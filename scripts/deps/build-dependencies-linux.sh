@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 set -e
+# CMake 4 refuses projects that declare compatibility below 3.5 (discord-rpc, soundtouch, ...).
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
 
 if [ "$#" -lt 1 ]; then
     echo "Syntax: $0 [-system-freetype] [-system-harfbuzz] [-system-libjpeg] [-system-libpng] [-system-libwebp] [-system-zstd] [-system-qt] [-skip-download] [-skip-cleanup] <output directory>"

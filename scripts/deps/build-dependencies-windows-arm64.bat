@@ -11,6 +11,8 @@ if exist "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Bu
   goto error
 )
 
+rem CMake 4 refuses projects that declare compatibility below 3.5 (discord-rpc, soundtouch, ...).
+set CMAKE_POLICY_VERSION_MINIMUM=3.5
 set SEVENZIP="C:\Program Files\7-Zip\7z.exe"
 set PATCH="C:\Program Files\Git\usr\bin\patch.exe"
 

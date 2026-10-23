@@ -1,6 +1,8 @@
 #!/bin/bash
 
 set -e
+# CMake 4 refuses projects that declare compatibility below 3.5 (discord-rpc, soundtouch, ...).
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
 
 merge_binaries() {
   X86DIR=$1

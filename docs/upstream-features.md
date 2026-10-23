@@ -55,7 +55,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 | Feature | What it does | Priority |
 |---|---|---|
 | Memory card improvements | Game icon shown while saving, renaming saves in the editor, icon extraction, multitap memory cards in the UI, fast-forwarding memory card access. | P1 (overlaps with emusync work) |
-| Separate settings for multi-disc games, disc sets | Multi-disc games merged in the game list, with memory cards shared between discs. | P1 |
+| Settings for whole disc sets | One configuration for every disc of a multi-disc game, custom titles for disc sets, and resetting a set's play time. The base already merges disc sets in the game list and can share one memory card between a set's discs. | P2 |
 | Save state improvements | XZ compression, taints (cheats, memory card "time travel") recorded in states, rewritten memory save states, a "low VRAM" rewind mode, runahead for analog input only. | P2 |
 | Background task threads | Saving states, screenshots and dumps off the emulation thread. | P2 |
 | Live region change, BIOS installer | Changing the console region without restarting; installing a BIOS when one is missing. | P2 |

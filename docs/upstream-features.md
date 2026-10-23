@@ -84,7 +84,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 | Feature | What it does | Priority |
 |---|---|---|
 | Memory card editor additions | Renaming saves, extracting icons. | P1 (alongside emusync) |
-| Cheat and patch management | A rewritten cheat system with a cheat database, assembly-style codes, patches with options, search and sorting. The base can load existing cheat lists; the databases themselves would be ours. | P2 |
+| Cheat and patch management | A rewritten cheat system: patches with options (widescreen, 60 fps and the like), assembly-style codes, search and sorting, and a much larger database. The base already has a cheat database (`data/resources/chtdb.txt`) and loads PCSX-R and libretro lists; upstream's later databases can't be used, so new entries would be ours. | P2 |
 | Debugger tools | Memory editor, call stack and threads views, instruction patching, memory scanner "freeze", a separate TTY window, GDB server single-step and breakpoints. | P3 |
 | ISO browser | Browsing a disc image and extracting files. | P3 |
 | Setup wizard and BIOS installer | Graphics and achievements in the first-run wizard. | P2 |

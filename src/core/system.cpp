@@ -22,6 +22,7 @@
 #include "imgui_overlays.h"
 #include "interrupt_controller.h"
 #include "mdec.h"
+#include "memcard_sync.h"
 #include "memory_card.h"
 #include "multitap.h"
 #include "pad.h"
@@ -492,6 +493,9 @@ bool System::Internal::CPUThreadInitialize(Error* error)
   if (g_settings.achievements_enabled)
     Achievements::Initialize();
 
+  // Starts in the background: a game booted right away waits for it before opening its cards.
+  MemcardSync::Initialize();
+
 #ifdef ENABLE_DISCORD_PRESENCE
   if (g_settings.enable_discord_presence)
     InitializeDiscordPresence();
@@ -516,6 +520,9 @@ void System::Internal::CPUThreadShutdown()
 #endif
 
   Achievements::Shutdown(false);
+
+  // After the system is gone, so the cards have been written and closed: gives uploads a few seconds.
+  MemcardSync::Shutdown();
 
   InputManager::CloseSources();
 

@@ -1,6 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\util\util.props" />
+  <!-- Memory card sync: emusync.dll next to the program (applications only). -->
+  <Import Project="..\..\dep\emusync\emusync.props" />
 
   <ItemDefinitionGroup>
     <ClCompile>
@@ -9,7 +11,7 @@
       <PreprocessorDefinitions Condition="('$(Platform)'=='x64' Or '$(Platform)'=='ARM64')">ENABLE_MMAP_FASTMEM=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="('$(Platform)'=='x64' Or '$(Platform)'=='ARM64')">ENABLE_NEWREC=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)dep\zlib\include;$(SolutionDir)dep\rcheevos\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)dep\zlib\include;$(SolutionDir)dep\rcheevos\include;$(SolutionDir)dep\emusync\include</AdditionalIncludeDirectories>
 
       <PreprocessorDefinitions>%(PreprocessorDefinitions);C4_NO_DEBUG_BREAK=1</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)dep\rapidyaml\include</AdditionalIncludeDirectories>

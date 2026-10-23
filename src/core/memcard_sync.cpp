@@ -395,19 +395,39 @@ static void EndSession(const MemcardSync::Card& card)
 static void FollowCard(const std::string& path, const std::string& serial, const std::string& title, u32 timeout_ms)
 {
   using namespace MemcardSync;
+  {
+    // Already followed: Start() and a card opening while it ran can both get here.
+    std::lock_guard lock(s_state_lock);
+    if (std::any_of(s_cards.begin(), s_cards.end(), [&](const Card& c) { return c.path == path && c.session != 0; }))
+      return;
+  }
   const es_container_id container = RegisterCard(path);
   es_session_info info;
   const es_session_id id = BeginSession(container, serial, title, timeout_ms, &info);
+  bool open = false;
   {
     std::lock_guard lock(s_state_lock);
     for (Card& c : s_cards)
     {
-      if (c.path == path)
+      if (c.path != path)
+        continue;
+      open = true;
+      // A session begun meanwhile by the other caller is kept (this one then failed as busy).
+      if (c.session == 0)
       {
         c.container = container;
         c.session = id;
       }
     }
+  }
+  // The card was closed while its session began: end it, or the card would stay marked in use.
+  if (!open && id != 0)
+  {
+    Card closed;
+    closed.session = id;
+    closed.opened = std::chrono::steady_clock::now();
+    EndSession(closed);
+    return;
   }
   if (id != 0 && info.units_applied > 0)
   {

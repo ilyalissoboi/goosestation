@@ -150,6 +150,12 @@ $LINUXDEPLOY --plugin qt --appdir="$OUTDIR" --executable="$BUILDDIR/bin/duckstat
 echo "Copying resources into AppDir..."
 cp -a "$BUILDDIR/bin/resources" "$OUTDIR/usr/bin"
 
+# Memory card sync loads emusync with dlopen(), so linuxdeploy can't see it: put it next to the
+# binary, where the core looks for it (CMakeModules/EmuSync.cmake copies it into the build).
+if [ -f "$BUILDDIR/bin/libemusync.so" ]; then
+	cp -a "$BUILDDIR/bin/libemusync.so" "$OUTDIR/usr/bin"
+fi
+
 # LinuxDeploy's Qt plugin doesn't include Wayland support. So manually copy in the additional Wayland libraries.
 echo "Copying Qt Wayland libraries..."
 for lib in "${MANUAL_QT_LIBS[@]}"; do

@@ -4,7 +4,7 @@ Memory card sync (`src/core/memcard_sync.h`) uses [emusync](https://github.com/i
 a library that syncs emulator saves through storage the user owns (S3-compatible services).
 
 - `include/emusync.h` is emusync's C API, from emusync 0.3.0 (the `v0.3.0` release; SHA-256
-  `0aa43a645c789472d7f2d255892b6e616af1a50ab871841e299a82061c11d249`). The core builds against
+  `d1e528f445331ebe229af43079e9e9072610554c117a78cd6a2bb46d15e2d278`). The core builds against
   it and loads the library at run time, so nothing links against emusync and a build or a system
   without the library runs without sync.
 - The library comes from the same release: `emusync.props` (MSBuild) and

@@ -2,7 +2,7 @@
 <!--
   Memory card sync (src/core/memcard_sync.h) with emusync. The core loads emusync.dll at run time and
   builds against the vendored header (include/emusync.h), so this only puts the DLL next to the
-  program: from a pinned release, emusync-X.Y.Z-windows-x64.zip, checked against its SHA-256 from
+  program: from a pinned release, emusync-X.Y.Z-windows-x64.zip (for duckstation-qt only), checked against its SHA-256 from
   the release's SHA256SUMS and unpacked into dep\msvc\. Without it (offline, /p:EmuSync=false, or not
   x64) the program runs without memory card sync.
 
@@ -12,8 +12,8 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <EmuSyncVersion>0.3.0</EmuSyncVersion>
-    <EmuSyncSha256>0000000000000000000000000000000000000000000000000000000000000000</EmuSyncSha256>
-    <EmuSync Condition="'$(EmuSync)' == '' and '$(Platform)' == 'x64' and '$(ConfigurationType)' == 'Application'">true</EmuSync>
+    <EmuSyncSha256>4a799ca384517be5667fd2296cd9a765798aa984fe9dac0a57207da423afd5eb</EmuSyncSha256>
+    <EmuSync Condition="'$(EmuSync)' == '' and '$(Platform)' == 'x64' and '$(MSBuildProjectName)' == 'duckstation-qt'">true</EmuSync>
     <EmuSyncDir Condition="'$(EmuSyncDir)' == ''">$(MSBuildThisFileDirectory)..\msvc\emusync-$(EmuSyncVersion)-windows-x64\</EmuSyncDir>
   </PropertyGroup>
 

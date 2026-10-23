@@ -1,3 +1,4 @@
 deps-arm64/
 deps-x64/
-
+# The emusync release dep/emusync/emusync.props downloads.
+emusync-*

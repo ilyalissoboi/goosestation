@@ -11,8 +11,8 @@
 
 option(USE_EMUSYNC "Memory card sync with emusync" ON)
 set(EMUSYNC_VERSION 0.3.0)
-set(EMUSYNC_SHA256_LINUX_X86_64 "0000000000000000000000000000000000000000000000000000000000000000")
-set(EMUSYNC_SHA256_MACOS "0000000000000000000000000000000000000000000000000000000000000000")
+set(EMUSYNC_SHA256_LINUX_X86_64 "395f0098c8f622941fd4cea6592fa873902df3b46fafd06e58269786322b5e6a")
+set(EMUSYNC_SHA256_MACOS "313f75515f8175418779f49c48082783d0187ce6dbb93c19748498beef1b846b")
 set(EMUSYNC_RUNTIME "")
 
 if(USE_EMUSYNC AND EMUSYNC_LIBRARY)
@@ -40,7 +40,10 @@ elseif(USE_EMUSYNC AND NOT WIN32)
         STATUS _emusync_status)
       list(GET _emusync_status 0 _emusync_code)
       if(_emusync_code EQUAL 0)
-        file(ARCHIVE_EXTRACT INPUT ${_emusync_dir}.tar.gz DESTINATION ${_emusync_dir})
+        # cmake -E tar: file(ARCHIVE_EXTRACT) needs CMake 3.18, the project 3.16.
+        file(MAKE_DIRECTORY ${_emusync_dir})
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${_emusync_dir}.tar.gz
+          WORKING_DIRECTORY ${_emusync_dir})
       else()
         message(WARNING "emusync: download failed (${_emusync_status}); building without memory card sync")
       endif()

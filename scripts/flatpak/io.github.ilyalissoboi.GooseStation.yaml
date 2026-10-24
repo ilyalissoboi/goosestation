@@ -20,6 +20,12 @@ finish-args:
   - "--socket=x11"
   - "--env=QT_QPA_PLATFORM=xcb"
 
+build-options:
+  env:
+    # CMake 4 (in the Freedesktop 25.08 SDK) refuses projects that declare compatibility below 3.5
+    # (discord-rpc, soundtouch, ...), as the dependency scripts also allow.
+    CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
 modules:
   # Dependencies.
   - "modules/20-sdl2.yaml"

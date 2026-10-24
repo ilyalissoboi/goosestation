@@ -12,24 +12,30 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Cache Dependencies
-      id: cache-deps
-      uses: actions/cache@v4
+    # Restore only: the keys must match the ones the rolling release saves.
+    - name: Restore X64 Dependencies
+      id: cache-deps-x64
+      uses: actions/cache/restore@v4
       with:
-        path: |
-          dep/msvc/deps-arm64
-          dep/msvc/deps-x64
-        key: deps ${{ hashFiles('scripts/deps/build-dependencies-windows-arm64.bat', 'scripts/deps/build-dependencies-windows-x64.bat') }}
+        path: dep/msvc/deps-x64
+        key: deps-windows-x64 ${{ hashFiles('scripts/deps/build-dependencies-windows-x64.bat') }}
+
+    - name: Restore ARM64 Dependencies
+      id: cache-deps-arm64
+      uses: actions/cache/restore@v4
+      with:
+        path: dep/msvc/deps-arm64
+        key: deps-windows-arm64 ${{ hashFiles('scripts/deps/build-dependencies-windows-arm64.bat', 'scripts/deps/build-dependencies-windows-x64.bat') }}
 
     - name: Zip Cache Files
-      if: steps.cache-deps.outputs.cache-hit == 'true'
+      if: steps.cache-deps-x64.outputs.cache-hit == 'true' && steps.cache-deps-arm64.outputs.cache-hit == 'true'
       shell: cmd
       run: |
         "C:\Program Files\7-Zip\7z.exe" a -r deps-x64.zip ./dep/msvc/deps-x64
         "C:\Program Files\7-Zip\7z.exe" a -r deps-arm64.zip ./dep/msvc/deps-arm64
 
     - name: Upload Cache Files
-      if: steps.cache-deps.outputs.cache-hit == 'true'
+      if: steps.cache-deps-x64.outputs.cache-hit == 'true' && steps.cache-deps-arm64.outputs.cache-hit == 'true'
       uses: actions/upload-artifact@v4.3.3
       with:
         name: "windows"

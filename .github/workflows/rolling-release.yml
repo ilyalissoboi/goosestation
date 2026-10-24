@@ -16,7 +16,18 @@ on:
       - 'appveyor.yml'
       - 'scripts/*'
       - '.github/ISSUE_TEMPLATE/*'
+  # Pull requests can only restore caches saved on their own branch or on master, and GitHub evicts a
+  # cache that goes unused for 7 days. Running on master twice a week keeps the dependency caches warm,
+  # and rebuilds any that were evicted, so a PR after a quiet week does not rebuild every dependency.
+  schedule:
+    - cron: '0 4 * * 1,4'
   workflow_dispatch:
+
+# A new push to a pull request cancels the run for its previous push. Branch pushes, schedules and
+# manual runs each get their own group, so they are never cancelled or skipped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   windows-build:
@@ -27,26 +38,18 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Cache Dependencies
-      id: cache-deps
+    - name: Cache X64 Dependencies
+      id: cache-deps-x64
       uses: actions/cache@v4
       with:
-        path: |
-          dep/msvc/deps-arm64
-          dep/msvc/deps-x64
-        key: deps ${{ hashFiles('scripts/deps/build-dependencies-windows-arm64.bat', 'scripts/deps/build-dependencies-windows-x64.bat') }}
+        path: dep/msvc/deps-x64
+        key: deps-windows-x64 ${{ hashFiles('scripts/deps/build-dependencies-windows-x64.bat') }}
 
     - name: Build X64 Dependencies
-      if: steps.cache-deps.outputs.cache-hit != 'true'
+      if: steps.cache-deps-x64.outputs.cache-hit != 'true'
       env:
         DEBUG: 0
       run: scripts/deps/build-dependencies-windows-x64.bat
-
-    - name: Build ARM64 Dependencies
-      if: steps.cache-deps.outputs.cache-hit != 'true'
-      env:
-        DEBUG: 0
-      run: scripts/deps/build-dependencies-windows-arm64.bat
 
     - name: Initialize build tag
       shell: cmd
@@ -115,23 +118,30 @@ jobs:
         fetch-depth: 0
         submodules: true
 
-    - name: Cache Dependencies
-      id: cache-deps
+    # The ARM64 build also needs the x64 dependencies: Qt's host tools (moc, rcc, uic) run on the x64 runner.
+    - name: Cache X64 Dependencies
+      id: cache-deps-x64
       uses: actions/cache@v4
       with:
-        path: |
-          dep/msvc/deps-arm64
-          dep/msvc/deps-x64
-        key: deps ${{ hashFiles('scripts/deps/build-dependencies-windows-arm64.bat', 'scripts/deps/build-dependencies-windows-x64.bat') }}
+        path: dep/msvc/deps-x64
+        key: deps-windows-x64 ${{ hashFiles('scripts/deps/build-dependencies-windows-x64.bat') }}
+
+    # Keyed on the x64 script too, because the ARM64 Qt is built against the x64 host Qt.
+    - name: Cache ARM64 Dependencies
+      id: cache-deps-arm64
+      uses: actions/cache@v4
+      with:
+        path: dep/msvc/deps-arm64
+        key: deps-windows-arm64 ${{ hashFiles('scripts/deps/build-dependencies-windows-arm64.bat', 'scripts/deps/build-dependencies-windows-x64.bat') }}
 
     - name: Build X64 Dependencies
-      if: steps.cache-deps.outputs.cache-hit != 'true'
+      if: steps.cache-deps-x64.outputs.cache-hit != 'true'
       env:
         DEBUG: 0
       run: scripts/deps/build-dependencies-windows-x64.bat
 
     - name: Build ARM64 Dependencies
-      if: steps.cache-deps.outputs.cache-hit != 'true'
+      if: steps.cache-deps-arm64.outputs.cache-hit != 'true'
       env:
         DEBUG: 0
       run: scripts/deps/build-dependencies-windows-arm64.bat

@@ -477,10 +477,16 @@ void ImGuiManager::SetKeyMap()
                                            {ImGuiKey_Space, "Space", nullptr},
                                            {ImGuiKey_Enter, "Return", nullptr},
                                            {ImGuiKey_Escape, "Escape", nullptr},
-                                           {ImGuiKey_LeftCtrl, "LeftCtrl", "Ctrl"},
+#ifdef __APPLE__
+                                           // Qt reports Cmd as Control and Ctrl as Meta. ImGui wants Cmd as Super.
+                                           {ImGuiKey_LeftCtrl, "LeftCtrl", "Meta"},
+                                           {ImGuiKey_LeftSuper, "LeftSuper", "Control"},
+#else
+                                           {ImGuiKey_LeftCtrl, "LeftCtrl", "Control"},
+                                           {ImGuiKey_LeftSuper, "LeftSuper", "Meta"},
+#endif
                                            {ImGuiKey_LeftShift, "LeftShift", "Shift"},
                                            {ImGuiKey_LeftAlt, "LeftAlt", "Alt"},
-                                           {ImGuiKey_LeftSuper, "LeftSuper", "Super"},
                                            {ImGuiKey_RightCtrl, "RightCtrl", nullptr},
                                            {ImGuiKey_RightShift, "RightShift", nullptr},
                                            {ImGuiKey_RightAlt, "RightAlt", nullptr},
@@ -1069,7 +1075,32 @@ bool ImGuiManager::ProcessHostKeyEvent(InputBindingKey key, float value)
     return false;
 
   // still update state anyway
-  ImGui::GetIO().AddKeyEvent(iter->second, value != 0.0);
+  ImGuiIO& io = ImGui::GetIO();
+  const bool down = (value != 0.0);
+  io.AddKeyEvent(iter->second, down);
+
+  // ImGui's shortcuts (Ctrl+V and the like) only look at the modifier keys, which have to be sent separately.
+  switch (iter->second)
+  {
+    case ImGuiKey_LeftCtrl:
+    case ImGuiKey_RightCtrl:
+      io.AddKeyEvent(ImGuiMod_Ctrl, down);
+      break;
+    case ImGuiKey_LeftShift:
+    case ImGuiKey_RightShift:
+      io.AddKeyEvent(ImGuiMod_Shift, down);
+      break;
+    case ImGuiKey_LeftAlt:
+    case ImGuiKey_RightAlt:
+      io.AddKeyEvent(ImGuiMod_Alt, down);
+      break;
+    case ImGuiKey_LeftSuper:
+    case ImGuiKey_RightSuper:
+      io.AddKeyEvent(ImGuiMod_Super, down);
+      break;
+    default:
+      break;
+  }
 
   return s_imgui_wants_keyboard.load(std::memory_order_acquire);
 }

@@ -325,32 +325,10 @@ if [ "$SKIP_QT" != true ]; then
 	tar xf "qttools-everywhere-src-$QT.tar.xz"
 	cd "qttools-everywhere-src-$QT"
 
-	# Force disable clang scanning, it gets very confused.
-	patch -u configure.cmake <<EOF
---- configure.cmake
-+++ configure.cmake
-@@ -14,12 +14,12 @@
- # Presumably because 6.0 ClangConfig.cmake files are not good enough?
- # In any case explicitly request a minimum version of 8.x for now, otherwise
- # building with CMake will fail at compilation time.
--qt_find_package(WrapLibClang 8 PROVIDED_TARGETS WrapLibClang::WrapLibClang)
-+#qt_find_package(WrapLibClang 8 PROVIDED_TARGETS WrapLibClang::WrapLibClang)
- # special case end
-
--if(TARGET WrapLibClang::WrapLibClang)
--    set(TEST_libclang "ON" CACHE BOOL "Required libclang version found." FORCE)
--endif()
-+#if(TARGET WrapLibClang::WrapLibClang)
-+#    set(TEST_libclang "ON" CACHE BOOL "Required libclang version found." FORCE)
-+#endif()
-
-
-
-EOF
-
 	mkdir build
 	cd build
-	"$INSTALLDIR/bin/qt-configure-module" .. -- -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DFEATURE_assistant=OFF -DFEATURE_clang=OFF -DFEATURE_designer=ON -DFEATURE_kmap2qmap=OFF -DFEATURE_pixeltool=OFF -DFEATURE_pkg_config=OFF -DFEATURE_qev=OFF -DFEATURE_qtattributionsscanner=OFF -DFEATURE_qtdiag=OFF -DFEATURE_qtplugininfo=OFF
+	# Never look for libclang: the system's LLVM packages confuse qttools' clang scanning, which isn't wanted anyway.
+	"$INSTALLDIR/bin/qt-configure-module" .. -- -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_DISABLE_FIND_PACKAGE_WrapLibClang=ON -DFEATURE_assistant=OFF -DFEATURE_clang=OFF -DFEATURE_designer=ON -DFEATURE_kmap2qmap=OFF -DFEATURE_pixeltool=OFF -DFEATURE_pkg_config=OFF -DFEATURE_qev=OFF -DFEATURE_qtattributionsscanner=OFF -DFEATURE_qtdiag=OFF -DFEATURE_qtplugininfo=OFF
 	cmake --build . --parallel
 	ninja install
 	cd ../../

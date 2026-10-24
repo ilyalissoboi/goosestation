@@ -22,10 +22,6 @@
 #include <QtGui/QWindowStateChangeEvent>
 #include <cmath>
 
-#if !defined(_WIN32) && !defined(APPLE)
-#include <qpa/qplatformnativeinterface.h>
-#endif
-
 #ifdef _WIN32
 #include "common/windows_headers.h"
 #endif

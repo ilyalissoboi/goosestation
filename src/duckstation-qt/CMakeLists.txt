@@ -1,4 +1,10 @@
-find_package(Qt6 6.7.2 COMPONENTS Core Gui Widgets LinguistTools REQUIRED)
+# 6.11: the Flatpak's KDE runtime. The release builds use 6.12.
+find_package(Qt6 6.11 COMPONENTS Core Gui Widgets LinguistTools REQUIRED)
+if(NOT WIN32 AND NOT APPLE)
+  # QPlatformNativeInterface (qtutils.cpp), for the X11 and Wayland display. Private modules are separate
+  # packages since Qt 6.10.
+  find_package(Qt6 6.11 COMPONENTS GuiPrivate REQUIRED)
+endif()
 
 include(CopyBaseTranslations)
 
@@ -172,8 +178,11 @@ if(NOT APPLE)
   set_target_properties(duckstation-qt PROPERTIES OUTPUT_NAME goosestation-qt)
 endif()
 target_precompile_headers(duckstation-qt PRIVATE "pch.h")
-target_include_directories(duckstation-qt PRIVATE "${Qt6Gui_PRIVATE_INCLUDE_DIRS}" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(duckstation-qt PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(duckstation-qt PRIVATE core common imgui minizip scmversion Qt6::Core Qt6::Gui Qt6::Widgets)
+if(NOT WIN32 AND NOT APPLE)
+  target_link_libraries(duckstation-qt PRIVATE Qt6::GuiPrivate)
+endif()
 
 # Our Qt builds may have exceptions on, so force them off.
 target_compile_definitions(duckstation-qt PRIVATE QT_NO_EXCEPTIONS)

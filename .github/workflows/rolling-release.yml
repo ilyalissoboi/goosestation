@@ -297,6 +297,8 @@ jobs:
     - name: Validate manifest
       run: flatpak-builder-lint manifest scripts/flatpak/io.github.ilyalissoboi.GooseStation.yaml
 
+    # Built as a bundle only. Not published to Flathub, so there is no screenshot mirroring and no
+    # `flatpak-builder-lint repo` (it enforces Flathub's publishing rules: mirrored media, screenshots).
     - name: Build Flatpak
       uses: flathub-infra/flatpak-github-actions/flatpak-builder@933e9e8ca36e85046ebca8e211f0785c6becac40
       with:
@@ -306,15 +308,10 @@ jobs:
         arch: x86_64
         build-bundle: true
         verbose: true
-        mirror-screenshots-url: https://dl.flathub.org/media
         branch: stable
         cache: true
         restore-cache: true
         cache-key: flatpak-x64-${{ hashFiles('scripts/flatpak/**/*.yaml') }}
-
-    - name: Validate build
-      run: |
-        flatpak-builder-lint repo repo
 
     - name: Upload Flatpak
       uses: actions/upload-artifact@v4.3.3

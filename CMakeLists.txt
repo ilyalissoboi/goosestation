@@ -110,6 +110,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Recursively include the source tree.
 include(DuckStationDependencies)
+include(EmuSync)
 add_subdirectory(dep)
 add_subdirectory(src)
 

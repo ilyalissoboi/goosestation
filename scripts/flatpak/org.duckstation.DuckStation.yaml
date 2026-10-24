@@ -69,6 +69,12 @@ modules:
     sources:
       - type: dir
         path: ../..
+      # Memory card sync: the pinned emusync release that CMakeModules/EmuSync.cmake would download,
+      # fetched here because the build itself has no network.
+      - type: file
+        url: "https://github.com/ilyalissoboi/emusync/releases/download/v0.3.0/emusync-0.3.0-linux-x86_64.tar.gz"
+        sha256: "395f0098c8f622941fd4cea6592fa873902df3b46fafd06e58269786322b5e6a"
+        dest: dep/emusync
 
     post-install:
       # Copy the binary distribution.

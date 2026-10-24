@@ -1,0 +1,2 @@
+# Release archives used instead of a download (see CMakeModules/EmuSync.cmake).
+*.tar.gz

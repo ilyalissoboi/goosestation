@@ -66,7 +66,8 @@ the Interface settings should then show the new number.
 ## Runtime resources
 
 The `runtime-resources` release holds files the app downloads only when it needs them. It is not an
-emulator release, so it is published without the Latest mark, and it is updated by hand.
+emulator release, so it is marked as a prerelease: GitHub marks the newest full release Latest
+whatever `--latest=false` says, as long as there is no other. It is updated by hand.
 
 | File | Downloaded by | Made with |
 |---|---|---|

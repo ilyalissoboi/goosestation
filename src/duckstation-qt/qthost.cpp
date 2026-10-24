@@ -56,6 +56,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QTimer>
 #include <QtGui/QClipboard>
+#include <QtGui/QDesktopServices>
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMenu>
@@ -1915,12 +1916,38 @@ std::string Host::GetTextFromClipboard()
   return text;
 }
 
+// Whether Steam's keyboard was asked for, so it is hidden again. Only used on the ImGui thread.
+static bool s_steam_keyboard_shown = false;
+
+static void OpenSteamKeyboardURL(std::string url)
+{
+  // Not QtUtils::OpenURL(): a message box over Big Picture would need a mouse to close.
+  INFO_LOG("Opening {}", url);
+  QtHost::RunOnUIThread([url = std::move(url)]() {
+    if (!QDesktopServices::openUrl(QUrl(QString::fromStdString(url))))
+      WARNING_LOG("Failed to open {}", url);
+  });
+}
+
 void Host::OnTextInputStarted(const TextInput::Request& request)
 {
+  // Steam's keyboard doesn't open by itself for a Qt window. A physical keyboard needs no on-screen one.
+  static const bool steam_keyboard =
+    TextInput::IsSteamKeyboardEnabled(std::getenv("SDL_ENABLE_STEAM_SCREEN_KEYBOARD"), std::getenv("SteamDeck"));
+  if (!steam_keyboard || request.keyboard_used)
+    return;
+
+  OpenSteamKeyboardURL(TextInput::GetSteamKeyboardShowURL(request));
+  s_steam_keyboard_shown = true;
 }
 
 void Host::OnTextInputEnded()
 {
+  if (!s_steam_keyboard_shown)
+    return;
+
+  OpenSteamKeyboardURL(TextInput::STEAM_KEYBOARD_CLOSE_URL);
+  s_steam_keyboard_shown = false;
 }
 
 void Host::ReportDebuggerMessage(std::string_view message)

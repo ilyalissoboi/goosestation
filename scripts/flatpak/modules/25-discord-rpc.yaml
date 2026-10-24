@@ -7,9 +7,9 @@ config-opts:
 build-options:
   strip: true
 sources:
-  - type: git
-    url: "https://github.com/stenzek/discord-rpc.git"
-    commit: "144f3a3f1209994d8d9e8a87964a989cb9911c1e"
+  - type: archive
+    url: "https://github.com/stenzek/discord-rpc/archive/144f3a3f1209994d8d9e8a87964a989cb9911c1e.tar.gz"
+    sha256: "3eea5ccce6670c126282f1ba4d32c19d486db49a1a5cbfb8d6f48774784d310c"
 cleanup:
   - /bin
   - /include

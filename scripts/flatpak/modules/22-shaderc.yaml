@@ -9,9 +9,9 @@ config-opts:
 build-options:
   strip: true
 sources:
-  - type: git
-    url: "https://github.com/stenzek/shaderc.git"
-    commit: "f60bb80e255144e71776e2ad570d89b78ea2ab4f"
+  - type: archive
+    url: "https://github.com/stenzek/shaderc/archive/f60bb80e255144e71776e2ad570d89b78ea2ab4f.tar.gz"
+    sha256: "4c1780b6c65c27c4dcb109f08ab632241c98b77fe2e22be726c151ff514482bf"
 cleanup:
   - /bin
   - /include

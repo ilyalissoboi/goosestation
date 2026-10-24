@@ -2,7 +2,9 @@
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <CharacterSet>NotSet</CharacterSet> <!-- TODO: Change to Unicode -->
-    <PlatformToolset Condition="!$(Configuration.Contains(Clang))">v143</PlatformToolset>
+    <!-- The toolset of the Visual Studio building: v145 from 2026 (18.0) on, else 2022's v143. -->
+    <PlatformToolset Condition="!$(Configuration.Contains(Clang)) and $([MSBuild]::VersionGreaterThanOrEquals('$(VisualStudioVersion)', '18.0'))">v145</PlatformToolset>
+    <PlatformToolset Condition="!$(Configuration.Contains(Clang)) and !$([MSBuild]::VersionGreaterThanOrEquals('$(VisualStudioVersion)', '18.0'))">v143</PlatformToolset>
     <PlatformToolset Condition="$(Configuration.Contains(Clang))">ClangCL</PlatformToolset>
     <SpectreMitigation>false</SpectreMitigation>
   </PropertyGroup>

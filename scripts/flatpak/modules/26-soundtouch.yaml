@@ -14,9 +14,9 @@ config-opts:
 build-options:
   strip: true
 sources:
-  - type: git
-    url: "https://github.com/stenzek/soundtouch.git"
-    commit: "463ade388f3a51da078dc9ed062bf28e4ba29da7"
+  - type: archive
+    url: "https://github.com/stenzek/soundtouch/archive/463ade388f3a51da078dc9ed062bf28e4ba29da7.tar.gz"
+    sha256: "fe45c2af99f6102d2704277d392c1c83b55180a70bfd17fb888cc84a54b70573"
 cleanup:
   - /bin
   - /include

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="data/resources/images/goosestation.png" width="200" alt="GooseStation logo: a white low-poly goose with orange beak and feet" />
+</p>
+
 # GooseStation - PlayStation 1, aka. PSX Emulator
 [Features](#features) | [Downloading and running](#downloading-and-running) | [Building](#building) | [Licence and credits](#licence-and-credits)
 

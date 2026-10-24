@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0
 #
-# Renders GooseStation's icons from scripts/branding/goosestation.svg.
-# Needs resvg_py and Pillow (pip install resvg_py pillow). Run from anywhere:
+# Renders GooseStation's icons from scripts/branding/goosestation.png (1024x1024, transparent).
+# Needs Pillow (pip install pillow). Run from anywhere:
 #   python scripts/branding/generate-icons.py
 
 import io
 import struct
 from pathlib import Path
 
-import resvg_py
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
-SVG = Path(__file__).resolve().parent / "goosestation.svg"
+MASTER = Image.open(Path(__file__).resolve().parent / "goosestation.png").convert("RGBA")
 
 
 def render(size: int) -> bytes:
-    return bytes(resvg_py.svg_to_bytes(svg_path=str(SVG), width=size, height=size))
+    data = io.BytesIO()
+    MASTER.resize((size, size), Image.LANCZOS).save(data, "PNG", optimize=True)
+    return data.getvalue()
 
 
 def write_png(path: str, size: int) -> None:

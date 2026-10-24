@@ -22,6 +22,7 @@
 #include "common/md5_digest.h"
 #include "common/path.h"
 #include "common/scoped_guard.h"
+#include "common/settings_interface.h"
 #include "common/small_string.h"
 #include "common/string_util.h"
 #include "common/timer.h"
@@ -130,6 +131,7 @@ static void ClearGameHash();
 static std::string GetGameHash(CDImage* image);
 static void SetHardcoreMode(bool enabled, bool force_display_message);
 static bool IsLoggedInOrLoggingIn();
+static std::string GetLoginToken();
 static bool CanEnableHardcoreMode();
 static void ShowLoginSuccess(const rc_client_t* client);
 static void ShowLoginNotification();
@@ -552,7 +554,7 @@ bool Achievements::Initialize()
     IdentifyGame(System::GetDiscPath(), nullptr);
 
   std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
-  std::string api_token = Host::GetBaseStringSettingValue("Cheevos", "Token");
+  std::string api_token = GetLoginToken();
   if (!username.empty() && !api_token.empty())
   {
     INFO_LOG("Attempting login with user '{}'...", username);
@@ -1871,7 +1873,7 @@ void Achievements::ClientLoginWithPasswordCallback(int result, const char* error
 
   // Store configuration.
   Host::SetBaseStringSettingValue("Cheevos", "Username", params->username);
-  Host::SetBaseStringSettingValue("Cheevos", "Token", user->token);
+  Host::SetSecretSettingValue("Cheevos", "Token", user->token);
   Host::SetBaseStringSettingValue("Cheevos", "LoginTimestamp", fmt::format("{}", std::time(nullptr)).c_str());
   Host::CommitBaseSettingChanges();
 
@@ -1982,8 +1984,40 @@ void Achievements::Logout()
   INFO_LOG("Clearing credentials...");
   Host::DeleteBaseSettingValue("Cheevos", "Username");
   Host::DeleteBaseSettingValue("Cheevos", "Token");
+  Host::SetSecretSettingValue("Cheevos", "Token", "");
   Host::DeleteBaseSettingValue("Cheevos", "LoginTimestamp");
   Host::CommitBaseSettingChanges();
+}
+
+std::string Achievements::GetLoginToken()
+{
+  // The login token is kept in secrets.ini (Host::SetSecretSettingValue()). Earlier versions wrote it to settings.ini:
+  // move it, if the host has a secrets layer.
+  auto lock = Host::GetSettingsLock();
+  SettingsInterface* base = Host::Internal::GetBaseSettingsLayer();
+  SettingsInterface* secrets = Host::Internal::GetSecretsSettingsLayer();
+  std::string token;
+  if (!secrets || !base->GetStringValue("Cheevos", "Token", &token) || token.empty())
+  {
+    lock.unlock();
+    return Host::GetSecretSettingValue("Cheevos", "Token");
+  }
+
+  secrets->SetStringValue("Cheevos", "Token", token.c_str());
+  Error error;
+  if (!secrets->Save(&error))
+  {
+    // Left in settings.ini, to try again next time.
+    secrets->DeleteValue("Cheevos", "Token");
+    ERROR_LOG("Failed to move the login token to secrets.ini: {}", error.GetDescription());
+    return token;
+  }
+
+  INFO_LOG("Moved the login token from settings.ini to secrets.ini.");
+  base->DeleteValue("Cheevos", "Token");
+  lock.unlock();
+  Host::CommitBaseSettingChanges();
+  return token;
 }
 
 bool Achievements::ConfirmSystemReset()

@@ -1,15 +1,10 @@
 app-id: "io.github.ilyalissoboi.GooseStation"
 runtime: "org.kde.Platform"
-runtime-version: "6.7"
+runtime-version: "6.11"
 sdk: "org.kde.Sdk"
 sdk-extensions:
-  - "org.freedesktop.Sdk.Extension.llvm17"
-add-extensions:
-  "org.freedesktop.Platform.ffmpeg-full":
-    directory: "lib/ffmpeg"
-    version: "23.08"
-    add-ld-path: "."
-    autodownload: true
+  - "org.freedesktop.Sdk.Extension.llvm21"
+# FFmpeg comes with the runtime (Freedesktop 25.08), its codecs-extra extension adding the rest.
 
 command: "goosestation-qt"
 
@@ -24,6 +19,12 @@ finish-args:
   # Wayland is disabled due to various QtWayland issues, causing broken UI.
   - "--socket=x11"
   - "--env=QT_QPA_PLATFORM=xcb"
+
+build-options:
+  env:
+    # CMake 4 (in the Freedesktop 25.08 SDK) refuses projects that declare compatibility below 3.5
+    # (discord-rpc, soundtouch, ...), as the dependency scripts also allow.
+    CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 modules:
   # Dependencies.
@@ -61,8 +62,8 @@ modules:
 
         # Make sure we're using ThinLTO.
         - "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
-        - "-DCMAKE_C_COMPILER=/usr/lib/sdk/llvm17/bin/clang"
-        - "-DCMAKE_CXX_COMPILER=/usr/lib/sdk/llvm17/bin/clang++"
+        - "-DCMAKE_C_COMPILER=/usr/lib/sdk/llvm21/bin/clang"
+        - "-DCMAKE_CXX_COMPILER=/usr/lib/sdk/llvm21/bin/clang++"
         - "-DCMAKE_EXE_LINKER_FLAGS_INIT=-fuse-ld=lld"
         - "-DCMAKE_MODULE_LINKER_FLAGS_INIT=-fuse-ld=lld"
         - "-DCMAKE_SHARED_LINKER_FLAGS_INIT=-fuse-ld=lld"
@@ -93,6 +94,3 @@ modules:
         install -Dm644
         "${FLATPAK_BUILDER_BUILDDIR}/scripts/flatpak/io.github.ilyalissoboi.GooseStation.metainfo.xml"
         "${FLATPAK_DEST}/share/metainfo/io.github.ilyalissoboi.GooseStation.metainfo.xml"
-
-      # Ensure ffmpeg-full mount point exists.
-      - "mkdir -p \"${FLATPAK_DEST}/lib/ffmpeg\""

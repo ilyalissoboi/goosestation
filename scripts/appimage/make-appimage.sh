@@ -62,10 +62,6 @@ declare -a MANUAL_LIBS=(
 	"libspirv-cross-c-shared.so.0"
 )
 
-declare -a MANUAL_QT_LIBS=(
-	"libQt6WaylandEglClientHwIntegration.so.6"
-)
-
 declare -a MANUAL_QT_PLUGINS=(
 	"wayland-decoration-client"
 	"wayland-graphics-integration-client"
@@ -139,7 +135,7 @@ done
 
 echo "Running linuxdeploy to create AppDir..."
 EXTRA_QT_PLUGINS="core;gui;svg;waylandclient;widgets;xcbqpa" \
-EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so" \
+EXTRA_PLATFORM_PLUGINS="libqwayland.so" \
 DEPLOY_PLATFORM_THEMES="1" \
 QMAKE="$DEPSDIR/bin/qmake" \
 NO_STRIP="1" \
@@ -156,17 +152,8 @@ if [ -f "$BUILDDIR/bin/libemusync.so" ]; then
 	cp -a "$BUILDDIR/bin/libemusync.so" "$OUTDIR/usr/bin"
 fi
 
-# LinuxDeploy's Qt plugin doesn't include Wayland support. So manually copy in the additional Wayland libraries.
-echo "Copying Qt Wayland libraries..."
-for lib in "${MANUAL_QT_LIBS[@]}"; do
-	srcpath="$DEPSDIR/lib/$lib"
-	dstpath="$OUTDIR/usr/lib/$lib"
-	echo "  $srcpath -> $dstpath"
-	cp "$srcpath" "$dstpath"
-	$PATCHELF --set-rpath '$ORIGIN' "$dstpath"
-done
-
-# .. and plugins.
+# LinuxDeploy's Qt plugin doesn't deploy Wayland's own plugins, so copy them in. (Since Qt 6.10 the EGL
+# client integration is part of libQt6WaylandClient, which it does deploy.)
 echo "Copying Qt Wayland plugins..."
 for GROUP in "${MANUAL_QT_PLUGINS[@]}"; do
 	srcpath="$DEPSDIR/plugins/$GROUP"

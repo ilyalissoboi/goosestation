@@ -48,6 +48,7 @@ GooseStation has a full desktop frontend built with Qt, and a fullscreen/TV UI (
  - Video capture with Media Foundation (Windows) and [FFmpeg](https://www.ffmpeg.org/) (All Platforms) backends.
 
 ## System Requirements
+ - Windows 10 (1809) or later, macOS 14.4 or later, or a Linux distribution as recent as Ubuntu 22.04 (the oldest each supports with Qt 6.12).
  - A CPU faster than a potato. But it needs to be x86_64 (SSE4.1), AArch32/armv7, AArch64/ARMv8, or RISC-V/RV64.
  - For the hardware renderers, a GPU capable of OpenGL 3.1/OpenGL ES 3.1/Direct3D 11 Feature Level 10.0 (or Vulkan 1.0) and above. So, basically anything made in the last 10 years or so.
  - SDL, XInput or DInput compatible game controller (e.g. XB360/XBOne/XBSeries). DualShock 3 users on Windows will need to install the official DualShock 3 drivers included as part of PlayStation Now.
@@ -115,7 +116,7 @@ alsa-lib-devel brotli-devel clang cmake dbus-devel egl-wayland-devel extra-cmake
 
 Requirements:
  - CMake
- - Xcode
+ - Xcode 16 or later (Qt 6.12 needs the macOS 15 SDK)
 
 1. Clone the repository: `git clone https://github.com/ilyalissoboi/goosestation.git`.
 2. Build the dependencies. This will take a while. `scripts/deps/build-dependencies-mac.sh deps`.

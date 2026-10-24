@@ -17,6 +17,7 @@
 #include "fmt/format.h"
 
 #include <QtCore/QDateTime>
+#include <QtCore/QTimeZone>
 #include <QtCore/QFuture>
 #include <QtCore/QStringBuilder>
 #include <QtWidgets/QDialog>
@@ -100,7 +101,7 @@ void GameSummaryWidget::populateUi(const std::string& path, const std::string& s
     QString release_info;
     if (entry->release_date != 0)
       release_info =
-        tr("Released %1").arg(QDateTime::fromSecsSinceEpoch(entry->release_date, Qt::UTC).date().toString());
+        tr("Released %1").arg(QDateTime::fromSecsSinceEpoch(entry->release_date, QTimeZone::UTC).date().toString());
     if (entry->min_players != 0)
     {
       if (!release_info.isEmpty())

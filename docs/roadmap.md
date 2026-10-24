@@ -40,7 +40,7 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 
 | # | Item | Size | After |
 |---|---|---|---|
-| 13 | Updated dependencies: a newer Qt LTS and compilers (upstream P1). Also less exposed to the CI breakage seen with current runners. | M | 1 |
+| 13 | ~~Updated dependencies.~~ Done (#16): Qt 6.12 LTS (macOS 14.4+), SDL2 2.32.10, VS 2026 on the `windows-2025` runner, clang 21 on Linux, Xcode 16.4 on `macos-15` (`macos-14` is deprecated), and the Flatpak on the KDE 6.11 runtime. | M | 1 |
 | 14 | On-screen keyboard in Big Picture, for text entry with a controller on desktop and handhelds (a Steam Deck in game mode, a TV PC), where the system's keyboards don't work with a controller (upstream P1); needed by item 12. Behind a "text input requested" hook, so each platform picks the keyboard: always this one on desktop; on Android, the system keyboard unless a gamepad was used last. | M | none |
 | 15 | SDL3 input: better controller support, sensors, touchpad (upstream P1; also helps Android). | M | 13 |
 | 16 | Android frontend, our own and written independently (not DuckStation's closed-source app, not RetroArch). The emusync Android library already exists. Text entry uses the system keyboard, except in Big Picture screens driven with a controller, which use item 14's. | L | 12, 15; 14 for controller use |

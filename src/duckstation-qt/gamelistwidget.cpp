@@ -44,24 +44,28 @@ public:
 
   void setMergeDiscSets(bool enabled)
   {
+    beginFilterChange();
     m_merge_disc_sets = enabled;
-    invalidateRowsFilter();
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
   }
 
   void setFilterType(GameList::EntryType type)
   {
+    beginFilterChange();
     m_filter_type = type;
-    invalidateRowsFilter();
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
   }
   void setFilterRegion(DiscRegion region)
   {
+    beginFilterChange();
     m_filter_region = region;
-    invalidateRowsFilter();
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
   }
   void setFilterName(const QString& name)
   {
+    beginFilterChange();
     m_filter_name = name;
-    invalidateRowsFilter();
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
   }
 
   bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override

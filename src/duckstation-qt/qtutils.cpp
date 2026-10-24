@@ -30,7 +30,7 @@
 #include <array>
 #include <map>
 
-#if !defined(_WIN32) && !defined(APPLE)
+#if !defined(_WIN32) && !defined(__APPLE__)
 #include <qpa/qplatformnativeinterface.h>
 #endif
 

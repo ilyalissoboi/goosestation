@@ -217,7 +217,12 @@
 #endif
 
 #ifndef FMT_CONSTEVAL
-#  if ((FMT_GCC_VERSION >= 1000 || FMT_CLANG_VERSION >= 1101) && \
+// GooseStation: clang 21 and later (and Apple clang 21) reject the FMT_STRING checks in format-inl.h and
+// os.cc as not constant expressions (https://github.com/fmtlib/fmt/issues/4740), so format strings are
+// checked at run time there; other compilers keep the compile-time checks.
+#  if FMT_CLANG_VERSION >= 2100
+#    define FMT_CONSTEVAL
+#  elif ((FMT_GCC_VERSION >= 1000 || FMT_CLANG_VERSION >= 1101) && \
        (!defined(__apple_build_version__) ||                     \
         __apple_build_version__ >= 14000029L) &&                 \
        FMT_CPLUSPLUS >= 202002L) ||                              \

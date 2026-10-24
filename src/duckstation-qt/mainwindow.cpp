@@ -41,6 +41,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMimeData>
+#include <QtCore/QTimeZone>
 #include <QtCore/QUrl>
 #include <QtGui/QActionGroup>
 #include <QtGui/QCursor>
@@ -1168,7 +1169,7 @@ std::optional<bool> MainWindow::promptForResumeState(const std::string& save_sta
   msgbox.setWindowModality(Qt::WindowModal);
   msgbox.setText(tr("A resume save state was found for this game, saved at:\n\n%1.\n\nDo you want to load this state, "
                     "or start from a fresh boot?")
-                   .arg(QDateTime::fromSecsSinceEpoch(sd.ModificationTime, Qt::UTC).toLocalTime().toString()));
+                   .arg(QDateTime::fromSecsSinceEpoch(sd.ModificationTime, QTimeZone::UTC).toLocalTime().toString()));
 
   QPushButton* load = msgbox.addButton(tr("Load State"), QMessageBox::AcceptRole);
   QPushButton* boot = msgbox.addButton(tr("Fresh Boot"), QMessageBox::RejectRole);

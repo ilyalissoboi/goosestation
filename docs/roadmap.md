@@ -41,9 +41,9 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 | # | Item | Size | After |
 |---|---|---|---|
 | 13 | Updated dependencies: a newer Qt LTS and compilers (upstream P1). Also less exposed to the CI breakage seen with current runners. | M | 1 |
-| 14 | On-screen keyboard for text entry with a controller (upstream P1); needed by item 12 and Android. | M | none |
+| 14 | On-screen keyboard in Big Picture, for text entry with a controller on desktop and handhelds (a Steam Deck in game mode, a TV PC), where the system's keyboards don't work with a controller (upstream P1); needed by item 12. Behind a "text input requested" hook, so each platform picks the keyboard: always this one on desktop; on Android, the system keyboard unless a gamepad was used last. | M | none |
 | 15 | SDL3 input: better controller support, sensors, touchpad (upstream P1; also helps Android). | M | 13 |
-| 16 | Android frontend, our own and written independently (not DuckStation's closed-source app, not RetroArch). The emusync Android library already exists. | L | 12, 14, 15 |
+| 16 | Android frontend, our own and written independently (not DuckStation's closed-source app, not RetroArch). The emusync Android library already exists. Text entry uses the system keyboard, except in Big Picture screens driven with a controller, which use item 14's. | L | 12, 15; 14 for controller use |
 
 ## 4. Upstream features (clean room)
 
@@ -69,5 +69,6 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 ## Suggested order
 
 1 → 2 → 4 → 5, with 7 and 9 alongside: a first release with sync tested for real. Then
-13 → 15 and 14 → 12 → 16 lead to Android. Items 11, 17 and 18 block nothing and can be picked up at
+13 → 15 and 12 lead to Android (16); 14 comes before 12, and gives Android's Big Picture screens
+controller text entry. Items 11, 17 and 18 block nothing and can be picked up at
 any time.

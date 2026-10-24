@@ -68,7 +68,9 @@ CMAKE_COMMON=(
 	-DCMAKE_SHARED_LINKER_FLAGS="-dead_strip -dead_strip_dylibs"
 	-DCMAKE_PREFIX_PATH="$INSTALLDIR"
 	-DCMAKE_INSTALL_PREFIX="$INSTALLDIR"
-	-DCMAKE_INSTALL_NAME_DIR='$<INSTALL_PREFIX>/lib'
+	# The install prefix itself, not $<INSTALL_PREFIX>: Qt 6.12's SBOM generation evaluates the install name dir
+	# outside install(), where that generator expression is an error.
+	-DCMAKE_INSTALL_NAME_DIR="$INSTALLDIR/lib"
 )
 CMAKE_ARCH_X64=-DCMAKE_OSX_ARCHITECTURES="x86_64"
 CMAKE_ARCH_ARM64=-DCMAKE_OSX_ARCHITECTURES="arm64"

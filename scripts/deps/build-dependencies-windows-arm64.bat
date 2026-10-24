@@ -174,7 +174,8 @@ echo Building SDL2...
 rmdir /S /Q "SDL2-%SDL2%"
 %SEVENZIP% x "SDL2-%SDL2%.zip" || goto error
 cd "SDL2-%SDL2%" || goto error
-cmake -B build %ARM64TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release %FORCEPDB% -DCMAKE_INSTALL_PREFIX="%INSTALLDIR%" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -G Ninja || goto error
+rem MSVC 14.44 leaves ARM64 _Interlocked* calls to the C runtime, which SDL drops (/NODEFAULTLIB) unless SDL_LIBC is on.
+cmake -B build %ARM64TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release %FORCEPDB% -DCMAKE_INSTALL_PREFIX="%INSTALLDIR%" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_LIBC=ON -G Ninja || goto error
 cmake --build build --parallel || goto error
 ninja -C build install || goto error
 copy build\SDL2.pdb "%INSTALLDIR%\bin" || goto error

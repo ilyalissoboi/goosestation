@@ -15,9 +15,9 @@ config-opts:
 build-options:
   strip: true
 sources:
-  - type: git
-    url: "https://github.com/stenzek/cpuinfo.git"
-    commit: "7524ad504fdcfcf75a18a133da6abd75c5d48053"
+  - type: archive
+    url: "https://github.com/stenzek/cpuinfo/archive/7524ad504fdcfcf75a18a133da6abd75c5d48053.tar.gz"
+    sha256: "e1351218d270db49c3dddcba04fb2153b09731ea3fa6830e423f5952f44585be"
 cleanup:
   - /bin
   - /include

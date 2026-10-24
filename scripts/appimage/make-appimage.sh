@@ -42,7 +42,7 @@ function retry_command {
 }
 
 if [ "$#" -ne 4 ]; then
-    echo "Syntax: $0 <path to duckstation directory> <path to build directory> <deps prefix> <output name>"
+    echo "Syntax: $0 <path to goosestation directory> <path to build directory> <deps prefix> <output name>"
     exit 1
 fi
 
@@ -51,8 +51,8 @@ BUILDDIR=$2
 DEPSDIR=$3
 NAME=$4
 
-BINARY=duckstation-qt
-APPDIRNAME=DuckStation.AppDir
+BINARY=goosestation-qt
+APPDIRNAME=GooseStation.AppDir
 STRIP=strip
 
 declare -a MANUAL_LIBS=(
@@ -143,12 +143,18 @@ EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so" \
 DEPLOY_PLATFORM_THEMES="1" \
 QMAKE="$DEPSDIR/bin/qmake" \
 NO_STRIP="1" \
-$LINUXDEPLOY --plugin qt --appdir="$OUTDIR" --executable="$BUILDDIR/bin/duckstation-qt" ${EXTRA_LIBS_ARGS[@]} \
---desktop-file="$ROOTDIR/scripts/org.duckstation.DuckStation.desktop" \
---icon-file="$ROOTDIR/scripts/org.duckstation.DuckStation.png" \
+$LINUXDEPLOY --plugin qt --appdir="$OUTDIR" --executable="$BUILDDIR/bin/$BINARY" ${EXTRA_LIBS_ARGS[@]} \
+--desktop-file="$ROOTDIR/scripts/io.github.ilyalissoboi.GooseStation.desktop" \
+--icon-file="$ROOTDIR/scripts/io.github.ilyalissoboi.GooseStation.png" \
 
 echo "Copying resources into AppDir..."
 cp -a "$BUILDDIR/bin/resources" "$OUTDIR/usr/bin"
+
+# Memory card sync loads emusync with dlopen(), so linuxdeploy can't see it: put it next to the
+# binary, where the core looks for it (CMakeModules/EmuSync.cmake copies it into the build).
+if [ -f "$BUILDDIR/bin/libemusync.so" ]; then
+	cp -a "$BUILDDIR/bin/libemusync.so" "$OUTDIR/usr/bin"
+fi
 
 # LinuxDeploy's Qt plugin doesn't include Wayland support. So manually copy in the additional Wayland libraries.
 echo "Copying Qt Wayland libraries..."

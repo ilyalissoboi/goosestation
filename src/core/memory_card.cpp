@@ -3,6 +3,7 @@
 
 #include "memory_card.h"
 #include "host.h"
+#include "memcard_sync.h"
 #include "system.h"
 
 #include "util/imgui_manager.h"
@@ -31,6 +32,8 @@ MemoryCard::MemoryCard()
 MemoryCard::~MemoryCard()
 {
   SaveIfChanged(false);
+  if (!m_filename.empty())
+    MemcardSync::OnCardClosed(m_filename);
 }
 
 TickCount MemoryCard::GetSaveDelayInTicks()
@@ -297,6 +300,9 @@ std::unique_ptr<MemoryCard> MemoryCard::Open(std::string_view filename)
   std::unique_ptr<MemoryCard> mc = std::make_unique<MemoryCard>();
   mc->m_filename = filename;
 
+  // Saves from other devices are written to the file first (and a missing card created for them).
+  MemcardSync::OnCardOpening(mc->m_filename);
+
   Error error;
   if (!FileSystem::FileExists(mc->m_filename.c_str())) [[unlikely]]
   {
@@ -358,6 +364,8 @@ bool MemoryCard::SaveIfChanged(bool display_osd_message)
 
     return false;
   }
+
+  MemcardSync::OnCardWritten(m_filename);
 
   if (display_osd_message)
   {

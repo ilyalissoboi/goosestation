@@ -61,7 +61,7 @@ bool RegTestHost::SetFolders()
   EmuFolders::DataRoot = EmuFolders::AppRoot;
 
 #ifdef __APPLE__
-  static constexpr char MAC_DATA_DIR[] = "Library/Application Support/DuckStation";
+  static constexpr char MAC_DATA_DIR[] = "Library/Application Support/GooseStation";
   const char* home_dir = getenv("HOME");
   if (home_dir)
     EmuFolders::DataRoot = Path::Combine(home_dir, MAC_DATA_DIR);
@@ -496,8 +496,8 @@ void RegTestHost::InitializeEarlyConsole()
 void RegTestHost::PrintCommandLineVersion()
 {
   InitializeEarlyConsole();
-  std::fprintf(stderr, "DuckStation Regression Test Runner Version %s (%s)\n", g_scm_tag_str, g_scm_branch_str);
-  std::fprintf(stderr, "https://github.com/stenzek/duckstation\n");
+  std::fprintf(stderr, "GooseStation Regression Test Runner Version %s (%s)\n", g_scm_tag_str, g_scm_branch_str);
+  std::fprintf(stderr, "https://github.com/ilyalissoboi/goosestation\n");
   std::fprintf(stderr, "\n");
 }
 

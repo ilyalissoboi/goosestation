@@ -16,7 +16,7 @@
                 <string>psf</string>
             </array>
             <key>CFBundleTypeIconFile</key>
-            <string>DuckStation.icns</string>
+            <string>GooseStation.icns</string>
             <key>CFBundleTypeName</key>
             <string>PlayStation File</string>
             <key>CFBundleTypeRole</key>
@@ -24,11 +24,11 @@
         </dict>
     </array>
     <key>CFBundleExecutable</key>
-    <string>DuckStation</string>
+    <string>GooseStation</string>
     <key>CFBundleIconFile</key>
-    <string>DuckStation.icns</string>
+    <string>GooseStation.icns</string>
     <key>CFBundleIdentifier</key>
-    <string>com.github.stenzek.duckstation</string>
+    <string>io.github.ilyalissoboi.GooseStation</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>English</string>
     <key>CFBundlePackageType</key>

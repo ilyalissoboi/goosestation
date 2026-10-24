@@ -5,13 +5,13 @@
     <name>AboutDialog</name>
     <message>
         <location filename="../aboutdialog.ui" line="14"/>
-        <source>About DuckStation</source>
+        <source>About GooseStation</source>
         <translation>Duckstation Hakkında</translation>
     </message>
     <message>
         <location filename="../aboutdialog.ui" line="101"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="29"/>
@@ -20,7 +20,7 @@
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="45"/>
-        <source>DuckStation is a free and open-source simulator/emulator of the Sony PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; console, focusing on playability, speed, and long-term maintainability.</source>
+        <source>GooseStation is a free and open-source simulator/emulator of the Sony PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; console, focusing on playability, speed, and long-term maintainability.</source>
         <translation>Duckstation beadava bir Playstation Emülatörüdür.&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; Kuallanılabilirlik,hız ve uzun vadede sürüdülebilirliği amaçlar.</translation>
     </message>
     <message>
@@ -40,13 +40,13 @@
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="59"/>
-        <source>DuckStation Third-Party Notices</source>
-        <translation>DuckStation Üçüncü Parti Bildirgeleri</translation>
+        <source>GooseStation Third-Party Notices</source>
+        <translation>GooseStation Üçüncü Parti Bildirgeleri</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="79"/>
-        <source>Missing thirdparty.html file. You should request it from where-ever you obtained DuckStation.</source>
-        <translation>thirdparty.html dosyası kayıp. DuckStation&apos;u nereden aldıysanız oraya sorunuz.</translation>
+        <source>Missing thirdparty.html file. You should request it from where-ever you obtained GooseStation.</source>
+        <translation>thirdparty.html dosyası kayıp. GooseStation&apos;u nereden aldıysanız oraya sorunuz.</translation>
     </message>
 </context>
 <context>
@@ -65,8 +65,8 @@
     </message>
     <message>
         <location filename="../achievementlogindialog.ui" line="69"/>
-        <source>Please enter your user name and password for retroachievements.org below. Your password will not be saved in DuckStation, an access token will be generated and used instead.</source>
-        <translation>Lütfen retroachievements.org için kullanıcı adı ve parolanızı giriniz. Şifreniz DuckStation programında saklanmayacak onun yerine token bazlı kimlik doğrulama kodu üretilip kullanılacak.</translation>
+        <source>Please enter your user name and password for retroachievements.org below. Your password will not be saved in GooseStation, an access token will be generated and used instead.</source>
+        <translation>Lütfen retroachievements.org için kullanıcı adı ve parolanızı giriniz. Şifreniz GooseStation programında saklanmayacak onun yerine token bazlı kimlik doğrulama kodu üretilip kullanılacak.</translation>
     </message>
     <message>
         <location filename="../achievementlogindialog.ui" line="94"/>
@@ -90,7 +90,7 @@
     </message>
     <message>
         <location filename="../achievementlogindialog.cpp" line="22"/>
-        <source>&lt;strong&gt;Your RetroAchievements login token is no longer valid.&lt;/strong&gt; You must re-enter your credentials for achievements to be tracked. Your password will not be saved in DuckStation, an access token will be generated and used instead.</source>
+        <source>&lt;strong&gt;Your RetroAchievements login token is no longer valid.&lt;/strong&gt; You must re-enter your credentials for achievements to be tracked. Your password will not be saved in GooseStation, an access token will be generated and used instead.</source>
         <translation>&lt;strong&gt;RetroAchievements giriş tokeniniz geçerliliğini yitirmiş&lt;/strong&gt; Başarımlarınızın takip edilebilmesi için giriş bilgilerinizi tekrar girmelisiniz. onun yerine token bazlı kimlik doğrulama kodu üretilip kullanılacak.</translation>
     </message>
     <message>
@@ -270,8 +270,8 @@ Giriş Tokeni Oluşturulma Tarihi:</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.ui" line="255"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;DuckStation uses RetroAchievements as an achievement database and for tracking progress. To use achievements, please sign up for an account at &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;To view the achievement list in-game, press the hotkey for &lt;span style=&quot; font-weight:600;&quot;&gt;Open Pause Menu&lt;/span&gt; and select &lt;span style=&quot; font-weight:600;&quot;&gt;Achievements&lt;/span&gt; from the menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;DuckStation, Başarımları takip etmek için RetroAchievements&apos;ı kullanır. Lütfen sitesinde hesap açınız. &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;Oyun sırasında başarımlara bakmak için şunun kısayol tuşuna basınız &lt;span style=&quot; font-weight:600;&quot;&gt;Duraklama Menüsü&lt;/span&gt; ve şunu &lt;span style=&quot; font-weight:600;&quot;&gt;Başarımlar&lt;/span&gt; menüden seçiniz.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;GooseStation uses RetroAchievements as an achievement database and for tracking progress. To use achievements, please sign up for an account at &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;To view the achievement list in-game, press the hotkey for &lt;span style=&quot; font-weight:600;&quot;&gt;Open Pause Menu&lt;/span&gt; and select &lt;span style=&quot; font-weight:600;&quot;&gt;Achievements&lt;/span&gt; from the menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;GooseStation, Başarımları takip etmek için RetroAchievements&apos;ı kullanır. Lütfen sitesinde hesap açınız. &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;Oyun sırasında başarımlara bakmak için şunun kısayol tuşuna basınız &lt;span style=&quot; font-weight:600;&quot;&gt;Duraklama Menüsü&lt;/span&gt; ve şunu &lt;span style=&quot; font-weight:600;&quot;&gt;Başarımlar&lt;/span&gt; menüden seçiniz.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="46"/>
@@ -285,7 +285,7 @@ Giriş Tokeni Oluşturulma Tarihi:</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="47"/>
-        <source>When enabled and logged in, DuckStation will scan for achievements on startup.</source>
+        <source>When enabled and logged in, GooseStation will scan for achievements on startup.</source>
         <translation>Etkinleştirilip Giriş Yapıldığında, Duckstation Başarımları her açılışta tarayacaktır.</translation>
     </message>
     <message>
@@ -328,12 +328,12 @@ Giriş Tokeni Oluşturulma Tarihi:</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="65"/>
-        <source>When enabled, DuckStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
+        <source>When enabled, GooseStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
         <translation>Etkinleştirildiğinde, Duckstation tüm başarımları kilitli kabul edip sunucuya başarım elde edilme verisi göndermez.</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="69"/>
-        <source>When enabled, DuckStation will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time.</source>
+        <source>When enabled, GooseStation will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time.</source>
         <translation>Etkinleştirildiğinde, Duckstation resmi olmayan setlerdeki başarımları listeleyecek. Aklınızda bulunsunki RetroAchievements bu başarımları takip etmez bu yüzden her defasında tekrar bu başarımları kazanıcaksınız.</translation>
     </message>
     <message>
@@ -1035,8 +1035,8 @@ Okunmamış Mesajlar: {}</translation>
     </message>
     <message>
         <location filename="../advancedsettingswidget.cpp" line="262"/>
-        <source>Logs messages to duckstation.log in the user directory.</source>
-        <translation>Logs messages to duckstation.log in the user directory.</translation>
+        <source>Logs messages to goosestation.log in the user directory.</source>
+        <translation>Logs messages to goosestation.log in the user directory.</translation>
     </message>
     <message>
         <location filename="../advancedsettingswidget.cpp" line="263"/>
@@ -1876,7 +1876,7 @@ Okunmamış Mesajlar: {}</translation>
     </message>
     <message>
         <location filename="../biossettingswidget.ui" line="126"/>
-        <source>DuckStation will search for BIOS images in this directory.</source>
+        <source>GooseStation will search for BIOS images in this directory.</source>
         <translation>Duckstation BIOS dosyalarını bu dizinde tarayacak.</translation>
     </message>
     <message>
@@ -2478,7 +2478,7 @@ Okunmamış Mesajlar: {}</translation>
     </message>
     <message>
         <location filename="../cheatmanagerdialog.cpp" line="730"/>
-        <source>Are you sure you want to reset the cheat list? Any cheats not in the DuckStation database WILL BE LOST.</source>
+        <source>Are you sure you want to reset the cheat list? Any cheats not in the GooseStation database WILL BE LOST.</source>
         <translation>Hile listesine resetlemek istediğinizden emin misiniz? Duckstation veritabanında olmayan tüm hileler YOK OLACAK.</translation>
     </message>
     <message>
@@ -3861,8 +3861,8 @@ Bu son uyarıdır.</translation>
     <name>ControllerSettingsWindow</name>
     <message>
         <location filename="../controllersettingswindow.ui" line="20"/>
-        <source>DuckStation Controller Settings</source>
-        <translation>DuckStation Kol Ayarları</translation>
+        <source>GooseStation Controller Settings</source>
+        <translation>GooseStation Kol Ayarları</translation>
     </message>
     <message>
         <location filename="../controllersettingswindow.ui" line="72"/>
@@ -4073,8 +4073,8 @@ Bunu geri alamazsınız.</translation>
     </message>
     <message>
         <location filename="../coverdownloaddialog.ui" line="38"/>
-        <source>DuckStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
-        <translation>DuckStation otomatik olarak oyun kapağı görseli olmayan oyunların oyun kapaklar görsellerini indirebilir. Biz oyun kapaklarını sağlamıyoruz. Siz bunu bir yerden sağlamalısınız.</translation>
+        <source>GooseStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
+        <translation>GooseStation otomatik olarak oyun kapağı görseli olmayan oyunların oyun kapaklar görsellerini indirebilir. Biz oyun kapaklarını sağlamıyoruz. Siz bunu bir yerden sağlamalısınız.</translation>
     </message>
     <message>
         <location filename="../coverdownloaddialog.ui" line="50"/>
@@ -5000,8 +5000,8 @@ This file can be several gigabytes, so be aware of SSD wear.</translation>
     </message>
     <message>
         <location filename="../displaysettingswidget.cpp" line="109"/>
-        <source>Enable this option to match DuckStation&apos;s refresh rate with your current monitor or screen. VSync is automatically disabled when it is not possible (e.g. running at non-100% speed).</source>
-        <translation>Bu ayar açılınca DuckStation&apos;un tazeleme hızını ekranınızınkine eşitler. Mümkün değil ise dikey senkronizasyon kapatılır. (mesela. tam-100% hız elde edilemezse).</translation>
+        <source>Enable this option to match GooseStation&apos;s refresh rate with your current monitor or screen. VSync is automatically disabled when it is not possible (e.g. running at non-100% speed).</source>
+        <translation>Bu ayar açılınca GooseStation&apos;un tazeleme hızını ekranınızınkine eşitler. Mümkün değil ise dikey senkronizasyon kapatılır. (mesela. tam-100% hız elde edilemezse).</translation>
     </message>
     <message>
         <location filename="../displaysettingswidget.cpp" line="112"/>
@@ -6084,7 +6084,7 @@ Bu kayıdı yükleyip devam etmek istermisiniz?</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6528"/>
-        <source>About DuckStation</source>
+        <source>About GooseStation</source>
         <translation>Duckstation Hakkında</translation>
     </message>
     <message>
@@ -6444,8 +6444,8 @@ Bu kayıdı yükleyip devam etmek istermisiniz?</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6600"/>
-        <source>Contributor List: https://github.com/stenzek/duckstation/blob/master/CONTRIBUTORS.md</source>
-        <translation>Emeği Geçenler: https://github.com/stenzek/duckstation/blob/master/CONTRIBUTORS.md</translation>
+        <source>Contributor List: https://github.com/ilyalissoboi/goosestation/blob/master/CONTRIBUTORS.md</source>
+        <translation>Emeği Geçenler: https://github.com/ilyalissoboi/goosestation/blob/master/CONTRIBUTORS.md</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6601"/>
@@ -6779,7 +6779,7 @@ Bu kayıdı yükleyip devam etmek istermisiniz?</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6667"/>
-        <source>DuckStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.</source>
+        <source>GooseStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.</source>
         <translation>Duckstation beadava bir Playstation Emülatörüdür.&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; Kuallanılabilirlik,hız ve uzun vadede sürüdülebilirliği amaçlar.</translation>
     </message>
     <message>
@@ -7431,8 +7431,8 @@ Hata şuydu:</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6798"/>
-        <source>Logs messages to duckstation.log in the user directory.</source>
-        <translation>Logs messages to duckstation.log in the user directory.</translation>
+        <source>Logs messages to goosestation.log in the user directory.</source>
+        <translation>Logs messages to goosestation.log in the user directory.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6799"/>
@@ -8717,18 +8717,18 @@ Hata şuydu:</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7054"/>
-        <source>When enabled and logged in, DuckStation will scan for achievements on startup.</source>
+        <source>When enabled and logged in, GooseStation will scan for achievements on startup.</source>
         <translation>Etkinleştirilip Giriş Yapıldığında, Duckstation Başarımları her açılışta tarayacaktır.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7055"/>
-        <source>When enabled, DuckStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
+        <source>When enabled, GooseStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
         <translation>Etkinleştirildiğinde, Duckstation tüm başarımları kilitli kabul edip sunucuya başarım elde edilme verisi göndermez.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7056"/>
-        <source>When enabled, DuckStation will list achievements from unofficial sets. These achievements are not tracked by RetroAchievements.</source>
-        <translation>Açıldığında DuckStation gayriresmi başarımlarıda takip eder. Bu başarımlar Retro Achievements&apos;te geçerli değildir.</translation>
+        <source>When enabled, GooseStation will list achievements from unofficial sets. These achievements are not tracked by RetroAchievements.</source>
+        <translation>Açıldığında GooseStation gayriresmi başarımlarıda takip eder. Bu başarımlar Retro Achievements&apos;te geçerli değildir.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7057"/>
@@ -10661,8 +10661,8 @@ Alt klasörlerle birlikte aramak daha çok zaman alır ama alt klasörleride tar
     <name>MainWindow</name>
     <message>
         <location filename="../mainwindow.ui" line="17"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="38"/>
@@ -10851,7 +10851,7 @@ Alt klasörlerle birlikte aramak daha çok zaman alır ama alt klasörleride tar
     <message>
         <location filename="../mainwindow.ui" line="515"/>
         <source>View Third-Party Notices...</source>
-        <translation>DuckStation Üçüncü Parti Bildirgelerini Görüntüle...</translation>
+        <translation>GooseStation Üçüncü Parti Bildirgelerini Görüntüle...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="560"/>
@@ -10953,8 +10953,8 @@ Alt klasörlerle birlikte aramak daha çok zaman alır ama alt klasörleride tar
     </message>
     <message>
         <location filename="../mainwindow.ui" line="533"/>
-        <source>&amp;About DuckStation...</source>
-        <translation>&amp;Hakkında DuckStation...</translation>
+        <source>&amp;About GooseStation...</source>
+        <translation>&amp;Hakkında GooseStation...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="542"/>
@@ -11644,8 +11644,8 @@ Devam etmeye emin misiniz?</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2926"/>
-        <source>&lt;p&gt;Sorry, you are trying to update a DuckStation version which is not an official GitHub release. To prevent incompatibilities, the auto-updater is only enabled on official builds.&lt;/p&gt;&lt;p&gt;To obtain an official build, please follow the instructions under &quot;Downloading and Running&quot; at the link below:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/stenzek/duckstation/&quot;&gt;https://github.com/stenzek/duckstation/&lt;/a&gt;&lt;/p&gt;</source>
-        <translation>&lt;p&gt;Üzgünüz. Bizim resmi DuckStation sürümü yerine elle hazırlanmış bir Duckstation sürümünü güncelleştirmeyi deniyorsunuz. Sorun ve uyumsuzluk olmasın diye otomatik güncelleştirici sadece resmi DuckStation sürümlerini güncellemektedir.&lt;/p&gt;&lt;p&gt;Resmi bir Duckstation sürümü için şuraya gidin:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/stenzek/duckstation/releases&quot;&gt;https://github.com/stenzek/duckstation/releases&lt;/a&gt;&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Sorry, you are trying to update a GooseStation version which is not an official GitHub release. To prevent incompatibilities, the auto-updater is only enabled on official builds.&lt;/p&gt;&lt;p&gt;To obtain an official build, please follow the instructions under &quot;Downloading and Running&quot; at the link below:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/ilyalissoboi/goosestation/&quot;&gt;https://github.com/ilyalissoboi/goosestation/&lt;/a&gt;&lt;/p&gt;</source>
+        <translation>&lt;p&gt;Üzgünüz. Bizim resmi GooseStation sürümü yerine elle hazırlanmış bir Duckstation sürümünü güncelleştirmeyi deniyorsunuz. Sorun ve uyumsuzluk olmasın diye otomatik güncelleştirici sadece resmi GooseStation sürümlerini güncellemektedir.&lt;/p&gt;&lt;p&gt;Resmi bir Duckstation sürümü için şuraya gidin:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/ilyalissoboi/goosestation/releases&quot;&gt;https://github.com/ilyalissoboi/goosestation/releases&lt;/a&gt;&lt;/p&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2932"/>
@@ -13089,8 +13089,8 @@ Açılamayan URL: %1</translation>
     <name>QtModalProgressCallback</name>
     <message>
         <location filename="../qtprogresscallback.cpp" line="14"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <location filename="../qtprogresscallback.cpp" line="31"/>
@@ -13275,8 +13275,8 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     <name>SettingsWindow</name>
     <message>
         <location filename="../settingswindow.ui" line="20"/>
-        <source>DuckStation Settings</source>
-        <translation>DuckStation Ayarları</translation>
+        <source>GooseStation Settings</source>
+        <translation>GooseStation Ayarları</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="56"/>
@@ -13300,7 +13300,7 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="91"/>
-        <source>&lt;strong&gt;Game List Settings&lt;/strong&gt;&lt;hr&gt;The list above shows the directories which will be searched by DuckStation to populate the game list. Search directories can be added, removed, and switched to recursive/non-recursive.</source>
+        <source>&lt;strong&gt;Game List Settings&lt;/strong&gt;&lt;hr&gt;The list above shows the directories which will be searched by GooseStation to populate the game list. Search directories can be added, removed, and switched to recursive/non-recursive.</source>
         <translation>&lt;strong&gt;Oyun Listesi Ayarları&lt;/strong&gt;&lt;hr&gt;Oyunların listesini ayarlar. Oyunların aranacağı dizinler seçilir.</translation>
     </message>
     <message>
@@ -13410,8 +13410,8 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="163"/>
-        <source>&lt;strong&gt;Folder Settings&lt;/strong&gt;&lt;hr&gt;These options control where DuckStation will save runtime data files.</source>
-        <translation>&lt;strong&gt;Dizin Ayarları&lt;/strong&gt;&lt;hr&gt;Bu ayarlar DuckStation&apos;un çalışırken verileri nereye işleyeceğini belirler.</translation>
+        <source>&lt;strong&gt;Folder Settings&lt;/strong&gt;&lt;hr&gt;These options control where GooseStation will save runtime data files.</source>
+        <translation>&lt;strong&gt;Dizin Ayarları&lt;/strong&gt;&lt;hr&gt;Bu ayarlar GooseStation&apos;un çalışırken verileri nereye işleyeceğini belirler.</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="166"/>
@@ -13443,13 +13443,13 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     <name>SetupWizardDialog</name>
     <message>
         <location filename="../setupwizarddialog.ui" line="14"/>
-        <source>DuckStation Setup Wizard</source>
-        <translation>DuckStation Kurulum Sihirbazı</translation>
+        <source>GooseStation Setup Wizard</source>
+        <translation>GooseStation Kurulum Sihirbazı</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="50"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Welcome to DuckStation!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;This wizard will help guide you through the configuration steps required to use the application. It is recommended if this is your first time installing DuckStation that you view the setup guide at &lt;a href=&quot;https://github.com/stenzek/duckstation#downloading-and-running&quot;&gt;https://github.com/stenzek/duckstation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;By default, DuckStation will connect to the server at &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; to check for updates, and if available and confirmed, download update packages from &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. If you do not wish for DuckStation to make any network connections on startup, you should uncheck the Automatic Updates option now. The Automatic Update setting can be changed later at any time in Interface Settings.&lt;/p&gt;&lt;p&gt;Please choose a language and theme to begin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;DuckStation&apos;a Hoş Geldiniz!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;Bu sihirbaz DuckStation kurulumunda size yol gösterecek. Bu, DuckStation&apos;u ilk kurulumunuz ise kullanım kılavuzunu okumanızı şiddetle tavsiye ederiz &lt;a href=&quot;https://github.com/stenzek/duckstation#downloading-and-running&quot;&gt;https://github.com/stenzek/duckstation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;Varsayılana göre DuckStation şu sunucuya bağlanacak &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; Ve müsait ve var ise güncellemeleri indirip kuracak &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. Eğer her başlatmada DuckStation&apos;un internete bağlanmasını istemiyorsanız otomatik güncelleştirmeleri şimdi kapatmalısınız. Otomatik güncelleştirme ayarı arayayüzden her istediğiniz zaman değiştirilebilir.&lt;/p&gt;&lt;p&gt;Lütfen bir tema ve dil seçiniz.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Welcome to GooseStation!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;This wizard will help guide you through the configuration steps required to use the application. It is recommended if this is your first time installing GooseStation that you view the setup guide at &lt;a href=&quot;https://github.com/ilyalissoboi/goosestation#downloading-and-running&quot;&gt;https://github.com/ilyalissoboi/goosestation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;By default, GooseStation will connect to the server at &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; to check for updates, and if available and confirmed, download update packages from &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. If you do not wish for GooseStation to make any network connections on startup, you should uncheck the Automatic Updates option now. The Automatic Update setting can be changed later at any time in Interface Settings.&lt;/p&gt;&lt;p&gt;Please choose a language and theme to begin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;GooseStation&apos;a Hoş Geldiniz!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;Bu sihirbaz GooseStation kurulumunda size yol gösterecek. Bu, GooseStation&apos;u ilk kurulumunuz ise kullanım kılavuzunu okumanızı şiddetle tavsiye ederiz &lt;a href=&quot;https://github.com/ilyalissoboi/goosestation#downloading-and-running&quot;&gt;https://github.com/ilyalissoboi/goosestation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;Varsayılana göre GooseStation şu sunucuya bağlanacak &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; Ve müsait ve var ise güncellemeleri indirip kuracak &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. Eğer her başlatmada GooseStation&apos;un internete bağlanmasını istemiyorsanız otomatik güncelleştirmeleri şimdi kapatmalısınız. Otomatik güncelleştirme ayarı arayayüzden her istediğiniz zaman değiştirilebilir.&lt;/p&gt;&lt;p&gt;Lütfen bir tema ve dil seçiniz.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="71"/>
@@ -13468,8 +13468,8 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="136"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation requires a PS1 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct DuckStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation bir PS1 BIOS&apos;una ihtiyaç duyar.&lt;/p&gt;&lt;p&gt;Yasal sebeplerden dolayı BIOS&apos;u &lt;span style=&quot; font-weight:700;&quot;&gt;sahip olduğunuz gerçek bir PS1&apos;den sağlamalsınız&lt;/span&gt; (emanet aldığız bir konsoldaki sayılmaz). Caetla ya da başka bir programla bu BIOS imajını oluşturmalısınız.&lt;/p&gt;&lt;p&gt;BIOS&apos;u elde ettiğinzde veri klasöründeki bios klasörüne atmanız yada BIOS&apos;un nerede olduğunu seçmeniz lazım ki DuckStation başka bir klasöre bakabilsin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation requires a PS1 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct GooseStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation bir PS1 BIOS&apos;una ihtiyaç duyar.&lt;/p&gt;&lt;p&gt;Yasal sebeplerden dolayı BIOS&apos;u &lt;span style=&quot; font-weight:700;&quot;&gt;sahip olduğunuz gerçek bir PS1&apos;den sağlamalsınız&lt;/span&gt; (emanet aldığız bir konsoldaki sayılmaz). Caetla ya da başka bir programla bu BIOS imajını oluşturmalısınız.&lt;/p&gt;&lt;p&gt;BIOS&apos;u elde ettiğinzde veri klasöründeki bios klasörüne atmanız yada BIOS&apos;un nerede olduğunu seçmeniz lazım ki GooseStation başka bir klasöre bakabilsin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="151"/>
@@ -13513,8 +13513,8 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="292"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation will automatically scan and identify games from the selected directories below, and populate the game list. These games should be dumped from discs you own. Utilities such as ImgBurn can be used to create images of game discs in .bin/.cue format.&lt;/p&gt;&lt;p&gt;Supported formats for dumps include: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation otomatik olarak aşağıdaki dizinlerdeki oyunları tarayıp belirleyebilir. Bunlar sizin sahip olduğunuz oyunlar olmalıdır. ImgBurn gibi programlar .bin/.cue formatında imajlar oluşturabilir.&lt;/p&gt;&lt;p&gt;Oyun kopyaları için desteklenen formatlar şunlar gibidir: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, SADECE SIFRESI KIRILMIS/DECRYPTED).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation will automatically scan and identify games from the selected directories below, and populate the game list. These games should be dumped from discs you own. Utilities such as ImgBurn can be used to create images of game discs in .bin/.cue format.&lt;/p&gt;&lt;p&gt;Supported formats for dumps include: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation otomatik olarak aşağıdaki dizinlerdeki oyunları tarayıp belirleyebilir. Bunlar sizin sahip olduğunuz oyunlar olmalıdır. ImgBurn gibi programlar .bin/.cue formatında imajlar oluşturabilir.&lt;/p&gt;&lt;p&gt;Oyun kopyaları için desteklenen formatlar şunlar gibidir: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, SADECE SIFRESI KIRILMIS/DECRYPTED).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="307"/>
@@ -13544,8 +13544,8 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="402"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;By default, DuckStation will map your keyboard to the virtual controller.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;To use an external controller, you must map it first. &lt;/span&gt;On this screen, you can automatically map any controller which is currently connected. If your controller is not currently connected, you can plug it in now.&lt;/p&gt;&lt;p&gt;To change controller bindings in more detail, or use multi-tap, open the Settings menu and choose Controllers once you have completed the Setup Wizard.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Varsayılana göre, DuckStation klavyenizi sanal kola tuş ataması yapar&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;Harici kol kullanmak istiyorsanız kullanacağınız kolun tuşlarını vb. atamalısınız. &lt;/span&gt;Bu ekranda, bağlamış olduğunuz bir kola otomatik tuş ataması yapabilirsiniz. Kol bağlı değil ise şimdi bağlayabilirsiniz.&lt;/p&gt;&lt;p&gt;Detaylı bir şekilde kol ataması yapmak ya da multi yap kullanmak istiyorsanız. Kurulum sihirbazi işlerini bitirdikten sonra ayarlar menüsünden kollar menüsünden atama yapabilirsiniz.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;By default, GooseStation will map your keyboard to the virtual controller.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;To use an external controller, you must map it first. &lt;/span&gt;On this screen, you can automatically map any controller which is currently connected. If your controller is not currently connected, you can plug it in now.&lt;/p&gt;&lt;p&gt;To change controller bindings in more detail, or use multi-tap, open the Settings menu and choose Controllers once you have completed the Setup Wizard.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Varsayılana göre, GooseStation klavyenizi sanal kola tuş ataması yapar&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;Harici kol kullanmak istiyorsanız kullanacağınız kolun tuşlarını vb. atamalısınız. &lt;/span&gt;Bu ekranda, bağlamış olduğunuz bir kola otomatik tuş ataması yapabilirsiniz. Kol bağlı değil ise şimdi bağlayabilirsiniz.&lt;/p&gt;&lt;p&gt;Detaylı bir şekilde kol ataması yapmak ya da multi yap kullanmak istiyorsanız. Kurulum sihirbazi işlerini bitirdikten sonra ayarlar menüsünden kollar menüsünden atama yapabilirsiniz.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="412"/>
@@ -13584,8 +13584,8 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="567"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Setup Complete!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;You are now ready to run games.&lt;/p&gt;&lt;p&gt;Further options are available under the settings menu. You can also use the Big Picture UI for navigation entirely with a gamepad.&lt;/p&gt;&lt;p&gt;We hope you enjoy using DuckStation.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Kurulum Tamamlandı!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;Oyun oynamaya hazırsınız.&lt;/p&gt;&lt;p&gt;İleri aşama ayarlar, ayarlar menüsünden ulaşılabilir. Sadece oyun kolu kullanarak Büyük Ekran modundada bu programı kullanabilirsiniz.&lt;/p&gt;&lt;p&gt;Umarız DuckStation size zevk verir.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Setup Complete!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;You are now ready to run games.&lt;/p&gt;&lt;p&gt;Further options are available under the settings menu. You can also use the Big Picture UI for navigation entirely with a gamepad.&lt;/p&gt;&lt;p&gt;We hope you enjoy using GooseStation.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Kurulum Tamamlandı!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;Oyun oynamaya hazırsınız.&lt;/p&gt;&lt;p&gt;İleri aşama ayarlar, ayarlar menüsünden ulaşılabilir. Sadece oyun kolu kullanarak Büyük Ekran modundada bu programı kullanabilirsiniz.&lt;/p&gt;&lt;p&gt;Umarız GooseStation size zevk verir.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="640"/>
@@ -13636,15 +13636,15 @@ Bu dizini oluşturmak istiyor musunuz?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="47"/>
-        <source>No BIOS images were found. DuckStation &lt;strong&gt;will not&lt;/strong&gt; be able to run games without a BIOS image.&lt;br&gt;&lt;br&gt;Are you sure you wish to continue without selecting a BIOS image?</source>
-        <translation>Hiçbir BIOS dosyası bulanamadı. DuckStation &lt;strong&gt;BIOS Dosyası olmadan&lt;/strong&gt; hiçbir oyun çalıştıramaz.&lt;br&gt;&lt;br&gt;BIOS Dosyası seçmeden ilerlemek istediğinizden emin misiniz?</translation>
+        <source>No BIOS images were found. GooseStation &lt;strong&gt;will not&lt;/strong&gt; be able to run games without a BIOS image.&lt;br&gt;&lt;br&gt;Are you sure you wish to continue without selecting a BIOS image?</source>
+        <translation>Hiçbir BIOS dosyası bulanamadı. GooseStation &lt;strong&gt;BIOS Dosyası olmadan&lt;/strong&gt; hiçbir oyun çalıştıramaz.&lt;br&gt;&lt;br&gt;BIOS Dosyası seçmeden ilerlemek istediğinizden emin misiniz?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="63"/>
-        <source>No game directories have been selected. You will have to manually open any game dumps you want to play, DuckStation&apos;s list will be empty.
+        <source>No game directories have been selected. You will have to manually open any game dumps you want to play, GooseStation&apos;s list will be empty.
 
 Are you sure you want to continue?</source>
-        <translation>Hiçbir oyun dizini seçilmedi. Oynayacağınız oyun dosyalarınızı kendiniz seçmek zorunda kalacaksınız. DuckStation oyun listesi boş kalacak
+        <translation>Hiçbir oyun dizini seçilmedi. Oynayacağınız oyun dosyalarınızı kendiniz seçmek zorunda kalacaksınız. GooseStation oyun listesi boş kalacak
 
 Devam etmek istediğinizden emin misiniz?</translation>
     </message>
@@ -13660,12 +13660,12 @@ Devam etmek istediğinizden emin misiniz?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="148"/>
-        <source>Are you sure you want to cancel DuckStation setup?
+        <source>Are you sure you want to cancel GooseStation setup?
 
-Any changes have been saved, and the wizard will run again next time you start DuckStation.</source>
-        <translation>DuckStation kurulumunu kapatmak istediğinizden emin misiniz?
+Any changes have been saved, and the wizard will run again next time you start GooseStation.</source>
+        <translation>GooseStation kurulumunu kapatmak istediğinizden emin misiniz?
 
-Şimdiye kadar ne ayar yaptıysanız kaydedildi. Bir Sonraki DuckStation açılışında bu sihirbaz tekrar çalışacak.</translation>
+Şimdiye kadar ne ayar yaptıysanız kaydedildi. Bir Sonraki GooseStation açılışında bu sihirbaz tekrar çalışacak.</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="269"/>

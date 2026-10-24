@@ -22,6 +22,7 @@
 #include "imgui_overlays.h"
 #include "interrupt_controller.h"
 #include "mdec.h"
+#include "memcard_sync.h"
 #include "memory_card.h"
 #include "multitap.h"
 #include "pad.h"
@@ -221,6 +222,10 @@ static void UpdateSessionTime(const std::string& prev_serial);
 static void SetTimerResolutionIncreased(bool enabled);
 
 #ifdef ENABLE_DISCORD_PRESENCE
+// GooseStation has no Discord application yet; DuckStation's would show its name and logo on the user's profile.
+// Rich presence stays off until this is set to GooseStation's own application ID.
+static constexpr const char* DISCORD_APPLICATION_ID = "";
+
 static void InitializeDiscordPresence();
 static void ShutdownDiscordPresence();
 static void PollDiscordPresence();
@@ -358,7 +363,7 @@ bool System::Internal::PerformEarlyHardwareChecks(Error* error)
   if (!cpuinfo_has_x86_sse4_1())
   {
     Error::SetStringFmt(error, "Your CPU does not support the SSE4.1 instruction set.\n"
-                               "A CPU from 2008 or newer is required to run DuckStation.");
+                               "A CPU from 2008 or newer is required to run GooseStation.");
     return false;
   }
 #endif
@@ -426,7 +431,7 @@ void System::CheckCacheLineSize()
 
 void System::LogStartupInformation()
 {
-  INFO_LOG("DuckStation Version {} [{}]", g_scm_tag_str, g_scm_branch_str);
+  INFO_LOG("GooseStation Version {} [{}]", g_scm_tag_str, g_scm_branch_str);
   INFO_LOG("SCM Timestamp: {}", g_scm_date_str);
   INFO_LOG("Build Timestamp: {} {}", __DATE__, __TIME__);
   if (const cpuinfo_package* package = cpuinfo_get_package(0)) [[likely]]
@@ -492,6 +497,9 @@ bool System::Internal::CPUThreadInitialize(Error* error)
   if (g_settings.achievements_enabled)
     Achievements::Initialize();
 
+  // Starts in the background: a game booted right away waits for it before opening its cards.
+  MemcardSync::Initialize();
+
 #ifdef ENABLE_DISCORD_PRESENCE
   if (g_settings.enable_discord_presence)
     InitializeDiscordPresence();
@@ -516,6 +524,9 @@ void System::Internal::CPUThreadShutdown()
 #endif
 
   Achievements::Shutdown(false);
+
+  // After the system is gone, so the cards have been written and closed: gives uploads a few seconds.
+  MemcardSync::Shutdown();
 
   InputManager::CloseSources();
 
@@ -5827,9 +5838,14 @@ void dyn_libs::CloseDiscordRPC()
   s_discord_rpc_library.Close();
 }
 
+bool System::IsDiscordPresenceAvailable()
+{
+  return DISCORD_APPLICATION_ID[0] != '\0';
+}
+
 void System::InitializeDiscordPresence()
 {
-  if (s_discord_presence_active)
+  if (s_discord_presence_active || !IsDiscordPresenceAvailable())
     return;
 
   Error error;
@@ -5840,7 +5856,7 @@ void System::InitializeDiscordPresence()
   }
 
   DiscordEventHandlers handlers = {};
-  dyn_libs::Discord_Initialize("705325712680288296", &handlers, 0, nullptr);
+  dyn_libs::Discord_Initialize(DISCORD_APPLICATION_ID, &handlers, 0, nullptr);
   s_discord_presence_active = true;
 
   UpdateRichPresence(true);
@@ -5868,8 +5884,8 @@ void System::UpdateRichPresence(bool update_session_time)
 
   // https://discord.com/developers/docs/rich-presence/how-to#updating-presence-update-presence-payload-fields
   DiscordRichPresence rp = {};
-  rp.largeImageKey = "duckstation_logo";
-  rp.largeImageText = "DuckStation PS1/PSX Emulator";
+  rp.largeImageKey = "goosestation_logo";
+  rp.largeImageText = "GooseStation PS1/PSX Emulator";
   rp.startTimestamp = s_discord_presence_time_epoch;
   rp.details = "No Game Running";
   if (IsValidOrInitializing())
@@ -5906,6 +5922,11 @@ void System::PollDiscordPresence()
 }
 
 #else
+
+bool System::IsDiscordPresenceAvailable()
+{
+  return false;
+}
 
 void System::UpdateRichPresence(bool update_session_time)
 {

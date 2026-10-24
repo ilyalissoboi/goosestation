@@ -465,6 +465,9 @@ void ReleaseSocketMultiplexer();
 /// Called when rich presence changes.
 void UpdateRichPresence(bool update_session_time);
 
+/// Returns true if this build has a Discord application to show rich presence with.
+bool IsDiscordPresenceAvailable();
+
 namespace Internal {
 /// Performs mandatory hardware checks.
 bool PerformEarlyHardwareChecks(Error* error);

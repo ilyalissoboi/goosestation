@@ -97,7 +97,8 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 |---|---|---|
 | SDL3 | Input moved to SDL3: better controller support, sensors (accelerometer) mapping, touchpad as pointer. | P1 (SDL3 also helps on Android) |
 | Input options | Disabling background input, pressure and deadzone in macros, inverting axes, raw input hotplugging, preventing opposing directions. | P2 |
-| Controller presets, per-game controller settings | Saving and applying controller setups. | P2 |
+
+Input profiles and per-game controller settings are in the base already, so they are not listed.
 
 ## Platform and build
 

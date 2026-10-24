@@ -5,6 +5,8 @@ add_executable(common-tests
   path_tests.cpp
   rectangle_tests.cpp
   string_tests.cpp
+  text_input_tests.cpp
+  ../util/text_input.cpp
 )
 
 target_link_libraries(common-tests PRIVATE common gtest gtest_main)

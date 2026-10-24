@@ -62,6 +62,8 @@ namespace MemcardSync {
   X(es_session_begin)                                                                                                  \
   X(es_session_end)                                                                                                    \
   X(es_sync_now)                                                                                                       \
+  X(es_conflict_get)                                                                                                   \
+  X(es_conflict_resolve)                                                                                               \
   X(es_secret_set)                                                                                                     \
   X(es_secret_get)                                                                                                     \
   X(es_secret_delete)
@@ -128,6 +130,8 @@ static Config s_config;
 static std::vector<Card> s_cards;
 static std::string s_status;
 static std::string s_last_start_error;
+// Conflicts waiting for the player, in the order emusync reported them.
+static std::vector<Conflict> s_conflicts;
 
 // The worker thread: periodic syncs, uploads after writes, and draining emusync's events. Writes
 // are handed to it so the emulation thread never waits for emusync.
@@ -137,6 +141,14 @@ static std::condition_variable s_worker_cv;
 static bool s_worker_stop = false;
 static bool s_worker_wake = false;
 static std::vector<es_container_id> s_flush_pending;
+// The player's choices, for the worker to hand to emusync.
+struct PendingResolution
+{
+  es_conflict_id id;
+  bool keep_local;
+  u32 remote_index;
+};
+static std::vector<PendingResolution> s_resolve_pending;
 
 // The apply thread (ApplySettingsAsync): starts and stops the client off the UI and emulation
 // threads.
@@ -467,12 +479,116 @@ static std::string DescribeEvent(const es_event& ev)
       if (ev.status == ES_E_BUSY)
         return {}; // the card is in use; it is applied when the card is closed
       return fmt::format("Could not update {}: {}", save, ev.message ? ev.message : s_es.es_status_str(ev.status));
+    case ES_EV_CONFLICT:
+      return fmt::format("{} was changed both on this device and on another: choose which to keep in the memory card "
+                         "sync settings.",
+                         save);
     case ES_EV_AUTH_REQUIRED:
       return "The storage rejected the access key. Check it in the memory card sync settings.";
     case ES_EV_ERROR:
       return fmt::format("Sync error: {}", ev.message ? ev.message : s_es.es_status_str(ev.status));
     default:
       return {};
+  }
+}
+
+static MemcardSync::ConflictVersion ToConflictVersion(const es_version_info& v)
+{
+  MemcardSync::ConflictVersion out;
+  out.device = v.device_name;
+  out.modified_unix_ms = v.modified_unix_ms;
+  out.size = v.size;
+  out.deleted = (v.is_tombstone != 0);
+  return out;
+}
+
+// Records a conflict emusync reported, or updates the record of it. Needs the client lock (shared).
+static void AddConflict(es_conflict_id id)
+{
+  using namespace MemcardSync;
+  es_conflict_info info = ES_CONFLICT_INFO_INIT;
+  if (const es_status st = s_es.es_conflict_get(s_client, id, &info); st != ES_OK)
+  {
+    WARNING_LOG("Could not read conflict {}: {}", id, s_es.es_status_str(st));
+    return;
+  }
+
+  Conflict c;
+  c.id = id;
+  // Unit ids are "ps1:<card>:<save>"; the save's name may itself hold ':'.
+  const std::string_view unit = info.unit_id;
+  if (const size_t first = unit.find(':'); first != std::string_view::npos)
+  {
+    if (const size_t second = unit.find(':', first + 1); second != std::string_view::npos)
+    {
+      c.card = unit.substr(first + 1, second - first - 1);
+      c.save = unit.substr(second + 1);
+    }
+  }
+  if (c.save.empty())
+    c.save = info.unit_name;
+  // Title keys are "ps1:SLUS-00067".
+  if (const std::string_view key = info.title_key; key.starts_with("ps1:"))
+    c.serial = key.substr(4);
+  if (info.local.version_id[0] != '\0')
+    c.local = ToConflictVersion(info.local);
+  const u32 remote_count = std::min<u32>(info.remote_count, static_cast<u32>(std::size(info.remote)));
+  for (u32 i = 0; i < remote_count; i++)
+    c.remote.push_back(ToConflictVersion(info.remote[i]));
+
+  std::lock_guard lock(s_state_lock);
+  const auto it = std::find_if(s_conflicts.begin(), s_conflicts.end(), [id](const Conflict& x) { return x.id == id; });
+  if (it != s_conflicts.end())
+    *it = std::move(c);
+  else
+    s_conflicts.push_back(std::move(c));
+}
+
+static void RemoveConflict(es_conflict_id id)
+{
+  using namespace MemcardSync;
+  std::lock_guard lock(s_state_lock);
+  std::erase_if(s_conflicts, [id](const Conflict& c) { return c.id == id; });
+}
+
+// Drops the conflicts resolved meanwhile, on another device say. Needs the client lock (shared).
+static void PruneConflicts()
+{
+  using namespace MemcardSync;
+  std::vector<es_conflict_id> ids;
+  {
+    std::lock_guard lock(s_state_lock);
+    for (const Conflict& c : s_conflicts)
+      ids.push_back(c.id);
+  }
+  for (const es_conflict_id id : ids)
+  {
+    es_conflict_info info = ES_CONFLICT_INFO_INIT;
+    if (s_es.es_conflict_get(s_client, id, &info) == ES_E_NOT_FOUND)
+      RemoveConflict(id);
+  }
+}
+
+// Hands the player's choices to emusync. Needs the client lock (shared).
+static void ResolvePending(const std::vector<MemcardSync::PendingResolution>& pending)
+{
+  using namespace MemcardSync;
+  for (const PendingResolution& p : pending)
+  {
+    const es_status st = s_es.es_conflict_resolve(s_client, p.id, p.keep_local ? ES_RESOLVE_KEEP_LOCAL : ES_RESOLVE_TAKE_REMOTE,
+                                                  p.remote_index);
+    if (st == ES_OK || st == ES_PENDING || st == ES_E_NOT_FOUND)
+    {
+      INFO_LOG("Conflict {} resolved: {}.", p.id,
+               p.keep_local ? std::string("kept this device's version") :
+                              fmt::format("took the other device's version {}", p.remote_index));
+      RemoveConflict(p.id);
+    }
+    else
+    {
+      WARNING_LOG("Could not resolve conflict {}: {}", p.id, s_es.es_status_str(st));
+      SetStatus(fmt::format("Could not resolve a conflict: {}", s_es.es_status_str(st)));
+    }
   }
 }
 
@@ -483,6 +599,21 @@ static void DrainEvents()
   es_event ev = ES_EVENT_INIT;
   while (s_es.es_event_poll(s_client, &ev) == 1)
   {
+    if (ev.type == ES_EV_CONFLICT)
+    {
+      AddConflict(ev.conflict_id);
+      Host::AddIconOSDMessage(
+        fmt::format("MemcardSync-Conflict-{}", ev.conflict_id), ICON_FA_CLOUD,
+        fmt::format(TRANSLATE_FS("MemcardSync", "{} was changed on this device and on another. Choose which to keep "
+                                                "in Settings > Memory Cards."),
+                    ev.unit_name ? ev.unit_name : "A save"),
+        Host::OSD_WARNING_DURATION);
+    }
+    else if (ev.type == ES_EV_SYNC_FINISHED)
+    {
+      PruneConflicts();
+    }
+
     std::string text = DescribeEvent(ev);
     if (ev.type == ES_EV_UNIT_APPLIED || ev.type == ES_EV_UNIT_UPLOADED)
       INFO_LOG("{} {}", ev.type == ES_EV_UNIT_APPLIED ? "Applied" : "Uploaded", ev.unit_id ? ev.unit_id : "?");
@@ -503,6 +634,7 @@ static void WorkerLoop()
   for (;;)
   {
     std::vector<es_container_id> flush;
+    std::vector<PendingResolution> resolve;
     {
       std::unique_lock lock(s_worker_lock);
       s_worker_cv.wait_until(lock, next_sync, [] { return s_worker_stop || s_worker_wake; });
@@ -510,6 +642,7 @@ static void WorkerLoop()
         return;
       s_worker_wake = false;
       flush = std::exchange(s_flush_pending, {});
+      resolve = std::exchange(s_resolve_pending, {});
     }
 
     std::shared_lock client(s_client_lock);
@@ -517,6 +650,7 @@ static void WorkerLoop()
       return;
     for (const es_container_id id : flush)
       s_es.es_container_flushed(s_client, id);
+    ResolvePending(resolve);
     if (std::chrono::steady_clock::now() >= next_sync)
     {
       s_es.es_sync_now(s_client);
@@ -552,6 +686,7 @@ static void StopLocked(std::unique_lock<std::shared_mutex>& client, u32 timeout_
   {
     std::lock_guard lock(s_worker_lock);
     s_flush_pending.clear();
+    s_resolve_pending.clear();
   }
   std::lock_guard lock(s_state_lock);
   for (Card& c : s_cards)
@@ -559,6 +694,8 @@ static void StopLocked(std::unique_lock<std::shared_mutex>& client, u32 timeout_
     c.container = 0;
     c.session = 0;
   }
+  // emusync reports the open ones again once a client is started.
+  s_conflicts.clear();
   WipeSecret(s_config.secret_access_key);
   s_config = {};
   s_status.clear();
@@ -588,8 +725,8 @@ bool MemcardSync::Start(const Config& config, std::string* error)
   cfg.device_name = config.device_name.empty() ? nullptr : config.device_name.c_str();
   cfg.emulator_id = "goosestation";
   cfg.emulator_version = config.emulator_version.c_str();
-  // No conflict screen yet: the newest version wins and the other stays in emusync's history.
-  cfg.conflict_policy = ES_POLICY_NEWEST;
+  // The player chooses (GetConflicts(), ResolveConflict()); until then the card keeps this device's version.
+  cfg.conflict_policy = ES_POLICY_ASK;
   cfg.log = &LogMessage;
   cfg.log_level = ES_LOG_INFO;
   es_status st = s_es.es_client_create(&cfg, &s_client);
@@ -697,6 +834,22 @@ void MemcardSync::SyncNow()
   std::shared_lock client(s_client_lock);
   if (s_client)
     s_es.es_sync_now(s_client);
+}
+
+std::vector<MemcardSync::Conflict> MemcardSync::GetConflicts()
+{
+  std::lock_guard lock(s_state_lock);
+  return s_conflicts;
+}
+
+void MemcardSync::ResolveConflict(u64 id, bool keep_local, u32 remote_index)
+{
+  // Through the worker: emusync's calls take the client lock, which a start in progress holds for seconds.
+  {
+    std::lock_guard lock(s_worker_lock);
+    s_resolve_pending.push_back({id, keep_local, remote_index});
+  }
+  WakeWorker();
 }
 
 // ---- Settings ------------------------------------------------------------------------------------

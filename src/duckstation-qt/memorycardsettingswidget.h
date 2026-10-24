@@ -44,6 +44,8 @@ private:
   void onShowToggled(QLineEdit* edit, QPushButton* show_button, const char* secret, bool shown);
   void onPassphraseRemoveClicked();
   void onSyncNowClicked();
+  /// The conflict screen: each save changed both here and on another device, and which version to keep.
+  void onResolveConflictsClicked();
 
   /// Restarts sync with the stored settings, storing `secrets` first (off the UI thread).
   void apply(std::vector<std::pair<const char*, std::string>> secrets = {});
@@ -64,6 +66,8 @@ private:
   QLineEdit* m_device_name = nullptr;
   QLabel* m_status = nullptr;
   QPushButton* m_sync_now = nullptr;
+  QLabel* m_conflicts = nullptr;
+  QPushButton* m_resolve_conflicts = nullptr;
   QTimer m_status_timer;
   /// Settings changes still being applied: each apply() until its callback.
   int m_pending_applies = 0;

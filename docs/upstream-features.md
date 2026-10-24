@@ -43,7 +43,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 |---|---|---|
 | Accuracy fixes across CPU, GPU, CD-ROM, SPU, MDEC, DMA, timers, pad | Hundreds of individual fixes; they can't be listed one by one from titles. We find and fix our own as games show them, with regression tests. | P1 (ongoing) |
 | Game database updates | Per-game fixes and traits, hashes, metadata, localised and sort titles, controller support info. The data in the base is GPLv3; the later database is not and must be rebuilt from our own testing and public sources (redump.org). | P1 (ongoing) |
-| New controllers | JogCon, Pop'n Music controller, Densha de Go controller with axes, NeGcon rumble, mouse in more games, right stick as shoulder or trigger buttons. | P2 |
+| New controllers | JogCon, Densha de Go controller with axes, mouse in more games, right stick as shoulder or trigger buttons. (NeGcon rumble and a Pop'n controller mode for the digital pad are in the base already.) | P2 |
 | CD-ROM options | Maximum read speedup, no speedup during FMVs, disc lid control, switch to next disc on stop, SubQ skew, CloneCD (`.ccd`) and Mode 1 images, WAVE cue sheets, PPF undo data. | P2 |
 | Fast boot variants | "Fast forward boot" and another fast-boot type. | P2 |
 | Parallel port flash cartridge | Basic emulation of PIO flash cartridges, and an option for the PCSX expansion region. | P3 |
@@ -104,7 +104,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 | Feature | What it does | Priority |
 |---|---|---|
 | Updated dependencies | Newer Qt, SDL3, newer compilers. Upgrading our own dependencies is our work, not a port. | P1 |
-| Packaging | AppImage, installer, RPM/Arch packaging. | P2 |
+| Packaging | Windows installer, RPM/Arch packaging. (The AppImage is in the base already.) | P2 |
 | Android | DuckStation's Android app is closed source. GooseStation's Android frontend is our own, written independently (see the project plan). | separate track |
 
 ## Not wanted

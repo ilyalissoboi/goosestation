@@ -18,7 +18,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="resources/duckstation-qt.qrc">
-    <normaloff>:/icons/duck.png</normaloff>:/icons/duck.png</iconset>
+    <normaloff>:/icons/goosestation.png</normaloff>:/icons/goosestation.png</iconset>
   </property>
   <property name="unifiedTitleAndToolBarOnMac">
    <bool>true</bool>
@@ -465,7 +465,7 @@
   <action name="actionAbout">
    <property name="icon">
     <iconset resource="resources/duckstation-qt.qrc">
-     <normaloff>:/icons/duck_64.png</normaloff>:/icons/duck_64.png</iconset>
+     <normaloff>:/icons/goosestation_64.png</normaloff>:/icons/goosestation_64.png</iconset>
    </property>
    <property name="text">
     <string>&amp;About GooseStation...</string>

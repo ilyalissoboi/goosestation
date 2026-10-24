@@ -158,7 +158,7 @@ void SetupWizardDialog::setupUi()
   m_ui.setupUi(this);
 
   m_ui.logo->setPixmap(
-    QPixmap(QString::fromUtf8(Path::Combine(EmuFolders::Resources, "images" FS_OSPATH_SEPARATOR_STR "duck.png"))));
+    QPixmap(QString::fromUtf8(Path::Combine(EmuFolders::Resources, "images" FS_OSPATH_SEPARATOR_STR "goosestation.png"))));
 
   m_ui.pages->setCurrentIndex(0);
 

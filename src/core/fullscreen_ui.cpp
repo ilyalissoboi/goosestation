@@ -894,7 +894,7 @@ void FullscreenUI::ReturnToMainWindow()
 
 bool FullscreenUI::LoadResources()
 {
-  s_app_icon_texture = LoadTexture("images/duck.png");
+  s_app_icon_texture = LoadTexture("images/goosestation.png");
 
   s_fallback_disc_texture = LoadTexture("fullscreenui/media-cdrom.png");
   s_fallback_exe_texture = LoadTexture("fullscreenui/applications-system.png");

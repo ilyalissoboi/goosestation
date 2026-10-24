@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normalon>:/icons/duck.png</normalon>
+    <normalon>:/icons/goosestation.png</normalon>
    </iconset>
   </property>
   <layout class="QGridLayout" name="gridLayout">

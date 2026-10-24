@@ -58,7 +58,7 @@ void AboutDialog::showThirdPartyNotices(QWidget* parent)
   dialog.setWindowTitle(tr("GooseStation Third-Party Notices"));
 
   QIcon icon;
-  icon.addFile(QString::fromUtf8(":/icons/duck.png"), QSize(), QIcon::Normal, QIcon::Off);
+  icon.addFile(QString::fromUtf8(":/icons/goosestation.png"), QSize(), QIcon::Normal, QIcon::Off);
   dialog.setWindowIcon(icon);
 
   QVBoxLayout* layout = new QVBoxLayout(&dialog);

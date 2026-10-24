@@ -195,7 +195,7 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(SettingsWindow* dialog, QWidget* 
   dialog->registerWidgetHelp(m_ui.logToWindow, tr("Log To Window"), tr("User Preference"),
                              tr("Logs messages to the window."));
   dialog->registerWidgetHelp(m_ui.logToFile, tr("Log To File"), tr("User Preference"),
-                             tr("Logs messages to duckstation.log in the user directory."));
+                             tr("Logs messages to goosestation.log in the user directory."));
   dialog->registerWidgetHelp(m_ui.showDebugMenu, tr("Show Debug Menu"), tr("Unchecked"),
                              tr("Shows a debug menu bar with additional statistics and quick settings."));
 }

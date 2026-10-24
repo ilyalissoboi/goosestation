@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop">
+  <id>io.github.ilyalissoboi.GooseStation</id>
+  <launchable type="desktop-id">io.github.ilyalissoboi.GooseStation.desktop</launchable>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0</project_license>
+  <name>GooseStation</name>
+  <developer_name>GooseStation contributors</developer_name>
+  <summary>PlayStation Emulator</summary>
+  <description>
+    <p>GooseStation is a simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability. The goal is to be as accurate as possible while maintaining performance suitable for low-end devices. It is a fork of DuckStation that adds memory card sync between devices.</p>
+    <p>"Hack" options are discouraged, the default configuration should support all playable games with only some of the enhancements having compatibility issues.</p>
+    <p>"PlayStation" and "PSX" are registered trademarks of Sony Interactive Entertainment Europe Limited. This project is not affiliated in any way with Sony Interactive Entertainment.</p>
+  </description>
+  <content_rating type="oars-1.1"/>
+  <url type="homepage">https://github.com/ilyalissoboi/goosestation</url>
+  <url type="help">https://github.com/ilyalissoboi/goosestation</url>
+  <url type="vcs-browser">https://github.com/ilyalissoboi/goosestation</url>
+  <releases>
+    <release version="@GIT_VERSION@" date="@GIT_DATE@" />
+  </releases>
+  <custom>
+    <value key="flathub::manifest">https://raw.githubusercontent.com/ilyalissoboi/goosestation/@GIT_HASH@/scripts/flatpak/io.github.ilyalissoboi.GooseStation.yaml</value>
+  </custom>
+</component>

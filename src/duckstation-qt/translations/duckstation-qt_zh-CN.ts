@@ -5,8 +5,8 @@
     <name>AboutDialog</name>
     <message>
         <location filename="../aboutdialog.cpp" line="45"/>
-        <source>DuckStation is a free and open-source simulator/emulator of the Sony PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; console, focusing on playability, speed, and long-term maintainability.</source>
-        <translation>DuckStation是索尼PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt;游戏机的免费开源仿真器/模拟器，专注于可玩性，速度，以及长期可维护性。</translation>
+        <source>GooseStation is a free and open-source simulator/emulator of the Sony PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; console, focusing on playability, speed, and long-term maintainability.</source>
+        <translation>GooseStation是索尼PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt;游戏机的免费开源仿真器/模拟器，专注于可玩性，速度，以及长期可维护性。</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="50"/>
@@ -15,13 +15,13 @@
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="59"/>
-        <source>DuckStation Third-Party Notices</source>
-        <translation>DuckStation第三方通知</translation>
+        <source>GooseStation Third-Party Notices</source>
+        <translation>GooseStation第三方通知</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="79"/>
-        <source>Missing thirdparty.html file. You should request it from where-ever you obtained DuckStation.</source>
-        <translation>缺失第三方html文件。您应当从您获得DuckStation的地方去索取它。</translation>
+        <source>Missing thirdparty.html file. You should request it from where-ever you obtained GooseStation.</source>
+        <translation>缺失第三方html文件。您应当从您获得GooseStation的地方去索取它。</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="29"/>
@@ -35,12 +35,12 @@
     </message>
     <message>
         <location filename="../aboutdialog.ui" line="101"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <location filename="../aboutdialog.ui" line="14"/>
-        <source>About DuckStation</source>
+        <source>About GooseStation</source>
         <translation>关于Duckstation</translation>
     </message>
     <message>
@@ -142,13 +142,13 @@ Do you want to enable hardcore mode?</source>
     </message>
     <message>
         <location filename="../achievementlogindialog.ui" line="69"/>
-        <source>Please enter your user name and password for retroachievements.org below. Your password will not be saved in DuckStation, an access token will be generated and used instead.</source>
-        <translation>请在下面输入您的retroachievements.org的用户名和密码。您的密码将不会保存在DuckStation中，取而代之的是将会生成一个访问令牌并使用。</translation>
+        <source>Please enter your user name and password for retroachievements.org below. Your password will not be saved in GooseStation, an access token will be generated and used instead.</source>
+        <translation>请在下面输入您的retroachievements.org的用户名和密码。您的密码将不会保存在GooseStation中，取而代之的是将会生成一个访问令牌并使用。</translation>
     </message>
     <message>
         <location filename="../achievementlogindialog.cpp" line="22"/>
-        <source>&lt;strong&gt;Your RetroAchievements login token is no longer valid.&lt;/strong&gt; You must re-enter your credentials for achievements to be tracked. Your password will not be saved in DuckStation, an access token will be generated and used instead.</source>
-        <translation>&lt;strong&gt;您在RetroAchievements的登入令牌不再有效。&lt;/strong&gt;您必须重新登入您的凭据用以跟踪成就。您的密码将不会保存在DuckStation中，取而代之的是将会生成一个访问令牌并使用。</translation>
+        <source>&lt;strong&gt;Your RetroAchievements login token is no longer valid.&lt;/strong&gt; You must re-enter your credentials for achievements to be tracked. Your password will not be saved in GooseStation, an access token will be generated and used instead.</source>
+        <translation>&lt;strong&gt;您在RetroAchievements的登入令牌不再有效。&lt;/strong&gt;您必须重新登入您的凭据用以跟踪成就。您的密码将不会保存在GooseStation中，取而代之的是将会生成一个访问令牌并使用。</translation>
     </message>
     <message>
         <location filename="../achievementlogindialog.ui" line="57"/>
@@ -219,8 +219,8 @@ Do you want to enable hardcore mode?</source>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="47"/>
-        <source>When enabled and logged in, DuckStation will scan for achievements on startup.</source>
-        <translation>当启用并登入时，DuckStation将在启动时扫描成就。</translation>
+        <source>When enabled and logged in, GooseStation will scan for achievements on startup.</source>
+        <translation>当启用并登入时，GooseStation将在启动时扫描成就。</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="63"/>
@@ -274,8 +274,8 @@ Do you want to enable hardcore mode?</source>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="65"/>
-        <source>When enabled, DuckStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
-        <translation>当启用时，DuckStation将假定全部成就都被锁定，并且不会向服务器发送任何解锁通知。</translation>
+        <source>When enabled, GooseStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
+        <translation>当启用时，GooseStation将假定全部成就都被锁定，并且不会向服务器发送任何解锁通知。</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="55"/>
@@ -327,8 +327,8 @@ Do you want to enable hardcore mode?</source>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="69"/>
-        <source>When enabled, DuckStation will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time.</source>
-        <translation>当启用时，DuckStation将列出非官方集的成就。请注意，这些成就不会被RetroAchievements追踪，所以它们每次都会解锁。</translation>
+        <source>When enabled, GooseStation will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time.</source>
+        <translation>当启用时，GooseStation将列出非官方集的成就。请注意，这些成就不会被RetroAchievements追踪，所以它们每次都会解锁。</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="184"/>
@@ -757,8 +757,8 @@ Unread messages: {}</source>
     </message>
     <message>
         <location filename="../advancedsettingswidget.cpp" line="198"/>
-        <source>Logs messages to duckstation.log in the user directory.</source>
-        <translation>将消息记录到用户数据目录中的duckstation.log。</translation>
+        <source>Logs messages to goosestation.log in the user directory.</source>
+        <translation>将消息记录到用户数据目录中的goosestation.log。</translation>
     </message>
     <message>
         <location filename="../advancedsettingswidget.cpp" line="194"/>
@@ -2118,8 +2118,8 @@ Unread messages: {}</source>
     </message>
     <message>
         <location filename="../biossettingswidget.ui" line="126"/>
-        <source>DuckStation will search for BIOS images in this directory.</source>
-        <translation>DuckStation将在此目录中搜索BIOS文件:</translation>
+        <source>GooseStation will search for BIOS images in this directory.</source>
+        <translation>GooseStation将在此目录中搜索BIOS文件:</translation>
     </message>
     <message>
         <location filename="../biossettingswidget.ui" line="141"/>
@@ -2449,8 +2449,8 @@ Unread messages: {}</source>
     </message>
     <message>
         <location filename="../cheatmanagerwindow.cpp" line="569"/>
-        <source>Are you sure you want to reset the cheat list? Any cheats not in the DuckStation database WILL BE LOST.</source>
-        <translation>您确定想要重置金手指列表吗？任何不在DuckStation数据库中的金手指将会丢失。</translation>
+        <source>Are you sure you want to reset the cheat list? Any cheats not in the GooseStation database WILL BE LOST.</source>
+        <translation>您确定想要重置金手指列表吗？任何不在GooseStation数据库中的金手指将会丢失。</translation>
     </message>
 </context>
 <context>
@@ -4059,8 +4059,8 @@ This warning will only be shown once.</source>
     <name>ControllerSettingsWindow</name>
     <message>
         <location filename="../controllersettingswindow.ui" line="20"/>
-        <source>DuckStation Controller Settings</source>
-        <translation>DuckStation控制器设置</translation>
+        <source>GooseStation Controller Settings</source>
+        <translation>GooseStation控制器设置</translation>
     </message>
     <message>
         <source>Profile:</source>
@@ -4337,8 +4337,8 @@ You cannot undo this action.</source>
     </message>
     <message>
         <location filename="../coverdownloaddialog.ui" line="38"/>
-        <source>DuckStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
-        <translation>DuckStation可为当前没有封面集的游戏去自动下载封面。我们不托管任何封面图片，用户必须提供他们自己的图片来源。</translation>
+        <source>GooseStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
+        <translation>GooseStation可为当前没有封面集的游戏去自动下载封面。我们不托管任何封面图片，用户必须提供他们自己的图片来源。</translation>
     </message>
 </context>
 <context>
@@ -5777,8 +5777,8 @@ Do you want to %1 anyway?</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7376"/>
-        <source>Determines the size of screenshots created by DuckStation.</source>
-        <translation>确定DuckStation创建的屏幕截图的大小。</translation>
+        <source>Determines the size of screenshots created by GooseStation.</source>
+        <translation>确定GooseStation创建的屏幕截图的大小。</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7378"/>
@@ -5821,8 +5821,8 @@ Do you want to %1 anyway?</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7438"/>
-        <source>Exit DuckStation</source>
-        <translation>退出DuckStation</translation>
+        <source>Exit GooseStation</source>
+        <translation>退出GooseStation</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7440"/>
@@ -6629,8 +6629,8 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7540"/>
-        <source>Logs messages to duckstation.log in the user directory.</source>
-        <translation>将消息记录到用户数据目录中的duckstation.log。</translation>
+        <source>Logs messages to goosestation.log in the user directory.</source>
+        <translation>将消息记录到用户数据目录中的goosestation.log。</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7542"/>
@@ -6767,8 +6767,8 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7835"/>
-        <source>When enabled and logged in, DuckStation will scan for achievements on startup.</source>
-        <translation>当启用并登入时，DuckStation将在启动时扫描成就。</translation>
+        <source>When enabled and logged in, GooseStation will scan for achievements on startup.</source>
+        <translation>当启用并登入时，GooseStation将在启动时扫描成就。</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7762"/>
@@ -7513,8 +7513,8 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7400"/>
-        <source>DuckStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.</source>
-        <translation>DuckStation是索尼PlayStation(TM) 游戏机的免费开源仿真器/模拟器，专注于可玩性，速度，以及长期可维护性。</translation>
+        <source>GooseStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.</source>
+        <translation>GooseStation是索尼PlayStation(TM) 游戏机的免费开源仿真器/模拟器，专注于可玩性，速度，以及长期可维护性。</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7777"/>
@@ -7552,8 +7552,8 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7836"/>
-        <source>When enabled, DuckStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
-        <translation>当启用时，DuckStation将假定全部成就都被锁定，并且不会向服务器发送任何解锁通知。</translation>
+        <source>When enabled, GooseStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
+        <translation>当启用时，GooseStation将假定全部成就都被锁定，并且不会向服务器发送任何解锁通知。</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7463"/>
@@ -8235,8 +8235,8 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7837"/>
-        <source>When enabled, DuckStation will list achievements from unofficial sets. These achievements are not tracked by RetroAchievements.</source>
-        <translation>当启用时，DuckStation将列出非官方集的成就。这些成就不会被RetroAchievements追踪。</translation>
+        <source>When enabled, GooseStation will list achievements from unofficial sets. These achievements are not tracked by RetroAchievements.</source>
+        <translation>当启用时，GooseStation将列出非官方集的成就。这些成就不会被RetroAchievements追踪。</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7652"/>
@@ -8305,7 +8305,7 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7244"/>
-        <source>About DuckStation</source>
+        <source>About GooseStation</source>
         <translation>关于Duckstation</translation>
     </message>
     <message>
@@ -11183,8 +11183,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
         <translation>不勾选</translation>
     </message>
     <message>
-        <source>Enable this option to match DuckStation&apos;s refresh rate with your current monitor or screen. VSync is automatically disabled when it is not possible (e.g. running at non-100% speed).</source>
-        <translation type="vanished">启用此选项以使DuckStation的刷新率与当前显示器或屏幕互相匹配。当不可能 (例如以非100%速度运行) 时，垂直同步将自动禁用。</translation>
+        <source>Enable this option to match GooseStation&apos;s refresh rate with your current monitor or screen. VSync is automatically disabled when it is not possible (e.g. running at non-100% speed).</source>
+        <translation type="vanished">启用此选项以使GooseStation的刷新率与当前显示器或屏幕互相匹配。当不可能 (例如以非100%速度运行) 时，垂直同步将自动禁用。</translation>
     </message>
     <message>
         <location filename="../graphicssettingswidget.cpp" line="336"/>
@@ -13181,8 +13181,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="3156"/>
-        <source>&lt;p&gt;Sorry, you are trying to update a DuckStation version which is not an official GitHub release. To prevent incompatibilities, the auto-updater is only enabled on official builds.&lt;/p&gt;&lt;p&gt;To obtain an official build, please follow the instructions under &quot;Downloading and Running&quot; at the link below:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/stenzek/duckstation/&quot;&gt;https://github.com/stenzek/duckstation/&lt;/a&gt;&lt;/p&gt;</source>
-        <translation>&lt;p&gt;抱歉，您正在尝试更新的DuckStation版本不是由官方GitHub所发行。为防止不兼容，自动更新程序仅在正式版本上启用。&lt;/p&gt;&lt;p&gt;要获取正式版本，请按照下面链接中的“下载并运行”下的说明进行操作：&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/stenzek/duckstation/&quot;&gt;https://github.com/stenzek/duckstation/&lt;/a&gt;lt;/p&gt;</translation>
+        <source>&lt;p&gt;Sorry, you are trying to update a GooseStation version which is not an official GitHub release. To prevent incompatibilities, the auto-updater is only enabled on official builds.&lt;/p&gt;&lt;p&gt;To obtain an official build, please follow the instructions under &quot;Downloading and Running&quot; at the link below:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/ilyalissoboi/goosestation/&quot;&gt;https://github.com/ilyalissoboi/goosestation/&lt;/a&gt;&lt;/p&gt;</source>
+        <translation>&lt;p&gt;抱歉，您正在尝试更新的GooseStation版本不是由官方GitHub所发行。为防止不兼容，自动更新程序仅在正式版本上启用。&lt;/p&gt;&lt;p&gt;要获取正式版本，请按照下面链接中的“下载并运行”下的说明进行操作：&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/ilyalissoboi/goosestation/&quot;&gt;https://github.com/ilyalissoboi/goosestation/&lt;/a&gt;lt;/p&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="648"/>
@@ -13825,8 +13825,8 @@ Are you sure you want to continue?</source>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="500"/>
-        <source>&amp;About DuckStation...</source>
-        <translation>关于DuckStation(&amp;A)…</translation>
+        <source>&amp;About GooseStation...</source>
+        <translation>关于GooseStation(&amp;A)…</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="1488"/>
@@ -13868,8 +13868,8 @@ Are you sure you want to continue?</source>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="17"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <source>Force NTSC Timings</source>
@@ -14142,14 +14142,14 @@ The saves will not be recoverable.</source>
     <name>MediaCapture</name>
     <message>
         <location filename="../../util/media_capture.cpp" line="1823"/>
-        <source>You may be missing one or more files, or are using the incorrect version. This build of DuckStation requires:
+        <source>You may be missing one or more files, or are using the incorrect version. This build of GooseStation requires:
   libavcodec: {}
   libavformat: {}
   libavutil: {}
   libswscale: {}
   libswresample: {}
 </source>
-        <translation>您可能缺少一个或多个文件，或者使用了不正确的版本。此DuckStation版本需要:
+        <translation>您可能缺少一个或多个文件，或者使用了不正确的版本。此GooseStation版本需要:
   libavcodec: {}
   libavformat: {}
   libavutil: {}
@@ -16244,8 +16244,8 @@ URL: %1</translation>
     </message>
     <message>
         <location filename="../qtprogresscallback.cpp" line="17"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <location filename="../qtprogresscallback.cpp" line="78"/>
@@ -16574,8 +16574,8 @@ Do you want to create this directory?</source>
         <location filename="../settingswindow.cpp" line="296"/>
         <location filename="../settingswindow.cpp" line="304"/>
         <location filename="../settingswindow.cpp" line="317"/>
-        <source>DuckStation Settings</source>
-        <translation>DuckStation设置</translation>
+        <source>GooseStation Settings</source>
+        <translation>GooseStation设置</translation>
     </message>
     <message>
         <location filename="../settingswindow.ui" line="89"/>
@@ -16614,8 +16614,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="92"/>
-        <source>&lt;strong&gt;Game List Settings&lt;/strong&gt;&lt;hr&gt;The list above shows the directories which will be searched by DuckStation to populate the game list. Search directories can be added, removed, and switched to recursive/non-recursive.</source>
-        <translation>&lt;strong&gt;游戏列表设置&lt;/strong&gt;&lt;hr&gt;上面的列表显示了DuckStation即将搜索的目录，用于其构成游戏列表。搜索目录可以添加、删除，并切换为深度搜索/非深度搜索。</translation>
+        <source>&lt;strong&gt;Game List Settings&lt;/strong&gt;&lt;hr&gt;The list above shows the directories which will be searched by GooseStation to populate the game list. Search directories can be added, removed, and switched to recursive/non-recursive.</source>
+        <translation>&lt;strong&gt;游戏列表设置&lt;/strong&gt;&lt;hr&gt;上面的列表显示了GooseStation即将搜索的目录，用于其构成游戏列表。搜索目录可以添加、删除，并切换为深度搜索/非深度搜索。</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="98"/>
@@ -16679,8 +16679,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="135"/>
-        <source>&lt;strong&gt;Achievement Settings&lt;/strong&gt;&lt;hr&gt;DuckStation uses RetroAchievements as an achievement database and for tracking progress. To use achievements, please sign up for an account at retroachievements.org. To view the achievement list in-game, press the hotkey for &lt;strong&gt;Open Pause Menu&lt;/strong&gt; and select &lt;strong&gt;Achievements&lt;/strong&gt; from the menu. Mouse over an option for additional information, and Shift+Wheel to scroll this panel.</source>
-        <translation>&lt;strong&gt;成就设置&lt;/strong&gt;&lt;hr&gt;DuckStation使用RetroAchievements作为成就数据库并以此来追踪进展。要使用成就，请注册一个账户于retroachievements.org。要查看游戏中的成就列表，按下热键&lt;strong&gt;打开暂停菜单&lt;/strong&gt;并从菜单中选择&lt;strong&gt;成就&lt;/strong&gt;。将鼠标移至选项上可获取更多信息，Shift键+滚轮可滚动该面板。</translation>
+        <source>&lt;strong&gt;Achievement Settings&lt;/strong&gt;&lt;hr&gt;GooseStation uses RetroAchievements as an achievement database and for tracking progress. To use achievements, please sign up for an account at retroachievements.org. To view the achievement list in-game, press the hotkey for &lt;strong&gt;Open Pause Menu&lt;/strong&gt; and select &lt;strong&gt;Achievements&lt;/strong&gt; from the menu. Mouse over an option for additional information, and Shift+Wheel to scroll this panel.</source>
+        <translation>&lt;strong&gt;成就设置&lt;/strong&gt;&lt;hr&gt;GooseStation使用RetroAchievements作为成就数据库并以此来追踪进展。要使用成就，请注册一个账户于retroachievements.org。要查看游戏中的成就列表，按下热键&lt;strong&gt;打开暂停菜单&lt;/strong&gt;并从菜单中选择&lt;strong&gt;成就&lt;/strong&gt;。将鼠标移至选项上可获取更多信息，Shift键+滚轮可滚动该面板。</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="167"/>
@@ -16719,8 +16719,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="162"/>
-        <source>&lt;strong&gt;Folder Settings&lt;/strong&gt;&lt;hr&gt;These options control where DuckStation will save runtime data files.</source>
-        <translation>&lt;strong&gt;文件夹设置&lt;/strong&gt;&lt;hr&gt;这些选项控制DuckStation将在何处保存运行时数据文件。</translation>
+        <source>&lt;strong&gt;Folder Settings&lt;/strong&gt;&lt;hr&gt;These options control where GooseStation will save runtime data files.</source>
+        <translation>&lt;strong&gt;文件夹设置&lt;/strong&gt;&lt;hr&gt;这些选项控制GooseStation将在何处保存运行时数据文件。</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="165"/>
@@ -16824,12 +16824,12 @@ Do you want to continue?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="147"/>
-        <source>Are you sure you want to cancel DuckStation setup?
+        <source>Are you sure you want to cancel GooseStation setup?
 
-Any changes have been saved, and the wizard will run again next time you start DuckStation.</source>
-        <translation>您确定想要取消DuckStation的设置吗？
+Any changes have been saved, and the wizard will run again next time you start GooseStation.</source>
+        <translation>您确定想要取消GooseStation的设置吗？
 
-所有更改都已被保存，向导将在您下次启动DuckStation时再次运行。</translation>
+所有更改都已被保存，向导将在您下次启动GooseStation时再次运行。</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="286"/>
@@ -16862,8 +16862,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="292"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation will automatically scan and identify games from the selected directories below, and populate the game list. These games should be dumped from discs you own. Utilities such as ImgBurn can be used to create images of game discs in .bin/.cue format.&lt;/p&gt;&lt;p&gt;Supported formats for dumps include: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation将从以下选择的目录中自动扫描并识别游戏，并填充游戏列表。这些游戏应当从您自己的光盘中转储而来。像Imgburn之类的应用程序可被用于创建.bin/.cue格式的游戏光盘镜像。&lt;/p&gt;&lt;p&gt;支持的转储格式包括: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue表单)，&lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (单轨镜像)，&lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (错误码建模镜像)，&lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (媒体描述符边车)，&lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (大块压缩数据)，&lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (掌上PlayStation，仅解密的)。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation will automatically scan and identify games from the selected directories below, and populate the game list. These games should be dumped from discs you own. Utilities such as ImgBurn can be used to create images of game discs in .bin/.cue format.&lt;/p&gt;&lt;p&gt;Supported formats for dumps include: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation将从以下选择的目录中自动扫描并识别游戏，并填充游戏列表。这些游戏应当从您自己的光盘中转储而来。像Imgburn之类的应用程序可被用于创建.bin/.cue格式的游戏光盘镜像。&lt;/p&gt;&lt;p&gt;支持的转储格式包括: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue表单)，&lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (单轨镜像)，&lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (错误码建模镜像)，&lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (媒体描述符边车)，&lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (大块压缩数据)，&lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (掌上PlayStation，仅解密的)。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="353"/>
@@ -16877,8 +16877,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
         <translation>主题:</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation requires a PS1 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct DuckStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation需要PS1 BIOS才能够运行。&lt;/p&gt;&lt;p&gt;出于法律原因，您必须&lt;span style=&quot; font-weight:700;&quot;&gt;从您拥有的实体PS1设备获取BIOS&lt;/span&gt; (借的不算)。您应当使用Caetla或其他应用程序去从的您的游戏机的BIOS ROM提取文件到您的个人电脑上。&lt;/p&gt;&lt;p&gt;一旦转储后，该BIOS文件应当放置在以下显示的数据目录内的bios文件夹中，或者您可以指示DuckStation去扫描一个备选目录。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation requires a PS1 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct GooseStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation需要PS1 BIOS才能够运行。&lt;/p&gt;&lt;p&gt;出于法律原因，您必须&lt;span style=&quot; font-weight:700;&quot;&gt;从您拥有的实体PS1设备获取BIOS&lt;/span&gt; (借的不算)。您应当使用Caetla或其他应用程序去从的您的游戏机的BIOS ROM提取文件到您的个人电脑上。&lt;/p&gt;&lt;p&gt;一旦转储后，该BIOS文件应当放置在以下显示的数据目录内的bios文件夹中，或者您可以指示GooseStation去扫描一个备选目录。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="668"/>
@@ -16886,8 +16886,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
         <translation>完成</translation>
     </message>
     <message>
-        <source>No BIOS images were found. DuckStation &lt;strong&gt;will not&lt;/strong&gt; be able to run games without a BIOS image.&lt;br&gt;&lt;br&gt;Are you sure you wish to continue without selecting a BIOS image?</source>
-        <translation type="vanished">没有找到BIOS文件。DuckStation&lt;strong&gt;无法&lt;/strong&gt;在缺少BIOS文件情况下运行游戏。&lt;br&gt;&lt;br&gt;您确定想要在没有选择BIOS文件的情况下继续吗？</translation>
+        <source>No BIOS images were found. GooseStation &lt;strong&gt;will not&lt;/strong&gt; be able to run games without a BIOS image.&lt;br&gt;&lt;br&gt;Are you sure you wish to continue without selecting a BIOS image?</source>
+        <translation type="vanished">没有找到BIOS文件。GooseStation&lt;strong&gt;无法&lt;/strong&gt;在缺少BIOS文件情况下运行游戏。&lt;br&gt;&lt;br&gt;您确定想要在没有选择BIOS文件的情况下继续吗？</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="161"/>
@@ -16913,8 +16913,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="567"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Setup Complete!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;You are now ready to run games.&lt;/p&gt;&lt;p&gt;Further options are available under the settings menu. You can also use the Big Picture UI for navigation entirely with a gamepad.&lt;/p&gt;&lt;p&gt;We hope you enjoy using DuckStation.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;设置完成！&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;您现已准备好运行游戏了。&lt;/p&gt;&lt;p&gt;在设置菜单下有更多的选项可用。您也可以使用大视画UI完全以游戏手柄进行导航。&lt;/p&gt;&lt;p&gt;我们希望您愉快使用DuckStation。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Setup Complete!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;You are now ready to run games.&lt;/p&gt;&lt;p&gt;Further options are available under the settings menu. You can also use the Big Picture UI for navigation entirely with a gamepad.&lt;/p&gt;&lt;p&gt;We hope you enjoy using GooseStation.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;设置完成！&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;您现已准备好运行游戏了。&lt;/p&gt;&lt;p&gt;在设置菜单下有更多的选项可用。您也可以使用大视画UI完全以游戏手柄进行导航。&lt;/p&gt;&lt;p&gt;我们希望您愉快使用GooseStation。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="419"/>
@@ -16938,8 +16938,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="402"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;By default, DuckStation will map your keyboard to the virtual controller.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;To use an external controller, you must map it first. &lt;/span&gt;On this screen, you can automatically map any controller which is currently connected. If your controller is not currently connected, you can plug it in now.&lt;/p&gt;&lt;p&gt;To change controller bindings in more detail, or use multi-tap, open the Settings menu and choose Controllers once you have completed the Setup Wizard.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;默认情况下，DuckStation会将您的键盘映射到虚拟控制器。&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;要使用外部控制器，必须先映射它。&lt;/span&gt;在此屏幕上，您可以自动映射当前连接的任何控制器。如果您的控制器当前没有连接，您可以现在插入它。&lt;/p&gt;&lt;p&gt;要更详细地更改控制器绑定，或者使用多接头，在您完成设置向导后，打开设置菜单并选择控制器。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;By default, GooseStation will map your keyboard to the virtual controller.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;To use an external controller, you must map it first. &lt;/span&gt;On this screen, you can automatically map any controller which is currently connected. If your controller is not currently connected, you can plug it in now.&lt;/p&gt;&lt;p&gt;To change controller bindings in more detail, or use multi-tap, open the Settings menu and choose Controllers once you have completed the Setup Wizard.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;默认情况下，GooseStation会将您的键盘映射到虚拟控制器。&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;要使用外部控制器，必须先映射它。&lt;/span&gt;在此屏幕上，您可以自动映射当前连接的任何控制器。如果您的控制器当前没有连接，您可以现在插入它。&lt;/p&gt;&lt;p&gt;要更详细地更改控制器绑定，或者使用多接头，在您完成设置向导后，打开设置菜单并选择控制器。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="727"/>
@@ -16958,10 +16958,10 @@ Scanning recursively takes more time, but will identify files in subdirectories.
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="47"/>
-        <source>No BIOS images were found. DuckStation WILL NOT be able to run games without a BIOS image.
+        <source>No BIOS images were found. GooseStation WILL NOT be able to run games without a BIOS image.
 
 Are you sure you wish to continue without selecting a BIOS image?</source>
-        <translation>没有找到BIOS文件。DuckStation无法在缺少BIOS文件情况下运行游戏。
+        <translation>没有找到BIOS文件。GooseStation无法在缺少BIOS文件情况下运行游戏。
 
 您确定想要在没有选择BIOS文件的情况下继续吗？</translation>
     </message>
@@ -16987,8 +16987,8 @@ Are you sure you wish to continue without selecting a BIOS image?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="136"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation requires a PS1 or PS2 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct DuckStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation需要PS1或PS2 BIOS才能运行。&lt;/p&gt;&lt;p&gt;出于法律原因，您必须&lt;span style=&quot; font-weight:700;&quot;&gt;从您拥有的实体PS1设备获取BIOS&lt;/span&gt; (借的不算)。您应当使用Caetla或其他应用程序去从的您的游戏机的BIOS ROM提取文件到您的个人电脑上。&lt;/p&gt;&lt;p&gt;一旦转储后，该BIOS文件应当放置在以下显示的数据目录内的bios文件夹中，或者您可以指示DuckStation去扫描一个备选目录。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation requires a PS1 or PS2 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct GooseStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation需要PS1或PS2 BIOS才能运行。&lt;/p&gt;&lt;p&gt;出于法律原因，您必须&lt;span style=&quot; font-weight:700;&quot;&gt;从您拥有的实体PS1设备获取BIOS&lt;/span&gt; (借的不算)。您应当使用Caetla或其他应用程序去从的您的游戏机的BIOS ROM提取文件到您的个人电脑上。&lt;/p&gt;&lt;p&gt;一旦转储后，该BIOS文件应当放置在以下显示的数据目录内的bios文件夹中，或者您可以指示GooseStation去扫描一个备选目录。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="412"/>
@@ -17007,10 +17007,10 @@ Are you sure you wish to continue without selecting a BIOS image?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="62"/>
-        <source>No game directories have been selected. You will have to manually open any game dumps you want to play, DuckStation&apos;s list will be empty.
+        <source>No game directories have been selected. You will have to manually open any game dumps you want to play, GooseStation&apos;s list will be empty.
 
 Are you sure you want to continue?</source>
-        <translation>没有选择游戏目录。您必须手动打开任何您想玩的游戏转储，DuckStation的列表将是空的。
+        <translation>没有选择游戏目录。您必须手动打开任何您想玩的游戏转储，GooseStation的列表将是空的。
 
 您确定想要继续吗？</translation>
     </message>
@@ -17032,8 +17032,8 @@ Are you sure you want to continue?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="14"/>
-        <source>DuckStation Setup Wizard</source>
-        <translation>DuckStation设置向导</translation>
+        <source>GooseStation Setup Wizard</source>
+        <translation>GooseStation设置向导</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="421"/>
@@ -17043,8 +17043,8 @@ Are you sure you want to continue?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="50"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Welcome to DuckStation!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;This wizard will help guide you through the configuration steps required to use the application. It is recommended if this is your first time installing DuckStation that you view the setup guide at &lt;a href=&quot;https://github.com/stenzek/duckstation#downloading-and-running&quot;&gt;https://github.com/stenzek/duckstation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;By default, DuckStation will connect to the server at &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; to check for updates, and if available and confirmed, download update packages from &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. If you do not wish for DuckStation to make any network connections on startup, you should uncheck the Automatic Updates option now. The Automatic Update setting can be changed later at any time in Interface Settings.&lt;/p&gt;&lt;p&gt;Please choose a language and theme to begin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;欢迎来到DuckStation！&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;此向导将帮助指导您完成使用本应用程序所需的配置步骤。如果这是您第一次安装DuckStation，建议您到&lt;a href=&quot;https://github.com/stenzek/duckstation#downloading-and-running&quot;&gt;https://github.com/stenzek/duckstation#downloading-and-running&lt;/a&gt;查看安装指南。&lt;/p&gt;&lt;p&gt;默认情况下，DuckStation将连接到服务器&lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;去检查更新，如果确认有了可用的，将会从&lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;下载升级包。如果您不希望DuckStation在启动时进行任何网络连接，您现在应当取消选中自动更新选项。自动更新设置稍后可以在界面设置中随时更改。&lt;/p&gt;&lt;p&gt;请选择一种语言和主题开始。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Welcome to GooseStation!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;This wizard will help guide you through the configuration steps required to use the application. It is recommended if this is your first time installing GooseStation that you view the setup guide at &lt;a href=&quot;https://github.com/ilyalissoboi/goosestation#downloading-and-running&quot;&gt;https://github.com/ilyalissoboi/goosestation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;By default, GooseStation will connect to the server at &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; to check for updates, and if available and confirmed, download update packages from &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. If you do not wish for GooseStation to make any network connections on startup, you should uncheck the Automatic Updates option now. The Automatic Update setting can be changed later at any time in Interface Settings.&lt;/p&gt;&lt;p&gt;Please choose a language and theme to begin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;欢迎来到GooseStation！&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;此向导将帮助指导您完成使用本应用程序所需的配置步骤。如果这是您第一次安装GooseStation，建议您到&lt;a href=&quot;https://github.com/ilyalissoboi/goosestation#downloading-and-running&quot;&gt;https://github.com/ilyalissoboi/goosestation#downloading-and-running&lt;/a&gt;查看安装指南。&lt;/p&gt;&lt;p&gt;默认情况下，GooseStation将连接到服务器&lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;去检查更新，如果确认有了可用的，将会从&lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;下载升级包。如果您不希望GooseStation在启动时进行任何网络连接，您现在应当取消选中自动更新选项。自动更新设置稍后可以在界面设置中随时更改。&lt;/p&gt;&lt;p&gt;请选择一种语言和主题开始。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="464"/>
@@ -17385,14 +17385,14 @@ SBI文件的名称必须匹配光盘镜像的名称。</translation>
         <location filename="../../core/bios.cpp" line="408"/>
         <source>No BIOS image found for {} region.
 
-DuckStation requires a PS1 or PS2 BIOS in order to run.
+GooseStation requires a PS1 or PS2 BIOS in order to run.
 
 For legal reasons, you *must* obtain a BIOS from an actual PS1 unit that you own (borrowing doesn&apos;t count).
 
 Once dumped, this BIOS image should be placed in the bios folder within the data directory (Tools Menu -&gt; Open Data Directory).</source>
         <translation>没有找到适用{}区域的BIOS文件。
 
-DuckStation需要PS1或PS2 BIOS才能够运行。
+GooseStation需要PS1或PS2 BIOS才能够运行。
 
 出于法律原因，您*必须*从您拥有的实体PS1设备获取BIOS (借用不算)。
 

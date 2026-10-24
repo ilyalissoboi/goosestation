@@ -44,7 +44,7 @@ bool SetupWizardDialog::canShowNextPage()
       {
         if (QMessageBox::question(
               this, tr("Warning"),
-              tr("No BIOS images were found. DuckStation WILL NOT be able to run games without a BIOS image.\n\nAre "
+              tr("No BIOS images were found. GooseStation WILL NOT be able to run games without a BIOS image.\n\nAre "
                  "you sure you wish to continue without selecting a BIOS image?")) != QMessageBox::Yes)
         {
           return false;
@@ -60,7 +60,7 @@ bool SetupWizardDialog::canShowNextPage()
         if (QMessageBox::question(
               this, tr("Warning"),
               tr("No game directories have been selected. You will have to manually open any game dumps you "
-                 "want to play, DuckStation's list will be empty.\n\nAre you sure you want to continue?")) !=
+                 "want to play, GooseStation's list will be empty.\n\nAre you sure you want to continue?")) !=
             QMessageBox::Yes)
         {
           return false;
@@ -144,8 +144,8 @@ void SetupWizardDialog::updatePageButtons()
 void SetupWizardDialog::confirmCancel()
 {
   if (QMessageBox::question(this, tr("Cancel Setup"),
-                            tr("Are you sure you want to cancel DuckStation setup?\n\nAny changes have been saved, and "
-                               "the wizard will run again next time you start DuckStation.")) != QMessageBox::Yes)
+                            tr("Are you sure you want to cancel GooseStation setup?\n\nAny changes have been saved, and "
+                               "the wizard will run again next time you start GooseStation.")) != QMessageBox::Yes)
   {
     return;
   }

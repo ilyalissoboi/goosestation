@@ -57,7 +57,7 @@ jobs:
       if: github.ref == 'refs/heads/master'
       shell: cmd
       run: |
-        echo #define SCM_RELEASE_ASSET "duckstation-windows-x64-release.zip" >> src/scmversion/tag.h
+        echo #define SCM_RELEASE_ASSET "goosestation-windows-x64-release.zip" >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAGS {"latest", "preview"} >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAG "preview" >> src/scmversion/tag.h
 
@@ -65,7 +65,7 @@ jobs:
       if: github.ref == 'refs/heads/dev'
       shell: cmd
       run: |
-        echo #define SCM_RELEASE_ASSET "duckstation-windows-x64-release.zip" >> src/scmversion/tag.h
+        echo #define SCM_RELEASE_ASSET "goosestation-windows-x64-release.zip" >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAGS {"latest", "preview"} >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAG "latest" >> src/scmversion/tag.h
 
@@ -86,7 +86,7 @@ jobs:
     - name: Create x64 symbols archive
       shell: cmd
       run: |
-        "C:\Program Files\7-Zip\7z.exe" a -r duckstation-windows-x64-release-symbols.zip ./bin/x64/*.pdb
+        "C:\Program Files\7-Zip\7z.exe" a -r goosestation-windows-x64-release-symbols.zip ./bin/x64/*.pdb
 
     - name: Remove extra bloat before archiving
       shell: cmd
@@ -97,13 +97,13 @@ jobs:
     - name: Create x64 release archive
       shell: cmd
       run: |
-        "C:\Program Files\7-Zip\7z.exe" a -r duckstation-windows-x64-release.zip ./bin/x64/*
+        "C:\Program Files\7-Zip\7z.exe" a -r goosestation-windows-x64-release.zip ./bin/x64/*
 
     - name: Upload x64 release artifact
       uses: actions/upload-artifact@v4.3.3
       with:
         name: "windows"
-        path: "duckstation-windows-x64-release*.zip"
+        path: "goosestation-windows-x64-release*.zip"
 
 
   windows-arm64-build:
@@ -145,7 +145,7 @@ jobs:
       if: github.ref == 'refs/heads/master'
       shell: cmd
       run: |
-        echo #define SCM_RELEASE_ASSET "duckstation-windows-arm64-release.zip" >> src/scmversion/tag.h
+        echo #define SCM_RELEASE_ASSET "goosestation-windows-arm64-release.zip" >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAGS {"latest", "preview"} >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAG "preview" >> src/scmversion/tag.h
 
@@ -153,7 +153,7 @@ jobs:
       if: github.ref == 'refs/heads/dev'
       shell: cmd
       run: |
-        echo #define SCM_RELEASE_ASSET "duckstation-windows-arm64-release.zip" >> src/scmversion/tag.h
+        echo #define SCM_RELEASE_ASSET "goosestation-windows-arm64-release.zip" >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAGS {"latest", "preview"} >> src/scmversion/tag.h
         echo #define SCM_RELEASE_TAG "latest" >> src/scmversion/tag.h
 
@@ -174,7 +174,7 @@ jobs:
     - name: Create arm64 symbols archive
       shell: cmd
       run: |
-        "C:\Program Files\7-Zip\7z.exe" a -r duckstation-windows-arm64-release-symbols.zip ./bin/ARM64/*.pdb
+        "C:\Program Files\7-Zip\7z.exe" a -r goosestation-windows-arm64-release-symbols.zip ./bin/ARM64/*.pdb
 
     - name: Remove extra bloat before archiving
       shell: cmd
@@ -185,13 +185,13 @@ jobs:
     - name: Create arm64 release archive
       shell: cmd
       run: |
-        "C:\Program Files\7-Zip\7z.exe" a -r duckstation-windows-arm64-release.zip ./bin/ARM64/*
+        "C:\Program Files\7-Zip\7z.exe" a -r goosestation-windows-arm64-release.zip ./bin/ARM64/*
 
     - name: Upload arm64 release artifact
       uses: actions/upload-artifact@v4.3.3
       with:
         name: "windows-arm64"
-        path: "duckstation-windows-arm64-release*.zip"
+        path: "goosestation-windows-arm64-release*.zip"
 
 
   linux-build:
@@ -236,14 +236,14 @@ jobs:
     - name: Tag as preview build
       if: github.ref == 'refs/heads/master'
       run: |
-        echo '#define SCM_RELEASE_ASSET "DuckStation-x64.AppImage"' >> src/scmversion/tag.h
+        echo '#define SCM_RELEASE_ASSET "GooseStation-x64.AppImage"' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAGS {"latest", "preview"}' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAG "preview"' >> src/scmversion/tag.h
 
     - name: Tag as dev build
       if: github.ref == 'refs/heads/dev'
       run: |
-        echo '#define SCM_RELEASE_ASSET "DuckStation-x64.AppImage"' >> src/scmversion/tag.h
+        echo '#define SCM_RELEASE_ASSET "GooseStation-x64.AppImage"' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAGS {"latest", "preview"}' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAG "latest"' >> src/scmversion/tag.h
 
@@ -256,13 +256,13 @@ jobs:
         cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -DCMAKE_PREFIX_PATH="$HOME/deps" -DCMAKE_C_COMPILER=clang-17 -DCMAKE_CXX_COMPILER=clang++-17 -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld" -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" ..
         cmake --build . --parallel
         cd ..
-        scripts/appimage/make-appimage.sh $(realpath .) $(realpath ./build) $HOME/deps DuckStation-x64
+        scripts/appimage/make-appimage.sh $(realpath .) $(realpath ./build) $HOME/deps GooseStation-x64
 
     - name: Upload Qt AppImage
       uses: actions/upload-artifact@v4.3.3
       with:
         name: "linux-x64-appimage-qt"
-        path: "DuckStation-x64.AppImage"
+        path: "GooseStation-x64.AppImage"
 
 
   linux-flatpak-build:
@@ -289,20 +289,20 @@ jobs:
     - name: Generate AppStream XML
       run: |
         scripts/generate-metainfo.sh scripts/flatpak
-        cat scripts/flatpak/org.duckstation.DuckStation.metainfo.xml
+        cat scripts/flatpak/io.github.ilyalissoboi.GooseStation.metainfo.xml
 
     - name: Validate AppStream XML
-      run: flatpak-builder-lint appstream scripts/flatpak/org.duckstation.DuckStation.metainfo.xml
+      run: flatpak-builder-lint appstream scripts/flatpak/io.github.ilyalissoboi.GooseStation.metainfo.xml
 
     - name: Validate manifest
-      run: flatpak-builder-lint manifest scripts/flatpak/org.duckstation.DuckStation.yaml
+      run: flatpak-builder-lint manifest scripts/flatpak/io.github.ilyalissoboi.GooseStation.yaml
 
     - name: Build Flatpak
       uses: flathub-infra/flatpak-github-actions/flatpak-builder@933e9e8ca36e85046ebca8e211f0785c6becac40
       with:
-        bundle: duckstation-x64.flatpak
+        bundle: goosestation-x64.flatpak
         upload-artifact: false
-        manifest-path: scripts/flatpak/org.duckstation.DuckStation.yaml
+        manifest-path: scripts/flatpak/io.github.ilyalissoboi.GooseStation.yaml
         arch: x86_64
         build-bundle: true
         verbose: true
@@ -320,7 +320,7 @@ jobs:
       uses: actions/upload-artifact@v4.3.3
       with:
         name: "linux-flatpak"
-        path: "duckstation-x64.flatpak"
+        path: "goosestation-x64.flatpak"
 
 
   macos-build:
@@ -357,14 +357,14 @@ jobs:
     - name: Tag as preview build
       if: github.ref == 'refs/heads/master'
       run: |
-        echo '#define SCM_RELEASE_ASSET "duckstation-mac-release.zip"' >> src/scmversion/tag.h
+        echo '#define SCM_RELEASE_ASSET "goosestation-mac-release.zip"' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAGS {"latest", "preview"}' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAG "preview"' >> src/scmversion/tag.h
 
     - name: Tag as dev build
       if: github.ref == 'refs/heads/dev'
       run: |
-        echo '#define SCM_RELEASE_ASSET "duckstation-mac-release.zip"' >> src/scmversion/tag.h
+        echo '#define SCM_RELEASE_ASSET "goosestation-mac-release.zip"' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAGS {"latest", "preview"}' >> src/scmversion/tag.h
         echo '#define SCM_RELEASE_TAG "latest"' >> src/scmversion/tag.h
 
@@ -376,15 +376,15 @@ jobs:
         export MACOSX_DEPLOYMENT_TARGET=11.0
         cmake -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENGL=OFF -DCMAKE_PREFIX_PATH="$HOME/deps" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -G Ninja ..
         cmake --build . --parallel
-        mv bin/DuckStation.app .
-        codesign -s - --deep -f -v DuckStation.app
-        zip -r duckstation-mac-release.zip DuckStation.app/
+        mv bin/GooseStation.app .
+        codesign -s - --deep -f -v GooseStation.app
+        zip -r goosestation-mac-release.zip GooseStation.app/
 
     - name: Upload macOS .app
       uses: actions/upload-artifact@v4.3.3
       with:
         name: "macos"
-        path: "build/duckstation-mac-release.zip"
+        path: "build/goosestation-mac-release.zip"
 
 
   create-release:
@@ -410,13 +410,13 @@ jobs:
           prerelease: true
           title: "Latest Preview Build"
           files: |
-            ./artifacts/windows/duckstation-windows-x64-release.zip
-            ./artifacts/windows/duckstation-windows-x64-release-symbols.zip
-            ./artifacts/windows-arm64/duckstation-windows-arm64-release.zip
-            ./artifacts/windows-arm64/duckstation-windows-arm64-release-symbols.zip
-            ./artifacts/linux-x64-appimage-qt/DuckStation-x64.AppImage
-            ./artifacts/linux-flatpak/duckstation-x64.flatpak
-            ./artifacts/macos/duckstation-mac-release.zip
+            ./artifacts/windows/goosestation-windows-x64-release.zip
+            ./artifacts/windows/goosestation-windows-x64-release-symbols.zip
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release.zip
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release-symbols.zip
+            ./artifacts/linux-x64-appimage-qt/GooseStation-x64.AppImage
+            ./artifacts/linux-flatpak/goosestation-x64.flatpak
+            ./artifacts/macos/goosestation-mac-release.zip
 
       - name: Create dev release
         if: github.ref == 'refs/heads/dev'
@@ -427,11 +427,11 @@ jobs:
           prerelease: false
           title: "Latest Rolling Release"
           files: |
-            ./artifacts/windows/duckstation-windows-x64-release.zip
-            ./artifacts/windows/duckstation-windows-x64-release-symbols.zip
-            ./artifacts/windows-arm64/duckstation-windows-arm64-release.zip
-            ./artifacts/windows-arm64/duckstation-windows-arm64-release-symbols.zip
-            ./artifacts/linux-x64-appimage-qt/DuckStation-x64.AppImage
-            ./artifacts/linux-flatpak/duckstation-x64.flatpak
-            ./artifacts/macos/duckstation-mac-release.zip
+            ./artifacts/windows/goosestation-windows-x64-release.zip
+            ./artifacts/windows/goosestation-windows-x64-release-symbols.zip
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release.zip
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release-symbols.zip
+            ./artifacts/linux-x64-appimage-qt/GooseStation-x64.AppImage
+            ./artifacts/linux-flatpak/goosestation-x64.flatpak
+            ./artifacts/macos/goosestation-mac-release.zip
 

@@ -8,9 +8,9 @@ config-opts:
 build-options:
   strip: true
 sources:
-  - type: git
-    url: "https://github.com/stenzek/lunasvg.git"
-    commit: "9af1ac7b90658a279b372add52d6f77a4ebb482c"
+  - type: archive
+    url: "https://github.com/sammycage/lunasvg/archive/9af1ac7b90658a279b372add52d6f77a4ebb482c.tar.gz"
+    sha256: "3998b024b0d442614a9ee270e76e018bb37a17b8c6941212171731123cbbcac7"
 cleanup:
   - /bin
   - /include

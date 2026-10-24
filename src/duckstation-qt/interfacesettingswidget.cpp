@@ -9,6 +9,8 @@
 #include "settingswindow.h"
 #include "settingwidgetbinder.h"
 
+#include "core/system.h"
+
 const char* InterfaceSettingsWidget::THEME_NAMES[] = {
   QT_TRANSLATE_NOOP("MainWindow", "Native"),
 #ifdef _WIN32
@@ -73,6 +75,7 @@ InterfaceSettingsWidget::InterfaceSettingsWidget(SettingsWindow* dialog, QWidget
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.createSaveStateBackups, "Main", "CreateSaveStateBackups",
                                                Settings::DEFAULT_SAVE_STATE_BACKUPS);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enableDiscordPresence, "Main", "EnableDiscordPresence", false);
+  m_ui.enableDiscordPresence->setEnabled(System::IsDiscordPresenceAvailable());
   connect(m_ui.renderToSeparateWindow, &QCheckBox::checkStateChanged, this,
           &InterfaceSettingsWidget::onRenderToSeparateWindowChanged);
 

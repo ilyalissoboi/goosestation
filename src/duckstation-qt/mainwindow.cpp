@@ -1408,17 +1408,12 @@ void MainWindow::onViewGamePropertiesActionTriggered()
 
 void MainWindow::onGitHubRepositoryActionTriggered()
 {
-  QtUtils::OpenURL(this, "https://github.com/stenzek/duckstation/");
+  QtUtils::OpenURL(this, "https://github.com/ilyalissoboi/goosestation/");
 }
 
 void MainWindow::onIssueTrackerActionTriggered()
 {
-  QtUtils::OpenURL(this, "https://www.duckstation.org/issues.html");
-}
-
-void MainWindow::onDiscordServerActionTriggered()
-{
-  QtUtils::OpenURL(this, "https://www.duckstation.org/discord.html");
+  QtUtils::OpenURL(this, "https://github.com/ilyalissoboi/goosestation/issues");
 }
 
 void MainWindow::onAboutActionTriggered()
@@ -2102,7 +2097,6 @@ void MainWindow::connectSignals()
   connect(m_ui.actionViewGameProperties, &QAction::triggered, this, &MainWindow::onViewGamePropertiesActionTriggered);
   connect(m_ui.actionGitHubRepository, &QAction::triggered, this, &MainWindow::onGitHubRepositoryActionTriggered);
   connect(m_ui.actionIssueTracker, &QAction::triggered, this, &MainWindow::onIssueTrackerActionTriggered);
-  connect(m_ui.actionDiscordServer, &QAction::triggered, this, &MainWindow::onDiscordServerActionTriggered);
   connect(m_ui.actionViewThirdPartyNotices, &QAction::triggered, this,
           [this]() { AboutDialog::showThirdPartyNotices(this); });
   connect(m_ui.actionAboutQt, &QAction::triggered, qApp, &QApplication::aboutQt);
@@ -2888,10 +2882,10 @@ void MainWindow::checkForUpdates(bool display_message)
       if (!AutoUpdaterDialog::isOfficialBuild())
       {
         message =
-          tr("<p>Sorry, you are trying to update a DuckStation version which is not an official GitHub release. To "
+          tr("<p>Sorry, you are trying to update a GooseStation version which is not an official GitHub release. To "
              "prevent incompatibilities, the auto-updater is only enabled on official builds.</p>"
-             "<p>Please download an official release from from <a "
-             "href=\"https://www.duckstation.org/\">duckstation.org</a>.</p>");
+             "<p>Please download an official release from <a "
+             "href=\"https://github.com/ilyalissoboi/goosestation/releases\">GooseStation's releases</a>.</p>");
       }
       else
       {

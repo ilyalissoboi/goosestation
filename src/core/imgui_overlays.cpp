@@ -111,7 +111,7 @@ void Host::DisplayLoadingScreen(const char* message, int progress_min /*= -1*/, 
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
                      ImGuiWindowFlags_NoBackground))
   {
-    GPUTexture* tex = ImGuiFullscreen::GetCachedTexture("images/duck.png");
+    GPUTexture* tex = ImGuiFullscreen::GetCachedTexture("images/goosestation.png");
     if (tex)
       ImGui::Image(tex, ImVec2(logo_width, logo_height));
   }

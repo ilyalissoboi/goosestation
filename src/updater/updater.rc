@@ -67,13 +67,13 @@ BEGIN
     BEGIN
         BLOCK "0c0904b0"
         BEGIN
-            VALUE "CompanyName", "https://github.com/stenzek/duckstation"
-            VALUE "FileDescription", "DuckStation Update Installer"
+            VALUE "CompanyName", "https://github.com/ilyalissoboi/goosestation"
+            VALUE "FileDescription", "GooseStation Update Installer"
             VALUE "FileVersion", "1.0.0.0"
             VALUE "InternalName", "updater.exe"
             VALUE "LegalCopyright", "Copyright (C) 2020-2024 Stenzek and collaborators"
             VALUE "OriginalFilename", "updater.exe"
-            VALUE "ProductName", "DuckStation"
+            VALUE "ProductName", "GooseStation"
             VALUE "ProductVersion", "1.0.0.0"
         END
     END

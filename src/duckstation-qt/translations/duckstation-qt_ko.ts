@@ -5,13 +5,13 @@
     <name>AboutDialog</name>
     <message>
         <location filename="../aboutdialog.ui" line="14"/>
-        <source>About DuckStation</source>
-        <translation>DuckStation 정보</translation>
+        <source>About GooseStation</source>
+        <translation>GooseStation 정보</translation>
     </message>
     <message>
         <location filename="../aboutdialog.ui" line="101"/>
-        <source>DuckStation</source>
-        <translation>DuckStation&lt;br&gt;&lt;i&gt;[한글화 : &lt;a href=&quot;https://blog.naver.com/jhacker&quot;&gt;Hack茶ん&lt;/a&gt;]&lt;/i&gt;</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation&lt;br&gt;&lt;i&gt;[한글화 : &lt;a href=&quot;https://blog.naver.com/jhacker&quot;&gt;Hack茶ん&lt;/a&gt;]&lt;/i&gt;</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="29"/>
@@ -20,8 +20,8 @@
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="45"/>
-        <source>DuckStation is a free and open-source simulator/emulator of the Sony PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; console, focusing on playability, speed, and long-term maintainability.</source>
-        <translation>DuckStation은 플레이 가능성, 속도, 장기적인 유지 보수성에 중점을 둔 소니 플레이스테이션&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; 콘솔의 무료 오픈 소스 시뮬레이터/에뮬레이터입니다.</translation>
+        <source>GooseStation is a free and open-source simulator/emulator of the Sony PlayStation&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; console, focusing on playability, speed, and long-term maintainability.</source>
+        <translation>GooseStation은 플레이 가능성, 속도, 장기적인 유지 보수성에 중점을 둔 소니 플레이스테이션&lt;span style=&quot;vertical-align:super;&quot;&gt;TM&lt;/span&gt; 콘솔의 무료 오픈 소스 시뮬레이터/에뮬레이터입니다.</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="48"/>
@@ -40,13 +40,13 @@
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="59"/>
-        <source>DuckStation Third-Party Notices</source>
-        <translation>DuckStation 써드파티 공지</translation>
+        <source>GooseStation Third-Party Notices</source>
+        <translation>GooseStation 써드파티 공지</translation>
     </message>
     <message>
         <location filename="../aboutdialog.cpp" line="79"/>
-        <source>Missing thirdparty.html file. You should request it from where-ever you obtained DuckStation.</source>
-        <translation>thirdparty.html 파일이 없습니다. DuckStation을 구입한 곳에서 이 파일을 요청해야 합니다.</translation>
+        <source>Missing thirdparty.html file. You should request it from where-ever you obtained GooseStation.</source>
+        <translation>thirdparty.html 파일이 없습니다. GooseStation을 구입한 곳에서 이 파일을 요청해야 합니다.</translation>
     </message>
 </context>
 <context>
@@ -65,8 +65,8 @@
     </message>
     <message>
         <location filename="../achievementlogindialog.ui" line="69"/>
-        <source>Please enter your user name and password for retroachievements.org below. Your password will not be saved in DuckStation, an access token will be generated and used instead.</source>
-        <translation>아래에 retroachievements.org의 사용자 이름과 비밀번호를 입력하세요. 비밀번호는 DuckStation에 저장되지 않으며, 대신 액세스 토큰이 생성되어 사용됩니다.</translation>
+        <source>Please enter your user name and password for retroachievements.org below. Your password will not be saved in GooseStation, an access token will be generated and used instead.</source>
+        <translation>아래에 retroachievements.org의 사용자 이름과 비밀번호를 입력하세요. 비밀번호는 GooseStation에 저장되지 않으며, 대신 액세스 토큰이 생성되어 사용됩니다.</translation>
     </message>
     <message>
         <location filename="../achievementlogindialog.ui" line="94"/>
@@ -85,8 +85,8 @@
     </message>
     <message>
         <location filename="../achievementlogindialog.cpp" line="22"/>
-        <source>&lt;strong&gt;Your RetroAchievements login token is no longer valid.&lt;/strong&gt; You must re-enter your credentials for achievements to be tracked. Your password will not be saved in DuckStation, an access token will be generated and used instead.</source>
-        <translation>&lt;strong&gt;RetroAchievements 로그인 토큰이 더 이상 유효하지 않습니다.&lt;/strong&gt; 업적을 추적하려면 자격 증명을 다시 입력해야 합니다. 비밀번호는 DuckStation에 저장되지 않으며, 대신 액세스 토큰이 생성되어 사용됩니다.</translation>
+        <source>&lt;strong&gt;Your RetroAchievements login token is no longer valid.&lt;/strong&gt; You must re-enter your credentials for achievements to be tracked. Your password will not be saved in GooseStation, an access token will be generated and used instead.</source>
+        <translation>&lt;strong&gt;RetroAchievements 로그인 토큰이 더 이상 유효하지 않습니다.&lt;/strong&gt; 업적을 추적하려면 자격 증명을 다시 입력해야 합니다. 비밀번호는 GooseStation에 저장되지 않으며, 대신 액세스 토큰이 생성되어 사용됩니다.</translation>
     </message>
     <message>
         <location filename="../achievementlogindialog.cpp" line="27"/>
@@ -264,8 +264,8 @@ Login token generated at:</source>
     </message>
     <message>
         <location filename="../achievementsettingswidget.ui" line="258"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;DuckStation uses RetroAchievements as an achievement database and for tracking progress. To use achievements, please sign up for an account at &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;To view the achievement list in-game, press the hotkey for &lt;span style=&quot; font-weight:600;&quot;&gt;Open Pause Menu&lt;/span&gt; and select &lt;span style=&quot; font-weight:600;&quot;&gt;Achievements&lt;/span&gt; from the menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;DuckStation은 도전 과제 데이터베이스 및 진행 상황 추적을 위해 레트로어치브먼트를 사용합니다. 도전 과제를 사용하려면 &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;에서 계정을 등록해 주세요.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;게임 내에서 도전 과제 목록을 보려면 &lt;span style=&quot; font-weight:600;&quot;&gt;일시 중지 메뉴 열기&lt;/span&gt; 단축키를 누르고 메뉴에서 &lt;span style=&quot; font-weight:600;&quot;&gt;도전 과제&lt;/span&gt;를 선택하세요.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;GooseStation uses RetroAchievements as an achievement database and for tracking progress. To use achievements, please sign up for an account at &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;To view the achievement list in-game, press the hotkey for &lt;span style=&quot; font-weight:600;&quot;&gt;Open Pause Menu&lt;/span&gt; and select &lt;span style=&quot; font-weight:600;&quot;&gt;Achievements&lt;/span&gt; from the menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;justify&quot;&gt;GooseStation은 도전 과제 데이터베이스 및 진행 상황 추적을 위해 레트로어치브먼트를 사용합니다. 도전 과제를 사용하려면 &lt;a href=&quot;https://retroachievements.org/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0000ff;&quot;&gt;retroachievements.org&lt;/span&gt;&lt;/a&gt;에서 계정을 등록해 주세요.&lt;/p&gt;&lt;p align=&quot;justify&quot;&gt;게임 내에서 도전 과제 목록을 보려면 &lt;span style=&quot; font-weight:600;&quot;&gt;일시 중지 메뉴 열기&lt;/span&gt; 단축키를 누르고 메뉴에서 &lt;span style=&quot; font-weight:600;&quot;&gt;도전 과제&lt;/span&gt;를 선택하세요.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.ui" line="66"/>
@@ -290,8 +290,8 @@ Login token generated at:</source>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="47"/>
-        <source>When enabled and logged in, DuckStation will scan for achievements on startup.</source>
-        <translation>이 기능을 활성화하고 로그인하면 DuckStation이 시작 시, 도전 과제를 검색합니다.</translation>
+        <source>When enabled and logged in, GooseStation will scan for achievements on startup.</source>
+        <translation>이 기능을 활성화하고 로그인하면 GooseStation이 시작 시, 도전 과제를 검색합니다.</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="52"/>
@@ -310,13 +310,13 @@ Login token generated at:</source>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="65"/>
-        <source>When enabled, DuckStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
-        <translation>활성화하면 DuckStation은 모든 도전 과제가 잠긴 것으로 간주하고 봉인 해제 알림을 서버로 보내지 않습니다.</translation>
+        <source>When enabled, GooseStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
+        <translation>활성화하면 GooseStation은 모든 도전 과제가 잠긴 것으로 간주하고 봉인 해제 알림을 서버로 보내지 않습니다.</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="69"/>
-        <source>When enabled, DuckStation will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time.</source>
-        <translation>이 기능을 활성화하면 DuckStation에서 비공식 세트의 도전 과제를 나열합니다. 해당 도전 과제는 레트로어치브먼트에서 추적되지 않으므로 매번 봉인 해제됩니다.</translation>
+        <source>When enabled, GooseStation will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time.</source>
+        <translation>이 기능을 활성화하면 GooseStation에서 비공식 세트의 도전 과제를 나열합니다. 해당 도전 과제는 레트로어치브먼트에서 추적되지 않으므로 매번 봉인 해제됩니다.</translation>
     </message>
     <message>
         <location filename="../achievementsettingswidget.cpp" line="73"/>
@@ -984,8 +984,8 @@ Unread messages: {}</source>
     </message>
     <message>
         <location filename="../advancedsettingswidget.cpp" line="262"/>
-        <source>Logs messages to duckstation.log in the user directory.</source>
-        <translation>사용자 디렉터리의 duckstation.log에 로그를 기록합니다.</translation>
+        <source>Logs messages to goosestation.log in the user directory.</source>
+        <translation>사용자 디렉터리의 goosestation.log에 로그를 기록합니다.</translation>
     </message>
     <message>
         <location filename="../advancedsettingswidget.cpp" line="264"/>
@@ -1876,8 +1876,8 @@ Unread messages: {}</source>
     </message>
     <message>
         <location filename="../biossettingswidget.ui" line="129"/>
-        <source>DuckStation will search for BIOS images in this directory.</source>
-        <translation>DuckStation은 이 디렉터리에서 바이오스 이미지를 검색합니다.</translation>
+        <source>GooseStation will search for BIOS images in this directory.</source>
+        <translation>GooseStation은 이 디렉터리에서 바이오스 이미지를 검색합니다.</translation>
     </message>
     <message>
         <location filename="../biossettingswidget.ui" line="144"/>
@@ -2448,8 +2448,8 @@ Unread messages: {}</source>
     </message>
     <message>
         <location filename="../cheatmanagerdialog.cpp" line="730"/>
-        <source>Are you sure you want to reset the cheat list? Any cheats not in the DuckStation database WILL BE LOST.</source>
-        <translation>치트 목록을 초기화하시겠습니까? DuckStation 데이터베이스에 없는 치트는 모두 손실됩니다.</translation>
+        <source>Are you sure you want to reset the cheat list? Any cheats not in the GooseStation database WILL BE LOST.</source>
+        <translation>치트 목록을 초기화하시겠습니까? GooseStation 데이터베이스에 없는 치트는 모두 손실됩니다.</translation>
     </message>
     <message>
         <location filename="../cheatmanagerdialog.cpp" line="759"/>
@@ -3906,8 +3906,8 @@ This warning will only be shown once.</source>
     <name>ControllerSettingsWindow</name>
     <message>
         <location filename="../controllersettingswindow.ui" line="20"/>
-        <source>DuckStation Controller Settings</source>
-        <translation>DuckStation 컨트롤러 설정</translation>
+        <source>GooseStation Controller Settings</source>
+        <translation>GooseStation 컨트롤러 설정</translation>
     </message>
     <message>
         <location filename="../controllersettingswindow.ui" line="72"/>
@@ -4118,8 +4118,8 @@ You cannot undo this action.</source>
     </message>
     <message>
         <location filename="../coverdownloaddialog.ui" line="38"/>
-        <source>DuckStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
-        <translation>DuckStation은 현재 표지가 없는 게임 표지를 자동으로 내려받기할 수 있습니다. 당사는 어떠한 표지 이미지도 호스팅하지 않으며, 사용자가 직접 이미지 소스를 제공해야 합니다.</translation>
+        <source>GooseStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
+        <translation>GooseStation은 현재 표지가 없는 게임 표지를 자동으로 내려받기할 수 있습니다. 당사는 어떠한 표지 이미지도 호스팅하지 않으며, 사용자가 직접 이미지 소스를 제공해야 합니다.</translation>
     </message>
     <message>
         <location filename="../coverdownloaddialog.ui" line="50"/>
@@ -5034,8 +5034,8 @@ This file can be several gigabytes, so be aware of SSD wear.</source>
     </message>
     <message>
         <location filename="../displaysettingswidget.cpp" line="109"/>
-        <source>Enable this option to match DuckStation&apos;s refresh rate with your current monitor or screen. VSync is automatically disabled when it is not possible (e.g. running at non-100% speed).</source>
-        <translation>이 옵션을 활성화하면 현재 모니터 또는 화면과 DuckStation의 재생률을 일치시킬 수 있습니다. 수직 동기화가 불가능할 경우(예 : 100%가 아닌 속도로 실행되는 경우) 자동으로 비활성화됩니다.</translation>
+        <source>Enable this option to match GooseStation&apos;s refresh rate with your current monitor or screen. VSync is automatically disabled when it is not possible (e.g. running at non-100% speed).</source>
+        <translation>이 옵션을 활성화하면 현재 모니터 또는 화면과 GooseStation의 재생률을 일치시킬 수 있습니다. 수직 동기화가 불가능할 경우(예 : 100%가 아닌 속도로 실행되는 경우) 자동으로 비활성화됩니다.</translation>
     </message>
     <message>
         <location filename="../displaysettingswidget.cpp" line="112"/>
@@ -6136,8 +6136,8 @@ Do you want to load this save and continue?</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6798"/>
-        <source>About DuckStation</source>
-        <translation>DuckStation 정보</translation>
+        <source>About GooseStation</source>
+        <translation>GooseStation 정보</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6799"/>
@@ -6491,8 +6491,8 @@ Do you want to load this save and continue?</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6869"/>
-        <source>Contributor List: https://github.com/stenzek/duckstation/blob/master/CONTRIBUTORS.md</source>
-        <translation>기여자 목록 : https://github.com/stenzek/duckstation/blob/master/CONTRIBUTORS.md</translation>
+        <source>Contributor List: https://github.com/ilyalissoboi/goosestation/blob/master/CONTRIBUTORS.md</source>
+        <translation>기여자 목록 : https://github.com/ilyalissoboi/goosestation/blob/master/CONTRIBUTORS.md</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6870"/>
@@ -6826,13 +6826,13 @@ Do you want to load this save and continue?</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6936"/>
-        <source>DuckStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
-        <translation>DuckStation은 현재 커버 세트가 없는 게임의 표지를 자동으로 내려받기할 수 있습니다. 당사는 어떠한 표지 이미지도 호스팅하지 않으며, 사용자가 직접 이미지 소스를 제공해야 합니다.</translation>
+        <source>GooseStation can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.</source>
+        <translation>GooseStation은 현재 커버 세트가 없는 게임의 표지를 자동으로 내려받기할 수 있습니다. 당사는 어떠한 표지 이미지도 호스팅하지 않으며, 사용자가 직접 이미지 소스를 제공해야 합니다.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6937"/>
-        <source>DuckStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.</source>
-        <translation>DuckStation은 플레이 가능성, 속도, 장기적인 유지 보수성에 중점을 둔 소니 PlayStation(TM) 콘솔의 무료 오픈 소스 시뮬레이터/에뮬레이터입니다.</translation>
+        <source>GooseStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.</source>
+        <translation>GooseStation은 플레이 가능성, 속도, 장기적인 유지 보수성에 중점을 둔 소니 PlayStation(TM) 콘솔의 무료 오픈 소스 시뮬레이터/에뮬레이터입니다.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="6938"/>
@@ -7563,8 +7563,8 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7069"/>
-        <source>Logs messages to duckstation.log in the user directory.</source>
-        <translation>사용자 디렉터리의 duckstation.log에 로그를 기록합니다.</translation>
+        <source>Logs messages to goosestation.log in the user directory.</source>
+        <translation>사용자 디렉터리의 goosestation.log에 로그를 기록합니다.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7070"/>
@@ -8783,18 +8783,18 @@ Error was:</source>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7324"/>
-        <source>When enabled and logged in, DuckStation will scan for achievements on startup.</source>
-        <translation>이 기능을 활성화하고 로그인하면 DuckStation이 시작 시, 도전 과제를 검색합니다.</translation>
+        <source>When enabled and logged in, GooseStation will scan for achievements on startup.</source>
+        <translation>이 기능을 활성화하고 로그인하면 GooseStation이 시작 시, 도전 과제를 검색합니다.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7325"/>
-        <source>When enabled, DuckStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
-        <translation>활성화하면 DuckStation은 모든 도전 과제가 잠긴 것으로 간주하고 봉인 해제 알림을 서버로 보내지 않습니다.</translation>
+        <source>When enabled, GooseStation will assume all achievements are locked and not send any unlock notifications to the server.</source>
+        <translation>활성화하면 GooseStation은 모든 도전 과제가 잠긴 것으로 간주하고 봉인 해제 알림을 서버로 보내지 않습니다.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7326"/>
-        <source>When enabled, DuckStation will list achievements from unofficial sets. These achievements are not tracked by RetroAchievements.</source>
-        <translation>이 옵션을 활성화하면 DuckStation은 비공식 세트의 도전 과제를 나열합니다. 이러한 도전 과제는 레트로어치브먼트에서 추적되지 않습니다.</translation>
+        <source>When enabled, GooseStation will list achievements from unofficial sets. These achievements are not tracked by RetroAchievements.</source>
+        <translation>이 옵션을 활성화하면 GooseStation은 비공식 세트의 도전 과제를 나열합니다. 이러한 도전 과제는 레트로어치브먼트에서 추적되지 않습니다.</translation>
     </message>
     <message>
         <location filename="../../core/fullscreen_ui.cpp" line="7328"/>
@@ -10722,8 +10722,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
     <name>MainWindow</name>
     <message>
         <location filename="../mainwindow.ui" line="17"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="42"/>
@@ -11039,8 +11039,8 @@ Scanning recursively takes more time, but will identify files in subdirectories.
     </message>
     <message>
         <location filename="../mainwindow.ui" line="533"/>
-        <source>&amp;About DuckStation...</source>
-        <translation>DuckStation 정보(&amp;A)...</translation>
+        <source>&amp;About GooseStation...</source>
+        <translation>GooseStation 정보(&amp;A)...</translation>
     </message>
     <message>
         <location filename="../mainwindow.ui" line="614"/>
@@ -11700,8 +11700,8 @@ Are you sure you want to continue?</source>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2889"/>
-        <source>&lt;p&gt;Sorry, you are trying to update a DuckStation version which is not an official GitHub release. To prevent incompatibilities, the auto-updater is only enabled on official builds.&lt;/p&gt;&lt;p&gt;To obtain an official build, please follow the instructions under &quot;Downloading and Running&quot; at the link below:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/stenzek/duckstation/&quot;&gt;https://github.com/stenzek/duckstation/&lt;/a&gt;&lt;/p&gt;</source>
-        <translation>&lt;p&gt;죄송합니다, GitHub의 공식 릴리스가 아닌 DuckStation 버전을 업데이트하려고 합니다. 비호환성을 방지하기 위해 자동 업데이트는 공식 빌드에서만 활성화되어 있습니다.&lt;/p&gt;&lt;p&gt;공식 빌드를 얻으려면 아래 바로가기의 &apos;내려받기 및 실행&apos; 단계를 따르세요.&lt;/p&gt;&lt;p&gt; &lt;a href=&quot;https://github.com/stenzek/duckstation/&quot;&gt; https://github.com/stenzek/duckstation/ &lt;/a&gt;&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Sorry, you are trying to update a GooseStation version which is not an official GitHub release. To prevent incompatibilities, the auto-updater is only enabled on official builds.&lt;/p&gt;&lt;p&gt;To obtain an official build, please follow the instructions under &quot;Downloading and Running&quot; at the link below:&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://github.com/ilyalissoboi/goosestation/&quot;&gt;https://github.com/ilyalissoboi/goosestation/&lt;/a&gt;&lt;/p&gt;</source>
+        <translation>&lt;p&gt;죄송합니다, GitHub의 공식 릴리스가 아닌 GooseStation 버전을 업데이트하려고 합니다. 비호환성을 방지하기 위해 자동 업데이트는 공식 빌드에서만 활성화되어 있습니다.&lt;/p&gt;&lt;p&gt;공식 빌드를 얻으려면 아래 바로가기의 &apos;내려받기 및 실행&apos; 단계를 따르세요.&lt;/p&gt;&lt;p&gt; &lt;a href=&quot;https://github.com/ilyalissoboi/goosestation/&quot;&gt; https://github.com/ilyalissoboi/goosestation/ &lt;/a&gt;&lt;/p&gt;</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="2895"/>
@@ -12936,8 +12936,8 @@ URL : %1</translation>
     <name>QtModalProgressCallback</name>
     <message>
         <location filename="../qtprogresscallback.cpp" line="14"/>
-        <source>DuckStation</source>
-        <translation>DuckStation</translation>
+        <source>GooseStation</source>
+        <translation>GooseStation</translation>
     </message>
     <message>
         <location filename="../qtprogresscallback.cpp" line="31"/>
@@ -13122,8 +13122,8 @@ Do you want to create this directory?</source>
     <name>SettingsWindow</name>
     <message>
         <location filename="../settingswindow.ui" line="20"/>
-        <source>DuckStation Settings</source>
-        <translation>DuckStation 설정</translation>
+        <source>GooseStation Settings</source>
+        <translation>GooseStation 설정</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="54"/>
@@ -13152,8 +13152,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="81"/>
-        <source>&lt;strong&gt;Game List Settings&lt;/strong&gt;&lt;hr&gt;The list above shows the directories which will be searched by DuckStation to populate the game list. Search directories can be added, removed, and switched to recursive/non-recursive.</source>
-        <translation>&lt;strong&gt;게임 목록 설정&lt;/strong&gt;&lt;hr&gt;위 목록은 게임 목록을 채우기 위해 DuckStation에서 검색할 디렉터리를 보여줍니다. 검색 디렉터리를 추가, 삭제 및 하위 디렉터리 검색 여부를 전환할 수 있습니다.</translation>
+        <source>&lt;strong&gt;Game List Settings&lt;/strong&gt;&lt;hr&gt;The list above shows the directories which will be searched by GooseStation to populate the game list. Search directories can be added, removed, and switched to recursive/non-recursive.</source>
+        <translation>&lt;strong&gt;게임 목록 설정&lt;/strong&gt;&lt;hr&gt;위 목록은 게임 목록을 채우기 위해 GooseStation에서 검색할 디렉터리를 보여줍니다. 검색 디렉터리를 추가, 삭제 및 하위 디렉터리 검색 여부를 전환할 수 있습니다.</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="86"/>
@@ -13252,8 +13252,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="150"/>
-        <source>&lt;strong&gt;Folder Settings&lt;/strong&gt;&lt;hr&gt;These options control where DuckStation will save runtime data files.</source>
-        <translation>&lt;strong&gt;폴더 설정&lt;/strong&gt;&lt;hr&gt;이 옵션은 DuckStation이 런타임 데이터 파일을 저장할 위치를 제어합니다.</translation>
+        <source>&lt;strong&gt;Folder Settings&lt;/strong&gt;&lt;hr&gt;These options control where GooseStation will save runtime data files.</source>
+        <translation>&lt;strong&gt;폴더 설정&lt;/strong&gt;&lt;hr&gt;이 옵션은 GooseStation이 런타임 데이터 파일을 저장할 위치를 제어합니다.</translation>
     </message>
     <message>
         <location filename="../settingswindow.cpp" line="153"/>
@@ -13290,13 +13290,13 @@ Do you want to create this directory?</source>
     <name>SetupWizardDialog</name>
     <message>
         <location filename="../setupwizarddialog.ui" line="14"/>
-        <source>DuckStation Setup Wizard</source>
-        <translation>DuckStation 설치 마법사</translation>
+        <source>GooseStation Setup Wizard</source>
+        <translation>GooseStation 설치 마법사</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="50"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Welcome to DuckStation!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;This wizard will help guide you through the configuration steps required to use the application. It is recommended if this is your first time installing DuckStation that you view the setup guide at &lt;a href=&quot;https://github.com/stenzek/duckstation#downloading-and-running&quot;&gt;https://github.com/stenzek/duckstation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;By default, DuckStation will connect to the server at &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; to check for updates, and if available and confirmed, download update packages from &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. If you do not wish for DuckStation to make any network connections on startup, you should uncheck the Automatic Updates option now. The Automatic Update setting can be changed later at any time in Interface Settings.&lt;/p&gt;&lt;p&gt;Please choose a language and theme to begin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;DuckStation에 오신 것을 환영합니다!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;이 마법사는 애플리케이션을 사용하는 데 필요한 구성 단계를 안내합니다. DuckStation을 처음 설치하는 경우 &lt;a href=&quot;https://github.com/stenzek/duckstation#downloading-and-running&quot;&gt;https://github.com/stenzek/duckstation#downloading-and-running&lt;/a&gt;에서 설치 가이드를 참조하는 것이 좋습니다.&lt;/p&gt;&lt;p&gt;기본적으로 DuckStation은 &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;의 서버에 연결하여 업데이트를 확인하고, 사용 가능하고 확인된 경우 &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;에서 업데이트 패키지를 내려받기합니다. 시작 시, DuckStation이 네트워크에 연결하지 않도록 하려면 지금 자동 업데이트 옵션을 선택 취소해야 합니다. 자동 업데이트 설정은 나중에 인터페이스 설정에서 언제든지 변경할 수 있습니다.&lt;/p&gt;&lt;p&gt;시작할 언어와 테마를 선택하세요.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Welcome to GooseStation!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;This wizard will help guide you through the configuration steps required to use the application. It is recommended if this is your first time installing GooseStation that you view the setup guide at &lt;a href=&quot;https://github.com/ilyalissoboi/goosestation#downloading-and-running&quot;&gt;https://github.com/ilyalissoboi/goosestation#downloading-and-running&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;By default, GooseStation will connect to the server at &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt; to check for updates, and if available and confirmed, download update packages from &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;. If you do not wish for GooseStation to make any network connections on startup, you should uncheck the Automatic Updates option now. The Automatic Update setting can be changed later at any time in Interface Settings.&lt;/p&gt;&lt;p&gt;Please choose a language and theme to begin.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;GooseStation에 오신 것을 환영합니다!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;이 마법사는 애플리케이션을 사용하는 데 필요한 구성 단계를 안내합니다. GooseStation을 처음 설치하는 경우 &lt;a href=&quot;https://github.com/ilyalissoboi/goosestation#downloading-and-running&quot;&gt;https://github.com/ilyalissoboi/goosestation#downloading-and-running&lt;/a&gt;에서 설치 가이드를 참조하는 것이 좋습니다.&lt;/p&gt;&lt;p&gt;기본적으로 GooseStation은 &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;의 서버에 연결하여 업데이트를 확인하고, 사용 가능하고 확인된 경우 &lt;a href=&quot;https://github.com/&quot;&gt;github.com&lt;/a&gt;에서 업데이트 패키지를 내려받기합니다. 시작 시, GooseStation이 네트워크에 연결하지 않도록 하려면 지금 자동 업데이트 옵션을 선택 취소해야 합니다. 자동 업데이트 설정은 나중에 인터페이스 설정에서 언제든지 변경할 수 있습니다.&lt;/p&gt;&lt;p&gt;시작할 언어와 테마를 선택하세요.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="71"/>
@@ -13315,7 +13315,7 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="136"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation requires a PS1 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct DuckStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation requires a PS1 BIOS in order to run.&lt;/p&gt;&lt;p&gt;For legal reasons, you must obtain a BIOS &lt;span style=&quot; font-weight:700;&quot;&gt;from an actual PS1 unit that you own&lt;/span&gt; (borrowing doesn&apos;t count). You should use Caetla or another utility to create an image from your console&apos;s BIOS ROM on your PC.&lt;/p&gt;&lt;p&gt;Once dumped, this BIOS image should be placed in the bios folder within the data directory shown below, or you can instruct GooseStation to scan an alternative directory.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation></translation>
     </message>
     <message>
@@ -13360,8 +13360,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="292"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation will automatically scan and identify games from the selected directories below, and populate the game list. These games should be dumped from discs you own. Utilities such as ImgBurn can be used to create images of game discs in .bin/.cue format.&lt;/p&gt;&lt;p&gt;Supported formats for dumps include: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DuckStation은 아래에서 선택한 디렉토리에서 게임을 자동으로 스캔하고 식별하여 게임 목록을 채웁니다. 이러한 게임은 소유한 디스크에서 덤프해야 합니다. ImgBurn과 같은 유틸리티를 사용하여 .bin/.cue 형식의 게임 디스크 이미지를 만들 수 있습니다.&lt;/p&gt;&lt;p&gt;지원하는 덤프 형식 :&lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt;(큐시트), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt;(싱글 트랙 이미지), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt;(오류 코드 모델링 이미지), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt;(미디어 디스크립터 사이드카), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt;(압축된 대용량 데이터), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt;(PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation will automatically scan and identify games from the selected directories below, and populate the game list. These games should be dumped from discs you own. Utilities such as ImgBurn can be used to create images of game discs in .bin/.cue format.&lt;/p&gt;&lt;p&gt;Supported formats for dumps include: &lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt; (Cue Sheets), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt; (Single Track Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt; (Error Code Modeling Image), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt; (Media Descriptor Sidecar), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt; (Compressed Hunks of Data), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt; (PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;GooseStation은 아래에서 선택한 디렉토리에서 게임을 자동으로 스캔하고 식별하여 게임 목록을 채웁니다. 이러한 게임은 소유한 디스크에서 덤프해야 합니다. ImgBurn과 같은 유틸리티를 사용하여 .bin/.cue 형식의 게임 디스크 이미지를 만들 수 있습니다.&lt;/p&gt;&lt;p&gt;지원하는 덤프 형식 :&lt;span style=&quot; font-weight:700;&quot;&gt;.cue&lt;/span&gt;(큐시트), &lt;span style=&quot; font-weight:700;&quot;&gt;.iso/.img&lt;/span&gt;(싱글 트랙 이미지), &lt;span style=&quot; font-weight:700;&quot;&gt;.ecm&lt;/span&gt;(오류 코드 모델링 이미지), &lt;span style=&quot; font-weight:700;&quot;&gt;.mds&lt;/span&gt;(미디어 디스크립터 사이드카), &lt;span style=&quot; font-weight:700;&quot;&gt;.chd&lt;/span&gt;(압축된 대용량 데이터), &lt;span style=&quot; font-weight:700;&quot;&gt;.pbp&lt;/span&gt;(PlayStation Portable, Only Decrypted).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="307"/>
@@ -13391,8 +13391,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="402"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;By default, DuckStation will map your keyboard to the virtual controller.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;To use an external controller, you must map it first. &lt;/span&gt;On this screen, you can automatically map any controller which is currently connected. If your controller is not currently connected, you can plug it in now.&lt;/p&gt;&lt;p&gt;To change controller bindings in more detail, or use multi-tap, open the Settings menu and choose Controllers once you have completed the Setup Wizard.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;기본적으로 DuckStation은 키보드를 가상 컨트롤러에 매핑합니다.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot;font-weight:700;&quot;&gt;외부 컨트롤러를 사용하려면 컨트롤러를 먼저 매핑해야 합니다. &lt;/span&gt;이 화면에서는 현재 연결된 모든 컨트롤러를 자동으로 매핑할 수 있습니다. 컨트롤러가 현재 연결되어 있지 않으면 지금 연결할 수 있습니다.&lt;/p&gt;&lt;p&gt;컨트롤러 바인딩을 더 자세히 변경하거나 멀티탭을 사용하려면 설정 마법사를 완료한 후 설정 메뉴를 열고 컨트롤러를 선택하세요. .&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;By default, GooseStation will map your keyboard to the virtual controller.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;To use an external controller, you must map it first. &lt;/span&gt;On this screen, you can automatically map any controller which is currently connected. If your controller is not currently connected, you can plug it in now.&lt;/p&gt;&lt;p&gt;To change controller bindings in more detail, or use multi-tap, open the Settings menu and choose Controllers once you have completed the Setup Wizard.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;기본적으로 GooseStation은 키보드를 가상 컨트롤러에 매핑합니다.&lt;/p&gt;&lt;p&gt;&lt;span style=&quot;font-weight:700;&quot;&gt;외부 컨트롤러를 사용하려면 컨트롤러를 먼저 매핑해야 합니다. &lt;/span&gt;이 화면에서는 현재 연결된 모든 컨트롤러를 자동으로 매핑할 수 있습니다. 컨트롤러가 현재 연결되어 있지 않으면 지금 연결할 수 있습니다.&lt;/p&gt;&lt;p&gt;컨트롤러 바인딩을 더 자세히 변경하거나 멀티탭을 사용하려면 설정 마법사를 완료한 후 설정 메뉴를 열고 컨트롤러를 선택하세요. .&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="412"/>
@@ -13431,8 +13431,8 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="567"/>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Setup Complete!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;You are now ready to run games.&lt;/p&gt;&lt;p&gt;Further options are available under the settings menu. You can also use the Big Picture UI for navigation entirely with a gamepad.&lt;/p&gt;&lt;p&gt;We hope you enjoy using DuckStation.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text- indent:0px;&quot;&gt;&lt;span style=&quot;font-size:xx-large;font-weight:700;&quot;&gt;설정이 완료되었습니다!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;이제 게임을 실행할 준비가 되었습니다.&lt; /p&gt;&lt;p&gt;설정 메뉴에서 추가 옵션을 사용할 수 있습니다. 빅피처 UI를 사용하여 게임패드만으로 탐색할 수도 있습니다.&lt;/p&gt;&lt;p&gt;DuckStation을 즐겁게 사용하시기 바랍니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:xx-large; font-weight:700;&quot;&gt;Setup Complete!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;You are now ready to run games.&lt;/p&gt;&lt;p&gt;Further options are available under the settings menu. You can also use the Big Picture UI for navigation entirely with a gamepad.&lt;/p&gt;&lt;p&gt;We hope you enjoy using GooseStation.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;h1 style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text- indent:0px;&quot;&gt;&lt;span style=&quot;font-size:xx-large;font-weight:700;&quot;&gt;설정이 완료되었습니다!&lt;/span&gt;&lt;/h1&gt;&lt;p&gt;이제 게임을 실행할 준비가 되었습니다.&lt; /p&gt;&lt;p&gt;설정 메뉴에서 추가 옵션을 사용할 수 있습니다. 빅피처 UI를 사용하여 게임패드만으로 탐색할 수도 있습니다.&lt;/p&gt;&lt;p&gt;GooseStation을 즐겁게 사용하시기 바랍니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.ui" line="640"/>
@@ -13483,15 +13483,15 @@ Do you want to create this directory?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="47"/>
-        <source>No BIOS images were found. DuckStation &lt;strong&gt;will not&lt;/strong&gt; be able to run games without a BIOS image.&lt;br&gt;&lt;br&gt;Are you sure you wish to continue without selecting a BIOS image?</source>
-        <translation>바이오스 이미지를 찾을 수 없습니다. DuckStation은 바이오스 이미지 없이는 게임을 실행할 수 &lt;strong&gt;없습니다&lt;/strong&gt;.&lt;br&gt;&lt;br&gt;바이오스 이미지를 선택하지 않고 계속하시겠습니까?</translation>
+        <source>No BIOS images were found. GooseStation &lt;strong&gt;will not&lt;/strong&gt; be able to run games without a BIOS image.&lt;br&gt;&lt;br&gt;Are you sure you wish to continue without selecting a BIOS image?</source>
+        <translation>바이오스 이미지를 찾을 수 없습니다. GooseStation은 바이오스 이미지 없이는 게임을 실행할 수 &lt;strong&gt;없습니다&lt;/strong&gt;.&lt;br&gt;&lt;br&gt;바이오스 이미지를 선택하지 않고 계속하시겠습니까?</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="63"/>
-        <source>No game directories have been selected. You will have to manually open any game dumps you want to play, DuckStation&apos;s list will be empty.
+        <source>No game directories have been selected. You will have to manually open any game dumps you want to play, GooseStation&apos;s list will be empty.
 
 Are you sure you want to continue?</source>
-        <translation>게임 디렉터리가 선택되지 않았습니다. 플레이하고 싶은 게임 덤프를 수동으로 열어야 하며, DuckStation의 목록이 비어 있습니다.
+        <translation>게임 디렉터리가 선택되지 않았습니다. 플레이하고 싶은 게임 덤프를 수동으로 열어야 하며, GooseStation의 목록이 비어 있습니다.
 
 계속하시겠습니까?</translation>
     </message>
@@ -13507,12 +13507,12 @@ Are you sure you want to continue?</source>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="148"/>
-        <source>Are you sure you want to cancel DuckStation setup?
+        <source>Are you sure you want to cancel GooseStation setup?
 
-Any changes have been saved, and the wizard will run again next time you start DuckStation.</source>
-        <translation>DuckStation 설정을 취소하시겠습니까?
+Any changes have been saved, and the wizard will run again next time you start GooseStation.</source>
+        <translation>GooseStation 설정을 취소하시겠습니까?
 
-변경 사항이 저장되었으며 다음에 DuckStation을 시작할 때, 마법사가 다시 실행됩니다.</translation>
+변경 사항이 저장되었으며 다음에 GooseStation을 시작할 때, 마법사가 다시 실행됩니다.</translation>
     </message>
     <message>
         <location filename="../setupwizarddialog.cpp" line="269"/>

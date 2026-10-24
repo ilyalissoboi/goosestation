@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=DuckStation
+Name=GooseStation
 GenericName=PlayStation 1 Emulator
 Comment=Fast PlayStation 1 emulator
-Icon=org.duckstation.DuckStation
-TryExec=duckstation-qt
-Exec=duckstation-qt %f
+Icon=io.github.ilyalissoboi.GooseStation
+TryExec=goosestation-qt
+Exec=goosestation-qt %f
 Categories=Game;Emulator;Qt;

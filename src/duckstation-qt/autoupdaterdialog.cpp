@@ -55,9 +55,9 @@ static constexpr u32 HTTP_POLL_INTERVAL = 10;
 
 #ifdef AUTO_UPDATER_SUPPORTED
 
-static const char* LATEST_TAG_URL = "https://api.github.com/repos/stenzek/duckstation/tags";
-static const char* LATEST_RELEASE_URL = "https://api.github.com/repos/stenzek/duckstation/releases/tags/{}";
-static const char* CHANGES_URL = "https://api.github.com/repos/stenzek/duckstation/compare/{}...{}";
+static const char* LATEST_TAG_URL = "https://api.github.com/repos/ilyalissoboi/goosestation/tags";
+static const char* LATEST_RELEASE_URL = "https://api.github.com/repos/ilyalissoboi/goosestation/releases/tags/{}";
+static const char* CHANGES_URL = "https://api.github.com/repos/ilyalissoboi/goosestation/compare/{}...{}";
 static const char* UPDATE_ASSET_FILENAME = SCM_RELEASE_ASSET;
 static const char* UPDATE_TAGS[] = SCM_RELEASE_TAGS;
 static const char* THIS_RELEASE_TAG = SCM_RELEASE_TAG;
@@ -115,24 +115,8 @@ bool AutoUpdaterDialog::isOfficialBuild()
 
 bool AutoUpdaterDialog::warnAboutUnofficialBuild()
 {
-  //
-  // To those distributing their own builds or packages of DuckStation, and seeing this message:
-  //
-  // This message is here for a reason. Under the terms of the license, you are within your rights to distribute your
-  // own builds of my application. However, it is a headache for me, as users run into broken functionality, or end up
-  // on untested/preview commits that have not been adequately tested, and I cannot resolve their issues. I provide
-  // builds for a range of platforms that covers almost all use cases, and can guarantee quality of these builds.
-  //
-  // If you must distribute builds/packages, per the GPL, modified builds should be clearly marked as such.
-  // This message is thus one way of meeting the requirement. See Section 5 of the GPLv3:
-  // https://www.gnu.org/licenses/gpl-3.0.en.html#section5
-  //
-  // This includes building the binary with any method that does not match the official release, including dependencies,
-  // as it is not uncommon for differing dependency versions to create issues I cannot reproduce.
-  //
-  // You should also provide user support for your package, and not direct them to upstream, as any users that ask for
-  // community help will be instructed to download a supported release instead.
-  //
+  // Builds that did not come from GooseStation's release workflow have no scmversion/tag.h. They may differ from the
+  // releases (dependencies, patches), so they are marked as unofficial, as GPLv3 section 5 asks of modified versions.
 #if !__has_include("scmversion/tag.h") && !defined(_DEBUG)
   constexpr const char* CONFIG_SECTION = "UI";
   constexpr const char* CONFIG_KEY = "UnofficialBuildWarningConfirmed";
@@ -145,7 +129,8 @@ bool AutoUpdaterDialog::warnAboutUnofficialBuild()
     "<h1>You are not using an official release!</h1><h3>If you continue to use this build, expect to run into "
     "issues.</h3><p><strong>No assistance will be provided by the developers or community</strong>, as we cannot fix "
     "broken functionality in builds we do not control.</p><p>We <strong>strongly recommend</strong> downloading an "
-    "official release from <a href=\"https://www.duckstation.org/\">duckstation.org</a>.</p><p>Do you want to exit and "
+    "official release from <a href=\"https://github.com/ilyalissoboi/goosestation/releases\">GooseStation's releases</a>.</p>"
+    "<p>Do you want to exit and "
     "open this page now?</p>");
 
   QMessageBox mbox;
@@ -185,7 +170,7 @@ bool AutoUpdaterDialog::warnAboutUnofficialBuild()
 
   if (mbox.exec() == QMessageBox::Yes)
   {
-    QtUtils::OpenURL(nullptr, "https://duckstation.org/");
+    QtUtils::OpenURL(nullptr, "https://github.com/ilyalissoboi/goosestation/releases");
     return false;
   }
 

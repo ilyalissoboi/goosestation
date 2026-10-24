@@ -70,9 +70,9 @@ BEGIN
             VALUE "CompanyName", "https://github.com/ilyalissoboi/goosestation"
             VALUE "FileDescription", "GooseStation PS1 Emulator"
             VALUE "FileVersion", "1.0.0.1"
-            VALUE "InternalName", "duckstation-qt.exe"
+            VALUE "InternalName", "goosestation-qt.exe"
             VALUE "LegalCopyright", "Copyright (C) 2020-2024 Stenzek and collaborators"
-            VALUE "OriginalFilename", "duckstation-qt.exe"
+            VALUE "OriginalFilename", "goosestation-qt.exe"
             VALUE "ProductName", "GooseStation"
             VALUE "ProductVersion", "1.0.0.1"
         END

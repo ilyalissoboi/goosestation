@@ -16,8 +16,9 @@
 // The memory cards in use are synced, one save at a time, with every other device using the same
 // storage: GooseStation on other computers, and anything else that syncs PS1 cards with emusync
 // (`emusync watch`, other emulators). A save made on one device shows up on the others; two devices
-// playing different games never conflict, and when the same save was changed on two devices the
-// newest version wins and the other stays in emusync's history.
+// playing different games never conflict. When the same save was changed on two devices, the card
+// here is left as it is and the player chooses which version to keep (GetConflicts(),
+// ResolveConflict()); the other stays in emusync's history.
 //
 // Each card file is a logical card named after the file (`shared_card_1.mcd` is card
 // `shared_card_1`, a per-game card `Final Fantasy VII (USA)_1.mcd` is `Final_Fantasy_VII_(USA)_1`),
@@ -84,6 +85,44 @@ std::string GetStatus();
 
 /// Queues a full sync: download, apply to the cards not in use, upload.
 void SyncNow();
+
+// ---- Conflicts ------------------------------------------------------------------------------------
+
+/// One device's version of a save in a conflict.
+struct ConflictVersion
+{
+  /// The device that made it.
+  std::string device;
+  s64 modified_unix_ms = 0;
+  u64 size = 0;
+  /// The save was deleted there.
+  bool deleted = false;
+};
+
+/// A save changed both on this device and on another since they last synced. The card here keeps
+/// this device's version until the player chooses; the version not chosen stays in emusync's history.
+struct Conflict
+{
+  u64 id = 0;
+  /// The logical card (CardNameFor()).
+  std::string card;
+  /// The save's name on the card, e.g. "BASLUS-00067DRACULA".
+  std::string save;
+  /// The game's serial, e.g. "SLUS-00067", if the save's name has one.
+  std::string serial;
+  /// This device's version, if the save is on this device's card.
+  std::optional<ConflictVersion> local;
+  /// The other devices' versions: usually one.
+  std::vector<ConflictVersion> remote;
+};
+
+/// The conflicts waiting for the player, oldest first. Ones resolved on another device drop out after
+/// the next sync.
+std::vector<Conflict> GetConflicts();
+
+/// Keeps this device's version of a conflict's save, or the version remote[remote_index]. Returns at
+/// once: the choice is uploaded, and written to the card as soon as the card isn't in use.
+void ResolveConflict(u64 id, bool keep_local, u32 remote_index = 0);
 
 // ---- Settings (settings.ini and the system's credential store) ----------------------------------
 

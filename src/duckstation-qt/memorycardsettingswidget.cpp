@@ -4,6 +4,7 @@
 #include "memorycardsettingswidget.h"
 
 #include "core/controller.h"
+#include "core/game_database.h"
 #include "core/host.h"
 #include "core/memcard_sync.h"
 #include "core/settings.h"
@@ -17,13 +18,20 @@
 #include "common/small_string.h"
 #include "common/string_util.h"
 
+#include <QtCore/QDateTime>
+#include <QtCore/QLocale>
 #include <QtCore/QPointer>
 #include <QtCore/QSysInfo>
 #include <QtCore/QUrl>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QTreeWidget>
 
+#include <algorithm>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <thread>
@@ -250,6 +258,14 @@ MemoryCardSyncWidget::MemoryCardSyncWidget(SettingsWindow* dialog, QWidget* pare
   status_row->addWidget(m_sync_now);
   form->addRow(status_row);
 
+  QHBoxLayout* conflicts_row = new QHBoxLayout();
+  m_conflicts = new QLabel(this);
+  m_conflicts->setWordWrap(true);
+  m_resolve_conflicts = new QPushButton(tr("Resolve..."), this);
+  conflicts_row->addWidget(m_conflicts, 1);
+  conflicts_row->addWidget(m_resolve_conflicts);
+  form->addRow(conflicts_row);
+
   m_enabled->setChecked(Host::GetBaseBoolSettingValue(SECTION, "Enabled", false));
   m_remote_uri->setText(QString::fromStdString(Host::GetBaseStringSettingValue(SECTION, "RemoteURI")));
   m_access_key_id->setText(QString::fromStdString(Host::GetBaseStringSettingValue(SECTION, "AccessKeyID")));
@@ -269,6 +285,7 @@ MemoryCardSyncWidget::MemoryCardSyncWidget(SettingsWindow* dialog, QWidget* pare
           [this](bool shown) { onShowToggled(m_passphrase, m_passphrase_show, ENCRYPTION_PASSPHRASE, shown); });
   connect(m_passphrase_remove, &QPushButton::clicked, this, &MemoryCardSyncWidget::onPassphraseRemoveClicked);
   connect(m_sync_now, &QPushButton::clicked, this, &MemoryCardSyncWidget::onSyncNowClicked);
+  connect(m_resolve_conflicts, &QPushButton::clicked, this, &MemoryCardSyncWidget::onResolveConflictsClicked);
 
   m_status_timer.setInterval(2000);
   connect(&m_status_timer, &QTimer::timeout, this, &MemoryCardSyncWidget::updateStatus);
@@ -276,7 +293,8 @@ MemoryCardSyncWidget::MemoryCardSyncWidget(SettingsWindow* dialog, QWidget* pare
   dialog->registerWidgetHelp(
     m_enabled, tr("Sync Memory Cards"), tr("Unchecked"),
     tr("Your memory card saves sync with your other devices, one save at a time, through storage you own. Newer "
-       "saves from other devices are put on a card before it opens; your saves upload while you play."));
+       "saves from other devices are put on a card before it opens; your saves upload while you play. When a save "
+       "was changed both here and on another device, you choose which version to keep."));
   dialog->registerWidgetHelp(
     m_remote_uri, tr("Storage"), tr("Not set"),
     tr("Bucket and folder, e.g. s3://my-saves/emusync/v1?region=eu-west-1. Use the same on every device. "
@@ -503,4 +521,114 @@ void MemoryCardSyncWidget::updateStatus()
     text = tr("Syncing. Nothing has changed yet.");
   m_status->setText(text);
   m_sync_now->setEnabled(MemcardSync::IsAvailable() && MemcardSync::IsRunning() && m_pending_applies == 0);
+
+  const int conflicts = static_cast<int>(MemcardSync::GetConflicts().size());
+  m_conflicts->setText(
+    tr("%n save(s) changed both on this device and on another. Choose which version to keep.", nullptr, conflicts));
+  m_conflicts->setVisible(conflicts > 0);
+  m_resolve_conflicts->setVisible(conflicts > 0);
+}
+
+void MemoryCardSyncWidget::onResolveConflictsClicked()
+{
+  const std::vector<MemcardSync::Conflict> conflicts = MemcardSync::GetConflicts();
+  if (conflicts.empty())
+  {
+    updateStatus();
+    return;
+  }
+
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Memory Card Sync Conflicts"));
+  dialog.resize(900, 400);
+  QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+  QLabel* intro = new QLabel(
+    tr("These saves were changed both on this device and on another since they last synced. Choose which version to "
+       "keep: the other stays in the sync history. Until you choose, the memory card here keeps this device's version. "
+       "A card in use gets the chosen save when the game is closed."),
+    &dialog);
+  intro->setWordWrap(true);
+  layout->addWidget(intro);
+
+  QTreeWidget* list = new QTreeWidget(&dialog);
+  list->setRootIsDecorated(false);
+  list->setSelectionMode(QAbstractItemView::NoSelection);
+  list->setHeaderLabels({tr("Save"), tr("Memory Card"), tr("This Device"), tr("Other Device"), tr("Keep")});
+  layout->addWidget(list, 1);
+
+  const auto describe = [](const MemcardSync::ConflictVersion& v) {
+    const QString when = QLocale().toString(QDateTime::fromMSecsSinceEpoch(v.modified_unix_ms), QLocale::ShortFormat);
+    if (v.deleted)
+      return tr("%1\nDeleted %2").arg(QString::fromStdString(v.device)).arg(when);
+    // PS1 saves are whole 8 KiB blocks; the size emusync stores adds a small header.
+    const int blocks = std::max(static_cast<int>(v.size / 8192), 1);
+    return tr("%1\n%2, %n block(s)", nullptr, blocks).arg(QString::fromStdString(v.device)).arg(when);
+  };
+
+  // One choice per conflict: the data is the remote index, or -1 for this device's version and -2 for later.
+  std::vector<std::pair<u64, QComboBox*>> choices;
+  for (const MemcardSync::Conflict& c : conflicts)
+  {
+    QString save = QString::fromStdString(c.save);
+    if (const GameDatabase::Entry* entry = c.serial.empty() ? nullptr : GameDatabase::GetEntryForSerial(c.serial))
+      save = QStringLiteral("%1\n%2").arg(QString::fromStdString(entry->title)).arg(save);
+
+    QStringList others;
+    for (const MemcardSync::ConflictVersion& v : c.remote)
+      others.append(describe(v));
+
+    QTreeWidgetItem* item = new QTreeWidgetItem(list);
+    item->setText(0, save);
+    item->setText(1, QString::fromStdString(c.card));
+    item->setText(2, c.local.has_value() ? describe(*c.local) : tr("Not on this device"));
+    item->setText(3, others.join(QStringLiteral("\n")));
+
+    QComboBox* choice = new QComboBox(list);
+    choice->addItem(tr("This device's"), -1);
+    s64 newest = c.local.has_value() ? c.local->modified_unix_ms : std::numeric_limits<s64>::min();
+    int newest_index = 0;
+    for (size_t i = 0; i < c.remote.size(); i++)
+    {
+      choice->addItem(tr("%1's").arg(QString::fromStdString(c.remote[i].device)), static_cast<int>(i));
+      if (c.remote[i].modified_unix_ms > newest)
+      {
+        newest = c.remote[i].modified_unix_ms;
+        newest_index = choice->count() - 1;
+      }
+    }
+    choice->addItem(tr("Decide later"), -2);
+    // The newest version is preselected, as sync chose before there was this screen.
+    choice->setCurrentIndex(newest_index);
+    list->setItemWidget(item, 4, choice);
+    choices.emplace_back(c.id, choice);
+  }
+  for (int i = 0; i < list->columnCount(); i++)
+    list->resizeColumnToContents(i);
+
+  QDialogButtonBox* buttons = new QDialogButtonBox(&dialog);
+  QPushButton* keep_all_here = buttons->addButton(tr("All From This Device"), QDialogButtonBox::ActionRole);
+  QPushButton* apply = buttons->addButton(tr("Keep Chosen Versions"), QDialogButtonBox::AcceptRole);
+  buttons->addButton(QDialogButtonBox::Cancel);
+  apply->setDefault(true);
+  layout->addWidget(buttons);
+
+  connect(keep_all_here, &QPushButton::clicked, &dialog, [&choices]() {
+    for (auto& [id, choice] : choices)
+      choice->setCurrentIndex(0);
+  });
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+  if (dialog.exec() != QDialog::Accepted)
+    return;
+
+  for (const auto& [id, choice] : choices)
+  {
+    const int remote = choice->currentData().toInt();
+    if (remote == -2)
+      continue;
+    MemcardSync::ResolveConflict(id, remote < 0, static_cast<u32>(std::max(remote, 0)));
+  }
+  m_status->setText(tr("Syncing..."));
 }

@@ -12,7 +12,8 @@ merge_binaries() {
   IFS="
 "
   pushd "$X86DIR"
-  for X86BIN in $(find . -type f \( -name '*.dylib' -o -name '*.a' -o -perm +111 \)); do
+  # CMakeFiles holds CMake's compiler checks, built for the host in both trees: not ours to merge.
+  for X86BIN in $(find . -path '*/CMakeFiles' -prune -o -type f \( -name '*.dylib' -o -name '*.a' -o -perm +111 \) -print); do
     if file "$X86DIR/$X86BIN" | grep "Mach-O " >/dev/null; then
       ARMBIN="${ARMDIR}/${X86BIN}"
       echo "Merge $ARMBIN to $X86BIN..."

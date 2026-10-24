@@ -799,11 +799,11 @@ static std::string StartFromSettings(const MemcardSync::ApplySettings& s)
     c.passphrase = std::move(*passphrase);
   c.data_dir = DataDirFor(c.remote_uri);
   c.emulator_version = g_scm_tag_str;
-  if (!FileSystem::EnsureDirectoryExists(c.data_dir.c_str(), true))
+  if (Error dir_error; !FileSystem::EnsureDirectoryExists(c.data_dir.c_str(), true, &dir_error))
   {
     WipeSecret(c.secret_access_key);
     WipeSecret(c.passphrase);
-    return fmt::format("Could not create the sync data folder {}.", c.data_dir);
+    return fmt::format("Could not create the sync data folder {}: {}", c.data_dir, dir_error.GetDescription());
   }
   const bool started = Start(c, &error);
   WipeSecret(c.secret_access_key);

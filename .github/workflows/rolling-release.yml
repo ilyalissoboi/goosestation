@@ -397,9 +397,28 @@ jobs:
   create-release:
     needs: [windows-build, windows-arm64-build, linux-build, linux-flatpak-build, macos-build]
     runs-on: ubuntu-22.04
-    # Releases are published by hand only, until the builds carry GooseStation's own name.
+    # Releases are published by hand only (Actions > Create rolling release > Run workflow, on master or dev). Most pushes
+    # in this stage of development are work in progress, and a release for each would bury the ones worth installing.
     if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4.1.6
+        with:
+          fetch-depth: 0
+
+      # The builds took their version from the same annotated tag (see docs/releasing.md). Without one they would all
+      # report an empty version, so nothing is published.
+      - name: Get version
+        id: version
+        run: |
+          if ! VERSION=$(git describe); then
+            echo "::error::No annotated version tag (such as 0.1) is reachable from this commit, see docs/releasing.md."
+            exit 1
+          fi
+          echo "Version: ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.7
         with:
@@ -408,37 +427,33 @@ jobs:
       - name: Display Downloaded Artifacts
         run: find ./artifacts/
 
-      - name: Create preview release
-        if: github.ref == 'refs/heads/master'
-        uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "preview"
-          prerelease: true
-          title: "Latest Preview Build"
-          files: |
-            ./artifacts/windows/goosestation-windows-x64-release.zip
-            ./artifacts/windows/goosestation-windows-x64-release-symbols.zip
-            ./artifacts/windows-arm64/goosestation-windows-arm64-release.zip
-            ./artifacts/windows-arm64/goosestation-windows-arm64-release-symbols.zip
-            ./artifacts/linux-x64-appimage-qt/GooseStation-x64.AppImage
-            ./artifacts/linux-flatpak/goosestation-x64.flatpak
-            ./artifacts/macos/goosestation-mac-release.zip
+      # Each channel is a single release whose tag the updater follows: master publishes "preview", dev "latest". The
+      # release is replaced and its tag moved to this commit, so the history holds one release per channel. The channel
+      # tags are lightweight, so git describe never picks them up as versions.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "${GITHUB_REF}" = "refs/heads/master" ]; then
+            TAG=preview
+            TITLE="Preview ${VERSION}"
+            PRERELEASE=--prerelease
+          else
+            TAG=latest
+            TITLE="Rolling release ${VERSION}"
+            PRERELEASE=
+          fi
 
-      - name: Create dev release
-        if: github.ref == 'refs/heads/dev'
-        uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
-          prerelease: false
-          title: "Latest Rolling Release"
-          files: |
-            ./artifacts/windows/goosestation-windows-x64-release.zip
-            ./artifacts/windows/goosestation-windows-x64-release-symbols.zip
-            ./artifacts/windows-arm64/goosestation-windows-arm64-release.zip
-            ./artifacts/windows-arm64/goosestation-windows-arm64-release-symbols.zip
-            ./artifacts/linux-x64-appimage-qt/GooseStation-x64.AppImage
-            ./artifacts/linux-flatpak/goosestation-x64.flatpak
-            ./artifacts/macos/goosestation-mac-release.zip
+          gh release delete "${TAG}" --yes || true
+          git push origin ":refs/tags/${TAG}" || true
 
+          gh release create "${TAG}" ${PRERELEASE} --target "${GITHUB_SHA}" --title "${TITLE}" \
+            --notes "GooseStation ${VERSION}, built from ${GITHUB_SHA}." \
+            ./artifacts/windows/goosestation-windows-x64-release.zip \
+            ./artifacts/windows/goosestation-windows-x64-release-symbols.zip \
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release.zip \
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release-symbols.zip \
+            ./artifacts/linux-x64-appimage-qt/GooseStation-x64.AppImage \
+            ./artifacts/linux-flatpak/goosestation-x64.flatpak \
+            ./artifacts/macos/goosestation-mac-release.zip

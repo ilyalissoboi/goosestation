@@ -9,19 +9,19 @@ list are tagged with their priority there ([upstream-features.md](upstream-featu
 built clean-room, from behaviour and our own design, never from DuckStation's code after
 `a5bf1ba5cee7`.
 
-## 0. Finish what is in flight
+## 0. Finish what is in flight (done)
 
 | # | Item | Size | After |
 |---|---|---|---|
-| 1 | Merge #5. It also brings sync (#2) and the rebrand (#4) into `master`, which they missed by being merged into `build/windows-deps` after that branch had gone into `master`. Its Windows ARM64 build (the SDL `SDL_LIBC` fix) is still unproven. | S | CI |
-| 2 | A real sync test: BIOS, game and S3 keys on Windows, then a second device (macOS or Linux) to check that saves cross devices. Also check that cards already open when sync starts sync from their next opening. | S | 1 |
-| 3 | Delete the merged branches (`build/windows-deps`, `feat/memcard-sync`, `feat/rebrand`, `docs/upstream-features`). | S | 1 |
+| 1 | ~~Merge #5.~~ Merged; the Windows ARM64 build passes on `master`. | S | CI |
+| 2 | ~~A real sync test.~~ Saves sync between Windows and macOS (after #8). Still unchecked: whether cards already open when sync starts sync from their next opening. | S | 1 |
+| 3 | ~~Delete the merged branches.~~ Done. | S | 1 |
 
 ## 1. First public release
 
 | # | Item | Size | After |
 |---|---|---|---|
-| 4 | Release process: a version scheme (annotated tags such as `0.1-N`, which the Windows version info and the updater read), re-enabling the release job (it only runs by hand for now), and checking the updater against GooseStation's own releases. | M | 1 |
+| 4 | Release process: a version scheme (an annotated `0.1` tag, so builds read `0.1-N` from `git describe`), a release job that publishes by hand only (automatic releases would flood the history while development moves fast), and checking the updater against GooseStation's own releases. See [releasing.md](releasing.md). | M | 1 |
 | 5 | CJK fonts: static Regular instances of Noto Sans JP/KR/SC, published in the `runtime-resources` release the app downloads them from. The Google Fonts variable fonts default to Thin, which is all stb_truetype renders. | S | 4 |
 | 6 | Register GooseStation with RetroAchievements; until then its user agent may be treated as an unknown emulator and hardcore mode refused. | S | none |
 | 7 | Encrypted RetroAchievements login token: not in plain text in settings.ini (upstream P1, security). | S | none |

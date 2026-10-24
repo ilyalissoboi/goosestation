@@ -74,7 +74,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 | Feature | What it does | Priority |
 |---|---|---|
 | Themes and backgrounds | Several themes, an automatic theme following the desktop UI, user-selectable and shader backgrounds. | P2 |
-| On-screen keyboard | Text entry with a controller. | P1 (needed for an Android or handheld UI) |
+| On-screen keyboard | Text entry with a controller. | P3 (the platforms' own keyboards are used instead; see [roadmap](roadmap.md) item 14) |
 | Game list improvements | Search, compact mode, game icons, cover download, setting a cover, editing titles and serials. | P2 |
 | Transitions, sound effects, polish | Fade/zoom/slide transitions, navigation sounds, drop shadows, rounding, blur. | P3 |
 | Controller ergonomics | PlayStation button glyphs, swapping confirm/cancel, vibration motor binding, images in controller settings. | P2 |

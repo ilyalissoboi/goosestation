@@ -2023,7 +2023,25 @@ bool FileSystem::CreateDirectory(const char* Path, bool Recursive, Error* error)
     // part of the path does not exist, so we'll create the parent folders, then
     // the full path again.
     const size_t pathLength = std::strlen(Path);
-    for (size_t i = 0; i < pathLength; i++)
+
+    // Start past the root ("C:\", or "\\server\share\"): it can't be created, and on the system drive
+    // CreateDirectoryW("C:") fails with ERROR_ACCESS_DENIED, not ERROR_ALREADY_EXISTS.
+    size_t start = 0;
+    if (IsUNCPath(std::string_view(Path, pathLength)))
+    {
+      size_t separators = 0;
+      for (start = 2; start < pathLength && separators < 2; start++)
+      {
+        if (Path[start] == '\\' || Path[start] == '/')
+          separators++;
+      }
+    }
+    else if (pathLength >= 3 && Path[1] == ':' && (Path[2] == '\\' || Path[2] == '/'))
+    {
+      start = 3;
+    }
+
+    for (size_t i = start; i < pathLength; i++)
     {
       if (Path[i] == '\\' || Path[i] == '/')
       {

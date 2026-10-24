@@ -21,17 +21,17 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 
 | # | Item | Size | After |
 |---|---|---|---|
-| 4 | Release process: a version scheme (an annotated `0.1` tag, so builds read `0.1-N` from `git describe`), a release job that publishes by hand only (automatic releases would flood the history while development moves fast), and checking the updater against GooseStation's own releases. See [releasing.md](releasing.md). | M | 1 |
-| 5 | CJK fonts: static Regular instances of Noto Sans JP/KR/SC, published in the `runtime-resources` release the app downloads them from (`scripts/make-cjk-fonts.py`). The Google Fonts variable fonts default to Thin, which is all FreeType renders. | S | 4 |
+| 4 | ~~Release process.~~ Done (#9, #10): a version scheme (an annotated `0.1` tag, so builds read `0.1-N` from `git describe`), a release job that publishes by hand only (automatic releases would flood the history while development moves fast), and the updater checked against GooseStation's own releases (0.1-49 → 0.1-61). See [releasing.md](releasing.md). | M | 1 |
+| 5 | ~~CJK fonts.~~ Done (#11): static Regular instances of Noto Sans JP/KR/SC, published in the `runtime-resources` release the app downloads them from (`scripts/make-cjk-fonts.py`). The Google Fonts variable fonts default to Thin, which is all FreeType renders. | S | 4 |
 | 6 | Deferred to [Later](#later): registering with RetroAchievements. | S | none |
-| 7 | RetroAchievements login token out of settings.ini (upstream P1, security): kept in a separate secrets.ini settings layer, as PCSX2 does, so settings.ini can be shared; moved there from older settings. | S | none |
+| 7 | ~~RetroAchievements login token out of settings.ini.~~ Done (#12) (upstream P1, security): kept in a separate secrets.ini settings layer, as PCSX2 does, so settings.ini can be shared; moved there from older settings. | S | none |
 | 8 | macOS signing and notarization, so Gatekeeper does not block downloaded builds (optional; needs an Apple developer account). | M | 4 |
 
 ## 2. Memory card sync
 
 | # | Item | Size | After |
 |---|---|---|---|
-| 9 | A conflict screen: when a save was changed on two devices, the player chooses which version to keep (Settings > Memory Cards > Resolve...); the card keeps this device's version until then, and the other stays in emusync's history. Big Picture has no conflict screen yet (with item 12). | M | 2 |
+| 9 | ~~A conflict screen.~~ Done (#13): when a save was changed on two devices, the player chooses which version to keep (Settings > Memory Cards > Resolve...); the card keeps this device's version until then, and the other stays in emusync's history. Big Picture has no conflict screen yet (with item 12). | M | 2 |
 | 10 | More platforms: emusync runtimes for Windows ARM64 and Linux aarch64 (today Windows x64, Linux x86_64 and macOS). Needs emusync releases for those targets first. | M | 1, emusync |
 | 11 | Memory card editor additions and memory card improvements: renaming saves, extracting icons, the game's icon shown while saving (upstream P1). | M | none |
 | 12 | Sync settings in Big Picture; only the Qt settings have them now. | M | 14 |

@@ -32,6 +32,8 @@
 //   Snapshots go to an on-disk queue first, so a save is not lost if the program exits before the
 //   upload.
 //   Closing: OnCardClosed(), after the card's last write, uploads and applies what arrived meanwhile.
+// A card already open when sync starts (sync turned on, or its settings changed, during a game) is
+// left alone until it is next opened: emusync can only start following a card before it is read.
 //
 // Settings: [MemoryCardSync] in settings.ini (Enabled, RemoteURI, AccessKeyID, DeviceName), with the
 // secret access key and the optional encryption passphrase in the system's credential store

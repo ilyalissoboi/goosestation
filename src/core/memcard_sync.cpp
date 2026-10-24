@@ -11,6 +11,7 @@
 #include "common/file_system.h"
 #include "common/log.h"
 #include "common/path.h"
+#include "common/scoped_guard.h"
 #include "common/sha1_digest.h"
 #include "common/string_util.h"
 #include "common/threading.h"
@@ -83,6 +84,8 @@ struct Card
   es_container_id container = 0;
   es_session_id session = 0;
   std::chrono::steady_clock::time_point opened;
+  // In OnCardOpening(): not read yet, so it is followed there, not by Start().
+  bool opening = false;
 };
 
 /// The settings an apply runs with, read when it is queued.
@@ -99,8 +102,6 @@ static EmuSyncApi s_es;
 
 // How long opening a card waits for the network before the card opens as it is.
 static constexpr u32 OPEN_SYNC_TIMEOUT_MS = 3000;
-// The session timeout for "don't wait": 0 would mean the default.
-static constexpr u32 NO_WAIT_MS = 1;
 // A sync with no event to trigger it.
 static constexpr std::chrono::minutes PERIODIC_SYNC{5};
 // What exiting gives queued uploads.
@@ -396,7 +397,7 @@ static void FollowCard(const std::string& path, const std::string& serial, const
 {
   using namespace MemcardSync;
   {
-    // Already followed: Start() and a card opening while it ran can both get here.
+    // Already followed: the same file in both slots.
     std::lock_guard lock(s_state_lock);
     if (std::any_of(s_cards.begin(), s_cards.end(), [&](const Card& c) { return c.path == path && c.session != 0; }))
       return;
@@ -650,15 +651,23 @@ bool MemcardSync::Start(const Config& config, std::string* error)
   s_es.es_event_set_notifier(s_client, &OnEventsWaiting, nullptr);
   s_worker = std::thread(&WorkerLoop);
 
-  // Cards already open keep their contents: follow them without writing to them (1 ms: marked in use
-  // at once; what the network brings waits until they are closed).
-  std::vector<Card> open;
+  // Cards already open are not followed (not even registered) until they are next opened. Beginning
+  // a session applies what already waits for them, and a registered card outside a session is
+  // written by every sync: either would change the file under the copy the emulator holds, and the
+  // next save would write that copy back. A card still opening is followed by OnCardOpening() once
+  // this start is done.
+  size_t open_cards;
   {
     std::lock_guard lock(s_state_lock);
-    open = s_cards;
+    open_cards = std::count_if(s_cards.begin(), s_cards.end(), [](const Card& c) { return !c.opening; });
   }
-  for (const Card& c : open)
-    FollowCard(c.path, c.serial, c.title, NO_WAIT_MS);
+  if (open_cards > 0)
+  {
+    INFO_LOG("{} memory card(s) already in use sync from the next time they are opened.", open_cards);
+    Host::AddIconOSDMessage("MemcardSync-InUse", ICON_FA_CLOUD,
+                            TRANSLATE_STR("MemcardSync", "Memory cards in use sync from the next time they are opened."),
+                            Host::OSD_INFO_DURATION);
+  }
   s_es.es_sync_now(s_client);
   INFO_LOG("Syncing memory cards with {}", config.remote_uri);
   return true;
@@ -922,8 +931,17 @@ void MemcardSync::OnCardOpening(std::string_view path)
     // A card opened twice without closing (shouldn't happen) is followed once.
     if (std::none_of(s_cards.begin(), s_cards.end(), [&](const Card& c) { return c.path == path; }))
       s_cards.push_back(Card{std::string(path), System::GetGameSerial(), System::GetGameTitle(), 0, 0,
-                             std::chrono::steady_clock::now()});
+                             std::chrono::steady_clock::now(), true});
   }
+  // Once this returns, the emulator reads the card: from then on it counts as loaded.
+  const ScopedGuard loaded([path]() {
+    std::lock_guard lock(s_state_lock);
+    for (Card& c : s_cards)
+    {
+      if (c.path == path)
+        c.opening = false;
+    }
+  });
   if (!Host::GetBaseBoolSettingValue(SECTION, "Enabled", false))
     return;
   WaitForPendingStart();

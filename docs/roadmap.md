@@ -24,7 +24,7 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 | 4 | Release process: a version scheme (an annotated `0.1` tag, so builds read `0.1-N` from `git describe`), a release job that publishes by hand only (automatic releases would flood the history while development moves fast), and checking the updater against GooseStation's own releases. See [releasing.md](releasing.md). | M | 1 |
 | 5 | CJK fonts: static Regular instances of Noto Sans JP/KR/SC, published in the `runtime-resources` release the app downloads them from (`scripts/make-cjk-fonts.py`). The Google Fonts variable fonts default to Thin, which is all FreeType renders. | S | 4 |
 | 6 | Deferred to [Later](#later): registering with RetroAchievements. | S | none |
-| 7 | RetroAchievements login token out of settings.ini (upstream P1, security): kept in the system's credential store through emusync, like the sync keys, and moved there from older settings. Builds without emusync (Windows ARM64 until item 10) still keep it in settings.ini. | S | none |
+| 7 | RetroAchievements login token out of settings.ini (upstream P1, security): kept in a separate secrets.ini settings layer, as PCSX2 does, so settings.ini can be shared; moved there from older settings. | S | none |
 | 8 | macOS signing and notarization, so Gatekeeper does not block downloaded builds (optional; needs an Apple developer account). | M | 4 |
 
 ## 2. Memory card sync

@@ -5081,7 +5081,7 @@ void FullscreenUI::DrawAchievementsSettingsPage()
   if (!IsEditingGameSettings(bsi))
   {
     MenuHeading(FSUI_CSTR("Account"));
-    // The token itself is in the system's credential store, so the username says whether there is a login.
+    // The token itself is in secrets.ini, so the username says whether there is a login.
     if (!bsi->GetTinyStringValue("Cheevos", "Username").empty())
     {
       ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::GetStyle().Colors[ImGuiCol_Text]);

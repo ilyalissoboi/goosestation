@@ -98,8 +98,7 @@ inline constexpr const char* SECRET_ACCESS_KEY = "s3-secret-access-key";
 inline constexpr const char* ENCRYPTION_PASSPHRASE = "encryption-passphrase";
 
 /// Stores a secret in the system's credential store; an empty value deletes it. Records in
-/// settings.ini whether one of the secrets above is stored (so the settings page can say so without
-/// asking the store). Achievements keeps its login token here too.
+/// settings.ini whether one is stored (so the settings page can say so without asking the store).
 /// May block while the system asks to unlock the keychain: not on the UI thread.
 bool StoreSecret(const char* name, const std::string& value, std::string* error);
 

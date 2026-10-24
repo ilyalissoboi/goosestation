@@ -113,6 +113,7 @@ static bool ParseCommandLineParametersAndInitializeConfig(QApplication& app,
 } // namespace QtHost
 
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
+static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
 static std::unique_ptr<QTimer> s_settings_save_timer;
 static bool s_batch_mode = false;
 static bool s_nogui_mode = false;
@@ -462,6 +463,15 @@ bool QtHost::InitializeConfig(std::string settings_filename)
       return false;
     }
   }
+
+  // Secrets (the achievements login token) go to secrets.ini next to it, so settings.ini can be shared without them.
+  std::string secrets_filename =
+    Path::Combine(Path::GetDirectory(s_base_settings_interface->GetFileName()), "secrets.ini");
+  const bool secrets_exist = FileSystem::FileExists(secrets_filename.c_str());
+  s_secrets_settings_interface = std::make_unique<INISettingsInterface>(std::move(secrets_filename));
+  if (secrets_exist && !s_secrets_settings_interface->Load())
+    ERROR_LOG("Failed to load secrets from {}.", s_secrets_settings_interface->GetFileName());
+  Host::Internal::SetSecretsSettingsLayer(s_secrets_settings_interface.get());
 
   // Setup wizard was incomplete last time?
   s_run_setup_wizard =

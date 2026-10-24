@@ -231,6 +231,40 @@ void Host::DeleteBaseSettingValue(const char* section, const char* key)
   s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE)->DeleteValue(section, key);
 }
 
+std::string Host::GetSecretSettingValue(const char* section, const char* key)
+{
+  std::unique_lock lock(s_settings_mutex);
+  SettingsInterface* sif = s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS);
+  if (!sif)
+    sif = s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE);
+  return sif->GetStringValue(section, key);
+}
+
+void Host::SetSecretSettingValue(const char* section, const char* key, const char* value)
+{
+  std::unique_lock lock(s_settings_mutex);
+  SettingsInterface* sif = s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS);
+  const bool has_secrets_layer = (sif != nullptr);
+  if (!has_secrets_layer)
+    sif = s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE);
+
+  if (value && *value)
+    sif->SetStringValue(section, key, value);
+  else
+    sif->DeleteValue(section, key);
+
+  if (!has_secrets_layer)
+  {
+    lock.unlock();
+    CommitBaseSettingChanges();
+    return;
+  }
+
+  Error error;
+  if (!sif->Save(&error))
+    ERROR_LOG("Failed to save secrets: {}", error.GetDescription());
+}
+
 SettingsInterface* Host::Internal::GetBaseSettingsLayer()
 {
   return s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_BASE);
@@ -244,6 +278,18 @@ SettingsInterface* Host::Internal::GetGameSettingsLayer()
 SettingsInterface* Host::Internal::GetInputSettingsLayer()
 {
   return s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_INPUT);
+}
+
+SettingsInterface* Host::Internal::GetSecretsSettingsLayer()
+{
+  return s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS);
+}
+
+void Host::Internal::SetSecretsSettingsLayer(SettingsInterface* sif)
+{
+  AssertMsg(s_layered_settings_interface.GetLayer(LayeredSettingsInterface::LAYER_SECRETS) == nullptr,
+            "Secrets layer has not been set");
+  s_layered_settings_interface.SetLayer(LayeredSettingsInterface::LAYER_SECRETS, sif);
 }
 
 void Host::Internal::SetBaseSettingsLayer(SettingsInterface* sif)

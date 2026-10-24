@@ -52,6 +52,12 @@ bool ContainsBaseSettingValue(const char* section, const char* key);
 void DeleteBaseSettingValue(const char* section, const char* key);
 void CommitBaseSettingChanges();
 
+// Secrets, such as login tokens, are kept in secrets.ini rather than settings.ini, so that settings.ini can be shared
+// (when asking for help, say) without them. A host without a secrets layer keeps them in the base layer. Setting one
+// saves secrets.ini straight away; an empty value deletes it.
+std::string GetSecretSettingValue(const char* section, const char* key);
+void SetSecretSettingValue(const char* section, const char* key, const char* value);
+
 // Settings access, thread-safe.
 std::string GetStringSettingValue(const char* section, const char* key, const char* default_value = "");
 SmallString GetSmallStringSettingValue(const char* section, const char* key, const char* default_value = "");
@@ -108,8 +114,15 @@ SettingsInterface* GetGameSettingsLayer();
 /// Retrieves the input settings layer, if present. Must call with lock held.
 SettingsInterface* GetInputSettingsLayer();
 
+/// Retrieves the secrets settings layer, if present. Must call with lock held.
+SettingsInterface* GetSecretsSettingsLayer();
+
 /// Sets the base settings layer. Should be called by the host at initialization time.
 void SetBaseSettingsLayer(SettingsInterface* sif);
+
+/// Sets the secrets settings layer: secrets.ini, next to the base settings. Optional; called by the host at
+/// initialization time.
+void SetSecretsSettingsLayer(SettingsInterface* sif);
 
 /// Sets the game settings layer. Called by VMManager when the game changes.
 void SetGameSettingsLayer(SettingsInterface* sif, std::unique_lock<std::mutex>& lock);

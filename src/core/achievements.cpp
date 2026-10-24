@@ -10,7 +10,6 @@
 #include "cpu_core.h"
 #include "fullscreen_ui.h"
 #include "host.h"
-#include "memcard_sync.h"
 #include "system.h"
 
 #include "scmversion/scmversion.h"
@@ -23,6 +22,7 @@
 #include "common/md5_digest.h"
 #include "common/path.h"
 #include "common/scoped_guard.h"
+#include "common/settings_interface.h"
 #include "common/small_string.h"
 #include "common/string_util.h"
 #include "common/timer.h"
@@ -49,7 +49,6 @@
 #include <cstdlib>
 #include <ctime>
 #include <functional>
-#include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -70,8 +69,6 @@ static constexpr const char* UNLOCK_SOUND_NAME = "sounds/achievements/unlock.wav
 static constexpr const char* LBSUBMIT_SOUND_NAME = "sounds/achievements/lbsubmit.wav";
 static constexpr const char* ACHEIVEMENT_DETAILS_URL_TEMPLATE = "https://retroachievements.org/achievement/{}";
 static constexpr const char* CACHE_SUBDIRECTORY_NAME = "achievement_images";
-// The login token's name in the system's credential store, where memory card sync keeps its keys too.
-static constexpr const char* LOGIN_TOKEN_SECRET = "retroachievements-token";
 
 static constexpr u32 LEADERBOARD_NEARBY_ENTRIES_TO_FETCH = 10;
 static constexpr u32 LEADERBOARD_ALL_FETCH_SIZE = 20;
@@ -134,9 +131,7 @@ static void ClearGameHash();
 static std::string GetGameHash(CDImage* image);
 static void SetHardcoreMode(bool enabled, bool force_display_message);
 static bool IsLoggedInOrLoggingIn();
-static std::optional<std::string> LoadLoginToken();
-static void StoreLoginToken(const char* token);
-static void DeleteLoginToken();
+static std::string GetLoginToken();
 static bool CanEnableHardcoreMode();
 static void ShowLoginSuccess(const rc_client_t* client);
 static void ShowLoginNotification();
@@ -559,21 +554,12 @@ bool Achievements::Initialize()
     IdentifyGame(System::GetDiscPath(), nullptr);
 
   std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
-  if (!username.empty())
+  std::string api_token = GetLoginToken();
+  if (!username.empty() && !api_token.empty())
   {
-    const std::optional<std::string> api_token = LoadLoginToken();
-    if (api_token.has_value() && !api_token->empty())
-    {
-      INFO_LOG("Attempting login with user '{}'...", username);
-      s_login_request = rc_client_begin_login_with_token(s_client, username.c_str(), api_token->c_str(),
-                                                         ClientLoginWithTokenCallback, nullptr);
-    }
-    else if (api_token.has_value())
-    {
-      // Logged in, but the token is gone from the credential store (removed there, or another user account).
-      WARNING_LOG("No login token is stored for user '{}'.", username);
-      Host::OnAchievementsLoginRequested(LoginRequestReason::TokenInvalid);
-    }
+    INFO_LOG("Attempting login with user '{}'...", username);
+    s_login_request = rc_client_begin_login_with_token(s_client, username.c_str(), api_token.c_str(),
+                                                       ClientLoginWithTokenCallback, nullptr);
   }
 
   // Hardcore mode isn't enabled when achievements first starts, if a game is already running.
@@ -1887,7 +1873,7 @@ void Achievements::ClientLoginWithPasswordCallback(int result, const char* error
 
   // Store configuration.
   Host::SetBaseStringSettingValue("Cheevos", "Username", params->username);
-  StoreLoginToken(user->token);
+  Host::SetSecretSettingValue("Cheevos", "Token", user->token);
   Host::SetBaseStringSettingValue("Cheevos", "LoginTimestamp", fmt::format("{}", std::time(nullptr)).c_str());
   Host::CommitBaseSettingChanges();
 
@@ -1997,71 +1983,41 @@ void Achievements::Logout()
 
   INFO_LOG("Clearing credentials...");
   Host::DeleteBaseSettingValue("Cheevos", "Username");
-  DeleteLoginToken();
+  Host::DeleteBaseSettingValue("Cheevos", "Token");
+  Host::SetSecretSettingValue("Cheevos", "Token", "");
   Host::DeleteBaseSettingValue("Cheevos", "LoginTimestamp");
   Host::CommitBaseSettingChanges();
 }
 
-// The login token is kept in the system's credential store (Credential Manager, Keychain, Secret Service) through
-// emusync, not in settings.ini, which is often shared when asking for help. Builds or systems without the emusync
-// library keep it in settings.ini, as before. The store may block while the system asks to unlock it, so these run
-// on the CPU thread, never the UI thread.
-
-std::optional<std::string> Achievements::LoadLoginToken()
+std::string Achievements::GetLoginToken()
 {
-  std::string token = Host::GetBaseStringSettingValue("Cheevos", "Token");
-  if (!MemcardSync::IsAvailable())
-    return token;
-
-  std::string error;
-  if (!token.empty())
+  // The login token is kept in secrets.ini (Host::SetSecretSettingValue()). Earlier versions wrote it to settings.ini:
+  // move it, if the host has a secrets layer.
+  auto lock = Host::GetSettingsLock();
+  SettingsInterface* base = Host::Internal::GetBaseSettingsLayer();
+  SettingsInterface* secrets = Host::Internal::GetSecretsSettingsLayer();
+  std::string token;
+  if (!secrets || !base->GetStringValue("Cheevos", "Token", &token) || token.empty())
   {
-    // Written by an earlier version: move it to the credential store.
-    if (MemcardSync::StoreSecret(LOGIN_TOKEN_SECRET, token, &error))
-    {
-      INFO_LOG("Moved the login token from settings.ini to the system's credential store.");
-      Host::DeleteBaseSettingValue("Cheevos", "Token");
-      Host::CommitBaseSettingChanges();
-    }
-    else
-    {
-      WARNING_LOG("Keeping the login token in settings.ini: {}", error);
-    }
+    lock.unlock();
+    return Host::GetSecretSettingValue("Cheevos", "Token");
+  }
+
+  secrets->SetStringValue("Cheevos", "Token", token.c_str());
+  Error error;
+  if (!secrets->Save(&error))
+  {
+    // Left in settings.ini, to try again next time.
+    secrets->DeleteValue("Cheevos", "Token");
+    ERROR_LOG("Failed to move the login token to secrets.ini: {}", error.GetDescription());
     return token;
   }
 
-  std::optional<std::string> stored = MemcardSync::LoadSecret(LOGIN_TOKEN_SECRET, &error);
-  if (!stored.has_value() && !error.empty())
-  {
-    ReportFmtError("Could not read the login token: {}", error);
-    return std::nullopt;
-  }
-  return stored.value_or(std::string());
-}
-
-void Achievements::StoreLoginToken(const char* token)
-{
-  if (MemcardSync::IsAvailable())
-  {
-    std::string error;
-    if (MemcardSync::StoreSecret(LOGIN_TOKEN_SECRET, token, &error))
-    {
-      Host::DeleteBaseSettingValue("Cheevos", "Token");
-      return;
-    }
-    WARNING_LOG("Storing the login token in settings.ini instead: {}", error);
-  }
-
-  Host::SetBaseStringSettingValue("Cheevos", "Token", token);
-}
-
-void Achievements::DeleteLoginToken()
-{
-  Host::DeleteBaseSettingValue("Cheevos", "Token");
-
-  std::string error;
-  if (MemcardSync::IsAvailable() && !MemcardSync::StoreSecret(LOGIN_TOKEN_SECRET, std::string(), &error))
-    WARNING_LOG("Could not delete the login token from the system's credential store: {}", error);
+  INFO_LOG("Moved the login token from settings.ini to secrets.ini.");
+  base->DeleteValue("Cheevos", "Token");
+  lock.unlock();
+  Host::CommitBaseSettingChanges();
+  return token;
 }
 
 bool Achievements::ConfirmSystemReset()

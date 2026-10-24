@@ -29,7 +29,7 @@ jobs:
 
     - name: Cache Dependencies
       id: cache-deps
-      uses: actions/cache@v4.0.2
+      uses: actions/cache@v4
       with:
         path: |
           dep/msvc/deps-arm64
@@ -117,7 +117,7 @@ jobs:
 
     - name: Cache Dependencies
       id: cache-deps
-      uses: actions/cache@v4.0.2
+      uses: actions/cache@v4
       with:
         path: |
           dep/msvc/deps-arm64
@@ -220,7 +220,7 @@ jobs:
 
     - name: Cache Dependencies
       id: cache-deps
-      uses: actions/cache@v4.0.2
+      uses: actions/cache@v4
       with:
         path: ~/deps
         key: deps ${{ hashFiles('scripts/deps/build-dependencies-linux.sh') }}
@@ -298,7 +298,7 @@ jobs:
       run: flatpak-builder-lint manifest scripts/flatpak/org.duckstation.DuckStation.yaml
 
     - name: Build Flatpak
-      uses: flathub-infra/flatpak-github-actions/flatpak-builder@23796715b3dfa4c86ddf50cf29c3cc8b3c82dca8
+      uses: flathub-infra/flatpak-github-actions/flatpak-builder@933e9e8ca36e85046ebca8e211f0785c6becac40
       with:
         bundle: duckstation-x64.flatpak
         upload-artifact: false
@@ -311,15 +311,6 @@ jobs:
         cache: true
         restore-cache: true
         cache-key: flatpak-x64-${{ hashFiles('scripts/flatpak/**/*.yaml') }}
-
-    - name: Push to Flathub stable
-      if: github.ref == 'refs/heads/dev'
-      uses: flathub-infra/flatpak-github-actions/flat-manager@b6c92176b7f578aedd80cac74cd8f0336f618e89
-      with:
-        flat-manager-url: https://hub.flathub.org/
-        repository: stable
-        token: ${{ secrets.FLATHUB_STABLE_TOKEN }}
-        build-log-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     - name: Validate build
       run: |
@@ -350,7 +341,7 @@ jobs:
 
     - name: Cache Dependencies
       id: cache-deps-mac
-      uses: actions/cache@v4.0.2
+      uses: actions/cache@v4
       with:
         path: ~/deps
         key: deps-mac ${{ hashFiles('scripts/deps/build-dependencies-mac.sh') }}
@@ -399,7 +390,8 @@ jobs:
   create-release:
     needs: [windows-build, windows-arm64-build, linux-build, linux-flatpak-build, macos-build]
     runs-on: ubuntu-22.04
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev'
+    # Releases are published by hand only, until the builds carry GooseStation's own name.
+    if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.7

@@ -62,3 +62,23 @@ updates through Flatpak) then:
 To check it after a release: install the previous release (or keep a build from before the newest
 commit), choose **Check for Updates** in the Help menu, and install the update. Current Version in
 the Interface settings should then show the new number.
+
+## Runtime resources
+
+The `runtime-resources` release holds files the app downloads only when it needs them. It is not an
+emulator release, so it is marked as a prerelease: GitHub marks the newest full release Latest
+whatever `--latest=false` says, as long as there is no other. It is updated by hand.
+
+| File | Downloaded by | Made with |
+|---|---|---|
+| `NotoSansJP-Regular.zip`, `NotoSansKR-Regular.zip`, `NotoSansSC-Regular.zip` | The Qt frontend, for the OSD and Big Picture Mode in Japanese, Korean and Chinese (Simplified) (`src/duckstation-qt/qttranslations.cpp`) | `scripts/make-cjk-fonts.py` |
+
+Each font zip holds `<name>.ttf` and its licence, `OFL.txt`. The script takes the Noto Sans variable
+fonts from a pinned google/fonts commit and keeps their Regular (weight 400) instance as a static
+font: as variable fonts they render at their default weight, Thin. To rebuild and replace them:
+
+```bash
+pip install fonttools
+python scripts/make-cjk-fonts.py out
+gh release upload runtime-resources out/*.zip --clobber
+```

@@ -22,8 +22,8 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 | # | Item | Size | After |
 |---|---|---|---|
 | 4 | Release process: a version scheme (an annotated `0.1` tag, so builds read `0.1-N` from `git describe`), a release job that publishes by hand only (automatic releases would flood the history while development moves fast), and checking the updater against GooseStation's own releases. See [releasing.md](releasing.md). | M | 1 |
-| 5 | CJK fonts: static Regular instances of Noto Sans JP/KR/SC, published in the `runtime-resources` release the app downloads them from. The Google Fonts variable fonts default to Thin, which is all stb_truetype renders. | S | 4 |
-| 6 | Register GooseStation with RetroAchievements; until then its user agent may be treated as an unknown emulator and hardcore mode refused. | S | none |
+| 5 | CJK fonts: static Regular instances of Noto Sans JP/KR/SC, published in the `runtime-resources` release the app downloads them from (`scripts/make-cjk-fonts.py`). The Google Fonts variable fonts default to Thin, which is all FreeType renders. | S | 4 |
+| 6 | Deferred to [Later](#later): registering with RetroAchievements. | S | none |
 | 7 | Encrypted RetroAchievements login token: not in plain text in settings.ini (upstream P1, security). | S | none |
 | 8 | macOS signing and notarization, so Gatekeeper does not block downloaded builds (optional; needs an Apple developer account). | M | 4 |
 
@@ -56,6 +56,8 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 
 ## Later
 
+- Register GooseStation with RetroAchievements (item 6, low priority for now); until then its user agent
+  may be treated as an unknown emulator and hardcore mode refused.
 - Importing settings, memory cards and save states from an existing DuckStation install.
 - A Discord application for GooseStation, so rich presence can be turned back on.
 - Flathub publishing: needs screenshots, media mirroring and the `flatpak-builder-lint repo` check
@@ -66,6 +68,6 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 
 ## Suggested order
 
-1 → 2 → 4 → 5, with 6, 7 and 9 alongside: a first release with sync tested for real. Then
+1 → 2 → 4 → 5, with 7 and 9 alongside: a first release with sync tested for real. Then
 13 → 15 and 14 → 12 → 16 lead to Android. Items 11, 17 and 18 block nothing and can be picked up at
 any time.

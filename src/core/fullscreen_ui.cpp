@@ -547,6 +547,7 @@ void ImGuiFullscreen::GetInputDialogHelpText(SmallStringBase& dest)
   if (IsGamepadInputSource())
   {
     CreateFooterTextString(dest, std::array{std::make_pair(ICON_PF_KEYBOARD, FSUI_VSTR("Enter Value")),
+                                            std::make_pair(ICON_PF_BUTTON_Y, FSUI_VSTR("Paste")),
                                             std::make_pair(ICON_PF_BUTTON_A, FSUI_VSTR("Select")),
                                             std::make_pair(ICON_PF_BUTTON_B, FSUI_VSTR("Cancel"))});
   }
@@ -7570,6 +7571,7 @@ TRANSLATE_NOOP("FullscreenUI", "PGXP (Precision Geometry Transform Pipeline)");
 TRANSLATE_NOOP("FullscreenUI", "PGXP Depth Buffer");
 TRANSLATE_NOOP("FullscreenUI", "PGXP Geometry Correction");
 TRANSLATE_NOOP("FullscreenUI", "Parent Directory");
+TRANSLATE_NOOP("FullscreenUI", "Paste");
 TRANSLATE_NOOP("FullscreenUI", "Patches");
 TRANSLATE_NOOP("FullscreenUI", "Patches the BIOS to skip the boot animation. Safe to enable.");
 TRANSLATE_NOOP("FullscreenUI", "Path");

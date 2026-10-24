@@ -378,6 +378,21 @@ bool Host::CopyTextToClipboard(std::string_view text)
   return false;
 }
 
+std::string Host::GetTextFromClipboard()
+{
+  return {};
+}
+
+void Host::OnTextInputStarted(const TextInput::Request& request)
+{
+  //
+}
+
+void Host::OnTextInputEnded()
+{
+  //
+}
+
 void Host::SetMouseMode(bool relative, bool hide_cursor)
 {
   //

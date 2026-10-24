@@ -12,6 +12,10 @@
 #include <string>
 #include <string_view>
 
+namespace TextInput {
+struct Request;
+}
+
 namespace Host {
 /// Returns true if the specified resource file exists.
 bool ResourceFileExists(std::string_view filename, bool allow_override);
@@ -47,6 +51,15 @@ void OpenURL(std::string_view url);
 
 /// Copies the provided text to the host's clipboard, if present.
 bool CopyTextToClipboard(std::string_view text);
+
+/// Returns the text in the host's clipboard, or an empty string when there is none.
+std::string GetTextFromClipboard();
+
+/// A text field in ImGui started being edited, so the host can show its on-screen keyboard.
+void OnTextInputStarted(const TextInput::Request& request);
+
+/// The field from OnTextInputStarted() stopped being edited. Called once for each OnTextInputStarted().
+void OnTextInputEnded();
 
 /// Returns a localized version of the specified string within the specified context.
 /// The pointer is guaranteed to be valid until the next language change.

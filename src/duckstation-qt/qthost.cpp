@@ -42,6 +42,7 @@
 #include "util/input_manager.h"
 #include "util/platform_misc.h"
 #include "util/postprocessing.h"
+#include "util/text_input.h"
 
 #include "scmversion/scmversion.h"
 
@@ -1899,6 +1900,27 @@ bool Host::CopyTextToClipboard(std::string_view text)
       clipboard->setText(text);
   });
   return true;
+}
+
+std::string Host::GetTextFromClipboard()
+{
+  std::string text;
+  QtHost::RunOnUIThread(
+    [&text]() {
+      const QClipboard* clipboard = QGuiApplication::clipboard();
+      if (clipboard)
+        text = clipboard->text().toStdString();
+    },
+    true);
+  return text;
+}
+
+void Host::OnTextInputStarted(const TextInput::Request& request)
+{
+}
+
+void Host::OnTextInputEnded()
+{
 }
 
 void Host::ReportDebuggerMessage(std::string_view message)

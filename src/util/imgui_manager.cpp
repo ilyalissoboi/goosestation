@@ -8,6 +8,7 @@
 #include "imgui_fullscreen.h"
 #include "imgui_glyph_ranges.inl"
 #include "input_manager.h"
+#include "text_input.h"
 
 #include "common/assert.h"
 #include "common/easing.h"
@@ -77,6 +78,7 @@ static void CreateSoftwareCursorTextures();
 static void UpdateSoftwareCursorTexture(u32 index);
 static void DestroySoftwareCursorTextures();
 static void DrawSoftwareCursor(const SoftwareCursor& sc, const std::pair<float, float>& pos);
+static void UpdateTextInput();
 
 static float s_global_prescale = 1.0f; // before window scale
 static float s_global_scale = 1.0f;
@@ -103,6 +105,12 @@ static Common::Timer s_last_render_time;
 // cached copies of WantCaptureKeyboard/Mouse, used to know when to dispatch events
 static std::atomic_bool s_imgui_wants_keyboard{false};
 static std::atomic_bool s_imgui_wants_mouse{false};
+
+// whether the host was told that a text field is being edited
+static bool s_text_input_active = false;
+
+// what the clipboard callback last read; ImGui keeps the pointer until the next read
+static std::string s_clipboard_text;
 
 // mapping of host key -> imgui key
 static std::unordered_map<u32, ImGuiKey> s_imgui_key_map;
@@ -239,6 +247,12 @@ bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error*
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
 #endif
 
+  io.GetClipboardTextFn = [](void*) -> const char* {
+    s_clipboard_text = TextInput::GetFirstLine(Host::GetTextFromClipboard());
+    return s_clipboard_text.c_str();
+  };
+  io.SetClipboardTextFn = [](void*, const char* text) { Host::CopyTextToClipboard(text); };
+
   s_window_width = static_cast<float>(g_gpu_device->GetWindowWidth());
   s_window_height = static_cast<float>(g_gpu_device->GetWindowHeight());
   io.DisplayFramebufferScale = ImVec2(1, 1); // We already scale things ourselves, this would double-apply scaling
@@ -266,6 +280,13 @@ bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error*
 void ImGuiManager::Shutdown()
 {
   DestroySoftwareCursorTextures();
+
+  if (s_text_input_active)
+  {
+    s_text_input_active = false;
+    Host::OnTextInputEnded();
+  }
+  s_clipboard_text = {};
 
   if (ImGui::GetCurrentContext())
     ImGui::DestroyContext();
@@ -343,6 +364,35 @@ void ImGuiManager::NewFrame()
   ImGui::GetCurrentWindowRead()->Flags |= ImGuiWindowFlags_NoNavInputs;
   s_imgui_wants_keyboard.store(io.WantCaptureKeyboard, std::memory_order_relaxed);
   s_imgui_wants_mouse.store(io.WantCaptureMouse, std::memory_order_release);
+
+  UpdateTextInput();
+}
+
+void ImGuiManager::UpdateTextInput()
+{
+  const ImGuiIO& io = ImGui::GetIO();
+  if (io.WantTextInput == s_text_input_active)
+    return;
+
+  s_text_input_active = io.WantTextInput;
+  if (!s_text_input_active)
+  {
+    Host::OnTextInputEnded();
+    return;
+  }
+
+  // WantTextInput and the IME data are from the last frame, when the field was drawn. ImGui doesn't keep the
+  // field's rectangle, so the request is a band as wide as the window at the cursor's line.
+  const ImGuiContext& g = *GImGui;
+  const TextInput::Request request = {
+    .x = 0,
+    .y = static_cast<s32>(g.PlatformImeDataPrev.InputPos.y),
+    .width = static_cast<s32>(io.DisplaySize.x),
+    .height = static_cast<s32>(g.PlatformImeDataPrev.InputLineHeight),
+    .numeric = (g.InputTextState.ID == g.ActiveId && (g.InputTextState.Flags & ImGuiInputTextFlags_CharsDecimal)),
+    .keyboard_used = (g.ActiveIdSource == ImGuiInputSource_Keyboard),
+  };
+  Host::OnTextInputStarted(request);
 }
 
 void ImGuiManager::SetStyle()

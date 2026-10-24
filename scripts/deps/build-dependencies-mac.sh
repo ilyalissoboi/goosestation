@@ -28,7 +28,8 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
-export MACOSX_DEPLOYMENT_TARGET=11.0
+# The oldest macOS Qt 6.12 supports.
+export MACOSX_DEPLOYMENT_TARGET=14.4
 
 NPROCS="$(getconf _NPROCESSORS_ONLN)"
 SCRIPTDIR=$(realpath $(dirname "${BASH_SOURCE[0]}"))
@@ -46,7 +47,7 @@ LIBJPEGTURBO=3.0.3
 LIBWEBP=1.4.0
 FFMPEG=7.0.2
 MOLTENVK=1.2.9
-QT=6.7.2
+QT=6.12.0
 
 CPUINFO=7524ad504fdcfcf75a18a133da6abd75c5d48053
 DISCORD_RPC=144f3a3f1209994d8d9e8a87964a989cb9911c1e
@@ -83,11 +84,11 @@ c6ef64ca18a19d13df6eb22df9aff19fb0db65610a74cc81dae33a82235cacd4  SDL2-$SDL2.tar
 8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1  zstd-$ZSTD.tar.gz
 8646515b638a3ad303e23af6a3587734447cb8fc0a0c064ecdb8e95c4fd8b389  ffmpeg-$FFMPEG.tar.xz
 f415a09385030c6510a936155ce211f617c31506db5fbc563e804345f1ecf56e  v$MOLTENVK.tar.gz
-c5f22a5e10fb162895ded7de0963328e7307611c688487b5d152c9ee64767599  qtbase-everywhere-src-$QT.tar.xz
-e1a1d8785fae67d16ad0a443b01d5f32663a6b68d275f1806ebab257485ce5d6  qtimageformats-everywhere-src-$QT.tar.xz
-fb0d1286a35be3583fee34aeb5843c94719e07193bdf1d4d8b0dc14009caef01  qtsvg-everywhere-src-$QT.tar.xz
-58e855ad1b2533094726c8a425766b63a04a0eede2ed85086860e54593aa4b2a  qttools-everywhere-src-$QT.tar.xz
-9845780b5dc1b7279d57836db51aeaf2e4a1160c42be09750616f39157582ca9  qttranslations-everywhere-src-$QT.tar.xz
+a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307  qtbase-everywhere-src-$QT.tar.xz
+0943132b5db8de6b6a7f1d162682173e8763c7ed94e80fd39113292845f67762  qtimageformats-everywhere-src-$QT.tar.xz
+e4ab39534ec97987b1b9b60ef7f4d3253d5912a69f8c713a01753174a4029331  qtsvg-everywhere-src-$QT.tar.xz
+8dab8f3611496486a470ad5f115ceea584f36bc22a2b8b6f6ebdbafbb8160693  qttools-everywhere-src-$QT.tar.xz
+85929c0c30d6f273f23bd879bb69803ea17b010ab73cab2f8abf95357f6f6bbb  qttranslations-everywhere-src-$QT.tar.xz
 e1351218d270db49c3dddcba04fb2153b09731ea3fa6830e423f5952f44585be  cpuinfo-$CPUINFO.tar.gz
 3eea5ccce6670c126282f1ba4d32c19d486db49a1a5cbfb8d6f48774784d310c  discord-rpc-$DISCORD_RPC.tar.gz
 3998b024b0d442614a9ee270e76e018bb37a17b8c6941212171731123cbbcac7  lunasvg-$LUNASVG.tar.gz
@@ -264,24 +265,12 @@ cd "qtbase-everywhere-src-$QT"
 # since we don't have a direct reference to QtSvg, it doesn't deployed directly from the main binary
 # (only indirectly from iconengines), and the libqsvg.dylib imageformat plugin does not get deployed.
 # We could run macdeployqt twice, but that's even more janky than patching it.
-
-# https://github.com/qt/qtbase/commit/7b018629c3c3ab23665bf1da00c43c1546042035
-# The QProcess default wait time of 30s may be too short in e.g. CI environments where processes may be blocked
-# for a longer time waiting for CPU or IO.
+# (Qt 6.12 already waits for otool without a timeout, which an earlier hunk here added.)
 
 patch -u src/tools/macdeployqt/shared/shared.cpp <<EOF
 --- shared.cpp
 +++ shared.cpp
-@@ -152,7 +152,7 @@
-     LogDebug() << " inspecting" << binaryPath;
-     QProcess otool;
-     otool.start("otool", QStringList() << "-L" << binaryPath);
--    otool.waitForFinished();
-+    otool.waitForFinished(-1);
- 
-     if (otool.exitStatus() != QProcess::NormalExit || otool.exitCode() != 0) {
-         LogError() << otool.readAllStandardError();
-@@ -1122,14 +1122,8 @@
+@@ -1166,14 +1166,8 @@
          addPlugins(QStringLiteral("networkinformation"));
      }
  

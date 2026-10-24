@@ -63,7 +63,7 @@ LIBJPEGTURBO=3.0.3
 LIBPNG=1.6.43
 LIBWEBP=1.4.0
 SDL2=2.30.6
-QT=6.7.2
+QT=6.12.0
 ZSTD=1.5.6
 
 CPUINFO=7524ad504fdcfcf75a18a133da6abd75c5d48053
@@ -156,12 +156,12 @@ if [ "$SKIP_QT" != true ]; then
 			-O "https://download.qt.io/archive/qt/${QT%.*}/$QT/submodules/qtwayland-everywhere-src-$QT.tar.xz" 
 	fi
 	cat >> SHASUMS <<EOF
-c5f22a5e10fb162895ded7de0963328e7307611c688487b5d152c9ee64767599  qtbase-everywhere-src-$QT.tar.xz
-e1a1d8785fae67d16ad0a443b01d5f32663a6b68d275f1806ebab257485ce5d6  qtimageformats-everywhere-src-$QT.tar.xz
-fb0d1286a35be3583fee34aeb5843c94719e07193bdf1d4d8b0dc14009caef01  qtsvg-everywhere-src-$QT.tar.xz
-58e855ad1b2533094726c8a425766b63a04a0eede2ed85086860e54593aa4b2a  qttools-everywhere-src-$QT.tar.xz
-9845780b5dc1b7279d57836db51aeaf2e4a1160c42be09750616f39157582ca9  qttranslations-everywhere-src-$QT.tar.xz
-a2a057e1dd644bd44abb9990fecc194b2e25c2e0f39e81aa9fee4c1e5e2a8a5b  qtwayland-everywhere-src-$QT.tar.xz
+a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307  qtbase-everywhere-src-$QT.tar.xz
+0943132b5db8de6b6a7f1d162682173e8763c7ed94e80fd39113292845f67762  qtimageformats-everywhere-src-$QT.tar.xz
+e4ab39534ec97987b1b9b60ef7f4d3253d5912a69f8c713a01753174a4029331  qtsvg-everywhere-src-$QT.tar.xz
+8dab8f3611496486a470ad5f115ceea584f36bc22a2b8b6f6ebdbafbb8160693  qttools-everywhere-src-$QT.tar.xz
+85929c0c30d6f273f23bd879bb69803ea17b010ab73cab2f8abf95357f6f6bbb  qttranslations-everywhere-src-$QT.tar.xz
+ae14d9bcf1bb3c300a3ab2e6a53f50284e5c6c966a4ac4cc5aedcb1bc74e4d02  qtwayland-everywhere-src-$QT.tar.xz
 EOF
 fi
 

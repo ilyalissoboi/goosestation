@@ -77,6 +77,8 @@ add_library(core
   justifier.h
   mdec.cpp
   mdec.h
+  memcard_sync.cpp
+  memcard_sync.h
   memory_card.cpp
   memory_card.h
   memory_card_image.cpp
@@ -135,6 +137,8 @@ set(NEWREC_SOURCES
 target_precompile_headers(core PRIVATE "pch.h")
 target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_include_directories(core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
+# Memory card sync loads emusync at run time; it builds against the vendored header only.
+target_include_directories(core PRIVATE "${CMAKE_SOURCE_DIR}/dep/emusync/include")
 target_link_libraries(core PUBLIC Threads::Threads common util)
 target_link_libraries(core PRIVATE xxhash imgui rapidyaml rcheevos cpuinfo::cpuinfo ZLIB::ZLIB Zstd::Zstd)
 

@@ -290,3 +290,6 @@ else()
   endforeach()
 endif()
 copy_base_translations(duckstation-qt)
+
+# Memory card sync: the emusync library next to the program (CMakeModules/EmuSync.cmake).
+emusync_deploy_runtime(duckstation-qt)

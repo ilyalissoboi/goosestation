@@ -17,7 +17,11 @@ merge_binaries() {
     if file "$X86DIR/$X86BIN" | grep "Mach-O " >/dev/null; then
       ARMBIN="${ARMDIR}/${X86BIN}"
       echo "Merge $ARMBIN to $X86BIN..."
-      lipo -create "$X86BIN" "$ARMBIN" -o "$X86BIN"
+      # Keep the x86 binary's mtime: make 3.81 compares whole seconds, so a library merged a
+      # second after one that links it looks newer, and make install relinks the latter x86-only.
+      lipo -create "$X86BIN" "$ARMBIN" -o "$X86BIN.fat"
+      touch -r "$X86BIN" "$X86BIN.fat"
+      mv "$X86BIN.fat" "$X86BIN"
     fi
   done
   popd

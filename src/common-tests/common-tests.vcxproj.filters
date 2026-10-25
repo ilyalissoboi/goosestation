@@ -10,5 +10,7 @@
     <ClCompile Include="text_input_tests.cpp" />
     <ClCompile Include="..\util\text_input.cpp" />
     <ClCompile Include="gsvector_yuvtorgb_test.cpp" />
+    <ClCompile Include="memcard_sync_ui_tests.cpp" />
+    <ClCompile Include="..\core\memcard_sync_ui.cpp" />
   </ItemGroup>
 </Project>

@@ -17,6 +17,7 @@
     <ClCompile Include="spu.cpp" />
     <ClCompile Include="mdec.cpp" />
     <ClCompile Include="memcard_sync.cpp" />
+    <ClCompile Include="memcard_sync_ui.cpp" />
     <ClCompile Include="memory_card.cpp" />
     <ClCompile Include="settings.cpp" />
     <ClCompile Include="gpu_commands.cpp" />
@@ -89,6 +90,7 @@
     <ClInclude Include="spu.h" />
     <ClInclude Include="mdec.h" />
     <ClInclude Include="memcard_sync.h" />
+    <ClInclude Include="memcard_sync_ui.h" />
     <ClInclude Include="memory_card.h" />
     <ClInclude Include="settings.h" />
     <ClInclude Include="gpu_sw.h" />

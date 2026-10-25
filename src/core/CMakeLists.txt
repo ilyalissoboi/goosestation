@@ -79,6 +79,8 @@ add_library(core
   mdec.h
   memcard_sync.cpp
   memcard_sync.h
+  memcard_sync_ui.cpp
+  memcard_sync_ui.h
   memory_card.cpp
   memory_card.h
   memory_card_image.cpp

@@ -46,6 +46,8 @@ static std::optional<RGBA8Image> LoadTextureImage(std::string_view path);
 static std::shared_ptr<GPUTexture> UploadTexture(std::string_view path, const RGBA8Image& image);
 static void TextureLoaderThread();
 
+static void RenderTextEllipsized(const ImRect& bb, const char* text);
+
 static void DrawFileSelector();
 static void DrawChoiceDialog();
 static void DrawInputDialog();
@@ -118,6 +120,7 @@ static std::string s_input_dialog_title;
 static std::string s_input_dialog_message;
 static std::string s_input_dialog_caption;
 static std::string s_input_dialog_text;
+static bool s_input_dialog_password = false;
 static std::string s_input_dialog_ok_text;
 static InputStringDialogCallback s_input_dialog_callback;
 
@@ -1395,34 +1398,35 @@ bool ImGuiFullscreen::ToggleButton(const char* title, const char* summary, bool*
   if (!visible)
     return false;
 
-  const float midpoint = bb.Min.y + font->FontSize + LayoutScale(4.0f);
-  const ImRect title_bb(bb.Min, ImVec2(bb.Max.x, midpoint));
-  const ImRect summary_bb(ImVec2(bb.Min.x, midpoint), bb.Max);
-
-  if (!enabled)
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
-
-  ImGui::PushFont(font);
-  ImGui::RenderTextClipped(title_bb.Min, title_bb.Max, title, nullptr, nullptr, ImVec2(0.0f, 0.0f), &title_bb);
-  ImGui::PopFont();
-
-  if (summary)
-  {
-    ImGui::PushFont(summary_font);
-    ImGui::RenderTextClipped(summary_bb.Min, summary_bb.Max, summary, nullptr, nullptr, ImVec2(0.0f, 0.0f),
-                             &summary_bb);
-    ImGui::PopFont();
-  }
-
-  if (!enabled)
-    ImGui::PopStyleColor();
-
   const float toggle_width = LayoutScale(50.0f);
   const float toggle_height = LayoutScale(25.0f);
   const float toggle_x = LayoutScale(8.0f);
   const float toggle_y = (LayoutScale(height) - toggle_height) * 0.5f;
   const float toggle_radius = toggle_height * 0.5f;
   const ImVec2 toggle_pos(bb.Max.x - toggle_width - toggle_x, bb.Min.y + toggle_y);
+
+  // The text stops before the switch.
+  const float midpoint = bb.Min.y + font->FontSize + LayoutScale(4.0f);
+  const float text_end = toggle_pos.x - LayoutScale(LAYOUT_MENU_BUTTON_X_PADDING);
+  const ImRect title_bb(bb.Min, ImVec2(text_end, midpoint));
+  const ImRect summary_bb(ImVec2(bb.Min.x, midpoint), ImVec2(text_end, bb.Max.y));
+
+  if (!enabled)
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
+
+  ImGui::PushFont(font);
+  RenderTextEllipsized(title_bb, title);
+  ImGui::PopFont();
+
+  if (summary)
+  {
+    ImGui::PushFont(summary_font);
+    RenderTextEllipsized(summary_bb, summary);
+    ImGui::PopFont();
+  }
+
+  if (!enabled)
+    ImGui::PopStyleColor();
 
   if (pressed)
     *v = !*v;
@@ -1469,34 +1473,35 @@ bool ImGuiFullscreen::ThreeWayToggleButton(const char* title, const char* summar
   if (!visible)
     return false;
 
-  const float midpoint = bb.Min.y + font->FontSize + LayoutScale(4.0f);
-  const ImRect title_bb(bb.Min, ImVec2(bb.Max.x, midpoint));
-  const ImRect summary_bb(ImVec2(bb.Min.x, midpoint), bb.Max);
-
-  if (!enabled)
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
-
-  ImGui::PushFont(font);
-  ImGui::RenderTextClipped(title_bb.Min, title_bb.Max, title, nullptr, nullptr, ImVec2(0.0f, 0.0f), &title_bb);
-  ImGui::PopFont();
-
-  if (summary)
-  {
-    ImGui::PushFont(summary_font);
-    ImGui::RenderTextClipped(summary_bb.Min, summary_bb.Max, summary, nullptr, nullptr, ImVec2(0.0f, 0.0f),
-                             &summary_bb);
-    ImGui::PopFont();
-  }
-
-  if (!enabled)
-    ImGui::PopStyleColor();
-
   const float toggle_width = LayoutScale(50.0f);
   const float toggle_height = LayoutScale(25.0f);
   const float toggle_x = LayoutScale(8.0f);
   const float toggle_y = (LayoutScale(LAYOUT_MENU_BUTTON_HEIGHT) - toggle_height) * 0.5f;
   const float toggle_radius = toggle_height * 0.5f;
   const ImVec2 toggle_pos(bb.Max.x - toggle_width - toggle_x, bb.Min.y + toggle_y);
+
+  // The text stops before the switch.
+  const float midpoint = bb.Min.y + font->FontSize + LayoutScale(4.0f);
+  const float text_end = toggle_pos.x - LayoutScale(LAYOUT_MENU_BUTTON_X_PADDING);
+  const ImRect title_bb(bb.Min, ImVec2(text_end, midpoint));
+  const ImRect summary_bb(ImVec2(bb.Min.x, midpoint), ImVec2(text_end, bb.Max.y));
+
+  if (!enabled)
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
+
+  ImGui::PushFont(font);
+  RenderTextEllipsized(title_bb, title);
+  ImGui::PopFont();
+
+  if (summary)
+  {
+    ImGui::PushFont(summary_font);
+    RenderTextEllipsized(summary_bb, summary);
+    ImGui::PopFont();
+  }
+
+  if (!enabled)
+    ImGui::PopStyleColor();
 
   if (pressed)
   {
@@ -1695,6 +1700,12 @@ bool ImGuiFullscreen::RangeButton(const char* title, const char* summary, float*
   return changed;
 }
 
+void ImGuiFullscreen::RenderTextEllipsized(const ImRect& bb, const char* text)
+{
+  // Left and top aligned, like RenderTextClipped() with no alignment, but cut with "..." rather than mid-letter.
+  ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), bb.Min, bb.Max, bb.Max.x, bb.Max.x, text, nullptr, nullptr);
+}
+
 bool ImGuiFullscreen::MenuButtonWithValue(const char* title, const char* summary, const char* value, bool enabled,
                                           float height, ImFont* font, ImFont* summary_font)
 {
@@ -1704,26 +1715,37 @@ bool ImGuiFullscreen::MenuButtonWithValue(const char* title, const char* summary
   if (!visible)
     return false;
 
-  const ImVec2 value_size(ImGui::CalcTextSize(value));
-
-  const float midpoint = bb.Min.y + font->FontSize + LayoutScale(4.0f);
-  const float text_end = bb.Max.x - value_size.x;
-  const ImRect title_bb(bb.Min, ImVec2(text_end, midpoint));
-  const ImRect summary_bb(ImVec2(bb.Min.x, midpoint), ImVec2(text_end, bb.Max.y));
-
   if (!enabled)
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
 
   ImGui::PushFont(font);
-  ImGui::RenderTextClipped(title_bb.Min, title_bb.Max, title, nullptr, nullptr, ImVec2(0.0f, 0.0f), &title_bb);
-  ImGui::RenderTextClipped(bb.Min, bb.Max, value, nullptr, nullptr, ImVec2(1.0f, 0.5f), &bb);
+
+  // Measured in the font it is drawn in, and at most half the row, so a long value (a URL) leaves the title and
+  // summary room; they stop before it.
+  const ImVec2 value_size(ImGui::CalcTextSize(value));
+  const float value_width = std::min(value_size.x, bb.GetWidth() * 0.5f);
+  const float midpoint = bb.Min.y + font->FontSize + LayoutScale(4.0f);
+  const float text_end =
+    bb.Max.x - value_width - ((value_width > 0.0f) ? LayoutScale(LAYOUT_MENU_BUTTON_X_PADDING) : 0.0f);
+  const ImRect title_bb(bb.Min, ImVec2(text_end, midpoint));
+  const ImRect summary_bb(ImVec2(bb.Min.x, midpoint), ImVec2(text_end, bb.Max.y));
+
+  RenderTextEllipsized(title_bb, title);
+  if (value_size.x <= value_width)
+  {
+    ImGui::RenderTextClipped(bb.Min, bb.Max, value, nullptr, &value_size, ImVec2(1.0f, 0.5f), &bb);
+  }
+  else
+  {
+    const float value_y = bb.Min.y + (bb.GetHeight() - value_size.y) * 0.5f;
+    RenderTextEllipsized(ImRect(bb.Max.x - value_width, value_y, bb.Max.x, value_y + value_size.y), value);
+  }
   ImGui::PopFont();
 
   if (summary)
   {
     ImGui::PushFont(summary_font);
-    ImGui::RenderTextClipped(summary_bb.Min, summary_bb.Max, summary, nullptr, nullptr, ImVec2(0.0f, 0.0f),
-                             &summary_bb);
+    RenderTextEllipsized(summary_bb, summary);
     ImGui::PopFont();
   }
 
@@ -2401,6 +2423,10 @@ void ImGuiFullscreen::DrawChoiceDialog()
           for (s32 j = 0; j < static_cast<s32>(s_choice_dialog_options.size()); j++)
             s_choice_dialog_options[j].second = (j == i);
         }
+
+        // Start on the selected option, so pressing it right away keeps it.
+        if (option.second)
+          ImGui::SetItemDefaultFocus();
       }
     }
 
@@ -2440,9 +2466,12 @@ bool ImGuiFullscreen::IsInputDialogOpen()
 }
 
 void ImGuiFullscreen::OpenInputStringDialog(std::string title, std::string message, std::string caption,
-                                            std::string ok_button_text, InputStringDialogCallback callback)
+                                            std::string ok_button_text, InputStringDialogCallback callback,
+                                            std::string default_value, bool password)
 {
   s_input_dialog_open = true;
+  s_input_dialog_text = std::move(default_value);
+  s_input_dialog_password = password;
   s_input_dialog_title = std::move(title);
   s_input_dialog_message = std::move(message);
   s_input_dialog_caption = std::move(caption);
@@ -2492,7 +2521,8 @@ void ImGuiFullscreen::DrawInputDialog()
     {
       ImGui::SetNextItemWidth(ImGui::GetCurrentWindow()->WorkRect.GetWidth());
     }
-    ImGui::InputText("##input", &s_input_dialog_text);
+    ImGui::InputText("##input", &s_input_dialog_text,
+                     s_input_dialog_password ? ImGuiInputTextFlags_Password : ImGuiInputTextFlags_None);
     const bool input_active = ImGui::IsItemActive();
 
     if (ImGui::IsKeyPressed(ImGuiKey_NavGamepadMenu, false))
@@ -2557,6 +2587,7 @@ void ImGuiFullscreen::CloseInputDialog()
   s_input_dialog_caption = {};
   s_input_dialog_ok_text = {};
   s_input_dialog_text = {};
+  s_input_dialog_password = false;
   s_input_dialog_callback = {};
 }
 

@@ -294,8 +294,9 @@ void CloseChoiceDialog();
 
 using InputStringDialogCallback = std::function<void(std::string text)>;
 bool IsInputDialogOpen();
+/// Opens a dialog asking for a line of text, starting with `default_value`. A `password` dialog masks the text.
 void OpenInputStringDialog(std::string title, std::string message, std::string caption, std::string ok_button_text,
-                           InputStringDialogCallback callback);
+                           InputStringDialogCallback callback, std::string default_value = {}, bool password = false);
 void CloseInputDialog();
 
 using ConfirmMessageDialogCallback = std::function<void(bool)>;

@@ -832,8 +832,12 @@ std::string MemcardSync::GetStatus()
 void MemcardSync::SyncNow()
 {
   std::shared_lock client(s_client_lock);
-  if (s_client)
-    s_es.es_sync_now(s_client);
+  if (!s_client)
+    return;
+
+  // Before asking, so the sync's own status (set when it finishes) can't be overwritten.
+  SetStatus("Syncing...");
+  s_es.es_sync_now(s_client);
 }
 
 std::vector<MemcardSync::Conflict> MemcardSync::GetConflicts()

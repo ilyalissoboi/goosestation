@@ -7,8 +7,11 @@
 #include "cheats.h"
 #include "controller.h"
 #include "game_list.h"
+#include "game_database.h"
 #include "gpu.h"
 #include "host.h"
+#include "memcard_sync.h"
+#include "memcard_sync_ui.h"
 #include "settings.h"
 #include "system.h"
 
@@ -300,6 +303,17 @@ static void DrawDisplaySettingsPage();
 static void DrawPostProcessingSettingsPage();
 static void DrawAudioSettingsPage();
 static void DrawMemoryCardSettingsPage();
+static void UpdateMemcardSyncState();
+static void QueueMemcardSyncApply(std::vector<MemcardSync::SecretUpdate> secrets = {});
+static void DrawMemcardSyncSettings(SettingsInterface* bsi);
+static void DrawMemcardSyncConflicts();
+static std::string DescribeMemcardSyncVersion(const MemcardSync::ConflictVersion& version);
+static void OpenMemcardSyncConflictDialog(const MemcardSync::Conflict& conflict, std::string title);
+static void DrawMemcardSyncTextSetting(SettingsInterface* bsi, const char* title, const char* summary,
+                                       std::string_view help, const char* key, const char* empty_value, bool enabled);
+static void DrawMemcardSyncSecretSetting(const char* title, const char* summary, std::string_view help,
+                                         const char* name, bool stored, const char* empty_value, bool trim,
+                                         bool enabled);
 static void DrawControllerSettingsPage();
 static void DrawHotkeySettingsPage();
 static void DrawAchievementsSettingsPage();
@@ -397,6 +411,23 @@ static void ClearInputBindingVariables();
 static void StartAutomaticBinding(u32 port);
 
 static SettingsPage s_settings_page = SettingsPage::Interface;
+
+// What the memory card sync settings show. Reading it takes locks (the settings lock among them, which the settings
+// pages are drawn under), so it is read before the page is drawn, at most once a second or when marked stale.
+struct MemcardSyncState
+{
+  bool available = false;
+  bool applying = false;
+  bool running = false;
+  bool has_secret = false;
+  bool has_passphrase = false;
+  std::string start_error;
+  std::string status;
+  std::vector<MemcardSync::Conflict> conflicts;
+};
+static MemcardSyncState s_memcard_sync_state;
+static Common::Timer s_memcard_sync_state_timer;
+static bool s_memcard_sync_state_stale = true;
 static std::unique_ptr<INISettingsInterface> s_game_settings_interface;
 static std::unique_ptr<GameList::Entry> s_game_settings_entry;
 static std::vector<std::pair<std::string, bool>> s_game_list_directories_cache;
@@ -2935,6 +2966,9 @@ void FullscreenUI::DrawSettingsWindow()
     if (ImGui::IsWindowFocused() && WantsToCloseMenu())
       ReturnToPreviousWindow();
 
+    if (s_settings_page == SettingsPage::MemoryCards)
+      UpdateMemcardSyncState();
+
     auto lock = Host::GetSettingsLock();
 
     switch (s_settings_page)
@@ -4116,7 +4150,293 @@ void FullscreenUI::DrawMemoryCardSettingsPage()
     }
   }
 
+  if (!game_settings)
+    DrawMemcardSyncSettings(bsi);
+
   EndMenuButtons();
+}
+
+void FullscreenUI::UpdateMemcardSyncState()
+{
+  if (!s_memcard_sync_state_stale && s_memcard_sync_state_timer.GetTimeSeconds() < 1.0)
+    return;
+  s_memcard_sync_state_stale = false;
+  s_memcard_sync_state_timer.Reset();
+
+  MemcardSyncState& state = s_memcard_sync_state;
+  state.available = MemcardSync::IsAvailable();
+  state.applying = state.available && MemcardSync::IsApplying();
+  // A start holds IsRunning() for seconds, and only happens while applying.
+  state.running = state.available && !state.applying && MemcardSync::IsRunning();
+  state.has_secret = MemcardSync::HasSecret(MemcardSync::SECRET_ACCESS_KEY);
+  state.has_passphrase = MemcardSync::HasSecret(MemcardSync::ENCRYPTION_PASSPHRASE);
+  state.start_error = MemcardSync::GetLastStartError();
+  state.status = MemcardSync::GetStatus();
+  state.conflicts = MemcardSync::GetConflicts();
+}
+
+void FullscreenUI::QueueMemcardSyncApply(std::vector<MemcardSync::SecretUpdate> secrets)
+{
+  // Applying reads the settings, so not from the page, which is drawn under the settings lock.
+  Host::RunOnCPUThread([secrets = std::move(secrets)]() mutable {
+    MemcardSync::ApplySettingsAsync(std::move(secrets));
+    s_memcard_sync_state_stale = true;
+  });
+}
+
+void FullscreenUI::DrawMemcardSyncTextSetting(SettingsInterface* bsi, const char* title, const char* summary,
+                                              std::string_view help, const char* key, const char* empty_value,
+                                              bool enabled)
+{
+  std::string value = bsi->GetStringValue(MemcardSync::SECTION, key);
+  if (!MenuButtonWithValue(title, summary, value.empty() ? empty_value : value.c_str(), enabled))
+    return;
+
+  // The row's summary is one short line; the dialog has room for the whole explanation.
+  OpenInputStringDialog(
+    title, std::string(help), std::string(), FSUI_ICONSTR(ICON_FA_CHECK, "OK"),
+    [key](std::string text) {
+      const std::string value(StringUtil::StripWhitespace(text));
+      {
+        auto lock = Host::GetSettingsLock();
+        SettingsInterface* bsi = GetEditingSettingsInterface(false);
+        if (bsi->GetStringValue(MemcardSync::SECTION, key) == value)
+          return;
+        bsi->SetStringValue(MemcardSync::SECTION, key, value.c_str());
+        SetSettingsChanged(bsi);
+      }
+      MemcardSync::ApplySettingsAsync();
+      s_memcard_sync_state_stale = true;
+    },
+    std::move(value));
+}
+
+void FullscreenUI::DrawMemcardSyncSecretSetting(const char* title, const char* summary, std::string_view help,
+                                                const char* name, bool stored, const char* empty_value, bool trim,
+                                                bool enabled)
+{
+  if (!MenuButtonWithValue(title, summary, stored ? FSUI_CSTR("Saved") : empty_value, enabled))
+    return;
+
+  // The saved secret is never put in the dialog: a new one replaces it.
+  OpenInputStringDialog(
+    title, std::string(help), std::string(), FSUI_ICONSTR(ICON_FA_CHECK, "OK"),
+    [name, trim](std::string text) {
+      std::string value(trim ? StringUtil::StripWhitespace(text) : std::string_view(text));
+      MemcardSync::WipeSecret(text);
+      if (value.empty())
+        return;
+      // Not through an initializer list, which would copy the secret.
+      std::vector<MemcardSync::SecretUpdate> secrets;
+      secrets.push_back({name, std::move(value)});
+      MemcardSync::ApplySettingsAsync(std::move(secrets));
+      s_memcard_sync_state_stale = true;
+    },
+    std::string(), true);
+}
+
+void FullscreenUI::DrawMemcardSyncSettings(SettingsInterface* bsi)
+{
+  const MemcardSyncState& state = s_memcard_sync_state;
+  const bool enabled = bsi->GetBoolValue(MemcardSync::SECTION, "Enabled", false);
+
+  MenuHeading(FSUI_CSTR("Memory Card Sync"));
+
+  // Summaries are one short line, which a row has room for next to its value; the edit dialogs explain in full.
+  if (DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_CLOUD, "Sync Memory Cards"),
+                        FSUI_CSTR("Syncs your saves with your other devices, through storage you own."),
+                        MemcardSync::SECTION, "Enabled", false, state.available))
+  {
+    QueueMemcardSyncApply();
+  }
+
+  DrawMemcardSyncTextSetting(
+    bsi, FSUI_ICONSTR(ICON_FA_SERVER, "Storage"), FSUI_CSTR("The bucket and folder your devices share."),
+    FSUI_VSTR("Bucket and folder, e.g. s3://my-saves/emusync/v1?region=eu-west-1. Use the same on every device. "
+              "S3-compatible services take an endpoint: s3://bucket/folder?endpoint=https://...&region=auto."),
+    "RemoteURI", FSUI_CSTR("Not set"), state.available);
+  DrawMemcardSyncTextSetting(
+    bsi, FSUI_ICONSTR(ICON_FA_ID_CARD, "Access Key ID"), FSUI_CSTR("From your storage provider."),
+    FSUI_VSTR("From your storage provider. A key that can only read and write this bucket is enough."), "AccessKeyID",
+    FSUI_CSTR("Not set"), state.available);
+  DrawMemcardSyncSecretSetting(
+    FSUI_ICONSTR(ICON_FA_KEY, "Secret Access Key"), FSUI_CSTR("Kept in your system's credential store."),
+    FSUI_VSTR("Saved in your system's credential store, not the settings file. Enter a new key to replace it."),
+    MemcardSync::SECRET_ACCESS_KEY, state.has_secret, FSUI_CSTR("Not set"), true, state.available);
+  // Not trimmed: emusync's own tool keeps spaces too, and the same passphrase has to unlock the storage on every
+  // device.
+  DrawMemcardSyncSecretSetting(
+    FSUI_ICONSTR(ICON_FA_LOCK, "Encryption Passphrase"), FSUI_CSTR("Optional. Encrypts your saves before they upload."),
+    FSUI_VSTR("Optional. Use the same passphrase on every device: it can't be recovered, and encryption can't be "
+              "turned off later."),
+    MemcardSync::ENCRYPTION_PASSPHRASE, state.has_passphrase, FSUI_CSTR("None"), false, state.available);
+  if (state.has_passphrase && MenuButton(FSUI_ICONSTR(ICON_FA_TRASH, "Remove Passphrase"),
+                                         FSUI_CSTR("Removes the saved passphrase from this device."), state.available))
+  {
+    QueueMemcardSyncApply({{MemcardSync::ENCRYPTION_PASSPHRASE, std::string()}});
+  }
+
+  DrawMemcardSyncTextSetting(bsi, FSUI_ICONSTR(ICON_FA_DESKTOP, "Device Name"),
+                             FSUI_CSTR("How this device appears on your other devices."),
+                             FSUI_VSTR("How this device appears in a save's history on your other devices."),
+                             "DeviceName", FSUI_CSTR("This device's name"), state.available);
+
+  std::string_view status;
+  switch (MemcardSync::GetStatusKind(state.available, state.applying, !state.start_error.empty(), enabled,
+                                     state.running, !state.status.empty()))
+  {
+    case MemcardSync::StatusKind::Unavailable:
+      status = FSUI_VSTR("Memory card sync is unavailable: the emusync library is missing.");
+      break;
+    case MemcardSync::StatusKind::Applying:
+      status = FSUI_VSTR("Connecting to the storage...");
+      break;
+    case MemcardSync::StatusKind::StartError:
+      status = state.start_error;
+      break;
+    case MemcardSync::StatusKind::Off:
+      status = FSUI_VSTR("Off.");
+      break;
+    case MemcardSync::StatusKind::Incomplete:
+      status = FSUI_VSTR("Not syncing: fill in the storage, access key ID and secret access key.");
+      break;
+    case MemcardSync::StatusKind::Status:
+      status = state.status;
+      break;
+    case MemcardSync::StatusKind::Idle:
+      status = FSUI_VSTR("Syncing. Nothing has changed yet.");
+      break;
+  }
+  // Wrapped, not a one-line button: errors say what to do about them, and are often longer than a line.
+  const float padding = LayoutScale(ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING);
+  ImGui::PushFont(g_medium_font);
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padding);
+  ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - padding);
+  ImGui::TextWrapped("%s %.*s", ICON_FA_INFO_CIRCLE, static_cast<int>(status.size()), status.data());
+  ImGui::PopTextWrapPos();
+  ImGui::PopFont();
+  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING));
+
+  if (MenuButton(FSUI_ICONSTR(ICON_FA_SYNC, "Sync Now"),
+                 FSUI_CSTR("Downloads newer saves from your other devices and uploads yours."),
+                 state.available && state.running && !state.applying))
+  {
+    MemcardSync::SyncNow();
+    s_memcard_sync_state_stale = true;
+  }
+
+  DrawMemcardSyncConflicts();
+}
+
+std::string FullscreenUI::DescribeMemcardSyncVersion(const MemcardSync::ConflictVersion& version)
+{
+  const std::optional<std::tm> tm = MemcardSync::GetLocalTime(version.modified_unix_ms);
+  const std::string when = tm.has_value() ? fmt::format("{:%Y-%m-%d %H:%M}", tm.value()) : std::string("?");
+  if (version.deleted)
+    return fmt::format(FSUI_FSTR("{}, deleted {}"), version.device, when);
+
+  const u32 blocks = MemcardSync::GetSaveBlockCount(version.size);
+  if (blocks == 1)
+    return fmt::format(FSUI_FSTR("{}, {}, 1 block"), version.device, when);
+  return fmt::format(FSUI_FSTR("{}, {}, {} blocks"), version.device, when, blocks);
+}
+
+void FullscreenUI::OpenMemcardSyncConflictDialog(const MemcardSync::Conflict& conflict, std::string title)
+{
+  std::vector<MemcardSync::ConflictChoice> choices = MemcardSync::GetConflictChoices(conflict);
+  const size_t preselected = MemcardSync::GetDefaultConflictChoice(conflict);
+
+  ImGuiFullscreen::ChoiceDialogOptions options;
+  for (size_t i = 0; i < choices.size(); i++)
+  {
+    const MemcardSync::ConflictChoice& choice = choices[i];
+    std::string label;
+    if (choice.later)
+      label = FSUI_STR("Decide later");
+    else if (choice.keep_local)
+      label = FSUI_STR("This device's");
+    else
+      label = fmt::format(FSUI_FSTR("{}'s"), conflict.remote[choice.remote_index].device);
+    // Labels are the buttons' IDs, and two devices can have the same name.
+    label += fmt::format("##choice_{}", i);
+    options.emplace_back(std::move(label), i == preselected);
+  }
+
+  // By id: the conflict may be gone (resolved on another device) by the time a choice is made, and resolving one
+  // that is gone does nothing.
+  OpenChoiceDialog(std::move(title), false, std::move(options),
+                   [id = conflict.id, choices = std::move(choices)](s32 index, const std::string&, bool) {
+                     if (index < 0)
+                       return;
+
+                     const MemcardSync::ConflictChoice& choice = choices[static_cast<size_t>(index)];
+                     if (!choice.later)
+                       MemcardSync::ResolveConflict(id, choice.keep_local, choice.remote_index);
+                     CloseChoiceDialog();
+                     s_memcard_sync_state_stale = true;
+                   });
+}
+
+void FullscreenUI::DrawMemcardSyncConflicts()
+{
+  const MemcardSyncState& state = s_memcard_sync_state;
+  if (state.conflicts.empty())
+    return;
+
+  MenuHeading(FSUI_CSTR("Sync Conflicts"));
+
+  const size_t count = state.conflicts.size();
+  ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::GetStyle().Colors[ImGuiCol_Text]);
+  ActiveButton(
+    (count == 1) ?
+      SmallString(FSUI_VSTR("1 save changed both on this device and on another. Choose which version to keep.")) :
+      SmallString::from_format(
+        FSUI_FSTR("{} saves changed both on this device and on another. Choose which version to keep."), count),
+    false, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+  ImGui::PopStyleColor();
+
+  for (const MemcardSync::Conflict& conflict : state.conflicts)
+  {
+    const GameDatabase::Entry* entry =
+      conflict.serial.empty() ? nullptr : GameDatabase::GetEntryForSerial(conflict.serial);
+    const std::string name = MemcardSync::GetConflictName(conflict, entry ? std::string_view(entry->title) : "");
+
+    std::string others;
+    for (const MemcardSync::ConflictVersion& version : conflict.remote)
+    {
+      if (!others.empty())
+        others += ", ";
+      others += DescribeMemcardSyncVersion(version);
+    }
+    const std::string summary = fmt::format(FSUI_FSTR("This device: {}; other: {}"),
+                                            conflict.local.has_value() ? DescribeMemcardSyncVersion(*conflict.local) :
+                                                                         std::string(FSUI_VSTR("not on this device")),
+                                            others);
+
+    const std::string title = fmt::format("{} {}##conflict_{}", ICON_FA_EXCLAMATION_TRIANGLE, name, conflict.id);
+    if (MenuButton(title.c_str(), summary.c_str(), state.available))
+      OpenMemcardSyncConflictDialog(conflict, fmt::format("{} {}", ICON_FA_EXCLAMATION_TRIANGLE, name));
+  }
+
+  if (MenuButton(FSUI_ICONSTR(ICON_FA_DESKTOP, "Keep All From This Device"),
+                 FSUI_CSTR("Keeps this device's version of every save above."), state.available))
+  {
+    std::vector<u64> ids;
+    for (const MemcardSync::Conflict& conflict : state.conflicts)
+      ids.push_back(conflict.id);
+
+    OpenConfirmMessageDialog(
+      FSUI_ICONSTR(ICON_FA_DESKTOP, "Keep All From This Device"),
+      FSUI_STR("Keep this device's version of every save above? The other versions stay in the sync history. A card "
+               "in use gets the chosen saves when the game is closed."),
+      [ids = std::move(ids)](bool result) {
+        if (!result)
+          return;
+        for (const u64 id : ids)
+          MemcardSync::ResolveConflict(id, true);
+        s_memcard_sync_state_stale = true;
+      });
+  }
 }
 
 void FullscreenUI::DrawDisplaySettingsPage()
@@ -7159,6 +7479,7 @@ TRANSLATE_NOOP("FullscreenUI", "%d ms");
 TRANSLATE_NOOP("FullscreenUI", "%d sectors");
 TRANSLATE_NOOP("FullscreenUI", "-");
 TRANSLATE_NOOP("FullscreenUI", "1 Frame");
+TRANSLATE_NOOP("FullscreenUI", "1 save changed both on this device and on another. Choose which version to keep.");
 TRANSLATE_NOOP("FullscreenUI", "10 Frames");
 TRANSLATE_NOOP("FullscreenUI", "100% [60 FPS (NTSC) / 50 FPS (PAL)]");
 TRANSLATE_NOOP("FullscreenUI", "1000% [600 FPS (NTSC) / 500 FPS (PAL)]");
@@ -7224,6 +7545,7 @@ TRANSLATE_NOOP("FullscreenUI", "9x (for 4K)");
 TRANSLATE_NOOP("FullscreenUI", "A resume save state created at %s was found.\n\nDo you want to load this save and continue?");
 TRANSLATE_NOOP("FullscreenUI", "About");
 TRANSLATE_NOOP("FullscreenUI", "About GooseStation");
+TRANSLATE_NOOP("FullscreenUI", "Access Key ID");
 TRANSLATE_NOOP("FullscreenUI", "Account");
 TRANSLATE_NOOP("FullscreenUI", "Accurate Blending");
 TRANSLATE_NOOP("FullscreenUI", "Achievement Notifications");
@@ -7271,8 +7593,10 @@ TRANSLATE_NOOP("FullscreenUI", "BIOS to use when emulating {} consoles.");
 TRANSLATE_NOOP("FullscreenUI", "Back");
 TRANSLATE_NOOP("FullscreenUI", "Back To Pause Menu");
 TRANSLATE_NOOP("FullscreenUI", "Backend Settings");
+TRANSLATE_NOOP("FullscreenUI", "Based on DuckStation by Connor McLaughlin and contributors.");
 TRANSLATE_NOOP("FullscreenUI", "Behavior");
 TRANSLATE_NOOP("FullscreenUI", "Borderless Fullscreen");
+TRANSLATE_NOOP("FullscreenUI", "Bucket and folder, e.g. s3://my-saves/emusync/v1?region=eu-west-1. Use the same on every device. S3-compatible services take an endpoint: s3://bucket/folder?endpoint=https://...&region=auto.");
 TRANSLATE_NOOP("FullscreenUI", "Buffer Size");
 TRANSLATE_NOOP("FullscreenUI", "CD-ROM Emulation");
 TRANSLATE_NOOP("FullscreenUI", "CPU Emulation");
@@ -7302,6 +7626,7 @@ TRANSLATE_NOOP("FullscreenUI", "Compatibility: ");
 TRANSLATE_NOOP("FullscreenUI", "Completely exits the application, returning you to your desktop.");
 TRANSLATE_NOOP("FullscreenUI", "Configuration");
 TRANSLATE_NOOP("FullscreenUI", "Confirm Power Off");
+TRANSLATE_NOOP("FullscreenUI", "Connecting to the storage...");
 TRANSLATE_NOOP("FullscreenUI", "Console Settings");
 TRANSLATE_NOOP("FullscreenUI", "Contributor List");
 TRANSLATE_NOOP("FullscreenUI", "Controller Port {}");
@@ -7330,6 +7655,7 @@ TRANSLATE_NOOP("FullscreenUI", "Crop Mode");
 TRANSLATE_NOOP("FullscreenUI", "Culling Correction");
 TRANSLATE_NOOP("FullscreenUI", "Current Game");
 TRANSLATE_NOOP("FullscreenUI", "Debugging Settings");
+TRANSLATE_NOOP("FullscreenUI", "Decide later");
 TRANSLATE_NOOP("FullscreenUI", "Default");
 TRANSLATE_NOOP("FullscreenUI", "Default Boot");
 TRANSLATE_NOOP("FullscreenUI", "Default View");
@@ -7358,6 +7684,7 @@ TRANSLATE_NOOP("FullscreenUI", "Determines the rotation of the simulated TV scre
 TRANSLATE_NOOP("FullscreenUI", "Determines the size of screenshots created by GooseStation.");
 TRANSLATE_NOOP("FullscreenUI", "Determines whether a prompt will be displayed to confirm shutting down the emulator/game when the hotkey is pressed.");
 TRANSLATE_NOOP("FullscreenUI", "Determines which algorithm is used to convert interlaced frames to progressive for display on your system.");
+TRANSLATE_NOOP("FullscreenUI", "Device Name");
 TRANSLATE_NOOP("FullscreenUI", "Device Settings");
 TRANSLATE_NOOP("FullscreenUI", "Disable All Enhancements");
 TRANSLATE_NOOP("FullscreenUI", "Disable Interlacing");
@@ -7374,11 +7701,10 @@ TRANSLATE_NOOP("FullscreenUI", "Displays popup messages when starting, submittin
 TRANSLATE_NOOP("FullscreenUI", "Double-Click Toggles Fullscreen");
 TRANSLATE_NOOP("FullscreenUI", "Download Covers");
 TRANSLATE_NOOP("FullscreenUI", "Downloads covers from a user-specified URL template.");
+TRANSLATE_NOOP("FullscreenUI", "Downloads newer saves from your other devices and uploads yours.");
 TRANSLATE_NOOP("FullscreenUI", "Downsamples the rendered image prior to displaying it. Can improve overall image quality in mixed 2D/3D games.");
 TRANSLATE_NOOP("FullscreenUI", "Downsampling");
 TRANSLATE_NOOP("FullscreenUI", "Downsampling Display Scale");
-TRANSLATE_NOOP("FullscreenUI", "Based on DuckStation by Connor McLaughlin and contributors.");
-TRANSLATE_NOOP("FullscreenUI", "GooseStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.");
 TRANSLATE_NOOP("FullscreenUI", "Dump Replaceable VRAM Writes");
 TRANSLATE_NOOP("FullscreenUI", "Emulation Settings");
 TRANSLATE_NOOP("FullscreenUI", "Emulation Speed");
@@ -7409,6 +7735,7 @@ TRANSLATE_NOOP("FullscreenUI", "Enables more precise frame pacing at the cost of
 TRANSLATE_NOOP("FullscreenUI", "Enables the older, less accurate MDEC decoding routines. May be required for old replacement backgrounds to match/load.");
 TRANSLATE_NOOP("FullscreenUI", "Enables the replacement of background textures in supported games.");
 TRANSLATE_NOOP("FullscreenUI", "Encore Mode");
+TRANSLATE_NOOP("FullscreenUI", "Encryption Passphrase");
 TRANSLATE_NOOP("FullscreenUI", "Ensures every frame generated is displayed for optimal pacing. Enable for variable refresh displays, such as GSync/FreeSync. Disable if you are having speed or sound issues.");
 TRANSLATE_NOOP("FullscreenUI", "Enter Value");
 TRANSLATE_NOOP("FullscreenUI", "Enter the name of the input profile you wish to create.");
@@ -7442,6 +7769,8 @@ TRANSLATE_NOOP("FullscreenUI", "Forces the use of FIFO over Mailbox presentation
 TRANSLATE_NOOP("FullscreenUI", "Forcibly mutes both CD-DA and XA audio from the CD-ROM. Can be used to disable background music in some games.");
 TRANSLATE_NOOP("FullscreenUI", "Frame Time Buffer");
 TRANSLATE_NOOP("FullscreenUI", "From File...");
+TRANSLATE_NOOP("FullscreenUI", "From your storage provider.");
+TRANSLATE_NOOP("FullscreenUI", "From your storage provider. A key that can only read and write this bucket is enough.");
 TRANSLATE_NOOP("FullscreenUI", "Fullscreen Resolution");
 TRANSLATE_NOOP("FullscreenUI", "GPU Adapter");
 TRANSLATE_NOOP("FullscreenUI", "GPU Renderer");
@@ -7467,6 +7796,7 @@ TRANSLATE_NOOP("FullscreenUI", "Geometry Tolerance");
 TRANSLATE_NOOP("FullscreenUI", "GitHub Repository");
 TRANSLATE_NOOP("FullscreenUI", "Global Slot {0} - {1}##global_slot_{0}");
 TRANSLATE_NOOP("FullscreenUI", "Global Slot {0}##global_slot_{0}");
+TRANSLATE_NOOP("FullscreenUI", "GooseStation is a free and open-source simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.");
 TRANSLATE_NOOP("FullscreenUI", "Graphics Settings");
 TRANSLATE_NOOP("FullscreenUI", "Hardcore Mode");
 TRANSLATE_NOOP("FullscreenUI", "Hardcore mode will be enabled on next game restart.");
@@ -7475,6 +7805,8 @@ TRANSLATE_NOOP("FullscreenUI", "Hides the mouse pointer/cursor when the emulator
 TRANSLATE_NOOP("FullscreenUI", "Hotkey Settings");
 TRANSLATE_NOOP("FullscreenUI", "How many saves will be kept for rewinding. Higher values have greater memory requirements.");
 TRANSLATE_NOOP("FullscreenUI", "How often a rewind state will be created. Higher frequencies have greater system requirements.");
+TRANSLATE_NOOP("FullscreenUI", "How this device appears in a save's history on your other devices.");
+TRANSLATE_NOOP("FullscreenUI", "How this device appears on your other devices.");
 TRANSLATE_NOOP("FullscreenUI", "Identifies any new files added to the game directories.");
 TRANSLATE_NOOP("FullscreenUI", "If not enabled, the current post processing chain will be ignored.");
 TRANSLATE_NOOP("FullscreenUI", "Increase Timer Resolution");
@@ -7488,6 +7820,10 @@ TRANSLATE_NOOP("FullscreenUI", "Input profile '{}' saved.");
 TRANSLATE_NOOP("FullscreenUI", "Integration");
 TRANSLATE_NOOP("FullscreenUI", "Interface Settings");
 TRANSLATE_NOOP("FullscreenUI", "Internal Resolution");
+TRANSLATE_NOOP("FullscreenUI", "Keep All From This Device");
+TRANSLATE_NOOP("FullscreenUI", "Keep this device's version of every save above? The other versions stay in the sync history. A card in use gets the chosen saves when the game is closed.");
+TRANSLATE_NOOP("FullscreenUI", "Keeps this device's version of every save above.");
+TRANSLATE_NOOP("FullscreenUI", "Kept in your system's credential store.");
 TRANSLATE_NOOP("FullscreenUI", "Last Played");
 TRANSLATE_NOOP("FullscreenUI", "Last Played: %s");
 TRANSLATE_NOOP("FullscreenUI", "Latency Control");
@@ -7531,7 +7867,9 @@ TRANSLATE_NOOP("FullscreenUI", "Memory Card Busy");
 TRANSLATE_NOOP("FullscreenUI", "Memory Card Directory");
 TRANSLATE_NOOP("FullscreenUI", "Memory Card Port {}");
 TRANSLATE_NOOP("FullscreenUI", "Memory Card Settings");
+TRANSLATE_NOOP("FullscreenUI", "Memory Card Sync");
 TRANSLATE_NOOP("FullscreenUI", "Memory Card {} Type");
+TRANSLATE_NOOP("FullscreenUI", "Memory card sync is unavailable: the emusync library is missing.");
 TRANSLATE_NOOP("FullscreenUI", "Merge Multi-Disc Games");
 TRANSLATE_NOOP("FullscreenUI", "Merges multi-disc games into one item in the game list.");
 TRANSLATE_NOOP("FullscreenUI", "Minimal Output Latency");
@@ -7552,17 +7890,23 @@ TRANSLATE_NOOP("FullscreenUI", "No resume save state found.");
 TRANSLATE_NOOP("FullscreenUI", "No save present in this slot.");
 TRANSLATE_NOOP("FullscreenUI", "No save states found.");
 TRANSLATE_NOOP("FullscreenUI", "No, resume the game.");
+TRANSLATE_NOOP("FullscreenUI", "None");
 TRANSLATE_NOOP("FullscreenUI", "None (Double Speed)");
 TRANSLATE_NOOP("FullscreenUI", "None (Normal Speed)");
 TRANSLATE_NOOP("FullscreenUI", "Not Logged In");
 TRANSLATE_NOOP("FullscreenUI", "Not Scanning Subdirectories");
+TRANSLATE_NOOP("FullscreenUI", "Not set");
+TRANSLATE_NOOP("FullscreenUI", "Not syncing: fill in the storage, access key ID and secret access key.");
 TRANSLATE_NOOP("FullscreenUI", "OK");
 TRANSLATE_NOOP("FullscreenUI", "OSD Scale");
+TRANSLATE_NOOP("FullscreenUI", "Off.");
 TRANSLATE_NOOP("FullscreenUI", "On-Screen Display");
 TRANSLATE_NOOP("FullscreenUI", "Open Containing Directory");
 TRANSLATE_NOOP("FullscreenUI", "Open in File Browser");
 TRANSLATE_NOOP("FullscreenUI", "Operations");
 TRANSLATE_NOOP("FullscreenUI", "Optimal Frame Pacing");
+TRANSLATE_NOOP("FullscreenUI", "Optional. Encrypts your saves before they upload.");
+TRANSLATE_NOOP("FullscreenUI", "Optional. Use the same passphrase on every device: it can't be recovered, and encryption can't be turned off later.");
 TRANSLATE_NOOP("FullscreenUI", "Options");
 TRANSLATE_NOOP("FullscreenUI", "Output Latency");
 TRANSLATE_NOOP("FullscreenUI", "Output Volume");
@@ -7618,7 +7962,9 @@ TRANSLATE_NOOP("FullscreenUI", "Reload Shaders");
 TRANSLATE_NOOP("FullscreenUI", "Reloads the shaders from disk, applying any changes.");
 TRANSLATE_NOOP("FullscreenUI", "Remove From Chain");
 TRANSLATE_NOOP("FullscreenUI", "Remove From List");
+TRANSLATE_NOOP("FullscreenUI", "Remove Passphrase");
 TRANSLATE_NOOP("FullscreenUI", "Removed stage {} ({}).");
+TRANSLATE_NOOP("FullscreenUI", "Removes the saved passphrase from this device.");
 TRANSLATE_NOOP("FullscreenUI", "Removes this shader from the chain.");
 TRANSLATE_NOOP("FullscreenUI", "Renames existing save states when saving to a backup file.");
 TRANSLATE_NOOP("FullscreenUI", "Rendering");
@@ -7656,6 +8002,8 @@ TRANSLATE_NOOP("FullscreenUI", "Save Screenshot");
 TRANSLATE_NOOP("FullscreenUI", "Save State");
 TRANSLATE_NOOP("FullscreenUI", "Save State Compression");
 TRANSLATE_NOOP("FullscreenUI", "Save State On Exit");
+TRANSLATE_NOOP("FullscreenUI", "Saved");
+TRANSLATE_NOOP("FullscreenUI", "Saved in your system's credential store, not the settings file. Enter a new key to replace it.");
 TRANSLATE_NOOP("FullscreenUI", "Saved {:%c}");
 TRANSLATE_NOOP("FullscreenUI", "Saves state periodically so you can rewind any mistakes while playing.");
 TRANSLATE_NOOP("FullscreenUI", "Scaled Dithering");
@@ -7670,6 +8018,7 @@ TRANSLATE_NOOP("FullscreenUI", "Screenshot Format");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Quality");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Size");
 TRANSLATE_NOOP("FullscreenUI", "Search Directories");
+TRANSLATE_NOOP("FullscreenUI", "Secret Access Key");
 TRANSLATE_NOOP("FullscreenUI", "Seek Speedup");
 TRANSLATE_NOOP("FullscreenUI", "Select");
 TRANSLATE_NOOP("FullscreenUI", "Select Device");
@@ -7753,6 +8102,7 @@ TRANSLATE_NOOP("FullscreenUI", "Start Fullscreen");
 TRANSLATE_NOOP("FullscreenUI", "Start Game");
 TRANSLATE_NOOP("FullscreenUI", "Start a game from a disc in your PC's DVD drive.");
 TRANSLATE_NOOP("FullscreenUI", "Start the console without any disc inserted.");
+TRANSLATE_NOOP("FullscreenUI", "Storage");
 TRANSLATE_NOOP("FullscreenUI", "Stores the current settings to an input profile.");
 TRANSLATE_NOOP("FullscreenUI", "Stretch Display Vertically");
 TRANSLATE_NOOP("FullscreenUI", "Stretch Mode");
@@ -7760,8 +8110,13 @@ TRANSLATE_NOOP("FullscreenUI", "Stretches the display to match the aspect ratio 
 TRANSLATE_NOOP("FullscreenUI", "Summary");
 TRANSLATE_NOOP("FullscreenUI", "Switches back to 4:3 display aspect ratio when displaying 24-bit content, usually FMVs.");
 TRANSLATE_NOOP("FullscreenUI", "Switches between full screen and windowed when the window is double-clicked.");
+TRANSLATE_NOOP("FullscreenUI", "Sync Conflicts");
+TRANSLATE_NOOP("FullscreenUI", "Sync Memory Cards");
+TRANSLATE_NOOP("FullscreenUI", "Sync Now");
 TRANSLATE_NOOP("FullscreenUI", "Sync To Host Refresh Rate");
 TRANSLATE_NOOP("FullscreenUI", "Synchronizes presentation of the console's frames to the host. GSync/FreeSync users should enable Optimal Frame Pacing instead.");
+TRANSLATE_NOOP("FullscreenUI", "Syncing. Nothing has changed yet.");
+TRANSLATE_NOOP("FullscreenUI", "Syncs your saves with your other devices, through storage you own.");
 TRANSLATE_NOOP("FullscreenUI", "Temporarily disables all enhancements, useful when testing.");
 TRANSLATE_NOOP("FullscreenUI", "Test Unofficial Achievements");
 TRANSLATE_NOOP("FullscreenUI", "Texture Filtering");
@@ -7769,7 +8124,11 @@ TRANSLATE_NOOP("FullscreenUI", "Texture Replacements");
 TRANSLATE_NOOP("FullscreenUI", "The SDL input source supports most controllers.");
 TRANSLATE_NOOP("FullscreenUI", "The XInput source provides support for XBox 360/XBox One/XBox Series controllers.");
 TRANSLATE_NOOP("FullscreenUI", "The audio backend determines how frames produced by the emulator are submitted to the host.");
+TRANSLATE_NOOP("FullscreenUI", "The bucket and folder your devices share.");
 TRANSLATE_NOOP("FullscreenUI", "The selected memory card image will be used in shared mode for this slot.");
+TRANSLATE_NOOP("FullscreenUI", "This device's");
+TRANSLATE_NOOP("FullscreenUI", "This device's name");
+TRANSLATE_NOOP("FullscreenUI", "This device: {}; other: {}");
 TRANSLATE_NOOP("FullscreenUI", "This game has no achievements.");
 TRANSLATE_NOOP("FullscreenUI", "This game has no leaderboards.");
 TRANSLATE_NOOP("FullscreenUI", "Threaded Presentation");
@@ -7811,6 +8170,7 @@ TRANSLATE_NOOP("FullscreenUI", "Uses perspective-correct interpolation for color
 TRANSLATE_NOOP("FullscreenUI", "Uses perspective-correct interpolation for texture coordinates, straightening out warped textures.");
 TRANSLATE_NOOP("FullscreenUI", "Uses screen positions to resolve PGXP data. May improve visuals in some games.");
 TRANSLATE_NOOP("FullscreenUI", "Value: {} | Default: {} | Minimum: {} | Maximum: {}");
+TRANSLATE_NOOP("FullscreenUI", "Version: %s");
 TRANSLATE_NOOP("FullscreenUI", "Vertex Cache");
 TRANSLATE_NOOP("FullscreenUI", "Vertical Sync (VSync)");
 TRANSLATE_NOOP("FullscreenUI", "WARNING: Your game is still saving to the memory card. Continuing to {0} may IRREVERSIBLY DESTROY YOUR MEMORY CARD. We recommend resuming your game and waiting 5 seconds for it to finish saving.\n\nDo you want to {0} anyway?");
@@ -7829,6 +8189,7 @@ TRANSLATE_NOOP("FullscreenUI", "Yes, {} now and risk memory card corruption.");
 TRANSLATE_NOOP("FullscreenUI", "\"Challenge\" mode for achievements, including leaderboard tracking. Disables save state, cheats, and slowdown functions.");
 TRANSLATE_NOOP("FullscreenUI", "\"PlayStation\" and \"PSX\" are registered trademarks of Sony Interactive Entertainment Europe Limited. This software is not affiliated in any way with Sony Interactive Entertainment.");
 TRANSLATE_NOOP("FullscreenUI", "change disc");
+TRANSLATE_NOOP("FullscreenUI", "not on this device");
 TRANSLATE_NOOP("FullscreenUI", "reset");
 TRANSLATE_NOOP("FullscreenUI", "shut down");
 TRANSLATE_NOOP("FullscreenUI", "{:%H:%M}");
@@ -7837,6 +8198,10 @@ TRANSLATE_NOOP("FullscreenUI", "{} Frames");
 TRANSLATE_NOOP("FullscreenUI", "{} deleted.");
 TRANSLATE_NOOP("FullscreenUI", "{} does not exist.");
 TRANSLATE_NOOP("FullscreenUI", "{} is not a valid disc image.");
-TRANSLATE_NOOP("FullscreenUI", "Version: %s");
+TRANSLATE_NOOP("FullscreenUI", "{} saves changed both on this device and on another. Choose which version to keep.");
+TRANSLATE_NOOP("FullscreenUI", "{}'s");
+TRANSLATE_NOOP("FullscreenUI", "{}, deleted {}");
+TRANSLATE_NOOP("FullscreenUI", "{}, {}, 1 block");
+TRANSLATE_NOOP("FullscreenUI", "{}, {}, {} blocks");
 // TRANSLATION-STRING-AREA-END
 #endif

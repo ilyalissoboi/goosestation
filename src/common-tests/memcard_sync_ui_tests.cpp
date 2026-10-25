@@ -72,3 +72,15 @@ TEST(MemcardSyncUI, LocalTime)
   ASSERT_FALSE(MemcardSync::GetLocalTime(std::numeric_limits<s64>::min()).has_value());
   ASSERT_FALSE(MemcardSync::GetLocalTime(-1).has_value());
 }
+
+TEST(MemcardSyncUI, ConflictName)
+{
+  Conflict c;
+  c.card = "shared_card_1";
+  c.save = "BASLUS-00067DRACULA";
+
+  // The save and card always show: one game can have several saves, on several cards.
+  ASSERT_EQ(MemcardSync::GetConflictName(c, "Castlevania: Symphony of the Night"),
+            "Castlevania: Symphony of the Night (BASLUS-00067DRACULA, shared_card_1)");
+  ASSERT_EQ(MemcardSync::GetConflictName(c, ""), "BASLUS-00067DRACULA (shared_card_1)");
+}

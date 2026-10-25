@@ -9,6 +9,8 @@
 
 #include <ctime>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 // What the memory card sync settings pages show, without the UI: Big Picture's page uses these, and they are
@@ -48,6 +50,10 @@ std::vector<ConflictChoice> GetConflictChoices(const Conflict& conflict);
 /// The index in GetConflictChoices() of the newest version, preselected as sync chose before there was a choice.
 /// A version only wins when it is strictly newer, so a tie keeps this device's.
 size_t GetDefaultConflictChoice(const Conflict& conflict);
+
+/// What a conflict is called in a list: the game's title (empty when the game database doesn't know it), then the
+/// save's name and card, since one game can have several saves, on several cards.
+std::string GetConflictName(const Conflict& conflict, std::string_view game_title);
 
 /// A version's time, in local time. None for times that can't be real (before 1970, from year 3000, where Windows
 /// stops): versions come from other devices.

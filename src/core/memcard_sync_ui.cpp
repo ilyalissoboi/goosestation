@@ -3,6 +3,8 @@
 
 #include "memcard_sync_ui.h"
 
+#include "fmt/format.h"
+
 #include <algorithm>
 #include <limits>
 
@@ -46,6 +48,13 @@ size_t MemcardSync::GetDefaultConflictChoice(const Conflict& conflict)
     }
   }
   return index;
+}
+
+std::string MemcardSync::GetConflictName(const Conflict& conflict, std::string_view game_title)
+{
+  if (game_title.empty())
+    return fmt::format("{} ({})", conflict.save, conflict.card);
+  return fmt::format("{} ({}, {})", game_title, conflict.save, conflict.card);
 }
 
 std::optional<std::tm> MemcardSync::GetLocalTime(s64 unix_ms)

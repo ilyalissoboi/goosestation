@@ -4399,7 +4399,7 @@ void FullscreenUI::DrawMemcardSyncConflicts()
   {
     const GameDatabase::Entry* entry =
       conflict.serial.empty() ? nullptr : GameDatabase::GetEntryForSerial(conflict.serial);
-    const std::string_view name = entry ? std::string_view(entry->title) : std::string_view(conflict.save);
+    const std::string name = MemcardSync::GetConflictName(conflict, entry ? std::string_view(entry->title) : "");
 
     std::string others;
     for (const MemcardSync::ConflictVersion& version : conflict.remote)
@@ -4413,9 +4413,8 @@ void FullscreenUI::DrawMemcardSyncConflicts()
                                                                          std::string(FSUI_VSTR("not on this device")),
                                             others);
 
-    const SmallString title =
-      SmallString::from_format("{} {}##conflict_{}", ICON_FA_EXCLAMATION_TRIANGLE, name, conflict.id);
-    if (MenuButton(title, summary.c_str(), state.available))
+    const std::string title = fmt::format("{} {}##conflict_{}", ICON_FA_EXCLAMATION_TRIANGLE, name, conflict.id);
+    if (MenuButton(title.c_str(), summary.c_str(), state.available))
       OpenMemcardSyncConflictDialog(conflict, fmt::format("{} {}", ICON_FA_EXCLAMATION_TRIANGLE, name));
   }
 

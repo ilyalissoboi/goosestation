@@ -118,6 +118,7 @@ static std::string s_input_dialog_title;
 static std::string s_input_dialog_message;
 static std::string s_input_dialog_caption;
 static std::string s_input_dialog_text;
+static bool s_input_dialog_password = false;
 static std::string s_input_dialog_ok_text;
 static InputStringDialogCallback s_input_dialog_callback;
 
@@ -2440,9 +2441,12 @@ bool ImGuiFullscreen::IsInputDialogOpen()
 }
 
 void ImGuiFullscreen::OpenInputStringDialog(std::string title, std::string message, std::string caption,
-                                            std::string ok_button_text, InputStringDialogCallback callback)
+                                            std::string ok_button_text, InputStringDialogCallback callback,
+                                            std::string default_value, bool password)
 {
   s_input_dialog_open = true;
+  s_input_dialog_text = std::move(default_value);
+  s_input_dialog_password = password;
   s_input_dialog_title = std::move(title);
   s_input_dialog_message = std::move(message);
   s_input_dialog_caption = std::move(caption);
@@ -2492,7 +2496,8 @@ void ImGuiFullscreen::DrawInputDialog()
     {
       ImGui::SetNextItemWidth(ImGui::GetCurrentWindow()->WorkRect.GetWidth());
     }
-    ImGui::InputText("##input", &s_input_dialog_text);
+    ImGui::InputText("##input", &s_input_dialog_text,
+                     s_input_dialog_password ? ImGuiInputTextFlags_Password : ImGuiInputTextFlags_None);
     const bool input_active = ImGui::IsItemActive();
 
     if (ImGui::IsKeyPressed(ImGuiKey_NavGamepadMenu, false))
@@ -2557,6 +2562,7 @@ void ImGuiFullscreen::CloseInputDialog()
   s_input_dialog_caption = {};
   s_input_dialog_ok_text = {};
   s_input_dialog_text = {};
+  s_input_dialog_password = false;
   s_input_dialog_callback = {};
 }
 

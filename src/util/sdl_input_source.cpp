@@ -3,6 +3,7 @@
 
 #include "sdl_input_source.h"
 #include "input_manager.h"
+#include "sdl_input_bindings.h"
 
 #include "core/host.h"
 #include "core/settings.h"
@@ -26,14 +27,6 @@ Log_SetChannel(SDLInputSource);
 
 static constexpr const char* CONTROLLER_DB_FILENAME = "gamecontrollerdb.txt";
 
-static constexpr const char* s_sdl_axis_names[] = {
-  "LeftX",        // SDL_CONTROLLER_AXIS_LEFTX
-  "LeftY",        // SDL_CONTROLLER_AXIS_LEFTY
-  "RightX",       // SDL_CONTROLLER_AXIS_RIGHTX
-  "RightY",       // SDL_CONTROLLER_AXIS_RIGHTY
-  "LeftTrigger",  // SDL_CONTROLLER_AXIS_TRIGGERLEFT
-  "RightTrigger", // SDL_CONTROLLER_AXIS_TRIGGERRIGHT
-};
 static constexpr const char* s_sdl_axis_icons[][2] = {
   {ICON_PF_LEFT_ANALOG_LEFT, ICON_PF_LEFT_ANALOG_RIGHT},   // SDL_CONTROLLER_AXIS_LEFTX
   {ICON_PF_LEFT_ANALOG_UP, ICON_PF_LEFT_ANALOG_DOWN},      // SDL_CONTROLLER_AXIS_LEFTY
@@ -51,29 +44,6 @@ static constexpr const GenericInputBinding s_sdl_generic_binding_axis_mapping[][
   {GenericInputBinding::Unknown, GenericInputBinding::R2},                     // SDL_CONTROLLER_AXIS_TRIGGERRIGHT
 };
 
-static constexpr const char* s_sdl_button_names[] = {
-  "A",             // SDL_CONTROLLER_BUTTON_A
-  "B",             // SDL_CONTROLLER_BUTTON_B
-  "X",             // SDL_CONTROLLER_BUTTON_X
-  "Y",             // SDL_CONTROLLER_BUTTON_Y
-  "Back",          // SDL_CONTROLLER_BUTTON_BACK
-  "Guide",         // SDL_CONTROLLER_BUTTON_GUIDE
-  "Start",         // SDL_CONTROLLER_BUTTON_START
-  "LeftStick",     // SDL_CONTROLLER_BUTTON_LEFTSTICK
-  "RightStick",    // SDL_CONTROLLER_BUTTON_RIGHTSTICK
-  "LeftShoulder",  // SDL_CONTROLLER_BUTTON_LEFTSHOULDER
-  "RightShoulder", // SDL_CONTROLLER_BUTTON_RIGHTSHOULDER
-  "DPadUp",        // SDL_CONTROLLER_BUTTON_DPAD_UP
-  "DPadDown",      // SDL_CONTROLLER_BUTTON_DPAD_DOWN
-  "DPadLeft",      // SDL_CONTROLLER_BUTTON_DPAD_LEFT
-  "DPadRight",     // SDL_CONTROLLER_BUTTON_DPAD_RIGHT
-  "Misc1",         // SDL_CONTROLLER_BUTTON_MISC1
-  "Paddle1",       // SDL_CONTROLLER_BUTTON_PADDLE1
-  "Paddle2",       // SDL_CONTROLLER_BUTTON_PADDLE2
-  "Paddle3",       // SDL_CONTROLLER_BUTTON_PADDLE3
-  "Paddle4",       // SDL_CONTROLLER_BUTTON_PADDLE4
-  "Touchpad",      // SDL_CONTROLLER_BUTTON_TOUCHPAD
-};
 static constexpr const char* s_sdl_button_icons[] = {
   ICON_PF_BUTTON_A,           // SDL_CONTROLLER_BUTTON_A
   ICON_PF_BUTTON_B,           // SDL_CONTROLLER_BUTTON_B
@@ -115,14 +85,9 @@ static constexpr const GenericInputBinding s_sdl_generic_binding_button_mapping[
   GenericInputBinding::Unknown,   // SDL_CONTROLLER_BUTTON_TOUCHPAD
 };
 
-static constexpr const char* s_sdl_hat_direction_names[] = {
-  // clang-format off
-	"North",
-	"East",
-	"South",
-	"West",
-  // clang-format on
-};
+static_assert(std::size(s_sdl_axis_icons) == SDLInputBindings::AXIS_NAMES.size());
+static_assert(std::size(s_sdl_generic_binding_axis_mapping) == SDLInputBindings::AXIS_NAMES.size());
+static_assert(std::size(s_sdl_generic_binding_button_mapping) == SDLInputBindings::BUTTON_NAMES.size());
 
 static constexpr const char* s_sdl_default_led_colors[] = {
   "0000ff", // SDL-0
@@ -362,175 +327,12 @@ std::vector<std::pair<std::string, std::string>> SDLInputSource::EnumerateDevice
 
 std::optional<InputBindingKey> SDLInputSource::ParseKeyString(std::string_view device, std::string_view binding)
 {
-  if (!device.starts_with("SDL-") || binding.empty())
-    return std::nullopt;
-
-  const std::optional<s32> player_id = StringUtil::FromChars<s32>(device.substr(4));
-  if (!player_id.has_value() || player_id.value() < 0)
-    return std::nullopt;
-
-  InputBindingKey key = {};
-  key.source_type = InputSourceType::SDL;
-  key.source_index = static_cast<u32>(player_id.value());
-
-  if (binding.ends_with("Motor"))
-  {
-    key.source_subtype = InputSubclass::ControllerMotor;
-    if (binding == "LargeMotor")
-    {
-      key.data = 0;
-      return key;
-    }
-    else if (binding == "SmallMotor")
-    {
-      key.data = 1;
-      return key;
-    }
-    else
-    {
-      return std::nullopt;
-    }
-  }
-  else if (binding.ends_with("Haptic"))
-  {
-    key.source_subtype = InputSubclass::ControllerHaptic;
-    key.data = 0;
-    return key;
-  }
-  else if (binding[0] == '+' || binding[0] == '-')
-  {
-    // likely an axis
-    const std::string_view axis_name(binding.substr(1));
-
-    if (axis_name.starts_with("Axis"))
-    {
-      std::string_view end;
-      if (auto value = StringUtil::FromChars<u32>(axis_name.substr(4), 10, &end))
-      {
-        key.source_subtype = InputSubclass::ControllerAxis;
-        key.data = *value + static_cast<u32>(std::size(s_sdl_axis_names));
-        key.modifier = (binding[0] == '-') ? InputModifier::Negate : InputModifier::None;
-        key.invert = (end == "~");
-        return key;
-      }
-    }
-    for (u32 i = 0; i < std::size(s_sdl_axis_names); i++)
-    {
-      if (axis_name == s_sdl_axis_names[i])
-      {
-        // found an axis!
-        key.source_subtype = InputSubclass::ControllerAxis;
-        key.data = i;
-        key.modifier = (binding[0] == '-') ? InputModifier::Negate : InputModifier::None;
-        return key;
-      }
-    }
-  }
-  else if (binding.starts_with("FullAxis"))
-  {
-    std::string_view end;
-    if (auto value = StringUtil::FromChars<u32>(binding.substr(8), 10, &end))
-    {
-      key.source_subtype = InputSubclass::ControllerAxis;
-      key.data = *value + static_cast<u32>(std::size(s_sdl_axis_names));
-      key.modifier = InputModifier::FullAxis;
-      key.invert = (end == "~");
-      return key;
-    }
-  }
-  else if (binding.starts_with("Hat"))
-  {
-    std::string_view hat_dir;
-    if (auto value = StringUtil::FromChars<u32>(binding.substr(3), 10, &hat_dir); value.has_value() && !hat_dir.empty())
-    {
-      for (u8 dir = 0; dir < static_cast<u8>(std::size(s_sdl_hat_direction_names)); dir++)
-      {
-        if (hat_dir == s_sdl_hat_direction_names[dir])
-        {
-          key.source_subtype = InputSubclass::ControllerHat;
-          key.data = value.value() * static_cast<u32>(std::size(s_sdl_hat_direction_names)) + dir;
-          return key;
-        }
-      }
-    }
-  }
-  else
-  {
-    // must be a button
-    if (binding.starts_with("Button"))
-    {
-      if (auto value = StringUtil::FromChars<u32>(binding.substr(6)))
-      {
-        key.source_subtype = InputSubclass::ControllerButton;
-        key.data = *value + static_cast<u32>(std::size(s_sdl_button_names));
-        return key;
-      }
-    }
-    for (u32 i = 0; i < std::size(s_sdl_button_names); i++)
-    {
-      if (binding == s_sdl_button_names[i])
-      {
-        key.source_subtype = InputSubclass::ControllerButton;
-        key.data = i;
-        return key;
-      }
-    }
-  }
-
-  // unknown axis/button
-  return std::nullopt;
+  return SDLInputBindings::ParseKey(device, binding);
 }
 
 TinyString SDLInputSource::ConvertKeyToString(InputBindingKey key)
 {
-  TinyString ret;
-
-  if (key.source_type == InputSourceType::SDL)
-  {
-    if (key.source_subtype == InputSubclass::ControllerAxis)
-    {
-      const char* modifier =
-        (key.modifier == InputModifier::FullAxis ? "Full" : (key.modifier == InputModifier::Negate ? "-" : "+"));
-      if (key.data < std::size(s_sdl_axis_names))
-      {
-        ret.format("SDL-{}/{}{}", static_cast<u32>(key.source_index), modifier, s_sdl_axis_names[key.data]);
-      }
-      else
-      {
-        ret.format("SDL-{}/{}Axis{}{}", static_cast<u32>(key.source_index), modifier,
-                   key.data - static_cast<u32>(std::size(s_sdl_axis_names)), key.invert ? "~" : "");
-      }
-    }
-    else if (key.source_subtype == InputSubclass::ControllerButton)
-    {
-      if (key.data < std::size(s_sdl_button_names))
-      {
-        ret.format("SDL-{}/{}", static_cast<u32>(key.source_index), s_sdl_button_names[key.data]);
-      }
-      else
-      {
-        ret.format("SDL-{}/Button{}", static_cast<u32>(key.source_index),
-                   key.data - static_cast<u32>(std::size(s_sdl_button_names)));
-      }
-    }
-    else if (key.source_subtype == InputSubclass::ControllerHat)
-    {
-      const u32 hat_index = key.data / static_cast<u32>(std::size(s_sdl_hat_direction_names));
-      const u32 hat_direction = key.data % static_cast<u32>(std::size(s_sdl_hat_direction_names));
-      ret.format("SDL-{}/Hat{}{}", static_cast<u32>(key.source_index), hat_index,
-                 s_sdl_hat_direction_names[hat_direction]);
-    }
-    else if (key.source_subtype == InputSubclass::ControllerMotor)
-    {
-      ret.format("SDL-{}/{}Motor", static_cast<u32>(key.source_index), key.data ? "Large" : "Small");
-    }
-    else if (key.source_subtype == InputSubclass::ControllerHaptic)
-    {
-      ret.format("SDL-{}/Haptic", static_cast<u32>(key.source_index));
-    }
-  }
-
-  return ret;
+  return SDLInputBindings::KeyToString(key);
 }
 
 TinyString SDLInputSource::ConvertKeyToIcon(InputBindingKey key)
@@ -748,9 +550,9 @@ bool SDLInputSource::OpenDevice(int index, bool is_gamecontroller)
       if (bind.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind.value.button < num_buttons)
         cd.joy_button_used_in_gc[bind.value.button] = true;
     };
-    for (size_t i = 0; i < std::size(s_sdl_axis_names); i++)
+    for (size_t i = 0; i < SDLInputBindings::AXIS_NAMES.size(); i++)
       mark_bind(SDL_GameControllerGetBindForAxis(gcontroller, static_cast<SDL_GameControllerAxis>(i)));
-    for (size_t i = 0; i < std::size(s_sdl_button_names); i++)
+    for (size_t i = 0; i < SDLInputBindings::BUTTON_NAMES.size(); i++)
       mark_bind(SDL_GameControllerGetBindForButton(gcontroller, static_cast<SDL_GameControllerButton>(i)));
 
     VERBOSE_LOG("Controller {} has {} axes and {} buttons", player_id, num_axes, num_buttons);
@@ -878,8 +680,9 @@ bool SDLInputSource::HandleJoystickAxisEvent(const SDL_JoyAxisEvent* ev)
   if (it == m_controllers.end())
     return false;
   if (ev->axis < it->joy_axis_used_in_gc.size() && it->joy_axis_used_in_gc[ev->axis])
-    return false;                                                            // Will get handled by GC event
-  const u32 axis = ev->axis + static_cast<u32>(std::size(s_sdl_axis_names)); // Ensure we don't conflict with GC axes
+    return false; // Will get handled by GC event
+  const u32 axis =
+    ev->axis + static_cast<u32>(SDLInputBindings::AXIS_NAMES.size()); // Ensure we don't conflict with GC axes
   const InputBindingKey key(MakeGenericControllerAxisKey(InputSourceType::SDL, it->player_id, axis));
   InputManager::InvokeEvents(key, NormalizeS16(ev->value));
   return true;
@@ -893,7 +696,7 @@ bool SDLInputSource::HandleJoystickButtonEvent(const SDL_JoyButtonEvent* ev)
   if (ev->button < it->joy_button_used_in_gc.size() && it->joy_button_used_in_gc[ev->button])
     return false; // Will get handled by GC event
   const u32 button =
-    ev->button + static_cast<u32>(std::size(s_sdl_button_names)); // Ensure we don't conflict with GC buttons
+    ev->button + static_cast<u32>(SDLInputBindings::BUTTON_NAMES.size()); // Ensure we don't conflict with GC buttons
   const InputBindingKey key(MakeGenericControllerButtonKey(InputSourceType::SDL, it->player_id, button));
   InputManager::InvokeEvents(key, (ev->state == SDL_PRESSED) ? 1.0f : 0.0f);
   return true;
@@ -916,9 +719,9 @@ bool SDLInputSource::HandleJoystickHatEvent(const SDL_JoyHatEvent* ev)
     const unsigned long mask = (1u << pos);
     changed_direction &= ~mask;
 
-    const InputBindingKey key(MakeGenericControllerHatKey(InputSourceType::SDL, it->player_id, ev->hat,
-                                                          static_cast<u8>(pos),
-                                                          static_cast<u32>(std::size(s_sdl_hat_direction_names))));
+    const InputBindingKey key(
+      MakeGenericControllerHatKey(InputSourceType::SDL, it->player_id, ev->hat, static_cast<u8>(pos),
+                                  static_cast<u32>(SDLInputBindings::HAT_DIRECTION_NAMES.size())));
     InputManager::InvokeEvents(key, (last_direction & mask) ? 0.0f : 1.0f);
   }
 
@@ -979,16 +782,16 @@ bool SDLInputSource::GetGenericBindingMapping(std::string_view device, GenericIn
       const GenericInputBinding negative = s_sdl_generic_binding_axis_mapping[i][0];
       const GenericInputBinding positive = s_sdl_generic_binding_axis_mapping[i][1];
       if (negative != GenericInputBinding::Unknown)
-        mapping->emplace_back(negative, fmt::format("SDL-{}/-{}", pid, s_sdl_axis_names[i]));
+        mapping->emplace_back(negative, fmt::format("SDL-{}/-{}", pid, SDLInputBindings::AXIS_NAMES[i]));
 
       if (positive != GenericInputBinding::Unknown)
-        mapping->emplace_back(positive, fmt::format("SDL-{}/+{}", pid, s_sdl_axis_names[i]));
+        mapping->emplace_back(positive, fmt::format("SDL-{}/+{}", pid, SDLInputBindings::AXIS_NAMES[i]));
     }
     for (u32 i = 0; i < std::size(s_sdl_generic_binding_button_mapping); i++)
     {
       const GenericInputBinding binding = s_sdl_generic_binding_button_mapping[i];
       if (binding != GenericInputBinding::Unknown)
-        mapping->emplace_back(binding, fmt::format("SDL-{}/{}", pid, s_sdl_button_names[i]));
+        mapping->emplace_back(binding, fmt::format("SDL-{}/{}", pid, SDLInputBindings::BUTTON_NAMES[i]));
     }
 
     if (it->use_game_controller_rumble || it->haptic_left_right_effect)

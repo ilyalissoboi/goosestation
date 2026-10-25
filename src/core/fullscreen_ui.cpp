@@ -4261,19 +4261,14 @@ void FullscreenUI::DrawMemcardSyncSettings(SettingsInterface* bsi)
     FSUI_CSTR("Not set"), state.available);
   DrawMemcardSyncSecretSetting(
     FSUI_ICONSTR(ICON_FA_KEY, "Secret Access Key"), FSUI_CSTR("Kept in your system's credential store."),
-    FSUI_VSTR("Kept in your system's credential store (Credential Manager, Keychain or Secret Service), never in the "
-              "settings file. Type or paste a new one to replace it."),
+    FSUI_VSTR("Saved in your system's credential store, not the settings file. Enter a new key to replace it."),
     MemcardSync::SECRET_ACCESS_KEY, state.has_secret, FSUI_CSTR("Not set"), true, state.available);
   // Not trimmed: emusync's own tool keeps spaces too, and the same passphrase has to unlock the storage on every
-  // device. The help is two strings: the translation tools take one of at most 300 characters.
+  // device.
   DrawMemcardSyncSecretSetting(
     FSUI_ICONSTR(ICON_FA_LOCK, "Encryption Passphrase"), FSUI_CSTR("Optional. Encrypts your saves before they upload."),
-    fmt::format("{} {}",
-                FSUI_VSTR("Optional. Encrypts your saves on this device before they upload, so the storage provider "
-                          "can't read them. New storage is created encrypted; for storage that is already encrypted, "
-                          "enter the passphrase used when it was set up."),
-                FSUI_VSTR("Use the same passphrase on every device. It can't be recovered, and encrypted storage "
-                          "can't be made unencrypted. Kept in your system's credential store.")),
+    FSUI_VSTR("Optional. Use the same passphrase on every device: it can't be recovered, and encryption can't be "
+              "turned off later."),
     MemcardSync::ENCRYPTION_PASSPHRASE, state.has_passphrase, FSUI_CSTR("None"), false, state.available);
   if (state.has_passphrase && MenuButton(FSUI_ICONSTR(ICON_FA_TRASH, "Remove Passphrase"),
                                          FSUI_CSTR("Removes the saved passphrase from this device."), state.available))
@@ -7829,7 +7824,6 @@ TRANSLATE_NOOP("FullscreenUI", "Internal Resolution");
 TRANSLATE_NOOP("FullscreenUI", "Keep All From This Device");
 TRANSLATE_NOOP("FullscreenUI", "Keep this device's version of every save above? The other versions stay in the sync history. A card in use gets the chosen saves when the game is closed.");
 TRANSLATE_NOOP("FullscreenUI", "Keeps this device's version of every save above.");
-TRANSLATE_NOOP("FullscreenUI", "Kept in your system's credential store (Credential Manager, Keychain or Secret Service), never in the settings file. Type or paste a new one to replace it.");
 TRANSLATE_NOOP("FullscreenUI", "Kept in your system's credential store.");
 TRANSLATE_NOOP("FullscreenUI", "Last Played");
 TRANSLATE_NOOP("FullscreenUI", "Last Played: %s");
@@ -7913,7 +7907,7 @@ TRANSLATE_NOOP("FullscreenUI", "Open in File Browser");
 TRANSLATE_NOOP("FullscreenUI", "Operations");
 TRANSLATE_NOOP("FullscreenUI", "Optimal Frame Pacing");
 TRANSLATE_NOOP("FullscreenUI", "Optional. Encrypts your saves before they upload.");
-TRANSLATE_NOOP("FullscreenUI", "Optional. Encrypts your saves on this device before they upload, so the storage provider can't read them. New storage is created encrypted; for storage that is already encrypted, enter the passphrase used when it was set up.");
+TRANSLATE_NOOP("FullscreenUI", "Optional. Use the same passphrase on every device: it can't be recovered, and encryption can't be turned off later.");
 TRANSLATE_NOOP("FullscreenUI", "Options");
 TRANSLATE_NOOP("FullscreenUI", "Output Latency");
 TRANSLATE_NOOP("FullscreenUI", "Output Volume");
@@ -8010,6 +8004,7 @@ TRANSLATE_NOOP("FullscreenUI", "Save State");
 TRANSLATE_NOOP("FullscreenUI", "Save State Compression");
 TRANSLATE_NOOP("FullscreenUI", "Save State On Exit");
 TRANSLATE_NOOP("FullscreenUI", "Saved");
+TRANSLATE_NOOP("FullscreenUI", "Saved in your system's credential store, not the settings file. Enter a new key to replace it.");
 TRANSLATE_NOOP("FullscreenUI", "Saved {:%c}");
 TRANSLATE_NOOP("FullscreenUI", "Saves state periodically so you can rewind any mistakes while playing.");
 TRANSLATE_NOOP("FullscreenUI", "Scaled Dithering");
@@ -8165,7 +8160,6 @@ TRANSLATE_NOOP("FullscreenUI", "Use Light Theme");
 TRANSLATE_NOOP("FullscreenUI", "Use Old MDEC Routines");
 TRANSLATE_NOOP("FullscreenUI", "Use Single Card For Multi-Disc Games");
 TRANSLATE_NOOP("FullscreenUI", "Use Software Renderer For Readbacks");
-TRANSLATE_NOOP("FullscreenUI", "Use the same passphrase on every device. It can't be recovered, and encrypted storage can't be made unencrypted. Kept in your system's credential store.");
 TRANSLATE_NOOP("FullscreenUI", "Username: {}");
 TRANSLATE_NOOP("FullscreenUI", "Uses PGXP for all instructions, not just memory operations.");
 TRANSLATE_NOOP("FullscreenUI", "Uses a blit presentation model instead of flipping. This may be needed on some systems.");

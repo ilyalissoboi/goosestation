@@ -189,7 +189,7 @@ if(NOT ANDROID)
   target_link_libraries(util PUBLIC
     cubeb
     freesurround
-    SDL2::SDL2
+    SDL3::SDL3
   )
   # FFmpeg loaded dynamically on demand.
   target_include_directories(util PUBLIC ${FFMPEG_INCLUDE_DIRS})

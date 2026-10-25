@@ -91,3 +91,28 @@ TEST(SDLInputBindings, MotorNames)
   EXPECT_EQ(std::string_view(SDLInputBindings::KeyToString(Parse("LargeMotor"))), "SDL-3/SmallMotor");
   EXPECT_EQ(std::string_view(SDLInputBindings::KeyToString(Parse("SmallMotor"))), "SDL-3/LargeMotor");
 }
+
+TEST(SDLInputBindings, FaceButtonIndices)
+{
+  using SDLInputBindings::FaceLabel;
+  using Indices = std::array<u8, 4>;
+
+  // Labels at the south, east, west and north positions.
+  EXPECT_EQ(SDLInputBindings::GetFaceButtonIndices({FaceLabel::A, FaceLabel::B, FaceLabel::X, FaceLabel::Y}),
+            (Indices{0, 1, 2, 3}));
+
+  // Nintendo: SDL2 named buttons by label, so the east button was A.
+  EXPECT_EQ(SDLInputBindings::GetFaceButtonIndices({FaceLabel::B, FaceLabel::A, FaceLabel::Y, FaceLabel::X}),
+            (Indices{1, 0, 3, 2}));
+  EXPECT_EQ(SDLInputBindings::GetFaceButtonIndices({FaceLabel::A, FaceLabel::X, FaceLabel::B, FaceLabel::Y}),
+            (Indices{0, 2, 1, 3}));
+
+  // PlayStation labels, unknown or inconsistent labels: by position.
+  EXPECT_EQ(
+    SDLInputBindings::GetFaceButtonIndices({FaceLabel::Other, FaceLabel::Other, FaceLabel::Other, FaceLabel::Other}),
+    (Indices{0, 1, 2, 3}));
+  EXPECT_EQ(SDLInputBindings::GetFaceButtonIndices({FaceLabel::B, FaceLabel::A, FaceLabel::Other, FaceLabel::X}),
+            (Indices{0, 1, 2, 3}));
+  EXPECT_EQ(SDLInputBindings::GetFaceButtonIndices({FaceLabel::A, FaceLabel::A, FaceLabel::X, FaceLabel::Y}),
+            (Indices{0, 1, 2, 3}));
+}

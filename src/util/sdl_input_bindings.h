@@ -58,4 +58,19 @@ inline constexpr std::array<const char*, 4> HAT_DIRECTION_NAMES = {
 std::optional<InputBindingKey> ParseKey(std::string_view device, std::string_view binding);
 TinyString KeyToString(InputBindingKey key);
 
+/// A face button's label, as SDL reports it.
+enum class FaceLabel : u8
+{
+  A,
+  B,
+  X,
+  Y,
+  Other,
+};
+
+/// SDL2 numbered the four face buttons by their A/B/X/Y labels, SDL3 by position (south, east, west, north). From the
+/// labels at those positions, returns the SDL2 number of each, so that bindings made with SDL2 keep the same buttons
+/// on controllers with Nintendo layouts. Controllers without A/B/X/Y labels keep the positions.
+std::array<u8, 4> GetFaceButtonIndices(const std::array<FaceLabel, 4>& labels);
+
 } // namespace SDLInputBindings

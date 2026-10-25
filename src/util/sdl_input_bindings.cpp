@@ -176,3 +176,19 @@ TinyString SDLInputBindings::KeyToString(InputBindingKey key)
 
   return ret;
 }
+
+std::array<u8, 4> SDLInputBindings::GetFaceButtonIndices(const std::array<FaceLabel, 4>& labels)
+{
+  std::array<u8, 4> indices = {};
+  u32 seen = 0;
+  for (size_t i = 0; i < labels.size(); i++)
+  {
+    if (labels[i] == FaceLabel::Other)
+      return {0, 1, 2, 3};
+
+    indices[i] = static_cast<u8>(labels[i]);
+    seen |= 1u << indices[i];
+  }
+
+  return (seen == 0xFu) ? indices : std::array<u8, 4>{0, 1, 2, 3};
+}

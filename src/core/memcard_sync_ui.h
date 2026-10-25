@@ -7,6 +7,8 @@
 
 #include "common/types.h"
 
+#include <ctime>
+#include <optional>
 #include <vector>
 
 // What the memory card sync settings pages show, without the UI: Big Picture's page uses these, and they are
@@ -46,6 +48,10 @@ std::vector<ConflictChoice> GetConflictChoices(const Conflict& conflict);
 /// The index in GetConflictChoices() of the newest version, preselected as sync chose before there was a choice.
 /// A version only wins when it is strictly newer, so a tie keeps this device's.
 size_t GetDefaultConflictChoice(const Conflict& conflict);
+
+/// A version's time, in local time. None for times that can't be real (before 1970, from year 3000, where Windows
+/// stops): versions come from other devices.
+std::optional<std::tm> GetLocalTime(s64 unix_ms);
 
 /// The number of blocks a save takes on a card, from the size emusync stores (whole 8 KiB blocks and a small header).
 u32 GetSaveBlockCount(u64 size);

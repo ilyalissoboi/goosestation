@@ -48,6 +48,25 @@ size_t MemcardSync::GetDefaultConflictChoice(const Conflict& conflict)
   return index;
 }
 
+std::optional<std::tm> MemcardSync::GetLocalTime(s64 unix_ms)
+{
+  // 3000-01-01 00:00:00 UTC.
+  static constexpr s64 MAX_UNIX_MS = 32'503'680'000'000;
+  if (unix_ms < 0 || unix_ms >= MAX_UNIX_MS)
+    return std::nullopt;
+
+  const std::time_t time = static_cast<std::time_t>(unix_ms / 1000);
+  std::tm tm;
+#ifdef _WIN32
+  if (localtime_s(&tm, &time) != 0)
+    return std::nullopt;
+#else
+  if (!localtime_r(&time, &tm))
+    return std::nullopt;
+#endif
+  return tm;
+}
+
 u32 MemcardSync::GetSaveBlockCount(u64 size)
 {
   return std::max(static_cast<u32>(size / 8192), 1u);

@@ -4305,10 +4305,15 @@ void FullscreenUI::DrawMemcardSyncSettings(SettingsInterface* bsi)
       status = FSUI_VSTR("Syncing. Nothing has changed yet.");
       break;
   }
-  ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::GetStyle().Colors[ImGuiCol_Text]);
-  ActiveButton(SmallString::from_format("{} {}", ICON_FA_INFO_CIRCLE, status), false, false,
-               ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
-  ImGui::PopStyleColor();
+  // Wrapped, not a one-line button: errors say what to do about them, and are often longer than a line.
+  const float padding = LayoutScale(ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING);
+  ImGui::PushFont(g_medium_font);
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padding);
+  ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - padding);
+  ImGui::TextWrapped("%s %.*s", ICON_FA_INFO_CIRCLE, static_cast<int>(status.size()), status.data());
+  ImGui::PopTextWrapPos();
+  ImGui::PopFont();
+  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING));
 
   if (MenuButton(FSUI_ICONSTR(ICON_FA_SYNC, "Sync Now"),
                  FSUI_CSTR("Downloads newer saves from your other devices and uploads yours."),
@@ -4323,14 +4328,15 @@ void FullscreenUI::DrawMemcardSyncSettings(SettingsInterface* bsi)
 
 std::string FullscreenUI::DescribeMemcardSyncVersion(const MemcardSync::ConflictVersion& version)
 {
-  const std::tm when = fmt::localtime(static_cast<std::time_t>(version.modified_unix_ms / 1000));
+  const std::optional<std::tm> tm = MemcardSync::GetLocalTime(version.modified_unix_ms);
+  const std::string when = tm.has_value() ? fmt::format("{:%Y-%m-%d %H:%M}", tm.value()) : std::string("?");
   if (version.deleted)
-    return fmt::format(FSUI_FSTR("{}, deleted {:%Y-%m-%d %H:%M}"), version.device, when);
+    return fmt::format(FSUI_FSTR("{}, deleted {}"), version.device, when);
 
   const u32 blocks = MemcardSync::GetSaveBlockCount(version.size);
   if (blocks == 1)
-    return fmt::format(FSUI_FSTR("{}, {:%Y-%m-%d %H:%M}, 1 block"), version.device, when);
-  return fmt::format(FSUI_FSTR("{}, {:%Y-%m-%d %H:%M}, {} blocks"), version.device, when, blocks);
+    return fmt::format(FSUI_FSTR("{}, {}, 1 block"), version.device, when);
+  return fmt::format(FSUI_FSTR("{}, {}, {} blocks"), version.device, when, blocks);
 }
 
 void FullscreenUI::OpenMemcardSyncConflictDialog(const MemcardSync::Conflict& conflict, std::string title)
@@ -4349,12 +4355,14 @@ void FullscreenUI::OpenMemcardSyncConflictDialog(const MemcardSync::Conflict& co
       label = FSUI_STR("This device's");
     else
       label = fmt::format(FSUI_FSTR("{}'s"), conflict.remote[choice.remote_index].device);
+    // Labels are the buttons' IDs, and two devices can have the same name.
+    label += fmt::format("##choice_{}", i);
     options.emplace_back(std::move(label), i == preselected);
   }
 
   // By id: the conflict may be gone (resolved on another device) by the time a choice is made, and resolving one
   // that is gone does nothing.
-  OpenChoiceDialog(std::move(title), true, std::move(options),
+  OpenChoiceDialog(std::move(title), false, std::move(options),
                    [id = conflict.id, choices = std::move(choices)](s32 index, const std::string&, bool) {
                      if (index < 0)
                        return;
@@ -8186,8 +8194,8 @@ TRANSLATE_NOOP("FullscreenUI", "{} does not exist.");
 TRANSLATE_NOOP("FullscreenUI", "{} is not a valid disc image.");
 TRANSLATE_NOOP("FullscreenUI", "{} saves changed both on this device and on another. Choose which version to keep.");
 TRANSLATE_NOOP("FullscreenUI", "{}'s");
-TRANSLATE_NOOP("FullscreenUI", "{}, deleted {:%Y-%m-%d %H:%M}");
-TRANSLATE_NOOP("FullscreenUI", "{}, {:%Y-%m-%d %H:%M}, 1 block");
-TRANSLATE_NOOP("FullscreenUI", "{}, {:%Y-%m-%d %H:%M}, {} blocks");
+TRANSLATE_NOOP("FullscreenUI", "{}, deleted {}");
+TRANSLATE_NOOP("FullscreenUI", "{}, {}, 1 block");
+TRANSLATE_NOOP("FullscreenUI", "{}, {}, {} blocks");
 // TRANSLATION-STRING-AREA-END
 #endif

@@ -2402,6 +2402,10 @@ void ImGuiFullscreen::DrawChoiceDialog()
           for (s32 j = 0; j < static_cast<s32>(s_choice_dialog_options.size()); j++)
             s_choice_dialog_options[j].second = (j == i);
         }
+
+        // Start on the selected option, so pressing it right away keeps it.
+        if (option.second)
+          ImGui::SetItemDefaultFocus();
       }
     }
 

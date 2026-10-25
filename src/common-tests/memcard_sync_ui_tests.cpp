@@ -4,6 +4,8 @@
 #include "core/memcard_sync_ui.h"
 #include <gtest/gtest.h>
 
+#include <limits>
+
 using MemcardSync::Conflict;
 using MemcardSync::ConflictVersion;
 
@@ -60,4 +62,13 @@ TEST(MemcardSyncUI, SaveBlockCount)
   ASSERT_EQ(MemcardSync::GetSaveBlockCount(3 * 8192 + 100), 3u);
   ASSERT_EQ(MemcardSync::GetSaveBlockCount(100), 1u);
   ASSERT_EQ(MemcardSync::GetSaveBlockCount(0), 1u);
+}
+
+TEST(MemcardSyncUI, LocalTime)
+{
+  // Versions come from other devices, so their times can be anything: out of range is no time, not a crash.
+  ASSERT_TRUE(MemcardSync::GetLocalTime(1'700'000'000'000).has_value());
+  ASSERT_FALSE(MemcardSync::GetLocalTime(std::numeric_limits<s64>::max()).has_value());
+  ASSERT_FALSE(MemcardSync::GetLocalTime(std::numeric_limits<s64>::min()).has_value());
+  ASSERT_FALSE(MemcardSync::GetLocalTime(-1).has_value());
 }

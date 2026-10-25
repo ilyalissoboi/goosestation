@@ -86,6 +86,9 @@ bool WantsTextInput();
 /// Returns true if imgui wants to intercept mouse input.
 bool WantsMouseInput();
 
+/// Returns true if a text field is being edited.
+bool IsTextInputActive();
+
 /// Called on the UI or CPU thread in response to a key press. String is UTF-8.
 void AddTextInput(std::string str);
 

@@ -1033,6 +1033,11 @@ bool ImGuiManager::WantsMouseInput()
   return s_imgui_wants_mouse.load(std::memory_order_acquire);
 }
 
+bool ImGuiManager::IsTextInputActive()
+{
+  return s_text_input_active;
+}
+
 void ImGuiManager::AddTextInput(std::string str)
 {
   if (!ImGui::GetCurrentContext())

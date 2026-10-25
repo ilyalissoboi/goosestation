@@ -309,10 +309,11 @@ static void DrawMemcardSyncSettings(SettingsInterface* bsi);
 static void DrawMemcardSyncConflicts();
 static std::string DescribeMemcardSyncVersion(const MemcardSync::ConflictVersion& version);
 static void OpenMemcardSyncConflictDialog(const MemcardSync::Conflict& conflict, std::string title);
-static void DrawMemcardSyncTextSetting(SettingsInterface* bsi, const char* title, const char* summary, const char* key,
-                                       const char* empty_value, bool enabled);
-static void DrawMemcardSyncSecretSetting(const char* title, const char* summary, const char* name, bool stored,
-                                         const char* empty_value, bool trim, bool enabled);
+static void DrawMemcardSyncTextSetting(SettingsInterface* bsi, const char* title, const char* summary,
+                                       std::string_view help, const char* key, const char* empty_value, bool enabled);
+static void DrawMemcardSyncSecretSetting(const char* title, const char* summary, std::string_view help,
+                                         const char* name, bool stored, const char* empty_value, bool trim,
+                                         bool enabled);
 static void DrawControllerSettingsPage();
 static void DrawHotkeySettingsPage();
 static void DrawAchievementsSettingsPage();
@@ -4184,14 +4185,16 @@ void FullscreenUI::QueueMemcardSyncApply(std::vector<MemcardSync::SecretUpdate> 
 }
 
 void FullscreenUI::DrawMemcardSyncTextSetting(SettingsInterface* bsi, const char* title, const char* summary,
-                                              const char* key, const char* empty_value, bool enabled)
+                                              std::string_view help, const char* key, const char* empty_value,
+                                              bool enabled)
 {
   std::string value = bsi->GetStringValue(MemcardSync::SECTION, key);
   if (!MenuButtonWithValue(title, summary, value.empty() ? empty_value : value.c_str(), enabled))
     return;
 
+  // The row's summary is one short line; the dialog has room for the whole explanation.
   OpenInputStringDialog(
-    title, summary, std::string(), FSUI_ICONSTR(ICON_FA_CHECK, "OK"),
+    title, std::string(help), std::string(), FSUI_ICONSTR(ICON_FA_CHECK, "OK"),
     [key](std::string text) {
       const std::string value(StringUtil::StripWhitespace(text));
       {
@@ -4208,15 +4211,16 @@ void FullscreenUI::DrawMemcardSyncTextSetting(SettingsInterface* bsi, const char
     std::move(value));
 }
 
-void FullscreenUI::DrawMemcardSyncSecretSetting(const char* title, const char* summary, const char* name, bool stored,
-                                                const char* empty_value, bool trim, bool enabled)
+void FullscreenUI::DrawMemcardSyncSecretSetting(const char* title, const char* summary, std::string_view help,
+                                                const char* name, bool stored, const char* empty_value, bool trim,
+                                                bool enabled)
 {
   if (!MenuButtonWithValue(title, summary, stored ? FSUI_CSTR("Saved") : empty_value, enabled))
     return;
 
   // The saved secret is never put in the dialog: a new one replaces it.
   OpenInputStringDialog(
-    title, summary, std::string(), FSUI_ICONSTR(ICON_FA_CHECK, "OK"),
+    title, std::string(help), std::string(), FSUI_ICONSTR(ICON_FA_CHECK, "OK"),
     [name, trim](std::string text) {
       std::string value(trim ? StringUtil::StripWhitespace(text) : std::string_view(text));
       MemcardSync::WipeSecret(text);
@@ -4238,36 +4242,38 @@ void FullscreenUI::DrawMemcardSyncSettings(SettingsInterface* bsi)
 
   MenuHeading(FSUI_CSTR("Memory Card Sync"));
 
-  if (DrawToggleSetting(
-        bsi, FSUI_ICONSTR(ICON_FA_CLOUD, "Sync Memory Cards"),
-        FSUI_CSTR("Syncs your memory card saves with your other devices, one save at a time, through storage you own. "
-                  "When a save was changed both here and on another device, you choose which version to keep."),
-        MemcardSync::SECTION, "Enabled", false, state.available))
+  // Summaries are one short line, which a row has room for next to its value; the edit dialogs explain in full.
+  if (DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_CLOUD, "Sync Memory Cards"),
+                        FSUI_CSTR("Syncs your saves with your other devices, through storage you own."),
+                        MemcardSync::SECTION, "Enabled", false, state.available))
   {
     QueueMemcardSyncApply();
   }
 
   DrawMemcardSyncTextSetting(
-    bsi, FSUI_ICONSTR(ICON_FA_SERVER, "Storage"),
-    FSUI_CSTR("Bucket and folder, e.g. s3://my-saves/emusync/v1?region=eu-west-1. Use the same on every device. "
+    bsi, FSUI_ICONSTR(ICON_FA_SERVER, "Storage"), FSUI_CSTR("The bucket and folder your devices share."),
+    FSUI_VSTR("Bucket and folder, e.g. s3://my-saves/emusync/v1?region=eu-west-1. Use the same on every device. "
               "S3-compatible services take an endpoint: s3://bucket/folder?endpoint=https://...&region=auto."),
     "RemoteURI", FSUI_CSTR("Not set"), state.available);
   DrawMemcardSyncTextSetting(
-    bsi, FSUI_ICONSTR(ICON_FA_ID_CARD, "Access Key ID"),
-    FSUI_CSTR("From your storage provider. A key that can only read and write this bucket is enough."), "AccessKeyID",
+    bsi, FSUI_ICONSTR(ICON_FA_ID_CARD, "Access Key ID"), FSUI_CSTR("From your storage provider."),
+    FSUI_VSTR("From your storage provider. A key that can only read and write this bucket is enough."), "AccessKeyID",
     FSUI_CSTR("Not set"), state.available);
   DrawMemcardSyncSecretSetting(
-    FSUI_ICONSTR(ICON_FA_KEY, "Secret Access Key"),
-    FSUI_CSTR("Kept in your system's credential store (Credential Manager, Keychain or Secret Service), never in the "
+    FSUI_ICONSTR(ICON_FA_KEY, "Secret Access Key"), FSUI_CSTR("Kept in your system's credential store."),
+    FSUI_VSTR("Kept in your system's credential store (Credential Manager, Keychain or Secret Service), never in the "
               "settings file. Type or paste a new one to replace it."),
     MemcardSync::SECRET_ACCESS_KEY, state.has_secret, FSUI_CSTR("Not set"), true, state.available);
   // Not trimmed: emusync's own tool keeps spaces too, and the same passphrase has to unlock the storage on every
-  // device.
+  // device. The help is two strings: the translation tools take one of at most 300 characters.
   DrawMemcardSyncSecretSetting(
-    FSUI_ICONSTR(ICON_FA_LOCK, "Encryption Passphrase"),
-    FSUI_CSTR("Optional. Encrypts your saves before they upload, so the storage provider can't read them. Use the "
-              "same passphrase on every device: it can't be recovered, and encrypted storage can't be made "
-              "unencrypted."),
+    FSUI_ICONSTR(ICON_FA_LOCK, "Encryption Passphrase"), FSUI_CSTR("Optional. Encrypts your saves before they upload."),
+    fmt::format("{} {}",
+                FSUI_VSTR("Optional. Encrypts your saves on this device before they upload, so the storage provider "
+                          "can't read them. New storage is created encrypted; for storage that is already encrypted, "
+                          "enter the passphrase used when it was set up."),
+                FSUI_VSTR("Use the same passphrase on every device. It can't be recovered, and encrypted storage "
+                          "can't be made unencrypted. Kept in your system's credential store.")),
     MemcardSync::ENCRYPTION_PASSPHRASE, state.has_passphrase, FSUI_CSTR("None"), false, state.available);
   if (state.has_passphrase && MenuButton(FSUI_ICONSTR(ICON_FA_TRASH, "Remove Passphrase"),
                                          FSUI_CSTR("Removes the saved passphrase from this device."), state.available))
@@ -4276,7 +4282,8 @@ void FullscreenUI::DrawMemcardSyncSettings(SettingsInterface* bsi)
   }
 
   DrawMemcardSyncTextSetting(bsi, FSUI_ICONSTR(ICON_FA_DESKTOP, "Device Name"),
-                             FSUI_CSTR("How this device appears in a save's history on your other devices."),
+                             FSUI_CSTR("How this device appears on your other devices."),
+                             FSUI_VSTR("How this device appears in a save's history on your other devices."),
                              "DeviceName", FSUI_CSTR("This device's name"), state.available);
 
   std::string_view status;
@@ -7768,6 +7775,7 @@ TRANSLATE_NOOP("FullscreenUI", "Forces the use of FIFO over Mailbox presentation
 TRANSLATE_NOOP("FullscreenUI", "Forcibly mutes both CD-DA and XA audio from the CD-ROM. Can be used to disable background music in some games.");
 TRANSLATE_NOOP("FullscreenUI", "Frame Time Buffer");
 TRANSLATE_NOOP("FullscreenUI", "From File...");
+TRANSLATE_NOOP("FullscreenUI", "From your storage provider.");
 TRANSLATE_NOOP("FullscreenUI", "From your storage provider. A key that can only read and write this bucket is enough.");
 TRANSLATE_NOOP("FullscreenUI", "Fullscreen Resolution");
 TRANSLATE_NOOP("FullscreenUI", "GPU Adapter");
@@ -7804,6 +7812,7 @@ TRANSLATE_NOOP("FullscreenUI", "Hotkey Settings");
 TRANSLATE_NOOP("FullscreenUI", "How many saves will be kept for rewinding. Higher values have greater memory requirements.");
 TRANSLATE_NOOP("FullscreenUI", "How often a rewind state will be created. Higher frequencies have greater system requirements.");
 TRANSLATE_NOOP("FullscreenUI", "How this device appears in a save's history on your other devices.");
+TRANSLATE_NOOP("FullscreenUI", "How this device appears on your other devices.");
 TRANSLATE_NOOP("FullscreenUI", "Identifies any new files added to the game directories.");
 TRANSLATE_NOOP("FullscreenUI", "If not enabled, the current post processing chain will be ignored.");
 TRANSLATE_NOOP("FullscreenUI", "Increase Timer Resolution");
@@ -7821,6 +7830,7 @@ TRANSLATE_NOOP("FullscreenUI", "Keep All From This Device");
 TRANSLATE_NOOP("FullscreenUI", "Keep this device's version of every save above? The other versions stay in the sync history. A card in use gets the chosen saves when the game is closed.");
 TRANSLATE_NOOP("FullscreenUI", "Keeps this device's version of every save above.");
 TRANSLATE_NOOP("FullscreenUI", "Kept in your system's credential store (Credential Manager, Keychain or Secret Service), never in the settings file. Type or paste a new one to replace it.");
+TRANSLATE_NOOP("FullscreenUI", "Kept in your system's credential store.");
 TRANSLATE_NOOP("FullscreenUI", "Last Played");
 TRANSLATE_NOOP("FullscreenUI", "Last Played: %s");
 TRANSLATE_NOOP("FullscreenUI", "Latency Control");
@@ -7902,7 +7912,8 @@ TRANSLATE_NOOP("FullscreenUI", "Open Containing Directory");
 TRANSLATE_NOOP("FullscreenUI", "Open in File Browser");
 TRANSLATE_NOOP("FullscreenUI", "Operations");
 TRANSLATE_NOOP("FullscreenUI", "Optimal Frame Pacing");
-TRANSLATE_NOOP("FullscreenUI", "Optional. Encrypts your saves before they upload, so the storage provider can't read them. Use the same passphrase on every device: it can't be recovered, and encrypted storage can't be made unencrypted.");
+TRANSLATE_NOOP("FullscreenUI", "Optional. Encrypts your saves before they upload.");
+TRANSLATE_NOOP("FullscreenUI", "Optional. Encrypts your saves on this device before they upload, so the storage provider can't read them. New storage is created encrypted; for storage that is already encrypted, enter the passphrase used when it was set up.");
 TRANSLATE_NOOP("FullscreenUI", "Options");
 TRANSLATE_NOOP("FullscreenUI", "Output Latency");
 TRANSLATE_NOOP("FullscreenUI", "Output Volume");
@@ -8111,7 +8122,7 @@ TRANSLATE_NOOP("FullscreenUI", "Sync Now");
 TRANSLATE_NOOP("FullscreenUI", "Sync To Host Refresh Rate");
 TRANSLATE_NOOP("FullscreenUI", "Synchronizes presentation of the console's frames to the host. GSync/FreeSync users should enable Optimal Frame Pacing instead.");
 TRANSLATE_NOOP("FullscreenUI", "Syncing. Nothing has changed yet.");
-TRANSLATE_NOOP("FullscreenUI", "Syncs your memory card saves with your other devices, one save at a time, through storage you own. When a save was changed both here and on another device, you choose which version to keep.");
+TRANSLATE_NOOP("FullscreenUI", "Syncs your saves with your other devices, through storage you own.");
 TRANSLATE_NOOP("FullscreenUI", "Temporarily disables all enhancements, useful when testing.");
 TRANSLATE_NOOP("FullscreenUI", "Test Unofficial Achievements");
 TRANSLATE_NOOP("FullscreenUI", "Texture Filtering");
@@ -8119,6 +8130,7 @@ TRANSLATE_NOOP("FullscreenUI", "Texture Replacements");
 TRANSLATE_NOOP("FullscreenUI", "The SDL input source supports most controllers.");
 TRANSLATE_NOOP("FullscreenUI", "The XInput source provides support for XBox 360/XBox One/XBox Series controllers.");
 TRANSLATE_NOOP("FullscreenUI", "The audio backend determines how frames produced by the emulator are submitted to the host.");
+TRANSLATE_NOOP("FullscreenUI", "The bucket and folder your devices share.");
 TRANSLATE_NOOP("FullscreenUI", "The selected memory card image will be used in shared mode for this slot.");
 TRANSLATE_NOOP("FullscreenUI", "This device's");
 TRANSLATE_NOOP("FullscreenUI", "This device's name");
@@ -8153,6 +8165,7 @@ TRANSLATE_NOOP("FullscreenUI", "Use Light Theme");
 TRANSLATE_NOOP("FullscreenUI", "Use Old MDEC Routines");
 TRANSLATE_NOOP("FullscreenUI", "Use Single Card For Multi-Disc Games");
 TRANSLATE_NOOP("FullscreenUI", "Use Software Renderer For Readbacks");
+TRANSLATE_NOOP("FullscreenUI", "Use the same passphrase on every device. It can't be recovered, and encrypted storage can't be made unencrypted. Kept in your system's credential store.");
 TRANSLATE_NOOP("FullscreenUI", "Username: {}");
 TRANSLATE_NOOP("FullscreenUI", "Uses PGXP for all instructions, not just memory operations.");
 TRANSLATE_NOOP("FullscreenUI", "Uses a blit presentation model instead of flipping. This may be needed on some systems.");

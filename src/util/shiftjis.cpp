@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 // https://stackoverflow.com/questions/33165171/c-shiftjis-to-utf8-conversion
 
@@ -1591,5 +1592,123 @@ char* sjis2utf8(char* input)
 
   // remove the unnecessary bytes
   output[indexOutput] = 0;
+  return output;
+}
+// Unicode code point to Shift-JIS code, inverted from shiftJIS_convTable; 0 where there is none.
+static const std::vector<uint16_t>& GetUnicodeToShiftJISTable()
+{
+  static const std::vector<uint16_t> table = [] {
+    std::vector<uint16_t> t(0x10000, 0);
+    for (size_t i = 0; i < sizeof(shiftJIS_convTable) / 2; i++)
+    {
+      uint16_t code;
+      if (i < 0x100)
+      {
+        // These bytes lead two-byte codes, so they never stand alone.
+        if ((i >= 0x80 && i <= 0x9F) || (i >= 0xE0 && i <= 0xEF))
+          continue;
+        code = static_cast<uint16_t>(i);
+      }
+      else
+      {
+        // Same layout as sjis2utf8: 0x8X yy at 0x100, 0x9X yy at 0x1100, 0xEX yy at 0x2100.
+        static constexpr uint16_t leads[] = {0x80, 0x90, 0xE0};
+        const size_t offset = i - 0x100;
+        code = static_cast<uint16_t>(((leads[offset >> 12] + ((offset >> 8) & 0xF)) << 8) | (offset & 0xFF));
+      }
+
+      const uint16_t unicode = static_cast<uint16_t>((shiftJIS_convTable[i * 2] << 8) | shiftJIS_convTable[i * 2 + 1]);
+
+      // Unmapped slots decode to a space (or zero), which only the real space and NUL stand for.
+      if ((unicode == 0x20 && code != 0x20) || unicode == 0 || t[unicode] != 0)
+        continue;
+
+      t[unicode] = code;
+    }
+    return t;
+  }();
+  return table;
+}
+
+std::optional<std::string> utf82sjis(std::string_view input)
+{
+  const std::vector<uint16_t>& table = GetUnicodeToShiftJISTable();
+  std::string output;
+  output.reserve(input.size() * 2);
+
+  size_t pos = 0;
+  while (pos < input.size())
+  {
+    const uint8_t lead = static_cast<uint8_t>(input[pos]);
+    uint32_t cp;
+    size_t length;
+    if (lead < 0x80)
+    {
+      cp = lead;
+      length = 1;
+    }
+    else if ((lead & 0xE0) == 0xC0)
+    {
+      cp = lead & 0x1F;
+      length = 2;
+    }
+    else if ((lead & 0xF0) == 0xE0)
+    {
+      cp = lead & 0x0F;
+      length = 3;
+    }
+    else
+    {
+      // Four-byte sequences are outside the Basic Multilingual Plane, which Shift-JIS doesn't reach.
+      return std::nullopt;
+    }
+
+    if (pos + length > input.size())
+      return std::nullopt;
+    for (size_t i = 1; i < length; i++)
+    {
+      const uint8_t cont = static_cast<uint8_t>(input[pos + i]);
+      if ((cont & 0xC0) != 0x80)
+        return std::nullopt;
+      cp = (cp << 6) | (cont & 0x3F);
+    }
+    pos += length;
+
+    // Printable ASCII is always written as two bytes: one single byte would put sjis2ascii, which reads two at a
+    // time, out of step for the rest of the title. Most characters have a full-width form; the table (JIS, not
+    // Windows-31J) lacks a few, which use the codes sjis2ascii reads back as the same character.
+    uint16_t code = 0;
+    switch (cp)
+    {
+      case ' ':
+        code = 0x8140; // ideographic space
+        break;
+      case '"':
+        code = 0x818C; // double prime
+        break;
+      case '\'':
+        code = 0x818B; // prime
+        break;
+      case '-':
+        code = 0x817C; // minus sign
+        break;
+      case '~':
+        code = 0x8160; // wave dash
+        break;
+      default:
+        if (cp >= 0x21 && cp <= 0x7E)
+          code = table[0xFF01 + (cp - 0x21)];
+        break;
+    }
+    if (code == 0)
+      code = table[cp];
+    if (code == 0)
+      return std::nullopt;
+
+    if (code > 0xFF)
+      output.push_back(static_cast<char>(code >> 8));
+    output.push_back(static_cast<char>(code & 0xFF));
+  }
+
   return output;
 }

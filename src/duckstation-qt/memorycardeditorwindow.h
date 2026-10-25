@@ -39,6 +39,7 @@ private Q_SLOTS:
   void doCopyFile();
   void doDeleteFile();
   void doUndeleteFile();
+  void doRenameFile();
 
 private:
   struct Card
@@ -85,6 +86,7 @@ private:
   Ui::MemoryCardEditorDialog m_ui;
   QPushButton* m_deleteFile;
   QPushButton* m_undeleteFile;
+  QPushButton* m_renameFile;
   QPushButton* m_exportFile;
   QPushButton* m_moveLeft;
   QPushButton* m_moveRight;

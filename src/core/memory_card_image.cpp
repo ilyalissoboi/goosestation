@@ -481,6 +481,30 @@ bool MemoryCardImage::UndeleteFile(DataArray* data, const FileInfo& fi)
   return true;
 }
 
+bool MemoryCardImage::SetFileName(DataArray* data, const FileInfo& fi, std::string_view filename)
+{
+  DirectoryFrame* df = GetFramePtr<DirectoryFrame>(data, 0, fi.first_block);
+  if (fi.deleted || filename.size() > DirectoryFrame::FILE_NAME_LENGTH)
+    return false;
+
+  std::memset(df->filename, 0, sizeof(df->filename));
+  std::memcpy(df->filename, filename.data(), filename.size());
+  UpdateChecksum(df);
+  return true;
+}
+
+std::span<const u8, 64> MemoryCardImage::GetRawTitle(const DataArray& data, const FileInfo& fi)
+{
+  return GetFramePtr<TitleFrame>(data, fi.first_block, 0)->title;
+}
+
+void MemoryCardImage::SetTitle(DataArray* data, const FileInfo& fi, std::span<const u8, 64> title_sjis)
+{
+  TitleFrame* tf = GetFramePtr<TitleFrame>(data, fi.first_block, 0);
+  static_assert(sizeof(tf->title) == 64);
+  std::memcpy(tf->title, title_sjis.data(), sizeof(tf->title));
+}
+
 bool MemoryCardImage::ImportCardMCD(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error)
 {
   if (file_data.size() != DATA_SIZE)

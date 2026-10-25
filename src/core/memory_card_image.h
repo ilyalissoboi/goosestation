@@ -55,6 +55,13 @@ bool ReadFile(const DataArray& data, const FileInfo& fi, std::vector<u8>* buffer
 bool WriteFile(DataArray* data, std::string_view filename, std::span<const u8> buffer, Error* error);
 bool DeleteFile(DataArray* data, const FileInfo& fi, bool clear_sectors);
 bool UndeleteFile(DataArray* data, const FileInfo& fi);
+
+/// Renames a save that isn't deleted: changes its file name in its first directory frame, the only one holding it.
+bool SetFileName(DataArray* data, const FileInfo& fi, std::string_view filename);
+
+/// A save's title as stored (Shift-JIS, zero-padded), and replacing it.
+std::span<const u8, 64> GetRawTitle(const DataArray& data, const FileInfo& fi);
+void SetTitle(DataArray* data, const FileInfo& fi, std::span<const u8, 64> title_sjis);
 bool ImportCard(DataArray* data, const char* filename, Error* error);
 bool ImportCard(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error);
 bool ExportSave(DataArray* data, const FileInfo& fi, const char* filename, Error* error);

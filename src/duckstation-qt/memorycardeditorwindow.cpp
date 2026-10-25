@@ -5,6 +5,8 @@
 #include "qtutils.h"
 
 #include "core/host.h"
+#include "core/memcard_sync.h"
+#include "core/memory_card_helpers.h"
 #include "core/settings.h"
 
 #include "common/assert.h"
@@ -15,6 +17,8 @@
 
 #include <QtCore/QFileInfo>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QFormLayout>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QMessageBox>
 
 static constexpr char MEMORY_CARD_IMAGE_FILTER[] = QT_TRANSLATE_NOOP(
@@ -31,6 +35,7 @@ MemoryCardEditorWindow::MemoryCardEditorWindow() : QWidget()
 
   m_deleteFile = m_ui.centerButtonBox->addButton(tr("Delete File"), QDialogButtonBox::ActionRole);
   m_undeleteFile = m_ui.centerButtonBox->addButton(tr("Undelete File"), QDialogButtonBox::ActionRole);
+  m_renameFile = m_ui.centerButtonBox->addButton(tr("Rename File..."), QDialogButtonBox::ActionRole);
   m_exportFile = m_ui.centerButtonBox->addButton(tr("Export File"), QDialogButtonBox::ActionRole);
   m_moveLeft = m_ui.centerButtonBox->addButton(tr("<<"), QDialogButtonBox::ActionRole);
   m_moveRight = m_ui.centerButtonBox->addButton(tr(">>"), QDialogButtonBox::ActionRole);
@@ -140,6 +145,7 @@ void MemoryCardEditorWindow::connectUi()
   connect(m_moveRight, &QPushButton::clicked, this, &MemoryCardEditorWindow::doCopyFile);
   connect(m_deleteFile, &QPushButton::clicked, this, &MemoryCardEditorWindow::doDeleteFile);
   connect(m_undeleteFile, &QPushButton::clicked, this, &MemoryCardEditorWindow::doUndeleteFile);
+  connect(m_renameFile, &QPushButton::clicked, this, &MemoryCardEditorWindow::doRenameFile);
 
   connect(m_ui.cardAPath, QOverload<int>::of(&QComboBox::currentIndexChanged),
           [this](int index) { loadCardFromComboBox(&m_card_a, index); });
@@ -499,6 +505,151 @@ void MemoryCardEditorWindow::doUndeleteFile()
   updateButtonState();
 }
 
+void MemoryCardEditorWindow::doRenameFile()
+{
+  const auto [card, selected_file] = getSelectedFile();
+  if (!selected_file || selected_file->deleted)
+    return;
+
+  // The table is rebuilt after the rename, which replaces card->files.
+  const MemoryCardImage::FileInfo fi = *selected_file;
+  const QString old_title = QString::fromStdString(fi.title);
+  const QString old_name = QString::fromStdString(fi.filename);
+
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Rename File"));
+  QFormLayout* layout = new QFormLayout(&dialog);
+  QLineEdit* title_edit = new QLineEdit(old_title, &dialog);
+  QLineEdit* name_edit = new QLineEdit(old_name, &dialog);
+  name_edit->setMaxLength(MemoryCardHelpers::FILE_NAME_MAX_LENGTH);
+  layout->addRow(tr("Title:"), title_edit);
+  layout->addRow(tr("File name:"), name_edit);
+  QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addRow(buttons);
+
+  // An edited title keeps the game's style: single bytes if that's how the game wrote it, otherwise full-width.
+  const std::span<const u8, MemoryCardHelpers::TITLE_SIZE> old_title_sjis =
+    MemoryCardImage::GetRawTitle(card->data, fi);
+  const MemoryCardHelpers::TitleStyle title_style = MemoryCardHelpers::GetTitleStyle(old_title_sjis);
+
+  std::array<u8, MemoryCardHelpers::TITLE_SIZE> title_sjis;
+  std::string new_name;
+  bool title_changed, name_changed;
+
+  // Reopens with what was typed until the rename is valid and confirmed, or cancelled.
+  for (;;)
+  {
+    if (dialog.exec() != QDialog::Accepted)
+      return;
+
+    title_changed = (title_edit->text() != old_title);
+    name_changed = (name_edit->text() != old_name);
+    if (!title_changed && !name_changed)
+      return;
+
+    QString error;
+    if (title_changed)
+    {
+      switch (MemoryCardHelpers::EncodeTitle(title_edit->text().toStdString(), &title_sjis, title_style))
+      {
+        case MemoryCardHelpers::TitleError::Unencodable:
+          error = tr("The title has characters that can't be stored on a memory card.");
+          break;
+        case MemoryCardHelpers::TitleError::TooLong:
+          error = (title_style == MemoryCardHelpers::TitleStyle::SingleByte) ?
+                    tr("The title is too long. It can be up to 64 characters, or 32 if it has any that aren't "
+                       "ASCII.") :
+                    tr("The title is too long. It can be up to 32 full-width characters.");
+          break;
+        case MemoryCardHelpers::TitleError::None:
+          break;
+      }
+    }
+
+    new_name = name_edit->text().toStdString();
+    if (error.isEmpty() && name_changed)
+    {
+      std::vector<std::string_view> other_names;
+      for (const MemoryCardImage::FileInfo& other : card->files)
+      {
+        if (!other.deleted && other.first_block != fi.first_block)
+          other_names.push_back(other.filename);
+      }
+
+      switch (MemoryCardHelpers::CheckFileName(new_name, other_names))
+      {
+        case MemoryCardHelpers::FileNameError::Empty:
+          error = tr("Enter a file name.");
+          break;
+        case MemoryCardHelpers::FileNameError::TooLong:
+          error = tr("File names can be at most 20 characters.");
+          break;
+        case MemoryCardHelpers::FileNameError::InvalidCharacter:
+          error = tr("File names can only use ASCII letters, numbers, spaces and punctuation, except * and ?.");
+          break;
+        case MemoryCardHelpers::FileNameError::Duplicate:
+          error = tr("This card already has a save named \"%1\".").arg(name_edit->text());
+          break;
+        case MemoryCardHelpers::FileNameError::None:
+          break;
+      }
+    }
+
+    if (!error.isEmpty())
+    {
+      QMessageBox::warning(&dialog, tr("Rename File"), error);
+      continue;
+    }
+
+    QStringList warnings;
+    if (title_changed && !MemoryCardHelpers::IsTitleShownExactly(old_title_sjis))
+    {
+      warnings.append(tr("Some characters in the current title can't be shown exactly here, such as ー or ・. The new "
+                         "title is saved as it appears in the box, so those characters may look different in the "
+                         "game."));
+    }
+    if (name_changed && !MemoryCardHelpers::IsStandardFileName(new_name))
+    {
+      warnings.append(tr("\"%1\" doesn't follow the usual pattern for save names: B, a region letter, then the game's "
+                         "product code, such as BASLUS-00067. The game may no longer find or load this save.")
+                        .arg(name_edit->text()));
+    }
+    if (name_changed && Host::GetBaseBoolSettingValue(MemcardSync::SECTION, "Enabled", false))
+    {
+      warnings.append(tr("Memory card sync is on. Other devices will see the save \"%1\" deleted and a new save \"%2\" "
+                         "added. The history of \"%1\" stays available under its old name.")
+                        .arg(old_name)
+                        .arg(name_edit->text()));
+    }
+    if (!warnings.isEmpty())
+    {
+      warnings.append(tr("Rename anyway?"));
+      if (QMessageBox::question(&dialog, tr("Rename File"), warnings.join(QStringLiteral("\n\n"))) !=
+          QMessageBox::Yes)
+      {
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  if (title_changed)
+    MemoryCardImage::SetTitle(&card->data, fi, title_sjis);
+  if (name_changed && !MemoryCardImage::SetFileName(&card->data, fi, new_name))
+  {
+    QMessageBox::critical(this, tr("Error"), tr("Failed to rename file %1").arg(old_name));
+    return;
+  }
+
+  clearSelection();
+  setCardDirty(card);
+  updateCardTable(card);
+  updateButtonState();
+}
+
 void MemoryCardEditorWindow::doExportSaveFile()
 {
   QString filename = QDir::toNativeSeparators(
@@ -628,6 +779,7 @@ void MemoryCardEditorWindow::updateButtonState()
   const bool both_cards_present = card_a_present && card_b_present;
   m_deleteFile->setEnabled(has_selection);
   m_undeleteFile->setEnabled(is_deleted);
+  m_renameFile->setEnabled(has_selection && !is_deleted);
   m_exportFile->setEnabled(has_selection);
   m_moveLeft->setEnabled(both_cards_present && has_selection && is_card_b);
   m_moveRight->setEnabled(both_cards_present && has_selection && !is_card_b);

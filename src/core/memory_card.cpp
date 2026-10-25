@@ -4,6 +4,7 @@
 #include "memory_card.h"
 #include "host.h"
 #include "memcard_sync.h"
+#include "memory_card_helpers.h"
 #include "system.h"
 
 #include "util/imgui_manager.h"
@@ -18,7 +19,16 @@
 
 #include "IconsFontAwesome5.h"
 
+#include <optional>
+#include <utility>
+
 Log_SetChannel(MemoryCard);
+
+// How long each frame of an animated save icon shows in the "saved" message.
+static constexpr float SAVE_ICON_FRAME_DURATION = 0.25f;
+
+static std::optional<MemoryCardImage::FileInfo> GetWrittenSave(const MemoryCardImage::DataArray& data,
+                                                               u16 written_blocks);
 
 MemoryCard::MemoryCard()
   : m_save_event(
@@ -62,6 +72,10 @@ bool MemoryCard::DoState(StateWrapper& sw)
   sw.Do(&m_data);
   sw.Do(&m_changed);
 
+  // Which blocks the loaded state's game wrote isn't known; the next save message doesn't name a save.
+  if (sw.IsReading())
+    m_written_blocks = 0;
+
   return !sw.HasError();
 }
 
@@ -76,6 +90,7 @@ void MemoryCard::CopyState(const MemoryCard* src)
   m_checksum = src->m_checksum;
   m_last_byte = src->m_last_byte;
   m_changed = src->m_changed;
+  m_written_blocks = src->m_written_blocks;
 }
 
 void MemoryCard::ResetTransferState()
@@ -187,7 +202,11 @@ bool MemoryCard::Transfer(const u8 data_in, u8* data_out)
       }
 
       const u32 offset = ZeroExtend32(m_address) * MemoryCardImage::FRAME_SIZE + m_sector_offset;
-      m_changed |= (m_data[offset] != data_in);
+      if (m_data[offset] != data_in)
+      {
+        m_changed = true;
+        m_written_blocks |= static_cast<u16>(1u << (m_address / MemoryCardImage::FRAMES_PER_BLOCK));
+      }
       m_data[offset] = data_in;
 
       *data_out = m_last_byte;
@@ -333,6 +352,7 @@ bool MemoryCard::SaveIfChanged(bool display_osd_message)
 {
   m_save_event.Deactivate();
 
+  const u16 written_blocks = std::exchange(m_written_blocks, 0);
   if (!m_changed)
     return true;
 
@@ -369,13 +389,48 @@ bool MemoryCard::SaveIfChanged(bool display_osd_message)
 
   if (display_osd_message)
   {
-    Host::AddIconOSDMessage(
-      std::move(osd_key), ICON_FA_SD_CARD,
-      fmt::format(TRANSLATE_FS("OSDMessage", "Saved memory card to '{}'."), Path::GetFileName(display_name)),
-      Host::OSD_QUICK_DURATION);
+    if (std::optional<MemoryCardImage::FileInfo> save = GetWrittenSave(m_data, written_blocks))
+    {
+      Host::OSDImage icon;
+      icon.width = MemoryCardImage::ICON_WIDTH;
+      icon.frame_height = MemoryCardImage::ICON_HEIGHT;
+      icon.frame_count = static_cast<u32>(save->icon_frames.size());
+      icon.frame_duration = SAVE_ICON_FRAME_DURATION;
+      for (const MemoryCardImage::IconFrame& frame : save->icon_frames)
+        icon.pixels.insert(icon.pixels.end(), std::begin(frame.pixels), std::end(frame.pixels));
+
+      Host::AddImageOSDMessage(std::move(osd_key), std::move(icon),
+                               fmt::format(TRANSLATE_FS("OSDMessage", "Saved '{}' to '{}'."),
+                                           save->title.empty() ? save->filename : save->title,
+                                           Path::GetFileName(display_name)),
+                               Host::OSD_QUICK_DURATION);
+    }
+    else
+    {
+      Host::AddIconOSDMessage(
+        std::move(osd_key), ICON_FA_SD_CARD,
+        fmt::format(TRANSLATE_FS("OSDMessage", "Saved memory card to '{}'."), Path::GetFileName(display_name)),
+        Host::OSD_QUICK_DURATION);
+    }
   }
 
   return true;
+}
+
+// The save a game's writes went to, when they went to exactly one save and it has an icon.
+std::optional<MemoryCardImage::FileInfo> GetWrittenSave(const MemoryCardImage::DataArray& data, u16 written_blocks)
+{
+  std::vector<MemoryCardImage::FileInfo> files = MemoryCardImage::EnumerateFiles(data, false);
+  std::vector<u16> block_masks;
+  block_masks.reserve(files.size());
+  for (const MemoryCardImage::FileInfo& fi : files)
+    block_masks.push_back(fi.block_mask);
+
+  const std::optional<size_t> index = MemoryCardHelpers::FindWrittenSave(block_masks, written_blocks);
+  if (!index.has_value() || files[*index].icon_frames.empty())
+    return std::nullopt;
+
+  return std::move(files[*index]);
 }
 
 void MemoryCard::QueueFileSave()

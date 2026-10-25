@@ -250,12 +250,14 @@ std::vector<MemoryCardImage::FileInfo> MemoryCardImage::EnumerateFiles(const Dat
     fi.first_block = dir_frame;
     fi.size = df->file_size;
     fi.num_blocks = 1;
+    fi.block_mask = static_cast<u16>(1u << dir_frame);
     fi.deleted = (df->block_allocation_state != 0x51);
 
     const DirectoryFrame* next_df = df;
     while (next_df->next_block_number < (NUM_BLOCKS - 1) && fi.num_blocks < FRAMES_PER_BLOCK)
     {
       fi.num_blocks++;
+      fi.block_mask |= static_cast<u16>(1u << (next_df->next_block_number + 1));
       next_df = GetFramePtr<DirectoryFrame>(data, 0, next_df->next_block_number + 1);
     }
 

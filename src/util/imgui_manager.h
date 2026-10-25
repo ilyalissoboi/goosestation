@@ -137,6 +137,18 @@ static constexpr float OSD_QUICK_DURATION = 2.5f;
 void AddOSDMessage(std::string message, float duration = 2.0f);
 void AddKeyedOSDMessage(std::string key, std::string message, float duration = 2.0f);
 void AddIconOSDMessage(std::string key, const char* icon, std::string message, float duration = 2.0f);
+
+/// An image shown before an OSD message's text, at the text's height. Several frames animate in turn.
+struct OSDImage
+{
+  std::vector<u32> pixels; // RGBA8, frames stacked top to bottom
+  u32 width;
+  u32 frame_height;
+  u32 frame_count;
+  float frame_duration; // seconds per frame
+};
+
+void AddImageOSDMessage(std::string key, OSDImage image, std::string message, float duration = 2.0f);
 void RemoveKeyedOSDMessage(std::string key);
 void ClearOSDMessages();
 } // namespace Host

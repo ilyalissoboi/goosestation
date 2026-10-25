@@ -33,7 +33,7 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 |---|---|---|---|
 | 9 | ~~A conflict screen.~~ Done (#13): when a save was changed on two devices, the player chooses which version to keep (Settings > Memory Cards > Resolve...); the card keeps this device's version until then, and the other stays in emusync's history. Big Picture has one too (item 12). | M | 2 |
 | 10 | More platforms: emusync runtimes for Windows ARM64 and Linux aarch64 (today Windows x64, Linux x86_64 and macOS). Needs emusync releases for those targets first. | M | 1, emusync |
-| 11 | Memory card editor additions and memory card improvements: renaming saves, extracting icons, the game's icon shown while saving (upstream P1). | M | none |
+| 11 | ~~Memory card editor additions.~~ Done (upstream P1): the editor renames saves, both the title (stored as Shift-JIS, typed text made full-width) and the file name the game looks for, with a warning when the new name doesn't follow the usual pattern or when sync is on (other devices see the old save deleted and a new one added). When a game saves, the message shows that save's icon, animated, and its title. Icon extraction was dropped as too narrow; multitap cards are in [Later](#later). | M | none |
 | 12 | ~~Sync settings in Big Picture.~~ Done (#18): Settings > Memory Cards has the sync settings Qt has (the switch, storage, access key ID, secret access key and encryption passphrase, masked and never shown back, device name, status and Sync Now) and the conflict screen, one row per save with a choice of version. Secrets can be pasted (item 14). | M | 14 |
 
 ## 3. Platform and dependencies
@@ -59,6 +59,7 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 - Register GooseStation with RetroAchievements (item 6, low priority for now); until then its user agent
   may be treated as an unknown emulator and hardcore mode refused.
 - Importing settings, memory cards and save states from an existing DuckStation install.
+- Multitap memory cards in the UI (upstream P1, left out of item 11).
 - A Discord application for GooseStation, so rich presence can be turned back on.
 - An on-screen keyboard of our own in Big Picture (upstream P1). Every platform already has a way
   to type (item 14), so it would only help a desktop driven by a controller alone, outside Steam,
@@ -73,4 +74,4 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 
 1 → 2 → 4 → 5, with 7 and 9 alongside: a first release with sync tested for real. Then
 13 → 15 and 12 lead to Android (16); 14 comes before 12, and gives Android's Big Picture screens
-the system keyboard. Items 11, 17 and 18 block nothing and can be picked up at any time.
+the system keyboard. Items 17 and 18 block nothing and can be picked up at any time.

@@ -43,6 +43,7 @@ struct FileInfo
   u32 size;
   u32 first_block;
   u32 num_blocks;
+  u16 block_mask; // bit n set for each block n in the save's chain
   bool deleted;
 
   std::vector<IconFrame> icon_frames;

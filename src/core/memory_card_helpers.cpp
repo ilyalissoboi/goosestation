@@ -85,3 +85,23 @@ bool MemoryCardHelpers::IsTitleShownExactly(std::span<const u8, TITLE_SIZE> stor
   std::free(utf8);
   return exact;
 }
+
+std::optional<size_t> MemoryCardHelpers::FindWrittenSave(std::span<const u16> save_block_masks, u16 written_blocks)
+{
+  const u16 data_blocks = written_blocks & ~u16(1);
+  if (data_blocks == 0)
+    return std::nullopt;
+
+  for (size_t i = 0; i < save_block_masks.size(); i++)
+  {
+    if ((save_block_masks[i] & data_blocks) == 0)
+      continue;
+
+    // Saves own disjoint blocks, so the first save that overlaps is the only candidate.
+    if ((data_blocks & ~save_block_masks[i]) != 0)
+      return std::nullopt;
+    return i;
+  }
+
+  return std::nullopt;
+}

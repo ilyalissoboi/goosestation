@@ -70,6 +70,19 @@ TEST(MemoryCardHelpers, EncodeTitleLeavesOutputOnError)
   ASSERT_TRUE(std::all_of(title.begin(), title.end(), [](u8 b) { return b == 0xAB; }));
 }
 
+TEST(MemoryCardHelpers, FindWrittenSave)
+{
+  // Save 0 owns blocks 1 and 2, save 1 owns block 3; block 0 is the directory.
+  const u16 masks[] = {0b0110, 0b1000};
+  ASSERT_EQ(MemoryCardHelpers::FindWrittenSave(masks, 0b0111), 0u);
+  ASSERT_EQ(MemoryCardHelpers::FindWrittenSave(masks, 0b0010), 0u);
+  ASSERT_EQ(MemoryCardHelpers::FindWrittenSave(masks, 0b1001), 1u);
+  ASSERT_EQ(MemoryCardHelpers::FindWrittenSave(masks, 0b0001), std::nullopt);
+  ASSERT_EQ(MemoryCardHelpers::FindWrittenSave(masks, 0b1010), std::nullopt);
+  ASSERT_EQ(MemoryCardHelpers::FindWrittenSave(masks, 0b10000), std::nullopt);
+  ASSERT_EQ(MemoryCardHelpers::FindWrittenSave(masks, 0), std::nullopt);
+}
+
 static std::array<u8, MemoryCardHelpers::TITLE_SIZE> StoredTitle(std::string_view sjis)
 {
   std::array<u8, MemoryCardHelpers::TITLE_SIZE> title = {};

@@ -83,7 +83,7 @@ bool IsRunning();
 /// One line about the last sync, for the settings page.
 std::string GetStatus();
 
-/// Queues a full sync: download, apply to the cards not in use, upload.
+/// Queues a full sync: download, apply to the cards not in use, upload. The status says "Syncing..." until it ends.
 void SyncNow();
 
 // ---- Conflicts ------------------------------------------------------------------------------------

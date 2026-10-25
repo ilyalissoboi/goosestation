@@ -1,4 +1,4 @@
-name: sdl2
+name: sdl3
 buildsystem: cmake-ninja
 builddir: true
 config-opts:
@@ -11,8 +11,8 @@ build-options:
   strip: true
 sources:
   - type: archive
-    url: "https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-2.32.10.tar.gz"
-    sha256: "5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165"
+    url: "https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18.tar.gz"
+    sha256: "9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3"
 cleanup:
   - /bin
   - /include

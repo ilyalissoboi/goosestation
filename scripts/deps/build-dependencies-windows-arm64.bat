@@ -51,7 +51,7 @@ set LIBJPEGTURBO=3.0.3
 set LIBPNG=1643
 set QT=6.12.0
 set QTMINOR=6.12
-set SDL2=2.32.10
+set SDL3=3.4.18
 set WEBP=1.4.0
 set ZLIB=1.3.1
 set ZLIBSHORT=131
@@ -68,7 +68,7 @@ call :downloadfile "freetype-%FREETYPE%.tar.gz" https://download.sourceforge.net
 call :downloadfile "harfbuzz-%HARFBUZZ%.zip" https://github.com/harfbuzz/harfbuzz/archive/refs/tags/%HARFBUZZ%.zip 314acd13d88c24826b88799439da8cd3dbcefd17a08dde9bdfd5ca4c3db62047 || goto error
 call :downloadfile "lpng%LIBPNG%.zip" https://download.sourceforge.net/libpng/lpng1643.zip fc466a1e638e635d6c66363bdf3f38555b81b0141d0b06ba45b49ccca327436d || goto error
 call :downloadfile "libjpeg-turbo-%LIBJPEGTURBO%.tar.gz" "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/%LIBJPEGTURBO%/libjpeg-turbo-%LIBJPEGTURBO%.tar.gz" 343e789069fc7afbcdfe44dbba7dbbf45afa98a15150e079a38e60e44578865d || goto error
-call :downloadfile "SDL2-%SDL2%.zip" "https://github.com/libsdl-org/SDL/releases/download/release-%SDL2%/SDL2-%SDL2%.zip" 12b2dc2eb8f2836100a7916b5d394a0c82f1f7e32693f95f98305403af242f08 || goto error
+call :downloadfile "SDL3-%SDL3%.zip" "https://github.com/libsdl-org/SDL/releases/download/release-%SDL3%/SDL3-%SDL3%.zip" 9cd42377704398796071b8597cd7e21da254a43bad98c4199739647adc13fa6f || goto error
 call :downloadfile "qtbase-everywhere-src-%QT%.zip" "https://download.qt.io/archive/qt/%QTMINOR%/%QT%/submodules/qtbase-everywhere-src-%QT%.zip" 0529901575c413e34ded504eeda177c4a6dfd0dff1e39ed52c811dc5204b43c7 || goto error
 call :downloadfile "qtimageformats-everywhere-src-%QT%.zip" "https://download.qt.io/archive/qt/%QTMINOR%/%QT%/submodules/qtimageformats-everywhere-src-%QT%.zip" 664de2ba60a1e74105da844c061688ff5e6f8f046d5dd98e2d6b6ad3c553b4ca || goto error
 call :downloadfile "qtsvg-everywhere-src-%QT%.zip" "https://download.qt.io/archive/qt/%QTMINOR%/%QT%/submodules/qtsvg-everywhere-src-%QT%.zip" a633ce8978543a7c72c1381d3a52bb424e8ba629882dfb39dfd29508cb4f125d || goto error
@@ -170,15 +170,14 @@ cmake --build build --parallel || goto error
 ninja -C build install || goto error
 cd .. || goto error
 
-echo Building SDL2...
-rmdir /S /Q "SDL2-%SDL2%"
-%SEVENZIP% x "SDL2-%SDL2%.zip" || goto error
-cd "SDL2-%SDL2%" || goto error
-rem MSVC 14.44 leaves ARM64 _Interlocked* calls to the C runtime, which SDL drops (/NODEFAULTLIB) unless SDL_LIBC is on.
-cmake -B build %ARM64TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release %FORCEPDB% -DCMAKE_INSTALL_PREFIX="%INSTALLDIR%" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_LIBC=ON -G Ninja || goto error
+echo Building SDL3...
+rmdir /S /Q "SDL3-%SDL3%"
+%SEVENZIP% x "SDL3-%SDL3%.zip" || goto error
+cd "SDL3-%SDL3%" || goto error
+cmake -B build %ARM64TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release %FORCEPDB% -DCMAKE_INSTALL_PREFIX="%INSTALLDIR%" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -G Ninja || goto error
 cmake --build build --parallel || goto error
 ninja -C build install || goto error
-copy build\SDL2.pdb "%INSTALLDIR%\bin" || goto error
+copy build\SDL3.pdb "%INSTALLDIR%\bin" || goto error
 cd .. || goto error
 
 if %DEBUG%==1 (

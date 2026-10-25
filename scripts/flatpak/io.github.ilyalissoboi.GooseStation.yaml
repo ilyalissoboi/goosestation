@@ -28,7 +28,7 @@ build-options:
 
 modules:
   # Dependencies.
-  - "modules/20-sdl2.yaml"
+  - "modules/20-sdl3.yaml"
   - "modules/21-libbacktrace.yaml"
   - "modules/22-shaderc.yaml"
   - "modules/23-spirv-cross.yaml"

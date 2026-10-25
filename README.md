@@ -150,6 +150,8 @@ GooseStation ships with a database of game controller mappings for the SDL contr
 
 If you are experiencing issues binding your controller with the SDL controller backend, you may need to add a custom mapping to the database file. Make a copy of `gamecontrollerdb.txt` and place it in your [user directory](#user-directories) (or directly in the program directory, if running in portable mode) and then follow the instructions in the [SDL_GameControllerDB repository](https://github.com/mdqinc/SDL_GameControllerDB) for creating a new mapping. Add this mapping to the new copy of `gamecontrollerdb.txt` and your controller should then be recognized properly.
 
+SDL hints can also be set in the `[SDLHints]` section of `settings.ini`, one `NAME = value` per line. GooseStation uses SDL3, so the names are SDL3's: some SDL2 hints were renamed or removed, and those do nothing.
+
 ## Default bindings
 Controller 1:
  - **Left Stick:** W/A/S/D

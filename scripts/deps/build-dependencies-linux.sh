@@ -62,7 +62,7 @@ LIBBACKTRACE=ad106d5fdd5d960bd33fae1c48a351af567fd075
 LIBJPEGTURBO=3.0.3
 LIBPNG=1.6.43
 LIBWEBP=1.4.0
-SDL2=2.32.10
+SDL3=3.4.18
 QT=6.12.0
 ZSTD=1.5.6
 
@@ -79,7 +79,7 @@ cd deps-build
 if [ "$SKIP_DOWNLOAD" != true ]; then
 	curl -C - -L \
 		-O "https://github.com/ianlancetaylor/libbacktrace/archive/$LIBBACKTRACE.zip" \
-		-O "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2/SDL2-$SDL2.tar.gz" \
+		-O "https://github.com/libsdl-org/SDL/releases/download/release-$SDL3/SDL3-$SDL3.tar.gz" \
 		-o "cpuinfo-$CPUINFO.tar.gz" "https://github.com/stenzek/cpuinfo/archive/$CPUINFO.tar.gz" \
 		-o "discord-rpc-$DISCORD_RPC.tar.gz" "https://github.com/stenzek/discord-rpc/archive/$DISCORD_RPC.tar.gz" \
 		-o "lunasvg-$LUNASVG.tar.gz" "https://github.com/sammycage/lunasvg/archive/$LUNASVG.tar.gz" \
@@ -89,7 +89,7 @@ fi
 
 cat > SHASUMS <<EOF
 fd6f417fe9e3a071cf1424a5152d926a34c4a3c5070745470be6cf12a404ed79  $LIBBACKTRACE.zip
-5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165  SDL2-$SDL2.tar.gz
+9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3  SDL3-$SDL3.tar.gz
 e1351218d270db49c3dddcba04fb2153b09731ea3fa6830e423f5952f44585be  cpuinfo-$CPUINFO.tar.gz
 3eea5ccce6670c126282f1ba4d32c19d486db49a1a5cbfb8d6f48774784d310c  discord-rpc-$DISCORD_RPC.tar.gz
 3998b024b0d442614a9ee270e76e018bb37a17b8c6941212171731123cbbcac7  lunasvg-$LUNASVG.tar.gz
@@ -260,11 +260,13 @@ if [ "$SKIP_FREETYPE" != true ]; then
 	cd ..
 fi
 
-echo "Building SDL2..."
-rm -fr "SDL2-$SDL2"
-tar xf "SDL2-$SDL2.tar.gz"
-cd "SDL2-$SDL2"
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -G Ninja
+echo "Building SDL3..."
+rm -fr "SDL3-$SDL3"
+tar xf "SDL3-$SDL3.tar.gz"
+cd "SDL3-$SDL3"
+# SDL3 stops on missing X11 extensions where SDL2 left them out. Only input and audio are used, so the screensaver
+# extension isn't needed.
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_X11_XSCRNSAVER=OFF -G Ninja
 cmake --build build --parallel
 ninja -C build install
 cd ..

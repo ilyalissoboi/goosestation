@@ -22,11 +22,8 @@
 
   <!-- Dependency linking and DLL copying -->
   <ItemDefinitionGroup>
-    <ClCompile>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(DepsIncludeDir)SDL2</AdditionalIncludeDirectories>
-    </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);cpuinfo.lib;freetype.lib;jpeg.lib;libpng16.lib;libwebp.lib;lunasvg.lib;SDL2.lib;soundtouch.lib;zlib.lib;zstd.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);cpuinfo.lib;freetype.lib;jpeg.lib;libpng16.lib;libwebp.lib;lunasvg.lib;SDL3.lib;soundtouch.lib;zlib.lib;zstd.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -39,7 +36,7 @@
     <DepsDLLs Include="$(DepsBinDir)libsharpyuv.dll" />
     <DepsDLLs Include="$(DepsBinDir)libwebp.dll" />
     <DepsDLLs Include="$(DepsBinDir)lunasvg.dll" />
-    <DepsDLLs Include="$(DepsBinDir)SDL2.dll" />
+    <DepsDLLs Include="$(DepsBinDir)SDL3.dll" />
     <DepsDLLs Include="$(DepsBinDir)shaderc_shared.dll" />
     <DepsDLLs Include="$(DepsBinDir)soundtouch.dll" />
     <DepsDLLs Include="$(DepsBinDir)spirv-cross-c-shared.dll" />

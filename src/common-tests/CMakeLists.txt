@@ -6,6 +6,8 @@ add_executable(common-tests
   ../core/memcard_sync_ui.cpp
   path_tests.cpp
   rectangle_tests.cpp
+  sdl_input_bindings_tests.cpp
+  ../util/sdl_input_bindings.cpp
   string_tests.cpp
   text_input_tests.cpp
   ../util/text_input.cpp

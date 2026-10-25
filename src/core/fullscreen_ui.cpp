@@ -306,6 +306,9 @@ static void DrawMemoryCardSettingsPage();
 static void UpdateMemcardSyncState();
 static void QueueMemcardSyncApply(std::vector<MemcardSync::SecretUpdate> secrets = {});
 static void DrawMemcardSyncSettings(SettingsInterface* bsi);
+static void DrawMemcardSyncConflicts();
+static std::string DescribeMemcardSyncVersion(const MemcardSync::ConflictVersion& version);
+static void OpenMemcardSyncConflictDialog(const MemcardSync::Conflict& conflict, std::string title);
 static void DrawMemcardSyncTextSetting(SettingsInterface* bsi, const char* title, const char* summary, const char* key,
                                        const char* empty_value, bool enabled);
 static void DrawMemcardSyncSecretSetting(const char* title, const char* summary, const char* name, bool stored,
@@ -4314,6 +4317,117 @@ void FullscreenUI::DrawMemcardSyncSettings(SettingsInterface* bsi)
     MemcardSync::SyncNow();
     s_memcard_sync_state_stale = true;
   }
+
+  DrawMemcardSyncConflicts();
+}
+
+std::string FullscreenUI::DescribeMemcardSyncVersion(const MemcardSync::ConflictVersion& version)
+{
+  const std::tm when = fmt::localtime(static_cast<std::time_t>(version.modified_unix_ms / 1000));
+  if (version.deleted)
+    return fmt::format(FSUI_FSTR("{}, deleted {:%Y-%m-%d %H:%M}"), version.device, when);
+
+  const u32 blocks = MemcardSync::GetSaveBlockCount(version.size);
+  if (blocks == 1)
+    return fmt::format(FSUI_FSTR("{}, {:%Y-%m-%d %H:%M}, 1 block"), version.device, when);
+  return fmt::format(FSUI_FSTR("{}, {:%Y-%m-%d %H:%M}, {} blocks"), version.device, when, blocks);
+}
+
+void FullscreenUI::OpenMemcardSyncConflictDialog(const MemcardSync::Conflict& conflict, std::string title)
+{
+  std::vector<MemcardSync::ConflictChoice> choices = MemcardSync::GetConflictChoices(conflict);
+  const size_t preselected = MemcardSync::GetDefaultConflictChoice(conflict);
+
+  ImGuiFullscreen::ChoiceDialogOptions options;
+  for (size_t i = 0; i < choices.size(); i++)
+  {
+    const MemcardSync::ConflictChoice& choice = choices[i];
+    std::string label;
+    if (choice.later)
+      label = FSUI_STR("Decide later");
+    else if (choice.keep_local)
+      label = FSUI_STR("This device's");
+    else
+      label = fmt::format(FSUI_FSTR("{}'s"), conflict.remote[choice.remote_index].device);
+    options.emplace_back(std::move(label), i == preselected);
+  }
+
+  // By id: the conflict may be gone (resolved on another device) by the time a choice is made, and resolving one
+  // that is gone does nothing.
+  OpenChoiceDialog(std::move(title), true, std::move(options),
+                   [id = conflict.id, choices = std::move(choices)](s32 index, const std::string&, bool) {
+                     if (index < 0)
+                       return;
+
+                     const MemcardSync::ConflictChoice& choice = choices[static_cast<size_t>(index)];
+                     if (!choice.later)
+                       MemcardSync::ResolveConflict(id, choice.keep_local, choice.remote_index);
+                     CloseChoiceDialog();
+                     s_memcard_sync_state_stale = true;
+                   });
+}
+
+void FullscreenUI::DrawMemcardSyncConflicts()
+{
+  const MemcardSyncState& state = s_memcard_sync_state;
+  if (state.conflicts.empty())
+    return;
+
+  MenuHeading(FSUI_CSTR("Sync Conflicts"));
+
+  const size_t count = state.conflicts.size();
+  ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::GetStyle().Colors[ImGuiCol_Text]);
+  ActiveButton(
+    (count == 1) ?
+      SmallString(FSUI_VSTR("1 save changed both on this device and on another. Choose which version to keep.")) :
+      SmallString::from_format(
+        FSUI_FSTR("{} saves changed both on this device and on another. Choose which version to keep."), count),
+    false, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+  ImGui::PopStyleColor();
+
+  for (const MemcardSync::Conflict& conflict : state.conflicts)
+  {
+    const GameDatabase::Entry* entry =
+      conflict.serial.empty() ? nullptr : GameDatabase::GetEntryForSerial(conflict.serial);
+    const std::string_view name = entry ? std::string_view(entry->title) : std::string_view(conflict.save);
+
+    std::string others;
+    for (const MemcardSync::ConflictVersion& version : conflict.remote)
+    {
+      if (!others.empty())
+        others += ", ";
+      others += DescribeMemcardSyncVersion(version);
+    }
+    const std::string summary = fmt::format(FSUI_FSTR("This device: {}; other: {}"),
+                                            conflict.local.has_value() ? DescribeMemcardSyncVersion(*conflict.local) :
+                                                                         std::string(FSUI_VSTR("not on this device")),
+                                            others);
+
+    const SmallString title =
+      SmallString::from_format("{} {}##conflict_{}", ICON_FA_EXCLAMATION_TRIANGLE, name, conflict.id);
+    if (MenuButton(title, summary.c_str(), state.available))
+      OpenMemcardSyncConflictDialog(conflict, fmt::format("{} {}", ICON_FA_EXCLAMATION_TRIANGLE, name));
+  }
+
+  if (MenuButton(FSUI_ICONSTR(ICON_FA_DESKTOP, "Keep All From This Device"),
+                 FSUI_CSTR("Keeps this device's version of every save above."), state.available))
+  {
+    std::vector<u64> ids;
+    for (const MemcardSync::Conflict& conflict : state.conflicts)
+      ids.push_back(conflict.id);
+
+    OpenConfirmMessageDialog(
+      FSUI_ICONSTR(ICON_FA_DESKTOP, "Keep All From This Device"),
+      FSUI_STR("Keep this device's version of every save above? The other versions stay in the sync history. A card "
+               "in use gets the chosen saves when the game is closed."),
+      [ids = std::move(ids)](bool result) {
+        if (!result)
+          return;
+        for (const u64 id : ids)
+          MemcardSync::ResolveConflict(id, true);
+        s_memcard_sync_state_stale = true;
+      });
+  }
 }
 
 void FullscreenUI::DrawDisplaySettingsPage()
@@ -7356,6 +7470,7 @@ TRANSLATE_NOOP("FullscreenUI", "%d ms");
 TRANSLATE_NOOP("FullscreenUI", "%d sectors");
 TRANSLATE_NOOP("FullscreenUI", "-");
 TRANSLATE_NOOP("FullscreenUI", "1 Frame");
+TRANSLATE_NOOP("FullscreenUI", "1 save changed both on this device and on another. Choose which version to keep.");
 TRANSLATE_NOOP("FullscreenUI", "10 Frames");
 TRANSLATE_NOOP("FullscreenUI", "100% [60 FPS (NTSC) / 50 FPS (PAL)]");
 TRANSLATE_NOOP("FullscreenUI", "1000% [600 FPS (NTSC) / 500 FPS (PAL)]");
@@ -7531,6 +7646,7 @@ TRANSLATE_NOOP("FullscreenUI", "Crop Mode");
 TRANSLATE_NOOP("FullscreenUI", "Culling Correction");
 TRANSLATE_NOOP("FullscreenUI", "Current Game");
 TRANSLATE_NOOP("FullscreenUI", "Debugging Settings");
+TRANSLATE_NOOP("FullscreenUI", "Decide later");
 TRANSLATE_NOOP("FullscreenUI", "Default");
 TRANSLATE_NOOP("FullscreenUI", "Default Boot");
 TRANSLATE_NOOP("FullscreenUI", "Default View");
@@ -7693,6 +7809,9 @@ TRANSLATE_NOOP("FullscreenUI", "Input profile '{}' saved.");
 TRANSLATE_NOOP("FullscreenUI", "Integration");
 TRANSLATE_NOOP("FullscreenUI", "Interface Settings");
 TRANSLATE_NOOP("FullscreenUI", "Internal Resolution");
+TRANSLATE_NOOP("FullscreenUI", "Keep All From This Device");
+TRANSLATE_NOOP("FullscreenUI", "Keep this device's version of every save above? The other versions stay in the sync history. A card in use gets the chosen saves when the game is closed.");
+TRANSLATE_NOOP("FullscreenUI", "Keeps this device's version of every save above.");
 TRANSLATE_NOOP("FullscreenUI", "Kept in your system's credential store (Credential Manager, Keychain or Secret Service), never in the settings file. Type or paste a new one to replace it.");
 TRANSLATE_NOOP("FullscreenUI", "Last Played");
 TRANSLATE_NOOP("FullscreenUI", "Last Played: %s");
@@ -7978,6 +8097,7 @@ TRANSLATE_NOOP("FullscreenUI", "Stretches the display to match the aspect ratio 
 TRANSLATE_NOOP("FullscreenUI", "Summary");
 TRANSLATE_NOOP("FullscreenUI", "Switches back to 4:3 display aspect ratio when displaying 24-bit content, usually FMVs.");
 TRANSLATE_NOOP("FullscreenUI", "Switches between full screen and windowed when the window is double-clicked.");
+TRANSLATE_NOOP("FullscreenUI", "Sync Conflicts");
 TRANSLATE_NOOP("FullscreenUI", "Sync Memory Cards");
 TRANSLATE_NOOP("FullscreenUI", "Sync Now");
 TRANSLATE_NOOP("FullscreenUI", "Sync To Host Refresh Rate");
@@ -7992,7 +8112,9 @@ TRANSLATE_NOOP("FullscreenUI", "The SDL input source supports most controllers."
 TRANSLATE_NOOP("FullscreenUI", "The XInput source provides support for XBox 360/XBox One/XBox Series controllers.");
 TRANSLATE_NOOP("FullscreenUI", "The audio backend determines how frames produced by the emulator are submitted to the host.");
 TRANSLATE_NOOP("FullscreenUI", "The selected memory card image will be used in shared mode for this slot.");
+TRANSLATE_NOOP("FullscreenUI", "This device's");
 TRANSLATE_NOOP("FullscreenUI", "This device's name");
+TRANSLATE_NOOP("FullscreenUI", "This device: {}; other: {}");
 TRANSLATE_NOOP("FullscreenUI", "This game has no achievements.");
 TRANSLATE_NOOP("FullscreenUI", "This game has no leaderboards.");
 TRANSLATE_NOOP("FullscreenUI", "Threaded Presentation");
@@ -8053,6 +8175,7 @@ TRANSLATE_NOOP("FullscreenUI", "Yes, {} now and risk memory card corruption.");
 TRANSLATE_NOOP("FullscreenUI", "\"Challenge\" mode for achievements, including leaderboard tracking. Disables save state, cheats, and slowdown functions.");
 TRANSLATE_NOOP("FullscreenUI", "\"PlayStation\" and \"PSX\" are registered trademarks of Sony Interactive Entertainment Europe Limited. This software is not affiliated in any way with Sony Interactive Entertainment.");
 TRANSLATE_NOOP("FullscreenUI", "change disc");
+TRANSLATE_NOOP("FullscreenUI", "not on this device");
 TRANSLATE_NOOP("FullscreenUI", "reset");
 TRANSLATE_NOOP("FullscreenUI", "shut down");
 TRANSLATE_NOOP("FullscreenUI", "{:%H:%M}");
@@ -8061,5 +8184,10 @@ TRANSLATE_NOOP("FullscreenUI", "{} Frames");
 TRANSLATE_NOOP("FullscreenUI", "{} deleted.");
 TRANSLATE_NOOP("FullscreenUI", "{} does not exist.");
 TRANSLATE_NOOP("FullscreenUI", "{} is not a valid disc image.");
+TRANSLATE_NOOP("FullscreenUI", "{} saves changed both on this device and on another. Choose which version to keep.");
+TRANSLATE_NOOP("FullscreenUI", "{}'s");
+TRANSLATE_NOOP("FullscreenUI", "{}, deleted {:%Y-%m-%d %H:%M}");
+TRANSLATE_NOOP("FullscreenUI", "{}, {:%Y-%m-%d %H:%M}, 1 block");
+TRANSLATE_NOOP("FullscreenUI", "{}, {:%Y-%m-%d %H:%M}, {} blocks");
 // TRANSLATION-STRING-AREA-END
 #endif

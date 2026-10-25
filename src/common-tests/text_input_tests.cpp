@@ -35,3 +35,19 @@ TEST(TextInput, SteamKeyboardURL)
   ASSERT_EQ(TextInput::GetSteamKeyboardShowURL({0, 0, 1280, 30, true, false}),
             "steam://open/keyboard?XPosition=0&YPosition=0&Width=1280&Height=30&Mode=3");
 }
+
+TEST(TextInput, KeyboardActivation)
+{
+  using TextInput::InputDevice;
+
+  // ImGui keeps reporting a gamepad after keys it doesn't count as navigation (keypad Enter), so the last key or
+  // button pressed decides.
+  ASSERT_TRUE(TextInput::IsKeyboardActivation(InputDevice::Gamepad, InputDevice::Keyboard));
+  ASSERT_TRUE(TextInput::IsKeyboardActivation(InputDevice::Keyboard, InputDevice::Keyboard));
+  ASSERT_FALSE(TextInput::IsKeyboardActivation(InputDevice::Gamepad, InputDevice::Gamepad));
+  ASSERT_FALSE(TextInput::IsKeyboardActivation(InputDevice::Keyboard, InputDevice::Gamepad));
+
+  // A click is not a keyboard activation, whatever was pressed before it.
+  ASSERT_FALSE(TextInput::IsKeyboardActivation(InputDevice::Mouse, InputDevice::Keyboard));
+  ASSERT_FALSE(TextInput::IsKeyboardActivation(InputDevice::Mouse, InputDevice::Gamepad));
+}

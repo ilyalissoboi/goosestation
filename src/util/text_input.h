@@ -30,6 +30,19 @@ struct Request
   bool keyboard_used;
 };
 
+/// A kind of input device.
+enum class InputDevice : u8
+{
+  Mouse,
+  Keyboard,
+  Gamepad,
+};
+
+/// Whether a field was activated with a physical keyboard, from what ImGui says activated it and what pressed the
+/// last key or button. ImGui's answer alone isn't enough: keys it doesn't count as navigation (keypad Enter) leave it
+/// saying gamepad.
+bool IsKeyboardActivation(InputDevice activated_with, InputDevice last_button_device);
+
 /// The first non-empty line of pasted text, as it is: spaces are kept, since some values (passphrases)
 /// can start or end with them.
 std::string_view GetFirstLine(std::string_view text);

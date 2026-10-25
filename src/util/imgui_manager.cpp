@@ -109,6 +109,9 @@ static std::atomic_bool s_imgui_wants_mouse{false};
 // whether the host was told that a text field is being edited
 static bool s_text_input_active = false;
 
+// what pressed the last key or button, to tell keyboard activations from gamepad ones
+static TextInput::InputDevice s_last_button_device = TextInput::InputDevice::Gamepad;
+
 // what the clipboard callback last read; ImGui keeps the pointer until the next read
 static std::string s_clipboard_text;
 
@@ -384,13 +387,18 @@ void ImGuiManager::UpdateTextInput()
   // WantTextInput and the IME data are from the last frame, when the field was drawn. ImGui doesn't keep the
   // field's rectangle, so the request is a band as wide as the window at the cursor's line.
   const ImGuiContext& g = *GImGui;
+  const TextInput::InputDevice activated_with =
+    (g.ActiveIdSource == ImGuiInputSource_Mouse) ?
+      TextInput::InputDevice::Mouse :
+      ((g.ActiveIdSource == ImGuiInputSource_Gamepad) ? TextInput::InputDevice::Gamepad :
+                                                        TextInput::InputDevice::Keyboard);
   const TextInput::Request request = {
     .x = 0,
     .y = static_cast<s32>(g.PlatformImeDataPrev.InputPos.y),
     .width = static_cast<s32>(io.DisplaySize.x),
     .height = static_cast<s32>(g.PlatformImeDataPrev.InputLineHeight),
     .numeric = (g.InputTextState.ID == g.ActiveId && (g.InputTextState.Flags & ImGuiInputTextFlags_CharsDecimal)),
-    .keyboard_used = (g.ActiveIdSource == ImGuiInputSource_Keyboard),
+    .keyboard_used = TextInput::IsKeyboardActivation(activated_with, s_last_button_device),
   };
   Host::OnTextInputStarted(request);
 }
@@ -1078,6 +1086,8 @@ bool ImGuiManager::ProcessHostKeyEvent(InputBindingKey key, float value)
   ImGuiIO& io = ImGui::GetIO();
   const bool down = (value != 0.0);
   io.AddKeyEvent(iter->second, down);
+  if (down)
+    s_last_button_device = TextInput::InputDevice::Keyboard;
 
   // ImGui's shortcuts (Ctrl+V and the like) only look at the modifier keys, which have to be sent separately.
   switch (iter->second)
@@ -1143,6 +1153,8 @@ bool ImGuiManager::ProcessGenericInputEvent(GenericInputBinding key, float value
     return false;
 
   ImGui::GetIO().AddKeyAnalogEvent(key_map[static_cast<u32>(key)], (value > 0.0f), value);
+  if (value > 0.0f)
+    s_last_button_device = TextInput::InputDevice::Gamepad;
   return s_imgui_wants_keyboard.load(std::memory_order_acquire);
 }
 

@@ -27,6 +27,11 @@ static bool GetEnvBoolean(const char* value, bool default_value)
 
 } // namespace TextInput
 
+bool TextInput::IsKeyboardActivation(InputDevice activated_with, InputDevice last_button_device)
+{
+  return (activated_with != InputDevice::Mouse && last_button_device == InputDevice::Keyboard);
+}
+
 std::string_view TextInput::GetFirstLine(std::string_view text)
 {
   const std::string_view::size_type start = text.find_first_not_of("\r\n");

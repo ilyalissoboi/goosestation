@@ -4,7 +4,7 @@
 #pragma once
 #include "input_source.h"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <array>
 #include <functional>
@@ -53,15 +53,22 @@ private:
   struct ControllerData
   {
     SDL_Haptic* haptic;
-    SDL_GameController* game_controller;
+    SDL_Gamepad* gamepad;
     SDL_Joystick* joystick;
     u16 rumble_intensity[2];
-    int haptic_left_right_effect;
-    int joystick_id;
+    SDL_HapticEffectID haptic_left_right_effect;
+    SDL_JoystickID joystick_id;
     int player_id;
-    bool use_game_controller_rumble;
+    bool use_gamepad_rumble;
 
-    // Used to disable Joystick controls that are used in GameController inputs so we don't get double events
+    // Set for wireless PS4/PS5 pads when enhanced mode is off: an LED or rumble command would switch them into
+    // enhanced mode, which SDL2 left to the setting.
+    bool no_effects;
+
+    // SDL2 numbers of the south, east, west and north buttons; see SDLInputBindings::GetFaceButtonIndices().
+    std::array<u8, 4> face_button_indices;
+
+    // Used to disable Joystick controls that are used in Gamepad inputs so we don't get double events
     std::vector<bool> joy_button_used_in_gc;
     std::vector<bool> joy_axis_used_in_gc;
 
@@ -76,14 +83,14 @@ private:
   void LoadSettings(SettingsInterface& si);
   void SetHints();
 
-  ControllerDataVector::iterator GetControllerDataForJoystickId(int id);
+  ControllerDataVector::iterator GetControllerDataForJoystickId(SDL_JoystickID id);
   ControllerDataVector::iterator GetControllerDataForPlayerId(int id);
   int GetFreePlayerId() const;
 
-  bool OpenDevice(int index, bool is_gamecontroller);
-  bool CloseDevice(int joystick_index);
-  bool HandleControllerAxisEvent(const SDL_ControllerAxisEvent* ev);
-  bool HandleControllerButtonEvent(const SDL_ControllerButtonEvent* ev);
+  bool OpenDevice(SDL_JoystickID id, bool is_gamepad);
+  bool CloseDevice(SDL_JoystickID id);
+  bool HandleGamepadAxisEvent(const SDL_GamepadAxisEvent* ev);
+  bool HandleGamepadButtonEvent(const SDL_GamepadButtonEvent* ev);
   bool HandleJoystickAxisEvent(const SDL_JoyAxisEvent* ev);
   bool HandleJoystickButtonEvent(const SDL_JoyButtonEvent* ev);
   bool HandleJoystickHatEvent(const SDL_JoyHatEvent* ev);

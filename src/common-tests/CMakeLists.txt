@@ -8,6 +8,8 @@ add_executable(common-tests
   ../core/memory_card_helpers.cpp
   path_tests.cpp
   rectangle_tests.cpp
+  sdl_input_bindings_tests.cpp
+  ../util/sdl_input_bindings.cpp
   shiftjis_tests.cpp
   ../util/shiftjis.cpp
   string_tests.cpp

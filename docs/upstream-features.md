@@ -95,7 +95,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 
 | Feature | What it does | Priority |
 |---|---|---|
-| SDL3 | Input moved to SDL3: better controller support, sensors (accelerometer) mapping, touchpad as pointer. | P1 (SDL3 also helps on Android) |
+| SDL3 | Input moved to SDL3: better controller support, sensors (accelerometer) mapping, touchpad as pointer. | P1 for the move itself, as a drop-in replacement ([roadmap](roadmap.md) item 15); sensors and the touchpad not planned, since PS1 games have no use for them |
 | Input options | Disabling background input, pressure and deadzone in macros, inverting axes, raw input hotplugging, preventing opposing directions. | P2 |
 
 Input profiles and per-game controller settings are in the base already, so they are not listed.

@@ -6,6 +6,8 @@
     <ClCompile Include="bitutils_tests.cpp" />
     <ClCompile Include="file_system_tests.cpp" />
     <ClCompile Include="path_tests.cpp" />
+    <ClCompile Include="sdl_input_bindings_tests.cpp" />
+    <ClCompile Include="..\util\sdl_input_bindings.cpp" />
     <ClCompile Include="string_tests.cpp" />
     <ClCompile Include="text_input_tests.cpp" />
     <ClCompile Include="..\util\text_input.cpp" />

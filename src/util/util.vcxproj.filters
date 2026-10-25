@@ -21,6 +21,7 @@
     <ClInclude Include="input_source.h" />
     <ClInclude Include="platform_misc.h" />
     <ClInclude Include="sdl_input_source.h" />
+    <ClInclude Include="sdl_input_bindings.h" />
     <ClInclude Include="win32_raw_input_source.h" />
     <ClInclude Include="xinput_source.h" />
     <ClInclude Include="dinput_source.h" />
@@ -105,6 +106,7 @@
     <ClCompile Include="postprocessing_shader.cpp" />
     <ClCompile Include="platform_misc_win32.cpp" />
     <ClCompile Include="sdl_input_source.cpp" />
+    <ClCompile Include="sdl_input_bindings.cpp" />
     <ClCompile Include="win32_raw_input_source.cpp" />
     <ClCompile Include="xinput_source.cpp" />
     <ClCompile Include="dinput_source.cpp" />

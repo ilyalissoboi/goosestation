@@ -42,8 +42,8 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 |---|---|---|---|
 | 13 | ~~Updated dependencies.~~ Done (#16): Qt 6.12 LTS (macOS 14.4+), SDL2 2.32.10, VS 2026 on the `windows-2025` runner, clang 21 on Linux, Xcode 16.4 on `macos-15` (`macos-14` is deprecated), and the Flatpak on the KDE 6.11 runtime. | M | 1 |
 | 14 | ~~Text entry in Big Picture.~~ Done (#17), through the platforms' own keyboards rather than one of ours (upstream's on-screen keyboard is in [Later](#later)). Big Picture tells the host when a text field starts and stops being edited; under Steam (a Steam Deck in game mode, Big Picture mode) that shows Steam's keyboard, with the number pad for number fields, unless the field was opened with a physical keyboard. Ctrl+V (Cmd+V on macOS), and X (Square on PlayStation pads) in the text input dialog, paste the first line of the system clipboard. Still unchecked on a Steam Deck: whether Steam asks for its keyboard for a non-Steam shortcut, and whether the Flatpak opens `steam://` links without asking which app to use. Android answers the same hook with its system keyboard (item 16). | S | none |
-| 15 | SDL3 input: better controller support, sensors, touchpad (upstream P1; also helps Android). | M | 13 |
-| 16 | Android frontend, our own and written independently (not DuckStation's closed-source app, not RetroArch). The emusync Android library already exists. Text entry uses the system keyboard, through item 14's hook. | L | 12, 14, 15 |
+| 15 | SDL3 as a drop-in replacement for SDL2 (SDL2 gets fixes only now; support for new controllers lands in SDL3): controller input and the SDL audio backend, with the same features, bindings and settings. Not motion sensors or the touchpad, which PS1 games have no use for. | M | 13 |
+| 16 | Android frontend, our own and written independently (not DuckStation's closed-source app, not RetroArch). The emusync Android library already exists. Text entry uses the system keyboard, through item 14's hook. | L | 12, 14 |
 
 ## 4. Upstream features (clean room)
 
@@ -73,5 +73,5 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 ## Suggested order
 
 1 → 2 → 4 → 5, with 7 and 9 alongside: a first release with sync tested for real. Then
-13 → 15 and 12 lead to Android (16); 14 comes before 12, and gives Android's Big Picture screens
-the system keyboard. Items 17 and 18 block nothing and can be picked up at any time.
+12 and 14 lead to Android (16); 14 comes before 12, and gives Android's Big Picture screens the
+system keyboard. Items 15, 17 and 18 block nothing and can be picked up at any time.

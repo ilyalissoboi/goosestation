@@ -181,13 +181,15 @@ if(NOT ANDROID)
   target_sources(util PRIVATE
     cubeb_audio_stream.cpp
     sdl_audio_stream.cpp
+    sdl_input_bindings.cpp
+    sdl_input_bindings.h
     sdl_input_source.cpp
     sdl_input_source.h
   )
   target_link_libraries(util PUBLIC
     cubeb
     freesurround
-    SDL2::SDL2
+    SDL3::SDL3
   )
   # FFmpeg loaded dynamically on demand.
   target_include_directories(util PUBLIC ${FFMPEG_INCLUDE_DIRS})

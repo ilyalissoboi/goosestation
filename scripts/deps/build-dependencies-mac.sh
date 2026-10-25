@@ -40,7 +40,7 @@ fi
 
 FREETYPE=2.13.3
 HARFBUZZ=9.0.0
-SDL2=2.32.10
+SDL3=3.4.18
 ZSTD=1.5.6
 LIBPNG=1.6.43
 LIBJPEGTURBO=3.0.3
@@ -82,7 +82,7 @@ b7e481b109d19aefdba31e9f5888aa0cdfbe7608fed9a43494c060ce1f8a34d2  harfbuzz-$HARF
 6a5ca0652392a2d7c9db2ae5b40210843c0bbc081cbd410825ab00cc59f14a6c  libpng-$LIBPNG.tar.xz
 343e789069fc7afbcdfe44dbba7dbbf45afa98a15150e079a38e60e44578865d  libjpeg-turbo-$LIBJPEGTURBO.tar.gz
 61f873ec69e3be1b99535634340d5bde750b2e4447caa1db9f61be3fd49ab1e5  libwebp-$LIBWEBP.tar.gz
-5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165  SDL2-$SDL2.tar.gz
+9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3  SDL3-$SDL3.tar.gz
 8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1  zstd-$ZSTD.tar.gz
 8646515b638a3ad303e23af6a3587734447cb8fc0a0c064ecdb8e95c4fd8b389  ffmpeg-$FFMPEG.tar.xz
 f415a09385030c6510a936155ce211f617c31506db5fbc563e804345f1ecf56e  v$MOLTENVK.tar.gz
@@ -104,7 +104,7 @@ curl -L \
 	-O "https://downloads.sourceforge.net/project/libpng/libpng16/$LIBPNG/libpng-$LIBPNG.tar.xz" \
 	-O "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/$LIBJPEGTURBO/libjpeg-turbo-$LIBJPEGTURBO.tar.gz" \
 	-O "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-$LIBWEBP.tar.gz" \
-	-O "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2/SDL2-$SDL2.tar.gz" \
+	-O "https://github.com/libsdl-org/SDL/releases/download/release-$SDL3/SDL3-$SDL3.tar.gz" \
 	-O "https://github.com/facebook/zstd/releases/download/v$ZSTD/zstd-$ZSTD.tar.gz" \
 	-O "https://ffmpeg.org/releases/ffmpeg-$FFMPEG.tar.xz" \
 	-O "https://github.com/KhronosGroup/MoltenVK/archive/refs/tags/v$MOLTENVK.tar.gz" \
@@ -205,10 +205,10 @@ merge_binaries $(realpath build) $(realpath build-arm64)
 make -C build install
 cd ..
 
-echo "Installing SDL2..."
-rm -fr "SDL2-$SDL2"
-tar xf "SDL2-$SDL2.tar.gz"
-cd "SDL2-$SDL2"
+echo "Installing SDL3..."
+rm -fr "SDL3-$SDL3"
+tar xf "SDL3-$SDL3.tar.gz"
+cd "SDL3-$SDL3"
 cmake -B build "${CMAKE_COMMON[@]}" "$CMAKE_ARCH_UNIVERSAL" -DSDL_X11=OFF -DBUILD_SHARED_LIBS=ON
 make -C build "-j$NPROCS"
 make -C build install

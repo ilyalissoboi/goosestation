@@ -14,5 +14,9 @@
     <ClCompile Include="gsvector_yuvtorgb_test.cpp" />
     <ClCompile Include="memcard_sync_ui_tests.cpp" />
     <ClCompile Include="..\core\memcard_sync_ui.cpp" />
+    <ClCompile Include="shiftjis_tests.cpp" />
+    <ClCompile Include="..\util\shiftjis.cpp" />
+    <ClCompile Include="memory_card_helpers_tests.cpp" />
+    <ClCompile Include="..\core\memory_card_helpers.cpp" />
   </ItemGroup>
 </Project>

@@ -105,6 +105,7 @@ private:
   u8 m_checksum = 0;
   u8 m_last_byte = 0;
   bool m_changed = false;
+  u16 m_written_blocks = 0; // bit n set when the game changed block n; not in save states
 
   TimingEvent m_save_event;
   std::string m_filename;

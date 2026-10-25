@@ -250,12 +250,14 @@ std::vector<MemoryCardImage::FileInfo> MemoryCardImage::EnumerateFiles(const Dat
     fi.first_block = dir_frame;
     fi.size = df->file_size;
     fi.num_blocks = 1;
+    fi.block_mask = static_cast<u16>(1u << dir_frame);
     fi.deleted = (df->block_allocation_state != 0x51);
 
     const DirectoryFrame* next_df = df;
     while (next_df->next_block_number < (NUM_BLOCKS - 1) && fi.num_blocks < FRAMES_PER_BLOCK)
     {
       fi.num_blocks++;
+      fi.block_mask |= static_cast<u16>(1u << (next_df->next_block_number + 1));
       next_df = GetFramePtr<DirectoryFrame>(data, 0, next_df->next_block_number + 1);
     }
 
@@ -479,6 +481,30 @@ bool MemoryCardImage::UndeleteFile(DataArray* data, const FileInfo& fi)
   }
 
   return true;
+}
+
+bool MemoryCardImage::SetFileName(DataArray* data, const FileInfo& fi, std::string_view filename)
+{
+  DirectoryFrame* df = GetFramePtr<DirectoryFrame>(data, 0, fi.first_block);
+  if (fi.deleted || filename.size() > DirectoryFrame::FILE_NAME_LENGTH)
+    return false;
+
+  std::memset(df->filename, 0, sizeof(df->filename));
+  std::memcpy(df->filename, filename.data(), filename.size());
+  UpdateChecksum(df);
+  return true;
+}
+
+std::span<const u8, 64> MemoryCardImage::GetRawTitle(const DataArray& data, const FileInfo& fi)
+{
+  return GetFramePtr<TitleFrame>(data, fi.first_block, 0)->title;
+}
+
+void MemoryCardImage::SetTitle(DataArray* data, const FileInfo& fi, std::span<const u8, 64> title_sjis)
+{
+  TitleFrame* tf = GetFramePtr<TitleFrame>(data, fi.first_block, 0);
+  static_assert(sizeof(tf->title) == 64);
+  std::memcpy(tf->title, title_sjis.data(), sizeof(tf->title));
 }
 
 bool MemoryCardImage::ImportCardMCD(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error)

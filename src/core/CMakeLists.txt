@@ -83,6 +83,8 @@ add_library(core
   memcard_sync_ui.h
   memory_card.cpp
   memory_card.h
+  memory_card_helpers.cpp
+  memory_card_helpers.h
   memory_card_image.cpp
   memory_card_image.h
   mips_encoder.h

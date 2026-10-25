@@ -29,6 +29,7 @@
 #include <cmath>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <type_traits>
 #include <unordered_map>
 
@@ -57,6 +58,8 @@ struct OSDMessage
   float duration;
   float target_y;
   float last_y;
+  std::optional<Host::OSDImage> image;
+  std::unique_ptr<GPUTexture> texture; // created from image when first drawn
 };
 
 } // namespace
@@ -74,6 +77,9 @@ static ImFont* AddFixedFont(float size);
 static bool AddIconFonts(float size);
 static void AcquirePendingOSDMessages(Common::Timer::Value current_time);
 static void DrawOSDMessages(Common::Timer::Value current_time);
+static void PostOSDMessage(std::string key, std::string message, float duration, std::optional<Host::OSDImage> image);
+static void CreateOSDMessageTexture(OSDMessage& msg);
+static void ReleaseOSDMessageTexture(OSDMessage& msg);
 static void CreateSoftwareCursorTextures();
 static void UpdateSoftwareCursorTexture(u32 index);
 static void DestroySoftwareCursorTextures();
@@ -283,6 +289,10 @@ bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error*
 void ImGuiManager::Shutdown()
 {
   DestroySoftwareCursorTextures();
+
+  // The messages stay; their textures are made again on the next device.
+  for (OSDMessage& msg : s_osd_active_messages)
+    msg.texture.reset();
 
   if (s_text_input_active)
   {
@@ -806,17 +816,28 @@ void Host::AddOSDMessage(std::string message, float duration /*= 2.0f*/)
 
 void Host::AddKeyedOSDMessage(std::string key, std::string message, float duration /* = 2.0f */)
 {
+  ImGuiManager::PostOSDMessage(std::move(key), std::move(message), duration, std::nullopt);
+}
+
+void Host::AddImageOSDMessage(std::string key, OSDImage image, std::string message, float duration /* = 2.0f */)
+{
+  ImGuiManager::PostOSDMessage(std::move(key), std::move(message), duration, std::move(image));
+}
+
+void ImGuiManager::PostOSDMessage(std::string key, std::string message, float duration,
+                                  std::optional<Host::OSDImage> image)
+{
   if (!key.empty())
     INFO_LOG("OSD [{}]: {}", key, message);
   else
     INFO_LOG("OSD: {}", message);
 
-  if (!ImGuiManager::s_show_osd_messages)
+  if (!s_show_osd_messages)
     return;
 
   const Common::Timer::Value current_time = Common::Timer::GetCurrentValue();
 
-  ImGuiManager::OSDMessage msg;
+  OSDMessage msg;
   msg.key = std::move(key);
   msg.text = std::move(message);
   msg.duration = duration;
@@ -824,9 +845,10 @@ void Host::AddKeyedOSDMessage(std::string key, std::string message, float durati
   msg.move_time = current_time;
   msg.target_y = -1.0f;
   msg.last_y = -1.0f;
+  msg.image = std::move(image);
 
-  std::unique_lock<std::mutex> lock(ImGuiManager::s_osd_messages_lock);
-  ImGuiManager::s_osd_posted_messages.push_back(std::move(msg));
+  std::unique_lock<std::mutex> lock(s_osd_messages_lock);
+  s_osd_posted_messages.push_back(std::move(msg));
 }
 
 void Host::AddIconOSDMessage(std::string key, const char* icon, std::string message, float duration /* = 2.0f */)
@@ -854,7 +876,34 @@ void Host::ClearOSDMessages()
     ImGuiManager::s_osd_posted_messages.clear();
   }
 
+  for (ImGuiManager::OSDMessage& msg : ImGuiManager::s_osd_active_messages)
+    ImGuiManager::ReleaseOSDMessageTexture(msg);
   ImGuiManager::s_osd_active_messages.clear();
+}
+
+void ImGuiManager::CreateOSDMessageTexture(OSDMessage& msg)
+{
+  const Host::OSDImage& image = *msg.image;
+  const u32 height = image.frame_height * image.frame_count;
+  if (image.width > 0 && height > 0 && image.pixels.size() == image.width * height)
+  {
+    msg.texture = g_gpu_device->FetchTexture(image.width, height, 1, 1, 1, GPUTexture::Type::Texture,
+                                             GPUTexture::Format::RGBA8, image.pixels.data(),
+                                             image.width * sizeof(u32));
+  }
+
+  // Without a texture, the message is shown as text alone.
+  if (!msg.texture)
+  {
+    ERROR_LOG("Failed to upload {}x{} image for OSD message '{}'", image.width, height, msg.key);
+    msg.image.reset();
+  }
+}
+
+void ImGuiManager::ReleaseOSDMessageTexture(OSDMessage& msg)
+{
+  if (msg.texture)
+    g_gpu_device->RecycleTexture(std::move(msg.texture));
 }
 
 void ImGuiManager::AcquirePendingOSDMessages(Common::Timer::Value current_time)
@@ -878,6 +927,8 @@ void ImGuiManager::AcquirePendingOSDMessages(Common::Timer::Value current_time)
     {
       iter->text = std::move(new_msg.text);
       iter->duration = new_msg.duration;
+      iter->image = std::move(new_msg.image);
+      ReleaseOSDMessageTexture(*iter);
 
       // Don't fade it in again
       const float time_passed =
@@ -918,6 +969,7 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
     const float time_passed = static_cast<float>(Common::Timer::ConvertValueToSeconds(current_time - msg.start_time));
     if (time_passed >= msg.duration)
     {
+      ReleaseOSDMessageTexture(msg);
       iter = s_osd_active_messages.erase(iter);
       continue;
     }
@@ -974,17 +1026,39 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
     if (actual_y >= ImGui::GetIO().DisplaySize.y)
       break;
 
+    if (msg.image.has_value() && !msg.texture)
+      CreateOSDMessageTexture(msg);
+
+    // An image takes the place of an icon glyph: as high as the text, then two spaces before the text.
+    const float image_size = msg.texture ? font->FontSize : 0.0f;
+    const float image_advance =
+      msg.texture ? (image_size + font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, "  ").x) : 0.0f;
+    const float text_max_width = max_width - image_advance;
+
     const ImVec2 pos(position_x, actual_y);
-    const ImVec2 text_size(font->CalcTextSizeA(font->FontSize, max_width, max_width, msg.text.c_str(),
+    const ImVec2 text_size(font->CalcTextSizeA(font->FontSize, text_max_width, text_max_width, msg.text.c_str(),
                                                msg.text.c_str() + msg.text.length()));
-    const ImVec2 size(text_size.x + padding * 2.0f, text_size.y + padding * 2.0f);
-    const ImVec4 text_rect(pos.x + padding, pos.y + padding, pos.x + size.x - padding, pos.y + size.y - padding);
+    const ImVec2 size(image_advance + text_size.x + padding * 2.0f, std::max(text_size.y, image_size) + padding * 2.0f);
+    const ImVec4 text_rect(pos.x + padding + image_advance, pos.y + padding, pos.x + size.x - padding,
+                           pos.y + size.y - padding);
 
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(0x21, 0x21, 0x21, opacity), rounding);
     dl->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(0x48, 0x48, 0x48, opacity), rounding);
+    if (msg.texture)
+    {
+      const Host::OSDImage& image = *msg.image;
+      const u32 frame = (image.frame_count > 1 && image.frame_duration > 0.0f) ?
+                          (static_cast<u32>(time_passed / image.frame_duration) % image.frame_count) :
+                          0;
+      const float frame_v = 1.0f / static_cast<float>(image.frame_count);
+      const ImVec2 image_min(pos.x + padding, pos.y + padding);
+      dl->AddImage(reinterpret_cast<ImTextureID>(msg.texture.get()), image_min,
+                   ImVec2(image_min.x + image_size, image_min.y + image_size), ImVec2(0.0f, frame * frame_v),
+                   ImVec2(1.0f, (frame + 1) * frame_v), IM_COL32(0xff, 0xff, 0xff, opacity));
+    }
     dl->AddText(font, font->FontSize, ImVec2(text_rect.x, text_rect.y), IM_COL32(0xff, 0xff, 0xff, opacity),
-                msg.text.c_str(), msg.text.c_str() + msg.text.length(), max_width, &text_rect);
+                msg.text.c_str(), msg.text.c_str() + msg.text.length(), text_max_width, &text_rect);
     position_y += size.y + spacing;
   }
 }

@@ -31,10 +31,10 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 
 | # | Item | Size | After |
 |---|---|---|---|
-| 9 | ~~A conflict screen.~~ Done (#13): when a save was changed on two devices, the player chooses which version to keep (Settings > Memory Cards > Resolve...); the card keeps this device's version until then, and the other stays in emusync's history. Big Picture has no conflict screen yet (with item 12). | M | 2 |
+| 9 | ~~A conflict screen.~~ Done (#13): when a save was changed on two devices, the player chooses which version to keep (Settings > Memory Cards > Resolve...); the card keeps this device's version until then, and the other stays in emusync's history. Big Picture has one too (item 12). | M | 2 |
 | 10 | More platforms: emusync runtimes for Windows ARM64 and Linux aarch64 (today Windows x64, Linux x86_64 and macOS). Needs emusync releases for those targets first. | M | 1, emusync |
 | 11 | Memory card editor additions and memory card improvements: renaming saves, extracting icons, the game's icon shown while saving (upstream P1). | M | none |
-| 12 | Sync settings in Big Picture; only the Qt settings have them now. | M | 14 |
+| 12 | ~~Sync settings in Big Picture.~~ Done (#18): Settings > Memory Cards has the sync settings Qt has (the switch, storage, access key ID, secret access key and encryption passphrase, masked and never shown back, device name, status and Sync Now) and the conflict screen, one row per save with a choice of version. Secrets can be pasted (item 14). | M | 14 |
 
 ## 3. Platform and dependencies
 

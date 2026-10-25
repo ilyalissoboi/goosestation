@@ -67,6 +67,8 @@ add_library(util
   sockets.h
   state_wrapper.cpp
   state_wrapper.h
+  text_input.cpp
+  text_input.h
   wav_writer.cpp
   wav_writer.h
   window_info.cpp

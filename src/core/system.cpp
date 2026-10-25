@@ -2131,12 +2131,13 @@ void System::FrameDone()
   const bool is_unique_frame = (s_last_presented_internal_frame_number != s_internal_frame_number);
   s_last_presented_internal_frame_number = s_internal_frame_number;
 
-  const bool skip_this_frame = (((s_skip_presenting_duplicate_frames && !is_unique_frame &&
-                                  s_skipped_frame_count < MAX_SKIPPED_DUPLICATE_FRAME_COUNT) ||
-                                 (!s_optimal_frame_pacing && current_time > s_next_frame_time &&
-                                  s_skipped_frame_count < MAX_SKIPPED_TIMEOUT_FRAME_COUNT) ||
-                                 g_gpu_device->ShouldSkipPresentingFrame()) &&
-                                !s_syncing_to_host_with_vsync && !IsExecutionInterrupted());
+  const bool skip_this_frame =
+    (((s_skip_presenting_duplicate_frames && !is_unique_frame &&
+       s_skipped_frame_count < MAX_SKIPPED_DUPLICATE_FRAME_COUNT) ||
+      (!s_optimal_frame_pacing && current_time > s_next_frame_time &&
+       s_skipped_frame_count < MAX_SKIPPED_TIMEOUT_FRAME_COUNT) ||
+      g_gpu_device->ShouldSkipPresentingFrame()) &&
+     !s_syncing_to_host_with_vsync && !IsExecutionInterrupted() && !ImGuiManager::IsTextInputActive());
   if (!skip_this_frame)
   {
     s_skipped_frame_count = 0;

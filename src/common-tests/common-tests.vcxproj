@@ -8,6 +8,8 @@
     <ClCompile Include="path_tests.cpp" />
     <ClCompile Include="rectangle_tests.cpp" />
     <ClCompile Include="string_tests.cpp" />
+    <ClCompile Include="text_input_tests.cpp" />
+    <ClCompile Include="..\util\text_input.cpp" />
     <ClCompile Include="gsvector_yuvtorgb_test.cpp" />
   </ItemGroup>
   <ItemGroup>

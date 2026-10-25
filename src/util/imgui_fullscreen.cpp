@@ -2493,6 +2493,20 @@ void ImGuiFullscreen::DrawInputDialog()
       ImGui::SetNextItemWidth(ImGui::GetCurrentWindow()->WorkRect.GetWidth());
     }
     ImGui::InputText("##input", &s_input_dialog_text);
+    const bool input_active = ImGui::IsItemActive();
+
+    if (ImGui::IsKeyPressed(ImGuiKey_NavGamepadMenu, false))
+    {
+      // While the field is being edited, ImGui has its own copy of the text, so paste at its cursor.
+      const char* text = ImGui::GetClipboardText();
+      if (text && *text != '\0')
+      {
+        if (input_active)
+          ImGui::GetIO().AddInputCharactersUTF8(text);
+        else
+          s_input_dialog_text.append(text);
+      }
+    }
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(10.0f));
 

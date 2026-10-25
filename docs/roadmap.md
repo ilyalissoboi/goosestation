@@ -41,9 +41,9 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 | # | Item | Size | After |
 |---|---|---|---|
 | 13 | ~~Updated dependencies.~~ Done (#16): Qt 6.12 LTS (macOS 14.4+), SDL2 2.32.10, VS 2026 on the `windows-2025` runner, clang 21 on Linux, Xcode 16.4 on `macos-15` (`macos-14` is deprecated), and the Flatpak on the KDE 6.11 runtime. | M | 1 |
-| 14 | On-screen keyboard in Big Picture, for text entry with a controller on desktop and handhelds (a Steam Deck in game mode, a TV PC), where the system's keyboards don't work with a controller (upstream P1); needed by item 12. Behind a "text input requested" hook, so each platform picks the keyboard: always this one on desktop; on Android, the system keyboard unless a gamepad was used last. | M | none |
+| 14 | ~~Text entry in Big Picture.~~ Done (#17), through the platforms' own keyboards rather than one of ours (upstream's on-screen keyboard is in [Later](#later)). Big Picture tells the host when a text field starts and stops being edited; under Steam (a Steam Deck in game mode, Big Picture mode) that shows Steam's keyboard, with the number pad for number fields, unless the field was opened with a physical keyboard. Ctrl+V (Cmd+V on macOS), and X (Square on PlayStation pads) in the text input dialog, paste the first line of the system clipboard. Still unchecked on a Steam Deck: whether Steam asks for its keyboard for a non-Steam shortcut, and whether the Flatpak opens `steam://` links without asking which app to use. Android answers the same hook with its system keyboard (item 16). | S | none |
 | 15 | SDL3 input: better controller support, sensors, touchpad (upstream P1; also helps Android). | M | 13 |
-| 16 | Android frontend, our own and written independently (not DuckStation's closed-source app, not RetroArch). The emusync Android library already exists. Text entry uses the system keyboard, except in Big Picture screens driven with a controller, which use item 14's. | L | 12, 15; 14 for controller use |
+| 16 | Android frontend, our own and written independently (not DuckStation's closed-source app, not RetroArch). The emusync Android library already exists. Text entry uses the system keyboard, through item 14's hook. | L | 12, 14, 15 |
 
 ## 4. Upstream features (clean room)
 
@@ -60,6 +60,9 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
   may be treated as an unknown emulator and hardcore mode refused.
 - Importing settings, memory cards and save states from an existing DuckStation install.
 - A Discord application for GooseStation, so rich presence can be turned back on.
+- An on-screen keyboard of our own in Big Picture (upstream P1). Every platform already has a way
+  to type (item 14), so it would only help a desktop driven by a controller alone, outside Steam,
+  such as a TV PC.
 - Flathub publishing: needs screenshots, media mirroring and the `flatpak-builder-lint repo` check
   restored.
 - The P2 items in [upstream-features.md](upstream-features.md): texture filters, display scaling,
@@ -70,5 +73,4 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 
 1 → 2 → 4 → 5, with 7 and 9 alongside: a first release with sync tested for real. Then
 13 → 15 and 12 lead to Android (16); 14 comes before 12, and gives Android's Big Picture screens
-controller text entry. Items 11, 17 and 18 block nothing and can be picked up at
-any time.
+the system keyboard. Items 11, 17 and 18 block nothing and can be picked up at any time.

@@ -2,6 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="state_wrapper.h" />
+    <ClInclude Include="text_input.h" />
     <ClInclude Include="audio_stream.h" />
     <ClInclude Include="iso_reader.h" />
     <ClInclude Include="cd_image.h" />
@@ -76,6 +77,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="state_wrapper.cpp" />
+    <ClCompile Include="text_input.cpp" />
     <ClCompile Include="cd_image.cpp" />
     <ClCompile Include="audio_stream.cpp" />
     <ClCompile Include="cd_image_cue.cpp" />

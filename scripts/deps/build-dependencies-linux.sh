@@ -264,7 +264,9 @@ echo "Building SDL3..."
 rm -fr "SDL3-$SDL3"
 tar xf "SDL3-$SDL3.tar.gz"
 cd "SDL3-$SDL3"
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -G Ninja
+# SDL3 stops on missing X11 extensions where SDL2 left them out. Only input and audio are used, so the screensaver
+# extension isn't needed.
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_X11_XSCRNSAVER=OFF -G Ninja
 cmake --build build --parallel
 ninja -C build install
 cd ..

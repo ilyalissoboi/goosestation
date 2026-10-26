@@ -187,6 +187,14 @@ class MirrorPlannerTest {
     }
 
     @Test
+    fun futureTimeCountsAsSettled() {
+        // The clock went back, or the file came with a time ahead of ours: waiting for it would never end.
+        val local = mapOf("memcards/a.mcd" to FileState(2, 50_000))
+
+        assertEquals(listOf(CopyToFolder("memcards/a.mcd")), push(emptyMap(), local, none, nowMs = 49_000))
+    }
+
+    @Test
     fun memcardsArePushedWhileRunning() {
         val manifest = Manifest(mapOf("memcards/a.mcd" to entry(1, 1)))
 

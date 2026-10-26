@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.storage
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.SystemClock
 import android.provider.DocumentsContract
 import java.io.File
@@ -32,6 +33,12 @@ object TestTrees {
         setProviderEnabled(context, true)
         return DocumentsContract.buildTreeDocumentUri(TestDocumentsProvider.AUTHORITY, name).toString()
     }
+
+    /** The folder behind [treeUri], one that [create] returned, for a test to change behind the provider's back. */
+    fun directory(
+        context: Context,
+        treeUri: String,
+    ) = File(TestDocumentsProvider.baseDirectory(context), DocumentsContract.getTreeDocumentId(Uri.parse(treeUri)))
 
     /** Deletes every tree. */
     fun deleteAll(context: Context) {

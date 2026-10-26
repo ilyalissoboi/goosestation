@@ -69,8 +69,9 @@ object MirrorPlanner {
 
     /**
      * Working copy to folder. A local file that is new or changed, and has been unchanged for [SETTLE_MS] (not
-     * waited for when [force]), is copied out. A file the working copy deleted is deleted from the folder. Where the
-     * folder's side is new, changed or deleted as well, the folder wins instead, as in a [pull], with no wait.
+     * waited for when [force], nor when its time is in the future), is copied out. A file the working copy deleted
+     * is deleted from the folder. Where the folder's side is new, changed or deleted as well, the folder wins
+     * instead, as in a [pull], with no wait.
      */
     fun push(
         folder: Map<String, FileState>,
@@ -89,7 +90,7 @@ object MirrorPlanner {
                 folderChanged(f, m) -> if (deferred(path)) null else folderWins(path, f, l, m)
                 // Gone locally, so the path came from the manifest, and the folder still holds its file unchanged.
                 l == null -> DeleteFromFolder(path)
-                force || nowMs - l.lastModifiedMs >= SETTLE_MS -> CopyToFolder(path)
+                force || settled(l, nowMs) -> CopyToFolder(path)
                 else -> null
             }
         }
@@ -107,6 +108,18 @@ object MirrorPlanner {
             l != null -> DeleteLocal(path)
             else -> Forget(path)
         }
+
+    /**
+     * True when [l] has been unchanged for [SETTLE_MS]. A time in the future (the clock went back, or the file was
+     * copied in with its own time) counts as settled, or the file would wait until the clock caught up.
+     */
+    private fun settled(
+        l: FileState,
+        nowMs: Long,
+    ): Boolean {
+        val age = nowMs - l.lastModifiedMs
+        return age < 0 || age >= SETTLE_MS
+    }
 
     /** True when the folder's file is new, changed or deleted since the manifest's entry. */
     private fun folderChanged(

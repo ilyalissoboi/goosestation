@@ -38,6 +38,7 @@ class ContentBridgeTest {
 
     @After
     fun tearDown() {
+        TestDocumentsProvider.loading = emptySet()
         TestTrees.deleteAll(context)
     }
 
@@ -47,6 +48,20 @@ class ContentBridgeTest {
 
         assertTrue("fd $fd", fd >= 0)
         ParcelFileDescriptor.adoptFd(fd).use { assertEquals(4096L, Os.fstat(it.fileDescriptor).st_size) }
+    }
+
+    @Test
+    fun readsThroughAFolderStillLoading() {
+        // The tree's root is still being fetched: what it lists so far (FF7) is used. Only the mirror, which
+        // would read missing files as deletions, refuses such a listing.
+        TestDocumentsProvider.loading = setOf(TestTrees.directory(context, tree).name)
+
+        val fd = ContentBridge.openForReading("$tree/FF7/disc 1 (Track 1).bin")
+
+        assertTrue("fd $fd", fd >= 0)
+        ParcelFileDescriptor.adoptFd(fd).close()
+        assertNotNull(ContentBridge.stat("$tree/FF7"))
+        assertEquals(setOf("FF7", "Disc?"), ContentBridge.listDirectory(tree)!!.map { it.name }.toSet())
     }
 
     @Test

@@ -20,19 +20,36 @@ interface DocumentLister {
     fun rootDocumentId(treeUri: String): String
 }
 
+/**
+ * A folder's [children], and whether its provider (a cloud one, say) is still [loading] it: then they may be only
+ * some of them, or none.
+ */
+class DocumentListing(
+    val children: List<NativeDocument>,
+    val loading: Boolean,
+)
+
 /** Lists through the storage access framework. A provider's exceptions (no grant, for one) are passed on. */
 class SafDocumentLister(
     private val resolver: ContentResolver,
 ) : DocumentLister {
     override fun rootDocumentId(treeUri: String): String = DocumentsContract.getTreeDocumentId(Uri.parse(treeUri))
 
+    /** The children as listed so far, loading or not: enough to find a file by name. */
     override fun listChildren(
         treeUri: String,
         parentDocumentId: String,
-    ): List<NativeDocument>? {
+    ): List<NativeDocument>? = listing(treeUri, parentDocumentId)?.children
+
+    /** The children of [parentDocumentId], and whether the provider is still loading them, or null. */
+    fun listing(
+        treeUri: String,
+        parentDocumentId: String,
+    ): DocumentListing? {
         val uri = DocumentsContract.buildChildDocumentsUriUsingTree(Uri.parse(treeUri), parentDocumentId)
         val cursor = resolver.query(uri, PROJECTION, null, null, null) ?: return null
         return cursor.use {
+            val loading = it.extras?.getBoolean(DocumentsContract.EXTRA_LOADING) == true
             val children = ArrayList<NativeDocument>(it.count)
             while (it.moveToNext()) {
                 val documentId = it.getString(0) ?: continue
@@ -46,7 +63,7 @@ class SafDocumentLister(
                         isDirectory = it.getString(2) == Document.MIME_TYPE_DIR,
                     )
             }
-            children
+            DocumentListing(children, loading)
         }
     }
 

@@ -8,13 +8,18 @@
 #include "content_bridge.h"
 #include "jni_util.h"
 
+#include "core/game_list.h"
+#include "core/settings.h"
+
 #include "common/error.h"
 #include "common/file_system.h"
 #include "common/log.h"
+#include "common/string_util.h"
 
 #include <android/native_window_jni.h>
 #include <jni.h>
 
+#include <algorithm>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -34,6 +39,8 @@ jclass s_callbacks_class = nullptr;
 jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
+jclass s_game_entry_class = nullptr;
+jmethodID s_game_entry_constructor = nullptr;
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -159,6 +166,24 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     return JNI_ERR;
   }
 
+  jclass game_entry_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/GameEntry");
+  if (!game_entry_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_game_entry_class = static_cast<jclass>(env->NewGlobalRef(game_entry_class));
+  env->DeleteLocalRef(game_entry_class);
+  s_game_entry_constructor =
+    env->GetMethodID(s_game_entry_class, "<init>",
+                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;)V");
+  if (!s_game_entry_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
   if (!AndroidContentProvider::LoadJNIReferences(env))
     return JNI_ERR;
 
@@ -256,6 +281,105 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring 
 
     env->SetObjectArrayElement(result, static_cast<jsize>(i), description);
     env->DeleteLocalRef(description);
+  }
+
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, refreshGameList)(JNIEnv*, jobject, jboolean invalidate_cache)
+{
+  // A refresh sees the folders as they are now, not as ContentBridge listed them a few seconds ago.
+  s_content_provider.InvalidateListings();
+  AndroidHost::RefreshGameList(invalidate_cache == JNI_TRUE);
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
+{
+  struct Game
+  {
+    std::string path;
+    std::string title;
+    std::string serial;
+    const char* region;
+    s64 total_played_time;
+    s64 last_played_time;
+    std::string cover_path;
+  };
+
+  // Copied out under the lock; the covers are looked up, and the Java objects made, without holding it.
+  std::vector<Game> games;
+  {
+    const auto lock = GameList::GetLock();
+    const u32 count = GameList::GetEntryCount();
+    games.reserve(count);
+    for (u32 i = 0; i < count; i++)
+    {
+      const GameList::Entry* entry = GameList::GetEntryByIndex(i);
+      if (entry->IsDiscSet())
+        continue;
+
+      games.push_back({entry->path, entry->title, entry->serial, Settings::GetDiscRegionName(entry->region),
+                       static_cast<s64>(entry->total_played_time), static_cast<s64>(entry->last_played_time),
+                       std::string()});
+    }
+  }
+
+  for (Game& game : games)
+    game.cover_path = GameList::GetCoverImagePath(game.path, game.serial, game.title);
+
+  std::stable_sort(games.begin(), games.end(), [](const Game& a, const Game& b) {
+    return StringUtil::Strcasecmp(a.title.c_str(), b.title.c_str()) < 0;
+  });
+
+  // Kotlin takes the array as never null: a failure gives an empty one.
+  const auto empty_result = [env]() {
+    jobjectArray empty = env->NewObjectArray(0, s_game_entry_class, nullptr);
+    ClearException(env);
+    return empty;
+  };
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(games.size()), s_game_entry_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    ERROR_LOG("Failed to allocate the game list's {} entries.", games.size());
+    return empty_result();
+  }
+
+  for (size_t i = 0; i < games.size(); i++)
+  {
+    const Game& game = games[i];
+    jstring path = ToJString(env, game.path);
+    jstring title = ToJString(env, game.title);
+    jstring serial = ToJString(env, game.serial);
+    jstring region = ToJString(env, game.region);
+    jstring cover_path = game.cover_path.empty() ? nullptr : ToJString(env, game.cover_path);
+    jobject entry = nullptr;
+    if (path && title && serial && region && (cover_path || game.cover_path.empty()))
+    {
+      entry = env->NewObject(s_game_entry_class, s_game_entry_constructor, path, title, serial, region,
+                             static_cast<jlong>(game.total_played_time), static_cast<jlong>(game.last_played_time),
+                             cover_path);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(path), static_cast<jobject>(title), static_cast<jobject>(serial),
+                        static_cast<jobject>(region), static_cast<jobject>(cover_path)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass the game list entry '{}' to Java.", game.path);
+      env->DeleteLocalRef(result);
+      return empty_result();
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
   }
 
   return result;

@@ -35,6 +35,10 @@ void ReloadSettings();
 bool GetBoolSetting(const char* section, const char* key, bool default_value);
 void SetBoolSetting(const char* section, const char* key, bool value);
 
+/// Scans the game folders: GameList::Refresh(). Blocks, on the calling thread, which should be the JVM's; one refresh
+/// runs at a time. Does nothing before Initialize() succeeded.
+void RefreshGameList(bool invalidate_cache);
+
 /// Boots a game, once the app has given a surface. NotifyGameStarted() reports that it booted. Every call ends with
 /// one NotifyGameStopped(): when the game stops, or straight away if it fails to boot (after NotifyError()), is
 /// refused, or is cancelled by ShutdownGame() or another StartGame() before it boots.

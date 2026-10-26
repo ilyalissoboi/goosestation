@@ -17,6 +17,7 @@ import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import java.io.File
 import java.io.FileNotFoundException
+import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * A provider over `filesDir/test-documents`, for the instrumented tests (debug builds only). A document's ID is its
@@ -27,7 +28,8 @@ import java.io.FileNotFoundException
  * (`name (1).ext`) when the one asked for is taken.
  *
  * Tests can make it misbehave as real providers do: refuse the documents named in [refused], and list the folders
- * named in [loading] as a cloud provider does while it is still fetching them.
+ * named in [loading] as a cloud provider does while it is still fetching them. They can also see what was asked of
+ * it: the documents [opened] and the folders [listed].
  */
 class TestDocumentsProvider : DocumentsProvider() {
     companion object {
@@ -61,6 +63,12 @@ class TestDocumentsProvider : DocumentsProvider() {
          */
         @Volatile
         var loading: Set<String> = emptySet()
+
+        /** The ID of every document [openDocument] was called for, in order; a test clears it. */
+        val opened = ConcurrentLinkedQueue<String>()
+
+        /** The ID of every folder [queryChildDocuments] was called for, in order; a test clears it. */
+        val listed = ConcurrentLinkedQueue<String>()
     }
 
     private val base: File by lazy { baseDirectory(context!!).canonicalFile }
@@ -82,6 +90,7 @@ class TestDocumentsProvider : DocumentsProvider() {
         projection: Array<String>?,
         sortOrder: String?,
     ): Cursor {
+        listed += parentDocumentId
         val parent = fileFor(parentDocumentId)
         val children = parent.listFiles() ?: throw FileNotFoundException(parentDocumentId)
         return MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION).also { cursor ->
@@ -97,7 +106,10 @@ class TestDocumentsProvider : DocumentsProvider() {
         documentId: String,
         mode: String,
         signal: CancellationSignal?,
-    ): ParcelFileDescriptor = ParcelFileDescriptor.open(fileFor(documentId), ParcelFileDescriptor.parseMode(mode))
+    ): ParcelFileDescriptor {
+        opened += documentId
+        return ParcelFileDescriptor.open(fileFor(documentId), ParcelFileDescriptor.parseMode(mode))
+    }
 
     override fun createDocument(
         parentDocumentId: String,

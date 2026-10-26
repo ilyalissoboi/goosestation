@@ -8,6 +8,8 @@
 #include "core/achievements.h"
 #include "core/controller.h"
 #include "core/fullscreen_ui.h"
+#include "core/game_database.h"
+#include "core/game_list.h"
 #include "core/host.h"
 #include "core/memory_card.h"
 #include "core/pad.h"
@@ -92,6 +94,9 @@ static bool s_startup_attempted = false; // guarded by s_initialize_mutex
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
 static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
 
+// GameList::Refresh() isn't safe to run twice at once.
+static std::mutex s_game_list_refresh_mutex;
+
 // Set once by Initialize(), before s_initialized.
 static std::string s_bios_dir;
 static std::string s_install_id;
@@ -156,7 +161,14 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   }
   s_startup_attempted = true;
 
-  if (!InitializeConfig(error) || !EmuThread::Start(error))
+  if (!InitializeConfig(error))
+    return false;
+
+  // GameDatabase loads itself on first use, unlocked: loaded here, before the CPU thread (a boot) or a game list
+  // refresh can use it, every later use only reads it.
+  GameDatabase::EnsureLoaded();
+
+  if (!EmuThread::Start(error))
     return false;
 
   {
@@ -256,6 +268,15 @@ void AndroidHost::SetGameFolders(std::vector<std::string> tree_uris)
   Error error;
   if (!si.Save(&error))
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+void AndroidHost::RefreshGameList(bool invalidate_cache)
+{
+  if (!s_initialized)
+    return;
+
+  std::unique_lock lock(s_game_list_refresh_mutex);
+  GameList::Refresh(invalidate_cache, false, nullptr);
 }
 
 void AndroidHost::ReloadSettings()

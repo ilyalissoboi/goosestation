@@ -14,6 +14,7 @@ jclass s_bridge_class = nullptr;
 jmethodID s_open_for_reading = nullptr;
 jmethodID s_stat = nullptr;
 jmethodID s_list_directory = nullptr;
+jmethodID s_invalidate = nullptr;
 jfieldID s_document_name = nullptr;
 jfieldID s_document_size = nullptr;
 jfieldID s_document_last_modified_ms = nullptr;
@@ -66,6 +67,7 @@ bool AndroidContentProvider::LoadJNIReferences(JNIEnv* env)
     (s_list_directory = env->GetStaticMethodID(bridge_class, "listDirectory",
                                                "(Ljava/lang/String;)[Lio/github/ilyalissoboi/goosestation/storage/"
                                                "NativeDocument;")) &&
+    (s_invalidate = env->GetStaticMethodID(bridge_class, "invalidate", "()V")) &&
     (s_document_name = env->GetFieldID(document_class, "name", "Ljava/lang/String;")) &&
     (s_document_size = env->GetFieldID(document_class, "size", "J")) &&
     (s_document_last_modified_ms = env->GetFieldID(document_class, "lastModifiedMs", "J")) &&
@@ -77,6 +79,16 @@ bool AndroidContentProvider::LoadJNIReferences(JNIEnv* env)
   env->DeleteLocalRef(document_class);
   env->DeleteLocalRef(bridge_class);
   return (s_bridge_class != nullptr);
+}
+
+void AndroidContentProvider::InvalidateListings()
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  env->CallStaticVoidMethod(s_bridge_class, s_invalidate);
+  JNIUtil::ClearException(env.get());
 }
 
 int AndroidContentProvider::OpenForReading(std::string_view uri, Error* error)

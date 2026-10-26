@@ -7,7 +7,8 @@ import android.view.Surface
 
 /**
  * The emulator core, in libgoosestation.so. The core runs on its own thread: these calls queue work for it and
- * return straight away, except [initialize], [surfaceChanged] and [reloadSettings], which wait for it.
+ * return straight away, except [initialize], [surfaceChanged] and [reloadSettings], which wait for it, and
+ * [refreshGameList], which scans on the calling thread.
  */
 object NativeLibrary {
     init {
@@ -42,10 +43,28 @@ object NativeLibrary {
      */
     external fun importBios(sourceTreeUri: String, destDir: String): Array<String>?
 
+    /**
+     * Scans the game folders ([setGameFolders]) for games, reading each folder afresh. A file whose path and modified
+     * time are in the game list cache isn't opened again, unless [invalidateCache]. Does nothing before [initialize].
+     * It blocks while it reads the folders, so call it on `Dispatchers.IO`.
+     */
+    external fun refreshGameList(invalidateCache: Boolean)
+
+    /**
+     * The games the last [refreshGameList] found, sorted by title (case-insensitively), each disc of a multi-disc set
+     * on its own. Empty if the list can't be passed on (it's logged). Call it only once [refreshGameList] has
+     * returned: during a refresh it gives the part found so far. It checks for cover images, so call it off the main
+     * thread.
+     */
+    external fun getGameList(): Array<GameEntry>
+
     /** Registers the callbacks, or removes them with null. They're called on the core's threads. */
     external fun setCallbacks(callbacks: NativeCallbacks?)
 
-    /** Boots a game once a surface exists; the result arrives through [NativeCallbacks], ending with onGameStopped(). */
+    /**
+     * Boots a game once a surface exists; the result arrives through [NativeCallbacks], ending with onGameStopped().
+     * [path] is a [GameEntry.path], content path or not, as it is.
+     */
     external fun startGame(path: String)
 
     external fun shutdownGame()

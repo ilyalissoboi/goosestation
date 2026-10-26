@@ -69,6 +69,12 @@ object ContentBridge {
     fun listDirectory(path: String): Array<NativeDocument>? =
         query(path) { documents, contentPath -> documents.list(contentPath) }?.toTypedArray()
 
+    /** Forgets the folder listings, so the next calls see the folders as they are now: a game list refresh does. */
+    @JvmStatic
+    fun invalidate() {
+        state?.documents?.invalidate()
+    }
+
     private fun <T> query(
         path: String,
         block: (DocumentResolver, ContentPath) -> T?,

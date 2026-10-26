@@ -23,19 +23,25 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
+import io.github.ilyalissoboi.goosestation.storage.FolderPicker
+import io.github.ilyalissoboi.goosestation.storage.FolderPrefs
+import io.github.ilyalissoboi.goosestation.storage.SharedPreferencesStore
 import io.github.ilyalissoboi.goosestation.ui.GameListScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import java.io.File
 import java.util.Locale
-import java.util.UUID
 import kotlin.concurrent.thread
 
 class MainActivity : ComponentActivity() {
     private var games by mutableStateOf(emptyList<File>())
 
+    // Registered here, before the activity starts, as the result API needs; the setup screen will use it.
+    private lateinit var folderPicker: FolderPicker
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        folderPicker = FolderPicker(this)
         // The app is always dark, whatever the system's theme.
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         App.start(applicationContext)
@@ -181,7 +187,7 @@ private object App : NativeCallbacks {
                         dataRoot.absolutePath,
                         resources.absolutePath,
                         biosDir.absolutePath,
-                        installId(context),
+                        FolderPrefs(SharedPreferencesStore(context)).installId(),
                     )
                 }
 
@@ -202,15 +208,6 @@ private object App : NativeCallbacks {
                 }
             }
         }
-    }
-
-    // Made once per install, so the core can tell its own settings.ini from one copied from elsewhere.
-    private fun installId(context: Context): String {
-        val prefs = context.getSharedPreferences("folders", Context.MODE_PRIVATE)
-        prefs.getString("installId", null)?.let { return it }
-        val id = UUID.randomUUID().toString()
-        prefs.edit().putString("installId", id).commit()
-        return id
     }
 
     fun startGame(game: File) {

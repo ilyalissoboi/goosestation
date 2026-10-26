@@ -17,8 +17,9 @@ import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
-import io.github.ilyalissoboi.goosestation.ui.GameListScreen
+import io.github.ilyalissoboi.goosestation.ui.FoldersPlaceholder
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
+import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
@@ -48,16 +49,20 @@ class MainActivity : ComponentActivity() {
                             onFinish = AppController::finishSetup,
                         )
                     Screen.Game -> GameScreen(onBack = AppController::leaveGame)
-                    // Folders comes with the folder settings; until then, the library.
-                    Screen.Library, Screen.Folders -> {
+                    Screen.Folders -> FoldersPlaceholder(onBack = AppController::closeFolders)
+                    Screen.Library -> {
                         val mirrorState by AppController.mirrorState.collectAsState()
-                        GameListScreen(
+                        LibraryScreen(
                             games = AppController.games,
+                            gridView = AppController.gridView,
                             banners = AppController.banners(mirrorState),
-                            ready = AppController.ready && !AppController.gameActive,
                             message = AppController.message,
                             isError = AppController.messageIsError,
+                            onToggleView = AppController::toggleView,
+                            onOpenFolders = AppController::openFolders,
+                            onRefresh = AppController::refresh,
                             onStartGame = AppController::startGame,
+                            focusPath = AppController.lastGamePath,
                         )
                     }
                 }

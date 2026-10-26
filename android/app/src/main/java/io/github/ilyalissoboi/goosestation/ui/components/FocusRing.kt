@@ -6,8 +6,6 @@ package io.github.ilyalissoboi.goosestation.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -39,8 +37,9 @@ fun Modifier.focusRing(
     role: Role? = null,
     onClick: () -> Unit,
 ): Modifier {
-    val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
+    // From the focus itself, not clickable()'s interactions: focus that comes as the element is composed (Compose
+    // moves it there when the focused element goes away) is emitted before anything collects them, and would be missed.
+    var focused by remember { mutableStateOf(false) }
     // Only an A pressed on this element activates it, not the release of one held since the previous screen.
     var buttonADown by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -48,7 +47,10 @@ fun Modifier.focusRing(
 
     return this
         // A controller's A button; clickable() handles Enter and the D-pad centre.
-        .onFocusChanged { if (!it.isFocused) buttonADown = false }
+        .onFocusChanged {
+            focused = it.isFocused
+            if (!it.isFocused) buttonADown = false
+        }
         .onKeyEvent { event ->
             if (event.key != Key.ButtonA) return@onKeyEvent false
             when (event.type) {
@@ -63,7 +65,7 @@ fun Modifier.focusRing(
         // clickable() only takes focus out of touch mode; screens are focused for a controller from the start.
         .focusProperties { canFocus = enabled }
         .clickable(
-            interactionSource = interactionSource,
+            interactionSource = null,
             indication = null,
             enabled = enabled,
             role = role,

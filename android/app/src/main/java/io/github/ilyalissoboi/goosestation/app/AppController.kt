@@ -60,6 +60,8 @@ object AppController : NativeCallbacks {
     private const val TAG = "GooseStation"
     private const val PUSH_INTERVAL_MS = 2_000L
     private const val MEMCARDS = "memcards/"
+    private const val UI = "UI"
+    private const val GRID_VIEW = "GameListGridView"
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = MainScope()
@@ -74,6 +76,7 @@ object AppController : NativeCallbacks {
     private var picker: FolderPicker? = null
     private var mirror: Mirror? = null
     private var pushTicker: Job? = null
+    private var refreshJob: Job? = null
 
     /** The saved folders, as last loaded or saved. */
     private var folders = SavedFolders(bios = null, games = emptyList(), data = null, setupComplete = false)
@@ -93,6 +96,14 @@ object AppController : NativeCallbacks {
 
     /** The game list, as the last refresh found it. */
     var games by mutableStateOf(emptyList<GameEntry>())
+        private set
+
+    /** The library shows a cover grid, or else a list: `[UI] GameListGridView`, read once the core runs. */
+    var gridView by mutableStateOf(true)
+        private set
+
+    /** The last game started, which the library focuses on coming back to it. */
+    var lastGamePath by mutableStateOf<String?>(null)
         private set
 
     /** The core is initialized: games can start, and the game screen can show. */
@@ -256,10 +267,35 @@ object AppController : NativeCallbacks {
         }
     }
 
+    // --- The library ---
+
+    /** Switches between the grid and the list, and saves the choice in settings.ini. */
+    fun toggleView() {
+        val grid = !gridView
+        gridView = grid
+        if (coreStarted) scope.launch(coreDispatcher) { NativeLibrary.setBoolSetting(UI, GRID_VIEW, grid) }
+    }
+
+    /** Scans the games folders again, unless a scan from here is under way. */
+    fun refresh() {
+        if (!coreStarted || refreshJob?.isActive == true) return
+        showMessage("Scanning your games…")
+        refreshJob = scope.launch { refreshLibrary(showProgress = true) }
+    }
+
+    fun openFolders() {
+        if (screen == Screen.Library) screen = Screen.Folders
+    }
+
+    fun closeFolders() {
+        if (screen == Screen.Folders) screen = Screen.Library
+    }
+
     // --- Games ---
 
     fun startGame(game: GameEntry) {
         if (!ready || gameActive) return
+        lastGamePath = game.path
         message = null
         messageIsError = false
         gameActive = true
@@ -377,7 +413,10 @@ object AppController : NativeCallbacks {
             withContext(coreDispatcher) {
                 for (step in steps) {
                     when (step) {
-                        StartupStep.ReloadSettings -> NativeLibrary.reloadSettings()
+                        StartupStep.ReloadSettings -> {
+                            NativeLibrary.reloadSettings()
+                            readGridView()
+                        }
                         StartupStep.SetGameFolders -> NativeLibrary.setGameFolders(readable)
                         StartupStep.RefreshLibrary -> NativeLibrary.refreshGameList(false)
                         else -> {}
@@ -404,7 +443,7 @@ object AppController : NativeCallbacks {
                         resources.absolutePath,
                         biosDir.absolutePath,
                         prefs.installId(),
-                    )
+                    ).also { if (it) readGridView() }
                 }
             }
         // onError(), posted before initialize() returned, has already run.
@@ -423,6 +462,12 @@ object AppController : NativeCallbacks {
         // Reported once the core takes input; it keeps connections made before then anyway.
         controllers = ControllerInput(context).also { it.start() }
         return true
+    }
+
+    // On coreDispatcher, once the core has read settings.ini.
+    private suspend fun readGridView() {
+        val grid = NativeLibrary.getBoolSetting(UI, GRID_VIEW, true)
+        withContext(Dispatchers.Main) { gridView = grid }
     }
 
     // The games folders the app can read: one without its grant is left out until it's picked again.

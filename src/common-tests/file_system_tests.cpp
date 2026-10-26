@@ -50,3 +50,120 @@ TEST(FileSystem, CreateDirectoryRecursiveOnSystemDrive)
 }
 
 #endif
+
+#ifndef _WIN32
+
+#include <cstdlib>
+
+namespace {
+
+// A fresh directory under $TMPDIR (or /tmp), deleted with its contents when the test ends.
+class TempDirectory
+{
+public:
+  TempDirectory()
+  {
+    const char* tmpdir = std::getenv("TMPDIR");
+    std::string templ = Path::Combine((tmpdir && *tmpdir) ? tmpdir : "/tmp", "common-tests-fs-XXXXXX");
+    if (mkdtemp(templ.data()))
+      m_path = std::move(templ);
+  }
+
+  ~TempDirectory()
+  {
+    if (!m_path.empty())
+      EXPECT_TRUE(FileSystem::RecursiveDeleteDirectory(m_path.c_str()));
+  }
+
+  bool IsValid() const { return !m_path.empty(); }
+  const std::string& GetPath() const { return m_path; }
+  std::string PathFor(std::string_view name) const { return Path::Combine(m_path, name); }
+
+private:
+  std::string m_path;
+};
+
+} // namespace
+
+TEST(FileSystem, CreateDirectory)
+{
+  const TempDirectory tmp;
+  ASSERT_TRUE(tmp.IsValid());
+
+  const std::string path = tmp.PathFor("sub");
+  EXPECT_FALSE(FileSystem::DirectoryExists(path.c_str()));
+
+  Error error;
+  ASSERT_TRUE(FileSystem::CreateDirectory(path.c_str(), false, &error)) << error.GetDescription();
+  EXPECT_TRUE(FileSystem::DirectoryExists(path.c_str()));
+}
+
+TEST(FileSystem, WriteAndReadString)
+{
+  const TempDirectory tmp;
+  ASSERT_TRUE(tmp.IsValid());
+
+  const std::string path = tmp.PathFor("file.txt");
+  static constexpr std::string_view contents = "GooseStation\nfile system test\n";
+
+  Error error;
+  ASSERT_TRUE(FileSystem::WriteStringToFile(path.c_str(), contents, &error)) << error.GetDescription();
+
+  const std::optional<std::string> read = FileSystem::ReadFileToString(path.c_str(), &error);
+  ASSERT_TRUE(read.has_value()) << error.GetDescription();
+  EXPECT_EQ(read.value(), contents);
+}
+
+TEST(FileSystem, StatFileSize)
+{
+  const TempDirectory tmp;
+  ASSERT_TRUE(tmp.IsValid());
+
+  const std::string path = tmp.PathFor("sized.bin");
+  const std::string contents(1234, 'x');
+  ASSERT_TRUE(FileSystem::WriteStringToFile(path.c_str(), contents));
+
+  FILESYSTEM_STAT_DATA sd;
+  ASSERT_TRUE(FileSystem::StatFile(path.c_str(), &sd));
+  EXPECT_EQ(sd.Size, static_cast<s64>(contents.size()));
+  EXPECT_EQ(sd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY, 0u);
+}
+
+TEST(FileSystem, FindFiles)
+{
+  const TempDirectory tmp;
+  ASSERT_TRUE(tmp.IsValid());
+
+  ASSERT_TRUE(FileSystem::WriteStringToFile(tmp.PathFor("a.txt").c_str(), "a"));
+  ASSERT_TRUE(FileSystem::WriteStringToFile(tmp.PathFor("b.txt").c_str(), "bb"));
+  ASSERT_TRUE(FileSystem::CreateDirectory(tmp.PathFor("dir").c_str(), false));
+
+  FileSystem::FindResultsArray results;
+  ASSERT_TRUE(FileSystem::FindFiles(tmp.GetPath().c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_SORT_BY_NAME,
+                                    &results));
+  ASSERT_EQ(results.size(), 2u);
+  EXPECT_EQ(results[0].FileName, tmp.PathFor("a.txt"));
+  EXPECT_EQ(results[0].Size, 1);
+  EXPECT_EQ(results[1].FileName, tmp.PathFor("b.txt"));
+  EXPECT_EQ(results[1].Size, 2);
+}
+
+TEST(FileSystem, RenameAndDelete)
+{
+  const TempDirectory tmp;
+  ASSERT_TRUE(tmp.IsValid());
+
+  const std::string old_path = tmp.PathFor("old.txt");
+  const std::string new_path = tmp.PathFor("new.txt");
+  ASSERT_TRUE(FileSystem::WriteStringToFile(old_path.c_str(), "moved"));
+
+  Error error;
+  ASSERT_TRUE(FileSystem::RenamePath(old_path.c_str(), new_path.c_str(), &error)) << error.GetDescription();
+  EXPECT_FALSE(FileSystem::FileExists(old_path.c_str()));
+  EXPECT_TRUE(FileSystem::FileExists(new_path.c_str()));
+
+  ASSERT_TRUE(FileSystem::DeleteFile(new_path.c_str(), &error)) << error.GetDescription();
+  EXPECT_FALSE(FileSystem::FileExists(new_path.c_str()));
+}
+
+#endif

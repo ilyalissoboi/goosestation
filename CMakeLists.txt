@@ -34,8 +34,8 @@ detect_cache_line_size()
 # Build options. Depends on system attributes.
 include(GooseStationBuildOptions)
 
-# Enable PIC on Linux, otherwise the builds do not support ASLR.
-if(LINUX OR BSD)
+# Enable PIC on Linux, otherwise the builds do not support ASLR. Android links the core into a shared library.
+if(LINUX OR BSD OR ANDROID)
   include(CheckPIESupported)
   check_pie_supported()
   set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)

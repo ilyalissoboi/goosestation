@@ -342,6 +342,11 @@ std::unique_ptr<MemoryCard> MemoryCard::Open(std::string_view filename)
   return mc;
 }
 
+void MemoryCard::Flush()
+{
+  SaveIfChanged(false);
+}
+
 void MemoryCard::Format()
 {
   MemoryCardImage::Format(&m_data);

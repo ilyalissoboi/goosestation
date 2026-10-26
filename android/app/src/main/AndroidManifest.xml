@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 GooseStation contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Controllers work without a touch screen. -->
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.gamepad"
+        android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:appCategory="game"
+        android:isGame="true"
+        android:label="GooseStation"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <!-- One activity, landscape, which handles rotation and controllers coming and going itself. -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

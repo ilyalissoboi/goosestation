@@ -1942,10 +1942,6 @@ void VulkanDevice::DestroyFramebuffer(VkFramebuffer fbo)
 
 bool VulkanDevice::IsSuitableDefaultRenderer()
 {
-#ifdef __ANDROID__
-  // No way in hell.
-  return false;
-#else
   GPUList gpus = EnumerateGPUs();
   if (gpus.empty())
   {
@@ -1974,7 +1970,6 @@ bool VulkanDevice::IsSuitableDefaultRenderer()
 
   INFO_LOG("Allowing Vulkan as default renderer.");
   return true;
-#endif
 }
 
 RenderAPI VulkanDevice::GetRenderAPI() const

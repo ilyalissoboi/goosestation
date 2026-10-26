@@ -2861,22 +2861,24 @@ MediaCapture::CodecList MediaCaptureFFmpeg::GetAudioCodecList(const char* contai
 
 } // namespace
 
+#ifndef __ANDROID__
 static constexpr const std::array s_backend_names = {
 #ifdef _WIN32
   "MediaFoundation",
 #endif
-#ifndef __ANDROID__
   "FFmpeg",
-#endif
 };
 static constexpr const std::array s_backend_display_names = {
 #ifdef _WIN32
   TRANSLATE_NOOP("MediaCapture", "Media Foundation"),
 #endif
-#ifndef __ANDROID__
   TRANSLATE_NOOP("MediaCapture", "FFmpeg"),
-#endif
 };
+#else
+// Android has no capture backend, and std::array can't deduce its type from an empty list.
+static constexpr const std::array<const char*, 0> s_backend_names = {};
+static constexpr const std::array<const char*, 0> s_backend_display_names = {};
+#endif
 static_assert(s_backend_names.size() == static_cast<size_t>(MediaCaptureBackend::MaxCount));
 static_assert(s_backend_display_names.size() == static_cast<size_t>(MediaCaptureBackend::MaxCount));
 

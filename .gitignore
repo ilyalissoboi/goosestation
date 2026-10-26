@@ -42,6 +42,9 @@ CMakeLists.txt.user
 # python bytecode
 __pycache__
 
-# other repos
-/android
+# android (gradle)
+android/.gradle
+android/**/build
+android/**/.cxx
+android/local.properties
 

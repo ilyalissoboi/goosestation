@@ -103,7 +103,8 @@ if(NOT WIN32 AND NOT ANDROID AND NOT APPLE)
 endif()
 
 if(ANDROID)
-  target_link_libraries(common PRIVATE log)
+  # libandroid provides ASharedMemory, used for shared memory in memmap.cpp.
+  target_link_libraries(common PRIVATE android log)
 endif()
 
 if(LINUX)

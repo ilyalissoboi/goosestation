@@ -135,7 +135,10 @@ if(ENABLE_OPENGL)
       )
     endif()
     if(ANDROID)
-      target_include_directories(util PRIVATE "${CMAKE_SOURCE_DIR}/android/app/src/cpp")
+      target_sources(util PRIVATE
+        opengl_context_egl_android.cpp
+        opengl_context_egl_android.h
+      )
     endif()
   endif()
 
@@ -171,7 +174,7 @@ if(ENABLE_VULKAN)
   target_link_libraries(util PUBLIC vulkan-headers)
 endif()
 
-if(ENABLE_VULKAN OR APPLE)
+if(ENABLE_VULKAN OR APPLE OR ANDROID)
   # shaderc is loaded dynamically to reduce module loads on startup.
   get_target_property(SHADERC_INCLUDE_DIR Shaderc::shaderc_shared INTERFACE_INCLUDE_DIRECTORIES)
   target_include_directories(util PUBLIC ${SHADERC_INCLUDE_DIR})
@@ -268,6 +271,19 @@ elseif(NOT ANDROID)
   if(LINUX)
     target_link_libraries(util PRIVATE UDEV::UDEV)
   endif()
+endif()
+
+if(ANDROID)
+  target_sources(util PRIVATE
+    aaudio_audio_stream.cpp
+    android_input_keys.cpp
+    android_input_keys.h
+    android_input_source.cpp
+    android_input_source.h
+    http_downloader_android.cpp
+    platform_misc_android.cpp
+  )
+  target_link_libraries(util PRIVATE aaudio android)
 endif()
 
 if(NOT WIN32 AND NOT ANDROID)

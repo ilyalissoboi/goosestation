@@ -22,7 +22,19 @@ Installed on 2026-10-25, the latest stable releases on that day:
 | `system-images;android-37.0;google_apis;arm64-v8a` | Android 17, revision 8 |
 | JDK | 17 (Temurin 17.0.8.1, `/usr/bin/java`) |
 
-The Gradle, Android Gradle Plugin, Kotlin and Compose versions are pinned in the Android project itself.
+The Android project pins its own versions, the latest stable releases on 2026-10-26: in
+`android/gradle/libs.versions.toml`, and Gradle in `android/gradle/wrapper/gradle-wrapper.properties`.
+
+| Tool or library | Version |
+| --- | --- |
+| Gradle (wrapper) | 9.8.2 |
+| Android Gradle Plugin | 9.4.1 (runs on JDK 17) |
+| Kotlin | 2.4.21 (AGP compiles Kotlin itself; the Kotlin plugin is declared only to pin this version) |
+| Compose BOM | 2026.09.00 |
+| `androidx.activity:activity-compose` | 1.13.0 |
+| `androidx.core:core-ktx` | 1.19.1 |
+| `compileSdk` / `targetSdk` / `minSdk` | 37 / 37 / 29 |
+| NDK / CMake (`ndkVersion`, `externalNativeBuild.cmake.version`) | 30.0.16248370 / 4.1.2 |
 
 ## Installing the SDK
 
@@ -82,3 +94,37 @@ linked into `libgoosestation.so`. zlib comes from the NDK. Three libraries are s
 
 The NDK's CMake platform leaves out SOVERSION, so all three are unversioned, as APKs require. They keep their debug
 information; the Android Gradle Plugin strips them when it packages the APK.
+
+## Building the app
+
+```bash
+cd android
+echo "sdk.dir=$ANDROID_HOME" > local.properties   # git-ignored; or rely on ANDROID_HOME
+./gradlew assembleDebug
+```
+
+The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. Gradle builds the `goosestation` target from the
+repository's top-level `CMakeLists.txt` with the same CMake arguments as `android/scripts/configure-native.sh`,
+staging it in `android/app/.cxx`. The native code is built as RelWithDebInfo for both the debug and release APKs: a
+Debug core is far too slow to play. The first build compiles the whole core and takes a few minutes.
+
+The APK also carries the dependency prefix's three shared libraries (`GOOSESTATION_ANDROID_DEPS` overrides the
+prefix, as for the configure script) and `data/resources` as assets under `resources/`. The app copies the resources
+to its internal files on first run and whenever the version code changes.
+
+## Running it
+
+The app lists games from its external files folder, and keeps its settings, memory cards and BIOS images in `data`
+next to it. Start the app once first, so it creates the folders itself (folders that `adb` creates belong to the shell,
+and the app can't write to them), then push the files:
+
+```bash
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
+FILES=/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files
+adb push extras/padtest/padtest.psexe $FILES/games/
+adb push <your BIOS image> $FILES/data/bios/
+```
+
+The list refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves
+it.

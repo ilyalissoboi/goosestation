@@ -213,9 +213,12 @@ void AndroidHost::SetDefaultSettings(SettingsInterface& si)
 
 void AndroidHost::StartGame(std::string path)
 {
+  // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to
+  // boot, is refused or is cancelled before it boots. The app can't tell which game a late callback was for otherwise.
   if (!s_initialized)
   {
     NotifyError("The core isn't initialized.");
+    NotifyGameStopped();
     return;
   }
 
@@ -228,7 +231,14 @@ void AndroidHost::StartGame(std::string path)
       {
         WARNING_LOG("A game is already running, not starting '{}'.", Path::GetFileName(path));
         NotifyError("A game is already running.");
+        NotifyGameStopped();
         return;
+      }
+
+      if (s_pending_boot_path.has_value())
+      {
+        INFO_LOG("Replacing the boot of '{}'.", Path::GetFileName(s_pending_boot_path.value()));
+        NotifyGameStopped();
       }
 
       s_pending_boot_path = std::move(path);
@@ -236,7 +246,8 @@ void AndroidHost::StartGame(std::string path)
         INFO_LOG("Waiting for the last game to stop to start '{}'.", Path::GetFileName(s_pending_boot_path.value()));
       else if (!s_window)
         INFO_LOG("Waiting for a surface to start '{}'.", Path::GetFileName(s_pending_boot_path.value()));
-      BootPendingGame();
+
+      // The CPU thread's loop boots it once this batch of work is done.
     },
     false);
 }
@@ -258,6 +269,7 @@ void AndroidHost::BootPendingGame()
   {
     ERROR_LOG("Failed to start '{}': {}", s_boot_path, error.GetDescription());
     NotifyError(fmt::format("Failed to start {}: {}", Path::GetFileName(s_boot_path), error.GetDescription()));
+    NotifyGameStopped();
   }
 }
 
@@ -265,7 +277,13 @@ void AndroidHost::ShutdownGame()
 {
   EmuThread::RunOnThread(
     []() {
-      s_pending_boot_path.reset();
+      if (s_pending_boot_path.has_value())
+      {
+        INFO_LOG("Cancelling the boot of '{}'.", Path::GetFileName(s_pending_boot_path.value()));
+        s_pending_boot_path.reset();
+        NotifyGameStopped();
+      }
+
       if (System::IsValid())
         System::ShutdownSystem(false);
     },
@@ -329,7 +347,8 @@ void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float 
   if (old_window)
     ANativeWindow_release(old_window);
 
-  BootPendingGame();
+  // A boot waiting for this surface isn't started here: SurfaceChanged() blocks the app's UI thread until this returns.
+  // The CPU thread's loop boots it once the work is done (EmuThread::ThreadMain()).
 }
 
 bool AndroidHost::QueueKeyEvent(s32 device_id, s32 keycode, bool pressed)
@@ -681,7 +700,7 @@ void Host::OnSystemStarted()
 
 void Host::OnSystemDestroyed()
 {
-  // A boot that failed destroys the system too, but the app only hears about it through the error.
+  // A boot that failed destroys the system too: BootPendingGame() reports that one.
   if (!AndroidHost::s_game_started)
     return;
 

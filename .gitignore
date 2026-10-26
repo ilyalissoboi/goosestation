@@ -45,5 +45,6 @@ __pycache__
 # android (gradle)
 android/.gradle
 android/**/build
+android/**/.cxx
 android/local.properties
 

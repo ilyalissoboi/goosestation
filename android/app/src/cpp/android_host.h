@@ -19,10 +19,12 @@ namespace AndroidHost {
 /// thread. Calling it again once it succeeded does nothing and returns true.
 bool Initialize(std::string data_root, std::string resources_root, Error* error);
 
-/// Boots a game, once the app has given a surface. The result arrives through NotifyGameStarted() or NotifyError().
+/// Boots a game, once the app has given a surface. NotifyGameStarted() reports that it booted. Every call ends with
+/// one NotifyGameStopped(): when the game stops, or straight away if it fails to boot (after NotifyError()), is
+/// refused, or is cancelled by ShutdownGame() or another StartGame() before it boots.
 void StartGame(std::string path);
 
-/// Shuts the running game down, or forgets a boot still waiting for a surface.
+/// Shuts the running game down, or cancels a boot still waiting for a surface.
 void ShutdownGame();
 
 void SetPaused(bool paused);
@@ -39,7 +41,8 @@ void QueueDeviceConnected(s32 device_id, std::string name, std::string descripto
 void QueueDeviceDisconnected(s32 device_id);
 
 /// CPU thread: boots the game StartGame() left pending, once there's a surface and the last game is destroyed. The
-/// thread's loop calls it whenever System::Execute() has returned.
+/// thread's loop calls it whenever System::Execute() has returned or its work is done, never from inside a blocking
+/// call, so the app's thread isn't held up by a boot.
 void BootPendingGame();
 
 /// CPU thread: passes the queued input to the Android input source.

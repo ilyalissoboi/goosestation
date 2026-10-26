@@ -20,7 +20,7 @@ object NativeLibrary {
     /** Registers the callbacks, or removes them with null. They're called on the core's threads. */
     external fun setCallbacks(callbacks: NativeCallbacks?)
 
-    /** Boots a game once a surface exists; the result arrives through [NativeCallbacks]. */
+    /** Boots a game once a surface exists; the result arrives through [NativeCallbacks], ending with onGameStopped(). */
     external fun startGame(path: String)
 
     external fun shutdownGame()

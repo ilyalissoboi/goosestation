@@ -109,6 +109,20 @@ class LibraryScanTest {
         assertEquals("Game A", gameA?.title)
     }
 
+    @Test
+    fun foreignSettingsReloadNeedsTheGameFoldersAgain() {
+        // From another install: adapting it drops [GameList] RecursivePaths, where setGameFolders keeps the trees.
+        File(dataRoot, "settings.ini").writeText("[Main]\nSettingsVersion = 3\n\n[GameList]\nRecursivePaths = $tree\n")
+        NativeLibrary.reloadSettings()
+        NativeLibrary.refreshGameList(false)
+        assertEquals(emptyList<String>(), NativeLibrary.getGameList().map { it.path })
+
+        NativeLibrary.setGameFolders(arrayOf(tree))
+        NativeLibrary.refreshGameList(false)
+
+        assertNotNull(NativeLibrary.getGameList().singleOrNull { it.path.endsWith("/Game A/Game A.cue") })
+    }
+
     private fun clearRequests() {
         TestDocumentsProvider.opened.clear()
         TestDocumentsProvider.listed.clear()

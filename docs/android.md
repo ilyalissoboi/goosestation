@@ -44,6 +44,7 @@ distribution itself against `distributionSha256Sum`, which matches the published
 | `androidx.test.ext:junit` | 1.3.0 |
 | `androidx.test:orchestrator` (brings `androidx.test.services:test-services` 1.6.0) | 1.6.1 |
 | Compose `ui-test-junit4` and `ui-test-manifest` | from the Compose BOM |
+| `androidx.test.espresso:espresso-core` (pinned for the Compose UI tests: the 3.5.0 they bring fails on API 37) | 3.7.0 |
 | `compileSdk` / `targetSdk` / `minSdk` | 37 / 37 / 29 |
 | NDK / CMake (`ndkVersion`, `externalNativeBuild.cmake.version`) | 30.0.16248370 / 4.1.2 |
 

@@ -13,7 +13,10 @@ data class SavedFolders(
     val games: List<String>,
     val data: String?,
     val setupComplete: Boolean,
-)
+) {
+    /** Whether any slot holds [uri], so its grant is still needed. */
+    fun uses(uri: String) = bios == uri || data == uri || uri in games
+}
 
 /** String preferences. [putString] with null removes the key, and returns false if the write failed. */
 interface KeyValueStore {

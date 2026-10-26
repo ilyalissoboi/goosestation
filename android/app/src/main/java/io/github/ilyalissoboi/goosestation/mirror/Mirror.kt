@@ -37,6 +37,11 @@ data class PullResult(
     val changed: Set<String>,
 )
 
+/** The working-copy files a push replaced or deleted, where the folder's side won. */
+data class PushResult(
+    val changed: Set<String>,
+)
+
 /**
  * Keeps the working copy and the data folder in step, as [MirrorPlanner] decides, remembering what it last saw of
  * both in a [Manifest] kept in [manifestFile] (outside the working copy). [clock] is the wall clock, in
@@ -64,21 +69,34 @@ class Mirror(
     /** Folder to working copy, except the [deferred] paths. */
     suspend fun pull(deferred: (String) -> Boolean): PullResult =
         withContext(dispatcher) {
-            PullResult(sync { folder, local, manifest -> MirrorPlanner.pull(folder, local, manifest, deferred) })
+            PullResult(
+                sync(deferred) { folder, local, manifest -> MirrorPlanner.pull(folder, local, manifest, deferred) },
+            )
         }
 
-    /** Working copy to folder, without waiting for files to settle when [force]. */
+    /**
+     * Working copy to folder, without waiting for files to settle when [force]. A file the folder changed as well is
+     * copied in instead, so the result says which working-copy files changed, as a pull's does.
+     */
     suspend fun push(
         force: Boolean,
         deferred: (String) -> Boolean,
-    ) {
+    ): PushResult =
         withContext(dispatcher) {
-            sync { folder, local, manifest -> MirrorPlanner.push(folder, local, manifest, clock(), force, deferred) }
+            PushResult(
+                sync(deferred) { folder, local, manifest ->
+                    MirrorPlanner.push(folder, local, manifest, clock(), force, deferred)
+                },
+            )
         }
-    }
 
-    /** One run of the actions [plan] gives; returns the working-copy paths it replaced or deleted. */
+    /**
+     * One run of the actions [plan] gives; returns the working-copy paths it replaced or deleted. [deferred] is asked
+     * again before each working-copy replace or delete, so a path deferred since the plan was made (a game started)
+     * is left for a later run.
+     */
     private suspend fun sync(
+        deferred: (String) -> Boolean,
         plan: (Map<String, FileState>, Map<String, FileState>, Manifest) -> List<MirrorAction>,
     ): Set<String> {
         // The listing recovers interrupted replaces first, so a file only a .goosebak holds isn't seen as deleted.
@@ -104,6 +122,9 @@ class Mirror(
             for ((done, action) in actions.withIndex()) {
                 currentCoroutineContext().ensureActive()
                 mutableState.value = MirrorState.Syncing(done, actions.size)
+                // Its manifest entry is unchanged, so a later run plans it again. This narrows the race with a game
+                // starting, but can't close it: one may start while this action runs.
+                if ((action is CopyToLocal || action is DeleteLocal) && deferred(action.path)) continue
                 try {
                     record(perform(action, folder, loadManifest()))
                     if (action is CopyToLocal || action is DeleteLocal) changed += action.path

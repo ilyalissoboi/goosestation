@@ -4,10 +4,6 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,42 +17,42 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.io.File
+import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.ui.components.Banner
+import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
+import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 
 /**
- * The games in [gamesFolder], one per row. The first row has focus, so the list works with a D-pad: A, Enter or a tap
- * starts a game, once [ready]. [message] is shown above the list: the latest error, or what the core is doing.
+ * The games of the game list, one per row: until the library screen replaces it. The first row has focus, so the list
+ * works with a D-pad: A, Enter or a tap starts a game, once [ready]. With no games, the first banner action has it.
+ * [banners] and [message] are shown above the list: prompts to pick a folder again, the latest error, or what the
+ * app is doing.
  */
 @Composable
 fun GameListScreen(
-    games: List<File>,
-    gamesFolder: File,
+    games: List<GameEntry>,
+    banners: List<BannerModel>,
     ready: Boolean,
     message: String?,
     isError: Boolean,
-    onStartGame: (File) -> Unit,
+    onStartGame: (GameEntry) -> Unit,
 ) {
     val firstItem = remember { FocusRequester() }
+    val firstAction = remember { FocusRequester() }
+    val hasAction = banners.any { it.actions.isNotEmpty() }
     // Rows only take focus once they're enabled.
-    LaunchedEffect(games, ready) {
-        if (ready && games.isNotEmpty()) firstItem.requestFocus()
+    LaunchedEffect(games, ready, hasAction) {
+        if (ready && games.isNotEmpty()) {
+            firstItem.requestFocus()
+        } else if (hasAction) {
+            firstAction.requestFocus()
+        }
     }
 
     Column(
@@ -70,14 +66,21 @@ fun GameListScreen(
     ) {
         Text("GooseStation", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
 
+        val firstWithAction = banners.indexOfFirst { it.actions.isNotEmpty() }
+        banners.forEachIndexed { index, banner ->
+            Banner(banner, firstAction = if (index == firstWithAction) firstAction else null)
+        }
         if (message != null) MessageBar(message, isError)
 
         if (games.isEmpty()) {
-            Text(
-                "No games found. Copy games to ${gamesFolder.absolutePath}.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Until the core runs, the message says what's happening instead.
+            if (ready) {
+                Text(
+                    "No games found in your games folders.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         } else {
             // Not lazy: every row exists as soon as it's composed, so the first one can take focus straight away.
             Column(
@@ -113,16 +116,10 @@ private fun MessageBar(message: String, isError: Boolean) {
 }
 
 @Composable
-private fun GameRow(game: File, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
-    // Only an A pressed on this row starts it, not the release of one held since the game screen.
-    var buttonADown by remember { mutableStateOf(false) }
+private fun GameRow(game: GameEntry, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(8.dp)
-
     Text(
-        text = game.name,
+        text = game.title,
         style = MaterialTheme.typography.titleMedium,
         color = if (enabled) colors.onSurface else colors.onSurfaceVariant,
         maxLines = 1,
@@ -130,28 +127,7 @@ private fun GameRow(game: File, enabled: Boolean, modifier: Modifier, onClick: (
         modifier =
             modifier
                 .fillMaxWidth()
-                // A controller's A button; clickable() handles Enter and the D-pad centre.
-                .onFocusChanged { if (!it.isFocused) buttonADown = false }
-                .onKeyEvent { event ->
-                    if (event.key != Key.ButtonA) return@onKeyEvent false
-                    when (event.type) {
-                        KeyEventType.KeyDown -> buttonADown = true
-                        KeyEventType.KeyUp -> {
-                            if (buttonADown && enabled) onClick()
-                            buttonADown = false
-                        }
-                    }
-                    true
-                }
-                // clickable() only takes focus out of touch mode; the list is focused for a controller from the start.
-                .focusProperties { canFocus = enabled }
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    enabled = enabled,
-                    onClick = onClick,
-                ).background(if (focused) colors.surfaceVariant else Color.Transparent, shape)
-                .border(2.dp, if (focused) colors.primary else Color.Transparent, shape)
+                .focusRing(enabled = enabled, onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
     )
 }

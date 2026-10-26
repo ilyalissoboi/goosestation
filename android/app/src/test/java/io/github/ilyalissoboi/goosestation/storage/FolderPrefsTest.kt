@@ -4,6 +4,8 @@
 package io.github.ilyalissoboi.goosestation.storage
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.UUID
 
@@ -47,5 +49,15 @@ class FolderPrefsTest {
 
         assertEquals(first, second)
         assertEquals(first, UUID.fromString(first).toString())
+    }
+
+    @Test
+    fun usesTellsWhetherAnySlotHoldsAUri() {
+        val saved = SavedFolders("content://a.b/tree/x", listOf("content://a.b/tree/g"), "content://a.b/tree/d", true)
+
+        assertTrue(saved.uses("content://a.b/tree/x"))
+        assertTrue(saved.uses("content://a.b/tree/g"))
+        assertTrue(saved.uses("content://a.b/tree/d"))
+        assertFalse(saved.uses("content://a.b/tree/g/"))
     }
 }

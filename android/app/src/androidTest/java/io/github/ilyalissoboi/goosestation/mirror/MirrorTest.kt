@@ -143,6 +143,46 @@ class MirrorTest {
     }
 
     @Test
+    fun pushReportsWhatTheFolderReplaced() {
+        createTree(mapOf("settings.ini" to INI, "memcards/a.mcd" to CARD))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+
+        // The core saved its settings while the folder's copy was edited: the folder's wins, in the working copy.
+        writeLocal("settings.ini", CARD2)
+        File(folder, "settings.ini").apply {
+            writeBytes(CARD3)
+            setLastModified(System.currentTimeMillis() + 5_000)
+        }
+        writeLocal("memcards/a.mcd", CARD2)
+        val result = runBlocking { mirror.push(false, never) }
+
+        assertArrayEquals(CARD3, local("settings.ini").readBytes())
+        assertEquals(setOf("settings.ini"), result.changed)
+    }
+
+    @Test
+    fun deferralIsCheckedAgainBeforeEachAction() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+        File(folder, "memcards/a.mcd").apply {
+            writeBytes(CARD3)
+            setLastModified(System.currentTimeMillis() + 5_000)
+        }
+
+        // Not deferred while the run plans, deferred by the time it acts: a game started in between.
+        val asked = HashSet<String>()
+        val result = runBlocking { mirror.pull { path -> !asked.add(path) } }
+
+        assertArrayEquals(CARD, local("memcards/a.mcd").readBytes())
+        assertEquals(emptySet<String>(), result.changed)
+        // Left for a later run.
+        runBlocking { mirror.pull(never) }
+        assertArrayEquals(CARD3, local("memcards/a.mcd").readBytes())
+    }
+
+    @Test
     fun deletionsFollow() {
         createTree(mapOf("memcards/a.mcd" to CARD, "memcards/b.mcd" to CARD2))
         val mirror = mirror()

@@ -1785,8 +1785,10 @@ bool System::BootSystem(SystemBootParameters parameters, Error* error)
   if (parameters.load_image_to_ram || g_settings.cdrom_load_image_to_ram)
     CDROM::PrecacheMedia();
 
+#ifndef __ANDROID__
   if (parameters.start_media_capture)
     StartMediaCapture({});
+#endif
 
   if (g_settings.start_paused || parameters.override_start_paused.value_or(false))
     PauseSystem(true);
@@ -1904,8 +1906,10 @@ void System::DestroySystem()
   if (s_state == State::Shutdown)
     return;
 
+#ifndef __ANDROID__
   if (s_media_capture)
     StopMediaCapture();
+#endif
 
   s_undo_load_state.reset();
 
@@ -2096,6 +2100,7 @@ void System::FrameDone()
     SaveRunaheadState();
   }
 
+#ifndef __ANDROID__
   // Kick off media capture early, might take a while.
   if (s_media_capture && s_media_capture->IsCapturingVideo()) [[unlikely]]
   {
@@ -2118,6 +2123,7 @@ void System::FrameDone()
         StopMediaCapture();
     }
   }
+#endif
 
   Common::Timer::Value current_time = Common::Timer::GetCurrentValue();
 
@@ -4069,7 +4075,7 @@ bool System::CheckForSBIFile(CDImage* image, Error* error)
     s_running_game_serial, s_running_game_title);
 #else
   // Shorter because no confirm messages.
-  Error::SetStringView(error, "Missing SBI file.", "The selected game requires a SBI file to run properly.");
+  Error::SetStringView(error, "Missing SBI file. The selected game requires a SBI file to run properly.");
 #endif
 
   return false;
@@ -5036,6 +5042,8 @@ bool System::SaveScreenshot(const char* filename, DisplayScreenshotMode mode, Di
   return g_gpu->RenderScreenshotToFile(filename, mode, quality, compress_on_thread, true);
 }
 
+#ifndef __ANDROID__
+
 static std::string_view GetCaptureTypeForMessage(bool capture_video, bool capture_audio)
 {
   return capture_video ? (capture_audio ? TRANSLATE_SV("System", "capturing audio and video") :
@@ -5185,6 +5193,8 @@ void System::StopMediaCapture()
 
   Host::OnMediaCaptureStopped();
 }
+
+#endif
 
 std::string System::GetGameSaveStateFileName(std::string_view serial, s32 slot)
 {

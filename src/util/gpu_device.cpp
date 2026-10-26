@@ -1363,8 +1363,8 @@ bool dyn_libs::OpenSpirvCross(Error* error)
   if (s_spirv_cross_library.IsOpen())
     return true;
 
-#ifdef _WIN32
-  // SPVC's build on Windows doesn't spit out a versioned DLL.
+#if defined(_WIN32) || defined(__ANDROID__)
+  // SPVC's build on Windows doesn't spit out a versioned DLL. Android apps can only package unversioned libraries.
   const std::string libname = DynamicLibrary::GetVersionedFilename("spirv-cross-c-shared");
 #else
   const std::string libname = DynamicLibrary::GetVersionedFilename("spirv-cross-c-shared", SPVC_C_API_VERSION_MAJOR);

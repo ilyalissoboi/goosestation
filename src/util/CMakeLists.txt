@@ -134,6 +134,12 @@ if(ENABLE_OPENGL)
         opengl_context_egl_wayland.h
       )
     endif()
+    if(ANDROID)
+      target_sources(util PRIVATE
+        opengl_context_egl_android.cpp
+        opengl_context_egl_android.h
+      )
+    endif()
   endif()
 
   if(APPLE)
@@ -265,6 +271,15 @@ elseif(NOT ANDROID)
   if(LINUX)
     target_link_libraries(util PRIVATE UDEV::UDEV)
   endif()
+endif()
+
+if(ANDROID)
+  target_sources(util PRIVATE
+    aaudio_audio_stream.cpp
+    http_downloader_android.cpp
+    platform_misc_android.cpp
+  )
+  target_link_libraries(util PRIVATE aaudio android)
 endif()
 
 if(NOT WIN32 AND NOT ANDROID)

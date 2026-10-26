@@ -447,7 +447,7 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
 
 #ifdef __ANDROID__
   // No expansion due to license incompatibility.
-  audio_expansion_mode = AudioExpansionMode::Disabled;
+  audio_stream_parameters.expansion_mode = AudioExpansionMode::Disabled;
 
   // Android users are incredibly silly and don't understand that stretch is in the aspect ratio list...
   if (si.GetBoolValue("Display", "Stretch", false))

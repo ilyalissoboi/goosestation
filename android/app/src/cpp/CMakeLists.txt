@@ -3,6 +3,7 @@
 
 # libgoosestation.so: the core and the Android host layer, loaded by the app with System.loadLibrary().
 add_library(goosestation SHARED
+  fullscreen_ui_stubs.cpp
   jni_onload.cpp
 )
 

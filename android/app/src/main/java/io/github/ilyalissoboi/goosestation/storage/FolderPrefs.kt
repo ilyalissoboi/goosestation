@@ -46,7 +46,7 @@ class SharedPreferencesStore(
     }
 }
 
-/** The saved folders and the install ID. */
+/** The saved folders, the BIOS images last imported, and the install ID. */
 class FolderPrefs(
     private val store: KeyValueStore,
 ) {
@@ -70,6 +70,13 @@ class FolderPrefs(
         return store.putString(SETUP_COMPLETE, folders.setupComplete.toString()) && foldersWritten
     }
 
+    /** The BIOS images the last import found, as [saveBiosImages] saved them; empty if none was saved. */
+    fun biosImages(): List<String> = store.getString(BIOS_IMAGES)?.lines()?.filter { it.isNotEmpty() }.orEmpty()
+
+    /** Returns false if the write failed. An image's description never holds a line break. */
+    fun saveBiosImages(images: List<String>): Boolean =
+        store.putString(BIOS_IMAGES, images.joinToString("\n").ifEmpty { null })
+
     /** Made on the first call, then kept, so the core can tell its own settings.ini from one copied from elsewhere. */
     fun installId(): String {
         store.getString(INSTALL_ID)?.let { return it }
@@ -84,5 +91,6 @@ class FolderPrefs(
         const val DATA = "data"
         const val SETUP_COMPLETE = "setupComplete"
         const val INSTALL_ID = "installId"
+        const val BIOS_IMAGES = "biosImages"
     }
 }

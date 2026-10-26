@@ -18,6 +18,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 
+/** Said under every button that opens the system folder picker, which may not take a controller. */
+const val PICKER_HINT = "Android's folder picker may need touch."
+
 /**
  * A prompt drawn in the screen: [text], and up to two actions, each a label and what it does. [note] is a line under
  * the text, such as that the system folder picker may need touch.

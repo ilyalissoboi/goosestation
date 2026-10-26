@@ -37,9 +37,20 @@ data class PullResult(
     val changed: Set<String>,
 )
 
-/** The working-copy files a push replaced or deleted, where the folder's side won. */
+/**
+ * The working-copy files a push replaced or deleted, where the folder's side won, and whether the run [complete]d its
+ * whole plan: false when it stopped at an unreachable folder, couldn't list it, skipped a deferred file, or any file
+ * failed, so some of the working copy's changes may not be in the folder.
+ */
 data class PushResult(
     val changed: Set<String>,
+    val complete: Boolean,
+)
+
+/** What one run did. */
+private class SyncResult(
+    val changed: Set<String>,
+    val complete: Boolean,
 )
 
 /**
@@ -65,12 +76,14 @@ class Mirror(
     // Touched only on the dispatcher. Every action is idempotent, so a manifest that lags behind is only replayed.
     private var manifest: Manifest? = null
     private var unsaved = 0
+    private var closed = false
 
     /** Folder to working copy, except the [deferred] paths. */
     suspend fun pull(deferred: (String) -> Boolean): PullResult =
         withContext(dispatcher) {
             PullResult(
-                sync(deferred) { folder, local, manifest -> MirrorPlanner.pull(folder, local, manifest, deferred) },
+                sync(deferred) { folder, local, manifest -> MirrorPlanner.pull(folder, local, manifest, deferred) }
+                    .changed,
             )
         }
 
@@ -83,22 +96,31 @@ class Mirror(
         deferred: (String) -> Boolean,
     ): PushResult =
         withContext(dispatcher) {
-            PushResult(
+            val result =
                 sync(deferred) { folder, local, manifest ->
                     MirrorPlanner.push(folder, local, manifest, clock(), force, deferred)
-                },
-            )
+                }
+            PushResult(result.changed, result.complete)
         }
 
     /**
-     * One run of the actions [plan] gives; returns the working-copy paths it replaced or deleted. [deferred] is asked
-     * again before each working-copy replace or delete, so a path deferred since the plan was made (a game started)
-     * is left for a later run.
+     * Ends the mirror, for a data folder change: the run under way finishes first, and every later run does nothing,
+     * so nothing it does can touch the working copy or the manifest file once this returns.
+     */
+    suspend fun close() = withContext(dispatcher) { closed = true }
+
+    /**
+     * One run of the actions [plan] gives; returns the working-copy paths it replaced or deleted, and whether it did
+     * every action ([SyncResult.complete]); a closed mirror's run is incomplete, as it does nothing. [deferred] is
+     * asked again before each working-copy replace or delete, so a path deferred since the plan was made (a game
+     * started) is left for a later run.
      */
     private suspend fun sync(
         deferred: (String) -> Boolean,
         plan: (Map<String, FileState>, Map<String, FileState>, Manifest) -> List<MirrorAction>,
-    ): Set<String> {
+    ): SyncResult {
+        // A run never suspends, so on the one-thread dispatcher it can't overlap close().
+        if (closed) return SyncResult(emptySet(), complete = false)
         // The listing recovers interrupted replaces first, so a file only a .goosebak holds isn't seen as deleted.
         val folder =
             try {
@@ -107,24 +129,28 @@ class Mirror(
                 throw e
             } catch (e: FolderUnreachableException) {
                 unreachable(e)
-                return emptySet()
+                return SyncResult(emptySet(), complete = false)
             } catch (e: Exception) {
                 // Reachable, but not listed in full (a provider still loading a folder, say): acting on a partial
                 // listing would delete files, so nothing is done.
                 Log.w(TAG, "Can't list the data folder; the next run tries again.", e)
                 mutableState.value = MirrorState.Idle
-                return emptySet()
+                return SyncResult(emptySet(), complete = false)
             }
         val actions = plan(folder, LocalTree.list(workingCopy), loadManifest())
 
         val changed = HashSet<String>()
+        var complete = true
         try {
             for ((done, action) in actions.withIndex()) {
                 currentCoroutineContext().ensureActive()
                 mutableState.value = MirrorState.Syncing(done, actions.size)
                 // Its manifest entry is unchanged, so a later run plans it again. This narrows the race with a game
                 // starting, but can't close it: one may start while this action runs.
-                if ((action is CopyToLocal || action is DeleteLocal) && deferred(action.path)) continue
+                if ((action is CopyToLocal || action is DeleteLocal) && deferred(action.path)) {
+                    complete = false
+                    continue
+                }
                 try {
                     record(perform(action, folder, loadManifest()))
                     if (action is CopyToLocal || action is DeleteLocal) changed += action.path
@@ -132,10 +158,11 @@ class Mirror(
                     throw e
                 } catch (e: FolderUnreachableException) {
                     unreachable(e)
-                    return changed
+                    return SyncResult(changed, complete = false)
                 } catch (e: Exception) {
                     // This one file: its manifest entry is unchanged, so the next run plans it again.
                     Log.w(TAG, "$action failed; the next run tries again.", e)
+                    complete = false
                 }
             }
             mutableState.value = MirrorState.Idle
@@ -143,7 +170,7 @@ class Mirror(
             save()
             if (mutableState.value is MirrorState.Syncing) mutableState.value = MirrorState.Idle
         }
-        return changed
+        return SyncResult(changed, complete)
     }
 
     /**

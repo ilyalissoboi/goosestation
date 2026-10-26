@@ -523,6 +523,48 @@ class MirrorTest {
         assertArrayEquals(CARD2, File(folder, "memcards/b.mcd").readBytes())
     }
 
+    @Test
+    fun pushReportsWhetherItsPlanWasComplete() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+        writeLocal("memcards/a.mcd", CARD2)
+
+        // One file fails: the folder is reachable, but the card isn't in it.
+        TestDocumentsProvider.refused = setOf("a.mcd.goosetmp")
+        assertFalse(runBlocking { mirror.push(true, never) }.complete)
+        assertReachable(mirror)
+        TestDocumentsProvider.refused = emptySet()
+        assertTrue(runBlocking { mirror.push(true, never) }.complete)
+        assertArrayEquals(CARD2, File(folder, "memcards/a.mcd").readBytes())
+
+        // The folder is gone.
+        writeLocal("memcards/a.mcd", CARD3)
+        TestTrees.setProviderEnabled(context, false)
+        assertFalse(runBlocking { mirror.push(true, never) }.complete)
+    }
+
+    @Test
+    fun aClosedMirrorRunsNoMore() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+
+        runBlocking { mirror.close() }
+        writeLocal("memcards/a.mcd", CARD2)
+        File(folder, "memcards/b.mcd").writeBytes(CARD3)
+        val manifest = manifestFile.readText()
+        val pushed =
+            runBlocking {
+                mirror.push(true, never).also { mirror.pull(never) }
+            }
+
+        assertArrayEquals(CARD, File(folder, "memcards/a.mcd").readBytes())
+        assertFalse(local("memcards/b.mcd").exists())
+        assertEquals(manifest, manifestFile.readText())
+        assertFalse(pushed.complete)
+    }
+
     private companion object {
         val INI = "[Main]\nSettingsVersion = 3\n".toByteArray()
         val CARD = ByteArray(128 * 1024) { it.toByte() }

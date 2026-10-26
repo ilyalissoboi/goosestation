@@ -10,9 +10,14 @@ data class DataFolderContents(
     val hasSettings: Boolean,
     val memoryCards: Int,
 ) {
+    private val empty get() = !hasSettings && memoryCards == 0
+
     /** What GooseStation will do with the folder, as the setup screen says it. */
-    fun describe(): String {
-        if (!hasSettings && memoryCards == 0) return "This folder is empty. GooseStation will start fresh here."
+    fun describe() = summary() + if (empty) " GooseStation will start fresh here." else " GooseStation will use it."
+
+    /** What the folder holds, and no more: when changing the data folder, the user chooses what's done with it. */
+    fun summary(): String {
+        if (empty) return "This folder is empty."
         val cards = if (memoryCards == 1) "1 memory card" else "$memoryCards memory cards"
         val found =
             when {
@@ -20,7 +25,7 @@ data class DataFolderContents(
                 hasSettings -> "settings"
                 else -> cards
             }
-        return "This folder already has GooseStation data ($found). GooseStation will use it."
+        return "This folder already has GooseStation data ($found)."
     }
 
     companion object {

@@ -72,4 +72,19 @@ class LibraryBannersTest {
         assertEquals(1, build(listOf(MissingGrant(FolderKind.Data, "d")), unreachable).size)
         assertEquals(emptyList<Any>(), build(emptyList(), unreachable, dataSaved = false))
     }
+
+    @Test
+    fun dataStatusFollowsTheMirror() {
+        assertEquals("Saved to the folder", LibraryBanners.dataStatus(MirrorState.Idle, granted = true))
+        assertEquals("Saving…", LibraryBanners.dataStatus(MirrorState.Syncing(0, 3), granted = true))
+        assertEquals(
+            "The data folder isn't reachable (gone). Your changes are kept on this device and saved to the folder " +
+                "when it's back.",
+            LibraryBanners.dataStatus(MirrorState.Unreachable("gone"), granted = true),
+        )
+        assertEquals(
+            "GooseStation can't reach your data folder. Changes are kept on this device until you pick it again.",
+            LibraryBanners.dataStatus(MirrorState.Idle, granted = false),
+        )
+    }
 }

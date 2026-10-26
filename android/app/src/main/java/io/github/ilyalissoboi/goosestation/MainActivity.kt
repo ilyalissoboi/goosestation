@@ -17,7 +17,7 @@ import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
-import io.github.ilyalissoboi.goosestation.ui.FoldersPlaceholder
+import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         folderPicker = FolderPicker(this)
-        AppController.attach(folderPicker)
+        AppController.attach(this, folderPicker)
         // The app is always dark, whatever the system's theme.
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         AppController.start(applicationContext)
@@ -49,7 +49,27 @@ class MainActivity : ComponentActivity() {
                             onFinish = AppController::finishSetup,
                         )
                     Screen.Game -> GameScreen(onBack = AppController::leaveGame)
-                    Screen.Folders -> FoldersPlaceholder(onBack = AppController::closeFolders)
+                    Screen.Folders -> {
+                        val mirrorState by AppController.mirrorState.collectAsState()
+                        FoldersScreen(
+                            folders = AppController.folders,
+                            biosImages = AppController.biosImages,
+                            dataStatus = AppController.dataStatus(mirrorState),
+                            dataReachable = AppController.dataReachable(mirrorState),
+                            candidate = AppController.dataCandidate,
+                            progress = AppController.dataChange,
+                            message = AppController.message,
+                            isError = AppController.messageIsError,
+                            onChangeBios = AppController::changeBios,
+                            onRescanBios = AppController::rescanBios,
+                            onAddGames = AppController::addGamesFolder,
+                            onSetGames = AppController::setGamesFolders,
+                            onChangeData = AppController::pickDataFolder,
+                            onChooseData = AppController::changeDataFolder,
+                            onCancelData = AppController::cancelDataChange,
+                            onBack = AppController::closeFolders,
+                        )
+                    }
                     Screen.Library -> {
                         val mirrorState by AppController.mirrorState.collectAsState()
                         LibraryScreen(
@@ -63,6 +83,7 @@ class MainActivity : ComponentActivity() {
                             onRefresh = AppController::refresh,
                             onStartGame = AppController::startGame,
                             focusPath = AppController.lastGamePath,
+                            focusFolders = AppController.focusFolders,
                         )
                     }
                 }
@@ -103,7 +124,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         if (isFinishing && inGame) AppController.leaveGame()
-        AppController.detach(folderPicker)
+        AppController.detach(this)
         super.onDestroy()
     }
 

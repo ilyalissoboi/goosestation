@@ -60,4 +60,14 @@ class FolderPrefsTest {
         assertTrue(saved.uses("content://a.b/tree/d"))
         assertFalse(saved.uses("content://a.b/tree/g/"))
     }
+
+    @Test
+    fun biosImagesAreKeptInOrder() {
+        val store = MemoryStore()
+        assertEquals(emptyList<String>(), FolderPrefs(store).biosImages())
+
+        assertTrue(FolderPrefs(store).saveBiosImages(listOf("SCPH-7001 (v4.1)", "SCPH-1001 (v2.2)")))
+
+        assertEquals(listOf("SCPH-7001 (v4.1)", "SCPH-1001 (v2.2)"), FolderPrefs(store).biosImages())
+    }
 }

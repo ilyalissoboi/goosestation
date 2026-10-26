@@ -61,4 +61,13 @@ class DataFolderContentsTest {
     fun anUnreadableFolderIsNull() {
         assertNull(DataFolderContents.read(FakeLister(mapOf("root" to null)), "tree"))
     }
+
+    @Test
+    fun summarySaysOnlyWhatTheFolderHolds() {
+        assertEquals("This folder is empty.", DataFolderContents(hasSettings = false, memoryCards = 0).summary())
+        assertEquals(
+            "This folder already has GooseStation data (1 memory card).",
+            DataFolderContents(hasSettings = false, memoryCards = 1).summary(),
+        )
+    }
 }

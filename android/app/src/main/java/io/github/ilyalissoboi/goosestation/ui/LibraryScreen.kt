@@ -44,8 +44,9 @@ import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
  * ([onOpenFolders]) and Refresh ([onRefresh]). [banners] and [message] sit under the bar: prompts to pick a folder
  * again, the latest error ([isError]), or what the app is doing.
  *
- * On opening, the game at [focusPath] (the last one launched) has focus, or else the first game; with no games,
- * Folders has it. Toggling the view keeps the focused game. A, Enter or a tap call [onStartGame].
+ * On opening, Folders has focus when [focusFolders] (coming back from the folder settings), or else the game at
+ * [focusPath] (the last one launched), or else the first game; with no games, Folders has it. Toggling the view keeps
+ * the focused game. A, Enter or a tap call [onStartGame].
  */
 @Composable
 fun LibraryScreen(
@@ -59,16 +60,20 @@ fun LibraryScreen(
     onRefresh: () -> Unit,
     onStartGame: (GameEntry) -> Unit,
     focusPath: String?,
+    focusFolders: Boolean = false,
 ) {
     val folders = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     val focus = remember { GameFocus() }
     val hasGames = games.isNotEmpty()
+    // Only on opening: a toggle, or games coming in, focus a game as usual.
+    var foldersFirst by remember { mutableStateOf(focusFolders) }
 
     // Not on every new list, which a resume brings: only on opening, on a toggle, and once there are games.
     LaunchedEffect(gridView, hasGames) {
-        if (!hasGames) {
+        if (!hasGames || foldersFirst) {
+            foldersFirst = false
             folders.requestFocus()
             return@LaunchedEffect
         }
@@ -163,8 +168,9 @@ private class GameFocus {
     }
 }
 
+/** The app's latest error ([isError]) or what it's doing, under a screen's top bar. */
 @Composable
-private fun MessageBar(message: String, isError: Boolean) {
+internal fun MessageBar(message: String, isError: Boolean) {
     val colors = MaterialTheme.colorScheme
     Text(
         text = message,

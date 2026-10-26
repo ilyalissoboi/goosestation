@@ -74,6 +74,7 @@ class LibraryScreenTest {
         games: List<GameEntry> = this.games,
         gridView: () -> Boolean = { true },
         focusPath: String? = null,
+        focusFolders: Boolean = false,
     ) {
         rule.setContent {
             GooseStationTheme {
@@ -89,6 +90,7 @@ class LibraryScreenTest {
                         onRefresh = {},
                         onStartGame = { started += it },
                         focusPath = focusPath,
+                        focusFolders = focusFolders,
                     )
                 }
             }
@@ -173,6 +175,13 @@ class LibraryScreenTest {
         show(games = emptyList())
 
         rule.onNodeWithText("No games found in your games folders.").assertExists()
+        rule.onNodeWithText("Folders").assertIsFocused()
+    }
+
+    @Test
+    fun comingBackFromTheFoldersFocusesFolders() {
+        show(focusPath = entry(25).path, focusFolders = true)
+
         rule.onNodeWithText("Folders").assertIsFocused()
     }
 }

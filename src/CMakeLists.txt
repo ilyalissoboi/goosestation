@@ -15,6 +15,10 @@ if(BUILD_QT_FRONTEND)
   add_subdirectory(duckstation-qt)
 endif()
 
+if(ANDROID)
+  add_subdirectory(${CMAKE_SOURCE_DIR}/android/app/src/cpp ${CMAKE_CURRENT_BINARY_DIR}/android)
+endif()
+
 if(BUILD_REGTEST)
   add_subdirectory(duckstation-regtest)
 endif()

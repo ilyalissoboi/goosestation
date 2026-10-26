@@ -134,9 +134,6 @@ if(ENABLE_OPENGL)
         opengl_context_egl_wayland.h
       )
     endif()
-    if(ANDROID)
-      target_include_directories(util PRIVATE "${CMAKE_SOURCE_DIR}/android/app/src/cpp")
-    endif()
   endif()
 
   if(APPLE)
@@ -171,7 +168,7 @@ if(ENABLE_VULKAN)
   target_link_libraries(util PUBLIC vulkan-headers)
 endif()
 
-if(ENABLE_VULKAN OR APPLE)
+if(ENABLE_VULKAN OR APPLE OR ANDROID)
   # shaderc is loaded dynamically to reduce module loads on startup.
   get_target_property(SHADERC_INCLUDE_DIR Shaderc::shaderc_shared INTERFACE_INCLUDE_DIRECTORIES)
   target_include_directories(util PUBLIC ${SHADERC_INCLUDE_DIR})

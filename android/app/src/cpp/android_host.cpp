@@ -8,6 +8,8 @@
 #include "core/controller.h"
 #include "core/fullscreen_ui.h"
 #include "core/host.h"
+#include "core/memory_card.h"
+#include "core/pad.h"
 #include "core/settings.h"
 #include "core/system.h"
 
@@ -52,6 +54,7 @@ struct InputEvent
     Axis,
     Connected,
     Disconnected,
+    ReleaseAll,
   };
 
   Type type;
@@ -74,7 +77,7 @@ static bool InitializeConfig(Error* error);
 static void SetDefaultSettings(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
-static void MapControllerIfPortUnbound(const std::string& identifier);
+static void AddControllerToPort1(const std::string& identifier);
 
 // Android's own settings.ini, so its version is independent of the Qt frontend's.
 static constexpr u32 SETTINGS_VERSION = 1;
@@ -263,6 +266,9 @@ void AndroidHost::BootPendingGame()
   s_boot_path = std::move(s_pending_boot_path.value());
   s_pending_boot_path.reset();
 
+  // Nothing held before the boot carries over into the game, nor stops its first press from counting.
+  QueueReleaseAllInputs();
+
   INFO_LOG("Starting '{}'.", s_boot_path);
   Error error;
   if (!System::BootSystem(SystemBootParameters(s_boot_path), &error))
@@ -294,8 +300,21 @@ void AndroidHost::SetPaused(bool paused)
 {
   EmuThread::RunOnThread(
     [paused]() {
-      if (System::IsValid())
-        System::PauseSystem(paused);
+      if (!System::IsValid())
+        return;
+
+      System::PauseSystem(paused);
+
+      // A paused system's memory cards never reach their delayed save, and the app may be killed in the background:
+      // write what the game saved now.
+      if (paused)
+      {
+        for (u32 slot = 0; slot < NUM_CONTROLLER_AND_CARD_PORTS; slot++)
+        {
+          if (MemoryCard* card = Pad::GetMemoryCard(slot))
+            card->Flush();
+        }
+      }
     },
     false);
 }
@@ -385,6 +404,11 @@ void AndroidHost::QueueDeviceDisconnected(s32 device_id)
   QueueInputEvent(InputEvent{InputEvent::Type::Disconnected, device_id, 0, 0.0f, {}, {}});
 }
 
+void AndroidHost::QueueReleaseAllInputs()
+{
+  QueueInputEvent(InputEvent{InputEvent::Type::ReleaseAll, 0, 0, 0.0f, {}, {}});
+}
+
 void AndroidHost::QueueInputEvent(InputEvent event)
 {
   bool wake;
@@ -394,6 +418,7 @@ void AndroidHost::QueueInputEvent(InputEvent event)
     {
       case InputEvent::Type::Key:
       case InputEvent::Type::Axis:
+      case InputEvent::Type::ReleaseAll:
       {
         // Before the CPU thread runs, nothing drains the queue: only connections are kept for it.
         if (!s_accept_input_events)
@@ -491,13 +516,21 @@ void AndroidHost::ProcessInputQueue()
           source->QueueDeviceDisconnected(event.device_id);
       }
       break;
+
+      case InputEvent::Type::ReleaseAll:
+      {
+        // Queued behind the events before it, so none of them is pressed after the release.
+        if (source)
+          source->QueueReleaseAll();
+      }
+      break;
     }
   }
 
   s_input_events.clear();
 }
 
-void AndroidHost::MapControllerIfPortUnbound(const std::string& identifier)
+void AndroidHost::AddControllerToPort1(const std::string& identifier)
 {
   if (!identifier.starts_with(DEVICE_PREFIX))
     return;
@@ -506,40 +539,46 @@ void AndroidHost::MapControllerIfPortUnbound(const std::string& identifier)
   if (!index.has_value())
     return;
 
-  // The binding prefixes of the controllers connected now ("Android-0/"), as long as this one still is.
-  std::vector<std::string> connected_prefixes;
-  bool still_connected = false;
-  for (const auto& [device, name] : InputManager::EnumerateDevices())
+  // Mapped later than it connected: skip it if it's gone again.
+  const auto devices = InputManager::EnumerateDevices();
+  if (std::none_of(devices.begin(), devices.end(),
+                   [&identifier](const auto& device) { return device.first == identifier; }))
   {
-    if (!device.starts_with(DEVICE_PREFIX))
-      continue;
-
-    connected_prefixes.push_back(device + "/");
-    still_connected |= (device == identifier);
-  }
-  if (!still_connected)
     return;
+  }
 
+  // Every controller drives Port 1: its default bindings are added to the ones there, so a pad connected later (a
+  // Bluetooth pad next to a handheld's own) works too. One that connects again adds nothing, as its bindings are there.
+  u32 added = 0;
   {
     const auto lock = Host::GetSettingsLock();
     SettingsInterface& si = *s_base_settings_interface;
     const std::string section = Controller::GetSettingsSection(0);
-    for (const auto& [key, value] : si.GetKeyValueList(section.c_str()))
+    const std::string type = si.GetStringValue(section.c_str(), "Type", Controller::GetDefaultPadType(0));
+    const Controller::ControllerInfo* info = Controller::GetControllerInfo(type);
+    if (!info)
     {
-      for (const std::string& prefix : connected_prefixes)
-      {
-        if (value.find(prefix) != std::string::npos)
-          return;
-      }
-    }
-
-    if (!InputManager::MapController(si, 0, AndroidInputKeys::GetDefaultMapping(index.value())))
-    {
-      WARNING_LOG("Failed to map {} to Port 1.", identifier);
+      WARNING_LOG("Port 1 has an unknown controller type '{}', not mapping {} to it.", type, identifier);
       return;
     }
 
-    INFO_LOG("Port 1 had no bindings for a connected controller, mapped {} to it.", identifier);
+    // As InputManager::MapController(): the first binding string for each of the pad's inputs.
+    const GenericInputBindingMapping mapping = AndroidInputKeys::GetDefaultMapping(index.value());
+    for (const Controller::ControllerBindingInfo& bi : info->bindings)
+    {
+      if (bi.generic_mapping == GenericInputBinding::Unknown)
+        continue;
+
+      const auto it = std::find_if(mapping.begin(), mapping.end(),
+                                   [&bi](const auto& entry) { return entry.first == bi.generic_mapping; });
+      if (it != mapping.end() && si.AddToStringList(section.c_str(), bi.name, it->second.c_str()))
+        added++;
+    }
+
+    if (added == 0)
+      return;
+
+    INFO_LOG("Added {} bindings for {} to Port 1.", added, identifier);
     Error error;
     if (!si.Save(&error))
       ERROR_LOG("Failed to save settings: {}", error.GetDescription());
@@ -700,6 +739,9 @@ void Host::OnSystemStarted()
 
 void Host::OnSystemDestroyed()
 {
+  // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
+  AndroidHost::QueueReleaseAllInputs();
+
   // A boot that failed destroys the system too: BootPendingGame() reports that one.
   if (!AndroidHost::s_game_started)
     return;
@@ -827,7 +869,7 @@ void Host::OnInputDeviceConnected(std::string_view identifier, std::string_view 
 {
   // The source reports this from inside its poll: map after it, not while the bindings are in use.
   Host::RunOnCPUThread(
-    [identifier = std::string(identifier)]() { AndroidHost::MapControllerIfPortUnbound(identifier); });
+    [identifier = std::string(identifier)]() { AndroidHost::AddControllerToPort1(identifier); });
 }
 
 void Host::OnInputDeviceDisconnected(InputBindingKey key, std::string_view identifier)

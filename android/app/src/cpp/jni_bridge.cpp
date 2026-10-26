@@ -320,4 +320,9 @@ NATIVE_LIBRARY_FUNCTION(void, onDeviceDisconnected)(JNIEnv*, jobject, jint devic
   AndroidHost::QueueDeviceDisconnected(device_id);
 }
 
+NATIVE_LIBRARY_FUNCTION(void, releaseAllInputs)(JNIEnv*, jobject)
+{
+  AndroidHost::QueueReleaseAllInputs();
+}
+
 } // extern "C"

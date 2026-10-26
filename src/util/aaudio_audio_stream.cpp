@@ -260,9 +260,8 @@ void AAudioAudioStream::ErrorCallback(AAudioStream* stream, void* userdata, aaud
   }
 
   AAudioAudioStream* const this_ptr = static_cast<AAudioAudioStream*>(userdata);
-  {
-    std::unique_lock lock(this_ptr->m_reopen_mutex);
-    this_ptr->m_reopen_stream = stream;
-  }
+  // Notified under the lock: once it is unlocked, the destructor (which takes it) may free this object.
+  std::unique_lock lock(this_ptr->m_reopen_mutex);
+  this_ptr->m_reopen_stream = stream;
   this_ptr->m_reopen_cv.notify_one();
 }

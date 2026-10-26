@@ -335,3 +335,34 @@ TEST(AndroidInputKeys, ReleaseAll)
   ASSERT_EQ(events.size(), 1u);
   ExpectEvent(events[0], BUTTON, 96, 1.0f, GenericInputBinding::Cross);
 }
+
+// The app releases everything when it loses focus or a game boots or stops, with no key-up or axis event from Android.
+// Whatever was held then, the same input afterwards is a new press.
+TEST(AndroidInputKeys, PressAgainAfterReleaseAll)
+{
+  PadState pad;
+  Key(pad, 97, true);  // Circle
+  Axis(pad, 15, 1.0f); // hat right
+  Axis(pad, 0, -1.0f); // left stick, all the way left
+  Axis(pad, 18, 1.0f); // R2, as an axis
+
+  std::vector<PadEvent> events;
+  pad.ReleaseAll(events);
+  EXPECT_FALSE(events.empty());
+
+  events = Key(pad, 97, true);
+  ASSERT_EQ(events.size(), 1u);
+  ExpectEvent(events[0], BUTTON, 97, 1.0f, GenericInputBinding::Circle);
+
+  events = Axis(pad, 15, 1.0f);
+  ASSERT_EQ(events.size(), 1u);
+  ExpectEvent(events[0], BUTTON, 22, 1.0f, GenericInputBinding::DPadRight);
+
+  events = Axis(pad, 0, -1.0f);
+  ASSERT_EQ(events.size(), 1u);
+  ExpectEvent(events[0], AXIS, 0, -1.0f, GenericInputBinding::Unknown);
+
+  events = Axis(pad, 18, 1.0f);
+  ASSERT_EQ(events.size(), 3u);
+  ExpectEvent(events[0], AXIS, 18, 1.0f, GenericInputBinding::R2);
+}

@@ -25,6 +25,11 @@ Installed on 2026-10-25, the latest stable releases on that day:
 The Android project pins its own versions, the latest stable releases on 2026-10-26: in
 `android/gradle/libs.versions.toml`, and Gradle in `android/gradle/wrapper/gradle-wrapper.properties`.
 
+`android/gradle/wrapper/gradle-wrapper.jar` matches Gradle's published checksum for 9.8.2
+(`https://services.gradle.org/distributions/gradle-9.8.2-wrapper.jar.sha256`): SHA-256
+`3b8a25775a69158b5ad2b1d17a80a88dc7b40a352a73eb27d06c612a7ce68e98`, checked on 2026-10-26. The wrapper checks the
+distribution itself against `distributionSha256Sum`, which matches the published `gradle-9.8.2-bin.zip.sha256`.
+
 | Tool or library | Version |
 | --- | --- |
 | Gradle (wrapper) | 9.8.2 |
@@ -134,7 +139,8 @@ repository (git-ignored).
 - `check-undefined.sh` builds `goosestation` in `build-android/` (configure it first), then links all of core,
   util and common into a throwaway library with `--no-undefined`. It lists any symbol the app would miss once it
   uses the whole core: the real link only pulls in what the JNI code references. It exits 0 when nothing is
-  undefined, and 1 when something is.
+  undefined, and 1 when something is. It exits 2 when it can't check: `build-android/` isn't configured, the
+  `goosestation` link command doesn't link the core, or the link fails for another reason than undefined symbols.
 
 ```bash
 android/scripts/configure-native.sh
@@ -158,7 +164,8 @@ Debug core is far too slow to play. The first build compiles the whole core and 
 
 The APK also carries the dependency prefix's three shared libraries (`GOOSESTATION_ANDROID_DEPS` overrides the
 prefix, as for the configure script) and `data/resources` as assets under `resources/`. The app copies the resources
-to its internal files on first run and whenever the version code changes.
+to its internal files on first run and whenever the app is reinstalled or updated: it compares the version code and
+the install's `lastUpdateTime` (`<versionCode>-<lastUpdateTime>`) with the last copy's.
 
 ## Running it
 
@@ -180,7 +187,14 @@ adb push "<a disc image>.chd" $FILES/games/
 ```
 
 The list refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves
-it. Home pauses the game, and reopening the app resumes it.
+it. Home pauses the game, and reopening the app resumes it. Pausing also writes any memory card changes to their files
+straight away (a paused game never reaches the card's usual save, 5 emulated seconds after the last write), so a save
+made just before Home survives the app being killed in the background. Going to the background, or losing focus to
+the notification shade or a dialog, also lets go of every button and stick, so press or move them again after
+coming back.
+
+In a game, the app keeps only the controllers' gamepad buttons and D-pad keys. Volume, media and other keys go to
+the system, so the volume keys work during a game.
 
 Never commit BIOS images or games. The checks below use `~/work/goose-test/ps-30j.bin` and a CHD from the same
 folder.
@@ -213,14 +227,19 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 
 - `[Main] SettingsVersion = 1` must be there, or the core resets the file to its defaults.
 - Every setting the file leaves out takes its default.
-- `[GPU] Renderer` is `Automatic` (the default), `Vulkan`, `OpenGL` or `Software`. On Android, `Automatic` is
-  always OpenGL ES: `VulkanDevice::IsSuitableDefaultRenderer()` turns Vulkan down there, as it does upstream. Set
-  `Vulkan` to use Vulkan.
+- `[GPU] Renderer` is `Automatic` (the default), `Vulkan`, `OpenGL` or `Software`. On Android, `Automatic` prefers
+  Vulkan, as on Linux: `VulkanDevice::IsSuitableDefaultRenderer()` takes the first Vulkan GPU unless it's a software
+  one (its name starts with `llvmpipe` or `SwiftShader`) or an Intel one, and OpenGL ES otherwise. `Vulkan` and
+  `OpenGL` (OpenGL ES on Android) force one. There's no fallback from Vulkan to OpenGL ES yet (Plan 3): if the
+  Vulkan device can't be created, the boot fails with `Failed to create render device`, and if the device is created
+  but the hardware renderer fails, the core falls back to its software renderer. Set `Renderer = OpenGL` if that
+  happens.
 - `ShowFPS`, `ShowSpeed` and `ShowCPU` turn on the OSD's frame rates (`G:` game, `V:` video), speed and frame times.
   With the default CPU settings, `ShowCPU` adds a `CPU[I]` line when the CPU falls back to the interpreter, and none
   on the recompiler.
-- The Port 1 bindings live in this file too. Leaving them out is fine: the core maps a connected controller to Port 1
-  again when Port 1 has no bindings, and saves the file. That save makes the file mode 0600 again.
+- The Port 1 bindings live in this file too. Leaving them out is fine: whenever a controller connects, the core adds
+  its default bindings to Port 1's (each binding is a list, so every connected pad drives Port 1), skips those
+  already there, and saves the file. That save makes the file mode 0600 again.
 
 ### Known limits
 
@@ -235,24 +254,42 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 
 ## Results on the emulator
 
-Checked on 2026-10-26 with the debug APK, on `goose-arm64` (Android 17, 4 KB pages, 4 cores). The BIOS was
+Checked on 2026-10-26 with the debug APK, on `goose-arm64` (Android 17, 4 KB pages). The BIOS was
 `ps-30j.bin` (SCPH-5500, NTSC-J), with `padtest.psexe` and Ace Combat 3 Electrosphere (Disc 1) as a CHD.
 
 | Check | Result |
 | --- | --- |
-| Install, first launch | Pass. The first launch extracts the resources (`Resources: Extracting the resources for install …`), so the cold start took 17 s; later cold starts took 1.2 to 13 s. |
+| Install, first launch | Pass. The first launch extracts the resources (`Resources: Extracting the resources for install …`), so the cold start took 17 s (`am start -W`, `TotalTime: 17284`). |
 | padtest renders | Pass. Port 1 shows as Analog. padtest is a PAL executable, so the core warns `BIOS region NTSC-J does not match requested region PAL` and boots it anyway. |
-| Ace Combat 3 boots | Pass. It reaches "Press START button" about 30 s after the boot (fast boot is on), then the attract FMVs. The boot itself (`Starting` to `Game started`) took 0.7 s. |
+| Ace Combat 3 boots | Pass. It shows "Press START button" by 30 s after the boot (fast boot is on), then the attract FMVs. The boot itself (`Starting` to `Game started`) took 0.7 s. |
 | Sound | An AAudio stream (44100 Hz, stereo, legacy path, 882-frame bursts) is open and active: `dumpsys media.audio_flinger` showed its track consuming frames, with 4 underruns over about 2 minutes. Not checked by ear. |
 | Back | Pass. It returns to the list (`Game stopped`, `Surface destroyed`). |
-| Home, then reopen | Pass, with both renderers. On Home (OpenGL ES run), the core pauses (`AAudioStream_requestPause`, then `Surface destroyed`, `Render window is 0x0`), and the process uses 0.0% CPU in `top`. On reopening, `New surface`, then the stream restarts, and the game carries on from where it was. No second `Game started`, so no reboot. |
-| Rotation | Pass, with both renderers. Four `adb emu rotate` steps went from 90° to 270° and back to 90°. The process (and its PID) stayed the same, with no surface event and no relaunch: the manifest handles the configuration changes, and `sensorLandscape` keeps it landscape. A speed dip to 85% at the turn. Under Vulkan, one screenshot just after the rotations showed a garbled FMV frame; the next four, 2 s apart, were clean, so it's probably the FMV's own transition (not confirmed). |
+| Home, then reopen | Pass, with both renderers. On Home (OpenGL ES run), the core pauses (`AAudioStream_requestPause`, then `Surface destroyed`, `Render window is 0x0`), and the process uses 0.0% CPU in `top`. On reopening, the stream restarts (`AAudioStream_requestStart` at 50.388 s), then `New surface` (50.659 s), and the game carries on from where it was. No second `Game started`, so no reboot. |
+| Rotation | Pass, with both renderers. `adb emu rotate` went from 90° to 270° and back to 90°: 2 steps under OpenGL ES, and 4 under Vulkan. The process (and its PID) stayed the same, with no surface event and no relaunch: the manifest handles the configuration changes, and `sensorLandscape` keeps it landscape. A speed dip to 85% at the turn. Under Vulkan, one screenshot just after the rotations showed a garbled FMV frame; the next four, 2 s apart, were clean, so it's probably the FMV's own transition (not confirmed). |
 | Crashes | None: the `crash` log buffer stayed empty, and logcat has no FATAL line. |
 
-**Renderer.** `Automatic` gives OpenGL ES: `Host: Trying to create a OpenGL GPU device...`, on
-`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0)))`, OpenGL ES 3.1. With `Renderer = Vulkan`, the
-Vulkan device (Vulkan 1.3.0, `Goldfish GFXStream (llvmpipe (LLVM 21.1.4, 128 bits))`) also works, through the same
-Home and rotation checks.
+**Renderer.** These checks ran when `Automatic` still meant OpenGL ES on Android, so the OpenGL ES column is
+`Automatic`: `Host: Trying to create a OpenGL GPU device...`, on
+`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0)))`, OpenGL ES 3.1. The Vulkan column is
+`Renderer = Vulkan`: the Vulkan device (Vulkan 1.3.0, `Goldfish GFXStream (llvmpipe (LLVM 21.1.4, 128 bits))`) also
+works, through the same Home and rotation checks. `Automatic` now prefers Vulkan (see "Changing settings"). On the
+emulator it logs `Using Vulkan GPU 'Goldfish GFXStream (llvmpipe …)' for automatic renderer check.`, then `Allowing
+Vulkan as default renderer.` and `Trying to create a Vulkan GPU device...`: the name starts with `Goldfish`, not
+`llvmpipe`.
+
+**Controllers, input release and memory cards**, checked later on 2026-10-26 with two gamepads made with the
+system's `uinput` tool (`adb shell uinput -`, which takes JSON `register` and `inject` commands), on padtest and
+Ace Combat 3:
+
+| Check | Result |
+| --- | --- |
+| Pads connected mid-game | Pass. Each logged `Added 24 bindings for Android-<n> to Port 1.`, and both drove Port 1 (Cross from one, Circle from the other). The game kept rendering, with the same PID and no surface event. |
+| Reconnecting | Pass. Both pads were removed and registered again: they came back as `Android-0` and `Android-1`, with no new `Added` line. `[Pad1]` in `settings.ini` has 24 entries for each pad, none twice. |
+| Held input across Home | Pass. With the hat held right and the left stick held left, Home and reopening left padtest showing nothing pressed (the stick reads X -1, its rest value after a release from the left). Moving them again pressed them again. |
+| Held input across focus loss | Pass. With the stick right and the hat down held, opening and closing the notification shade released both. |
+| Held button across games | Pass. Cross held while leaving padtest, let go on the list, then pressed in the next padtest run: it registered on the first press. |
+| Volume keys in a game | Pass. `input gamepad keyevent KEYCODE_VOLUME_UP` twice, then `VOLUME_DOWN`, moved the music volume 5, 7, 6. |
+| Memory card on Home | Pass. With a blank card, Ace Combat 3 wrote sector 63 at 42.300 s; Home paused the game at 42.818 s, and `Saving memory card to Ace Combat 3 - Electrosphere (Japan)_1...` followed at 42.851 s, 0.55 s after the write instead of 5 emulated seconds. |
 
 **Frame rate**, from the OSD (`ShowFPS`, `ShowSpeed`, `ShowCPU`):
 
@@ -260,7 +297,7 @@ Home and rotation checks.
 | --- | --- | --- |
 | padtest | G 58.75, V 58.75, 99% | G 59.60, V 59.60, 101% |
 | Ace Combat 3 title | G 57.3 to 58.6, V the same, 96 to 98% | not measured |
-| Ace Combat 3 FMV | G 13 to 15 (the FMV's own rate), V 57 to 59.8, 96 to 100%; V 50.7, 85% just after a resume or a rotation | G 14.7 to 22, V 59.8 to 59.9, 100% |
+| Ace Combat 3 FMV | G 13.8 to 14.8 (the FMV's own rate), V 57.3 to 59.1, 96 to 99%; V 50.7, 85% just after a resume, and 85% at a rotation | G 14.7 to 22, V 59.9, 100% |
 
 Both renderers are in software on the host, so these say nothing about a device's speed.
 
@@ -302,7 +339,12 @@ adb push "$HOME/work/goose-test/Ace Combat 3 Electrosphere (Disc 1).chd" $FILES/
 adb logcat -c
 ```
 
-Keep a log of each session: `adb logcat -v time > thor.log`, in a second terminal.
+Keep a log of each session in a second terminal. `ANDROID_SERIAL` is per shell, so set it there too (or pass `-s`):
+
+```bash
+export ANDROID_SERIAL=<the Thor's serial>
+adb logcat -v time > thor.log
+```
 
 1. **padtest, with the Thor's own controls.** Start padtest from the list.
    - [ ] Each face button lights the right PS1 button: bottom = Cross, right = Circle, left = Square, top =
@@ -314,12 +356,19 @@ Keep a log of each session: `adb logcat -v time > thor.log`, in a second termina
    - [ ] L2 and R2 press once each, and let go cleanly, whether they're analog or digital.
    - [ ] No button leaves the game on its own. Only the Back gesture and Home should do that; note any button that
      sends Back.
-2. **padtest, with a Bluetooth pad**, paired in Android's settings.
-   - [ ] It drives Port 1, and the checks in step 1 pass.
-   - [ ] Switch the pad off while holding a button and a stick: nothing stays pressed in padtest.
-   - [ ] Switch it back on: it drives Port 1 again.
-3. **Ace Combat 3, with OpenGL ES** (the default, `Automatic`). Turn the OSD on as in "Changing settings", with
-   `Renderer = OpenGL`. Play for a few minutes.
+2. **padtest, with a Bluetooth pad**, paired in Android's settings. Start padtest with the pad off.
+   - [ ] Switch the pad on mid-game: padtest keeps rendering, with no relaunch and no black screen (a new input
+     device is a configuration change, which the manifest handles).
+   - [ ] Both the Bluetooth pad and the Thor's own controls drive Port 1, and the checks in step 1 pass with the
+     Bluetooth pad. The log has `Added … bindings for Android-1 to Port 1.` (the index may differ).
+   - [ ] Switch the pad off while holding a button and a stick: nothing stays pressed in padtest, and it keeps
+     rendering, with no relaunch and no black screen.
+   - [ ] Switch it back on: it drives Port 1 again, and the log has no second `Added … bindings` line for it (its
+     bindings are already there).
+   - [ ] Hold a D-pad direction and a stick, press Home, let go, then reopen the app: nothing is held in padtest.
+   - [ ] The volume keys change the volume during the game.
+3. **Ace Combat 3, with OpenGL ES.** Turn the OSD on as in "Changing settings", with `Renderer = OpenGL` in the
+   pushed `settings.ini`. Play for a few minutes.
    - [ ] Full speed: the OSD's speed stays at 100%, and `V:` is about 59.9.
    - [ ] No audio crackle.
    - [ ] Plug headphones in mid-game, then unplug them: the sound moves over each time, with no crash and no lasting
@@ -327,8 +376,14 @@ Keep a log of each session: `adb logcat -v time > thor.log`, in a second termina
      no `Failed to reopen the AAudio stream`.
    - [ ] Home, then reopen the app: the game resumes where it was.
    - [ ] Screen off and back on: the game resumes, without a black screen.
-4. **Ace Combat 3, with Vulkan.** Repeat step 3 with `Renderer = Vulkan`.
-5. **Afterwards.**
+   - [ ] Save to the memory card, press Home within 5 s, then swipe the app away in Recents. Start it and the game
+     again: the save is there. The log has `Saving memory card to …` just after the Home.
+4. **Ace Combat 3, with Vulkan.** Repeat step 3 with `Renderer = Vulkan` in the pushed `settings.ini`.
+5. **The default renderer.** Push the file again with the `Renderer = …` line left out (or `Renderer = Automatic`),
+   and start Ace Combat 3.
+   - [ ] The log has `Allowing Vulkan as default renderer.` and `Trying to create a Vulkan GPU device...`. If it
+     has `Not using Vulkan …` and `Trying to create a OpenGL GPU device...` instead, note the GPU name it logs.
+6. **Afterwards.**
    - [ ] `adb logcat -b crash -d` is empty.
    - [ ] Note the renderer lines (`adb logcat -d | grep -E "GPUDevice|Trying to create"`).
    - [ ] Note the page size (`adb shell getconf PAGE_SIZE`). The core is built for 16 KB pages, so on 4096 or 16384

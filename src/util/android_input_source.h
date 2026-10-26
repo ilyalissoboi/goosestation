@@ -44,6 +44,9 @@ public:
   void QueueDeviceConnected(s32 device_id, std::string name, std::string descriptor);
   void QueueDeviceDisconnected(s32 device_id);
 
+  /// Lets go of everything every device holds, after the events queued before it.
+  void QueueReleaseAll();
+
 private:
   struct QueuedEvent
   {
@@ -53,6 +56,7 @@ private:
       Axis,
       Connected,
       Disconnected,
+      ReleaseAll,
     };
 
     Type type;
@@ -76,6 +80,7 @@ private:
   bool IsIndexConnected(u32 index) const;
   void HandleConnected(s32 device_id, std::string name, const std::string& descriptor);
   void HandleDisconnected(s32 device_id);
+  void ReleaseAll(Device& device);
   void ReportPadEvents(u32 index, const std::vector<AndroidInputKeys::PadEvent>& events);
 
   std::mutex m_queue_mutex;

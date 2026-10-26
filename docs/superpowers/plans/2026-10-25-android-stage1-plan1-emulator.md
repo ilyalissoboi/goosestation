@@ -59,8 +59,10 @@ Stage 1 is split into three plans, each ending in something testable on the devi
    while the core is rendering. It must go surfaceless and recover without a crash or a black screen. (Task 8.)
 4. **Controller disconnect mid-game.** Every button and axis of the lost device is released (no stuck input), and
    a reconnected pad maps back to Port 1. (Task 6, Task 8.)
-5. **Page size.** The core is built with 4 KB pages; on a 16 KB-page device, fastmem must be turned off at
-   startup instead of crashing. (Task 6.)
+5. **Page size.** The core is built with 16 KB pages (`HOST_PAGE_SIZE=16384`), which also work on 4 KB-page
+   devices; on a device with pages larger than 16 KB, fastmem must be turned off at startup instead of crashing.
+   (Task 6.) *Changed during implementation: the plan first built with 4 KB pages, but a 16 KB build runs fastmem
+   on both 4 KB and 16 KB devices.*
 
 ---
 
@@ -107,7 +109,9 @@ Stage 1 is split into three plans, each ending in something testable on the devi
   minizip scmversion android log EGL aaudio`, with the link flags from Global Constraints. In this task it holds
   only `JNI_OnLoad` returning `JNI_VERSION_1_6`.
 - Produces: `android/scripts/configure-native.sh [BUILD_TESTS=ON]` running CMake with the NDK toolchain,
-  `-DBUILD_QT_FRONTEND=OFF -DUSE_EMUSYNC=OFF -DHOST_PAGE_SIZE=4096 -DCMAKE_FIND_ROOT_PATH=<deps prefix>`.
+  `-DBUILD_QT_FRONTEND=OFF -DUSE_EMUSYNC=OFF -DHOST_PAGE_SIZE=16384 -DCMAKE_FIND_ROOT_PATH=<deps prefix>`.
+  *Changed during implementation: 16384 rather than 4096, so fastmem works on 16 KB-page devices too (Review
+  Focus 5).*
 
 - [ ] **Step 1: Make CMake accept Android** and gate the desktop-only dependencies as listed.
 - [ ] **Step 2: Add the `goosestation` target** and the configure script.
@@ -254,10 +258,13 @@ Behaviour that the signatures don't fix:
 - The CPU thread loops like Qt's `EmuThread::run`. `Host::RunOnCPUThread` posts to a mutex-protected queue drained
   in `PumpMessagesOnCPUThread` and while idle, honouring `block`. Every JNI entry point that touches the core posts
   to this queue.
-- **Page size:** if `sysconf(_SC_PAGESIZE)` isn't `HOST_PAGE_SIZE`, force `CPUFastmemMode::Disabled` before the
-  first boot and log it.
-- **Default mapping:** when a controller connects and Port 1 has no bindings for any connected device, map it with
-  `InputManager::MapController` using `AndroidInputKeys::GetDefaultMapping`, and save the settings.
+- **Page size:** if `sysconf(_SC_PAGESIZE)` is larger than `HOST_PAGE_SIZE` (16384), force
+  `CPUFastmemMode::Disabled` before the first boot and log it. *Changed during implementation, with the 16 KB build
+  (Review Focus 5).*
+- **Default mapping:** when a controller connects, add its `AndroidInputKeys::GetDefaultMapping` bindings to Port 1's
+  (each binding is a list), skipping any already there, and save the settings. *Changed during the final review:
+  the plan mapped a controller only when Port 1 had no bindings for any connected device, so a second pad never
+  drove Port 1.*
   `Settings::SetDefaultControllerConfig` skips auto-mapping on Android, so this is what maps the Thor's pad.
 - **The surface** follows the Qt pattern: a size change calls `Host::ResizeDisplayWindow`; a new or destroyed
   surface swaps the `ANativeWindow` (acquired/released with `ANativeWindow_fromSurface`/`_release`) and calls

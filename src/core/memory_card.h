@@ -39,6 +39,10 @@ public:
 
   bool IsOrWasRecentlyWriting() const;
 
+  /// Writes any changes to the file now, rather than once the save delay is over. Hosts that may be killed while
+  /// paused (Android in the background) call it, since a paused system's save event never fires.
+  void Flush();
+
   void Format();
 
 private:

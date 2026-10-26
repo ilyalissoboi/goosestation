@@ -31,9 +31,12 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
         }
     }
 
-    /** Sends a controller key to the core. Returns false for an event that isn't a controller's. */
+    /**
+     * Sends a controller's gamepad button or D-pad key to the core. Returns false for any other key, such as Back,
+     * volume or media keys, so that the system handles it.
+     */
     fun onKeyEvent(event: KeyEvent): Boolean {
-        if (!isControllerEvent(event.source) || event.keyCode == KeyEvent.KEYCODE_BACK) return false
+        if (!isControllerEvent(event.source) || !isPadKey(event.keyCode)) return false
         val pressed =
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> true
@@ -61,6 +64,19 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
             }
         }
         return true
+    }
+
+    /**
+     * Lets go of everything the controllers hold, in the core and here, so the next value of each axis is sent even if
+     * it's the last one. Android sends no axis events when the app loses focus, nor any input on the game list.
+     */
+    fun releaseAll() {
+        forgetAxes()
+        NativeLibrary.releaseAllInputs()
+    }
+
+    private fun forgetAxes() {
+        for (last in devices.values) last.fill(0f)
     }
 
     override fun onInputDeviceAdded(deviceId: Int) {
@@ -101,6 +117,16 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
                 MotionEvent.AXIS_HAT_X,
                 MotionEvent.AXIS_HAT_Y,
             )
+
+        // KeyEvent.isGamepadButton() covers BUTTON_A to BUTTON_MODE and BUTTON_1 to BUTTON_16. Back is neither that nor
+        // a D-pad key, so it stays the app's.
+        fun isPadKey(keyCode: Int): Boolean =
+            KeyEvent.isGamepadButton(keyCode) ||
+                keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                keyCode == KeyEvent.KEYCODE_DPAD_CENTER
 
         fun isControllerEvent(source: Int): Boolean =
             hasSource(source, InputDevice.SOURCE_GAMEPAD) ||

@@ -40,6 +40,10 @@ void QueueAxisEvent(s32 device_id, s32 axis, float value);
 void QueueDeviceConnected(s32 device_id, std::string name, std::string descriptor);
 void QueueDeviceDisconnected(s32 device_id);
 
+/// Lets go of every controller input, from any thread, in order with the events queued before it. For when the app
+/// stops getting a device's events (focus lost, in the background) and when a game boots or stops.
+void QueueReleaseAllInputs();
+
 /// CPU thread: boots the game StartGame() left pending, once there's a surface and the last game is destroyed. The
 /// thread's loop calls it whenever System::Execute() has returned or its work is done, never from inside a blocking
 /// call, so the app's thread isn't held up by a boot.

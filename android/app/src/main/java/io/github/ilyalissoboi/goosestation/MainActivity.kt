@@ -65,8 +65,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         App.resumed = false
-        if (App.playing != null) NativeLibrary.setPaused(true)
+        if (App.playing != null) {
+            App.controllers?.releaseAll()
+            NativeLibrary.setPaused(true)
+        }
         super.onPause()
+    }
+
+    // Losing focus (the notification shade, a dialog) sends a cancelled key-up for held keys, but nothing for axes.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus && App.playing != null) App.controllers?.releaseAll()
     }
 
     override fun onDestroy() {
@@ -212,6 +221,9 @@ private object App : NativeCallbacks {
         mainHandler.post {
             Log.i(TAG, "Game started: $title")
             gameRunning = true
+            // Release on this thread, after any input it already sent during the boot, so nothing pressed
+            // while booting can stay held.
+            controllers?.releaseAll()
             // Booted in the background. One the user left while it booted is shut down next anyway.
             if (playing != null && !resumed) NativeLibrary.setPaused(true)
         }
@@ -221,6 +233,8 @@ private object App : NativeCallbacks {
         mainHandler.post {
             Log.i(TAG, "Game stopped.")
             gameRunning = false
+            // Same as on start: release in order with this thread's input.
+            controllers?.releaseAll()
             gameActive = false
             playing = null
             if (!messageIsError) message = null

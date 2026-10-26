@@ -126,6 +126,11 @@ void AndroidInputSource::QueueDeviceDisconnected(s32 device_id)
   QueueEvent(QueuedEvent{QueuedEvent::Type::Disconnected, device_id, 0, 0.0f, {}, {}});
 }
 
+void AndroidInputSource::QueueReleaseAll()
+{
+  QueueEvent(QueuedEvent{QueuedEvent::Type::ReleaseAll, 0, 0, 0.0f, {}, {}});
+}
+
 void AndroidInputSource::PollEvents()
 {
   {
@@ -163,6 +168,13 @@ void AndroidInputSource::PollEvents()
       case QueuedEvent::Type::Disconnected:
         HandleDisconnected(event.device_id);
         break;
+
+      case QueuedEvent::Type::ReleaseAll:
+      {
+        for (Device& device : m_devices)
+          ReleaseAll(device);
+      }
+      break;
     }
   }
 
@@ -207,9 +219,7 @@ void AndroidInputSource::HandleDisconnected(s32 device_id)
     return;
 
   // Let go of everything it held, so nothing stays pressed.
-  m_pad_events.clear();
-  it->state.ReleaseAll(m_pad_events);
-  ReportPadEvents(it->index, m_pad_events);
+  ReleaseAll(*it);
 
   const u32 index = it->index;
   m_devices.erase(it);
@@ -218,6 +228,13 @@ void AndroidInputSource::HandleDisconnected(s32 device_id)
   key.source_type = InputSourceType::Android;
   key.source_index = index;
   InputManager::OnInputDeviceDisconnected(key, fmt::format("Android-{}", index));
+}
+
+void AndroidInputSource::ReleaseAll(Device& device)
+{
+  m_pad_events.clear();
+  device.state.ReleaseAll(m_pad_events);
+  ReportPadEvents(device.index, m_pad_events);
 }
 
 void AndroidInputSource::ReportPadEvents(u32 index, const std::vector<AndroidInputKeys::PadEvent>& events)

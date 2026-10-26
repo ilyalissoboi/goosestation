@@ -39,4 +39,7 @@ object NativeLibrary {
     external fun onDeviceConnected(deviceId: Int, name: String, descriptor: String)
 
     external fun onDeviceDisconnected(deviceId: Int)
+
+    /** Lets go of every controller input, after the input sent before it. */
+    external fun releaseAllInputs()
 }

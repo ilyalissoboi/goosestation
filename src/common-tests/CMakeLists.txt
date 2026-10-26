@@ -2,6 +2,8 @@ add_executable(common-tests
   android_input_keys_tests.cpp
   ../util/android_input_keys.cpp
   bitutils_tests.cpp
+  fallback_fonts_tests.cpp
+  ../util/fallback_fonts.cpp
   file_system_tests.cpp
   gsvector_yuvtorgb_test.cpp
   memcard_sync_ui_tests.cpp

@@ -4050,6 +4050,9 @@ void System::UpdateRunningGame(const std::string_view path, CDImage* image, bool
 
   UpdateRichPresence(booting);
 
+  // The title shows in Big Picture and OSD messages, and can be in any script.
+  ImGuiManager::RequestGlyphsForText(s_running_game_title);
+
   Host::OnGameChanged(s_running_game_path, s_running_game_serial, s_running_game_title);
 }
 

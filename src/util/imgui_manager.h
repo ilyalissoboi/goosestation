@@ -6,6 +6,7 @@
 #include "common/types.h"
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 class Error;
@@ -28,6 +29,10 @@ void SetEmojiFontRange(std::vector<WCharType> range);
 
 /// Returns a compacted font range, with adjacent glyphs merged into one pair.
 std::vector<WCharType> CompactFontRange(std::span<const WCharType> range);
+
+/// Makes the text fonts able to draw the text, such as a game's Japanese title, by adding the glyphs they lack from a
+/// fallback font before the next frame. OSD messages do this themselves. Call on the thread that renders ImGui.
+void RequestGlyphsForText(std::string_view text);
 
 /// Changes the global scale.
 void SetGlobalScale(float global_scale);

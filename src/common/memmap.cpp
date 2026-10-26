@@ -27,12 +27,15 @@
 #include <mach/mach_vm.h>
 #include <mach/vm_map.h>
 #include <sys/mman.h>
-#elif !defined(__ANDROID__)
+#else
 #include <cerrno>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+#include <android/sharedmem.h>
+#endif
 #endif
 
 Log_SetChannel(MemMap);
@@ -598,7 +601,7 @@ void MemMap::EndCodeWrite()
 
 #endif
 
-#elif !defined(__ANDROID__)
+#else
 
 bool MemMap::MemProtect(void* baseaddr, size_t size, PageProtect mode)
 {
@@ -628,7 +631,16 @@ std::string MemMap::GetFileMappingName(const char* prefix)
 void* MemMap::CreateSharedMemory(const char* name, size_t size, Error* error)
 {
   const bool is_anonymous = (!name || *name == 0);
-#if defined(__linux__) || defined(__FreeBSD__)
+#if defined(__ANDROID__)
+  // Bionic has no shm_open(), and memfd_create() needs API 30. The fd is mapped like any other. Named regions aren't
+  // visible to other processes, so there is nothing to unlink later.
+  const int fd = ASharedMemory_create(is_anonymous ? nullptr : name, size);
+  if (fd < 0)
+  {
+    Error::SetErrno(error, "ASharedMemory_create() failed: ", errno);
+    return nullptr;
+  }
+#elif defined(__linux__) || defined(__FreeBSD__)
   const int fd = is_anonymous ? memfd_create("", 0) : shm_open(name, O_CREAT | O_EXCL | O_RDWR, 0600);
   if (fd < 0)
   {
@@ -648,8 +660,10 @@ void* MemMap::CreateSharedMemory(const char* name, size_t size, Error* error)
     shm_unlink(name);
 #endif
 
+#if defined(__ANDROID__)
+  // ASharedMemory_create() already sized the region.
+#elif defined(__linux__)
   // use fallocate() to ensure we don't SIGBUS later on.
-#ifdef __linux__
   if (fallocate(fd, 0, 0, static_cast<off_t>(size)) < 0)
   {
     Error::SetErrno(error, TinyString::from_format("fallocate({}) failed: ", size), errno);
@@ -680,7 +694,9 @@ void MemMap::DestroySharedMemory(void* ptr)
 
 void MemMap::DeleteSharedMemory(const char* name)
 {
+#ifndef __ANDROID__
   shm_unlink(name);
+#endif
 }
 
 void* MemMap::MapSharedMemory(void* handle, size_t offset, void* baseaddr, size_t size, PageProtect mode)

@@ -45,8 +45,6 @@
 
 Log_SetChannel(FileSystem);
 
-#ifndef __ANDROID__
-
 #ifdef _WIN32
 static std::time_t ConvertFileTimeToUnixTime(const FILETIME& ft)
 {
@@ -832,6 +830,8 @@ std::vector<std::string> FileSystem::GetRootDirectoryList()
       ptr += len + 1u;
     }
   }
+#elif defined(__ANDROID__)
+  // Apps only see their own storage, so there are no root directories to offer.
 #else
   const char* home_path = std::getenv("HOME");
   if (home_path)
@@ -1252,8 +1252,6 @@ void FileSystem::DiscardAtomicRenamedFile(AtomicRenamedFile& file)
 {
   file.get_deleter().discard();
 }
-
-#endif
 
 FileSystem::ManagedCFilePtr FileSystem::OpenManagedCFile(const char* filename, const char* mode, Error* error)
 {
@@ -2203,7 +2201,7 @@ bool FileSystem::SetPathCompression(const char* path, bool enable)
   return result;
 }
 
-#elif !defined(__ANDROID__)
+#else
 
 static u32 TranslateStatAttributes(struct stat& st)
 {
@@ -2602,7 +2600,7 @@ bool FileSystem::DeleteDirectory(const char* path)
 
 std::string FileSystem::GetProgramPath()
 {
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
   static const char* exeFileName = "/proc/self/exe";
 
   int curSize = PATH_MAX;

@@ -146,7 +146,7 @@ std::string InputSource::ConvertGenericControllerKeyToString(InputBindingKey key
   }
   else if (key.source_subtype == InputSubclass::ControllerButton)
   {
-    return fmt::format("{}{}/Button{}", InputManager::InputSourceToString(key.source_type),
+    return fmt::format("{}-{}/Button{}", InputManager::InputSourceToString(key.source_type),
                        static_cast<u32>(key.source_index), key.data);
   }
   else

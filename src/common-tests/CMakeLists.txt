@@ -1,4 +1,6 @@
 add_executable(common-tests
+  android_input_keys_tests.cpp
+  ../util/android_input_keys.cpp
   bitutils_tests.cpp
   file_system_tests.cpp
   gsvector_yuvtorgb_test.cpp

@@ -7,6 +7,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 class Error;
 struct ANativeWindow;
@@ -15,9 +16,24 @@ struct ANativeWindow;
 /// calls the functions below from the app's threads; the core itself only runs on the CPU thread (emu_thread.h).
 namespace AndroidHost {
 
-/// Sets the folders, loads settings.ini (defaults when it's missing or from another version) and starts the CPU
-/// thread. Calling it again once it succeeded does nothing and returns true.
-bool Initialize(std::string data_root, std::string resources_root, Error* error);
+/// Sets the folders, loads settings.ini (defaults when it's missing or from another version, adapted when it's from
+/// another install: AdaptForeignSettings()) and starts the CPU thread. The BIOS images are read from bios_dir, whatever
+/// settings.ini says. Calling it again once it succeeded does nothing and returns true.
+bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
+                Error* error);
+
+/// The settings below are the base layer's, settings.ini, and are saved straight away. From any thread; they do
+/// nothing (or return the default) before Initialize() succeeded.
+
+/// Scans exactly these folders, and all below them, for games: [GameList] RecursivePaths, with no Paths.
+void SetGameFolders(std::vector<std::string> tree_uris);
+
+/// Reads settings.ini again (after the app replaced it), adapts it if it's from another install, and applies it.
+/// Blocks until the CPU thread has done so.
+void ReloadSettings();
+
+bool GetBoolSetting(const char* section, const char* key, bool default_value);
+void SetBoolSetting(const char* section, const char* key, bool value);
 
 /// Boots a game, once the app has given a surface. NotifyGameStarted() reports that it booted. Every call ends with
 /// one NotifyGameStopped(): when the game stops, or straight away if it fails to boot (after NotifyError()), is

@@ -9,6 +9,8 @@ add_library(goosestation SHARED
   content_bridge.h
   emu_thread.cpp
   emu_thread.h
+  foreign_settings.cpp
+  foreign_settings.h
   fullscreen_ui_stubs.cpp
   jni_bridge.cpp
   jni_util.cpp

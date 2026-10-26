@@ -28,6 +28,7 @@ import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import java.io.File
 import java.util.Locale
+import java.util.UUID
 import kotlin.concurrent.thread
 
 class MainActivity : ComponentActivity() {
@@ -172,11 +173,16 @@ private object App : NativeCallbacks {
             val result =
                 runCatching {
                     val dataRoot = File(context.getExternalFilesDir(null), "data")
-                    File(dataRoot, "bios").mkdirs()
+                    val biosDir = File(context.filesDir, "bios").apply { mkdirs() }
                     gamesFolder(context).mkdirs()
                     val resources = Resources.extract(context)
                     NativeLibrary.setCallbacks(this)
-                    NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath)
+                    NativeLibrary.initialize(
+                        dataRoot.absolutePath,
+                        resources.absolutePath,
+                        biosDir.absolutePath,
+                        installId(context),
+                    )
                 }
 
             mainHandler.post {
@@ -196,6 +202,15 @@ private object App : NativeCallbacks {
                 }
             }
         }
+    }
+
+    // Made once per install, so the core can tell its own settings.ini from one copied from elsewhere.
+    private fun installId(context: Context): String {
+        val prefs = context.getSharedPreferences("folders", Context.MODE_PRIVATE)
+        prefs.getString("installId", null)?.let { return it }
+        val id = UUID.randomUUID().toString()
+        prefs.edit().putString("installId", id).commit()
+        return id
     }
 
     fun startGame(game: File) {

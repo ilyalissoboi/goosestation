@@ -17,6 +17,8 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 Log_SetChannel(JNIBridge);
 
@@ -156,13 +158,12 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 #define NATIVE_LIBRARY_FUNCTION(ret, name) \
   JNIEXPORT ret JNICALL Java_io_github_ilyalissoboi_goosestation_core_NativeLibrary_##name
 
-NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root)
+NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
+                                               jstring bios_dir, jstring install_id)
 {
-  std::string data_root_str = FromJString(env, data_root);
-  std::string resources_root_str = FromJString(env, resources_root);
-
   Error error;
-  if (!AndroidHost::Initialize(std::move(data_root_str), std::move(resources_root_str), &error))
+  if (!AndroidHost::Initialize(FromJString(env, data_root), FromJString(env, resources_root),
+                               FromJString(env, bios_dir), FromJString(env, install_id), &error))
   {
     ERROR_LOG("Initialization failed: {}", error.GetDescription());
     AndroidHost::NotifyError(error.GetDescription());
@@ -170,6 +171,48 @@ NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data
   }
 
   return JNI_TRUE;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setGameFolders)(JNIEnv* env, jobject, jobjectArray tree_uris)
+{
+  std::vector<std::string> uris;
+  const jsize count = tree_uris ? env->GetArrayLength(tree_uris) : 0;
+  uris.reserve(static_cast<size_t>(count));
+  for (jsize i = 0; i < count; i++)
+  {
+    jstring uri = static_cast<jstring>(env->GetObjectArrayElement(tree_uris, i));
+    if (ClearException(env))
+      return;
+
+    if (uri)
+    {
+      uris.push_back(FromJString(env, uri));
+      env->DeleteLocalRef(uri);
+    }
+  }
+
+  AndroidHost::SetGameFolders(std::move(uris));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, reloadSettings)(JNIEnv*, jobject)
+{
+  AndroidHost::ReloadSettings();
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, getBoolSetting)(JNIEnv* env, jobject, jstring section, jstring key,
+                                                  jboolean default_value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  return AndroidHost::GetBoolSetting(section_str.c_str(), key_str.c_str(), default_value == JNI_TRUE) ? JNI_TRUE :
+                                                                                                        JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setBoolSetting)(JNIEnv* env, jobject, jstring section, jstring key, jboolean value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  AndroidHost::SetBoolSetting(section_str.c_str(), key_str.c_str(), value == JNI_TRUE);
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setCallbacks)(JNIEnv* env, jobject, jobject callbacks)

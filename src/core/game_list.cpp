@@ -779,14 +779,10 @@ void GameList::Refresh(bool invalidate_cache, bool only_cache, ProgressCallback*
 
   const std::vector<std::string> excluded_paths(Host::GetBaseStringListSetting("GameList", "ExcludedPaths"));
   const std::vector<std::string> dirs(Host::GetBaseStringListSetting("GameList", "Paths"));
-  std::vector<std::string> recursive_dirs(Host::GetBaseStringListSetting("GameList", "RecursivePaths"));
+  const std::vector<std::string> recursive_dirs(Host::GetBaseStringListSetting("GameList", "RecursivePaths"));
   const PlayedTimeMap played_time(LoadPlayedTimeMap(GetPlayedTimeFile()));
   INISettingsInterface custom_attributes_ini(GetCustomPropertiesFile());
   custom_attributes_ini.Load();
-
-#ifdef __ANDROID__
-  recursive_dirs.push_back(Path::Combine(EmuFolders::DataRoot, "games"));
-#endif
 
   if (!dirs.empty() || !recursive_dirs.empty())
   {

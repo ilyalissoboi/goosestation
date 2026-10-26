@@ -3,6 +3,7 @@
 
 #include "android_host.h"
 #include "emu_thread.h"
+#include "foreign_settings.h"
 
 #include "core/achievements.h"
 #include "core/controller.h"
@@ -75,12 +76,13 @@ struct ConnectedDevice
 
 static bool InitializeConfig(Error* error);
 static void SetDefaultSettings(SettingsInterface& si);
+static void LoadFolders(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
 static void AddControllerToPort1(const std::string& identifier);
 
-// Android's own settings.ini, so its version is independent of the Qt frontend's.
-static constexpr u32 SETTINGS_VERSION = 1;
+// Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
+static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
 
 static constexpr std::string_view DEVICE_PREFIX = "Android-";
 
@@ -89,6 +91,10 @@ static std::atomic_bool s_initialized{false};
 static bool s_startup_attempted = false; // guarded by s_initialize_mutex
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
 static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
+
+// Set once by Initialize(), before s_initialized.
+static std::string s_bios_dir;
+static std::string s_install_id;
 
 // Input queued by the app's threads.
 static std::mutex s_input_mutex;
@@ -110,7 +116,8 @@ static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
 } // namespace AndroidHost
 
-bool AndroidHost::Initialize(std::string data_root, std::string resources_root, Error* error)
+bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
+                             std::string install_id, Error* error)
 {
   std::unique_lock lock(s_initialize_mutex);
   if (s_initialized)
@@ -122,8 +129,11 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   EmuFolders::AppRoot = Path::Canonicalize(resources_root);
   EmuFolders::Resources = EmuFolders::AppRoot;
   EmuFolders::DataRoot = Path::Canonicalize(data_root);
+  s_bios_dir = Path::Canonicalize(bios_dir);
+  s_install_id = std::move(install_id);
   INFO_LOG("DataRoot Directory: {}", EmuFolders::DataRoot);
   INFO_LOG("Resources Directory: {}", EmuFolders::Resources);
+  INFO_LOG("BIOS Directory: {}", s_bios_dir);
 
   if (!FileSystem::DirectoryExists(EmuFolders::Resources.c_str()))
   {
@@ -167,38 +177,49 @@ bool AndroidHost::InitializeConfig(Error* error)
   s_base_settings_interface = std::make_unique<INISettingsInterface>(std::move(settings_filename));
   Host::Internal::SetBaseSettingsLayer(s_base_settings_interface.get());
 
+  const auto lock = Host::GetSettingsLock();
+  INISettingsInterface& si = *s_base_settings_interface;
+  bool changed = false;
   u32 settings_version;
-  if (!settings_exists || !s_base_settings_interface->Load() ||
-      !s_base_settings_interface->GetUIntValue("Main", "SettingsVersion", &settings_version) ||
-      settings_version != SETTINGS_VERSION)
+  if (!settings_exists || !si.Load() || !si.GetUIntValue("Main", "SettingsVersion", &settings_version) ||
+      (settings_version != Settings::SETTINGS_VERSION && settings_version != PLAN1_SETTINGS_VERSION))
   {
-    if (s_base_settings_interface->ContainsValue("Main", "SettingsVersion"))
+    if (si.ContainsValue("Main", "SettingsVersion"))
     {
       WARNING_LOG("Settings version {} does not match expected version {}, resetting.", settings_version,
-                  SETTINGS_VERSION);
+                  Settings::SETTINGS_VERSION);
     }
 
-    s_base_settings_interface->SetUIntValue("Main", "SettingsVersion", SETTINGS_VERSION);
-    SetDefaultSettings(*s_base_settings_interface);
+    si.SetUIntValue("Main", "SettingsVersion", Settings::SETTINGS_VERSION);
+    SetDefaultSettings(si);
+    changed = true;
+  }
+  else if (settings_version == PLAN1_SETTINGS_VERSION)
+  {
+    INFO_LOG("Upgrading the settings from version {} to {}.", settings_version, Settings::SETTINGS_VERSION);
+    si.SetUIntValue("Main", "SettingsVersion", Settings::SETTINGS_VERSION);
+    changed = true;
+  }
 
-    // Make sure the config can be saved at all.
-    if (!s_base_settings_interface->Save(error))
-    {
-      Error::AddPrefixFmt(error, "Failed to save configuration to '{}': ", s_base_settings_interface->GetFileName());
-      return false;
-    }
+  // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
+  changed = AdaptForeignSettings(si, s_install_id) || changed;
+
+  // Saving the defaults also makes sure the config can be saved at all.
+  if (changed && !si.Save(error))
+  {
+    Error::AddPrefixFmt(error, "Failed to save configuration to '{}': ", si.GetFileName());
+    return false;
   }
 
   // Secrets go to secrets.ini next to it, so settings.ini can be shared without them.
-  std::string secrets_filename =
-    Path::Combine(Path::GetDirectory(s_base_settings_interface->GetFileName()), "secrets.ini");
+  std::string secrets_filename = Path::Combine(Path::GetDirectory(si.GetFileName()), "secrets.ini");
   const bool secrets_exist = FileSystem::FileExists(secrets_filename.c_str());
   s_secrets_settings_interface = std::make_unique<INISettingsInterface>(std::move(secrets_filename));
   if (secrets_exist && !s_secrets_settings_interface->Load())
     ERROR_LOG("Failed to load secrets from {}.", s_secrets_settings_interface->GetFileName());
   Host::Internal::SetSecretsSettingsLayer(s_secrets_settings_interface.get());
 
-  EmuFolders::LoadConfig(*s_base_settings_interface);
+  LoadFolders(si);
   EmuFolders::EnsureFoldersExist();
   return true;
 }
@@ -212,6 +233,90 @@ void AndroidHost::SetDefaultSettings(SettingsInterface& si)
   InputManager::SetDefaultSourceConfig(si);
   Settings::SetDefaultControllerConfig(si);
   Settings::SetDefaultHotkeyConfig(si);
+}
+
+void AndroidHost::LoadFolders(SettingsInterface& si)
+{
+  // The BIOS images are the app's own copies, outside the data folder: [BIOS] SearchDirectory stays as the file has
+  // it, for the desktop that shares it.
+  EmuFolders::LoadConfig(si);
+  EmuFolders::Bios = s_bios_dir;
+}
+
+void AndroidHost::SetGameFolders(std::vector<std::string> tree_uris)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  INISettingsInterface& si = *s_base_settings_interface;
+  si.DeleteValue("GameList", "Paths");
+  si.SetStringList("GameList", "RecursivePaths", tree_uris);
+
+  Error error;
+  if (!si.Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+void AndroidHost::ReloadSettings()
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    []() {
+      bool adapted;
+      {
+        const auto lock = Host::GetSettingsLock();
+        INISettingsInterface& si = *s_base_settings_interface;
+        Error error;
+        if (!si.Reload(&error))
+        {
+          ERROR_LOG("Failed to reload the settings from {}, keeping them: {}", si.GetFileName(), error.GetDescription());
+          return;
+        }
+
+        INFO_LOG("Reloaded the settings from {}.", si.GetFileName());
+        adapted = AdaptForeignSettings(si, s_install_id);
+        if (adapted && !si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      // The bindings were reset: map the pads connected now, which won't connect again.
+      if (adapted)
+      {
+        for (const auto& device : InputManager::EnumerateDevices())
+          AddControllerToPort1(device.first);
+      }
+
+      // Update() takes the lock itself, and loads the folders again.
+      EmuFolders::Update();
+      EmuFolders::Bios = s_bios_dir;
+      System::ApplySettings(false);
+    },
+    true);
+}
+
+bool AndroidHost::GetBoolSetting(const char* section, const char* key, bool default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetBoolValue(section, key, default_value);
+}
+
+void AndroidHost::SetBoolSetting(const char* section, const char* key, bool value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  s_base_settings_interface->SetBoolValue(section, key, value);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
 }
 
 void AndroidHost::StartGame(std::string path)

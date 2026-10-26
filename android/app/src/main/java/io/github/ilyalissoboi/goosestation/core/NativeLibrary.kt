@@ -7,15 +7,31 @@ import android.view.Surface
 
 /**
  * The emulator core, in libgoosestation.so. The core runs on its own thread: these calls queue work for it and
- * return straight away, except [initialize] and [surfaceChanged], which wait for it.
+ * return straight away, except [initialize], [surfaceChanged] and [reloadSettings], which wait for it.
  */
 object NativeLibrary {
     init {
         System.loadLibrary("goosestation")
     }
 
-    /** Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. */
-    external fun initialize(dataRoot: String, resourcesRoot: String): Boolean
+    /**
+     * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
+     * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
+     * settings reset.
+     */
+    external fun initialize(dataRoot: String, resourcesRoot: String, biosDir: String, installId: String): Boolean
+
+    // The settings calls work on settings.ini, which they save, and can be made from any thread.
+
+    /** The game list scans exactly these folders, and every folder below them. */
+    external fun setGameFolders(treeUris: Array<String>)
+
+    /** Reads settings.ini again, after the app replaced it, and applies it. Waits for the core. */
+    external fun reloadSettings()
+
+    external fun getBoolSetting(section: String, key: String, default: Boolean): Boolean
+
+    external fun setBoolSetting(section: String, key: String, value: Boolean)
 
     /** Registers the callbacks, or removes them with null. They're called on the core's threads. */
     external fun setCallbacks(callbacks: NativeCallbacks?)

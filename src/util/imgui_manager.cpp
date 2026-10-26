@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: (GPL-3.0 OR PolyForm-Strict-1.0.0)
 
 #include "imgui_manager.h"
+#include "fallback_fonts.h"
 #include "gpu_device.h"
 #include "host.h"
 #include "image.h"
@@ -10,11 +11,14 @@
 #include "input_manager.h"
 #include "text_input.h"
 
+#include "core/settings.h" // TODO: Remove, needed for the downloaded fonts directory.
+
 #include "common/assert.h"
 #include "common/easing.h"
 #include "common/error.h"
 #include "common/file_system.h"
 #include "common/log.h"
+#include "common/path.h"
 #include "common/string_util.h"
 #include "common/timer.h"
 
@@ -24,6 +28,7 @@
 #include "imgui_freetype.h"
 #include "imgui_internal.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -62,6 +67,13 @@ struct OSDMessage
   std::unique_ptr<GPUTexture> texture; // created from image when first drawn
 };
 
+struct FallbackFont
+{
+  DynamicHeapArray<u8> data;
+  u32 face_index;
+  size_t candidate; // index in FallbackFonts::GetCandidates()
+};
+
 } // namespace
 
 static_assert(std::is_same_v<WCharType, ImWchar>);
@@ -75,6 +87,8 @@ static bool AddImGuiFonts(bool fullscreen_fonts);
 static ImFont* AddTextFont(float size);
 static ImFont* AddFixedFont(float size);
 static bool AddIconFonts(float size);
+static void UpdateFallbackGlyphs();
+static size_t CountMissingFallbackGlyphs();
 static void AcquirePendingOSDMessages(Common::Timer::Value current_time);
 static void DrawOSDMessages(Common::Timer::Value current_time);
 static void PostOSDMessage(std::string key, std::string message, float duration, std::optional<Host::OSDImage> image);
@@ -103,6 +117,15 @@ static DynamicHeapArray<u8> s_fixed_font_data;
 static DynamicHeapArray<u8> s_icon_fa_font_data;
 static DynamicHeapArray<u8> s_icon_pf_font_data;
 static DynamicHeapArray<u8> s_emoji_font_data;
+
+// Code points the text fonts lacked when text needed them, sorted, and the fonts loaded to draw them. A font stays
+// loaded only if it has some of them. s_fallback_unavailable counts the code points no font had.
+static constexpr size_t MAX_FALLBACK_GLYPHS = 1024;
+static std::vector<char32_t> s_fallback_codepoints;
+static std::vector<WCharType> s_fallback_range;
+static std::vector<FallbackFont> s_fallback_fonts;
+static std::vector<std::string> s_pending_glyph_text;
+static size_t s_fallback_unavailable = 0;
 
 static float s_window_width;
 static float s_window_height;
@@ -206,6 +229,18 @@ std::vector<ImGuiManager::WCharType> ImGuiManager::CompactFontRange(std::span<co
   }
 
   return ret;
+}
+
+void ImGuiManager::RequestGlyphsForText(std::string_view text)
+{
+  // ASCII is always in the text fonts.
+  if (s_fallback_codepoints.size() >= MAX_FALLBACK_GLYPHS ||
+      std::none_of(text.begin(), text.end(), [](char ch) { return (static_cast<u8>(ch) >= 0x80); }))
+  {
+    return;
+  }
+
+  s_pending_glyph_text.emplace_back(text);
 }
 
 void ImGuiManager::SetGlobalScale(float global_scale)
@@ -369,6 +404,8 @@ void ImGuiManager::NewFrame()
     s_scale_changed = false;
     UpdateScale();
   }
+
+  UpdateFallbackGlyphs();
 
   ImGui::NewFrame();
 
@@ -660,8 +697,25 @@ ImFont* ImGuiManager::AddTextFont(float size)
 {
   ImFontConfig cfg;
   cfg.FontDataOwnedByAtlas = false;
-  return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
+  ImFont* const font = ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
     s_standard_font_data.data(), static_cast<int>(s_standard_font_data.size()), size, &cfg, s_font_range.data());
+  if (!font)
+    return nullptr;
+
+  for (FallbackFont& fallback : s_fallback_fonts)
+  {
+    ImFontConfig fallback_cfg;
+    fallback_cfg.MergeMode = true;
+    fallback_cfg.FontDataOwnedByAtlas = false;
+    fallback_cfg.FontNo = static_cast<int>(fallback.face_index);
+    if (!ImGui::GetIO().Fonts->AddFontFromMemoryTTF(fallback.data.data(), static_cast<int>(fallback.data.size()), size,
+                                                    &fallback_cfg, s_fallback_range.data())) [[unlikely]]
+    {
+      return nullptr;
+    }
+  }
+
+  return font;
 }
 
 ImFont* ImGuiManager::AddFixedFont(float size)
@@ -782,6 +836,83 @@ void ImGuiManager::ReloadFontDataIfActive()
     Panic("Failed to recreate font texture after scale+resize");
 
   NewFrame();
+}
+
+void ImGuiManager::UpdateFallbackGlyphs()
+{
+  if (s_pending_glyph_text.empty())
+    return;
+
+  const auto has_glyph = [](char32_t ch) { return (s_standard_font->FindGlyphNoFallback(ch) != nullptr); };
+  size_t added = 0;
+  for (const std::string& text : s_pending_glyph_text)
+    added += FallbackFonts::AddMissingCodepoints(s_fallback_codepoints, text, has_glyph, MAX_FALLBACK_GLYPHS);
+  s_pending_glyph_text.clear();
+  if (added == 0)
+    return;
+
+  s_fallback_range.assign(s_fallback_codepoints.begin(), s_fallback_codepoints.end());
+  s_fallback_range = CompactFontRange(s_fallback_range);
+  s_fallback_range.push_back(0);
+  s_fallback_range.push_back(0);
+
+  // Without a fallback font yet, rebuilding would change nothing.
+  bool rebuilt = false;
+  if (!s_fallback_fonts.empty())
+  {
+    if (!AddImGuiFonts(HasFullscreenFonts()))
+      Panic("Failed to create ImGui font text");
+    rebuilt = true;
+  }
+
+  // Try the fonts not loaded yet, in order, while new glyphs are missing. Every font has been tried for the older
+  // ones. A font that adds none is let go again.
+  size_t missing = CountMissingFallbackGlyphs();
+  const std::vector<FallbackFonts::Candidate> candidates =
+    FallbackFonts::GetCandidates(Path::Combine(EmuFolders::UserResources, "fonts"));
+  for (size_t i = 0; i < candidates.size() && missing > s_fallback_unavailable; i++)
+  {
+    const FallbackFonts::Candidate& candidate = candidates[i];
+    if (std::any_of(s_fallback_fonts.begin(), s_fallback_fonts.end(),
+                    [i](const FallbackFont& font) { return (font.candidate == i); }) ||
+        !FileSystem::FileExists(candidate.path.c_str()))
+    {
+      continue;
+    }
+
+    std::optional<DynamicHeapArray<u8>> data = FileSystem::ReadBinaryFile(candidate.path.c_str());
+    if (!data.has_value())
+      continue;
+
+    s_fallback_fonts.push_back(FallbackFont{std::move(data.value()), candidate.face_index, i});
+    rebuilt = true;
+    const size_t now_missing = AddImGuiFonts(HasFullscreenFonts()) ? CountMissingFallbackGlyphs() : missing;
+    if (now_missing < missing)
+    {
+      INFO_LOG("Using fallback font '{}' for {} glyphs.", candidate.path, missing - now_missing);
+      missing = now_missing;
+    }
+    else
+    {
+      DEV_LOG("Fallback font '{}' has none of the missing glyphs.", candidate.path);
+      s_fallback_fonts.pop_back();
+      if (!AddImGuiFonts(HasFullscreenFonts()))
+        Panic("Failed to create ImGui font text");
+    }
+  }
+
+  if (missing > s_fallback_unavailable)
+    WARNING_LOG("No fallback font has {} of the glyphs needed.", missing - s_fallback_unavailable);
+  s_fallback_unavailable = missing;
+
+  if (rebuilt && !g_gpu_device->UpdateImGuiFontTexture())
+    Panic("Failed to recreate font texture after adding glyphs");
+}
+
+size_t ImGuiManager::CountMissingFallbackGlyphs()
+{
+  return static_cast<size_t>(std::count_if(s_fallback_codepoints.begin(), s_fallback_codepoints.end(),
+                                           [](char32_t ch) { return !s_standard_font->FindGlyphNoFallback(ch); }));
 }
 
 bool ImGuiManager::AddFullscreenFontsIfMissing()
@@ -919,6 +1050,8 @@ void ImGuiManager::AcquirePendingOSDMessages(Common::Timer::Value current_time)
       break;
 
     OSDMessage& new_msg = s_osd_posted_messages.front();
+    RequestGlyphsForText(new_msg.text);
+
     std::deque<OSDMessage>::iterator iter;
     if (!new_msg.key.empty() && (iter = std::find_if(s_osd_active_messages.begin(), s_osd_active_messages.end(),
                                                      [&new_msg](const OSDMessage& other) {

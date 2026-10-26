@@ -9,6 +9,7 @@
     <ClInclude Include="cd_image.h" />
     <ClInclude Include="cd_image_hasher.h" />
     <ClInclude Include="cue_parser.h" />
+    <ClInclude Include="fallback_fonts.h" />
     <ClInclude Include="d3d11_device.h" />
     <ClInclude Include="d3d11_pipeline.h" />
     <ClInclude Include="d3d11_stream_buffer.h" />
@@ -121,6 +122,7 @@
     <ClCompile Include="compress_helpers.cpp" />
     <ClCompile Include="cubeb_audio_stream.cpp" />
     <ClCompile Include="cue_parser.cpp" />
+    <ClCompile Include="fallback_fonts.cpp" />
     <ClCompile Include="cd_image_ppf.cpp" />
     <ClCompile Include="d3d11_device.cpp" />
     <ClCompile Include="d3d11_pipeline.cpp" />

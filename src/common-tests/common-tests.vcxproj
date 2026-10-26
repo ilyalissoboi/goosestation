@@ -19,6 +19,8 @@
     <ClCompile Include="..\util\shiftjis.cpp" />
     <ClCompile Include="memory_card_helpers_tests.cpp" />
     <ClCompile Include="..\core\memory_card_helpers.cpp" />
+    <ClCompile Include="fallback_fonts_tests.cpp" />
+    <ClCompile Include="..\util\fallback_fonts.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\dep\googletest\googletest.vcxproj">

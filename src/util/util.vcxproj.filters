@@ -12,6 +12,7 @@
     <ClInclude Include="shiftjis.h" />
     <ClInclude Include="page_fault_handler.h" />
     <ClInclude Include="cue_parser.h" />
+    <ClInclude Include="fallback_fonts.h" />
     <ClInclude Include="ini_settings_interface.h" />
     <ClInclude Include="shadergen.h" />
     <ClInclude Include="imgui_fullscreen.h" />
@@ -96,6 +97,7 @@
     <ClCompile Include="cd_image_pbp.cpp" />
     <ClCompile Include="cd_image_m3u.cpp" />
     <ClCompile Include="cue_parser.cpp" />
+    <ClCompile Include="fallback_fonts.cpp" />
     <ClCompile Include="cd_image_ppf.cpp" />
     <ClCompile Include="cd_image_device.cpp" />
     <ClCompile Include="ini_settings_interface.cpp" />

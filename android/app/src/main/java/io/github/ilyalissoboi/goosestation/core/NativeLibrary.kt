@@ -33,6 +33,15 @@ object NativeLibrary {
 
     external fun setBoolSetting(section: String, key: String, value: Boolean)
 
+    /**
+     * Copies the PS1 BIOS images the core recognises from the top of [sourceTreeUri] to [destDir], then deletes every
+     * other file in [destDir]. Returns the images' descriptions in file name order. A folder with no image gives an
+     * empty array, and nothing is deleted. Returns null if the folder can't be read or a copy fails, and then nothing
+     * is deleted either. Doesn't need [initialize]. It runs on the calling thread and does I/O, so call it off the
+     * main thread.
+     */
+    external fun importBios(sourceTreeUri: String, destDir: String): Array<String>?
+
     /** Registers the callbacks, or removes them with null. They're called on the core's threads. */
     external fun setCallbacks(callbacks: NativeCallbacks?)
 

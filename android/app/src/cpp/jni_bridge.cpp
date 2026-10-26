@@ -4,6 +4,7 @@
 // The JNI side of io.github.ilyalissoboi.goosestation.core.NativeLibrary, and the calls back into NativeCallbacks.
 
 #include "android_host.h"
+#include "bios_import.h"
 #include "content_bridge.h"
 #include "jni_util.h"
 
@@ -28,6 +29,7 @@ using JNIUtil::ToJString;
 
 namespace {
 // Cached at JNI_OnLoad.
+jclass s_string_class = nullptr;
 jclass s_callbacks_class = nullptr;
 jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
@@ -129,6 +131,16 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     return JNI_ERR;
 
+  jclass string_class = env->FindClass("java/lang/String");
+  if (!string_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_string_class = static_cast<jclass>(env->NewGlobalRef(string_class));
+  env->DeleteLocalRef(string_class);
+
   jclass callbacks_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/NativeCallbacks");
   if (!callbacks_class)
   {
@@ -213,6 +225,40 @@ NATIVE_LIBRARY_FUNCTION(void, setBoolSetting)(JNIEnv* env, jobject, jstring sect
   const std::string section_str = FromJString(env, section);
   const std::string key_str = FromJString(env, key);
   AndroidHost::SetBoolSetting(section_str.c_str(), key_str.c_str(), value == JNI_TRUE);
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring source_tree_uri, jstring dest_dir)
+{
+  Error error;
+  const std::optional<std::vector<std::string>> descriptions =
+    BIOSImport::Import(s_content_provider, FromJString(env, source_tree_uri), FromJString(env, dest_dir), &error);
+  if (!descriptions.has_value())
+  {
+    ERROR_LOG("BIOS import failed: {}", error.GetDescription());
+    return nullptr;
+  }
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(descriptions->size()), s_string_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < descriptions->size(); i++)
+  {
+    jstring description = ToJString(env, (*descriptions)[i]);
+    if (!description)
+    {
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), description);
+    env->DeleteLocalRef(description);
+  }
+
+  return result;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setCallbacks)(JNIEnv* env, jobject, jobject callbacks)

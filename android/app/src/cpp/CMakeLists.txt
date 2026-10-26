@@ -5,6 +5,8 @@
 add_library(goosestation SHARED
   android_host.cpp
   android_host.h
+  bios_import.cpp
+  bios_import.h
   content_bridge.cpp
   content_bridge.h
   emu_thread.cpp

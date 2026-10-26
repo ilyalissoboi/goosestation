@@ -38,18 +38,34 @@ The Android project pins its own versions, the latest stable releases on 2026-10
 
 ## Installing the SDK
 
+On a fresh Mac, install the host tools first: CMake and Ninja for the dependency script and the standalone native
+build, and JDK 17 for Gradle.
+
+```bash
+brew install cmake ninja
+brew install --cask temurin@17
+java -version   # 17.x
+```
+
+Then the SDK:
+
 ```bash
 brew install --cask android-commandlinetools
 export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
 export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 
 yes | sdkmanager --licenses
 sdkmanager --install "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" "ndk;30.0.16248370" \
     "cmake;4.1.2" "emulator" "system-images;android-37.0;google_apis;arm64-v8a"
 ```
 
-The cask puts the SDK in `/opt/homebrew/share/android-commandlinetools`. Put the two `export` lines in your shell
-profile: the dependency script needs `ANDROID_NDK_HOME`, and Gradle finds the SDK through `ANDROID_HOME`.
+The cask puts the SDK in `/opt/homebrew/share/android-commandlinetools`, and links only the command-line tools
+(`sdkmanager`, `avdmanager` and so on) into `/opt/homebrew/bin`. `adb` (in `platform-tools`) and `emulator` aren't
+on `PATH` until you add them, as the third `export` does. It puts them first, ahead of any other `adb`, such as the
+`android-platform-tools` cask's. Put the three `export` lines in your shell profile: the dependency script needs
+`ANDROID_NDK_HOME`, Gradle finds the SDK through `ANDROID_HOME`, and every `adb` command below needs the `PATH`
+entry.
 
 ## The emulator
 
@@ -62,10 +78,14 @@ echo no | avdmanager create avd -n goose-arm64 -k "system-images;android-37.0;go
 Start it, then check that `adb` sees it:
 
 ```bash
-$ANDROID_HOME/emulator/emulator -avd goose-arm64 &
+emulator -avd goose-arm64 -no-snapshot-save &
 adb wait-for-device
 adb devices
 ```
+
+When a phone or handheld is plugged in as well, `adb` needs to know which device you mean: pass `-s emulator-5554`
+(the emulator's serial in `adb devices`), or `export ANDROID_SERIAL=emulator-5554`. The commands below leave `-s`
+out.
 
 The image uses 4 KB pages, like most devices. `libgoosestation.so` is also linked to load on 16 KB-page devices.
 
@@ -95,6 +115,34 @@ linked into `libgoosestation.so`. zlib comes from the NDK. Three libraries are s
 The NDK's CMake platform leaves out SOVERSION, so all three are unversioned, as APKs require. They keep their debug
 information; the Android Gradle Plugin strips them when it packages the APK.
 
+The Gradle build and the scripts below look for the prefix in `~/work/goosestation-deps-android`. If you built it
+somewhere else, set `GOOSESTATION_ANDROID_DEPS` to that directory.
+
+## Building the native code without Gradle
+
+`android/scripts/` builds and checks the native code on its own, faster than going through Gradle. All three
+scripts need `ANDROID_NDK_HOME` and the dependency prefix, and work in `build-android/` at the top of the
+repository (git-ignored).
+
+- `configure-native.sh [BUILD_TESTS=ON]` configures `build-android/` for arm64-v8a, API 29, with the same CMake
+  arguments as the Gradle build. `BUILD_TESTS=ON` adds `common-tests`. Build with
+  `cmake --build build-android --target goosestation`.
+- `run-native-tests.sh [gtest arguments]` configures with `BUILD_TESTS=ON`, builds `common-tests`, pushes it to
+  `/data/local/tmp` on the emulator and runs it there. Its exit code is the tests'. It needs `ANDROID_HOME` for
+  `adb`, and uses `ANDROID_SERIAL` (default `emulator-5554`) to pick the device. For example:
+  `android/scripts/run-native-tests.sh --gtest_filter='FileSystem.*'`.
+- `check-undefined.sh` builds `goosestation` in `build-android/` (configure it first), then links all of core,
+  util and common into a throwaway library with `--no-undefined`. It lists any symbol the app would miss once it
+  uses the whole core: the real link only pulls in what the JNI code references. It exits 0 when nothing is
+  undefined, and 1 when something is.
+
+```bash
+android/scripts/configure-native.sh
+cmake --build build-android --target goosestation
+android/scripts/check-undefined.sh
+android/scripts/run-native-tests.sh
+```
+
 ## Building the app
 
 ```bash
@@ -115,16 +163,173 @@ to its internal files on first run and whenever the version code changes.
 ## Running it
 
 The app lists games from its external files folder, and keeps its settings, memory cards and BIOS images in `data`
-next to it. Start the app once first, so it creates the folders itself (folders that `adb` creates belong to the shell,
-and the app can't write to them), then push the files:
+next to it.
+
+**Launch the app once before pushing anything.** The first launch creates `files/games`, `files/data` and its
+subfolders, owned by the app. A folder that `adb push` or `adb shell mkdir` creates first belongs to the shell, and
+the core can't write to it. The first launch also extracts the resources, so it takes 10 to 20 seconds on the
+emulator.
 
 ```bash
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
+adb shell am start -W -n io.github.ilyalissoboi.goosestation/.MainActivity   # wait for the list to appear
 FILES=/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files
-adb push extras/padtest/padtest.psexe $FILES/games/
 adb push <your BIOS image> $FILES/data/bios/
+adb push extras/padtest/padtest.psexe $FILES/games/
+adb push "<a disc image>.chd" $FILES/games/
 ```
 
 The list refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves
-it.
+it. Home pauses the game, and reopening the app resumes it.
+
+Never commit BIOS images or games. The checks below use `~/work/goose-test/ps-30j.bin` and a CHD from the same
+folder.
+
+### Changing settings
+
+There's no settings screen yet, so settings are changed by replacing `files/data/settings.ini`. The shell can't read
+or edit the app's copy: the core writes it as a temporary file renamed into place, so it's mode 0600, and
+`run-as` can't reach external storage. The shell can delete it, though, and the app reads a file the shell pushes.
+Stop the app, replace the file, then start the app again:
+
+```bash
+cat > /tmp/settings.ini <<'EOF'
+[Main]
+SettingsVersion = 1
+
+[GPU]
+Renderer = Vulkan
+
+[Display]
+ShowFPS = true
+ShowSpeed = true
+ShowCPU = true
+EOF
+adb shell am force-stop io.github.ilyalissoboi.goosestation
+adb shell rm $FILES/data/settings.ini
+adb push /tmp/settings.ini $FILES/data/settings.ini
+adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
+```
+
+- `[Main] SettingsVersion = 1` must be there, or the core resets the file to its defaults.
+- Every setting the file leaves out takes its default.
+- `[GPU] Renderer` is `Automatic` (the default), `Vulkan`, `OpenGL` or `Software`. On Android, `Automatic` is
+  always OpenGL ES: `VulkanDevice::IsSuitableDefaultRenderer()` turns Vulkan down there, as it does upstream. Set
+  `Vulkan` to use Vulkan.
+- `ShowFPS`, `ShowSpeed` and `ShowCPU` turn on the OSD's frame rates (`G:` game, `V:` video), speed and frame times.
+  With the default CPU settings, `ShowCPU` adds a `CPU[I]` line when the CPU falls back to the interpreter, and none
+  on the recompiler.
+- The Port 1 bindings live in this file too. Leaving them out is fine: the core maps a connected controller to Port 1
+  again when Port 1 has no bindings, and saves the file. That save makes the file mode 0600 again.
+
+### Known limits
+
+- **In a game, a controller alone can't get back to the list.** B goes to the game, as Circle. Use the Back gesture,
+  or Home. A later plan adds the Mode button and Select+Start.
+- **Leaving during a boot freezes the UI until the boot is done.** Destroying the surface waits for the CPU thread,
+  which is still booting. On the emulator, Back during an Ace Combat 3 boot froze the UI for 0.7 to 1.2 s (43 and
+  67 skipped frames), and the boot took 1.2 to 1.4 s. That's well under the 5 s ANR limit, but a slow first boot on a
+  device could take longer.
+- **Switching audio output mid-game is untested.** The AAudio stream is reopened when its device goes away, as when
+  headphones are unplugged. The emulator can't check this; the device checklist below does.
+
+## Results on the emulator
+
+Checked on 2026-10-26 with the debug APK, on `goose-arm64` (Android 17, 4 KB pages, 4 cores). The BIOS was
+`ps-30j.bin` (SCPH-5500, NTSC-J), with `padtest.psexe` and Ace Combat 3 Electrosphere (Disc 1) as a CHD.
+
+| Check | Result |
+| --- | --- |
+| Install, first launch | Pass. The first launch extracts the resources (`Resources: Extracting the resources for install …`), so the cold start took 17 s; later cold starts took 1.2 to 13 s. |
+| padtest renders | Pass. Port 1 shows as Analog. padtest is a PAL executable, so the core warns `BIOS region NTSC-J does not match requested region PAL` and boots it anyway. |
+| Ace Combat 3 boots | Pass. It reaches "Press START button" about 30 s after the boot (fast boot is on), then the attract FMVs. The boot itself (`Starting` to `Game started`) took 0.7 s. |
+| Sound | An AAudio stream (44100 Hz, stereo, legacy path, 882-frame bursts) is open and active: `dumpsys media.audio_flinger` showed its track consuming frames, with 4 underruns over about 2 minutes. Not checked by ear. |
+| Back | Pass. It returns to the list (`Game stopped`, `Surface destroyed`). |
+| Home, then reopen | Pass, with both renderers. On Home (OpenGL ES run), the core pauses (`AAudioStream_requestPause`, then `Surface destroyed`, `Render window is 0x0`), and the process uses 0.0% CPU in `top`. On reopening, `New surface`, then the stream restarts, and the game carries on from where it was. No second `Game started`, so no reboot. |
+| Rotation | Pass, with both renderers. Four `adb emu rotate` steps went from 90° to 270° and back to 90°. The process (and its PID) stayed the same, with no surface event and no relaunch: the manifest handles the configuration changes, and `sensorLandscape` keeps it landscape. A speed dip to 85% at the turn. Under Vulkan, one screenshot just after the rotations showed a garbled FMV frame; the next four, 2 s apart, were clean, so it's probably the FMV's own transition (not confirmed). |
+| Crashes | None: the `crash` log buffer stayed empty, and logcat has no FATAL line. |
+
+**Renderer.** `Automatic` gives OpenGL ES: `Host: Trying to create a OpenGL GPU device...`, on
+`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0)))`, OpenGL ES 3.1. With `Renderer = Vulkan`, the
+Vulkan device (Vulkan 1.3.0, `Goldfish GFXStream (llvmpipe (LLVM 21.1.4, 128 bits))`) also works, through the same
+Home and rotation checks.
+
+**Frame rate**, from the OSD (`ShowFPS`, `ShowSpeed`, `ShowCPU`):
+
+| Scene | OpenGL ES | Vulkan |
+| --- | --- | --- |
+| padtest | G 58.75, V 58.75, 99% | G 59.60, V 59.60, 101% |
+| Ace Combat 3 title | G 57.3 to 58.6, V the same, 96 to 98% | not measured |
+| Ace Combat 3 FMV | G 13 to 15 (the FMV's own rate), V 57 to 59.8, 96 to 100%; V 50.7, 85% just after a resume or a rotation | G 14.7 to 22, V 59.8 to 59.9, 100% |
+
+Both renderers are in software on the host, so these say nothing about a device's speed.
+
+**Recompiler.** In use. `[CPU] ExecutionMode = Recompiler` and `FastmemMode = MMap` are the defaults, and the OSD
+shows no `CPU[I]` (interpreter) line. With `[Logging] LogLevel = Dev`, padtest logs the recompiler's fastmem
+backpatching (`CPU::Recompiler: Backpatching 0x… (guest PC 0xBFC012B8) to slowmem`), and no
+`falling back to uncached interpreter` errors. At startup: `CPU::CodeCache: Using JIT buffer section of size
+50331648` and `Bus: Fastmem base: 0x7640000000`. Also at startup: `This build was compiled with 16384 byte pages,
+and the system has 4096 byte pages.` That's by design: the build sets `HOST_PAGE_SIZE=16384`, which also works on
+4 KB pages, and fastmem is only turned off on pages larger than that.
+
+**Errors in logcat.** Each one is either the emulator's or harmless:
+
+- OpenGL ES: `eglCreateContext() failed: 0x3005` (`EGL_BAD_CONFIG: no ES 3.2 support`). The core tries ES 3.2
+  first, then gets 3.1.
+- OpenGL ES: `GL error 0x500 condition [!GLESv2Validation::samplerParams(ctx, pname)]`, twice per boot, from
+  gfxstream.
+- OpenGL ES: `Failed to create GL program from binary: status 0, discarding cache`, on every launch after the
+  first. The emulator's driver apparently rejects the program binaries it produced, so the shader cache is rebuilt
+  each time.
+- Vulkan: `MESA: Failed to open rendernode: No such file or directory`, about 40 times per boot, from the
+  emulator's Mesa driver; and `Immediate not supported for vsync-disabled, using mailbox`.
+- Hundreds of `GameDatabase: Duplicate code …` warnings while the game database loads, the same as on desktop.
+
+## Checks on the AYN Thor
+
+Still to do by hand, on the Thor itself, with a controller and headphones. Find the Thor's serial with
+`adb devices`, and allow USB debugging on the Thor when it asks. Use the serial in place of `emulator-5554`. Results
+go in a table like the emulator's above.
+
+```bash
+export ANDROID_SERIAL=<the Thor's serial>
+FILES=/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -W -n io.github.ilyalissoboi.goosestation/.MainActivity   # once, before pushing
+adb push ~/work/goose-test/ps-30j.bin $FILES/data/bios/
+adb push extras/padtest/padtest.psexe $FILES/games/
+adb push "$HOME/work/goose-test/Ace Combat 3 Electrosphere (Disc 1).chd" $FILES/games/
+adb logcat -c
+```
+
+Keep a log of each session: `adb logcat -v time > thor.log`, in a second terminal.
+
+1. **padtest, with the Thor's own controls.** Start padtest from the list.
+   - [ ] Each face button lights the right PS1 button: bottom = Cross, right = Circle, left = Square, top =
+     Triangle. If Cross/Circle and Square/Triangle come out swapped, the pad reports Nintendo labels: note it, for
+     the remap screen. Don't work around it in code.
+   - [ ] L1, R1, L2, R2, L3, R3, Start, Select and the D-pad each light the right button.
+   - [ ] Both sticks move their crosses and go back to 0 when let go.
+   - [ ] Nothing sticks or repeats: hold each button, then let go.
+   - [ ] L2 and R2 press once each, and let go cleanly, whether they're analog or digital.
+   - [ ] No button leaves the game on its own. Only the Back gesture and Home should do that; note any button that
+     sends Back.
+2. **padtest, with a Bluetooth pad**, paired in Android's settings.
+   - [ ] It drives Port 1, and the checks in step 1 pass.
+   - [ ] Switch the pad off while holding a button and a stick: nothing stays pressed in padtest.
+   - [ ] Switch it back on: it drives Port 1 again.
+3. **Ace Combat 3, with OpenGL ES** (the default, `Automatic`). Turn the OSD on as in "Changing settings", with
+   `Renderer = OpenGL`. Play for a few minutes.
+   - [ ] Full speed: the OSD's speed stays at 100%, and `V:` is about 59.9.
+   - [ ] No audio crackle.
+   - [ ] Plug headphones in mid-game, then unplug them: the sound moves over each time, with no crash and no lasting
+     silence. The log should have `AAudio stream disconnected, reopening it on the new output device.` each time, and
+     no `Failed to reopen the AAudio stream`.
+   - [ ] Home, then reopen the app: the game resumes where it was.
+   - [ ] Screen off and back on: the game resumes, without a black screen.
+4. **Ace Combat 3, with Vulkan.** Repeat step 3 with `Renderer = Vulkan`.
+5. **Afterwards.**
+   - [ ] `adb logcat -b crash -d` is empty.
+   - [ ] Note the renderer lines (`adb logcat -d | grep -E "GPUDevice|Trying to create"`).
+   - [ ] Note the page size (`adb shell getconf PAGE_SIZE`). The core is built for 16 KB pages, so on 4096 or 16384
+     fastmem stays on and the log has no `fastmem is disabled` line.

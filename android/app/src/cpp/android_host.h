@@ -5,6 +5,7 @@
 
 #include "common/types.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -34,6 +35,11 @@ void ReloadSettings();
 
 bool GetBoolSetting(const char* section, const char* key, bool default_value);
 void SetBoolSetting(const char* section, const char* key, bool value);
+
+/// Where the memory cards are, relative to the data root (RelativeToDataRoot()): EmuFolders::MemoryCards with a
+/// trailing '/' (empty if it's the data root), then [MemoryCards] Card1Path and Card2Path, resolved as the core does,
+/// if they're set and elsewhere in the data root. nullopt before Initialize() succeeded.
+std::optional<std::vector<std::string>> GetMemoryCardPaths();
 
 /// Scans the game folders: GameList::Refresh(). Blocks, on the calling thread, which should be the JVM's; one refresh
 /// runs at a time. Does nothing before Initialize() succeeded.

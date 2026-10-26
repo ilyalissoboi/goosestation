@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -144,6 +145,41 @@ class SettingsSetupTest {
 
         assertTrue(NativeLibrary.getBoolSetting("Display", "ShowFPS", false))
         assertFalse(settingsFile.exists())
+    }
+
+    // Settings::GetSharedMemoryCardPath() puts a relative card path in the memory card folder, so ".." can leave it.
+    @Test
+    fun cardPathsLeavingTheDataFolderAreDropped() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[MemoryCards]\nDirectory = memcards\n" +
+                "Card1Path = ../../escape.mcd\nCard2Path = ../inside.mcd\n",
+        )
+
+        val ini = readSettings()
+        assertEquals(emptyList<String>(), ini.values("MemoryCards", "Card1Path"))
+        assertEquals("../inside.mcd", ini.value("MemoryCards", "Card2Path"))
+    }
+
+    @Test
+    fun memoryCardPathsAreUnknownBeforeTheCoreStarts() {
+        assertNull(NativeLibrary.getMemoryCardPaths())
+    }
+
+    @Test
+    fun memoryCardPathsAreTheDefaultFolder() {
+        initialize(null)
+
+        assertEquals(listOf("memcards/"), NativeLibrary.getMemoryCardPaths()?.toList())
+    }
+
+    @Test
+    fun memoryCardPathsFollowTheSettings() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[MemoryCards]\n" +
+                "Directory = cards\nCard1Path = ../shared/one.mcd\nCard2Path = /elsewhere/two.mcd\n",
+        )
+
+        assertEquals(listOf("cards/", "shared/one.mcd"), NativeLibrary.getMemoryCardPaths()?.toList())
     }
 
     private fun waitFor(what: String, condition: () -> Boolean) {

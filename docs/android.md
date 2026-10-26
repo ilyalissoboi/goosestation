@@ -222,6 +222,17 @@ system folder picker is the exception, and may need touch (each step says so). I
   limits": it isn't shared live). Setup says which:
   "This folder is empty. GooseStation will start fresh here.", or "This folder already has GooseStation data
   (settings and 2 memory cards). GooseStation will use it."
+- Setup refuses a data folder, in the screen, with Finish kept off until another is picked, when:
+  - it's one of the games folders, holds one or sits in one: "The data folder can't be a games folder, nor hold
+    one or sit in one. Pick another." (the first pull would copy the games into the app). This goes by the folders'
+    document IDs, such as `primary:PS1/games`; a cloud provider's opaque IDs are only caught when they're the same
+    folder. A BIOS folder inside the data folder is fine. Going back and adding a games folder that overlaps the
+    data folder is refused the same way ("A games folder can't be the data folder, nor hold it or sit in it. Pick
+    another.").
+  - its storage can't rename files: "This folder's storage can't replace files safely. Pick another." The check
+    creates `.goosestation-probe.goosetmp` at the top of the folder, reads whether it can be renamed, and deletes it
+    (a leftover is cleaned up as any `.goosetmp` is). A folder where no file can be created gets "GooseStation can't
+    create files in this folder. Pick another."
 
 Finish starts the core and shows the **library**: a grid of covers by default, or a list (the **List** and **Grid**
 button switches, and the choice is saved as `[UI] GameListGridView` in `settings.ini`). **Folders** opens the folder
@@ -254,7 +265,9 @@ folder.
 - **BIOS folder**: **Change** picks another folder, which replaces the old one only if it holds a BIOS image.
   **Rescan** copies the images in the same folder again, after you add one to it.
 - **Games folders**: **Add folder**, and **Remove** next to each one. The library is scanned again after either.
-- **Data folder**: **Change** picks another folder, then asks what to do with it:
+- **Data folder**: **Change** picks another folder, then asks what to do with it. A folder setup would refuse (see
+  above) gets no choice: the screen says why, with **Pick another** and **Cancel**. **Add folder** under the games
+  folders refuses one that overlaps the data folder, in the same way.
   - **Copy this device's data into it**: the settings, memory cards and save states here go into the new folder,
     over its files of the same name.
   - **Use the data already there**: the data here is replaced with the new folder's. The old data folder keeps its
@@ -286,7 +299,10 @@ The rules:
   `settings.ini`, and whenever it comes back to the foreground. A file that is new or changed in the folder is copied
   in, even over a change of the working copy's, and a file deleted from the folder is deleted from the working copy.
   There is no conflict detection: when both sides changed, the folder wins.
-- **Memory cards are never replaced under a running game.** The game's own card writes go out during the game,
+- **Memory cards are never replaced under a running game.** The memory cards are the files in the core's memory
+  card folder (`[MemoryCards] Directory`, `memcards/` by default) and the shared cards `[MemoryCards] Card1Path` and
+  `Card2Path` name, wherever they are in the data folder: the app asks the core once it has started, and again after
+  `settings.ini` is reloaded, and uses `memcards/` until then. The game's own card writes go out during the game,
   as any other file's (on the emulator, a game's save reached the folder in 3.9 s). Only a card the folder changed
   as well waits: while the game runs, nothing replaces or deletes it in the working copy, and nothing is sent over
   the folder's version. When the game stops, the folder's version comes in and wins, so the game's writes to that
@@ -298,10 +314,16 @@ The rules:
 - **No half-written files.** A file is replaced by writing `<name>.goosetmp`, renaming the old file to
   `<name>.goosebak`, renaming the temporary file into place, then deleting the `.goosebak`. A leftover `.goosetmp` or
   `.goosebak` (the app was killed between the steps) is cleaned up on the next run; a file whose only copy is its
-  `.goosebak` gets it back. Neither kind is ever mirrored, nor is `cache/`, which the core rebuilds. The exception
-  is a provider that can't rename documents: there the file is written in place (logged as `The data folder can't
-  rename files: writing … in place.`), so a crash during the write can leave a short file in the folder, which the
-  next run reads as the folder's change, and copies in (the folder wins).
+  `.goosebak` gets it back. Neither kind is ever mirrored, nor is `cache/`, which the core rebuilds. A provider that
+  can't rename documents gets no write at all: written in place, a write cut short would leave a short file that the
+  next pull took as the folder's change. Setup and the data folder change refuse such a folder; if one gets through
+  anyway, pushes stop as for an unreachable folder ("The data folder isn't reachable (its storage can't replace
+  files safely)…"), and every change stays on the device.
+- **Neither side is acted on unless it's listed in full.** A data folder still loading, a working copy that's
+  missing, or a folder in it that can't be read, stops the run before it does anything: listed as empty, its files
+  would read as deleted, and be deleted on the other side. A fresh install's working copy is created before the
+  first pull; one that has gone missing is created again, and its manifest deleted, so the folder's files all come
+  in.
 - **Changes are kept when the folder is gone.** If the folder can't be reached (the SD card is out, or the folder was
   moved), the run stops without touching the folder, and every change stays in the working copy until a later run
   reaches it.
@@ -316,6 +338,10 @@ The library shows a banner when something is wrong, and the folder settings show
   falls back to another place.
 - **The data folder can't be reached**: "The data folder isn't reachable (…). Your changes are kept on this device and
   saved to the folder when it's back." It goes once a run reaches the folder again.
+- **Changes aren't reaching the folder**: when two pushes in a row reached the folder but couldn't save every change
+  to it (a file failed, or a side couldn't be listed in full), "Some changes couldn't be saved to the folder.", in
+  the library and as the folder settings' data folder status. The changes stay on the device, and every push tries
+  again; it goes once one saves everything. After one such push, the status says "Saving…".
 
 ### Moving Plan 1's data
 

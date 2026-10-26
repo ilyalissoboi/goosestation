@@ -56,16 +56,27 @@ bool IsWindowsPath(std::string_view path)
 
 bool IsInsideDataRoot(std::string_view path)
 {
-  if (IsWindowsPath(path))
-    return false;
-
-  const std::string full =
-    Path::Canonicalize(Path::IsAbsolute(path) ? std::string(path) : Path::Combine(EmuFolders::DataRoot, path));
-  const std::string_view root = EmuFolders::DataRoot;
-  return full == root || (full.starts_with(root) && full.size() > root.size() && full[root.size()] == '/');
+  return AndroidHost::RelativeToDataRoot(path).has_value();
 }
 } // namespace
 } // namespace AndroidHost
+
+std::optional<std::string> AndroidHost::RelativeToDataRoot(std::string_view path)
+{
+  if (IsWindowsPath(path))
+    return std::nullopt;
+
+  // Both sides resolved alike: the core's folders are real paths, and the app's files folder is under a symbolic link
+  // (/data/user/0 to /data/data).
+  const std::string full = Path::RealPath(
+    Path::Canonicalize(Path::IsAbsolute(path) ? std::string(path) : Path::Combine(EmuFolders::DataRoot, path)));
+  const std::string root = Path::RealPath(EmuFolders::DataRoot);
+  if (full == root)
+    return std::string();
+  if (!full.starts_with(root) || full.size() <= root.size() || full[root.size()] != '/')
+    return std::nullopt;
+  return full.substr(root.size() + 1);
+}
 
 bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view install_id)
 {
@@ -99,12 +110,23 @@ bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view i
     }
   }
 
-  // Relative card paths are inside the memory card folder.
+  // Relative card paths are inside the memory card folder, as Settings::GetSharedMemoryCardPath() has them, and can
+  // still leave the data folder with "..".
+  std::string memcards = si.GetStringValue("MemoryCards", "Directory", "memcards");
+  if (memcards.empty())
+    memcards = "memcards";
   for (const char* key : MEMORY_CARD_PATH_KEYS)
   {
     const std::string value = si.GetStringValue("MemoryCards", key);
-    if ((Path::IsAbsolute(value) || IsWindowsPath(value)) && !IsInsideDataRoot(value))
+    if (value.empty())
+      continue;
+
+    const std::string card = (Path::IsAbsolute(value) || IsWindowsPath(value)) ? value : Path::Combine(memcards, value);
+    if (!IsInsideDataRoot(card))
+    {
+      INFO_LOG("[MemoryCards] {} '{}' is outside the data folder, using the default.", key, value);
       si.DeleteValue("MemoryCards", key);
+    }
   }
 
   si.SetStringValue("Android", "InstallID", std::string(install_id).c_str());

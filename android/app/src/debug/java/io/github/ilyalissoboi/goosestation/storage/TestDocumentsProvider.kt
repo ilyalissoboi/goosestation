@@ -28,8 +28,9 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * (`name (1).ext`) when the one asked for is taken.
  *
  * Tests can make it misbehave as real providers do: refuse the documents named in [refused], and list the folders
- * named in [loading] as a cloud provider does while it is still fetching them. They can also see what was asked of
- * it: the documents [opened] and the folders [listed].
+ * named in [loading] as a cloud provider does while it is still fetching them, and make the trees named in
+ * [cantRename] storage that can't rename, as some providers' is. They can also see what was asked of it: the
+ * documents [opened] and the folders [listed].
  */
 class TestDocumentsProvider : DocumentsProvider() {
     companion object {
@@ -63,6 +64,13 @@ class TestDocumentsProvider : DocumentsProvider() {
          */
         @Volatile
         var loading: Set<String> = emptySet()
+
+        /**
+         * Names of trees (TestTrees' folders) whose documents can't be renamed: they lack
+         * [Document.FLAG_SUPPORTS_RENAME], and [renameDocument] throws, as the default one does. A test sets it.
+         */
+        @Volatile
+        var cantRename: Set<String> = emptySet()
 
         /** The ID of every document [openDocument] was called for, in order; a test clears it. */
         val opened = ConcurrentLinkedQueue<String>()
@@ -129,6 +137,7 @@ class TestDocumentsProvider : DocumentsProvider() {
         documentId: String,
         displayName: String,
     ): String {
+        if (!canRename(documentId)) throw UnsupportedOperationException("Rename not supported")
         val file = fileFor(documentId)
         refuse(displayName)
         val target = uniqueFile(file.parentFile!!, displayName)
@@ -153,6 +162,8 @@ class TestDocumentsProvider : DocumentsProvider() {
         refuse(file.name)
         return file
     }
+
+    private fun canRename(documentId: String) = documentId.substringBefore('/') !in cantRename
 
     private fun refuse(name: String) {
         if (name in refused) throw IllegalStateException("$name is refused")
@@ -193,7 +204,8 @@ class TestDocumentsProvider : DocumentsProvider() {
             add(Document.COLUMN_MIME_TYPE, if (file.isDirectory) Document.MIME_TYPE_DIR else "application/octet-stream")
             add(Document.COLUMN_SIZE, if (file.isDirectory) null else file.length())
             add(Document.COLUMN_LAST_MODIFIED, file.lastModified())
-            add(Document.COLUMN_FLAGS, if (file.isDirectory) DIRECTORY_FLAGS else FILE_FLAGS)
+            val flags = if (file.isDirectory) DIRECTORY_FLAGS else FILE_FLAGS
+            add(Document.COLUMN_FLAGS, if (canRename(documentId)) flags else flags and Document.FLAG_SUPPORTS_RENAME.inv())
         }
     }
 }

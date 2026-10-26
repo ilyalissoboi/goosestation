@@ -34,9 +34,33 @@ class LocalTreeTest {
         assertEquals(FileState(5, 40_000), listed["memcards/a.mcd"])
     }
 
+    // Listed as empty, every file would read as deleted, and the push would delete it from the folder.
+    @Test(expected = IOException::class)
+    fun missingRootFailsTheListing() {
+        LocalTree.list(File(temp.root, "nothing"))
+    }
+
     @Test
-    fun missingRootIsEmpty() {
-        assertEquals(emptyMap<String, FileState>(), LocalTree.list(File(temp.root, "nothing")))
+    fun unreadableFolderFailsTheListing() {
+        val root = temp.newFolder("data")
+        File(root, "memcards/a.mcd").apply {
+            parentFile!!.mkdirs()
+            writeBytes(ByteArray(5))
+        }
+        val memcards = File(root, "memcards")
+        assertTrue(memcards.setReadable(false))
+
+        val failed =
+            try {
+                LocalTree.list(root)
+                false
+            } catch (e: IOException) {
+                true
+            } finally {
+                memcards.setReadable(true)
+            }
+
+        assertTrue(failed)
     }
 
     @Test

@@ -18,7 +18,10 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
+import io.github.ilyalissoboi.goosestation.storage.DataFolderCheck
 import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
+import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
+import io.github.ilyalissoboi.goosestation.storage.FolderKind
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Rule
 import org.junit.Test
@@ -32,14 +35,19 @@ class SetupScreenTest {
 
     private lateinit var focusManager: FocusManager
 
+    // What the picker returns for each kind, and the inspection of a data folder; a test may change them.
+    private val picks = FolderKind.entries.associateWith { "content://test/tree/${it.name.lowercase()}" }.toMutableMap()
+    private var inspection: DataFolderInspection =
+        DataFolderInspection.Usable(DataFolderContents(hasSettings = false, memoryCards = 0))
+
     private fun show(images: List<String>) {
         rule.setContent {
             focusManager = LocalFocusManager.current
             GooseStationTheme {
                 SetupScreen(
-                    pickFolder = { kind -> "content://test/tree/${kind.name.lowercase()}" },
+                    pickFolder = { kind -> picks[kind] },
                     importBios = { BiosImportResult(images, null) },
-                    inspectDataFolder = { DataFolderContents(hasSettings = false, memoryCards = 0) },
+                    inspectDataFolder = { _, _ -> inspection },
                     releaseFolder = {},
                     onFinish = {},
                 )
@@ -137,5 +145,45 @@ class SetupScreenTest {
 
         rule.onNodeWithText("BIOS folder").assertIsDisplayed()
         rule.onNodeWithText("Pick folder").assertIsFocused()
+    }
+
+    /** From the welcome to the data step, with the BIOS and a games folder picked. */
+    private fun goToTheDataStep() {
+        press(Key.Enter)
+        press(Key.Enter)
+        press(Key.DirectionDown)
+        press(Key.Enter)
+        press(Key.Enter)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.Enter)
+        rule.onNodeWithText("Data folder").assertIsDisplayed()
+    }
+
+    @Test
+    fun aRefusedDataFolderKeepsFinishDisabled() {
+        inspection = DataFolderInspection.Refused(DataFolderCheck.CANT_REPLACE)
+        show(listOf("SCPH-3000"))
+        goToTheDataStep()
+
+        press(Key.Enter)
+
+        rule.onNodeWithText("This folder's storage can't replace files safely. Pick another.").assertIsDisplayed()
+        rule.onNodeWithText("Finish").assertIsNotEnabled()
+    }
+
+    @Test
+    fun aGamesFolderInsideTheDataFolderIsRefused() {
+        show(listOf("SCPH-3000"))
+        goToTheDataStep()
+        press(Key.Enter)
+        press(Key.Back)
+        rule.onNodeWithText("Add folder").assertIsFocused()
+
+        picks[FolderKind.Games] = "content://test/tree/data%2Fgames"
+        press(Key.Enter)
+
+        rule.onNodeWithText(DataFolderCheck.GAMES_OVERLAP_DATA).assertIsDisplayed()
+        rule.onNodeWithText("data/games").assertDoesNotExist()
     }
 }

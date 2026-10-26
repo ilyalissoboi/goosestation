@@ -252,6 +252,35 @@ NATIVE_LIBRARY_FUNCTION(void, setBoolSetting)(JNIEnv* env, jobject, jstring sect
   AndroidHost::SetBoolSetting(section_str.c_str(), key_str.c_str(), value == JNI_TRUE);
 }
 
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemoryCardPaths)(JNIEnv* env, jobject)
+{
+  const std::optional<std::vector<std::string>> paths = AndroidHost::GetMemoryCardPaths();
+  if (!paths.has_value())
+    return nullptr;
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(paths->size()), s_string_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < paths->size(); i++)
+  {
+    jstring path = ToJString(env, (*paths)[i]);
+    if (!path)
+    {
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), path);
+    env->DeleteLocalRef(path);
+  }
+
+  return result;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring source_tree_uri, jstring dest_dir)
 {
   Error error;

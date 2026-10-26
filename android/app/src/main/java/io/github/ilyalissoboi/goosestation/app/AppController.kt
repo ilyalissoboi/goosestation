@@ -24,13 +24,13 @@ import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
-import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
+import io.github.ilyalissoboi.goosestation.storage.DataFolderCheck
+import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
 import io.github.ilyalissoboi.goosestation.storage.FolderKind
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPrefs
 import io.github.ilyalissoboi.goosestation.storage.GrantCheck
 import io.github.ilyalissoboi.goosestation.storage.MissingGrant
-import io.github.ilyalissoboi.goosestation.storage.SafDocumentLister
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.storage.SharedPreferencesStore
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
@@ -64,7 +64,6 @@ enum class Screen { Setup, Library, Folders, Game }
 object AppController : NativeCallbacks {
     private const val TAG = "GooseStation"
     private const val PUSH_INTERVAL_MS = 2_000L
-    private const val MEMCARDS = "memcards/"
     private const val UI = "UI"
     private const val GRID_VIEW = "GameListGridView"
 
@@ -166,6 +165,9 @@ object AppController : NativeCallbacks {
      */
     @Volatile private var holdMemcards = false
 
+    /** Where the memory cards are in the working copy ([MemoryCardPaths]), as the core last said. */
+    @Volatile private var memcardPaths = MemoryCardPaths.DEFAULT
+
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
         private set
@@ -241,8 +243,12 @@ object AppController : NativeCallbacks {
         return result
     }
 
-    suspend fun inspectDataFolder(treeUri: String): DataFolderContents? =
-        withContext(Dispatchers.IO) { DataFolderContents.read(SafDocumentLister(context.contentResolver), treeUri) }
+    /** Whether [treeUri] can be the data folder alongside the [games] folders, and what it holds if it can. */
+    suspend fun inspectDataFolder(
+        treeUri: String,
+        games: List<String>,
+    ): DataFolderInspection =
+        withContext(Dispatchers.IO) { DataFolderCheck.inspect(context.contentResolver, treeUri, games) }
 
     /** Lets go of a folder setup picked and then dropped, unless a saved folder still uses it. */
     fun releaseFolder(uri: String) {
@@ -296,6 +302,7 @@ object AppController : NativeCallbacks {
                         folders = folders.copy(bios = picked)
                     }
                     FolderKind.Games -> {
+                        if (refuseGamesFolder(picked)) return@launch
                         val games = folders.games.map { if (it == grant.uri) picked else it }.distinct()
                         folders = folders.copy(games = games)
                     }
@@ -366,8 +373,18 @@ object AppController : NativeCallbacks {
         val picker = picker ?: return
         scope.launch {
             val picked = picker.pick(FolderKind.Games) ?: return@launch
+            if (refuseGamesFolder(picked)) return@launch
             if (picked !in folders.games) setGamesFolders(folders.games + picked)
         }
+    }
+
+    /** Refuses, saying why, and lets go of, a games folder [picked] that overlaps the data folder. */
+    private suspend fun refuseGamesFolder(picked: String): Boolean {
+        val data = folders.data ?: return false
+        if (!DataFolderCheck.overlaps(picked, data)) return false
+        release(picked)
+        showError(DataFolderCheck.GAMES_OVERLAP_DATA)
+        return true
     }
 
     /** Saves [games] as the games folders, releases the removed ones, and refreshes the library. */
@@ -412,7 +429,8 @@ object AppController : NativeCallbacks {
      */
     fun changeDataFolder(choice: DataFolderChoice) {
         val candidate = dataCandidate ?: return
-        if (candidate.contents == null || screen != Screen.Folders || dataChange != null) return
+        val usable = candidate.inspection is DataFolderInspection.Usable
+        if (!usable || screen != Screen.Folders || dataChange != null) return
         // A game left a moment ago may still be stopping, and the start may still be pulling the old folder.
         if (gameActive || coldStarting) {
             showMessage("GooseStation is busy. Try again in a moment.")
@@ -493,18 +511,21 @@ object AppController : NativeCallbacks {
         pull(onlyMemcards = false)
     }
 
-    /** Offers [uri] as the new data folder, once it's listed, unless it's the data folder already. */
+    /**
+     * Offers [uri] as the new data folder, once it's looked at, unless it's the data folder already. One that can't be
+     * the data folder ([DataFolderCheck]) is offered only to say why.
+     */
     private suspend fun offerDataFolder(uri: String) {
         if (uri == folders.data) {
             showMessage("That's your data folder already.")
             return
         }
         showMessage("Looking at the folder…")
-        val contents = inspectDataFolder(uri)
+        val inspection = inspectDataFolder(uri, folders.games)
         if (dataChange != null) return
         dataCandidate?.let { if (it.uri != uri) release(it.uri) }
         oldFolderMissedChanges = false
-        dataCandidate = DataFolderCandidate(uri, contents)
+        dataCandidate = DataFolderCandidate(uri, inspection)
         if (message == "Looking at the folder…") message = null
     }
 
@@ -620,6 +641,7 @@ object AppController : NativeCallbacks {
     // The first pull, before the core reads settings.ini, with its progress shown.
     private suspend fun firstPull() {
         val mirror = mirror ?: return
+        prepareWorkingCopy()
         val copying = "Copying your data from the data folder…"
         message = copying
         val progress =
@@ -634,6 +656,18 @@ object AppController : NativeCallbacks {
     }
 
     /**
+     * Creates the working copy if it's missing (a fresh install), which the mirror needs to run. A manifest without
+     * one describes files that are gone: it's deleted, so the folder's files all come in rather than read as deleted
+     * here.
+     */
+    private suspend fun prepareWorkingCopy() =
+        withContext(Dispatchers.IO) {
+            if (workingCopy.isDirectory) return@withContext
+            if (manifestFile.delete()) Log.w(TAG, "The working copy is gone: pulling the data folder in full.")
+            if (!workingCopy.mkdirs()) Log.e(TAG, "Can't create $workingCopy")
+        }
+
+    /**
      * A pull of everything but the running game's memory cards (only the memory cards when [onlyMemcards]), then what
      * [StartupPlan.afterPull] says. Only once the core runs, so never before the first pull, and never without the
      * data grant. Returns whether that refreshed the library.
@@ -644,7 +678,7 @@ object AppController : NativeCallbacks {
         // Asked for each file as the mirror acts, so a game started meanwhile keeps its cards.
         val result =
             mirror.pull { path ->
-                val memcard = path.startsWith(MEMCARDS)
+                val memcard = MemoryCardPaths.matches(path, memcardPaths)
                 if (onlyMemcards) !memcard else holdMemcards && memcard
             }
         return applyChanged(result.changed)
@@ -654,7 +688,7 @@ object AppController : NativeCallbacks {
     private suspend fun push(force: Boolean) {
         val mirror = mirror ?: return
         if (!coreStarted || !dataGranted) return
-        applyChanged(mirror.push(force) { holdMemcards && it.startsWith(MEMCARDS) }.changed)
+        applyChanged(mirror.push(force) { holdMemcards && MemoryCardPaths.matches(it, memcardPaths) }.changed)
     }
 
     /**
@@ -673,6 +707,7 @@ object AppController : NativeCallbacks {
                         StartupStep.ReloadSettings -> {
                             NativeLibrary.reloadSettings()
                             readGridView()
+                            readMemcardPaths()
                         }
                         StartupStep.SetGameFolders -> NativeLibrary.setGameFolders(readable)
                         StartupStep.RefreshLibrary -> NativeLibrary.refreshGameList(false)
@@ -700,7 +735,12 @@ object AppController : NativeCallbacks {
                         resources.absolutePath,
                         biosDir.absolutePath,
                         prefs.installId(),
-                    ).also { if (it) readGridView() }
+                    ).also {
+                        if (it) {
+                            readGridView()
+                            readMemcardPaths()
+                        }
+                    }
                 }
             }
         // onError(), posted before initialize() returned, has already run.
@@ -725,6 +765,11 @@ object AppController : NativeCallbacks {
     private suspend fun readGridView() {
         val grid = NativeLibrary.getBoolSetting(UI, GRID_VIEW, true)
         withContext(Dispatchers.Main) { gridView = grid }
+    }
+
+    // On coreDispatcher, once the core has read settings.ini.
+    private fun readMemcardPaths() {
+        memcardPaths = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
     }
 
     // The games folders the app can read: one without its grant is left out until it's picked again.

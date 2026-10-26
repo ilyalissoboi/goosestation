@@ -35,6 +35,13 @@ object NativeLibrary {
     external fun setBoolSetting(section: String, key: String, value: Boolean)
 
     /**
+     * Where the memory cards are, relative to the data root: the memory card folder with a trailing `/` (empty if
+     * it's the data root itself), then each shared card file set in settings.ini that's elsewhere in the data root.
+     * Paths outside the data root are left out. Null before [initialize].
+     */
+    external fun getMemoryCardPaths(): Array<String>?
+
+    /**
      * Copies the PS1 BIOS images the core recognises from the top of [sourceTreeUri] to [destDir], then deletes every
      * other file in [destDir]. Returns the images' descriptions in file name order. A folder with no image gives an
      * empty array, and nothing is deleted. Returns null if the folder can't be read or a copy fails, and then nothing

@@ -16,7 +16,10 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.SyncFailedException
 
-/** The data folder can't be reached at all (no grant, or its provider or storage is gone); [cause] says why. */
+/**
+ * The data folder can't be reached at all (no grant, or its provider or storage is gone), or can't take any write
+ * (its storage can't rename files); [cause] says why.
+ */
 class FolderUnreachableException(
     cause: Throwable,
 ) : IOException(cause.message ?: cause.javaClass.name, cause)
@@ -74,7 +77,8 @@ interface FolderStore {
  *
  * [replace] never leaves a half-written file under the real name. It writes `<name>.goosetmp` and syncs it, renames
  * the old `<name>` to `<name>.goosebak`, renames the temporary file to `<name>`, then deletes the `.goosebak`. A crash
- * between any two steps leaves a state [recover] repairs. A provider that can't rename gets an in-place write.
+ * between any two steps leaves a state [recover] repairs. A provider that can't rename gets no write at all: [replace]
+ * fails with a [FolderUnreachableException], so the mirror stops and says so, and the changes stay in the working copy.
  *
  * It keeps the listing of each folder it has seen, and its own changes to them, so an operation costs no extra
  * queries. [listAll] lists afresh; after any failure, every listing is forgotten. That listing only finds documents:
@@ -131,13 +135,13 @@ class SafFolderStore(
             // Kept under the name the provider gave it: only the rename below must get the name exact.
             val temp = create(parentId, FILE_MIME, name + TEMP, exact = false)
             if (temp.flags and Document.FLAG_SUPPORTS_RENAME == 0) {
-                Log.w(TAG, "The data folder can't rename files: writing $path in place.")
+                // Written in place, an interrupted write would leave a short file that the next pull takes as the
+                // folder's change. Nothing is written: every change stays in the working copy.
                 deleteQuietly(parentId, temp.document)
-                requireAsListed(path, children[name]?.let(::fresh), expected)
-                return@guard writeInPlace(parentId, name, source)
+                throw FolderUnreachableException(IOException(CANT_RENAME))
             }
             try {
-                write(temp.document, "w", source)
+                write(temp.document, source)
                 val old = children[name]
                 requireAsListed(path, old?.let(::fresh), expected)
                 if (old != null) moveAside(parentId, old, name + BACKUP)
@@ -235,23 +239,12 @@ class SafFolderStore(
         return list(folderId)
     }
 
-    private fun writeInPlace(
-        parentId: String,
-        name: String,
-        source: File,
-    ): FileState {
-        val document = children(parentId)[name] ?: create(parentId, FILE_MIME, name).document
-        write(document, "wt", source)
-        return stat(uriOf(document.documentId)).also { children(parentId)[name] = it.document }.state
-    }
-
     private fun write(
         document: NativeDocument,
-        mode: String,
         source: File,
     ) {
         val descriptor =
-            resolver.openFileDescriptor(uriOf(document.documentId), mode)
+            resolver.openFileDescriptor(uriOf(document.documentId), "w")
                 ?: throw IOException("Can't open ${document.name}")
         ParcelFileDescriptor.AutoCloseOutputStream(descriptor).use { out ->
             source.inputStream().use { it.copyTo(out) }
@@ -452,6 +445,7 @@ class SafFolderStore(
         const val TEMP = ".goosetmp"
         const val BACKUP = ".goosebak"
         const val FILE_MIME = "application/octet-stream"
+        const val CANT_RENAME = "its storage can't replace files safely"
 
         val STAT_PROJECTION =
             arrayOf(

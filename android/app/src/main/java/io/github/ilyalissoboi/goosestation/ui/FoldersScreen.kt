@@ -35,17 +35,17 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
-import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
+import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.PICKER_HINT
 import kotlinx.coroutines.launch
 
-/** A folder picked to become the data folder, and what it holds (null if it can't be read). */
+/** A folder picked to become the data folder, and what it holds, or why it can't be the data folder. */
 data class DataFolderCandidate(
     val uri: String,
-    val contents: DataFolderContents?,
+    val inspection: DataFolderInspection,
 )
 
 /**
@@ -55,7 +55,8 @@ data class DataFolderCandidate(
  * [onChangeBios] picks and imports another BIOS folder, [onRescanBios] imports the same one again, [onAddGames] picks
  * a games folder to add, and [onSetGames] takes the games folders as they're to be. [onChangeData] picks a new data
  * folder, which comes back as the [candidate]: the screen then shows what it holds and asks, in the screen, what to
- * do with it ([onChooseData]), with B or **Cancel** ([onCancelData]) going back to the folders. [dataReachable] is
+ * do with it ([onChooseData]), with B or **Cancel** ([onCancelData]) going back to the folders. A refused candidate
+ * gets no choice, only why, and **Pick another**. [dataReachable] is
  * false when the data folder's latest changes may not be in it: the choice then warns that they're lost. While
  * [progress] is set, a change is under way and nothing else is offered. [message] is the app's latest error
  * ([isError]) or what it's doing.
@@ -197,14 +198,17 @@ private fun DataChoice(
 ) {
     Heading("Change the data folder")
     Body("New data folder: ${folderLabel(candidate.uri)}")
-    val contents = candidate.contents
-    if (contents == null) {
-        Body("Can't read this folder. Pick another.")
-        ActionButton("Pick another", onClick = onPickAnother, modifier = Modifier.focusRequester(first))
-        Hint()
-        ActionButton("Cancel", onClick = onCancel)
-        return
-    }
+    val contents =
+        when (val inspection = candidate.inspection) {
+            is DataFolderInspection.Usable -> inspection.contents
+            is DataFolderInspection.Refused -> {
+                Body(inspection.reason)
+                ActionButton("Pick another", onClick = onPickAnother, modifier = Modifier.focusRequester(first))
+                Hint()
+                ActionButton("Cancel", onClick = onCancel)
+                return
+            }
+        }
     Body(contents.summary())
     Body("GooseStation restarts once the change is made.")
     ActionButton(

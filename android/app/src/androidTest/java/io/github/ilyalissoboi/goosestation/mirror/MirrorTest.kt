@@ -32,13 +32,14 @@ class MirrorTest {
 
     @Before
     fun setUp() {
-        scratch.mkdirs()
+        workingCopy.mkdirs()
     }
 
     @After
     fun tearDown() {
         TestDocumentsProvider.refused = emptySet()
         TestDocumentsProvider.loading = emptySet()
+        TestDocumentsProvider.cantRename = emptySet()
         TestTrees.setProviderEnabled(context, true)
         TestTrees.deleteAll(context)
         scratch.deleteRecursively()
@@ -332,7 +333,7 @@ class MirrorTest {
 
         assertArrayEquals(CARD, File(folder, "memcards/a.mcd").readBytes())
         assertArrayEquals(CARD3, File(folder, "memcards/b.mcd").readBytes())
-        assertEquals(MirrorState.Idle, mirror.state.value)
+        assertEquals(MirrorState.Incomplete(1), mirror.state.value)
 
         TestDocumentsProvider.refused = emptySet()
         runBlocking { mirror.push(false, never) }
@@ -563,6 +564,91 @@ class MirrorTest {
         assertFalse(local("memcards/b.mcd").exists())
         assertEquals(manifest, manifestFile.readText())
         assertFalse(pushed.complete)
+    }
+
+    @Test
+    fun failedRunsCountUntilTheChangeGetsThrough() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+        assertEquals(MirrorState.Idle, mirror.state.value)
+
+        writeLocal("memcards/a.mcd", CARD2)
+        TestDocumentsProvider.refused = setOf("a.mcd.goosetmp")
+        runBlocking { mirror.push(true, never) }
+        assertEquals(MirrorState.Incomplete(1), mirror.state.value)
+        runBlocking { mirror.push(true, never) }
+        assertEquals(MirrorState.Incomplete(2), mirror.state.value)
+        // A pull saves nothing, so it leaves the count alone.
+        runBlocking { mirror.pull(never) }
+        assertEquals(MirrorState.Incomplete(2), mirror.state.value)
+
+        TestDocumentsProvider.refused = emptySet()
+        runBlocking { mirror.push(true, never) }
+        assertEquals(MirrorState.Idle, mirror.state.value)
+        assertArrayEquals(CARD2, File(folder, "memcards/a.mcd").readBytes())
+    }
+
+    // Written in place, a write cut short would leave a short card that the next pull takes as the folder's change.
+    @Test
+    fun aFolderThatCantRenameIsNeverWrittenInPlace() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+        TestDocumentsProvider.cantRename = setOf(folder.name)
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+        val manifest = manifestFile.readBytes()
+
+        writeLocal("memcards/a.mcd", CARD2)
+        writeLocal("memcards/b.mcd", CARD3)
+        val pushed = runBlocking { mirror.push(true, never) }
+
+        val state = mirror.state.value
+        assertTrue(state.toString(), state is MirrorState.Unreachable)
+        assertEquals("its storage can't replace files safely", (state as MirrorState.Unreachable).reason)
+        assertFalse(pushed.complete)
+        assertArrayEquals(CARD, File(folder, "memcards/a.mcd").readBytes())
+        assertFalse(File(folder, "memcards/b.mcd").exists())
+        assertNoTemporaries()
+        assertArrayEquals(manifest, manifestFile.readBytes())
+
+        // The working copy keeps its changes: nothing in the folder reads as changed.
+        runBlocking { mirror.pull(never) }
+        assertArrayEquals(CARD2, local("memcards/a.mcd").readBytes())
+        assertArrayEquals(CARD3, local("memcards/b.mcd").readBytes())
+    }
+
+    @Test
+    fun aMissingWorkingCopyDrivesNoDeletions() {
+        createTree(mapOf("memcards/a.mcd" to CARD, "settings.ini" to INI))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+
+        assertTrue(workingCopy.deleteRecursively())
+        val pushed = runBlocking { mirror.push(true, never) }
+
+        assertFalse(pushed.complete)
+        assertEquals(setOf("memcards/a.mcd", "settings.ini"), folderNames())
+        assertReachable(mirror)
+    }
+
+    @Test
+    fun anUnreadableWorkingCopyFolderDrivesNoDeletions() {
+        createTree(mapOf("memcards/a.mcd" to CARD, "settings.ini" to INI))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+
+        val memcards = local("memcards")
+        assertTrue(memcards.setReadable(false))
+        val pushed =
+            try {
+                runBlocking { mirror.push(true, never) }
+            } finally {
+                memcards.setReadable(true)
+            }
+
+        assertFalse(pushed.complete)
+        assertEquals(setOf("memcards/a.mcd", "settings.ini"), folderNames())
+        assertReachable(mirror)
     }
 
     private companion object {

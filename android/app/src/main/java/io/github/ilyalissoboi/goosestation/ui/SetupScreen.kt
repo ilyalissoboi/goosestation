@@ -35,7 +35,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
-import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
+import io.github.ilyalissoboi.goosestation.storage.DataFolderCheck
+import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
 import io.github.ilyalissoboi.goosestation.storage.FolderKind
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
@@ -47,15 +48,16 @@ private enum class SetupStep { Welcome, Bios, Games, Data }
 /**
  * First-run setup: the BIOS, games and data folders, one step at a time, each step's main button focused when it
  * opens, and B or Back going back a step. [pickFolder] opens the system picker (null if nothing was picked),
- * [importBios] copies a BIOS folder's images, and [inspectDataFolder] says what a data folder holds (null if it
- * can't be read). [releaseFolder] lets go of a folder picked, then replaced or removed. [onFinish] gets the folders,
- * marked set up.
+ * [importBios] copies a BIOS folder's images, and [inspectDataFolder] says what a data folder holds, given the games
+ * folders, or why it can't be the data folder ([DataFolderCheck]); Finish waits for a usable one. A games folder that
+ * overlaps the data folder picked is refused. [releaseFolder] lets go of a folder picked, then replaced or removed.
+ * [onFinish] gets the folders, marked set up.
  */
 @Composable
 fun SetupScreen(
     pickFolder: suspend (FolderKind) -> String?,
     importBios: suspend (String) -> BiosImportResult,
-    inspectDataFolder: suspend (String) -> DataFolderContents?,
+    inspectDataFolder: suspend (String, List<String>) -> DataFolderInspection,
     releaseFolder: (String) -> Unit,
     onFinish: (SavedFolders) -> Unit,
 ) {
@@ -64,7 +66,9 @@ fun SetupScreen(
     var biosResult by remember { mutableStateOf<BiosImportResult?>(null) }
     var games by remember { mutableStateOf(emptyList<String>()) }
     var data by remember { mutableStateOf<String?>(null) }
-    var dataContents by remember { mutableStateOf<DataFolderContents?>(null) }
+    var dataInspection by remember { mutableStateOf<DataFolderInspection?>(null) }
+    // Why the games folder last picked wasn't added, until the next pick.
+    var gamesRefusal by remember { mutableStateOf<String?>(null) }
     // A pick, an import or a listing is under way: the buttons wait for it.
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -179,7 +183,15 @@ fun SetupScreen(
                     onClick = {
                         work {
                             val picked = pickFolder(FolderKind.Games) ?: return@work
-                            if (picked !in games) games = games + picked
+                            val current = data
+                            gamesRefusal = null
+                            when {
+                                current != null && DataFolderCheck.overlaps(picked, current) -> {
+                                    gamesRefusal = DataFolderCheck.GAMES_OVERLAP_DATA
+                                    releaseIfUnused(picked)
+                                }
+                                picked !in games -> games = games + picked
+                            }
                         }
                     },
                     modifier = Modifier.focusRequester(primary),
@@ -199,6 +211,7 @@ fun SetupScreen(
                         Body(folderLabel(uri))
                     }
                 }
+                gamesRefusal?.let { Body(it) }
                 Navigation(nextEnabled = games.isNotEmpty(), onNext = { step = SetupStep.Data }, ::back)
             }
 
@@ -216,22 +229,22 @@ fun SetupScreen(
                             val old = data
                             data = picked
                             if (old != picked) releaseIfUnused(old)
-                            dataContents = null
-                            dataContents = inspectDataFolder(picked)
+                            dataInspection = null
+                            dataInspection = inspectDataFolder(picked, games)
                         }
                     },
                     modifier = Modifier.focusRequester(primary),
                 )
                 data?.let { Body(folderLabel(it)) }
-                val contents = dataContents
+                val inspection = dataInspection
                 when {
                     data == null -> {}
                     busy -> Body("Looking at the folder…")
-                    contents == null -> Body("Can't read this folder. Pick another.")
-                    else -> Body(contents.describe())
+                    inspection is DataFolderInspection.Usable -> Body(inspection.contents.describe())
+                    inspection is DataFolderInspection.Refused -> Body(inspection.reason)
                 }
                 Navigation(
-                    nextEnabled = data != null && contents != null && !busy,
+                    nextEnabled = data != null && inspection is DataFolderInspection.Usable && !busy,
                     onNext = { onFinish(folders(setupComplete = true)) },
                     onBack = ::back,
                     nextLabel = "Finish",

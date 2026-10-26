@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.mirror
 
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -13,13 +14,17 @@ object LocalTree {
     private const val TEMP_SUFFIX = ".goosetmp"
 
     /**
-     * Every file under [root], recursively; empty if [root] doesn't exist. The leftover of a [copyIn] that a crash
-     * interrupted isn't listed; the next [copyIn] to the same file writes over it.
+     * Every file under [root], recursively. The leftover of a [copyIn] that a crash interrupted isn't listed; the next
+     * [copyIn] to the same file writes over it.
+     *
+     * Throws [IOException] if [root] isn't a folder, or a folder under it can't be listed: the files missing from the
+     * listing would read as deleted, and be deleted from the data folder.
      */
     fun list(root: File): Map<String, FileState> {
-        if (!root.isDirectory) return emptyMap()
+        if (!root.isDirectory) throw FileNotFoundException("The working copy $root is missing")
         val files = HashMap<String, FileState>()
-        for (file in root.walkTopDown()) {
+        val walk = root.walkTopDown().onFail { folder, e -> throw IOException("Can't list $folder", e) }
+        for (file in walk) {
             if (!file.isFile || isTemp(file)) continue
             files[file.relativeTo(root).invariantSeparatorsPath] = FileState(file.length(), file.lastModified())
         }

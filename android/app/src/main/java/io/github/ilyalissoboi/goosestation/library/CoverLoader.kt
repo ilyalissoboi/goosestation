@@ -42,9 +42,19 @@ class CoverLoader(maxBytes: Int) {
         BitmapFactory.decodeFile(file.path, bounds)
         val longer = maxOf(bounds.outWidth, bounds.outHeight)
         if (longer <= 0) return null
-        // The largest power of two that keeps the longer side at targetPx or more.
-        var sampleSize = 1
-        while (longer / (sampleSize * 2) >= targetPx) sampleSize *= 2
-        return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sampleSize })
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSizeFor(longer, targetPx) }
+        return BitmapFactory.decodeFile(file.path, options)
     }
+}
+
+/** The largest power of two that keeps an image's [longer] side at [targetPx] or more, and at least 1 px. */
+internal fun sampleSizeFor(
+    longer: Int,
+    targetPx: Int,
+): Int {
+    // A target of 0 or less (a tile not laid out yet) would double the size until it overflowed.
+    val target = targetPx.coerceAtLeast(1)
+    var sampleSize = 1
+    while (longer / (sampleSize * 2) >= target) sampleSize *= 2
+    return sampleSize
 }

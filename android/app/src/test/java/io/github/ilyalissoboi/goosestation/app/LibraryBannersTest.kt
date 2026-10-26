@@ -87,4 +87,32 @@ class LibraryBannersTest {
             LibraryBanners.dataStatus(MirrorState.Idle, granted = false),
         )
     }
+
+    @Test
+    fun incompleteRunsShowOnlyFromTheSecondInARow() {
+        assertEquals(emptyList<Any>(), build(emptyList(), MirrorState.Incomplete(1)))
+
+        val banner = build(emptyList(), MirrorState.Incomplete(2)).single()
+
+        assertEquals("Some changes couldn't be saved to the folder.", banner.text)
+        assertEquals(emptyList<Pair<String, () -> Unit>>(), banner.actions)
+        // It stays up while the next run retries.
+        assertEquals(1, build(emptyList(), MirrorState.Syncing(0, 1, failedRuns = 2)).size)
+        assertEquals(emptyList<Any>(), build(emptyList(), MirrorState.Incomplete(3), dataSaved = false))
+        // Without the grant, that banner says enough.
+        assertEquals(1, build(listOf(MissingGrant(FolderKind.Data, "d")), MirrorState.Incomplete(3)).size)
+    }
+
+    @Test
+    fun dataStatusSaysWhenChangesDidNotReachTheFolder() {
+        assertEquals("Saving…", LibraryBanners.dataStatus(MirrorState.Incomplete(1), granted = true))
+        assertEquals(
+            "Some changes couldn't be saved to the folder.",
+            LibraryBanners.dataStatus(MirrorState.Incomplete(2), granted = true),
+        )
+        assertEquals(
+            "Some changes couldn't be saved to the folder.",
+            LibraryBanners.dataStatus(MirrorState.Syncing(1, 2, failedRuns = 2), granted = true),
+        )
+    }
 }

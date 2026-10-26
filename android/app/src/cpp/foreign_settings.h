@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <optional>
+#include <string>
 #include <string_view>
 
 class SettingsInterface;
@@ -15,5 +17,9 @@ namespace AndroidHost {
 /// which go back to their defaults. InstallID is then set to install_id. Returns whether anything changed; the caller
 /// holds the settings lock and saves.
 bool AdaptForeignSettings(SettingsInterface& si, std::string_view install_id);
+
+/// path relative to EmuFolders::DataRoot, with '/' separators: empty for the data root itself, and nullopt for a path
+/// outside it, or one from Windows. A relative path is relative to the data root. Symbolic links count as resolved.
+std::optional<std::string> RelativeToDataRoot(std::string_view path);
 
 } // namespace AndroidHost

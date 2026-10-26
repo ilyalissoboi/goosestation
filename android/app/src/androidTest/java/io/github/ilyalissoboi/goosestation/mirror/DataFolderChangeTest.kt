@@ -33,7 +33,8 @@ class DataFolderChangeTest {
 
     @Before
     fun setUp() {
-        scratch.mkdirs()
+        // As the app makes it before its first pull: the mirror doesn't run without one.
+        workingCopy.mkdirs()
     }
 
     @After

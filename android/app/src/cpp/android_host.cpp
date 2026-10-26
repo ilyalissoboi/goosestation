@@ -340,6 +340,33 @@ void AndroidHost::SetBoolSetting(const char* section, const char* key, bool valu
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
 }
 
+std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  // EmuFolders::Update() changes the folder under the lock.
+  const auto lock = Host::GetSettingsLock();
+  std::vector<std::string> paths;
+  const std::optional<std::string> folder = RelativeToDataRoot(EmuFolders::MemoryCards);
+  if (folder.has_value())
+    paths.push_back(folder->empty() ? std::string() : *folder + '/');
+
+  for (const char* key : {"Card1Path", "Card2Path"})
+  {
+    const std::string value = s_base_settings_interface->GetStringValue("MemoryCards", key);
+    if (value.empty())
+      continue;
+
+    // As Settings::GetSharedMemoryCardPath() resolves it.
+    const std::string card = Path::IsAbsolute(value) ? value : Path::Combine(EmuFolders::MemoryCards, value);
+    const std::optional<std::string> relative = RelativeToDataRoot(card);
+    if (relative.has_value() && !relative->empty())
+      paths.push_back(*relative);
+  }
+  return paths;
+}
+
 void AndroidHost::StartGame(std::string path)
 {
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to

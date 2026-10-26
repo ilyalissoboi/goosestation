@@ -107,6 +107,7 @@ bool DirectoryExists(const char* path);
 bool IsRealDirectory(const char* path);
 
 /// Directory does not contain any files?
+/// Not served for content:// paths: one always reads as empty. Use FindFiles() for those.
 bool IsDirectoryEmpty(const char* path);
 
 /// Delete file
@@ -142,6 +143,7 @@ s64 FTell64(std::FILE* fp);
 s64 FSize64(std::FILE* fp, Error* error = nullptr);
 bool FTruncate64(std::FILE* fp, s64 size, Error* error = nullptr);
 
+/// Not served for content:// paths: one fails as a missing file (ENOENT). Use OpenCFile() to read one.
 int OpenFDFile(const char* filename, int flags, int mode, Error* error = nullptr);
 
 /// Sharing modes for OpenSharedCFile().

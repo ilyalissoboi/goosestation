@@ -18,7 +18,9 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
+import io.github.ilyalissoboi.goosestation.storage.DataFolderCheck
 import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
+import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -46,7 +48,7 @@ class FoldersScreenTest {
     private val picked =
         DataFolderCandidate(
             "content://test/tree/primary%3AGooseTest%2Fdata2",
-            DataFolderContents(hasSettings = true, memoryCards = 1),
+            DataFolderInspection.Usable(DataFolderContents(hasSettings = true, memoryCards = 1)),
         )
 
     private fun show(
@@ -157,5 +159,20 @@ class FoldersScreenTest {
                 "This device's data is replaced with the folder's. Some changes aren't in your old data folder, " +
                     "which can't be reached or didn't take them, and are lost.",
             ).assertExists()
+    }
+
+    @Test
+    fun aRefusedFolderOffersNoChoice() {
+        val refused =
+            DataFolderCandidate(
+                "content://test/tree/primary%3AGooseTest%2Fgames%2Fdata",
+                DataFolderInspection.Refused(DataFolderCheck.CANT_REPLACE),
+            )
+        show(firstCandidate = refused)
+
+        rule.onNodeWithText("This folder's storage can't replace files safely. Pick another.").assertIsDisplayed()
+        rule.onNodeWithText("Pick another").assertIsFocused()
+        rule.onNodeWithText("Copy this device's data into it").assertDoesNotExist()
+        rule.onNodeWithText("Use the data already there").assertDoesNotExist()
     }
 }

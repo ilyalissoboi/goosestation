@@ -322,11 +322,38 @@ and the system has 4096 byte pages.` That's by design: the build sets `HOST_PAGE
   emulator's Mesa driver; and `Immediate not supported for vsync-disabled, using mailbox`.
 - Hundreds of `GameDatabase: Duplicate code …` warnings while the game database loads, the same as on desktop.
 
+## Results on the AYN Thor
+
+Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
+8 Gen 2 (QCS8550), Adreno 740, 4 KB pages. The built-in pad connects as `Odin Controller` (`Android-0`) and reports
+X/Y (left stick), Z/RZ (right stick), HAT_X/HAT_Y (D-pad) and BRAKE/GAS (L2/R2), all of which the app forwards. Its
+key layout has real BACK, HOME and BUTTON_MODE keys, so on the Thor the pad's Back key leaves a game.
+
+| Check | Result |
+|---|---|
+| padtest: face buttons by position, L1/R1/L2/R2/L3/R3, Start, Select, D-pad, both sticks | Pass: each shows the right PS1 control |
+| Nothing sticks or repeats; L2/R2 press once | Pass |
+| Home, and screen off and on, mid-game | Pass: resumes |
+| The pad's Back key | Pass: returns to the list |
+| Default renderer | Vulkan (`Allowing Vulkan as default renderer.`, `Using Vulkan GPU 'Adreno (TM) 740'`) |
+| Ace Combat 3, Vulkan, in a mission | Full speed: `G: 29.91`, `V: 59.82`, 100%, frame times 16.64–16.80 ms, CPU 7.2% |
+| Ace Combat 3, OpenGL ES, in a mission | Full speed: `G: 29.91`, `V: 59.82`, 100%, frame times 7.25–26.17 ms (average 16.72), CPU 8.6% |
+| Sound, both renderers | Clean, no crackle |
+| Headphones plugged in and out mid-game | Sound moves over. The stream was never disconnected (Android re-routed it), so the reopen code wasn't exercised |
+| Recompiler, fastmem | Recompiler in use (no `CPU[I]` line); fastmem on (no `fastmem is disabled` line) |
+| Crash buffer | Empty |
+
+Found: the memory card save message shows the Japanese game title as `?????????`. The OSD's text font (Roboto) has
+Latin glyphs only, and nothing loads a CJK font for game titles (the same happens on desktop unless the UI language
+is CJK).
+
+Not checked yet: a Bluetooth pad (step 2 below), the volume keys during a game, and the save-then-swipe-away check
+in step 3.
+
 ## Checks on the AYN Thor
 
-Still to do by hand, on the Thor itself, with a controller and headphones. Find the Thor's serial with
-`adb devices`, and allow USB debugging on the Thor when it asks. Use the serial in place of `emulator-5554`. Results
-go in a table like the emulator's above.
+The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
+`adb devices`, and allow USB debugging on the Thor when it asks. Use the serial in place of `emulator-5554`.
 
 ```bash
 export ANDROID_SERIAL=<the Thor's serial>

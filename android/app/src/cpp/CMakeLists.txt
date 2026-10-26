@@ -3,8 +3,12 @@
 
 # libgoosestation.so: the core and the Android host layer, loaded by the app with System.loadLibrary().
 add_library(goosestation SHARED
+  android_host.cpp
+  android_host.h
+  emu_thread.cpp
+  emu_thread.h
   fullscreen_ui_stubs.cpp
-  jni_onload.cpp
+  jni_bridge.cpp
 )
 
 target_link_libraries(goosestation PRIVATE core common util imgui minizip scmversion android log EGL aaudio)

@@ -375,6 +375,15 @@ bool System::Internal::PerformEarlyHardwareChecks(Error* error)
     Error::SetStringFmt(error, "Cannot determine size of page. Continuing with expectation of {} byte pages.",
                         runtime_host_page_size);
   }
+#ifdef __ANDROID__
+  else if (HOST_PAGE_SIZE != runtime_host_page_size)
+  {
+    // One Android build runs on both 4 KB and 16 KB-page devices, so a mismatch isn't fatal there. The host turns
+    // fastmem off when the system's pages are larger than the build's.
+    INFO_LOG("This build was compiled with {} byte pages, and the system has {} byte pages.", HOST_PAGE_SIZE,
+             runtime_host_page_size);
+  }
+#else
   else if (HOST_PAGE_SIZE != runtime_host_page_size)
   {
     Error::SetStringFmt(
@@ -383,6 +392,7 @@ bool System::Internal::PerformEarlyHardwareChecks(Error* error)
     CPUThreadShutdown();
     return false;
   }
+#endif
 
   return true;
 }

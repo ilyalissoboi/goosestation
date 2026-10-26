@@ -10,3 +10,12 @@
     public void onGameStopped();
     public void onError(java.lang.String);
 }
+
+# content_bridge.cpp finds ContentBridge's static methods and NativeDocument's fields by name in JNI_OnLoad, and calls
+# them only from native code.
+-keep class io.github.ilyalissoboi.goosestation.storage.ContentBridge {
+    public static int openForReading(java.lang.String);
+    public static long[] stat(java.lang.String);
+    public static io.github.ilyalissoboi.goosestation.storage.NativeDocument[] listDirectory(java.lang.String);
+}
+-keep class io.github.ilyalissoboi.goosestation.storage.NativeDocument { <fields>; }

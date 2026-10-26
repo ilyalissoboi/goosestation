@@ -4,10 +4,12 @@
 // The JNI side of io.github.ilyalissoboi.goosestation.core.NativeLibrary, and the calls back into NativeCallbacks.
 
 #include "android_host.h"
+#include "content_bridge.h"
+#include "jni_util.h"
 
 #include "common/error.h"
+#include "common/file_system.h"
 #include "common/log.h"
-#include "common/string_util.h"
 
 #include <android/native_window_jni.h>
 #include <jni.h>
@@ -15,13 +17,14 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <vector>
 
 Log_SetChannel(JNIBridge);
 
-namespace {
-JavaVM* s_vm = nullptr;
+using JNIUtil::ClearException;
+using JNIUtil::FromJString;
+using JNIUtil::ToJString;
 
+namespace {
 // Cached at JNI_OnLoad.
 jclass s_callbacks_class = nullptr;
 jmethodID s_on_game_started = nullptr;
@@ -35,103 +38,14 @@ jobject s_callbacks = nullptr;
 // Set on the thread AttachCurrentThreadToJVM() attached.
 thread_local JNIEnv* s_attached_env = nullptr;
 
-void ClearException(JNIEnv* env)
-{
-  if (env->ExceptionCheck())
-  {
-    env->ExceptionDescribe();
-    env->ExceptionClear();
-  }
-}
-
-// Java strings are UTF-16; JNI's own UTF conversions use modified UTF-8, which differs for NUL and characters
-// outside the BMP, so convert by hand.
-std::string FromJString(JNIEnv* env, jstring str)
-{
-  std::string ret;
-  if (!str)
-    return ret;
-
-  const jsize length = env->GetStringLength(str);
-  const jchar* chars = env->GetStringChars(str, nullptr);
-  if (!chars)
-  {
-    ClearException(env);
-    return ret;
-  }
-
-  ret.reserve(static_cast<size_t>(length));
-  for (jsize i = 0; i < length; i++)
-  {
-    char32_t ch = chars[i];
-    if (ch >= 0xD800 && ch <= 0xDBFF && (i + 1) < length && chars[i + 1] >= 0xDC00 && chars[i + 1] <= 0xDFFF)
-    {
-      ch = 0x10000 + ((ch - 0xD800) << 10) + (chars[i + 1] - 0xDC00);
-      i++;
-    }
-    else if (ch >= 0xD800 && ch <= 0xDFFF)
-    {
-      ch = 0xFFFD; // unpaired surrogate
-    }
-    StringUtil::EncodeAndAppendUTF8(ret, ch);
-  }
-
-  env->ReleaseStringChars(str, chars);
-  return ret;
-}
-
-jstring ToJString(JNIEnv* env, std::string_view str)
-{
-  std::vector<jchar> chars;
-  chars.reserve(str.size());
-  for (size_t offset = 0; offset < str.size();)
-  {
-    char32_t ch;
-    offset += StringUtil::DecodeUTF8(str, offset, &ch);
-    if (ch > 0x10FFFF)
-      ch = 0xFFFD;
-
-    if (ch >= 0x10000)
-    {
-      ch -= 0x10000;
-      chars.push_back(static_cast<jchar>(0xD800 + (ch >> 10)));
-      chars.push_back(static_cast<jchar>(0xDC00 + (ch & 0x3FF)));
-    }
-    else
-    {
-      chars.push_back(static_cast<jchar>(ch));
-    }
-  }
-
-  static constexpr jchar empty = 0;
-  jstring ret = env->NewString(chars.empty() ? &empty : chars.data(), static_cast<jsize>(chars.size()));
-  if (!ret)
-    ClearException(env);
-  return ret;
-}
+AndroidContentProvider s_content_provider;
 
 // Calls a NativeCallbacks method on the registered object, from any thread.
 void CallCallback(jmethodID method, std::optional<std::string_view> arg)
 {
-  if (!s_vm)
+  ScopedJNIEnv env;
+  if (!env)
     return;
-
-  JNIEnv* env = nullptr;
-  bool attached_here = false;
-  const jint res = s_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
-  if (res == JNI_EDETACHED)
-  {
-    if (s_vm->AttachCurrentThread(&env, nullptr) != JNI_OK)
-    {
-      ERROR_LOG("Failed to attach a thread to the JVM for a callback.");
-      return;
-    }
-    attached_here = true;
-  }
-  else if (res != JNI_OK)
-  {
-    return;
-  }
 
   jobject callbacks = nullptr;
   {
@@ -140,40 +54,38 @@ void CallCallback(jmethodID method, std::optional<std::string_view> arg)
       callbacks = env->NewLocalRef(s_callbacks);
   }
 
-  if (callbacks)
-  {
-    if (arg.has_value())
-    {
-      jstring jarg = ToJString(env, arg.value());
-      if (jarg)
-      {
-        env->CallVoidMethod(callbacks, method, jarg);
-        ClearException(env);
-        env->DeleteLocalRef(jarg);
-      }
-    }
-    else
-    {
-      env->CallVoidMethod(callbacks, method);
-      ClearException(env);
-    }
+  if (!callbacks)
+    return;
 
-    env->DeleteLocalRef(callbacks);
+  if (arg.has_value())
+  {
+    jstring jarg = ToJString(env.get(), arg.value());
+    if (jarg)
+    {
+      env->CallVoidMethod(callbacks, method, jarg);
+      ClearException(env.get());
+      env->DeleteLocalRef(jarg);
+    }
+  }
+  else
+  {
+    env->CallVoidMethod(callbacks, method);
+    ClearException(env.get());
   }
 
-  if (attached_here)
-    s_vm->DetachCurrentThread();
+  env->DeleteLocalRef(callbacks);
 }
 } // namespace
 
 void AndroidHost::AttachCurrentThreadToJVM(const char* name)
 {
-  if (!s_vm || s_attached_env)
+  JavaVM* const vm = JNIUtil::GetJavaVM();
+  if (!vm || s_attached_env)
     return;
 
   JavaVMAttachArgs args = {JNI_VERSION_1_6, name, nullptr};
   JNIEnv* env = nullptr;
-  if (s_vm->AttachCurrentThread(&env, &args) != JNI_OK)
+  if (vm->AttachCurrentThread(&env, &args) != JNI_OK)
   {
     ERROR_LOG("Failed to attach '{}' to the JVM.", name);
     return;
@@ -184,10 +96,11 @@ void AndroidHost::AttachCurrentThreadToJVM(const char* name)
 
 void AndroidHost::DetachCurrentThreadFromJVM()
 {
-  if (!s_vm || !s_attached_env)
+  JavaVM* const vm = JNIUtil::GetJavaVM();
+  if (!vm || !s_attached_env)
     return;
 
-  s_vm->DetachCurrentThread();
+  vm->DetachCurrentThread();
   s_attached_env = nullptr;
 }
 
@@ -232,7 +145,11 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     return JNI_ERR;
   }
 
-  s_vm = vm;
+  if (!AndroidContentProvider::LoadJNIReferences(env))
+    return JNI_ERR;
+
+  JNIUtil::SetJavaVM(vm);
+  FileSystem::SetContentProvider(&s_content_provider);
   return JNI_VERSION_1_6;
 }
 

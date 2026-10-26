@@ -22,6 +22,7 @@ import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
+import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import io.github.ilyalissoboi.goosestation.ui.GameListScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -164,6 +165,8 @@ private object App : NativeCallbacks {
     fun start(context: Context) {
         if (started) return
         started = true
+        // The core calls it for content:// paths from its first use on.
+        ContentBridge.init(context)
 
         thread(name = "GooseStation startup") {
             val result =

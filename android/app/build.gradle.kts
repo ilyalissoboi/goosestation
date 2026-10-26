@@ -27,6 +27,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -71,6 +72,11 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // Each instrumented test runs in a process of its own, so each gets its own one-shot NativeLibrary.initialize.
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
     }
 }
 
@@ -127,4 +133,16 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
+    implementation(libs.kotlinx.coroutines.android)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestUtil(libs.androidx.test.orchestrator)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

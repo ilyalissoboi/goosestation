@@ -38,6 +38,12 @@ distribution itself against `distributionSha256Sum`, which matches the published
 | Compose BOM | 2026.09.00 |
 | `androidx.activity:activity-compose` | 1.13.0 |
 | `androidx.core:core-ktx` | 1.19.1 |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-android` and `-test` | 1.11.0 |
+| `junit:junit` (JVM unit tests) | 4.13.2 |
+| `androidx.test:runner` | 1.7.0 |
+| `androidx.test.ext:junit` | 1.3.0 |
+| `androidx.test:orchestrator` (brings `androidx.test.services:test-services` 1.6.0) | 1.6.1 |
+| Compose `ui-test-junit4` and `ui-test-manifest` | from the Compose BOM |
 | `compileSdk` / `targetSdk` / `minSdk` | 37 / 37 / 29 |
 | NDK / CMake (`ndkVersion`, `externalNativeBuild.cmake.version`) | 30.0.16248370 / 4.1.2 |
 
@@ -166,6 +172,19 @@ The APK also carries the dependency prefix's three shared libraries (`GOOSESTATI
 prefix, as for the configure script) and `data/resources` as assets under `resources/`. The app copies the resources
 to its internal files on first run and whenever the app is reinstalled or updated: it compares the version code and
 the install's `lastUpdateTime` (`<versionCode>-<lastUpdateTime>`) with the last copy's.
+
+## Testing the app
+
+```bash
+cd android
+./gradlew testDebugUnitTest                                    # JVM unit tests, in app/src/test
+ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest   # instrumented tests, in app/src/androidTest
+```
+
+The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
+can only be initialized once per process). Tests that need a document tree build one in `TestDocumentsProvider`, a
+`DocumentsProvider` in the debug build only (`app/src/debug`), over `files/test-documents`. It's disabled until a
+test enables it, and shares the app's UID, so the app reads it without a grant.
 
 ## Running it
 

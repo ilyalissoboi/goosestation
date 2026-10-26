@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <sys/stat.h>
 #include <vector>
 
@@ -62,6 +63,25 @@ struct FILESYSTEM_FIND_DATA
 
 namespace FileSystem {
 using FindResultsArray = std::vector<FILESYSTEM_FIND_DATA>;
+
+/// True for "content://" paths, which a ContentProvider serves.
+bool IsContentURI(std::string_view path);
+
+#ifndef _WIN32
+/// Serves content:// paths, read only. Registered once; nullptr removes it.
+/// Every function that writes fails with EROFS on a content:// path. With no provider, one is a missing file (ENOENT).
+class ContentProvider
+{
+public:
+  virtual ~ContentProvider();
+  /// A file descriptor the caller owns, or -1 with the error set (errno-style: ENOENT, EACCES, EIO).
+  virtual int OpenForReading(std::string_view uri, Error* error) = 0;
+  virtual bool Stat(std::string_view uri, FILESYSTEM_STAT_DATA* sd) = 0;
+  /// One level: FileName is the bare name. False if the URI isn't a readable directory.
+  virtual bool ListDirectory(std::string_view uri, FindResultsArray* entries, Error* error) = 0;
+};
+void SetContentProvider(ContentProvider* provider);
+#endif
 
 /// Returns the display name of a filename. Usually this is the same as the path.
 std::string GetDisplayNameFromPath(std::string_view path);

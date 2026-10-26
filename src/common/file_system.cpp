@@ -10,6 +10,8 @@
 #include "timer.h"
 
 #include <algorithm>
+#include <atomic>
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -44,6 +46,175 @@
 #endif
 
 Log_SetChannel(FileSystem);
+
+bool FileSystem::IsContentURI(std::string_view path)
+{
+  return path.starts_with("content://");
+}
+
+// content:// paths are served by the ContentProvider. Windows has none, so there they stay ordinary paths.
+static bool IsContentPath(std::string_view path)
+{
+#ifdef _WIN32
+  return false;
+#else
+  return FileSystem::IsContentURI(path);
+#endif
+}
+
+// The core never writes through content://.
+static bool SetReadOnlyError(Error* error)
+{
+  errno = EROFS;
+  Error::SetErrno(error, EROFS);
+  return false;
+}
+
+// Length of the "content://<authority>/tree/<id>" root, which canonicalisation keeps as it is. A URI of any other
+// shape is all root.
+static size_t GetContentURIRootLength(std::string_view uri)
+{
+  static constexpr std::string_view tree = "/tree/";
+  const size_t authority_end = uri.find('/', std::string_view("content://").length());
+  if (authority_end == std::string_view::npos || uri.substr(authority_end, tree.length()) != tree)
+    return uri.length();
+
+  const size_t id_end = uri.find('/', authority_end + tree.length());
+  return (id_end == std::string_view::npos) ? uri.length() : id_end;
+}
+
+// Resolves "." and ".." after the tree root, as raw text: nothing is URL-decoded. ".." stops at the root.
+static std::string CanonicalizeContentURI(std::string_view uri)
+{
+  const size_t root_length = GetContentURIRootLength(uri);
+  std::vector<std::string_view> components;
+  for (const std::string_view& component : Path::SplitNativePath(uri.substr(root_length)))
+  {
+    if (component.empty() || component == ".")
+      continue;
+    else if (component == "..")
+    {
+      if (!components.empty())
+        components.pop_back();
+    }
+    else
+    {
+      components.push_back(component);
+    }
+  }
+
+  std::string ret(uri.substr(0, root_length));
+  for (const std::string_view& component : components)
+  {
+    ret.push_back('/');
+    ret.append(component);
+  }
+  return ret;
+}
+
+#ifndef _WIN32
+
+static std::atomic<FileSystem::ContentProvider*> s_content_provider{nullptr};
+
+FileSystem::ContentProvider::~ContentProvider() = default;
+
+void FileSystem::SetContentProvider(ContentProvider* provider)
+{
+  s_content_provider.store(provider, std::memory_order_release);
+}
+
+static bool StatContentURI(std::string_view uri, FILESYSTEM_STAT_DATA* sd)
+{
+  FileSystem::ContentProvider* const provider = s_content_provider.load(std::memory_order_acquire);
+  return (provider && provider->Stat(uri, sd));
+}
+
+static std::FILE* OpenContentURI(const char* uri, const char* mode, Error* error)
+{
+  if (std::strcmp(mode, "r") != 0 && std::strcmp(mode, "rb") != 0)
+  {
+    SetReadOnlyError(error);
+    return nullptr;
+  }
+
+  FileSystem::ContentProvider* const provider = s_content_provider.load(std::memory_order_acquire);
+  if (!provider)
+  {
+    errno = ENOENT;
+    Error::SetErrno(error, ENOENT);
+    return nullptr;
+  }
+
+  const int fd = provider->OpenForReading(uri, error);
+  if (fd < 0)
+    return nullptr;
+
+  // Readers seek around the file, so a pipe (what some providers hand out for remote documents) is no use.
+  if (lseek(fd, 0, SEEK_CUR) < 0 && errno == ESPIPE)
+  {
+    close(fd);
+    Error::SetStringFmt(error, "'{}' can't be read in place: the storage gives no seekable file.",
+                        Path::GetFileName(uri));
+    return nullptr;
+  }
+
+  std::FILE* fp = fdopen(fd, mode);
+  if (!fp)
+  {
+    Error::SetErrno(error, "fdopen() failed: ", errno);
+    close(fd);
+  }
+  return fp;
+}
+
+static u32 FindContentFiles(FileSystem::ContentProvider* provider, const std::string& dir,
+                            std::string_view relative_dir, const char* pattern, u32 flags,
+                            FileSystem::FindResultsArray* results)
+{
+  FileSystem::FindResultsArray entries;
+  if (!provider->ListDirectory(dir, &entries, nullptr))
+    return 0;
+
+  const bool has_wildcards = (std::strpbrk(pattern, "*?") != nullptr);
+  const bool wildcard_match_all = (std::strcmp(pattern, "*") == 0);
+  u32 count = 0;
+  for (FILESYSTEM_FIND_DATA& entry : entries)
+  {
+    if (entry.FileName.starts_with('.') && !(flags & FILESYSTEM_FIND_HIDDEN_FILES))
+      continue;
+
+    std::string full_path = Path::Combine(dir, entry.FileName);
+    std::string relative_path =
+      relative_dir.empty() ? entry.FileName : fmt::format("{}/{}", relative_dir, entry.FileName);
+
+    if (entry.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY)
+    {
+      if (flags & FILESYSTEM_FIND_RECURSIVE)
+        count += FindContentFiles(provider, full_path, relative_path, pattern, flags, results);
+
+      if (!(flags & FILESYSTEM_FIND_FOLDERS))
+        continue;
+    }
+    else if (!(flags & FILESYSTEM_FIND_FILES))
+    {
+      continue;
+    }
+
+    if (has_wildcards ? (!wildcard_match_all && !StringUtil::WildcardMatch(entry.FileName.c_str(), pattern)) :
+                        (entry.FileName != pattern))
+    {
+      continue;
+    }
+
+    entry.FileName = (flags & FILESYSTEM_FIND_RELATIVE_PATHS) ? std::move(relative_path) : std::move(full_path);
+    results->push_back(std::move(entry));
+    count++;
+  }
+
+  return count;
+}
+
+#endif
 
 #ifdef _WIN32
 static std::time_t ConvertFileTimeToUnixTime(const FILETIME& ft)
@@ -108,6 +279,13 @@ static inline void PathAppendString(std::string& dst, const T& src)
   {
     dst.append("\\\\");
     index = 2;
+  }
+#else
+  // keep the "//" of content://
+  if (dst.empty() && IsContentPath(src))
+  {
+    dst.append("content://");
+    index = std::string_view("content://").length();
   }
 #endif
 
@@ -290,12 +468,16 @@ bool Path::IsAbsolute(std::string_view path)
           path[1] == ':' && (path[2] == '/' || path[2] == '\\')) ||
          IsUNCPath(path);
 #else
-  return (path.length() >= 1 && path[0] == '/');
+  return (path.length() >= 1 && path[0] == '/') || IsContentPath(path);
 #endif
 }
 
 std::string Path::RealPath(std::string_view path)
 {
+  // A provider's tree has no symbolic links, nor a working directory to be relative to.
+  if (IsContentPath(path))
+    return CanonicalizeContentURI(path);
+
   // Resolve non-absolute paths first.
   std::vector<std::string_view> components;
   if (!IsAbsolute(path))
@@ -494,6 +676,9 @@ void Path::ToNativePath(std::string* path)
 
 std::string Path::Canonicalize(std::string_view path)
 {
+  if (IsContentPath(path))
+    return CanonicalizeContentURI(path);
+
   std::vector<std::string_view> components = Path::SplitNativePath(path);
   std::vector<std::string_view> new_components;
   new_components.reserve(components.size());
@@ -1007,6 +1192,9 @@ std::FILE* FileSystem::OpenCFile(const char* filename, const char* mode, Error* 
 
   return fp;
 #else
+  if (IsContentURI(filename))
+    return OpenContentURI(filename, mode, error);
+
   std::FILE* fp = std::fopen(filename, mode);
   if (!fp)
     Error::SetErrno(error, errno);
@@ -1016,6 +1204,12 @@ std::FILE* FileSystem::OpenCFile(const char* filename, const char* mode, Error* 
 
 std::FILE* FileSystem::OpenExistingOrCreateCFile(const char* filename, s32 retry_ms, Error* error /*= nullptr*/)
 {
+  if (IsContentPath(filename))
+  {
+    SetReadOnlyError(error);
+    return nullptr;
+  }
+
 #ifdef _WIN32
   const std::wstring wfilename = GetWin32Path(filename);
   if (wfilename.empty())
@@ -1154,6 +1348,9 @@ std::FILE* FileSystem::OpenSharedCFile(const char* filename, const char* mode, F
   Error::SetErrno(error, errno);
   return nullptr;
 #else
+  if (IsContentURI(filename))
+    return OpenContentURI(filename, mode, error);
+
   std::FILE* fp = std::fopen(filename, mode);
   if (!fp)
     Error::SetErrno(error, errno);
@@ -1204,7 +1401,12 @@ FileSystem::AtomicRenamedFile FileSystem::CreateAtomicRenamedFile(std::string fi
 {
   std::string temp_filename;
   std::FILE* fp = nullptr;
-  if (!filename.empty())
+  if (IsContentPath(filename))
+  {
+    SetReadOnlyError(error);
+    filename.clear();
+  }
+  else if (!filename.empty())
   {
     // this is disgusting, but we need null termination, and std::string::data() does not guarantee it.
     const size_t filename_length = filename.length();
@@ -1215,13 +1417,25 @@ FileSystem::AtomicRenamedFile FileSystem::CreateAtomicRenamedFile(std::string fi
 
 #ifdef _WIN32
     _mktemp_s(name_buf.get(), name_buf_size);
+    fp = OpenCFile(name_buf.get(), mode, error);
 #elif defined(__linux__) || defined(__ANDROID__) || defined(__APPLE__)
-    mkstemp(name_buf.get());
+    // Use mkstemp()'s descriptor, so it isn't leaked and the name isn't opened twice.
+    const int fd = mkstemp(name_buf.get());
+    if (fd < 0)
+    {
+      Error::SetErrno(error, "mkstemp() failed: ", errno);
+    }
+    else if (!(fp = fdopen(fd, mode)))
+    {
+      Error::SetErrno(error, "fdopen() failed: ", errno);
+      close(fd);
+      unlink(name_buf.get());
+    }
 #else
     mktemp(name_buf.get());
+    fp = OpenCFile(name_buf.get(), mode, error);
 #endif
 
-    fp = OpenCFile(name_buf.get(), mode, error);
     if (fp)
       temp_filename.assign(name_buf.get(), name_buf_size - 1);
     else
@@ -1541,6 +1755,9 @@ bool FileSystem::WriteStringToFile(const char* filename, std::string_view sv, Er
 
 bool FileSystem::EnsureDirectoryExists(const char* path, bool recursive, Error* error)
 {
+  if (IsContentPath(path))
+    return SetReadOnlyError(error);
+
   if (FileSystem::DirectoryExists(path))
     return true;
 
@@ -1550,6 +1767,9 @@ bool FileSystem::EnsureDirectoryExists(const char* path, bool recursive, Error* 
 
 bool FileSystem::RecursiveDeleteDirectory(const char* path)
 {
+  if (IsContentPath(path))
+    return SetReadOnlyError(nullptr);
+
   FindResultsArray results;
   if (FindFiles(path, "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_HIDDEN_FILES, &results))
   {
@@ -1573,6 +1793,9 @@ bool FileSystem::RecursiveDeleteDirectory(const char* path)
 
 bool FileSystem::CopyFilePath(const char* source, const char* destination, bool replace)
 {
+  if (IsContentPath(destination))
+    return SetReadOnlyError(nullptr);
+
 #ifndef _WIN32
   // TODO: There's technically a race here between checking and opening the file..
   // But fopen doesn't specify any way to say "don't create if it exists"...
@@ -2346,18 +2569,28 @@ bool FileSystem::FindFiles(const char* path, const char* pattern, u32 flags, Fin
   if (!(flags & FILESYSTEM_FIND_KEEP_ARRAY))
     results->clear();
 
-  // add self if recursive, we don't want to visit it twice
-  std::vector<std::string> visited;
-  if (flags & FILESYSTEM_FIND_RECURSIVE)
+  if (IsContentURI(path))
   {
-    std::string real_path = Path::RealPath(path);
-    if (!real_path.empty())
-      visited.push_back(std::move(real_path));
+    // a provider's tree has no links, so there are no loops to look out for
+    ContentProvider* const provider = s_content_provider.load(std::memory_order_acquire);
+    if (!provider || FindContentFiles(provider, path, {}, pattern, flags, results) == 0)
+      return false;
   }
+  else
+  {
+    // add self if recursive, we don't want to visit it twice
+    std::vector<std::string> visited;
+    if (flags & FILESYSTEM_FIND_RECURSIVE)
+    {
+      std::string real_path = Path::RealPath(path);
+      if (!real_path.empty())
+        visited.push_back(std::move(real_path));
+    }
 
-  // enter the recursive function
-  if (RecursiveFindFiles(path, nullptr, nullptr, pattern, flags, results, visited) == 0)
-    return false;
+    // enter the recursive function
+    if (RecursiveFindFiles(path, nullptr, nullptr, pattern, flags, results, visited) == 0)
+      return false;
+  }
 
   if (flags & FILESYSTEM_FIND_SORT_BY_NAME)
   {
@@ -2378,6 +2611,20 @@ bool FileSystem::FindFiles(const char* path, const char* pattern, u32 flags, Fin
 
 bool FileSystem::StatFile(const char* path, struct stat* st)
 {
+  if (IsContentURI(path))
+  {
+    FILESYSTEM_STAT_DATA sd;
+    if (!StatContentURI(path, &sd))
+      return false;
+
+    *st = {};
+    st->st_mode = (sd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY) ? (S_IFDIR | 0555) : (S_IFREG | 0444);
+    st->st_size = static_cast<off_t>(sd.Size);
+    st->st_ctime = sd.CreationTime;
+    st->st_mtime = sd.ModificationTime;
+    return true;
+  }
+
   return stat(path, st) == 0;
 }
 
@@ -2392,6 +2639,9 @@ bool FileSystem::StatFile(std::FILE* fp, struct stat* st)
 
 bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 {
+  if (IsContentURI(path))
+    return StatContentURI(path, sd);
+
   // stat file
   struct stat sysStatData;
   if (stat(path, &sysStatData) < 0)
@@ -2429,6 +2679,12 @@ bool FileSystem::StatFile(std::FILE* fp, FILESYSTEM_STAT_DATA* sd)
 
 bool FileSystem::FileExists(const char* path)
 {
+  if (IsContentURI(path))
+  {
+    FILESYSTEM_STAT_DATA sd;
+    return (StatContentURI(path, &sd) && !(sd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY));
+  }
+
   struct stat sysStatData;
   if (stat(path, &sysStatData) < 0)
     return false;
@@ -2441,6 +2697,12 @@ bool FileSystem::FileExists(const char* path)
 
 bool FileSystem::DirectoryExists(const char* path)
 {
+  if (IsContentURI(path))
+  {
+    FILESYSTEM_STAT_DATA sd;
+    return (StatContentURI(path, &sd) && (sd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY));
+  }
+
   struct stat sysStatData;
   if (stat(path, &sysStatData) < 0)
     return false;
@@ -2450,6 +2712,10 @@ bool FileSystem::DirectoryExists(const char* path)
 
 bool FileSystem::IsRealDirectory(const char* path)
 {
+  // a provider's tree has no links
+  if (IsContentURI(path))
+    return DirectoryExists(path);
+
   struct stat sysStatData;
   if (lstat(path, &sysStatData) < 0)
     return false;
@@ -2483,6 +2749,9 @@ bool FileSystem::IsDirectoryEmpty(const char* path)
 
 bool FileSystem::CreateDirectory(const char* path, bool recursive, Error* error)
 {
+  if (IsContentURI(path))
+    return SetReadOnlyError(error);
+
   // has a path
   const size_t pathLength = std::strlen(path);
   if (pathLength == 0)
@@ -2561,6 +2830,9 @@ bool FileSystem::CreateDirectory(const char* path, bool recursive, Error* error)
 
 bool FileSystem::DeleteFile(const char* path, Error* error)
 {
+  if (IsContentURI(path))
+    return SetReadOnlyError(error);
+
   struct stat sysStatData;
   if (stat(path, &sysStatData) != 0 || S_ISDIR(sysStatData.st_mode))
   {
@@ -2579,6 +2851,9 @@ bool FileSystem::DeleteFile(const char* path, Error* error)
 
 bool FileSystem::RenamePath(const char* old_path, const char* new_path, Error* error)
 {
+  if (IsContentURI(old_path) || IsContentURI(new_path))
+    return SetReadOnlyError(error);
+
   if (rename(old_path, new_path) != 0)
   {
     const int err = errno;
@@ -2591,6 +2866,9 @@ bool FileSystem::RenamePath(const char* old_path, const char* new_path, Error* e
 
 bool FileSystem::DeleteDirectory(const char* path)
 {
+  if (IsContentURI(path))
+    return SetReadOnlyError(nullptr);
+
   struct stat sysStatData;
   if (stat(path, &sysStatData) != 0 || !S_ISDIR(sysStatData.st_mode))
     return false;

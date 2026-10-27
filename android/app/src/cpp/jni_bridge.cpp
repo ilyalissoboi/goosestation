@@ -86,6 +86,32 @@ void CallCallback(jmethodID method, std::optional<std::string_view> arg)
 
   env->DeleteLocalRef(callbacks);
 }
+
+// A String[] of strings, or null (with no exception pending) if it can't be made.
+jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& strings)
+{
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(strings.size()), s_string_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < strings.size(); i++)
+  {
+    jstring string = ToJString(env, strings[i]);
+    if (!string)
+    {
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), string);
+    env->DeleteLocalRef(string);
+  }
+
+  return result;
+}
 } // namespace
 
 void AndroidHost::AttachCurrentThreadToJVM(const char* name)
@@ -255,30 +281,19 @@ NATIVE_LIBRARY_FUNCTION(void, setBoolSetting)(JNIEnv* env, jobject, jstring sect
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemoryCardPaths)(JNIEnv* env, jobject)
 {
   const std::optional<std::vector<std::string>> paths = AndroidHost::GetMemoryCardPaths();
-  if (!paths.has_value())
-    return nullptr;
+  return paths.has_value() ? ToJStringArray(env, paths.value()) : nullptr;
+}
 
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(paths->size()), s_string_class, nullptr);
-  if (!result)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getDataFolders)(JNIEnv* env, jobject)
+{
+  const std::optional<std::vector<std::string>> folders = AndroidHost::GetDataFolders();
+  return folders.has_value() ? ToJStringArray(env, folders.value()) : nullptr;
+}
 
-  for (size_t i = 0; i < paths->size(); i++)
-  {
-    jstring path = ToJString(env, (*paths)[i]);
-    if (!path)
-    {
-      env->DeleteLocalRef(result);
-      return nullptr;
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), path);
-    env->DeleteLocalRef(path);
-  }
-
-  return result;
+NATIVE_LIBRARY_FUNCTION(jstring, getCacheFolder)(JNIEnv* env, jobject)
+{
+  const std::optional<std::string> folder = AndroidHost::GetCacheFolder();
+  return folder.has_value() ? ToJString(env, folder.value()) : nullptr;
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring source_tree_uri, jstring dest_dir)

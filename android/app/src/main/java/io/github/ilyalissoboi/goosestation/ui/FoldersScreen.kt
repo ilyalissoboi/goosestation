@@ -210,6 +210,7 @@ private fun DataChoice(
             }
         }
     Body(contents.summary())
+    contents.otherThings()?.let { Body(it) }
     Body("GooseStation restarts once the change is made.")
     ActionButton(
         "Copy this device's data into it",

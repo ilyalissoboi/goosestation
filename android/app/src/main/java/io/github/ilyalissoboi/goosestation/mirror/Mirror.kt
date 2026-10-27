@@ -69,7 +69,10 @@ private class SyncResult(
 /**
  * Keeps the working copy and the data folder in step, as [MirrorPlanner] decides, remembering what it last saw of
  * both in a [Manifest] kept in [manifestFile] (outside the working copy). [clock] is the wall clock, in
- * milliseconds, that working-copy times are compared with.
+ * milliseconds, that working-copy times are compared with. [layout] is what's mirrored, asked at the start of each
+ * run: once the core reports it ([DataLayout.fromCore]), each run that lists both sides first deletes the working
+ * copy's [DataLayout.stray] files that are in step with the folder, and their manifest entries, never touching the
+ * folder.
  *
  * Runs never overlap: they take turns on one thread. A run that can't reach the folder stops, with what it had done
  * kept, and the state [MirrorState.Unreachable]; the next run tries again. A file that fails on its own is left for
@@ -82,6 +85,7 @@ class Mirror(
     private val workingCopy: File,
     private val manifestFile: File,
     private val clock: () -> Long,
+    private val layout: () -> DataLayout,
 ) {
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
     private val mutableState = MutableStateFlow<MirrorState>(MirrorState.Idle)
@@ -99,8 +103,8 @@ class Mirror(
     suspend fun pull(deferred: (String) -> Boolean): PullResult =
         withContext(dispatcher) {
             PullResult(
-                sync(deferred, saves = false) { folder, local, manifest ->
-                    MirrorPlanner.pull(folder, local, manifest, deferred)
+                sync(deferred, saves = false) { folder, local, manifest, layout ->
+                    MirrorPlanner.pull(folder, local, manifest, layout, deferred)
                 }.changed,
             )
         }
@@ -115,8 +119,8 @@ class Mirror(
     ): PushResult =
         withContext(dispatcher) {
             val result =
-                sync(deferred, saves = true) { folder, local, manifest ->
-                    MirrorPlanner.push(folder, local, manifest, clock(), force, deferred)
+                sync(deferred, saves = true) { folder, local, manifest, layout ->
+                    MirrorPlanner.push(folder, local, manifest, layout, clock(), force, deferred)
                 }
             PushResult(result.changed, result.complete)
         }
@@ -137,14 +141,15 @@ class Mirror(
     private suspend fun sync(
         deferred: (String) -> Boolean,
         saves: Boolean,
-        plan: (Map<String, FileState>, Map<String, FileState>, Manifest) -> List<MirrorAction>,
+        plan: (Map<String, FileState>, Map<String, FileState>, Manifest, DataLayout) -> List<MirrorAction>,
     ): SyncResult {
         // A run never suspends, so on the one-thread dispatcher it can't overlap close().
         if (closed) return SyncResult(emptySet(), complete = false)
+        val layout = layout()
         // The listing recovers interrupted replaces first, so a file only a .goosebak holds isn't seen as deleted.
         val listings =
             try {
-                store.listAll() to LocalTree.list(workingCopy)
+                store.listAll(layout) to LocalTree.list(workingCopy)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FolderUnreachableException) {
@@ -158,13 +163,14 @@ class Mirror(
                 return SyncResult(emptySet(), complete = false)
             }
         val (folder, local) = listings
-        val actions = plan(folder, local, loadManifest())
 
         val changed = HashSet<String>()
         var complete = true
         // Whether a working-copy change didn't reach the folder.
         var failed = false
         try {
+            if (layout.fromCore) removeStrays(local, layout)
+            val actions = plan(folder, local, loadManifest(), layout)
             for ((done, action) in actions.withIndex()) {
                 currentCoroutineContext().ensureActive()
                 mutableState.value = MirrorState.Syncing(done, actions.size, failedRuns)
@@ -195,6 +201,44 @@ class Mirror(
             if (mutableState.value is MirrorState.Syncing) mutableState.value = idle()
         }
         return SyncResult(changed, complete)
+    }
+
+    /**
+     * Deletes the working copy's [DataLayout.stray] files among [local] that are in step with the data folder (as
+     * the manifest last saw them, and unchanged since), and the folders they leave empty, and drops their manifest
+     * entries. The data folder keeps its copies. Any other stray (changed since, or never mirrored: a folder
+     * settings.ini no longer names may hold a change that never reached the data folder) stays, with its entry. The
+     * manifest's other entries outside the [layout] go when their file is gone from the working copy, or is one that
+     * is never mirrored (the cache, the log, a temporary file). A file that can't be deleted keeps its entry and is
+     * tried again at the next run: outside the layout, the planner never acts on it.
+     */
+    private fun removeStrays(
+        local: Map<String, FileState>,
+        layout: DataLayout,
+    ) {
+        val manifest = loadManifest()
+        val removed = HashSet<String>()
+        for ((path, state) in local) {
+            if (!layout.stray(path)) continue
+            val file = File(workingCopy, path)
+            if (manifest[path]?.local != state) {
+                Log.w(TAG, "Keeping $file: it isn't GooseStation's data, but may hold a change the folder lacks.")
+                continue
+            }
+            if (!file.delete()) {
+                Log.w(TAG, "Can't delete $file, which isn't GooseStation's data.")
+                continue
+            }
+            removed += path
+            // Its folders, up to the working copy, while they're empty (delete() fails on one that isn't).
+            var parent = file.parentFile
+            while (parent != null && parent != workingCopy && parent.delete()) parent = parent.parentFile
+        }
+        val kept =
+            manifest.entries.filterKeys { path ->
+                layout.mirrored(path) || (path in local && path !in removed && layout.stray(path))
+            }
+        if (kept.size != manifest.entries.size) record(Manifest(kept))
     }
 
     /** Ends a run that reached the folder, one that [saves], [failed] if a working-copy change didn't reach it. */

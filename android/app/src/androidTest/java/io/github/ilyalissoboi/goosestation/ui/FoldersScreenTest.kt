@@ -162,6 +162,24 @@ class FoldersScreenTest {
     }
 
     @Test
+    fun theChoiceTellsOfOtherThingsInTheFolder() {
+        val withGames =
+            DataFolderCandidate(
+                picked.uri,
+                DataFolderInspection.Usable(
+                    DataFolderContents(hasSettings = false, memoryCards = 0, others = listOf("games", "notes.txt")),
+                ),
+            )
+        show(firstCandidate = withGames)
+
+        rule.onNodeWithText("No GooseStation data here yet.").assertIsDisplayed()
+        rule
+            .onNodeWithText("This folder also holds other things (games, notes.txt). GooseStation leaves them alone.")
+            .assertIsDisplayed()
+        rule.onNodeWithText("Copy this device's data into it").assertIsFocused()
+    }
+
+    @Test
     fun aRefusedFolderOffersNoChoice() {
         val refused =
             DataFolderCandidate(

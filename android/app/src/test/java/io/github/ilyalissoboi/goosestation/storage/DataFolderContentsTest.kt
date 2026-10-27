@@ -70,4 +70,61 @@ class DataFolderContentsTest {
             DataFolderContents(hasSettings = false, memoryCards = 1).summary(),
         )
     }
+
+    @Test
+    fun otherThingsAreToldAndLeftAlone() {
+        val lister =
+            FakeLister(
+                mapOf(
+                    "root" to
+                        listOf(folder("games"), folder("bios"), file(".goosestation-probe.goosetmp"), folder(".x")),
+                ),
+            )
+
+        val contents = DataFolderContents.read(lister, "tree")!!
+
+        assertEquals(DataFolderContents(hasSettings = false, memoryCards = 0, others = listOf("games")), contents)
+        assertEquals(
+            "No GooseStation data here yet. GooseStation will start fresh in this folder.",
+            contents.describe(),
+        )
+        assertEquals("No GooseStation data here yet.", contents.summary())
+        assertEquals(
+            "This folder also holds other things (games). GooseStation leaves them alone.",
+            contents.otherThings(),
+        )
+    }
+
+    @Test
+    fun otherThingsBesideGooseStationData() {
+        val contents = DataFolderContents(hasSettings = true, memoryCards = 0, others = listOf("games", "notes.txt"))
+
+        assertEquals(
+            "This folder already has GooseStation data (settings). GooseStation will use it.",
+            contents.describe(),
+        )
+        assertEquals(
+            "This folder also holds other things (games, notes.txt). GooseStation leaves them alone.",
+            contents.otherThings(),
+        )
+    }
+
+    @Test
+    fun otherThingsListUpToThreeNames() {
+        val contents = DataFolderContents(false, 0, others = listOf("a", "b", "c", "d", "e"))
+
+        assertEquals(
+            "This folder also holds other things (a, b, c and 2 more). GooseStation leaves them alone.",
+            contents.otherThings(),
+        )
+        assertEquals(
+            "This folder also holds other things (a, b, c). GooseStation leaves them alone.",
+            DataFolderContents(false, 0, others = listOf("a", "b", "c")).otherThings(),
+        )
+    }
+
+    @Test
+    fun noOtherThingsNoLine() {
+        assertNull(DataFolderContents(hasSettings = true, memoryCards = 1).otherThings())
+    }
 }

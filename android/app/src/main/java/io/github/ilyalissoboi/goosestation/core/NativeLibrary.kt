@@ -42,6 +42,19 @@ object NativeLibrary {
     external fun getMemoryCardPaths(): Array<String>?
 
     /**
+     * The folders the core keeps its data in, relative to the data root, each with a trailing `/` (empty if it's the
+     * data root itself): every one but the cache, as settings.ini sets them, if it's inside the data root. Null
+     * before [initialize].
+     */
+    external fun getDataFolders(): Array<String>?
+
+    /**
+     * The core's cache folder, as [getDataFolders] gives a folder. Null if it's outside the data root, or the data
+     * root itself, or before [initialize].
+     */
+    external fun getCacheFolder(): String?
+
+    /**
      * Copies the PS1 BIOS images the core recognises from the top of [sourceTreeUri] to [destDir], then deletes every
      * other file in [destDir]. Returns the images' descriptions in file name order. A folder with no image gives an
      * empty array, and nothing is deleted. Returns null if the folder can't be read or a copy fails, and then nothing

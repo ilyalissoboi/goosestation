@@ -41,6 +41,15 @@ void SetBoolSetting(const char* section, const char* key, bool value);
 /// if they're set and elsewhere in the data root. nullopt before Initialize() succeeded.
 std::optional<std::vector<std::string>> GetMemoryCardPaths();
 
+/// The folders the core keeps its data in, relative to the data root (RelativeToDataRoot()), each with a trailing '/'
+/// (empty if it's the data root): every EmuFolders folder but the cache, in EmuFolders::LoadConfig()'s order, if it's
+/// inside the data root. nullopt before Initialize() succeeded.
+std::optional<std::vector<std::string>> GetDataFolders();
+
+/// EmuFolders::Cache as GetDataFolders() gives a folder: nullopt if it's outside the data root, or the data root
+/// itself, or before Initialize() succeeded.
+std::optional<std::string> GetCacheFolder();
+
 /// Scans the game folders: GameList::Refresh(). Blocks, on the calling thread, which should be the JVM's; one refresh
 /// runs at a time. Does nothing before Initialize() succeeded.
 void RefreshGameList(bool invalidate_cache);

@@ -367,6 +367,38 @@ std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
   return paths;
 }
 
+std::optional<std::vector<std::string>> AndroidHost::GetDataFolders()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  const auto lock = Host::GetSettingsLock();
+  std::vector<std::string> folders;
+  for (const std::string* folder :
+       {&EmuFolders::Bios, &EmuFolders::Cheats, &EmuFolders::Covers, &EmuFolders::Dumps, &EmuFolders::GameIcons,
+        &EmuFolders::GameSettings, &EmuFolders::InputProfiles, &EmuFolders::MemoryCards, &EmuFolders::SaveStates,
+        &EmuFolders::Screenshots, &EmuFolders::Shaders, &EmuFolders::Textures, &EmuFolders::UserResources,
+        &EmuFolders::Videos})
+  {
+    const std::optional<std::string> relative = RelativeToDataRoot(*folder);
+    if (relative.has_value())
+      folders.push_back(relative->empty() ? std::string() : *relative + '/');
+  }
+  return folders;
+}
+
+std::optional<std::string> AndroidHost::GetCacheFolder()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  const auto lock = Host::GetSettingsLock();
+  const std::optional<std::string> relative = RelativeToDataRoot(EmuFolders::Cache);
+  if (!relative.has_value() || relative->empty())
+    return std::nullopt;
+  return *relative + '/';
+}
+
 void AndroidHost::StartGame(std::string path)
 {
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to

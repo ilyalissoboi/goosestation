@@ -50,17 +50,19 @@ class MirrorTest {
         folder = TestTrees.directory(context, tree)
     }
 
-    private fun mirror() =
-        Mirror(SafFolderStore(context.contentResolver, tree), workingCopy, manifestFile, System::currentTimeMillis)
+    private fun mirror(layout: DataLayout = LAYOUT) =
+        Mirror(SafFolderStore(context.contentResolver, tree), workingCopy, manifestFile, System::currentTimeMillis) {
+            layout
+        }
 
     /** A mirror whose store runs [afterListing] once each listing is done, as if the folder changed right then. */
     private fun mirrorChangingAfterListing(afterListing: () -> Unit): Mirror {
         val store = SafFolderStore(context.contentResolver, tree)
         val changing =
             object : FolderStore by store {
-                override fun listAll() = store.listAll().also { afterListing() }
+                override fun listAll(layout: DataLayout) = store.listAll(layout).also { afterListing() }
             }
-        return Mirror(changing, workingCopy, manifestFile, System::currentTimeMillis)
+        return Mirror(changing, workingCopy, manifestFile, System::currentTimeMillis) { LAYOUT }
     }
 
     private fun assertReachable(mirror: Mirror) {
@@ -83,6 +85,8 @@ class MirrorTest {
 
     /** Every name in the folder's tree, relative, for checking that no temporary document is left. */
     private fun folderNames() = folder.walk().filter { it.isFile }.map { it.relativeTo(folder).path }.toSet()
+
+    private fun localNames() = workingCopy.walk().filter { it.isFile }.map { it.relativeTo(workingCopy).path }.toSet()
 
     private fun assertNoTemporaries() {
         val names = folderNames()
@@ -209,6 +213,114 @@ class MirrorTest {
         assertEquals(emptySet<String>(), folderNames())
     }
 
+    @Test
+    fun onlyTheLayoutIsPulled() {
+        createTree(mapOf("games/big.chd" to CARD, "games/sub/b.bin" to CARD, "settings.ini" to INI))
+        TestDocumentsProvider.listed.clear()
+
+        val result = runBlocking { mirror().pull(never) }
+
+        assertEquals(setOf("settings.ini"), localNames())
+        assertEquals(setOf("settings.ini"), result.changed)
+        // The folder's other things aren't even listed.
+        val listed = TestDocumentsProvider.listed.toList()
+        assertTrue(listed.toString(), listed.isNotEmpty() && listed.none { it.contains("/games") })
+    }
+
+    @Test
+    fun theLayoutTheCoreReportsIsPulled() {
+        createTree(mapOf("mycheats/a.cht" to INI, "settings.ini" to INI))
+
+        runBlocking { mirror(DataLayout.withCorePaths(listOf("memcards/", "mycheats/"), "cache/")).pull(never) }
+
+        assertEquals(setOf("mycheats/a.cht", "settings.ini"), localNames())
+    }
+
+    @Test
+    fun otherThingsAreNeitherPushedNorDeletedInTheFolder() {
+        createTree(mapOf("games/x.chd" to CARD, "notes.txt" to INI))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+
+        writeLocal("games/y.chd", CARD2)
+        runBlocking { mirror.push(true, never) }
+
+        assertEquals(setOf("games/x.chd", "notes.txt"), folderNames())
+    }
+
+    /** The working copy holds [path] as an earlier build's pull left it: copied from the folder, in the manifest. */
+    private fun strayFromAnEarlierBuild(path: String) {
+        writeLocal(path, CARD)
+        val local = local(path).let { FileState(it.length(), it.lastModified()) }
+        val inFolder = File(folder, path).let { FileState(it.length(), it.lastModified()) }
+        manifestFile.writeText(Manifest(mapOf(path to ManifestEntry(local, inFolder))).encode())
+    }
+
+    private fun manifestPaths() = Manifest.decode(manifestFile.readText())!!.entries.keys
+
+    @Test
+    fun straysLeaveTheWorkingCopyButNotTheFolder() {
+        createTree(mapOf("games/x.chd" to CARD, "settings.ini" to INI))
+        strayFromAnEarlierBuild("games/x.chd")
+        writeLocal("cache/gamelist.cache", CARD)
+        writeLocal("goosestation.log", INI)
+
+        runBlocking { mirror().pull(never) }
+
+        assertFalse(local("games/x.chd").exists())
+        assertFalse(local("games").exists())
+        assertEquals(setOf("settings.ini"), manifestPaths())
+        assertArrayEquals(CARD, File(folder, "games/x.chd").readBytes())
+        // The core's own files that are never mirrored stay.
+        assertEquals(setOf("cache/gamelist.cache", "goosestation.log", "settings.ini"), localNames())
+    }
+
+    @Test
+    fun straysLeaveOnAPushToo() {
+        createTree(mapOf("games/x.chd" to CARD))
+        strayFromAnEarlierBuild("games/x.chd")
+
+        runBlocking { mirror().push(true, never) }
+
+        assertFalse(local("games/x.chd").exists())
+        assertEquals(emptySet<String>(), manifestPaths())
+        assertArrayEquals(CARD, File(folder, "games/x.chd").readBytes())
+    }
+
+    @Test
+    fun aStrayWithAnUnpushedChangeStays() {
+        // A folder settings.ini no longer names (memory cards moved back to memcards/): its card changed since the
+        // last run, and a card the manifest never saw, may not be in the data folder.
+        createTree(mapOf("mycards/a.mcd" to CARD, "games/gone.chd" to CARD))
+        strayFromAnEarlierBuild("mycards/a.mcd")
+        val synced = Manifest.decode(manifestFile.readText())!!["mycards/a.mcd"]!!
+        val gone = ManifestEntry(FileState(1, 1), FileState(1, 1))
+        manifestFile.writeText(Manifest(mapOf("mycards/a.mcd" to synced, "games/gone.chd" to gone)).encode())
+        writeLocal("mycards/a.mcd", CARD2)
+        local("mycards/a.mcd").setLastModified(System.currentTimeMillis() - 10_000)
+        writeLocal("mycards/b.mcd", CARD3)
+
+        runBlocking { mirror().pull(never) }
+
+        assertArrayEquals(CARD2, local("mycards/a.mcd").readBytes())
+        assertArrayEquals(CARD3, local("mycards/b.mcd").readBytes())
+        // Kept with its entry; the entry whose file is gone from the working copy goes.
+        assertEquals(setOf("mycards/a.mcd"), manifestPaths())
+        assertArrayEquals(CARD, File(folder, "mycards/a.mcd").readBytes())
+    }
+
+    @Test
+    fun straysStayUntilTheCoreReportsItsLayout() {
+        createTree(mapOf("mycards/a.mcd" to CARD))
+        strayFromAnEarlierBuild("mycards/a.mcd")
+
+        // Before the core starts, the folder its settings name may be outside the default layout.
+        runBlocking { mirror(DataLayout.DEFAULT).pull(never) }
+
+        assertTrue(local("mycards/a.mcd").exists())
+        assertEquals(setOf("mycards/a.mcd"), manifestPaths())
+    }
+
     /** A replace that stopped after moving the old file aside: only the `.goosebak` holds it. */
     private fun interruptReplace(path: String) {
         val file = File(folder, path)
@@ -309,14 +421,14 @@ class MirrorTest {
 
     @Test
     fun pushDoesNotReplaceAFolderWithAFile() {
-        createTree(mapOf("x/inner.txt" to INI))
+        createTree(mapOf("memcards/x/inner.txt" to INI))
         val mirror = mirror()
 
-        writeLocal("x", CARD)
+        writeLocal("memcards/x", CARD)
         runBlocking { mirror.push(false, never) }
 
-        assertArrayEquals(INI, File(folder, "x/inner.txt").readBytes())
-        assertEquals(setOf("x/inner.txt"), folderNames())
+        assertArrayEquals(INI, File(folder, "memcards/x/inner.txt").readBytes())
+        assertEquals(setOf("memcards/x/inner.txt"), folderNames())
         assertReachable(mirror)
     }
 
@@ -652,6 +764,8 @@ class MirrorTest {
     }
 
     private companion object {
+        /** As the core reports it once it runs, with its defaults. */
+        val LAYOUT = DataLayout.withCorePaths(listOf("memcards/"), cacheFolder = "cache/")
         val INI = "[Main]\nSettingsVersion = 3\n".toByteArray()
         val CARD = ByteArray(128 * 1024) { it.toByte() }
         val CARD2 = ByteArray(128 * 1024) { (it * 7).toByte() }

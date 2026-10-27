@@ -18,6 +18,7 @@ import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
+import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
@@ -167,6 +168,9 @@ object AppController : NativeCallbacks {
 
     /** Where the memory cards are in the working copy ([MemoryCardPaths]), as the core last said. */
     @Volatile private var memcardPaths = MemoryCardPaths.DEFAULT
+
+    /** What the mirror copies ([DataLayout]): the defaults until the core, once it has started, says otherwise. */
+    @Volatile private var dataLayout = DataLayout.DEFAULT
 
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
@@ -431,8 +435,10 @@ object AppController : NativeCallbacks {
         val candidate = dataCandidate ?: return
         val usable = candidate.inspection is DataFolderInspection.Usable
         if (!usable || screen != Screen.Folders || dataChange != null) return
-        // A game left a moment ago may still be stopping, and the start may still be pulling the old folder.
-        if (gameActive || coldStarting) {
+        // A game left a moment ago may still be stopping, and the start may still be pulling the old folder. Until the
+        // core has started, the layout is only the defaults: a push to the old folder would leave out the folders its
+        // settings.ini names, and still count as complete.
+        if (gameActive || coldStarting || !dataLayout.fromCore) {
             showMessage("GooseStation is busy. Try again in a moment.")
             return
         }
@@ -445,7 +451,7 @@ object AppController : NativeCallbacks {
                 try {
                     val store = SafFolderStore(context.contentResolver, candidate.uri)
                     val applied =
-                        DataFolderChange(workingCopy, manifestFile).switchFrom(
+                        DataFolderChange(workingCopy, manifestFile, dataLayout).switchFrom(
                             mirror,
                             pushOld = dataGranted,
                             lossAccepted = lossAccepted,
@@ -607,7 +613,11 @@ object AppController : NativeCallbacks {
         for (step in steps) {
             when (step) {
                 StartupStep.Pull -> firstPull()
-                StartupStep.InitializeCore -> if (!initializeCore()) return
+                StartupStep.InitializeCore -> {
+                    if (!initializeCore()) return
+                    // The folders the core's settings.ini names beyond the defaults, which the first pull left out.
+                    if (dataLayout.addsTo(DataLayout.DEFAULT)) pull(onlyMemcards = false)
+                }
                 StartupStep.SetGameFolders -> applyGameFolders()
                 StartupStep.RefreshLibrary -> refreshLibrary(showProgress = true)
                 StartupStep.ShowSetup, StartupStep.ReloadSettings -> {}
@@ -633,7 +643,7 @@ object AppController : NativeCallbacks {
     private fun useMirror(data: String) {
         mirrorStateJob?.cancel()
         val store = SafFolderStore(context.contentResolver, data)
-        val created = Mirror(store, workingCopy, manifestFile, System::currentTimeMillis)
+        val created = Mirror(store, workingCopy, manifestFile, System::currentTimeMillis) { dataLayout }
         mirror = created
         mirrorStateJob = scope.launch { created.state.collect { mutableMirrorState.value = it } }
     }
@@ -700,6 +710,7 @@ object AppController : NativeCallbacks {
         val steps = StartupPlan.afterPull(changed)
         if (steps.isEmpty()) return false
         val readable = readableGameFolders()
+        var layoutGrew = false
         val refreshed =
             withContext(coreDispatcher) {
                 for (step in steps) {
@@ -707,7 +718,7 @@ object AppController : NativeCallbacks {
                         StartupStep.ReloadSettings -> {
                             NativeLibrary.reloadSettings()
                             readGridView()
-                            readMemcardPaths()
+                            layoutGrew = readCorePaths()
                         }
                         StartupStep.SetGameFolders -> NativeLibrary.setGameFolders(readable)
                         StartupStep.RefreshLibrary -> NativeLibrary.refreshGameList(false)
@@ -717,6 +728,8 @@ object AppController : NativeCallbacks {
                 if (StartupStep.RefreshLibrary in steps) NativeLibrary.getGameList().toList() else null
             }
         refreshed?.let { games = it }
+        // The folders the new settings.ini names, which this run left out, come in now.
+        if (layoutGrew) scope.launch { pull(onlyMemcards = false) }
         return refreshed != null
     }
 
@@ -738,7 +751,7 @@ object AppController : NativeCallbacks {
                     ).also {
                         if (it) {
                             readGridView()
-                            readMemcardPaths()
+                            readCorePaths()
                         }
                     }
                 }
@@ -767,9 +780,16 @@ object AppController : NativeCallbacks {
         withContext(Dispatchers.Main) { gridView = grid }
     }
 
-    // On coreDispatcher, once the core has read settings.ini.
-    private fun readMemcardPaths() {
+    /**
+     * The memory card paths and the [dataLayout], as the core has them; returns whether the layout gained a folder or
+     * file. On coreDispatcher, once the core has read settings.ini.
+     */
+    private fun readCorePaths(): Boolean {
         memcardPaths = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
+        val folders = NativeLibrary.getDataFolders() ?: return false
+        val old = dataLayout
+        dataLayout = DataLayout.withCorePaths(folders.toList() + memcardPaths, NativeLibrary.getCacheFolder())
+        return dataLayout.addsTo(old)
     }
 
     // The games folders the app can read: one without its grant is left out until it's picked again.

@@ -182,6 +182,41 @@ class SettingsSetupTest {
         assertEquals(listOf("cards/", "shared/one.mcd"), NativeLibrary.getMemoryCardPaths()?.toList())
     }
 
+    @Test
+    fun dataFoldersAreUnknownBeforeTheCoreStarts() {
+        assertNull(NativeLibrary.getDataFolders())
+        assertNull(NativeLibrary.getCacheFolder())
+    }
+
+    @Test
+    fun dataFoldersAreTheDefaults() {
+        initialize(null)
+
+        // Not the BIOS folder: the app's own, outside the data root.
+        assertEquals(
+            listOf(
+                "cheats/", "covers/", "dump/", "gameicons/", "gamesettings/", "inputprofiles/", "memcards/",
+                "savestates/", "screenshots/", "shaders/", "textures/", "resources/", "videos/",
+            ),
+            NativeLibrary.getDataFolders()?.toList(),
+        )
+        assertEquals("cache/", NativeLibrary.getCacheFolder())
+    }
+
+    @Test
+    fun dataFoldersFollowTheSettings() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Folders]\nCheats = mycheats\n" +
+                "Covers = /elsewhere/covers\nTextures = more/textures\nCache = mycache\n\n" +
+                "[MemoryCards]\nDirectory = cards\n",
+        )
+
+        val folders = NativeLibrary.getDataFolders()!!.toList()
+        assertTrue(folders.toString(), "mycheats/" in folders && "more/textures/" in folders && "cards/" in folders)
+        assertFalse(folders.toString(), folders.any { "covers" in it || it == "memcards/" || "cache" in it })
+        assertEquals("mycache/", NativeLibrary.getCacheFolder())
+    }
+
     private fun waitFor(what: String, condition: () -> Boolean) {
         val deadline = System.nanoTime() + 5_000_000_000L
         while (!condition()) {

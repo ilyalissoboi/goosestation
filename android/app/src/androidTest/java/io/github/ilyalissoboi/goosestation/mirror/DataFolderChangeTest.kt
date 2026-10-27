@@ -47,7 +47,8 @@ class DataFolderChangeTest {
 
     private fun store(tree: String) = SafFolderStore(context.contentResolver, tree)
 
-    private fun mirror(tree: String) = Mirror(store(tree), workingCopy, manifestFile, System::currentTimeMillis)
+    private fun mirror(tree: String) =
+        Mirror(store(tree), workingCopy, manifestFile, System::currentTimeMillis) { LAYOUT }
 
     /**
      * The old folder ([oldTree]) holds [files], pulled into the working copy as the app does at its start; returns
@@ -76,7 +77,7 @@ class DataFolderChangeTest {
         lossAccepted: Boolean = false,
         beforeApply: suspend () -> Unit = {},
     ) = runBlocking {
-        DataFolderChange(workingCopy, manifestFile)
+        DataFolderChange(workingCopy, manifestFile, LAYOUT)
             .switchFrom(old, pushOld = true, lossAccepted, tree, choice, store(tree), beforeApply)
     }
 
@@ -85,7 +86,7 @@ class DataFolderChangeTest {
     private fun change(
         tree: String,
         choice: DataFolderChoice,
-    ) = runBlocking { DataFolderChange(workingCopy, manifestFile).apply(tree, choice, store(tree)) }
+    ) = runBlocking { DataFolderChange(workingCopy, manifestFile, LAYOUT).apply(tree, choice, store(tree)) }
 
     @Test
     fun copyThisDevicesData() {
@@ -130,6 +131,31 @@ class DataFolderChangeTest {
         change(new, DataFolderChoice.CopyThisDevicesData)
 
         assertEquals(setOf("memcards/a.mcd"), files(TestTrees.directory(context, new)))
+    }
+
+    @Test
+    fun copyThisDevicesDataLeavesOtherThingsOut() {
+        pulledFrom(mapOf("memcards/a.mcd" to CARD_A))
+        local("games/x.chd").apply {
+            parentFile!!.mkdirs()
+            writeBytes(CARD_B)
+        }
+        val new = TestTrees.create(context, mapOf("notes.txt" to INI))
+
+        change(new, DataFolderChoice.CopyThisDevicesData)
+
+        assertEquals(setOf("memcards/a.mcd", "notes.txt"), files(TestTrees.directory(context, new)))
+    }
+
+    @Test
+    fun useFolderDataTakesOnlyTheLayout() {
+        pulledFrom(mapOf("memcards/a.mcd" to CARD_A))
+        val new = TestTrees.create(context, mapOf("memcards/b.mcd" to CARD_B, "games/x.chd" to CARD_A))
+
+        change(new, DataFolderChoice.UseFolderData)
+
+        assertEquals(setOf("memcards/b.mcd"), files(workingCopy))
+        assertEquals(setOf("memcards/b.mcd", "games/x.chd"), files(TestTrees.directory(context, new)))
     }
 
     @Test
@@ -237,6 +263,7 @@ class DataFolderChangeTest {
         root.walk().filter { it.isFile }.map { it.relativeTo(root).invariantSeparatorsPath }.toSet()
 
     private companion object {
+        val LAYOUT = DataLayout.withCorePaths(listOf("memcards/"), cacheFolder = "cache/")
         val CARD_A = ByteArray(128) { 0xA1.toByte() }
         val CARD_B = ByteArray(128) { 0xB2.toByte() }
         val INI = "[Main]\nSettingsVersion = 3\n".toByteArray()

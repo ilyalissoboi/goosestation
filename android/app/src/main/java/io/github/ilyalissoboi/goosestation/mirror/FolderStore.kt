@@ -32,10 +32,11 @@ class FolderUnreachableException(
  */
 interface FolderStore {
     /**
-     * Every file in the folder, recursively. The leftovers of an interrupted [replace] are dealt with first, as
-     * [recover] does, so a file whose only copy is its `.goosebak` is listed under its own name, never as missing.
+     * Every file in the folder that the [layout] mirrors, recursively; the folders it doesn't walk aren't listed at
+     * all. The leftovers of an interrupted [replace] are dealt with first, as [recover] does, so a file whose only
+     * copy is its `.goosebak` is listed under its own name, never as missing.
      */
-    fun listAll(): Map<String, FileState>
+    fun listAll(layout: DataLayout): Map<String, FileState>
 
     /** Copies the file at [path] over [dest], whole or not at all. */
     fun copyFrom(
@@ -66,10 +67,10 @@ interface FolderStore {
     )
 
     /**
-     * Cleans up after interrupted [replace]s in every folder: a `.goosebak` whose file is missing is renamed back to
-     * it, any other `.goosebak` is deleted, and so is every `.goosetmp`.
+     * Cleans up after interrupted [replace]s in every folder [listAll] lists for the [layout]: a `.goosebak` whose
+     * file is missing is renamed back to it, any other `.goosebak` is deleted, and so is every `.goosetmp`.
      */
-    fun recover()
+    fun recover(layout: DataLayout)
 }
 
 /**
@@ -101,10 +102,10 @@ class SafFolderStore(
         val state get() = FileState(document.size, document.lastModifiedMs)
     }
 
-    override fun listAll(): Map<String, FileState> = guard { walk() }
+    override fun listAll(layout: DataLayout): Map<String, FileState> = guard { walk(layout) }
 
-    override fun recover() {
-        guard { walk() }
+    override fun recover(layout: DataLayout) {
+        guard { walk(layout) }
     }
 
     override fun copyFrom(
@@ -195,10 +196,11 @@ class SafFolderStore(
     }
 
     /**
-     * Lists every folder, recovering each one's leftovers on the way ([recover]), and returns every file in it. A
-     * `.goosebak` that can't be renamed back fails the listing: listing without it would read as a deletion.
+     * Lists every folder the [layout] walks, recovering each one's leftovers on the way ([recover]), and returns the
+     * files in them that it mirrors. A `.goosebak` that can't be renamed back fails the listing: listing without it
+     * would read as a deletion.
      */
-    private fun walk(): Map<String, FileState> {
+    private fun walk(layout: DataLayout): Map<String, FileState> {
         folders.clear()
         val files = HashMap<String, FileState>()
         val pending = ArrayDeque<Pair<String, String>>()
@@ -208,8 +210,8 @@ class SafFolderStore(
             for (child in recovered(folderId).values) {
                 val path = if (folder.isEmpty()) child.name else "$folder/${child.name}"
                 if (child.isDirectory) {
-                    pending += path to child.documentId
-                } else {
+                    if (layout.walks(path)) pending += path to child.documentId
+                } else if (layout.mirrored(path)) {
                     files[path] = FileState(child.size, child.lastModifiedMs)
                 }
             }

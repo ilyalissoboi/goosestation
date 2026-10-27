@@ -173,6 +173,24 @@ class SetupScreenTest {
     }
 
     @Test
+    fun otherThingsInTheDataFolderAreToldWithoutBlockingFinish() {
+        val contents = DataFolderContents(hasSettings = false, memoryCards = 0, others = listOf("games"))
+        inspection = DataFolderInspection.Usable(contents)
+        show(listOf("SCPH-3000"))
+        goToTheDataStep()
+
+        press(Key.Enter)
+
+        rule
+            .onNodeWithText("No GooseStation data here yet. GooseStation will start fresh in this folder.")
+            .assertIsDisplayed()
+        rule
+            .onNodeWithText("This folder also holds other things (games). GooseStation leaves them alone.")
+            .assertIsDisplayed()
+        rule.onNodeWithText("Finish").assertIsEnabled()
+    }
+
+    @Test
     fun aGamesFolderInsideTheDataFolderIsRefused() {
         show(listOf("SCPH-3000"))
         goToTheDataStep()

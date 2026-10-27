@@ -28,7 +28,7 @@ class MirrorPlannerTest {
         local: Map<String, FileState>,
         manifest: Manifest,
         deferred: (String) -> Boolean = never,
-    ) = MirrorPlanner.pull(folder, local, manifest, deferred)
+    ) = MirrorPlanner.pull(folder, local, manifest, DataLayout.DEFAULT, deferred)
 
     private fun push(
         folder: Map<String, FileState>,
@@ -37,7 +37,7 @@ class MirrorPlannerTest {
         nowMs: Long = now,
         force: Boolean = false,
         deferred: (String) -> Boolean = never,
-    ) = MirrorPlanner.push(folder, local, manifest, nowMs, force, deferred)
+    ) = MirrorPlanner.push(folder, local, manifest, DataLayout.DEFAULT, nowMs, force, deferred)
 
     // pull
 
@@ -130,9 +130,12 @@ class MirrorPlannerTest {
 
     @Test
     fun pullIsSortedByPath() {
-        val folder = mapOf("b" to s(1), "a" to s(1), "c/d" to s(1))
+        val folder = mapOf("settings.ini" to s(1), "secrets.ini" to s(1), "covers/d" to s(1))
 
-        assertEquals(listOf(CopyToLocal("a"), CopyToLocal("b"), CopyToLocal("c/d")), pull(folder, emptyMap(), none))
+        assertEquals(
+            listOf(CopyToLocal("covers/d"), CopyToLocal("secrets.ini"), CopyToLocal("settings.ini")),
+            pull(folder, emptyMap(), none),
+        )
     }
 
     // push
@@ -290,11 +293,35 @@ class MirrorPlannerTest {
     @Test
     fun cacheAndTempsExcluded() {
         val paths = listOf("cache/shaders.bin", "memcards/a.mcd.goosetmp", "x.goosebak", "memcards/.a.mcd.goosetmp")
+        assertNothingPlanned(paths)
+    }
+
+    @Test
+    fun outsideTheLayoutIsNeverPulledPushedOrDeleted() {
+        assertNothingPlanned(listOf("games/x.chd", "games/y.chd", "notes.txt", "goosestation.log"))
+        // A folder file and a local file, neither known to the manifest.
+        val folder = mapOf("games/x.chd" to s(1))
+        val local = mapOf("games/y.chd" to s(1))
+        assertEquals(emptyList<MirrorAction>(), pull(folder, local, none))
+        assertEquals(emptyList<MirrorAction>(), push(folder, local, none, force = true))
+    }
+
+    @Test
+    fun aFolderTheCoreReportsIsPlanned() {
+        val layout = DataLayout.withCorePaths(listOf("memcards/", "mycheats/"), cacheFolder = "cache/")
+        val folder = mapOf("mycheats/a.cht" to s(1))
+
+        assertEquals(listOf(CopyToLocal("mycheats/a.cht")), MirrorPlanner.pull(folder, emptyMap(), none, layout, never))
+        assertEquals(emptyList<MirrorAction>(), pull(folder, emptyMap(), none))
+    }
+
+    /** No action, in either direction, for [paths] on any side, changed or not, known to the manifest or not. */
+    private fun assertNothingPlanned(paths: List<String>) {
         val all = paths.associateWith { s(1) }
         val changed = paths.associateWith { s(2) }
         val manifest = Manifest(paths.associateWith { entry(1, 1) })
 
-        paths.forEach { assertTrue(it, MirrorPlanner.excluded(it)) }
+        paths.forEach { assertFalse(it, DataLayout.DEFAULT.mirrored(it)) }
         for (folder in listOf(emptyMap(), all, changed)) {
             for (local in listOf(emptyMap(), all, changed)) {
                 for (m in listOf(none, manifest)) {
@@ -306,9 +333,9 @@ class MirrorPlannerTest {
     }
 
     @Test
-    fun onlyCacheFolderAndTempSuffixesAreExcluded() {
-        listOf("cache", "cachefile.bin", "covers/cache/x.png", "memcards/a.goosetmp.mcd", "settings.ini").forEach {
-            assertFalse(it, MirrorPlanner.excluded(it))
+    fun onlyTheCacheFolderAndTempSuffixesAreExcludedInTheLayout() {
+        listOf("covers/cache/x.png", "memcards/a.goosetmp.mcd", "settings.ini").forEach {
+            assertTrue(it, DataLayout.DEFAULT.mirrored(it))
         }
     }
 }

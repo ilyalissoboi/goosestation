@@ -240,7 +240,10 @@ fun SetupScreen(
                 when {
                     data == null -> {}
                     busy -> Body("Looking at the folder…")
-                    inspection is DataFolderInspection.Usable -> Body(inspection.contents.describe())
+                    inspection is DataFolderInspection.Usable -> {
+                        Body(inspection.contents.describe())
+                        inspection.contents.otherThings()?.let { Body(it) }
+                    }
                     inspection is DataFolderInspection.Refused -> Body(inspection.reason)
                 }
                 Navigation(

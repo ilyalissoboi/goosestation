@@ -221,7 +221,11 @@ system folder picker is the exception, and may need touch (each step says so). I
 - The data folder can be empty, or hold data GooseStation saved before, here or on another device (but see "Known
   limits": it isn't shared live). Setup says which:
   "This folder is empty. GooseStation will start fresh here.", or "This folder already has GooseStation data
-  (settings and 2 memory cards). GooseStation will use it."
+  (settings and 2 memory cards). GooseStation will use it." A folder that holds other things but no GooseStation
+  data gets "No GooseStation data here yet. GooseStation will start fresh in this folder." When the folder holds
+  anything at its top that isn't GooseStation's (see "The data folder and its mirror"), a line follows: "This folder
+  also holds other things (games, notes.txt and 2 more). GooseStation leaves them alone." It doesn't stop Finish,
+  and the data folder change shows it as well.
 - Setup refuses a data folder, in the screen, with Finish kept off until another is picked, when:
   - it's one of the games folders, holds one or sits in one: "The data folder can't be a games folder, nor hold
     one or sit in one. Pick another." (the first pull would copy the games into the app). This goes by the folders'
@@ -295,6 +299,22 @@ adb shell run-as io.github.ilyalissoboi.goosestation cat files/mirror-manifest.t
 
 The rules:
 
+- **Only GooseStation's own data is mirrored.** That is `settings.ini`, `secrets.ini`, `playtime.dat` and
+  `custom_properties.ini` at the top of the folder, and everything in the desktop data folder's folders: `bios`,
+  `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `savestates`,
+  `screenshots`, `shaders`, `textures`, `resources` and `videos`, and `emusync` (memory card sync, a later stage).
+  Once the core has started, the folders its `settings.ini` names inside the data folder (a `[Folders]` entry, or
+  `[MemoryCards] Directory`, such as `mycheats`) and the shared memory cards are mirrored too; the app asks the core
+  for them, and pulls once more when that adds any. `cache/` (and the core's cache folder, wherever it is) and
+  `goosestation.log` stay on the device. **Anything else in the data folder is left alone**: a `games/` folder, say,
+  is never copied in, never written to and never deleted, and the mirror doesn't even list what's inside it. Folder
+  names are matched as the desktop writes them, in lower case: a `Memcards/` folder counts as something else. Files
+  outside the layout in the working copy (an earlier build copied in everything) are deleted from the working copy,
+  never from the folder, once the core has said where its folders are, and their manifest entries go too; only those
+  in step with the folder, though. One changed since the last run, or never mirrored (a card in a folder
+  `settings.ini` no longer names, say), stays in the working copy, as it may hold a change the folder lacks. A
+  leftover `.goosetmp` or `.goosebak` in a folder that is no longer part of the layout isn't cleaned up: it stays in
+  the data folder under that name.
 - **The folder is the source of truth.** The app pulls (folder to working copy) at start, before the core reads
   `settings.ini`, and whenever it comes back to the foreground. A file that is new or changed in the folder is copied
   in, even over a change of the working copy's, and a file deleted from the folder is deleted from the working copy.

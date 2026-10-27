@@ -4,20 +4,31 @@
 package io.github.ilyalissoboi.goosestation.storage
 
 import android.net.Uri
+import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 
-/** What a picked data folder already holds: a settings.ini, and how many files its memcards folder has. */
+/**
+ * What a picked data folder already holds: a settings.ini, how many files its memcards folder has, and the names at
+ * its top that aren't GooseStation's ([others]: a games folder, say), which the mirror leaves alone.
+ */
 data class DataFolderContents(
     val hasSettings: Boolean,
     val memoryCards: Int,
+    val others: List<String> = emptyList(),
 ) {
-    private val empty get() = !hasSettings && memoryCards == 0
+    private val noData get() = !hasSettings && memoryCards == 0
 
     /** What GooseStation will do with the folder, as the setup screen says it. */
-    fun describe() = summary() + if (empty) " GooseStation will start fresh here." else " GooseStation will use it."
+    fun describe() =
+        summary() +
+            when {
+                !noData -> " GooseStation will use it."
+                others.isEmpty() -> " GooseStation will start fresh here."
+                else -> " GooseStation will start fresh in this folder."
+            }
 
     /** What the folder holds, and no more: when changing the data folder, the user chooses what's done with it. */
     fun summary(): String {
-        if (empty) return "This folder is empty."
+        if (noData) return if (others.isEmpty()) "This folder is empty." else "No GooseStation data here yet."
         val cards = if (memoryCards == 1) "1 memory card" else "$memoryCards memory cards"
         val found =
             when {
@@ -28,10 +39,21 @@ data class DataFolderContents(
         return "This folder already has GooseStation data ($found)."
     }
 
+    /** The line shown under [describe] or [summary] when the folder holds [others]; null when it holds none. */
+    fun otherThings(): String? {
+        if (others.isEmpty()) return null
+        val shown = others.take(SHOWN).joinToString(", ")
+        val more = if (others.size > SHOWN) " and ${others.size - SHOWN} more" else ""
+        return "This folder also holds other things ($shown$more). GooseStation leaves them alone."
+    }
+
     companion object {
+        private const val SHOWN = 3
+
         /**
          * Lists the top of [treeUri], and its memcards folder if there is one. Null if the folder can't be read.
-         * SAF queries: call it off the main thread.
+         * The [others] are those of the [DataLayout.DEFAULT], as the core's settings aren't read yet. SAF queries:
+         * call it off the main thread.
          */
         fun read(
             lister: DocumentLister,
@@ -44,6 +66,7 @@ data class DataFolderContents(
                 DataFolderContents(
                     hasSettings = top.any { !it.isDirectory && it.name == "settings.ini" },
                     memoryCards = cards.count { !it.isDirectory },
+                    others = DataLayout.DEFAULT.others(top.map { it.name to it.isDirectory }),
                 )
             }.getOrNull()
     }

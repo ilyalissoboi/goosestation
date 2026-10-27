@@ -42,14 +42,12 @@ data class Forget(
  * memory cards). Nothing replaces or deletes a deferred working-copy file, and no push sends a deferred file whose
  * folder side won: it is left for a later run.
  *
- * Plans are sorted by path, and never hold an [excluded] path.
+ * Plans are sorted by path, and hold only the paths the [DataLayout] mirrors: anything else on either side is never
+ * pulled, pushed or deleted.
  */
 object MirrorPlanner {
     /** How long a working-copy file must stay unchanged before a push sends it, so a file isn't sent mid-write. */
     const val SETTLE_MS = 2000L
-
-    /** Not mirrored: regenerable caches (`EmuFolders::Cache`), and the mirror's own temporary files. */
-    fun excluded(path: String) = path.startsWith("cache/") || path.endsWith(".goosetmp") || path.endsWith(".goosebak")
 
     /**
      * Folder to working copy. A folder file that is new or changed is copied in, even over a changed local file. A
@@ -60,9 +58,10 @@ object MirrorPlanner {
         folder: Map<String, FileState>,
         local: Map<String, FileState>,
         manifest: Manifest,
+        layout: DataLayout,
         deferred: (String) -> Boolean,
     ): List<MirrorAction> =
-        paths(folder.keys, manifest.entries.keys).mapNotNull { path ->
+        paths(folder.keys, manifest.entries.keys, layout).mapNotNull { path ->
             if (deferred(path)) return@mapNotNull null
             folderWins(path, folder[path], local[path], manifest[path])
         }
@@ -77,11 +76,12 @@ object MirrorPlanner {
         folder: Map<String, FileState>,
         local: Map<String, FileState>,
         manifest: Manifest,
+        layout: DataLayout,
         nowMs: Long,
         force: Boolean,
         deferred: (String) -> Boolean,
     ): List<MirrorAction> =
-        paths(local.keys, manifest.entries.keys).mapNotNull { path ->
+        paths(local.keys, manifest.entries.keys, layout).mapNotNull { path ->
             val f = folder[path]
             val l = local[path]
             val m = manifest[path]
@@ -130,5 +130,6 @@ object MirrorPlanner {
     private fun paths(
         a: Set<String>,
         b: Set<String>,
-    ) = (a + b).filterNot(::excluded).sorted()
+        layout: DataLayout,
+    ) = (a + b).filter(layout::mirrored).sorted()
 }

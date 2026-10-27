@@ -10,3 +10,18 @@
     public void onGameStopped();
     public void onError(java.lang.String);
 }
+
+# jni_bridge.cpp finds GameEntry and its constructor by name in JNI_OnLoad, for getGameList().
+-keep class io.github.ilyalissoboi.goosestation.core.GameEntry {
+    <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, long, long, java.lang.String);
+}
+
+# content_bridge.cpp finds ContentBridge's static methods and NativeDocument's fields by name in JNI_OnLoad, and calls
+# them only from native code.
+-keep class io.github.ilyalissoboi.goosestation.storage.ContentBridge {
+    public static int openForReading(java.lang.String);
+    public static long[] stat(java.lang.String);
+    public static io.github.ilyalissoboi.goosestation.storage.NativeDocument[] listDirectory(java.lang.String);
+    public static void invalidate();
+}
+-keep class io.github.ilyalissoboi.goosestation.storage.NativeDocument { <fields>; }

@@ -54,6 +54,7 @@ TEST(FileSystem, CreateDirectoryRecursiveOnSystemDrive)
 #ifndef _WIN32
 
 #include <cstdlib>
+#include <dirent.h>
 
 namespace {
 
@@ -164,6 +165,40 @@ TEST(FileSystem, RenameAndDelete)
 
   ASSERT_TRUE(FileSystem::DeleteFile(new_path.c_str(), &error)) << error.GetDescription();
   EXPECT_FALSE(FileSystem::FileExists(new_path.c_str()));
+}
+
+static size_t CountOpenDescriptors()
+{
+#ifdef __ANDROID__
+  DIR* dir = opendir("/proc/self/fd");
+#else
+  DIR* dir = opendir("/dev/fd");
+#endif
+  if (!dir)
+    return 0;
+
+  size_t count = 0;
+  while (readdir(dir))
+    count++;
+  closedir(dir);
+  return count;
+}
+
+TEST(FileSystem, CreateAtomicRenamedFileClosesTempDescriptor)
+{
+  const TempDirectory tmp;
+  ASSERT_TRUE(tmp.IsValid());
+
+  const size_t before = CountOpenDescriptors();
+  ASSERT_NE(before, 0u);
+  for (int i = 0; i < 50; i++)
+  {
+    Error error;
+    ASSERT_TRUE(FileSystem::WriteAtomicRenamedFile(tmp.PathFor(fmt::format("file{}.bin", i)), "data", 4, &error))
+      << error.GetDescription();
+  }
+
+  EXPECT_EQ(CountOpenDescriptors(), before);
 }
 
 #endif

@@ -95,6 +95,23 @@ bool INISettingsInterface::Load(Error* error /* = nullptr */)
   return (err == SI_OK);
 }
 
+bool INISettingsInterface::Reload(Error* error /* = nullptr */)
+{
+  // Load() adds to what's there, so it starts empty; what was there comes back if the file can't be read.
+  std::string previous;
+  m_ini.Save(previous);
+  m_ini.Reset();
+  if (Load(error))
+  {
+    m_dirty = false;
+    return true;
+  }
+
+  m_ini.Reset();
+  m_ini.LoadData(previous);
+  return false;
+}
+
 bool INISettingsInterface::Save(Error* error /* = nullptr */)
 {
   if (m_filename.empty())

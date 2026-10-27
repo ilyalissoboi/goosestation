@@ -4,29 +4,43 @@
 // The JNI side of io.github.ilyalissoboi.goosestation.core.NativeLibrary, and the calls back into NativeCallbacks.
 
 #include "android_host.h"
+#include "bios_import.h"
+#include "content_bridge.h"
+#include "jni_util.h"
+
+#include "core/game_list.h"
+#include "core/settings.h"
 
 #include "common/error.h"
+#include "common/file_system.h"
 #include "common/log.h"
 #include "common/string_util.h"
 
 #include <android/native_window_jni.h>
 #include <jni.h>
 
+#include <algorithm>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 Log_SetChannel(JNIBridge);
 
-namespace {
-JavaVM* s_vm = nullptr;
+using JNIUtil::ClearException;
+using JNIUtil::FromJString;
+using JNIUtil::ToJString;
 
+namespace {
 // Cached at JNI_OnLoad.
+jclass s_string_class = nullptr;
 jclass s_callbacks_class = nullptr;
 jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
+jclass s_game_entry_class = nullptr;
+jmethodID s_game_entry_constructor = nullptr;
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -35,103 +49,14 @@ jobject s_callbacks = nullptr;
 // Set on the thread AttachCurrentThreadToJVM() attached.
 thread_local JNIEnv* s_attached_env = nullptr;
 
-void ClearException(JNIEnv* env)
-{
-  if (env->ExceptionCheck())
-  {
-    env->ExceptionDescribe();
-    env->ExceptionClear();
-  }
-}
-
-// Java strings are UTF-16; JNI's own UTF conversions use modified UTF-8, which differs for NUL and characters
-// outside the BMP, so convert by hand.
-std::string FromJString(JNIEnv* env, jstring str)
-{
-  std::string ret;
-  if (!str)
-    return ret;
-
-  const jsize length = env->GetStringLength(str);
-  const jchar* chars = env->GetStringChars(str, nullptr);
-  if (!chars)
-  {
-    ClearException(env);
-    return ret;
-  }
-
-  ret.reserve(static_cast<size_t>(length));
-  for (jsize i = 0; i < length; i++)
-  {
-    char32_t ch = chars[i];
-    if (ch >= 0xD800 && ch <= 0xDBFF && (i + 1) < length && chars[i + 1] >= 0xDC00 && chars[i + 1] <= 0xDFFF)
-    {
-      ch = 0x10000 + ((ch - 0xD800) << 10) + (chars[i + 1] - 0xDC00);
-      i++;
-    }
-    else if (ch >= 0xD800 && ch <= 0xDFFF)
-    {
-      ch = 0xFFFD; // unpaired surrogate
-    }
-    StringUtil::EncodeAndAppendUTF8(ret, ch);
-  }
-
-  env->ReleaseStringChars(str, chars);
-  return ret;
-}
-
-jstring ToJString(JNIEnv* env, std::string_view str)
-{
-  std::vector<jchar> chars;
-  chars.reserve(str.size());
-  for (size_t offset = 0; offset < str.size();)
-  {
-    char32_t ch;
-    offset += StringUtil::DecodeUTF8(str, offset, &ch);
-    if (ch > 0x10FFFF)
-      ch = 0xFFFD;
-
-    if (ch >= 0x10000)
-    {
-      ch -= 0x10000;
-      chars.push_back(static_cast<jchar>(0xD800 + (ch >> 10)));
-      chars.push_back(static_cast<jchar>(0xDC00 + (ch & 0x3FF)));
-    }
-    else
-    {
-      chars.push_back(static_cast<jchar>(ch));
-    }
-  }
-
-  static constexpr jchar empty = 0;
-  jstring ret = env->NewString(chars.empty() ? &empty : chars.data(), static_cast<jsize>(chars.size()));
-  if (!ret)
-    ClearException(env);
-  return ret;
-}
+AndroidContentProvider s_content_provider;
 
 // Calls a NativeCallbacks method on the registered object, from any thread.
 void CallCallback(jmethodID method, std::optional<std::string_view> arg)
 {
-  if (!s_vm)
+  ScopedJNIEnv env;
+  if (!env)
     return;
-
-  JNIEnv* env = nullptr;
-  bool attached_here = false;
-  const jint res = s_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
-  if (res == JNI_EDETACHED)
-  {
-    if (s_vm->AttachCurrentThread(&env, nullptr) != JNI_OK)
-    {
-      ERROR_LOG("Failed to attach a thread to the JVM for a callback.");
-      return;
-    }
-    attached_here = true;
-  }
-  else if (res != JNI_OK)
-  {
-    return;
-  }
 
   jobject callbacks = nullptr;
   {
@@ -140,40 +65,64 @@ void CallCallback(jmethodID method, std::optional<std::string_view> arg)
       callbacks = env->NewLocalRef(s_callbacks);
   }
 
-  if (callbacks)
-  {
-    if (arg.has_value())
-    {
-      jstring jarg = ToJString(env, arg.value());
-      if (jarg)
-      {
-        env->CallVoidMethod(callbacks, method, jarg);
-        ClearException(env);
-        env->DeleteLocalRef(jarg);
-      }
-    }
-    else
-    {
-      env->CallVoidMethod(callbacks, method);
-      ClearException(env);
-    }
+  if (!callbacks)
+    return;
 
-    env->DeleteLocalRef(callbacks);
+  if (arg.has_value())
+  {
+    jstring jarg = ToJString(env.get(), arg.value());
+    if (jarg)
+    {
+      env->CallVoidMethod(callbacks, method, jarg);
+      ClearException(env.get());
+      env->DeleteLocalRef(jarg);
+    }
+  }
+  else
+  {
+    env->CallVoidMethod(callbacks, method);
+    ClearException(env.get());
   }
 
-  if (attached_here)
-    s_vm->DetachCurrentThread();
+  env->DeleteLocalRef(callbacks);
+}
+
+// A String[] of strings, or null (with no exception pending) if it can't be made.
+jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& strings)
+{
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(strings.size()), s_string_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < strings.size(); i++)
+  {
+    jstring string = ToJString(env, strings[i]);
+    if (!string)
+    {
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), string);
+    env->DeleteLocalRef(string);
+  }
+
+  return result;
 }
 } // namespace
 
 void AndroidHost::AttachCurrentThreadToJVM(const char* name)
 {
-  if (!s_vm || s_attached_env)
+  JavaVM* const vm = JNIUtil::GetJavaVM();
+  if (!vm || s_attached_env)
     return;
 
   JavaVMAttachArgs args = {JNI_VERSION_1_6, name, nullptr};
   JNIEnv* env = nullptr;
-  if (s_vm->AttachCurrentThread(&env, &args) != JNI_OK)
+  if (vm->AttachCurrentThread(&env, &args) != JNI_OK)
   {
     ERROR_LOG("Failed to attach '{}' to the JVM.", name);
     return;
@@ -184,10 +133,11 @@ void AndroidHost::AttachCurrentThreadToJVM(const char* name)
 
 void AndroidHost::DetachCurrentThreadFromJVM()
 {
-  if (!s_vm || !s_attached_env)
+  JavaVM* const vm = JNIUtil::GetJavaVM();
+  if (!vm || !s_attached_env)
     return;
 
-  s_vm->DetachCurrentThread();
+  vm->DetachCurrentThread();
   s_attached_env = nullptr;
 }
 
@@ -214,6 +164,16 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     return JNI_ERR;
 
+  jclass string_class = env->FindClass("java/lang/String");
+  if (!string_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_string_class = static_cast<jclass>(env->NewGlobalRef(string_class));
+  env->DeleteLocalRef(string_class);
+
   jclass callbacks_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/NativeCallbacks");
   if (!callbacks_class)
   {
@@ -232,20 +192,41 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     return JNI_ERR;
   }
 
-  s_vm = vm;
+  jclass game_entry_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/GameEntry");
+  if (!game_entry_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_game_entry_class = static_cast<jclass>(env->NewGlobalRef(game_entry_class));
+  env->DeleteLocalRef(game_entry_class);
+  s_game_entry_constructor =
+    env->GetMethodID(s_game_entry_class, "<init>",
+                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;)V");
+  if (!s_game_entry_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  if (!AndroidContentProvider::LoadJNIReferences(env))
+    return JNI_ERR;
+
+  JNIUtil::SetJavaVM(vm);
+  FileSystem::SetContentProvider(&s_content_provider);
   return JNI_VERSION_1_6;
 }
 
 #define NATIVE_LIBRARY_FUNCTION(ret, name) \
   JNIEXPORT ret JNICALL Java_io_github_ilyalissoboi_goosestation_core_NativeLibrary_##name
 
-NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root)
+NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
+                                               jstring bios_dir, jstring install_id)
 {
-  std::string data_root_str = FromJString(env, data_root);
-  std::string resources_root_str = FromJString(env, resources_root);
-
   Error error;
-  if (!AndroidHost::Initialize(std::move(data_root_str), std::move(resources_root_str), &error))
+  if (!AndroidHost::Initialize(FromJString(env, data_root), FromJString(env, resources_root),
+                               FromJString(env, bios_dir), FromJString(env, install_id), &error))
   {
     ERROR_LOG("Initialization failed: {}", error.GetDescription());
     AndroidHost::NotifyError(error.GetDescription());
@@ -253,6 +234,199 @@ NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data
   }
 
   return JNI_TRUE;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setGameFolders)(JNIEnv* env, jobject, jobjectArray tree_uris)
+{
+  std::vector<std::string> uris;
+  const jsize count = tree_uris ? env->GetArrayLength(tree_uris) : 0;
+  uris.reserve(static_cast<size_t>(count));
+  for (jsize i = 0; i < count; i++)
+  {
+    jstring uri = static_cast<jstring>(env->GetObjectArrayElement(tree_uris, i));
+    if (ClearException(env))
+      return;
+
+    if (uri)
+    {
+      uris.push_back(FromJString(env, uri));
+      env->DeleteLocalRef(uri);
+    }
+  }
+
+  AndroidHost::SetGameFolders(std::move(uris));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, reloadSettings)(JNIEnv*, jobject)
+{
+  AndroidHost::ReloadSettings();
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, getBoolSetting)(JNIEnv* env, jobject, jstring section, jstring key,
+                                                  jboolean default_value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  return AndroidHost::GetBoolSetting(section_str.c_str(), key_str.c_str(), default_value == JNI_TRUE) ? JNI_TRUE :
+                                                                                                        JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setBoolSetting)(JNIEnv* env, jobject, jstring section, jstring key, jboolean value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  AndroidHost::SetBoolSetting(section_str.c_str(), key_str.c_str(), value == JNI_TRUE);
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemoryCardPaths)(JNIEnv* env, jobject)
+{
+  const std::optional<std::vector<std::string>> paths = AndroidHost::GetMemoryCardPaths();
+  return paths.has_value() ? ToJStringArray(env, paths.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getDataFolders)(JNIEnv* env, jobject)
+{
+  const std::optional<std::vector<std::string>> folders = AndroidHost::GetDataFolders();
+  return folders.has_value() ? ToJStringArray(env, folders.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getCacheFolder)(JNIEnv* env, jobject)
+{
+  const std::optional<std::string> folder = AndroidHost::GetCacheFolder();
+  return folder.has_value() ? ToJString(env, folder.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring source_tree_uri, jstring dest_dir)
+{
+  Error error;
+  const std::optional<std::vector<std::string>> descriptions =
+    BIOSImport::Import(s_content_provider, FromJString(env, source_tree_uri), FromJString(env, dest_dir), &error);
+  if (!descriptions.has_value())
+  {
+    ERROR_LOG("BIOS import failed: {}", error.GetDescription());
+    return nullptr;
+  }
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(descriptions->size()), s_string_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < descriptions->size(); i++)
+  {
+    jstring description = ToJString(env, (*descriptions)[i]);
+    if (!description)
+    {
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), description);
+    env->DeleteLocalRef(description);
+  }
+
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, refreshGameList)(JNIEnv*, jobject, jboolean invalidate_cache)
+{
+  // A refresh sees the folders as they are now, not as ContentBridge listed them a few seconds ago.
+  s_content_provider.InvalidateListings();
+  AndroidHost::RefreshGameList(invalidate_cache == JNI_TRUE);
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
+{
+  struct Game
+  {
+    std::string path;
+    std::string title;
+    std::string serial;
+    const char* region;
+    s64 total_played_time;
+    s64 last_played_time;
+    std::string cover_path;
+  };
+
+  // Copied out under the lock; the covers are looked up, and the Java objects made, without holding it.
+  std::vector<Game> games;
+  {
+    const auto lock = GameList::GetLock();
+    const u32 count = GameList::GetEntryCount();
+    games.reserve(count);
+    for (u32 i = 0; i < count; i++)
+    {
+      const GameList::Entry* entry = GameList::GetEntryByIndex(i);
+      if (entry->IsDiscSet())
+        continue;
+
+      games.push_back({entry->path, entry->title, entry->serial, Settings::GetDiscRegionName(entry->region),
+                       static_cast<s64>(entry->total_played_time), static_cast<s64>(entry->last_played_time),
+                       std::string()});
+    }
+  }
+
+  for (Game& game : games)
+    game.cover_path = GameList::GetCoverImagePath(game.path, game.serial, game.title);
+
+  std::stable_sort(games.begin(), games.end(), [](const Game& a, const Game& b) {
+    return StringUtil::Strcasecmp(a.title.c_str(), b.title.c_str()) < 0;
+  });
+
+  // Kotlin takes the array as never null: a failure gives an empty one.
+  const auto empty_result = [env]() {
+    jobjectArray empty = env->NewObjectArray(0, s_game_entry_class, nullptr);
+    ClearException(env);
+    return empty;
+  };
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(games.size()), s_game_entry_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    ERROR_LOG("Failed to allocate the game list's {} entries.", games.size());
+    return empty_result();
+  }
+
+  for (size_t i = 0; i < games.size(); i++)
+  {
+    const Game& game = games[i];
+    jstring path = ToJString(env, game.path);
+    jstring title = ToJString(env, game.title);
+    jstring serial = ToJString(env, game.serial);
+    jstring region = ToJString(env, game.region);
+    jstring cover_path = game.cover_path.empty() ? nullptr : ToJString(env, game.cover_path);
+    jobject entry = nullptr;
+    if (path && title && serial && region && (cover_path || game.cover_path.empty()))
+    {
+      entry = env->NewObject(s_game_entry_class, s_game_entry_constructor, path, title, serial, region,
+                             static_cast<jlong>(game.total_played_time), static_cast<jlong>(game.last_played_time),
+                             cover_path);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(path), static_cast<jobject>(title), static_cast<jobject>(serial),
+                        static_cast<jobject>(region), static_cast<jobject>(cover_path)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass the game list entry '{}' to Java.", game.path);
+      env->DeleteLocalRef(result);
+      return empty_result();
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return result;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setCallbacks)(JNIEnv* env, jobject, jobject callbacks)

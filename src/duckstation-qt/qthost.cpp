@@ -75,7 +75,6 @@ Log_SetChannel(QtHost);
 #include <ShlObj.h>
 #endif
 
-static constexpr u32 SETTINGS_VERSION = 3;
 static constexpr u32 SETTINGS_SAVE_DELAY = 1000;
 
 /// Interval at which the controllers are polled when the system is not active.
@@ -436,16 +435,16 @@ bool QtHost::InitializeConfig(std::string settings_filename)
   uint settings_version;
   if (!settings_exists || !s_base_settings_interface->Load() ||
       !s_base_settings_interface->GetUIntValue("Main", "SettingsVersion", &settings_version) ||
-      settings_version != SETTINGS_VERSION)
+      settings_version != Settings::SETTINGS_VERSION)
   {
     if (s_base_settings_interface->ContainsValue("Main", "SettingsVersion"))
     {
       // NOTE: No point translating this, because there's no config loaded, so no language loaded.
       Host::ReportErrorAsync("Error", fmt::format("Settings version {} does not match expected version {}, resetting.",
-                                                  settings_version, SETTINGS_VERSION));
+                                                  settings_version, Settings::SETTINGS_VERSION));
     }
 
-    s_base_settings_interface->SetUIntValue("Main", "SettingsVersion", SETTINGS_VERSION);
+    s_base_settings_interface->SetUIntValue("Main", "SettingsVersion", Settings::SETTINGS_VERSION);
     SetDefaultSettings(*s_base_settings_interface, true, true);
 
     // Flag for running the setup wizard if this is our first run. We want to run it next time if they don't finish it.

@@ -1,0 +1,185 @@
+// SPDX-FileCopyrightText: 2026 GooseStation contributors
+// SPDX-License-Identifier: GPL-3.0
+
+package io.github.ilyalissoboi.goosestation.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.unit.dp
+import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
+import io.github.ilyalissoboi.goosestation.ui.components.Banner
+import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
+
+/**
+ * The games, as a cover grid ([gridView]) or a list, under a top bar of Grid/List ([onToggleView]), Folders
+ * ([onOpenFolders]) and Refresh ([onRefresh]). [banners] and [message] sit under the bar: prompts to pick a folder
+ * again, the latest error ([isError]), or what the app is doing.
+ *
+ * On opening, Folders has focus when [focusFolders] (coming back from the folder settings), or else the game at
+ * [focusPath] (the last one launched), or else the first game; with no games, Folders has it. Toggling the view keeps
+ * the focused game. A, Enter or a tap call [onStartGame].
+ */
+@Composable
+fun LibraryScreen(
+    games: List<GameEntry>,
+    gridView: Boolean,
+    banners: List<BannerModel>,
+    message: String?,
+    isError: Boolean,
+    onToggleView: () -> Unit,
+    onOpenFolders: () -> Unit,
+    onRefresh: () -> Unit,
+    onStartGame: (GameEntry) -> Unit,
+    focusPath: String?,
+    focusFolders: Boolean = false,
+) {
+    val folders = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
+    val focus = remember { GameFocus() }
+    val hasGames = games.isNotEmpty()
+    // Only on opening: a toggle, or games coming in, focus a game as usual.
+    var foldersFirst by remember { mutableStateOf(focusFolders) }
+
+    // Not on every new list, which a resume brings: only on opening, on a toggle, and once there are games.
+    LaunchedEffect(gridView, hasGames) {
+        if (!hasGames || foldersFirst) {
+            foldersFirst = false
+            folders.requestFocus()
+            return@LaunchedEffect
+        }
+        val index =
+            listOf(focus.focused, focusPath).firstNotNullOfOrNull { path ->
+                games.indexOfFirst { it.path == path }.takeIf { it >= 0 }
+            } ?: 0
+        // A lazy item can only take focus once it's composed: it does so itself, once the scroll brings it in.
+        focus.pending = games[index].path
+        if (gridView) gridState.scrollToItem(index) else listState.scrollToItem(index)
+    }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .safeDrawingPadding()
+                .padding(horizontal = 32.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "GooseStation",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            ActionButton(if (gridView) "List" else "Grid", onClick = onToggleView)
+            ActionButton("Folders", onClick = onOpenFolders, modifier = Modifier.focusRequester(folders))
+            ActionButton("Refresh", onClick = onRefresh)
+        }
+
+        banners.forEach { Banner(it) }
+        if (message != null) MessageBar(message, isError)
+
+        val content = Modifier.weight(1f)
+        when {
+            // While a message says what the app is doing, the list may just not be there yet.
+            !hasGames ->
+                if (message == null) {
+                    Text(
+                        "No games found in your games folders.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            gridView ->
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(150.dp),
+                    state = gridState,
+                    modifier = content,
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(games, key = { it.path }) { game ->
+                        GameTile(game, onClick = { onStartGame(game) }, modifier = focus.modifier(game.path))
+                    }
+                }
+            else ->
+                LazyColumn(
+                    state = listState,
+                    modifier = content,
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(games, key = { it.path }) { game ->
+                        GameListRow(game, onClick = { onStartGame(game) }, modifier = focus.modifier(game.path))
+                    }
+                }
+        }
+    }
+}
+
+/** Which game has focus, by path, and which one is to take it once it's composed. */
+private class GameFocus {
+    var focused: String? = null
+    var pending by mutableStateOf<String?>(null)
+
+    /** For the item showing the game at [path]. */
+    @Composable
+    fun modifier(path: String): Modifier {
+        val requester = remember { FocusRequester() }
+        if (pending == path) {
+            LaunchedEffect(Unit) {
+                requester.requestFocus()
+                pending = null
+            }
+        }
+        return Modifier.focusRequester(requester).onFocusChanged { if (it.isFocused) focused = path }
+    }
+}
+
+/** The app's latest error ([isError]) or what it's doing, under a screen's top bar. */
+@Composable
+internal fun MessageBar(message: String, isError: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodyLarge,
+        color = if (isError) colors.onErrorContainer else colors.onSurfaceVariant,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(if (isError) colors.errorContainer else colors.surfaceVariant, RoundedCornerShape(8.dp))
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
+}

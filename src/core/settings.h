@@ -59,6 +59,9 @@ struct SettingInfo
 
 struct Settings
 {
+  /// settings.ini's [Main] SettingsVersion, shared by the frontends. A file with another version is reset.
+  static constexpr u32 SETTINGS_VERSION = 3;
+
   Settings();
 
   ConsoleRegion region = DEFAULT_CONSOLE_REGION;

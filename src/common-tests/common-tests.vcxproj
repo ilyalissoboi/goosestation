@@ -6,6 +6,7 @@
     <ClCompile Include="android_input_keys_tests.cpp" />
     <ClCompile Include="..\util\android_input_keys.cpp" />
     <ClCompile Include="bitutils_tests.cpp" />
+    <ClCompile Include="content_uri_tests.cpp" />
     <ClCompile Include="file_system_tests.cpp" />
     <ClCompile Include="path_tests.cpp" />
     <ClCompile Include="rectangle_tests.cpp" />

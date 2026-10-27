@@ -3,10 +3,13 @@
 
 #include "android_host.h"
 #include "emu_thread.h"
+#include "foreign_settings.h"
 
 #include "core/achievements.h"
 #include "core/controller.h"
 #include "core/fullscreen_ui.h"
+#include "core/game_database.h"
+#include "core/game_list.h"
 #include "core/host.h"
 #include "core/memory_card.h"
 #include "core/pad.h"
@@ -75,12 +78,13 @@ struct ConnectedDevice
 
 static bool InitializeConfig(Error* error);
 static void SetDefaultSettings(SettingsInterface& si);
+static void LoadFolders(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
 static void AddControllerToPort1(const std::string& identifier);
 
-// Android's own settings.ini, so its version is independent of the Qt frontend's.
-static constexpr u32 SETTINGS_VERSION = 1;
+// Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
+static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
 
 static constexpr std::string_view DEVICE_PREFIX = "Android-";
 
@@ -89,6 +93,13 @@ static std::atomic_bool s_initialized{false};
 static bool s_startup_attempted = false; // guarded by s_initialize_mutex
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
 static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
+
+// GameList::Refresh() isn't safe to run twice at once.
+static std::mutex s_game_list_refresh_mutex;
+
+// Set once by Initialize(), before s_initialized.
+static std::string s_bios_dir;
+static std::string s_install_id;
 
 // Input queued by the app's threads.
 static std::mutex s_input_mutex;
@@ -110,7 +121,8 @@ static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
 } // namespace AndroidHost
 
-bool AndroidHost::Initialize(std::string data_root, std::string resources_root, Error* error)
+bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
+                             std::string install_id, Error* error)
 {
   std::unique_lock lock(s_initialize_mutex);
   if (s_initialized)
@@ -122,8 +134,11 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   EmuFolders::AppRoot = Path::Canonicalize(resources_root);
   EmuFolders::Resources = EmuFolders::AppRoot;
   EmuFolders::DataRoot = Path::Canonicalize(data_root);
+  s_bios_dir = Path::Canonicalize(bios_dir);
+  s_install_id = std::move(install_id);
   INFO_LOG("DataRoot Directory: {}", EmuFolders::DataRoot);
   INFO_LOG("Resources Directory: {}", EmuFolders::Resources);
+  INFO_LOG("BIOS Directory: {}", s_bios_dir);
 
   if (!FileSystem::DirectoryExists(EmuFolders::Resources.c_str()))
   {
@@ -146,7 +161,14 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   }
   s_startup_attempted = true;
 
-  if (!InitializeConfig(error) || !EmuThread::Start(error))
+  if (!InitializeConfig(error))
+    return false;
+
+  // GameDatabase loads itself on first use, unlocked: loaded here, before the CPU thread (a boot) or a game list
+  // refresh can use it, every later use only reads it.
+  GameDatabase::EnsureLoaded();
+
+  if (!EmuThread::Start(error))
     return false;
 
   {
@@ -167,38 +189,49 @@ bool AndroidHost::InitializeConfig(Error* error)
   s_base_settings_interface = std::make_unique<INISettingsInterface>(std::move(settings_filename));
   Host::Internal::SetBaseSettingsLayer(s_base_settings_interface.get());
 
+  const auto lock = Host::GetSettingsLock();
+  INISettingsInterface& si = *s_base_settings_interface;
+  bool changed = false;
   u32 settings_version;
-  if (!settings_exists || !s_base_settings_interface->Load() ||
-      !s_base_settings_interface->GetUIntValue("Main", "SettingsVersion", &settings_version) ||
-      settings_version != SETTINGS_VERSION)
+  if (!settings_exists || !si.Load() || !si.GetUIntValue("Main", "SettingsVersion", &settings_version) ||
+      (settings_version != Settings::SETTINGS_VERSION && settings_version != PLAN1_SETTINGS_VERSION))
   {
-    if (s_base_settings_interface->ContainsValue("Main", "SettingsVersion"))
+    if (si.ContainsValue("Main", "SettingsVersion"))
     {
       WARNING_LOG("Settings version {} does not match expected version {}, resetting.", settings_version,
-                  SETTINGS_VERSION);
+                  Settings::SETTINGS_VERSION);
     }
 
-    s_base_settings_interface->SetUIntValue("Main", "SettingsVersion", SETTINGS_VERSION);
-    SetDefaultSettings(*s_base_settings_interface);
+    si.SetUIntValue("Main", "SettingsVersion", Settings::SETTINGS_VERSION);
+    SetDefaultSettings(si);
+    changed = true;
+  }
+  else if (settings_version == PLAN1_SETTINGS_VERSION)
+  {
+    INFO_LOG("Upgrading the settings from version {} to {}.", settings_version, Settings::SETTINGS_VERSION);
+    si.SetUIntValue("Main", "SettingsVersion", Settings::SETTINGS_VERSION);
+    changed = true;
+  }
 
-    // Make sure the config can be saved at all.
-    if (!s_base_settings_interface->Save(error))
-    {
-      Error::AddPrefixFmt(error, "Failed to save configuration to '{}': ", s_base_settings_interface->GetFileName());
-      return false;
-    }
+  // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
+  changed = AdaptForeignSettings(si, s_install_id) || changed;
+
+  // Saving the defaults also makes sure the config can be saved at all.
+  if (changed && !si.Save(error))
+  {
+    Error::AddPrefixFmt(error, "Failed to save configuration to '{}': ", si.GetFileName());
+    return false;
   }
 
   // Secrets go to secrets.ini next to it, so settings.ini can be shared without them.
-  std::string secrets_filename =
-    Path::Combine(Path::GetDirectory(s_base_settings_interface->GetFileName()), "secrets.ini");
+  std::string secrets_filename = Path::Combine(Path::GetDirectory(si.GetFileName()), "secrets.ini");
   const bool secrets_exist = FileSystem::FileExists(secrets_filename.c_str());
   s_secrets_settings_interface = std::make_unique<INISettingsInterface>(std::move(secrets_filename));
   if (secrets_exist && !s_secrets_settings_interface->Load())
     ERROR_LOG("Failed to load secrets from {}.", s_secrets_settings_interface->GetFileName());
   Host::Internal::SetSecretsSettingsLayer(s_secrets_settings_interface.get());
 
-  EmuFolders::LoadConfig(*s_base_settings_interface);
+  LoadFolders(si);
   EmuFolders::EnsureFoldersExist();
   return true;
 }
@@ -212,6 +245,215 @@ void AndroidHost::SetDefaultSettings(SettingsInterface& si)
   InputManager::SetDefaultSourceConfig(si);
   Settings::SetDefaultControllerConfig(si);
   Settings::SetDefaultHotkeyConfig(si);
+}
+
+void AndroidHost::LoadFolders(SettingsInterface& si)
+{
+  // The BIOS images are the app's own copies, outside the data folder: [BIOS] SearchDirectory stays as the file has
+  // it, for the desktop that shares it.
+  EmuFolders::LoadConfig(si);
+  EmuFolders::Bios = s_bios_dir;
+}
+
+void AndroidHost::SetGameFolders(std::vector<std::string> tree_uris)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  INISettingsInterface& si = *s_base_settings_interface;
+  si.DeleteValue("GameList", "Paths");
+  si.SetStringList("GameList", "RecursivePaths", tree_uris);
+
+  Error error;
+  if (!si.Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+void AndroidHost::RefreshGameList(bool invalidate_cache)
+{
+  if (!s_initialized)
+    return;
+
+  std::unique_lock lock(s_game_list_refresh_mutex);
+  GameList::Refresh(invalidate_cache, false, nullptr);
+}
+
+void AndroidHost::ReloadSettings()
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    []() {
+      bool adapted;
+      {
+        const auto lock = Host::GetSettingsLock();
+        INISettingsInterface& si = *s_base_settings_interface;
+        Error error;
+        if (!si.Reload(&error))
+        {
+          ERROR_LOG("Failed to reload the settings from {}, keeping them: {}", si.GetFileName(), error.GetDescription());
+          return;
+        }
+
+        INFO_LOG("Reloaded the settings from {}.", si.GetFileName());
+        adapted = AdaptForeignSettings(si, s_install_id);
+        if (adapted && !si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      // The bindings were reset: map the pads connected now, which won't connect again.
+      if (adapted)
+      {
+        for (const auto& device : InputManager::EnumerateDevices())
+          AddControllerToPort1(device.first);
+      }
+
+      // Update() takes the lock itself, and loads the folders again.
+      EmuFolders::Update();
+      EmuFolders::Bios = s_bios_dir;
+      System::ApplySettings(false);
+    },
+    true);
+}
+
+bool AndroidHost::GetBoolSetting(const char* section, const char* key, bool default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetBoolValue(section, key, default_value);
+}
+
+void AndroidHost::SetBoolSetting(const char* section, const char* key, bool value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  s_base_settings_interface->SetBoolValue(section, key, value);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  // A running game's cards, which the CPU thread owns: the files it has open, and the shared card paths its settings
+  // give (a gamesettings/<serial>.ini can override settings.ini's), resolved as the core does.
+  std::vector<std::string> game_cards;
+  EmuThread::RunOnThread(
+    [&game_cards]() {
+      if (!System::IsValid())
+        return;
+
+      for (u32 slot = 0; slot < NUM_CONTROLLER_AND_CARD_PORTS; slot++)
+      {
+        if (const MemoryCard* card = Pad::GetMemoryCard(slot); card && !card->GetFilename().empty())
+          game_cards.push_back(card->GetFilename());
+        if (!g_settings.memory_card_paths[slot].empty())
+          game_cards.push_back(g_settings.GetSharedMemoryCardPath(slot));
+      }
+    },
+    true);
+
+  // EmuFolders::Update() changes the folders under the lock.
+  std::string memory_cards_dir;
+  std::string game_settings_dir;
+  std::vector<std::string> cards;
+  {
+    const auto lock = Host::GetSettingsLock();
+    memory_cards_dir = EmuFolders::MemoryCards;
+    game_settings_dir = EmuFolders::GameSettings;
+    for (const char* key : {"Card1Path", "Card2Path"})
+      cards.push_back(s_base_settings_interface->GetStringValue("MemoryCards", key));
+  }
+
+  // Every game's own settings, which System::LoadSettings() layers over settings.ini when it runs: read before any
+  // game does, so the app holds its cards from the start.
+  FileSystem::FindResultsArray game_settings;
+  FileSystem::FindFiles(game_settings_dir.c_str(), "*.ini", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES,
+                        &game_settings);
+  std::sort(game_settings.begin(), game_settings.end(),
+            [](const FILESYSTEM_FIND_DATA& a, const FILESYSTEM_FIND_DATA& b) { return a.FileName < b.FileName; });
+  for (const FILESYSTEM_FIND_DATA& file : game_settings)
+  {
+    INISettingsInterface si(file.FileName);
+    Error error;
+    if (!si.Load(&error))
+    {
+      WARNING_LOG("Can't read {}: {}", file.FileName, error.GetDescription());
+      continue;
+    }
+    for (const char* key : {"Card1Path", "Card2Path"})
+      cards.push_back(si.GetStringValue("MemoryCards", key));
+  }
+
+  std::vector<std::string> paths;
+  const std::optional<std::string> folder = RelativeToDataRoot(memory_cards_dir);
+  if (folder.has_value())
+    paths.push_back(folder->empty() ? std::string() : *folder + '/');
+
+  // As Settings::GetSharedMemoryCardPath() resolves them, then the running game's, which are full paths already.
+  std::vector<std::string> files;
+  for (const std::string& value : cards)
+  {
+    if (!value.empty())
+      files.push_back(Path::IsAbsolute(value) ? value : Path::Combine(memory_cards_dir, value));
+  }
+  files.insert(files.end(), game_cards.begin(), game_cards.end());
+
+  // Unless the memory card folder holds them already, or they're listed.
+  for (const std::string& card : files)
+  {
+    const std::optional<std::string> relative = RelativeToDataRoot(card);
+    if (!relative.has_value() || relative->empty())
+      continue;
+    // The data root as the folder holds only its top-level files, as the mirror sees it.
+    const bool in_folder = folder.has_value() && (folder->empty() ? relative->find('/') == std::string::npos :
+                                                                    relative->starts_with(paths.front()));
+    if (!in_folder && std::find(paths.begin(), paths.end(), *relative) == paths.end())
+      paths.push_back(*relative);
+  }
+  return paths;
+}
+
+std::optional<std::vector<std::string>> AndroidHost::GetDataFolders()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  const auto lock = Host::GetSettingsLock();
+  std::vector<std::string> folders;
+  for (const std::string* folder :
+       {&EmuFolders::Bios, &EmuFolders::Cheats, &EmuFolders::Covers, &EmuFolders::Dumps, &EmuFolders::GameIcons,
+        &EmuFolders::GameSettings, &EmuFolders::InputProfiles, &EmuFolders::MemoryCards, &EmuFolders::SaveStates,
+        &EmuFolders::Screenshots, &EmuFolders::Shaders, &EmuFolders::Textures, &EmuFolders::UserResources,
+        &EmuFolders::Videos})
+  {
+    const std::optional<std::string> relative = RelativeToDataRoot(*folder);
+    if (relative.has_value())
+      folders.push_back(relative->empty() ? std::string() : *relative + '/');
+  }
+  return folders;
+}
+
+std::optional<std::string> AndroidHost::GetCacheFolder()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  const auto lock = Host::GetSettingsLock();
+  const std::optional<std::string> relative = RelativeToDataRoot(EmuFolders::Cache);
+  if (!relative.has_value() || relative->empty())
+    return std::nullopt;
+  return *relative + '/';
 }
 
 void AndroidHost::StartGame(std::string path)

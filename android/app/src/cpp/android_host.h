@@ -5,8 +5,10 @@
 
 #include "common/types.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 class Error;
 struct ANativeWindow;
@@ -15,9 +17,45 @@ struct ANativeWindow;
 /// calls the functions below from the app's threads; the core itself only runs on the CPU thread (emu_thread.h).
 namespace AndroidHost {
 
-/// Sets the folders, loads settings.ini (defaults when it's missing or from another version) and starts the CPU
-/// thread. Calling it again once it succeeded does nothing and returns true.
-bool Initialize(std::string data_root, std::string resources_root, Error* error);
+/// Sets the folders, loads settings.ini (defaults when it's missing or from another version, adapted when it's from
+/// another install: AdaptForeignSettings()) and starts the CPU thread. The BIOS images are read from bios_dir, whatever
+/// settings.ini says. Calling it again once it succeeded does nothing and returns true.
+bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
+                Error* error);
+
+/// The settings below are the base layer's, settings.ini, and are saved straight away. From any thread; they do
+/// nothing (or return the default) before Initialize() succeeded.
+
+/// Scans exactly these folders, and all below them, for games: [GameList] RecursivePaths, with no Paths.
+void SetGameFolders(std::vector<std::string> tree_uris);
+
+/// Reads settings.ini again (after the app replaced it), adapts it if it's from another install, and applies it.
+/// Blocks until the CPU thread has done so.
+void ReloadSettings();
+
+bool GetBoolSetting(const char* section, const char* key, bool default_value);
+void SetBoolSetting(const char* section, const char* key, bool value);
+
+/// Where the memory cards are, relative to the data root (RelativeToDataRoot()): EmuFolders::MemoryCards with a
+/// trailing '/' (empty if it's the data root), then the card files: [MemoryCards] Card1Path and Card2Path from
+/// settings.ini and from every EmuFolders::GameSettings *.ini (which override them for a game), resolved as the core
+/// does, then, while a game runs, the cards it has open and the shared card paths its settings give; each if it's set,
+/// elsewhere in the data root and not listed already. Blocks until the CPU thread has read the game's. nullopt before
+/// Initialize() succeeded.
+std::optional<std::vector<std::string>> GetMemoryCardPaths();
+
+/// The folders the core keeps its data in, relative to the data root (RelativeToDataRoot()), each with a trailing '/'
+/// (empty if it's the data root): every EmuFolders folder but the cache, in EmuFolders::LoadConfig()'s order, if it's
+/// inside the data root. nullopt before Initialize() succeeded.
+std::optional<std::vector<std::string>> GetDataFolders();
+
+/// EmuFolders::Cache as GetDataFolders() gives a folder: nullopt if it's outside the data root, or the data root
+/// itself, or before Initialize() succeeded.
+std::optional<std::string> GetCacheFolder();
+
+/// Scans the game folders: GameList::Refresh(). Blocks, on the calling thread, which should be the JVM's; one refresh
+/// runs at a time. Does nothing before Initialize() succeeded.
+void RefreshGameList(bool invalidate_cache);
 
 /// Boots a game, once the app has given a surface. NotifyGameStarted() reports that it booted. Every call ends with
 /// one NotifyGameStopped(): when the game stops, or straight away if it fails to boot (after NotifyError()), is

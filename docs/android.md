@@ -38,6 +38,13 @@ distribution itself against `distributionSha256Sum`, which matches the published
 | Compose BOM | 2026.09.00 |
 | `androidx.activity:activity-compose` | 1.13.0 |
 | `androidx.core:core-ktx` | 1.19.1 |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-android` and `-test` | 1.11.0 |
+| `junit:junit` (JVM unit tests) | 4.13.2 |
+| `androidx.test:runner` | 1.7.0 |
+| `androidx.test.ext:junit` | 1.3.0 |
+| `androidx.test:orchestrator` (brings `androidx.test.services:test-services` 1.6.0) | 1.6.1 |
+| Compose `ui-test-junit4` and `ui-test-manifest` | from the Compose BOM |
+| `androidx.test.espresso:espresso-core` (pinned for the Compose UI tests: the 3.5.0 they bring fails on API 37) | 3.7.0 |
 | `compileSdk` / `targetSdk` / `minSdk` | 37 / 37 / 29 |
 | NDK / CMake (`ndkVersion`, `externalNativeBuild.cmake.version`) | 30.0.16248370 / 4.1.2 |
 
@@ -167,27 +174,83 @@ prefix, as for the configure script) and `data/resources` as assets under `resou
 to its internal files on first run and whenever the app is reinstalled or updated: it compares the version code and
 the install's `lastUpdateTime` (`<versionCode>-<lastUpdateTime>`) with the last copy's.
 
-## Running it
-
-The app lists games from its external files folder, and keeps its settings, memory cards and BIOS images in `data`
-next to it.
-
-**Launch the app once before pushing anything.** The first launch creates `files/games`, `files/data` and its
-subfolders, owned by the app. A folder that `adb push` or `adb shell mkdir` creates first belongs to the shell, and
-the core can't write to it. The first launch also extracts the resources, so it takes 10 to 20 seconds on the
-emulator.
+## Testing the app
 
 ```bash
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -W -n io.github.ilyalissoboi.goosestation/.MainActivity   # wait for the list to appear
-FILES=/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files
-adb push <your BIOS image> $FILES/data/bios/
-adb push extras/padtest/padtest.psexe $FILES/games/
-adb push "<a disc image>.chd" $FILES/games/
+cd android
+./gradlew testDebugUnitTest                                    # JVM unit tests, in app/src/test
+ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest   # instrumented tests, in app/src/androidTest
 ```
 
-The list refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves
-it. Home pauses the game, and reopening the app resumes it. Pausing also writes any memory card changes to their files
+The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
+can only be initialized once per process). Tests that need a document tree build one in `TestDocumentsProvider`, a
+`DocumentsProvider` in the debug build only (`app/src/debug`), over `files/test-documents`. It's disabled until a
+test enables it, and shares the app's UID, so the app reads it without a grant.
+
+## Running it
+
+The app asks for no storage permission. It works with three kinds of folder, picked in Android's folder picker
+(the Storage Access Framework), and keeps a grant for each:
+
+- **The BIOS folder**, read only. The app copies the PS1 BIOS images it finds there into its own `files/bios`, and
+  the core uses the copies. A BIOS folder whose grant is gone doesn't stop anything: the copies still work.
+- **One or more games folders**, read only. Games are played from where they are, through `content://` paths.
+- **The data folder**, read and write: settings, memory cards, save states, covers, play time and the rest of the
+  core's data root. The core never writes to it: it works on a copy in the app's internal storage, which the app
+  mirrors to the folder (see "The data folder and its mirror").
+
+Put the files in folders on the device first. The shell can make folders under `/sdcard`, and the picker can open
+them:
+
+```bash
+adb shell mkdir -p /sdcard/GooseStation/bios /sdcard/GooseStation/games /sdcard/GooseStation/data
+adb push <your BIOS image> /sdcard/GooseStation/bios/
+adb push extras/padtest/padtest.psexe /sdcard/GooseStation/games/
+adb push "<a disc image>.chd" /sdcard/GooseStation/games/
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
+```
+
+The first launch opens **setup**: a welcome screen, then the BIOS folder, the games folders and the data folder, one
+step each. Every step works with a D-pad: A or Enter presses the focused button, B or Back goes back a step. The
+system folder picker is the exception, and may need touch (each step says so). In the picker, open the folder, press
+**Use this folder**, then **Allow**.
+
+- The BIOS step lists the images it copied (`SCPH-5500 (v3.0 09-09-96 J)`, say), and won't go on without one.
+- The games step takes any number of folders, and needs at least one.
+- The data folder can be empty, or hold data GooseStation saved before, here or on another device (but see "Known
+  limits": it isn't shared live). Setup says which:
+  "This folder is empty. GooseStation will start fresh here.", or "This folder already has GooseStation data
+  (settings and 2 memory cards). GooseStation will use it." A folder that holds other things but no GooseStation
+  data gets "No GooseStation data here yet. GooseStation will start fresh in this folder." When the folder holds
+  anything at its top that isn't GooseStation's (see "The data folder and its mirror"), a line follows: "This folder
+  also holds other things (games, notes.txt and 2 more). GooseStation leaves them alone." It doesn't stop Finish,
+  and the data folder change shows it as well.
+- Setup refuses a data folder, in the screen, with Finish kept off until another is picked, when:
+  - it's one of the games folders, holds one or sits in one: "The data folder can't be a games folder, nor hold
+    one or sit in one. Pick another." (the first pull would copy the games into the app). This goes by the folders'
+    document IDs, such as `primary:PS1/games`; a cloud provider's opaque IDs are only caught when they're the same
+    folder. A BIOS folder inside the data folder is fine. Going back and adding a games folder that overlaps the
+    data folder is refused the same way ("A games folder can't be the data folder, nor hold it or sit in it. Pick
+    another.").
+  - its storage can't rename files: "This folder's storage can't replace files safely. Pick another." The check
+    creates `.goosestation-probe.goosetmp` at the top of the folder, reads whether it can be renamed, and deletes it
+    (a leftover is cleaned up as any `.goosetmp` is). A folder where no file can be created gets "GooseStation can't
+    create files in this folder. Pick another."
+
+Finish starts the core and shows the **library**: a grid of covers by default, or a list (the **List** and **Grid**
+button switches, and the choice is saved as `[UI] GameListGridView` in `settings.ini`). **Folders** opens the folder
+settings, and **Refresh** scans the games folders again. The library also refreshes when the app comes back to the
+foreground. A, Enter or a tap starts the selected game; Back leaves it. The tile for the last game played is
+focused when the library comes back. A tile shows the game's cover from `covers/` in the data folder, or its title
+when there's none; a list row shows the title, region, serial and play time.
+
+The library lists what the core's game list finds in the games folders, as on desktop: disc images (CUE/BIN, CHD,
+ISO and the rest), M3U playlists, and PS-X EXE files. Disc images in the same folder as a CUE resolve by name, with
+a case-insensitive match when the case differs (`FILE "TRACK 01.BIN"` next to `Track 01.bin`), and names holding
+`#`, `%` or `?` work as they are.
+
+Home pauses the game, and reopening the app resumes it. Pausing also writes any memory card changes to their files
 straight away (a paused game never reaches the card's usual save, 5 emulated seconds after the last write), so a save
 made just before Home survives the app being killed in the background. Going to the background, or losing focus to
 the notification shade or a dialog, also lets go of every button and stick, so press or move them again after
@@ -196,37 +259,158 @@ coming back.
 In a game, the app keeps only the controllers' gamepad buttons and D-pad keys. Volume, media and other keys go to
 the system, so the volume keys work during a game.
 
-Never commit BIOS images or games. The checks below use `~/work/goose-test/ps-30j.bin` and a CHD from the same
+Never commit BIOS images or games. The checks below use `~/work/goose-test/ps-30j.bin` and the CHDs from the same
 folder.
+
+### The folder settings
+
+**Folders** in the library opens them, with the same D-pad rules as setup:
+
+- **BIOS folder**: **Change** picks another folder, which replaces the old one only if it holds a BIOS image.
+  **Rescan** copies the images in the same folder again, after you add one to it.
+- **Games folders**: **Add folder**, and **Remove** next to each one. The library is scanned again after either.
+- **Data folder**: **Change** picks another folder, then asks what to do with it. A folder setup would refuse (see
+  above) gets no choice: the screen says why, with **Pick another** and **Cancel**. **Add folder** under the games
+  folders refuses one that overlaps the data folder, in the same way.
+  - **Copy this device's data into it**: the settings, memory cards and save states here go into the new folder,
+    over its files of the same name.
+  - **Use the data already there**: the data here is replaced with the new folder's. The old data folder keeps its
+    copy. If the old folder can't be reached already (or its grant is gone), the choice says up front that changes
+    not in it are lost, and one press goes ahead. If it can be reached but the push of the latest changes to it
+    fails at the moment of the change, nothing changes yet: the choice is shown again with that warning, and only a
+    second press goes ahead.
+
+  Either way, the app first saves its latest changes to the old folder, if it can be reached, and then restarts:
+  the core's data root can't change while it runs. If the change fails, nothing is saved, and the old folder stays
+  the data folder.
+
+Folders the app no longer uses have their grants released, unless another saved folder still needs the same one.
+
+### The data folder and its mirror
+
+The core reads and writes `files/data` in the app's internal storage (the working copy). The app keeps it in step
+with the data folder, and remembers what it last saw of both in `files/mirror-manifest.txt`. The BIOS copies are in
+`files/bios`. The working copy is private, but a debug build can be inspected with `run-as`:
+
+```bash
+adb shell run-as io.github.ilyalissoboi.goosestation ls -R files/data
+adb shell run-as io.github.ilyalissoboi.goosestation cat files/mirror-manifest.txt
+```
+
+The rules:
+
+- **Only GooseStation's own data is mirrored.** That is `settings.ini`, `secrets.ini`, `playtime.dat` and
+  `custom_properties.ini` at the top of the folder, and everything in the desktop data folder's folders: `bios`,
+  `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `savestates`,
+  `screenshots`, `shaders`, `textures`, `resources` and `videos`, and `emusync` (memory card sync, a later stage).
+  Once the core has started, the folders its `settings.ini` names inside the data folder (a `[Folders]` entry, or
+  `[MemoryCards] Directory`, such as `mycheats`) and the shared memory cards are mirrored too; the app asks the core
+  for them, and pulls once more when that adds any. `cache/` (and the core's cache folder, wherever it is) and
+  `goosestation.log` stay on the device. **Anything else in the data folder is left alone**: a `games/` folder, say,
+  is never copied in, never written to and never deleted, and the mirror doesn't even list what's inside it. Folder
+  names are matched as the desktop writes them, in lower case: a `Memcards/` folder counts as something else. Files
+  outside the layout in the working copy (an earlier build copied in everything) are deleted from the working copy,
+  never from the folder, once the core has said where its folders are, and their manifest entries go too; only those
+  in step with the folder, though. One changed since the last run, or never mirrored (a card in a folder
+  `settings.ini` no longer names, say), stays in the working copy, as it may hold a change the folder lacks. A
+  leftover `.goosetmp` or `.goosebak` in a folder that is no longer part of the layout isn't cleaned up: it stays in
+  the data folder under that name.
+- **The folder is the source of truth.** The app pulls (folder to working copy) at start, before the core reads
+  `settings.ini`, and whenever it comes back to the foreground. A file that is new or changed in the folder is copied
+  in, even over a change of the working copy's, and a file deleted from the folder is deleted from the working copy.
+  There is no conflict detection: when both sides changed, the folder wins.
+- **Memory cards are never replaced under a running game.** The memory cards are the files in the core's memory
+  card folder (`[MemoryCards] Directory`, `memcards/` by default) and the shared cards `[MemoryCards] Card1Path` and
+  `Card2Path` name, wherever they are in the data folder: the app asks the core once it has started, and again after
+  `settings.ini` is reloaded, and uses `memcards/` until then. The game's own card writes go out during the game,
+  as any other file's (on the emulator, a game's save reached the folder in 3.9 s). Only a card the folder changed
+  as well waits: while the game runs, nothing replaces or deletes it in the working copy, and nothing is sent over
+  the folder's version. When the game stops, the folder's version comes in and wins, so the game's writes to that
+  card since the folder's change are lost.
+- **Pushes** (working copy to folder) run every 2 s while the app is in the foreground, when it goes to the
+  background, and when a game stops. A file is sent once it has been unchanged for 2 s, so it isn't sent mid-write.
+  The push on going to the background and at a game's stop doesn't wait. Where the folder's side changed as well,
+  the folder wins, as in a pull, and its file is copied in instead.
+- **No half-written files.** A file is replaced by writing `<name>.goosetmp`, renaming the old file to
+  `<name>.goosebak`, renaming the temporary file into place, then deleting the `.goosebak`. A leftover `.goosetmp` or
+  `.goosebak` (the app was killed between the steps) is cleaned up on the next run; a file whose only copy is its
+  `.goosebak` gets it back. Neither kind is ever mirrored, nor is `cache/`, which the core rebuilds. A provider that
+  can't rename documents gets no write at all: written in place, a write cut short would leave a short file that the
+  next pull took as the folder's change. Setup and the data folder change refuse such a folder; if one gets through
+  anyway, pushes stop as for an unreachable folder ("The data folder isn't reachable (its storage can't replace
+  files safely)…"), and every change stays on the device.
+- **Neither side is acted on unless it's listed in full.** A data folder still loading, a working copy that's
+  missing, or a folder in it that can't be read, stops the run before it does anything: listed as empty, its files
+  would read as deleted, and be deleted on the other side. A fresh install's working copy is created before the
+  first pull; one that has gone missing is created again, and its manifest deleted, so the folder's files all come
+  in.
+- **Changes are kept when the folder is gone.** If the folder can't be reached (the SD card is out, or the folder was
+  moved), the run stops without touching the folder, and every change stays in the working copy until a later run
+  reaches it.
+
+The library shows a banner when something is wrong, and the folder settings show the data folder's state:
+
+- **A grant is gone** (the folder was deleted through the system's Files app, say; see "Known limits"): "Can't
+  read your BIOS folder. The copies already made still work.", "Can't read <folder>. Its games are hidden until you
+  pick it again." (with **Remove folder** as well), or "GooseStation can't reach your data folder. Changes are kept
+  on this device until you pick it again." Each has **Pick again**. Picking the same folder restores it; another one
+  replaces it (for the data folder, through the folder settings' choice above). The app never drops a folder on its
+  own, nor falls back to another place.
+- **The data folder can't be reached**: "The data folder isn't reachable (…). Your changes are kept on this device and
+  saved to the folder when it's back." It goes once a run reaches the folder again.
+- **Changes aren't reaching the folder**: when two pushes in a row reached the folder but couldn't save every change
+  to it (a file failed, or a side couldn't be listed in full), "Some changes couldn't be saved to the folder.", in
+  the library and as the folder settings' data folder status. The changes stay on the device, and every push tries
+  again; it goes once one saves everything. After one such push, the status says "Saving…".
+
+### Moving Plan 1's data
+
+Plan 1's builds kept everything in the app's external files folder,
+`/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files`: games in `games`, and the data root in `data`. The
+app doesn't use either any more, and doesn't delete them. To keep Plan 1's data, copy the contents of `files/data`
+into the new data folder **before** setup picks it, except `bios`: its images go in the BIOS folder, and the games in
+a games folder. Setup then says the folder holds GooseStation data, and the first start pulls it in.
+
+`adb` can't make this copy. The core writes its files as temporary files renamed into place, so they're mode 0600:
+on the Thor, `adb shell cp` and `adb pull` of `settings.ini` and the memory cards both failed with "Permission
+denied", and `run-as` can't reach external storage. Copy the files on the device with a file manager that can open
+`Android/data`, or from a computer over USB. Neither way was checked for this plan.
+
+Plan 1's `settings.ini` has no `[Android] InstallID` (and `SettingsVersion = 1`, which is upgraded to 3), so the first
+start with it adapts it as a file from another install (see "Changing settings"): the renderer goes back to
+`Automatic`, the Port 1 bindings are reset (each connected pad adds its own again), and the game folders are replaced
+by the ones setup picked. That happens once; other settings are kept.
 
 ### Changing settings
 
-There's no settings screen yet, so settings are changed by replacing `files/data/settings.ini`. The shell can't read
-or edit the app's copy: the core writes it as a temporary file renamed into place, so it's mode 0600, and
-`run-as` can't reach external storage. The shell can delete it, though, and the app reads a file the shell pushes.
-Stop the app, replace the file, then start the app again:
+There's no settings screen yet, so settings are changed by editing `settings.ini` in the data folder, on the device
+or from a computer. Then switch to the app, or reopen it: the pull on coming back copies the file in, and the core
+reloads it, then scans the library again. While the app stays in front, the next push (within 2 s) also notices the
+change and copies it in. Edit the file the app wrote, so it keeps its `[Android] InstallID` (see below). For
+example, to pick the renderer and turn on the OSD's frame rates:
 
 ```bash
-cat > /tmp/settings.ini <<'EOF'
-[Main]
-SettingsVersion = 1
-
-[GPU]
-Renderer = Vulkan
-
-[Display]
-ShowFPS = true
-ShowSpeed = true
-ShowCPU = true
-EOF
-adb shell am force-stop io.github.ilyalissoboi.goosestation
-adb shell rm $FILES/data/settings.ini
-adb push /tmp/settings.ini $FILES/data/settings.ini
+adb pull /sdcard/GooseStation/data/settings.ini /tmp/settings.ini
+# In /tmp/settings.ini: under [GPU], Renderer = Vulkan; under [Display], ShowFPS, ShowSpeed and ShowCPU = true.
+adb push /tmp/settings.ini /sdcard/GooseStation/data/settings.ini
+adb shell input keyevent KEYCODE_HOME
 adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 ```
 
-- `[Main] SettingsVersion = 1` must be there, or the core resets the file to its defaults.
+- `[Main] SettingsVersion = 3` must be there, or the core resets the file to its defaults. Desktop and Android use
+  the same version (`Settings::SETTINGS_VERSION`), and Android upgrades Plan 1's version 1 files.
+- Keep `[Android] InstallID`. A file without this install's ID is taken as one from another install, and its
+  device-specific keys are rewritten, `Renderer` among them.
 - Every setting the file leaves out takes its default.
+- **A `settings.ini` from another install** (desktop, another device, or a reinstall, which gets a new ID) is
+  adapted the first time this install reads it. The file records the install it was last adapted for in
+  `[Android] InstallID`; when that isn't this install's, the device-specific keys are rewritten: the renderer goes back
+  to `Automatic`; `[GameList]` paths are replaced by the games folders; the BIOS image choices are dropped, and the
+  BIOS search folder is the app's copy folder; the input sources, Port 1 bindings and hotkeys are reset to their
+  defaults, then each connected pad adds its own; and any folder outside the data folder (an absolute path elsewhere,
+  or a Windows path such as `C:\Users\…\memcards`) is set back to its default under the data folder. Everything else,
+  such as the OSD or enhancement settings, is kept. The adapted file is saved with this install's ID, and goes back
+  to the data folder with the next push.
 - `[GPU] Renderer` is `Automatic` (the default), `Vulkan`, `OpenGL` or `Software`. On Android, `Automatic` prefers
   Vulkan, as on Linux: `VulkanDevice::IsSuitableDefaultRenderer()` takes the first Vulkan GPU unless it's a software
   one (its name starts with `llvmpipe` or `SwiftShader`) or an Intel one, and OpenGL ES otherwise. `Vulkan` and
@@ -239,11 +423,20 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
   on the recompiler.
 - The Port 1 bindings live in this file too. Leaving them out is fine: whenever a controller connects, the core adds
   its default bindings to Port 1's (each binding is a list, so every connected pad drives Port 1), skips those
-  already there, and saves the file. That save makes the file mode 0600 again.
+  already there, and saves the file.
 
 ### Known limits
 
-- **In a game, a controller alone can't get back to the list.** B goes to the game, as Circle. Use the Back gesture,
+- **Removing the SD card stops a game played from it.** Android kills any process that still has a file open on a
+  card it unmounts, about 5 s after the eject begins (`exited due to signal 2`), and a game holds its disc open. So
+  when the card that holds the running game, or the data folder, is ejected (`ACTION_MEDIA_EJECT`, or its unmount or
+  removal if no eject came first), the app saves the game's memory cards to the working copy straight away, rather
+  than 5 emulated seconds after the game's last write, stops the game, and goes back to the library: "The SD card was
+  removed, so the game was stopped. Its memory cards are saved on this device." A data folder on the card stops being
+  mirrored at once: the run under way stops before its next file, and the library shows the unreachable banner ("The
+  data folder isn't reachable (the SD card was removed)…"). Once the card is mounted again, the next run saves the
+  changes to it. With no game running, only the mirror stops. The Thor result below is from the build before this.
+- **In a game, a controller alone can't get back to the library.** B goes to the game, as Circle. Use the Back gesture,
   or Home. A later plan adds the Mode button and Select+Start.
 - **Leaving during a boot freezes the UI until the boot is done.** Destroying the surface waits for the CPU thread,
   which is still booting. On the emulator, Back during an Ace Combat 3 boot froze the UI for 0.7 to 1.2 s (43 and
@@ -251,6 +444,24 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
   device could take longer.
 - **Switching audio output mid-game is untested.** The AAudio stream is reopened when its device goes away, as when
   headphones are unplugged. The emulator can't check this; the device checklist below does.
+- **A missing grant can't be made with `adb`.** Deleting a folder through the Storage Access Framework (the
+  system's Files app, say) should take its grant with it (not checked here). Deleting or moving it from the shell
+  (`rm`, `mv`) or by its file path leaves the grant, and looks like an unreachable folder instead. `GrantCheckTest` and
+  `LibraryBannersTest` cover the grant check and its banners.
+- **The data folder isn't shared live with desktop or another install.** Each install mirrors its own working copy,
+  and the folder wins when both changed, with no merging, so two installs using one folder at once can lose each
+  other's changes. Each install also adapts a `settings.ini` another one wrote (see "Changing settings"). Syncing
+  memory cards between devices comes later, through emusync.
+- **An M3U's discs are listed on their own as well.** A set's playlist and each of its discs get a tile each.
+- **Play time is updated on the next refresh.** Coming back from a game doesn't rescan the library, so the list shows
+  the time played before it until the next refresh or resume.
+- **A provider that keeps a folder "loading" stops the mirror quietly.** A listing that isn't complete is never acted
+  on (it would read as deletions), so the run does nothing and tries again next time, with only a log line
+  (`Mirror: Can't list the data folder; the next run tries again.`) and no banner.
+- **Settings changes during a game.** A `settings.ini` pulled in during a game (from the folder, by the 2 s push) is
+  reloaded straight away, under the running game, so it can change the renderer or the bindings mid-game; a file
+  from another install resets the bindings while the game is played. The library is also rescanned while the game
+  reads its disc. Change settings with no game running.
 
 ## Results on the emulator
 
@@ -322,6 +533,26 @@ and the system has 4096 byte pages.` That's by design: the build sets `HOST_PAGE
   emulator's Mesa driver; and `Immediate not supported for vsync-disabled, using mailbox`.
 - Hundreds of `GameDatabase: Duplicate code …` warnings while the game database loads, the same as on desktop.
 
+**Storage, setup and the library** (Plan 2), checked later on 2026-10-26 with the debug APK, on the same emulator,
+with the real folder picker. The folders were `/sdcard/GooseTest/bios` (`ps-30j.bin`), `/sdcard/GooseTest/games`
+and an empty `/sdcard/GooseTest/data`. The games folder held `padtest.psexe`, both Ace Combat 3 discs as CHDs, an M3U
+of the two, and a CUE/BIN made for the check (below). Setup and the library were driven with D-pad key events, and the
+picker with taps; the games with a gamepad made with `uinput`, as above.
+
+| Check | Result |
+| --- | --- |
+| Fresh install, setup, library | Pass. After `adb uninstall`, the first launch showed setup's welcome (`am start -W`: `TotalTime: 1462`). Each step's button was focused when it opened, and D-pad down and Enter went through them; the picker needed taps (**Use this folder**, **Allow**). The BIOS step listed `SCPH-5500 (v3.0 09-09-96 J)`, the data step said "This folder is empty. GooseStation will start fresh here.". Finish extracted the resources and started the core in 1.0 s (`Extracting the resources …` to `The core is ready.`), and the library listed five entries: both discs, the M3U, the CUE and padtest. |
+| CUE/BIN | Opens, but doesn't boot to a picture, on desktop either, so the image is the likely cause. No real CUE/BIN was at hand, so it was made for the check: `Pad Test #1 (100%).cue`, whose `FILE "PAD TEST #1 (100%).BIN"` differs in case from `Pad Test #1 (100%).bin`, a 1 MB MODE2/2352 image of an ISO 9660 file system (made with `hdiutil makehybrid -iso`) holding `SYSTEM.CNF` and padtest as `PADTEST.EXE`, with the NTSC-J licence text in sector 4. The core opened the CUE, found the BIN by its case-insensitive match, read the licence sector (`Auto-detected console NTSC-J region`) and the file system (`Game changed: 'Pad Test #1 (100%)' (PADTESTEXE)`), and `Game started` came 1.25 s after `Boot Filename`. The screen then stayed black, with or without `;1` in `SYSTEM.CNF`. The desktop build does the same with the same files: `goosestation-regtest` (built with `-DBUILD_REGTEST=ON`) ran the CUE for 1800 frames, dumping one every 300, and all six were the same black frame, while Ace Combat 3's CHD, run the same way, gave five different frames. The BIOS apparently doesn't start the hand-made image's executable. The Thor checklist boots a real one. |
+| M3U set | Pass. `Loaded 2 paths from m3u`, then `Game changed: 'Ace Combat 3 Electrosphere' (SLPS-02020)`; `Game started` 1.3 s after `Boot Filename`, and "Press START button" by 30 s. |
+| CHD | Pass. Disc 1 on its own: `Game started` 1.3 s after `Boot Filename`, and the title screen by 30 s (`G: 59.53`). Plan 1 recorded 0.7 s (`Starting '…'` to `Game started`, in the table above) and 1.2 to 1.4 s (in "Known limits") for Ace Combat 3 from the app's own folder, so reading through `content://` isn't clearly slower on the emulator. The Thor checklist compares on the device. |
+| A memory card save reaches the folder | Pass. Entering Ace Combat 3's link mode menu wrote the card: `Saving memory card to Ace Combat 3 Electrosphere_1...` at 22:31:13.258, and the folder's file had a new time of 22:31:17.197, 3.9 s later. In a later push (the account save below), polling the folder every 0.05 to 0.1 s saw `Ace Combat 3 Electrosphere_1.mcd.goosetmp` once and `….mcd.goosebak` once, between the steps of the replace. None was left: `find /sdcard/GooseTest/data -name "*.goose*"` found nothing at the end. |
+| Home mid-game, card replaced in the folder | Pass. The card's MD5 was `f8eaf894…` on both sides. Home, then `adb push` of a copy with one byte changed (`e6df94db…`) over the folder's card, then reopening: the game carried on (no second `Game started`), and the working copy still had `f8eaf894…`. After Back (`Game stopped.`), the working copy had `e6df94db…`, the folder's. |
+| A save state deleted from the folder | Pass. There's no way to save a state yet, so a 300 KB `savestates/SLPS-02020_1.sav` was pushed into the folder. Home and reopening copied it into the working copy (`run-as … ls files/data/savestates`). Deleting it from the folder, then Home and reopening, deleted it from the working copy. |
+| Data folder unreachable | Pass. After `mv /sdcard/GooseTest/data /sdcard/GooseTest/data-away`, the library showed "The data folder isn't reachable (Can't list primary:GooseTest/data). Your changes are kept on this device and saved to the folder when it's back." within 5 s, and the log had `Mirror: The data folder can't be reached.` every 2 s. A new Ace Combat 3 account, saved to the card in slot 1 (`Writing memory card sector 77`, `78`, then `Saving memory card …` at 22:42:25.725), changed the working copy's card to `72153b85…`; `data-away` kept `e6df94db…`, and no new `data` folder appeared. After moving it back, Home and reopening, the folder's card was `72153b85…`, and the banner was gone. |
+| Killed during a large push | Pass. A 200 MB file of random bytes was copied into `files/data/screenshots/big.bin` with `run-as`, then Home started the push. Once `big.bin.goosetmp` showed in the folder, `am kill` ended the process (it's only allowed in the background), leaving a 15,400,960-byte `big.bin.goosetmp` and no `big.bin`. On the next start (`TotalTime: 1077`), the leftover was deleted and the push began again: 2 s later `big.bin.goosetmp` was full size, 4 s later `big.bin` was 209,715,200 bytes with the source's MD5 (`dfda8f9f…`), and no temporary was left. |
+| A desktop `settings.ini` | Pass. A version 3 file with `Renderer = Software`, `[Pad1]` bound to `SDL-0` (D-pad, Cross, Circle, Start), `[InputSources] SDL = true`, Windows paths for the game list, the BIOS folder and the memory card folder, and `ShowFPS = true`, was pushed over the folder's. Home and reopening: `Reloaded the settings …`, `The settings are from another install (''), adapting them.`, `[MemoryCards] Directory 'C:\Users\goose\Documents\GooseStation\memcards' is outside the data folder, using 'memcards'.` and `Added 24 bindings for Android-0 to Port 1.` The working copy's file had no `Renderer` and no `SDL-0` binding, `RecursivePaths` set to the games folder, `[BIOS] SearchDirectory = bios`, no `PathNTSCJ`, and `ShowFPS = true` still; the folder's copy got this install's `[Android] InstallID` with the next push. padtest then booted with `Allowing Vulkan as default renderer.` (Automatic), the OSD's frame rates showed, and the pad's Cross and D-pad right lit up. |
+| Crashes | None: `adb logcat -b crash -d` was empty at the end, and the app's process stayed the same from setup to the `am kill` (PID 9010), and from then to the end (PID 11609). The crash buffer was also cleared with each `adb logcat -c` along the way. |
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -350,21 +581,64 @@ is CJK).
 Not checked yet: a Bluetooth pad (step 2 below), the volume keys during a game, and the save-then-swipe-away check
 in step 3.
 
+**Storage, setup and the library** (Plan 2, step 7 below), checked on 2026-10-27 with the debug APK built from
+`8004548f5` plus the mirror's layout fix (below), on the same Thor. The SD card is exFAT (`9C33-6BBD`). The app was
+installed over Plan 1's (`adb install -r`); setup runs because the new build keeps its folders in its own preferences.
+The BIOS folder was `ROMs/bios` on the SD card the first time and `GooseStation/bios` the second; the games were the
+user's own `ROMs/psx` (83 CHDs) and `GooseStationGames`, which held padtest, both Ace Combat 3 discs as CHDs, an M3U of
+the two, and a real CUE/BIN (`AC3 Disc 1 (CUE)`, extracted from the Disc 1 CHD with `chdman extractcd`, its `FILE` line
+in upper case). The data folder was `GooseStation` on the SD card, then `GooseStation/data` on internal storage.
+
+| Check | Result |
+| --- | --- |
+| Setup with the built-in controller | Pass, twice. The D-pad and A drove every step, B went back, and the focused button had a ring; touch only in the system picker. |
+| BIOS import from a mixed folder | Pass. From `ROMs/bios` (Mega CD, PS2 and Switch files as well), the four images the core knows were copied to app storage (`SCPH1001.BIN` and three PS2 BIOSes, which the core accepts); the rest were skipped. |
+| First setup's data folder held other files | **Found and fixed.** `GooseStation` on the SD card held a `games` folder (1.4 GB) and a `bios` folder. The mirror then copied everything in the data folder, so the first pull put 1.4 GB of games into app storage. The mirror now copies only GooseStation's own files and folders (see "The data folder and its mirror"), and setup says what else the folder holds. With the fix, the second setup's working copy was 2.4 MB: `settings.ini`, `playtime.dat` and the data folder's `bios/ps-30j.bin`; `games/` was left alone. |
+| A games folder inside the data folder | Refused, as designed: `GooseStation/games` couldn't be added while `GooseStation` was the data folder. The test games were moved to `GooseStationGames`. |
+| Library | Pass. The user's 83 CHDs from `ROMs/psx` as a cover grid; later the six entries of `GooseStationGames`. |
+| CUE/BIN, M3U, CHD, EXE boots | Pass, all to a picture. `Boot Filename` to `Game started`: the CUE/BIN 2.99 s (its BIN found by the case-insensitive match; `SLPS-02020`, NTSC-J), the Disc 1 CHD 2.49 s, the M3U set 2.51 s (`Loaded 2 paths from m3u`), padtest 2.50 s. Nearly the same for every format, so reading in place isn't what the time goes on. |
+| A memory card save reaches the folder | Pass. `Saving memory card to Ace Combat 3 Electrosphere_1...` at 10:06:27.447; the SD card's copy had a new time of 10:06:30.100, 2.65 s later, with the same MD5 (`f8eaf894…`). Another at 10:29:13.370 arrived at 10:29:15.150. No temporary file was left. |
+| Card replaced in the folder mid-game | Pass, driven with `adb`. Both copies `b3201b01…`; Home; a changed card (`8234fabb…`) pushed into the folder; reopening: the game carried on (no second `Game started`) and the working copy kept `b3201b01…`; Back (`Game stopped.`): the working copy had `8234fabb…`, the folder's. |
+| Home, then reopen, mid-game | Pass. The game resumed where it was. |
+| Data folder unreachable | Pass. After `mv GooseStation GooseStation-away` on the SD card, the library showed "The data folder isn't reachable (Can't list 9C33-6BBD:GooseStation). Your changes are kept on this device and saved to the folder when it's back.", the log had `The data folder can't be reached.` every 2 s, and no new `GooseStation` folder appeared. A file added to the working copy reached the folder 2 s after it was moved back. |
+| SD card removed mid-game | Android ended the app. With the data folder and the game both on the card, the eject began at 10:29:20; the mirror logged the unreachable folder every 2 s; at 10:29:25.9 Android found the app holding the CHD open on the card and killed it (`exited due to signal 2`). The card saved at 10:29:13 was safe on both sides (`eda799a8…`). A card write the game made at 10:29:24, after the card was out and not yet saved to the file, was lost with the process. After the card went back in, the app cold-started and listed the games again. See "Known limits". |
+| SD card removed mid-game, with the eject handling | Pass, re-checked later on 2026-10-27 with the build that handles the eject. The data folder on internal storage, the CUE/BIN on the card. The game saved the card at 13:02:34.455; the folder's copy had a new time of 13:02:36.711, with the same MD5 (`8a250fe6…`). The eject began at 13:02:43.152, the app got `MEDIA_EJECT for volume 9C33-6BBD` 2 ms later, and `Game stopped.` came at 13:02:43.178, 26 ms after the eject began and 0.2 s before the card was unmounted. The process stayed the same (pid 14280): no kill. The library showed the message, `MEDIA_UNMOUNTED`/`MEDIA_BAD_REMOVAL` were handled once, and `MEDIA_MOUNTED` at 13:02:58.143 after the card went back in. |
+| Killed during a 200 MB push | Pass. `am kill` with `big.bin.goosetmp` at 56 MB left a 153 MB temporary and no `big.bin`. On the next start the leftover was cleared and the push began again; 13 s later `big.bin` was 209,715,200 bytes with the source's MD5 (`89f5951e…`) and no temporary. Moving the finished temporary into place took about 11 s on this card. |
+| A desktop `settings.ini` | Pass. A version 3 file with `Renderer = Software`, `SDL-0` bindings and Windows folder paths, pushed into the data folder: reopening logged `Reloaded the settings …`, `The settings are from another install (''), adapting them.` and `[MemoryCards] Directory 'C:\…\memcards' is outside the data folder, using 'memcards'.`; the result had no `Renderer` and no `PathNTSCJ`, `SearchDirectory = bios`, `Directory = memcards`, Android bindings on Port 1, `ShowFPS = true` kept, and this install's `InstallID`, which reached the folder with the next push. |
+| Changing the data folder | Pass. **Folders** → **Data folder** → **Change**, `GooseStation/data` on internal storage, **Copy this device's data into it**: the app restarted (the new process's core was ready 0.5 s after the old one ended) and the new folder held the working copy's seven files with the same MD5s. |
+| Moving Plan 1's data with `adb` | Doesn't work: `adb shell cp` and `adb pull` of the core's files fail with "Permission denied" (mode 0600). See "Moving Plan 1's data". |
+| Crashes | None. `adb logcat -b crash` was empty; the one process death was Android's on the SD card's removal. |
+
+Not checked: whether setup's data step showed the "other things" line on the Thor (not reported), padtest's controls
+again (Plan 1's results stand), and a games folder on internal storage as a boot-time baseline.
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
 `adb devices`, and allow USB debugging on the Thor when it asks. Use the serial in place of `emulator-5554`.
 
+The BIOS and the games go on the SD card, and the data folder on internal storage. Find the SD card's folder with
+`adb shell ls /storage` (a name like `1234-ABCD`). If the shell can't write to the SD card, copy the files with a
+computer or a file manager instead. Plan 1's checks (steps 1 to 6) need nothing more than this; step 7 needs a
+CUE/BIN game and an M3U set as well.
+
 ```bash
 export ANDROID_SERIAL=<the Thor's serial>
-FILES=/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -W -n io.github.ilyalissoboi.goosestation/.MainActivity   # once, before pushing
-adb push ~/work/goose-test/ps-30j.bin $FILES/data/bios/
-adb push extras/padtest/padtest.psexe $FILES/games/
-adb push "$HOME/work/goose-test/Ace Combat 3 Electrosphere (Disc 1).chd" $FILES/games/
+SD=/storage/<the SD card's folder>
+adb shell mkdir -p $SD/GooseStation/bios $SD/GooseStation/games /sdcard/GooseStation/data
+adb push ~/work/goose-test/ps-30j.bin $SD/GooseStation/bios/
+adb push extras/padtest/padtest.psexe $SD/GooseStation/games/
+adb push "$HOME/work/goose-test/Ace Combat 3 Electrosphere (Disc 1).chd" $SD/GooseStation/games/
+adb uninstall io.github.ilyalissoboi.goosestation   # setup runs on a fresh install only
+adb install android/app/build/outputs/apk/debug/app-debug.apk
 adb logcat -c
+adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 ```
+
+Run setup with the built-in controller first (step 7's first check), picking `GooseStation/bios` and
+`GooseStation/games` on the SD card and `GooseStation/data` on internal storage. Settings are changed in
+`/sdcard/GooseStation/data/settings.ini`, as in "Changing settings": edit the app's file, since one pushed without
+its `[Android] InstallID` loses its `Renderer`.
 
 Keep a log of each session in a second terminal. `ANDROID_SERIAL` is per shell, so set it there too (or pass `-s`):
 
@@ -373,7 +647,7 @@ export ANDROID_SERIAL=<the Thor's serial>
 adb logcat -v time > thor.log
 ```
 
-1. **padtest, with the Thor's own controls.** Start padtest from the list.
+1. **padtest, with the Thor's own controls.** Start padtest from the library.
    - [ ] Each face button lights the right PS1 button: bottom = Cross, right = Circle, left = Square, top =
      Triangle. If Cross/Circle and Square/Triangle come out swapped, the pad reports Nintendo labels: note it, for
      the remap screen. Don't work around it in code.
@@ -415,3 +689,48 @@ adb logcat -v time > thor.log
    - [ ] Note the renderer lines (`adb logcat -d | grep -E "GPUDevice|Trying to create"`).
    - [ ] Note the page size (`adb shell getconf PAGE_SIZE`). The core is built for 16 KB pages, so on 4096 or 16384
      fastmem stays on and the log has no `fastmem is disabled` line.
+7. **Storage, setup and the library.** The emulator's checks above, with the BIOS and games on the SD card and the
+   data folder on internal storage. Put a CUE/BIN game (a real one, so it boots to a picture) and an M3U set in the
+   games folder first.
+   - [ ] The whole setup with the built-in controller, run before step 1: the D-pad moves between the buttons, A
+     presses them, B goes back a step, and the focused button has a visible ring. Touch only in the system picker,
+     if it needs it. The
+     library then lists every game.
+   - [ ] The CUE/BIN game, the M3U set and the CHD each boot from the library.
+   - [ ] Save on a memory card in a game. `/sdcard/GooseStation/data/memcards/` has the change within 5 s. A
+     `.goosetmp` may show up between the steps of a write, but none is left behind.
+   - [ ] Home mid-game, replace the card in the folder with `adb push`, then reopen. The game keeps its card. After
+     quitting, the working copy has the folder's version
+     (`adb shell run-as io.github.ilyalissoboi.goosestation md5sum "files/data/memcards/<the card>"`).
+   - [ ] Delete a save state from the folder, then reopen: it's gone from the working copy
+     (`adb shell run-as io.github.ilyalissoboi.goosestation ls files/data/savestates`).
+   - [ ] Move the data folder away (`adb shell mv /sdcard/GooseStation/data /sdcard/GooseStation/data-away`), then
+     save on a memory card. The unreachable banner shows, and the save stays in the working copy. Move it back and
+     reopen the app: the save reaches the folder, and the banner goes.
+   - [ ] Remove the SD card mid-game, a moment after a memory card save. The game stops, and the library says "The
+     SD card was removed, so the game was stopped. Its memory cards are saved on this device."; the app isn't killed
+     (no `exited due to signal` in the log). Note what the library shows after it (a banner for the games folder, or
+     none). Nothing is lost: the memory card in the data folder has the game's last save. Put the card back and
+     reopen the app: the games are listed again.
+   - [ ] Repeat with the data folder on the SD card. Make a `GooseStation/data` folder there, then **Folders** →
+     **Data folder** → **Change**, pick it, and choose **Copy this device's data into it**; the app restarts on it.
+     Then remove the card mid-game, a moment after a save: the game stops with the same message, the unreachable
+     banner shows "(the SD card was removed)", the working copy keeps the save, and it reaches the folder once the
+     card is back.
+   - [ ] Kill the app during a large push. Make a 200 MB file (`adb shell "dd if=/dev/urandom
+     of=/data/local/tmp/big.bin bs=1048576 count=200 && chmod 644 /data/local/tmp/big.bin"`), copy it in with
+     `adb shell run-as io.github.ilyalissoboi.goosestation cp /data/local/tmp/big.bin files/data/screenshots/big.bin`,
+     press Home,
+     then `adb shell am kill io.github.ilyalissoboi.goosestation` once a `big.bin.goosetmp` shows in the folder.
+     Start the app again: the folder has no `big.bin` that is short, no temporary document is left, and the next
+     push completes.
+   - [ ] Copy a desktop `settings.ini` (version 3, `Renderer = Software`, an `SDL-0` binding) into the data folder,
+     then reopen. The renderer is back to Automatic, and the pad maps.
+   - [ ] Boot time from the library: the time from `System: Boot Filename: …` to `AndroidHost: Game started: …` in
+     the log, for Ace Combat 3 read in place from the SD card, three boots. For a baseline, also boot it from a games
+     folder on internal storage (add one in **Folders**), or with Plan 1's build (#23, from `7e1d16150`, installed
+     over this one with `adb install -r -d`) and the CHD pushed into
+     `/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files/games`; its log has the same two lines. Plan 1
+     didn't record a boot time on the Thor; on the emulator it was 0.7 to 1.4 s. This shows whether reading in place
+     is slower.
+   - [ ] `adb logcat -b crash -d` is empty.

@@ -35,6 +35,14 @@ void ReloadSettings();
 
 bool GetBoolSetting(const char* section, const char* key, bool default_value);
 void SetBoolSetting(const char* section, const char* key, bool value);
+std::string GetStringSetting(const char* section, const char* key, const char* default_value);
+/// Deletes the key if value is nullptr.
+void SetStringSetting(const char* section, const char* key, const char* value);
+s32 GetIntSetting(const char* section, const char* key, s32 default_value);
+void SetIntSetting(const char* section, const char* key, s32 value);
+
+/// Applies the settings: System::ApplySettings(false). Blocks until the CPU thread has done so.
+void ApplySettings();
 
 /// Where the memory cards are, relative to the data root (RelativeToDataRoot()): EmuFolders::MemoryCards with a
 /// trailing '/' (empty if it's the data root), then the card files: [MemoryCards] Card1Path and Card2Path from

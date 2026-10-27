@@ -278,6 +278,70 @@ NATIVE_LIBRARY_FUNCTION(void, setBoolSetting)(JNIEnv* env, jobject, jstring sect
   AndroidHost::SetBoolSetting(section_str.c_str(), key_str.c_str(), value == JNI_TRUE);
 }
 
+NATIVE_LIBRARY_FUNCTION(jstring, getStringSetting)(JNIEnv* env, jobject, jstring section, jstring key,
+                                                  jstring default_value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  const std::string default_str = FromJString(env, default_value);
+  const std::string value = AndroidHost::GetStringSetting(section_str.c_str(), key_str.c_str(), default_str.c_str());
+
+  // Kotlin takes the result as never null: if it can't be made, the default comes back.
+  jstring result = ToJString(env, value);
+  return result ? result : default_value;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setStringSetting)(JNIEnv* env, jobject, jstring section, jstring key, jstring value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  if (!value)
+  {
+    AndroidHost::SetStringSetting(section_str.c_str(), key_str.c_str(), nullptr);
+    return;
+  }
+
+  const std::string value_str = FromJString(env, value);
+  AndroidHost::SetStringSetting(section_str.c_str(), key_str.c_str(), value_str.c_str());
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getIntSetting)(JNIEnv* env, jobject, jstring section, jstring key, jint default_value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  return AndroidHost::GetIntSetting(section_str.c_str(), key_str.c_str(), default_value);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setIntSetting)(JNIEnv* env, jobject, jstring section, jstring key, jint value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  AndroidHost::SetIntSetting(section_str.c_str(), key_str.c_str(), value);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, applySettings)(JNIEnv*, jobject)
+{
+  AndroidHost::ApplySettings();
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)
+{
+  std::vector<std::string> names;
+  names.reserve(static_cast<size_t>(DisplayAspectRatio::Count));
+  for (u32 i = 0; i < static_cast<u32>(DisplayAspectRatio::Count); i++)
+    names.emplace_back(Settings::GetDisplayAspectRatioName(static_cast<DisplayAspectRatio>(i)));
+
+  // Kotlin takes the array as never null: a failure gives an empty one.
+  jobjectArray result = ToJStringArray(env, names);
+  if (!result)
+  {
+    result = env->NewObjectArray(0, s_string_class, nullptr);
+    ClearException(env);
+  }
+
+  return result;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemoryCardPaths)(JNIEnv* env, jobject)
 {
   const std::optional<std::vector<std::string>> paths = AndroidHost::GetMemoryCardPaths();

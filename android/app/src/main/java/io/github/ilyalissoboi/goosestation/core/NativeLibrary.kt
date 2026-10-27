@@ -7,8 +7,8 @@ import android.view.Surface
 
 /**
  * The emulator core, in libgoosestation.so. The core runs on its own thread: these calls queue work for it and
- * return straight away, except [initialize], [surfaceChanged] and [reloadSettings], which wait for it, and
- * [refreshGameList], which scans on the calling thread.
+ * return straight away, except [initialize], [surfaceChanged], [reloadSettings] and [applySettings], which wait for
+ * it, and [refreshGameList], which scans on the calling thread.
  */
 object NativeLibrary {
     init {
@@ -33,6 +33,24 @@ object NativeLibrary {
     external fun getBoolSetting(section: String, key: String, default: Boolean): Boolean
 
     external fun setBoolSetting(section: String, key: String, value: Boolean)
+
+    external fun getStringSetting(section: String, key: String, default: String): String
+
+    /** Sets [key] to [value], or deletes it if [value] is null. */
+    external fun setStringSetting(section: String, key: String, value: String?)
+
+    external fun getIntSetting(section: String, key: String, default: Int): Int
+
+    external fun setIntSetting(section: String, key: String, value: Int)
+
+    /** Applies settings.ini as it is now, as the core does after its own settings change. Waits for the core. */
+    external fun applySettings()
+
+    /**
+     * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game
+     * Native)`, `Stretch To Fill` and `4:3`. Doesn't need [initialize].
+     */
+    external fun getAspectRatioNames(): Array<String>
 
     /**
      * Where the memory cards are, relative to the data root: the memory card folder with a trailing `/` (empty if

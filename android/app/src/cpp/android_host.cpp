@@ -340,6 +340,61 @@ void AndroidHost::SetBoolSetting(const char* section, const char* key, bool valu
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
 }
 
+std::string AndroidHost::GetStringSetting(const char* section, const char* key, const char* default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetStringValue(section, key, default_value);
+}
+
+void AndroidHost::SetStringSetting(const char* section, const char* key, const char* value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  if (value)
+    s_base_settings_interface->SetStringValue(section, key, value);
+  else
+    s_base_settings_interface->DeleteValue(section, key);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+s32 AndroidHost::GetIntSetting(const char* section, const char* key, s32 default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetIntValue(section, key, default_value);
+}
+
+void AndroidHost::SetIntSetting(const char* section, const char* key, s32 value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  s_base_settings_interface->SetIntValue(section, key, value);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+void AndroidHost::ApplySettings()
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread([]() { System::ApplySettings(false); }, true);
+}
+
 std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
 {
   if (!s_initialized)

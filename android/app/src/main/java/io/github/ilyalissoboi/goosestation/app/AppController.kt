@@ -4,13 +4,17 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
@@ -34,6 +38,7 @@ import io.github.ilyalissoboi.goosestation.storage.GrantCheck
 import io.github.ilyalissoboi.goosestation.storage.MissingGrant
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.storage.SharedPreferencesStore
+import io.github.ilyalissoboi.goosestation.storage.VolumeMatch
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.storage.persistedGrants
 import io.github.ilyalissoboi.goosestation.ui.DataFolderCandidate
@@ -67,6 +72,9 @@ object AppController : NativeCallbacks {
     private const val PUSH_INTERVAL_MS = 2_000L
     private const val UI = "UI"
     private const val GRID_VIEW = "GameListGridView"
+    private const val CARD_REMOVED = "the SD card was removed"
+    private const val GAME_STOPPED_FOR_EJECT =
+        "The SD card was removed, so the game was stopped. Its memory cards are saved on this device."
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = MainScope()
@@ -81,13 +89,17 @@ object AppController : NativeCallbacks {
     private lateinit var prefs: FolderPrefs
     private lateinit var biosImporter: BiosImporter
     private var started = false
-    private var activity: Activity? = null
+    private val currentActivity = CurrentActivity<Activity>()
+    private val activity get() = currentActivity.current
     private var picker: FolderPicker? = null
     private var mirror: Mirror? = null
     private var mirrorStateJob: Job? = null
     private var pushTicker: Job? = null
     private var refreshJob: Job? = null
     private var biosJob: Job? = null
+
+    /** The volumes being ejected, or gone, since their eject: each is handled once, until it's mounted again. */
+    private val ejectedVolumes = HashSet<String>()
 
     /** The saved folders, as last loaded or saved. */
     var folders by mutableStateOf(SavedFolders(bios = null, games = emptyList(), data = null, setupComplete = false))
@@ -193,6 +205,7 @@ object AppController : NativeCallbacks {
         biosImporter = BiosImporter(appContext)
         // The core calls it for content:// paths from its first use on.
         ContentBridge.init(appContext)
+        watchVolumes(appContext)
         scope.launch {
             val (saved, images) = withContext(Dispatchers.IO) { prefs.load() to prefs.biosImages() }
             biosImages = images
@@ -200,23 +213,33 @@ object AppController : NativeCallbacks {
         }
     }
 
-    /** The activity, and its picker, registered in its onCreate; null when they're gone. */
+    /**
+     * The activity, and its picker, registered in its onCreate; null when they're gone. It replaces any other: the
+     * lifecycle calls below, from an activity that isn't this one, are ignored ([CurrentActivity]).
+     */
     fun attach(
         activity: Activity,
         folderPicker: FolderPicker,
     ) {
-        this.activity = activity
+        currentActivity.attach(activity)
         picker = folderPicker
     }
 
     fun detach(activity: Activity) {
-        if (this.activity !== activity) return
-        this.activity = null
+        if (!currentActivity.isCurrent(activity)) return
+        currentActivity.detach(activity)
         picker = null
     }
 
-    /** The activity is visible: pushes every 2 s, and on a resume, the grants are checked and the folder pulled. */
-    fun onStart() {
+    /** Whether [activity] is the one the app is shown in, the last attached. */
+    fun isCurrent(activity: Activity): Boolean = currentActivity.isCurrent(activity)
+
+    /**
+     * [activity] is visible: pushes every 2 s, and on a resume, the grants are checked and the folder pulled. Ignored
+     * unless it's the current activity.
+     */
+    fun onStart(activity: Activity) {
+        if (!isCurrent(activity)) return
         pushTicker?.cancel()
         pushTicker =
             scope.launch {
@@ -228,8 +251,12 @@ object AppController : NativeCallbacks {
         if (coreStarted) scope.launch { resume() }
     }
 
-    /** The activity is hidden: everything changed is pushed now, settled or not. */
-    fun onStop() {
+    /**
+     * [activity] is hidden: everything changed is pushed now, settled or not. Ignored unless it's the current
+     * activity: an old one stopping after its replacement started would end the new one's pushes.
+     */
+    fun onStop(activity: Activity) {
+        if (!isCurrent(activity)) return
         pushTicker?.cancel()
         pushTicker = null
         scope.launch { push(force = true) }
@@ -584,6 +611,71 @@ object AppController : NativeCallbacks {
         screen = Screen.Library
         if (!messageIsError) message = "Stopping the game…"
         NativeLibrary.shutdownGame()
+    }
+
+    // --- SD card removal ---
+
+    /**
+     * Listens, for the life of the process, for volumes going away (ejected, unmounted or pulled out: the first of
+     * these is handled) and coming back. The broadcasts come from the system, so the receiver isn't exported.
+     */
+    private fun watchVolumes(appContext: Context) {
+        val filter =
+            IntentFilter().apply {
+                addAction(Intent.ACTION_MEDIA_EJECT)
+                addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+                addAction(Intent.ACTION_MEDIA_BAD_REMOVAL)
+                addAction(Intent.ACTION_MEDIA_MOUNTED)
+                addDataScheme("file")
+            }
+        val receiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    context: Context,
+                    intent: Intent,
+                ) {
+                    val volumeId = intent.data?.path?.let(VolumeMatch::volumeIdOfMountPath) ?: return
+                    val mounted = intent.action == Intent.ACTION_MEDIA_MOUNTED
+                    Log.i(TAG, "${intent.action} for volume $volumeId")
+                    // Off onReceive, on the main thread, where the app's state lives.
+                    scope.launch { if (mounted) onVolumeMounted(volumeId) else onVolumeEjected(volumeId) }
+                }
+            }
+        ContextCompat.registerReceiver(appContext, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    /**
+     * The volume [volumeId] is going away, as [EjectPlan] says. Android kills a process that still has a file open
+     * on it about 5 s after the eject starts: a game on it, or one whose data folder is on it, has its memory cards
+     * saved to the working copy and is stopped, closing its disc, and the mirror stops using a data folder on it.
+     */
+    private suspend fun onVolumeEjected(volumeId: String) {
+        if (!ejectedVolumes.add(volumeId)) return
+        val actions = EjectPlan.of(volumeId, lastGamePath, folders.data, gameActive)
+        if (actions.isEmpty()) return
+        Log.i(TAG, "Volume $volumeId is going away: $actions")
+        if (EjectAction.ShowMessage in actions) showError(GAME_STOPPED_FOR_EJECT)
+        if (EjectAction.FlushAndStopGame in actions) {
+            // The shutdown saves the memory cards anyway, before it closes the disc. Pausing writes them at once
+            // (android_host.cpp), before anything else the core runs. onGameStopped() follows.
+            NativeLibrary.setPaused(true)
+            if (screen == Screen.Game) screen = Screen.Library
+            NativeLibrary.shutdownGame()
+        }
+        if (EjectAction.StopMirror in actions) mirror?.hold(CARD_REMOVED)
+    }
+
+    /**
+     * The volume [volumeId] is back: a data folder on it is mirrored again, starting with a push now, so the changes
+     * held back go out and the banner goes without waiting for the next tick.
+     */
+    private suspend fun onVolumeMounted(volumeId: String) {
+        if (!ejectedVolumes.remove(volumeId)) return
+        val data = folders.data ?: return
+        if (!VolumeMatch.treeOnVolume(data, volumeId)) return
+        val mirror = mirror ?: return
+        mirror.letGo()
+        push(force = false)
     }
 
     // --- The sequences ---

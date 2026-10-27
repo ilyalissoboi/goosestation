@@ -427,11 +427,15 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 
 ### Known limits
 
-- **Removing the SD card during a game played from it ends the app.** Android kills any process that still has a file
-  open on a card it unmounts, here the game's disc (`exited due to signal 2`, about 5 s after the eject began). A
-  memory card the game saved before then is safe in the working copy, and in the data folder if it could be reached;
-  a card write the game makes after the card is out, not yet saved to the file, is lost with the process. A later fix
-  can listen for the eject (`ACTION_MEDIA_EJECT`) and save the cards and stop the game in that window.
+- **Removing the SD card stops a game played from it.** Android kills any process that still has a file open on a
+  card it unmounts, about 5 s after the eject begins (`exited due to signal 2`), and a game holds its disc open. So
+  when the card that holds the running game, or the data folder, is ejected (`ACTION_MEDIA_EJECT`, or its unmount or
+  removal if no eject came first), the app saves the game's memory cards to the working copy straight away, rather
+  than 5 emulated seconds after the game's last write, stops the game, and goes back to the library: "The SD card was
+  removed, so the game was stopped. Its memory cards are saved on this device." A data folder on the card stops being
+  mirrored at once: the run under way stops before its next file, and the library shows the unreachable banner ("The
+  data folder isn't reachable (the SD card was removed)…"). Once the card is mounted again, the next run saves the
+  changes to it. With no game running, only the mirror stops. The Thor result below is from the build before this.
 - **In a game, a controller alone can't get back to the library.** B goes to the game, as Circle. Use the Back gesture,
   or Home. A later plan adds the Mode button and Select+Start.
 - **Leaving during a boot freezes the UI until the boot is done.** Destroying the surface waits for the CPU thread,
@@ -598,6 +602,7 @@ in upper case). The data folder was `GooseStation` on the SD card, then `GooseSt
 | Home, then reopen, mid-game | Pass. The game resumed where it was. |
 | Data folder unreachable | Pass. After `mv GooseStation GooseStation-away` on the SD card, the library showed "The data folder isn't reachable (Can't list 9C33-6BBD:GooseStation). Your changes are kept on this device and saved to the folder when it's back.", the log had `The data folder can't be reached.` every 2 s, and no new `GooseStation` folder appeared. A file added to the working copy reached the folder 2 s after it was moved back. |
 | SD card removed mid-game | Android ended the app. With the data folder and the game both on the card, the eject began at 10:29:20; the mirror logged the unreachable folder every 2 s; at 10:29:25.9 Android found the app holding the CHD open on the card and killed it (`exited due to signal 2`). The card saved at 10:29:13 was safe on both sides (`eda799a8…`). A card write the game made at 10:29:24, after the card was out and not yet saved to the file, was lost with the process. After the card went back in, the app cold-started and listed the games again. See "Known limits". |
+| SD card removed mid-game, with the eject handling | Pass, re-checked later on 2026-10-27 with the build that handles the eject. The data folder on internal storage, the CUE/BIN on the card. The game saved the card at 13:02:34.455; the folder's copy had a new time of 13:02:36.711, with the same MD5 (`8a250fe6…`). The eject began at 13:02:43.152, the app got `MEDIA_EJECT for volume 9C33-6BBD` 2 ms later, and `Game stopped.` came at 13:02:43.178, 26 ms after the eject began and 0.2 s before the card was unmounted. The process stayed the same (pid 14280): no kill. The library showed the message, `MEDIA_UNMOUNTED`/`MEDIA_BAD_REMOVAL` were handled once, and `MEDIA_MOUNTED` at 13:02:58.143 after the card went back in. |
 | Killed during a 200 MB push | Pass. `am kill` with `big.bin.goosetmp` at 56 MB left a 153 MB temporary and no `big.bin`. On the next start the leftover was cleared and the push began again; 13 s later `big.bin` was 209,715,200 bytes with the source's MD5 (`89f5951e…`) and no temporary. Moving the finished temporary into place took about 11 s on this card. |
 | A desktop `settings.ini` | Pass. A version 3 file with `Renderer = Software`, `SDL-0` bindings and Windows folder paths, pushed into the data folder: reopening logged `Reloaded the settings …`, `The settings are from another install (''), adapting them.` and `[MemoryCards] Directory 'C:\…\memcards' is outside the data folder, using 'memcards'.`; the result had no `Renderer` and no `PathNTSCJ`, `SearchDirectory = bios`, `Directory = memcards`, Android bindings on Port 1, `ShowFPS = true` kept, and this install's `InstallID`, which reached the folder with the next push. |
 | Changing the data folder | Pass. **Folders** → **Data folder** → **Change**, `GooseStation/data` on internal storage, **Copy this device's data into it**: the app restarted (the new process's core was ready 0.5 s after the old one ended) and the new folder held the working copy's seven files with the same MD5s. |
@@ -702,13 +707,16 @@ adb logcat -v time > thor.log
    - [ ] Move the data folder away (`adb shell mv /sdcard/GooseStation/data /sdcard/GooseStation/data-away`), then
      save on a memory card. The unreachable banner shows, and the save stays in the working copy. Move it back and
      reopen the app: the save reaches the folder, and the banner goes.
-   - [ ] Remove the SD card mid-game. Note what the game does, and what the library shows after it (a banner for
-     the games folder, or none). Nothing is lost: the memory card in the data folder has the game's last save. Put
-     the card back and reopen the app: the games are listed again.
+   - [ ] Remove the SD card mid-game, a moment after a memory card save. The game stops, and the library says "The
+     SD card was removed, so the game was stopped. Its memory cards are saved on this device."; the app isn't killed
+     (no `exited due to signal` in the log). Note what the library shows after it (a banner for the games folder, or
+     none). Nothing is lost: the memory card in the data folder has the game's last save. Put the card back and
+     reopen the app: the games are listed again.
    - [ ] Repeat with the data folder on the SD card. Make a `GooseStation/data` folder there, then **Folders** →
      **Data folder** → **Change**, pick it, and choose **Copy this device's data into it**; the app restarts on it.
-     Then remove the card mid-game: after the game, the unreachable banner shows, the working copy keeps the save,
-     and it reaches the folder once the card is back and the app reopened.
+     Then remove the card mid-game, a moment after a save: the game stops with the same message, the unreachable
+     banner shows "(the SD card was removed)", the working copy keeps the save, and it reaches the folder once the
+     card is back.
    - [ ] Kill the app during a large push. Make a 200 MB file (`adb shell "dd if=/dev/urandom
      of=/data/local/tmp/big.bin bs=1048576 count=200 && chmod 644 /data/local/tmp/big.bin"`), copy it in with
      `adb shell run-as io.github.ilyalissoboi.goosestation cp /data/local/tmp/big.bin files/data/screenshots/big.bin`,

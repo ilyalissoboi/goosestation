@@ -96,6 +96,9 @@ class Mirror(
     private var unsaved = 0
     private var closed = false
 
+    // Why runs are held ([hold]), or null when they aren't. Set from any thread, read before each action.
+    @Volatile private var heldReason: String? = null
+
     // The runs in a row that reached the folder but failed to save something to it: MirrorState.failedRuns.
     private var failedRuns = 0
 
@@ -132,6 +135,22 @@ class Mirror(
     suspend fun close() = withContext(dispatcher) { closed = true }
 
     /**
+     * Holds every run, for a data folder that is going away (its SD card is being ejected): the run under way stops
+     * before its next action, and every run until [letGo] does nothing. Each leaves the state
+     * [MirrorState.Unreachable], for [reason], and its changes for a later run. Returns once the run under way has
+     * stopped, so no file in the folder is open.
+     */
+    suspend fun hold(reason: String) {
+        heldReason = reason
+        withContext(dispatcher) { mutableState.value = MirrorState.Unreachable(reason) }
+    }
+
+    /** Ends a [hold]: the next run tries the folder again. */
+    fun letGo() {
+        heldReason = null
+    }
+
+    /**
      * One run of the actions [plan] gives; returns the working-copy paths it replaced or deleted, and whether it did
      * every action ([SyncResult.complete]); a closed mirror's run is incomplete, as it does nothing. [deferred] is
      * asked again before each working-copy replace or delete, so a path deferred since the plan was made (a game
@@ -145,6 +164,7 @@ class Mirror(
     ): SyncResult {
         // A run never suspends, so on the one-thread dispatcher it can't overlap close().
         if (closed) return SyncResult(emptySet(), complete = false)
+        if (held()) return SyncResult(emptySet(), complete = false)
         val layout = layout()
         // The listing recovers interrupted replaces first, so a file only a .goosebak holds isn't seen as deleted.
         val listings =
@@ -173,6 +193,7 @@ class Mirror(
             val actions = plan(folder, local, loadManifest(), layout)
             for ((done, action) in actions.withIndex()) {
                 currentCoroutineContext().ensureActive()
+                if (held()) return SyncResult(changed, complete = false)
                 mutableState.value = MirrorState.Syncing(done, actions.size, failedRuns)
                 // Its manifest entry is unchanged, so a later run plans it again. This narrows the race with a game
                 // starting, but can't close it: one may start while this action runs.
@@ -285,6 +306,13 @@ class Mirror(
             }
             is Forget -> manifest.without(path)
         }
+    }
+
+    /** Whether runs are held ([hold]); if they are, the state says so. */
+    private fun held(): Boolean {
+        val reason = heldReason ?: return false
+        mutableState.value = MirrorState.Unreachable(reason)
+        return true
     }
 
     private fun stateOf(file: File) = if (file.isFile) FileState(file.length(), file.lastModified()) else null

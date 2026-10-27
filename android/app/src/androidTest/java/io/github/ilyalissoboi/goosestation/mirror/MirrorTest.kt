@@ -7,6 +7,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.storage.TestDocumentsProvider
 import io.github.ilyalissoboi.goosestation.storage.TestTrees
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -676,6 +681,82 @@ class MirrorTest {
         assertFalse(local("memcards/b.mcd").exists())
         assertEquals(manifest, manifestFile.readText())
         assertFalse(pushed.complete)
+    }
+
+    @Test
+    fun aHeldMirrorRunsNothingUntilLetGo() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+        val mirror = mirror()
+        runBlocking { mirror.pull(never) }
+        val manifest = manifestFile.readText()
+
+        runBlocking { mirror.hold("the SD card was removed") }
+        assertEquals(MirrorState.Unreachable("the SD card was removed"), mirror.state.value)
+        writeLocal("memcards/a.mcd", CARD2)
+        File(folder, "memcards/b.mcd").writeBytes(CARD3)
+        val pushed = runBlocking { mirror.push(true, never).also { mirror.pull(never) } }
+
+        assertFalse(pushed.complete)
+        assertArrayEquals(CARD, File(folder, "memcards/a.mcd").readBytes())
+        assertFalse(local("memcards/b.mcd").exists())
+        assertEquals(manifest, manifestFile.readText())
+        assertEquals(MirrorState.Unreachable("the SD card was removed"), mirror.state.value)
+
+        mirror.letGo()
+        runBlocking { mirror.push(true, never).also { mirror.pull(never) } }
+
+        assertArrayEquals(CARD2, File(folder, "memcards/a.mcd").readBytes())
+        assertArrayEquals(CARD3, local("memcards/b.mcd").readBytes())
+        assertEquals(MirrorState.Idle, mirror.state.value)
+    }
+
+    @Test
+    fun holdingStopsTheRunUnderWayBeforeItsNextAction() {
+        createTree(mapOf("memcards/a.mcd" to CARD, "memcards/b.mcd" to CARD))
+        runBlocking { mirror().pull(never) }
+        writeLocal("memcards/a.mcd", CARD2)
+        writeLocal("memcards/b.mcd", CARD3)
+
+        // The hold comes while the first file is being written, as an eject does: it waits for that run to stop.
+        val store = SafFolderStore(context.contentResolver, tree)
+        lateinit var mirror: Mirror
+        var hold: Job? = null
+        val holding =
+            object : FolderStore by store {
+                override fun replace(
+                    path: String,
+                    source: File,
+                    expected: FileState?,
+                ): FileState {
+                    if (hold == null) {
+                        hold =
+                            CoroutineScope(Dispatchers.Default).launch(start = CoroutineStart.UNDISPATCHED) {
+                                mirror.hold("the SD card was removed")
+                            }
+                    }
+                    return store.replace(path, source, expected)
+                }
+            }
+        mirror = Mirror(holding, workingCopy, manifestFile, System::currentTimeMillis) { LAYOUT }
+        val pushed = runBlocking { mirror.push(true, never) }
+        runBlocking { hold!!.join() }
+
+        assertFalse(pushed.complete)
+        // One file went out, whole; the other wasn't started.
+        val a = File(folder, "memcards/a.mcd").readBytes()
+        val b = File(folder, "memcards/b.mcd").readBytes()
+        assertTrue(
+            (a.contentEquals(CARD2) && b.contentEquals(CARD)) || (a.contentEquals(CARD) && b.contentEquals(CARD3)),
+        )
+        assertNoTemporaries()
+        assertEquals(MirrorState.Unreachable("the SD card was removed"), mirror.state.value)
+
+        // The file that went out is recorded, so once let go, the next push sends only the other one.
+        mirror.letGo()
+        runBlocking { mirror.push(true, never) }
+        assertArrayEquals(CARD2, File(folder, "memcards/a.mcd").readBytes())
+        assertArrayEquals(CARD3, File(folder, "memcards/b.mcd").readBytes())
+        assertEquals(MirrorState.Idle, mirror.state.value)
     }
 
     @Test

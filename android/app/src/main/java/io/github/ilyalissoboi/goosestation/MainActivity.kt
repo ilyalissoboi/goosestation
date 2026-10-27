@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        AppController.onStart()
+        AppController.onStart(this)
     }
 
     override fun onResume() {
@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        AppController.onStop()
+        AppController.onStop(this)
         super.onStop()
     }
 
@@ -123,7 +123,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing && inGame) AppController.leaveGame()
+        // Not an old activity destroyed after its replacement started: the game would be the new one's.
+        if (isFinishing && inGame && AppController.isCurrent(this)) AppController.leaveGame()
         AppController.detach(this)
         super.onDestroy()
     }

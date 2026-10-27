@@ -20,6 +20,7 @@
 #include "util/android_input_source.h"
 #include "util/gpu_device.h"
 #include "util/imgui_fullscreen.h"
+#include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
 #include "util/window_info.h"
@@ -34,6 +35,7 @@
 #include "fmt/format.h"
 
 #include <android/native_window.h>
+#include <sys/system_properties.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -82,6 +84,7 @@ static void LoadFolders(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
 static void AddControllerToPort1(const std::string& identifier);
+static bool IsVulkanRenderer(GPURenderer renderer);
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
@@ -119,6 +122,9 @@ static std::optional<std::string> s_pending_boot_path;
 static std::string s_boot_path;
 static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
+
+// Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
+static std::atomic_bool s_vulkan_failed{false};
 } // namespace AndroidHost
 
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
@@ -393,6 +399,20 @@ void AndroidHost::ApplySettings()
     return;
 
   EmuThread::RunOnThread([]() { System::ApplySettings(false); }, true);
+}
+
+bool AndroidHost::IsVulkanFailed()
+{
+  return s_vulkan_failed.load();
+}
+
+bool AndroidHost::IsVulkanRenderer(GPURenderer renderer)
+{
+  // As System::CreateGPU() picks the device's API: Software (and Automatic) runs on the preferred API.
+  if (renderer == GPURenderer::Automatic)
+    renderer = Settings::GetAutomaticRenderer();
+
+  return (Settings::GetRenderAPIForRenderer(renderer) == RenderAPI::Vulkan);
 }
 
 std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
@@ -903,6 +923,25 @@ void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& loc
 
     g_settings.cpu_fastmem_mode = CPUFastmemMode::Disabled;
   }
+
+  // Once Vulkan has failed, every renderer on it uses OpenGL ES instead, so later boots don't try it again. The
+  // software renderer is left as it is.
+  if (AndroidHost::s_vulkan_failed.load() && g_settings.gpu_renderer != GPURenderer::Software &&
+      AndroidHost::IsVulkanRenderer(g_settings.gpu_renderer))
+  {
+    g_settings.gpu_renderer = GPURenderer::HardwareOpenGL;
+  }
+}
+
+bool Host::OnVulkanDeviceFailed(const Error& error)
+{
+  WARNING_LOG("Vulkan didn't start ({}), using OpenGL ES until the app restarts.", error.GetDescription());
+  AndroidHost::s_vulkan_failed.store(true);
+  if (g_settings.gpu_renderer != GPURenderer::Software)
+    g_settings.gpu_renderer = GPURenderer::HardwareOpenGL;
+  Host::AddOSDMessage("Vulkan didn't start on this device, so GooseStation is using OpenGL ES.",
+                      Host::OSD_WARNING_DURATION);
+  return true;
 }
 
 void Host::CheckForSettingsChanges(const Settings& old_settings)
@@ -1081,6 +1120,22 @@ void Host::FrameDone()
 
 std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)
 {
+  // Test only, for the OpenGL ES fallback: with debug.goosestation.fail_vulkan = 1 (adb shell setprop), creating a
+  // Vulkan device fails until the fallback has happened. Set the property before starting a game: any Vulkan device
+  // created after that fails, such as a switch to Vulkan during a game. Surface changes keep the device, so they don't
+  // come here with recreate_window. The API is worked out from the settings, as System::CreateGPU() does, because
+  // asking the device isn't safe yet: OpenGLDevice::GetRenderAPI() reads a context it hasn't created.
+  if (recreate_window && !AndroidHost::s_vulkan_failed.load())
+  {
+    char value[PROP_VALUE_MAX] = {};
+    if (__system_property_get("debug.goosestation.fail_vulkan", value) > 0 && std::strcmp(value, "1") == 0 &&
+        AndroidHost::IsVulkanRenderer(g_settings.gpu_renderer))
+    {
+      ERROR_LOG("Failing the Vulkan device for testing (debug.goosestation.fail_vulkan).");
+      return std::nullopt;
+    }
+  }
+
   WindowInfo wi;
   if (!AndroidHost::s_window)
   {

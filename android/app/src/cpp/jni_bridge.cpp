@@ -324,6 +324,11 @@ NATIVE_LIBRARY_FUNCTION(void, applySettings)(JNIEnv*, jobject)
   AndroidHost::ApplySettings();
 }
 
+NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)
+{
+  return AndroidHost::IsVulkanFailed() ? JNI_TRUE : JNI_FALSE;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)
 {
   std::vector<std::string> names;

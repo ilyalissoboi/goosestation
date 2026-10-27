@@ -47,6 +47,12 @@ object NativeLibrary {
     external fun applySettings()
 
     /**
+     * Whether Vulkan didn't start in this process, so games use OpenGL ES until the app restarts. Doesn't need
+     * [initialize].
+     */
+    external fun isVulkanFailed(): Boolean
+
+    /**
      * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game
      * Native)`, `Stretch To Fill` and `4:3`. Doesn't need [initialize].
      */

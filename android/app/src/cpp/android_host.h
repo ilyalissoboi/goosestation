@@ -44,6 +44,10 @@ void SetIntSetting(const char* section, const char* key, s32 value);
 /// Applies the settings: System::ApplySettings(false). Blocks until the CPU thread has done so.
 void ApplySettings();
 
+/// Whether the Vulkan device failed to start in this process, so games use OpenGL ES until the app restarts. From any
+/// thread.
+bool IsVulkanFailed();
+
 /// Where the memory cards are, relative to the data root (RelativeToDataRoot()): EmuFolders::MemoryCards with a
 /// trailing '/' (empty if it's the data root), then the card files: [MemoryCards] Card1Path and Card2Path from
 /// settings.ini and from every EmuFolders::GameSettings *.ini (which override them for a game), resolved as the core

@@ -17,6 +17,7 @@ import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
+import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.ComingSoonScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
@@ -24,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
@@ -75,7 +77,22 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                    Screen.Bios -> ComingSoonScreen("BIOS", onBack = AppController::closeSettingsPage)
+                    Screen.Bios -> {
+                        val bios = AppController.bios
+                        if (bios == null) {
+                            SettingsLoadingPage("BIOS", onBack = AppController::closeSettingsPage)
+                        } else {
+                            BiosScreen(
+                                images = bios.images,
+                                auto = bios.auto,
+                                overrides = bios.overrides,
+                                fastBoot = bios.fastBoot,
+                                onSetOverride = AppController::setBiosOverride,
+                                onFastBoot = AppController::setFastBoot,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
                     Screen.Controllers -> ComingSoonScreen("Controllers", onBack = AppController::closeSettingsPage)
                     Screen.Folders -> {
                         val mirrorState by AppController.mirrorState.collectAsState()

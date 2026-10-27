@@ -276,6 +276,14 @@ void AndroidHost::SetGameFolders(std::vector<std::string> tree_uris)
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
 }
 
+std::optional<std::string> AndroidHost::GetBIOSDirectory()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  return s_bios_dir;
+}
+
 void AndroidHost::RefreshGameList(bool invalidate_cache)
 {
   if (!s_initialized)

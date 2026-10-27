@@ -16,6 +16,11 @@
     <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, long, long, java.lang.String);
 }
 
+# jni_bridge.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().
+-keep class io.github.ilyalissoboi.goosestation.core.BiosImage {
+    <init>(java.lang.String, java.lang.String, java.lang.String);
+}
+
 # content_bridge.cpp finds ContentBridge's static methods and NativeDocument's fields by name in JNI_OnLoad, and calls
 # them only from native code.
 -keep class io.github.ilyalissoboi.goosestation.storage.ContentBridge {

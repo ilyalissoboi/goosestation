@@ -26,6 +26,10 @@ import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
+import io.github.ilyalissoboi.goosestation.settings.BiosFastBoot
+import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
+import io.github.ilyalissoboi.goosestation.settings.BiosPage
+import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
@@ -157,6 +161,13 @@ object AppController : NativeCallbacks {
     /** Vulkan didn't start in this run, as the core said when [graphics] were read. */
     var vulkanFailed by mutableStateOf(false)
         private set
+
+    /** The BIOS page's images and settings, as read on opening it; null until they are. */
+    var bios by mutableStateOf<BiosPage?>(null)
+        private set
+
+    /** An import copied images before the core started: the overrides they leave stale are dropped once it has. */
+    private var biosOverridesToCheck = false
 
     /** initialize() succeeded: from then on, starts are resumes. */
     private var coreStarted = false
@@ -299,12 +310,16 @@ object AppController : NativeCallbacks {
 
     // --- Setup ---
 
-    /** Copies the BIOS images in [treeUri], and remembers what it found, if anything. */
+    /**
+     * Copies the BIOS images in [treeUri], and remembers what it found, if anything. A region whose image isn't among
+     * the new copies goes back to Automatic, once the core has started ([dropStaleBiosOverrides]).
+     */
     suspend fun importBios(treeUri: String): BiosImportResult {
         val result = biosImporter.import(treeUri)
         if (result.images.isNotEmpty()) {
             biosImages = result.images
             withContext(prefsDispatcher) { prefs.saveBiosImages(result.images) }
+            if (coreStarted) dropStaleBiosOverrides() else biosOverridesToCheck = true
         }
         return result
     }
@@ -429,21 +444,38 @@ object AppController : NativeCallbacks {
      */
     fun openSettingsPage(entry: SettingsEntry) {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
-        if (entry == SettingsEntry.Graphics) {
-            graphics = null
-            scope.launch {
-                val loaded =
-                    withContext(coreDispatcher) {
-                        Triple(
-                            GraphicsSettings.load(NativeCoreSettings),
-                            NativeLibrary.getAspectRatioNames().toList(),
-                            NativeLibrary.isVulkanFailed(),
-                        )
-                    }
-                aspectRatioNames = loaded.second
-                vulkanFailed = loaded.third
-                graphics = loaded.first
+        when (entry) {
+            SettingsEntry.Graphics -> {
+                graphics = null
+                scope.launch {
+                    val loaded =
+                        withContext(coreDispatcher) {
+                            Triple(
+                                GraphicsSettings.load(NativeCoreSettings),
+                                NativeLibrary.getAspectRatioNames().toList(),
+                                NativeLibrary.isVulkanFailed(),
+                            )
+                        }
+                    aspectRatioNames = loaded.second
+                    vulkanFailed = loaded.third
+                    graphics = loaded.first
+                }
             }
+            SettingsEntry.Bios -> {
+                bios = null
+                scope.launch {
+                    bios =
+                        withContext(coreDispatcher) {
+                            BiosPage(
+                                images = NativeLibrary.getBiosImages().toList(),
+                                auto = BiosRegion.entries.associateWith { NativeLibrary.getAutoBios(it.coreName) },
+                                overrides = BiosOverrides.load(NativeCoreSettings),
+                                fastBoot = BiosFastBoot.load(NativeCoreSettings),
+                            )
+                        }
+                }
+            }
+            SettingsEntry.Controllers, SettingsEntry.Folders -> {}
         }
         screen = Screen.entries.first { it.page == entry }
     }
@@ -467,6 +499,31 @@ object AppController : NativeCallbacks {
         graphics = new
         scope.launch(coreDispatcher) {
             new.save(NativeCoreSettings, old)
+            NativeLibrary.applySettings()
+        }
+    }
+
+    /** Sets [region]'s BIOS image to [fileName], or back to Automatic with null, then has the core apply it. */
+    fun setBiosOverride(
+        region: BiosRegion,
+        fileName: String?,
+    ) {
+        val page = bios ?: return
+        val overrides = if (fileName == null) page.overrides - region else page.overrides + (region to fileName)
+        // Now, so a second change made before this one is saved starts from it.
+        bios = page.copy(overrides = overrides)
+        scope.launch(coreDispatcher) {
+            BiosOverrides.set(NativeCoreSettings, region, fileName)
+            NativeLibrary.applySettings()
+        }
+    }
+
+    /** Turns fast boot on or off, then has the core apply it. */
+    fun setFastBoot(on: Boolean) {
+        val page = bios ?: return
+        bios = page.copy(fastBoot = on)
+        scope.launch(coreDispatcher) {
+            BiosFastBoot.save(NativeCoreSettings, on)
             NativeLibrary.applySettings()
         }
     }
@@ -963,10 +1020,27 @@ object AppController : NativeCallbacks {
         Log.i(TAG, "The core is ready.")
         coreStarted = true
         ready = true
+        if (biosOverridesToCheck) dropStaleBiosOverrides()
         if (!messageIsError) message = null
         // Reported once the core takes input; it keeps connections made before then anyway.
         controllers = ControllerInput(context).also { it.start() }
         return true
+    }
+
+    /**
+     * Sets each region whose image filesDir/bios no longer has back to Automatic, then has the core apply that, on
+     * [coreDispatcher]. Only once the core has started: it reads and writes the core's settings.ini.
+     */
+    private suspend fun dropStaleBiosOverrides() {
+        biosOverridesToCheck = false
+        withContext(coreDispatcher) {
+            val copies = File(context.filesDir, "bios").list()?.toList().orEmpty()
+            val stale = BiosOverrides.stale(BiosOverrides.load(NativeCoreSettings), copies)
+            if (stale.isEmpty()) return@withContext
+            Log.i(TAG, "Back to Automatic, as the BIOS folder no longer has their image: $stale")
+            stale.forEach { BiosOverrides.set(NativeCoreSettings, it, null) }
+            NativeLibrary.applySettings()
+        }
     }
 
     // On coreDispatcher, once the core has read settings.ini.

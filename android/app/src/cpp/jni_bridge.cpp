@@ -41,6 +41,8 @@ jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
 jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
+jclass s_bios_image_class = nullptr;
+jmethodID s_bios_image_constructor = nullptr;
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -205,6 +207,23 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     env->GetMethodID(s_game_entry_class, "<init>",
                      "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;)V");
   if (!s_game_entry_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass bios_image_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/BiosImage");
+  if (!bios_image_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_bios_image_class = static_cast<jclass>(env->NewGlobalRef(bios_image_class));
+  env->DeleteLocalRef(bios_image_class);
+  s_bios_image_constructor =
+    env->GetMethodID(s_bios_image_class, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+  if (!s_bios_image_constructor)
   {
     ClearException(env);
     return JNI_ERR;
@@ -397,6 +416,71 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring 
   }
 
   return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getBiosImages)(JNIEnv* env, jobject)
+{
+  const std::optional<std::string> dir = AndroidHost::GetBIOSDirectory();
+  const std::vector<BIOSImport::Image> images =
+    dir.has_value() ? BIOSImport::ListImages(dir.value()) : std::vector<BIOSImport::Image>();
+
+  // Kotlin takes the array as never null: a failure gives an empty one.
+  const auto empty_result = [env]() {
+    jobjectArray empty = env->NewObjectArray(0, s_bios_image_class, nullptr);
+    ClearException(env);
+    return empty;
+  };
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(images.size()), s_bios_image_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return empty_result();
+  }
+
+  for (size_t i = 0; i < images.size(); i++)
+  {
+    const BIOSImport::Image& image = images[i];
+    jstring file_name = ToJString(env, image.file_name);
+    jstring description = ToJString(env, image.description);
+    jstring region = ToJString(env, image.region);
+    jobject entry = nullptr;
+    if (file_name && description && region)
+    {
+      entry = env->NewObject(s_bios_image_class, s_bios_image_constructor, file_name, description, region);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(file_name), static_cast<jobject>(description),
+                        static_cast<jobject>(region)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass the BIOS image '{}' to Java.", image.file_name);
+      env->DeleteLocalRef(result);
+      return empty_result();
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getAutoBios)(JNIEnv* env, jobject, jstring region)
+{
+  const std::optional<std::string> dir = AndroidHost::GetBIOSDirectory();
+  if (!dir.has_value())
+    return nullptr;
+
+  const std::optional<std::string> description = BIOSImport::FindAutomaticImage(FromJString(env, region), dir.value());
+  return description.has_value() ? ToJString(env, description.value()) : nullptr;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, refreshGameList)(JNIEnv*, jobject, jboolean invalidate_cache)

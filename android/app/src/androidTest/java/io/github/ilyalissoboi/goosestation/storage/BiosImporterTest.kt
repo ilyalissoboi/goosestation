@@ -5,6 +5,9 @@ package io.github.ilyalissoboi.goosestation.storage
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.core.Resources
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -104,6 +107,34 @@ class BiosImporterTest {
         assertEquals(1, result.images.size)
         assertTrue(result.images[0], result.images[0].contains("SCPH-5500"))
         assertArrayEquals(bytes, File(biosDir, "ps-30j.bin").readBytes())
+    }
+
+    @Test
+    fun realBiosIsListed() {
+        val bytes = realBios()
+        val dataRoot = File(context.cacheDir, "bios-listing").apply { deleteRecursively() }.apply { mkdirs() }
+        val resources = Resources.extract(context)
+        assertTrue(NativeLibrary.initialize(dataRoot.path, resources.path, biosDir.path, "test-install"))
+        val tree = TestTrees.create(context, mapOf("ps-30j.bin" to bytes, "readme.txt" to "hi".toByteArray()))
+        assertEquals(1, runBlocking { BiosImporter(context).import(tree) }.images.size)
+
+        val images = NativeLibrary.getBiosImages().toList()
+
+        assertEquals(listOf("ps-30j.bin"), images.map(BiosImage::fileName))
+        assertTrue(images[0].description, images[0].description.contains("SCPH-5500"))
+        assertEquals("NTSC-J", images[0].region)
+        assertEquals(images[0].description, NativeLibrary.getAutoBios("NTSC-J"))
+        // FindBIOSImageInDirectory() keeps the first known image it finds, and only passes over a later one when the
+        // one it has matches the region: with no PAL image, a PAL console gets the NTSC-J one (and boots with a
+        // warning).
+        assertEquals(images[0].description, NativeLibrary.getAutoBios("PAL"))
+        dataRoot.deleteRecursively()
+    }
+
+    @Test
+    fun nothingIsListedBeforeInitialize() {
+        assertEquals(0, NativeLibrary.getBiosImages().size)
+        assertNull(NativeLibrary.getAutoBios("NTSC-U"))
     }
 
     /** The real BIOS's bytes; skips the test if it wasn't pushed. */

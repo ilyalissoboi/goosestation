@@ -65,6 +65,10 @@ std::optional<std::vector<std::string>> GetDataFolders();
 /// itself, or before Initialize() succeeded.
 std::optional<std::string> GetCacheFolder();
 
+/// The folder the BIOS images are read from, EmuFolders::Bios: Initialize()'s bios_dir, canonicalized, whatever
+/// settings.ini says. From any thread. nullopt before Initialize() succeeded.
+std::optional<std::string> GetBIOSDirectory();
+
 /// Scans the game folders: GameList::Refresh(). Blocks, on the calling thread, which should be the JVM's; one refresh
 /// runs at a time. Does nothing before Initialize() succeeded.
 void RefreshGameList(bool invalidate_cache);

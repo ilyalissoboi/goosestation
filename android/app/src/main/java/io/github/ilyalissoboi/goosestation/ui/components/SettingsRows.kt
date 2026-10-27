@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui.components
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -85,6 +86,27 @@ fun SettingsPage(
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
         CompositionLocalProvider(LocalOpenRow provides openRow) { content() }
+    }
+}
+
+/**
+ * A [SettingsPage] for the moment its settings take to read: [title] and a line saying so. The line holds the focus,
+ * with nothing to activate, so B and Back reach the page as on any other ([onBack]).
+ */
+@Composable
+fun SettingsLoadingPage(
+    title: String,
+    onBack: () -> Unit,
+) {
+    val holder = remember { FocusRequester() }
+    LaunchedEffect(Unit) { holder.requestFocus() }
+    SettingsPage(title, onBack = onBack) {
+        Text(
+            "Reading the settings…",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp).focusRequester(holder).focusable(),
+        )
     }
 }
 

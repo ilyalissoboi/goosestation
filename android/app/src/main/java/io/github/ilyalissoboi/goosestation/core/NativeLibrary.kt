@@ -89,6 +89,19 @@ object NativeLibrary {
     external fun importBios(sourceTreeUri: String, destDir: String): Array<String>?
 
     /**
+     * The BIOS images the core recognises among the app's copies (the [initialize] biosDir), in file name order.
+     * Empty before [initialize]. It reads every image, so call it off the main thread.
+     */
+    external fun getBiosImages(): Array<BiosImage>
+
+    /**
+     * The description of the image the core picks for [region] (`NTSC-U`, `NTSC-J` or `PAL`) when none is set for it:
+     * one made for the region if there is one, or else another. Null if there's none it recognises, or before
+     * [initialize]. It reads every image, so call it off the main thread.
+     */
+    external fun getAutoBios(region: String): String?
+
+    /**
      * Scans the game folders ([setGameFolders]) for games, reading each folder afresh. A file whose path and modified
      * time are in the game list cache isn't opened again, unless [invalidateCache]. Does nothing before [initialize].
      * It blocks while it reads the folders, so call it on `Dispatchers.IO`.

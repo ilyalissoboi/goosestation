@@ -50,7 +50,8 @@ data class DataFolderCandidate(
 
 /**
  * The folder settings: the BIOS folder and the images last imported ([biosImages]), the games folders, and the data
- * folder with its [dataStatus]. The BIOS **Change** is focused on opening; B or Back go back ([onBack]).
+ * folder with its [dataStatus], a page of the settings. The BIOS **Change** is focused on opening; B or Back go back
+ * to the settings hub ([onBack]).
  *
  * [onChangeBios] picks and imports another BIOS folder, [onRescanBios] imports the same one again, [onAddGames] picks
  * a games folder to add, and [onSetGames] takes the games folders as they're to be. [onChangeData] picks a new data

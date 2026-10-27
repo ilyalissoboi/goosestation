@@ -40,12 +40,12 @@ import io.github.ilyalissoboi.goosestation.ui.components.Banner
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 
 /**
- * The games, as a cover grid ([gridView]) or a list, under a top bar of Grid/List ([onToggleView]), Folders
- * ([onOpenFolders]) and Refresh ([onRefresh]). [banners] and [message] sit under the bar: prompts to pick a folder
+ * The games, as a cover grid ([gridView]) or a list, under a top bar of Grid/List ([onToggleView]), Settings
+ * ([onOpenSettings]) and Refresh ([onRefresh]). [banners] and [message] sit under the bar: prompts to pick a folder
  * again, the latest error ([isError]), or what the app is doing.
  *
- * On opening, Folders has focus when [focusFolders] (coming back from the folder settings), or else the game at
- * [focusPath] (the last one launched), or else the first game; with no games, Folders has it. Toggling the view keeps
+ * On opening, Settings has focus when [focusSettings] (coming back from the settings), or else the game at
+ * [focusPath] (the last one launched), or else the first game; with no games, Settings has it. Toggling the view keeps
  * the focused game. A, Enter or a tap call [onStartGame].
  */
 @Composable
@@ -56,25 +56,25 @@ fun LibraryScreen(
     message: String?,
     isError: Boolean,
     onToggleView: () -> Unit,
-    onOpenFolders: () -> Unit,
+    onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
     onStartGame: (GameEntry) -> Unit,
     focusPath: String?,
-    focusFolders: Boolean = false,
+    focusSettings: Boolean = false,
 ) {
-    val folders = remember { FocusRequester() }
+    val settings = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     val focus = remember { GameFocus() }
     val hasGames = games.isNotEmpty()
     // Only on opening: a toggle, or games coming in, focus a game as usual.
-    var foldersFirst by remember { mutableStateOf(focusFolders) }
+    var settingsFirst by remember { mutableStateOf(focusSettings) }
 
     // Not on every new list, which a resume brings: only on opening, on a toggle, and once there are games.
     LaunchedEffect(gridView, hasGames) {
-        if (!hasGames || foldersFirst) {
-            foldersFirst = false
-            folders.requestFocus()
+        if (!hasGames || settingsFirst) {
+            settingsFirst = false
+            settings.requestFocus()
             return@LaunchedEffect
         }
         val index =
@@ -103,7 +103,7 @@ fun LibraryScreen(
                 modifier = Modifier.weight(1f),
             )
             ActionButton(if (gridView) "List" else "Grid", onClick = onToggleView)
-            ActionButton("Folders", onClick = onOpenFolders, modifier = Modifier.focusRequester(folders))
+            ActionButton("Settings", onClick = onOpenSettings, modifier = Modifier.focusRequester(settings))
             ActionButton("Refresh", onClick = onRefresh)
         }
 

@@ -26,6 +26,8 @@ import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
+import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
@@ -42,6 +44,7 @@ import io.github.ilyalissoboi.goosestation.storage.VolumeMatch
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.storage.persistedGrants
 import io.github.ilyalissoboi.goosestation.ui.DataFolderCandidate
+import io.github.ilyalissoboi.goosestation.ui.SettingsEntry
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,8 +59,20 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.system.exitProcess
 
-/** The app's screens. */
-enum class Screen { Setup, Library, Folders, Game }
+/** The app's screens: the settings hub, and its pages ([Screen.page]), open from the library. */
+enum class Screen(
+    /** The hub's entry for this page of the settings; null for any other screen. */
+    val page: SettingsEntry? = null,
+) {
+    Setup,
+    Library,
+    Settings,
+    Controllers(SettingsEntry.Controllers),
+    Graphics(SettingsEntry.Graphics),
+    Bios(SettingsEntry.Bios),
+    Folders(SettingsEntry.Folders),
+    Game,
+}
 
 /**
  * The core, the folders, the mirror and what the app shows, for the life of the process, so a recreated activity
@@ -123,8 +138,24 @@ object AppController : NativeCallbacks {
     var dataChange by mutableStateOf<String?>(null)
         private set
 
-    /** The library focuses its Folders button when it opens, as it does coming back from the folder settings. */
-    var focusFolders by mutableStateOf(false)
+    /** The library focuses its Settings button when it opens, as it does coming back from the settings. */
+    var focusSettings by mutableStateOf(false)
+        private set
+
+    /** The hub's entry for the page last left, which the hub focuses; null on opening it from the library. */
+    var settingsEntry by mutableStateOf<SettingsEntry?>(null)
+        private set
+
+    /** The Graphics page's settings, as loaded on opening it; null until they are. */
+    var graphics by mutableStateOf<GraphicsSettings?>(null)
+        private set
+
+    /** The core's `[Display] AspectRatio` names, read with [graphics]. */
+    var aspectRatioNames by mutableStateOf(emptyList<String>())
+        private set
+
+    /** Vulkan didn't start in this run, as the core said when [graphics] were read. */
+    var vulkanFailed by mutableStateOf(false)
         private set
 
     /** initialize() succeeded: from then on, starts are resumes. */
@@ -373,15 +404,78 @@ object AppController : NativeCallbacks {
         refreshJob = scope.launch { refreshLibrary(showProgress = true) }
     }
 
-    fun openFolders() {
-        if (screen == Screen.Library) screen = Screen.Folders
+    // --- The settings ---
+
+    /** Opens the settings hub, from the library. */
+    fun openSettings() {
+        if (screen != Screen.Library) return
+        settingsEntry = null
+        screen = Screen.Settings
+    }
+
+    /** Back to the library, which focuses its Settings button. */
+    fun closeSettings() {
+        if (screen != Screen.Settings) return
+        focusSettings = true
+        screen = Screen.Library
+    }
+
+    /** The settings pages that need the core can open: it has started, and no game is under way. */
+    val settingsReady get() = ready && !gameActive
+
+    /**
+     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. The Graphics page shows once its
+     * settings are read, on [coreDispatcher].
+     */
+    fun openSettingsPage(entry: SettingsEntry) {
+        if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
+        if (entry == SettingsEntry.Graphics) {
+            graphics = null
+            scope.launch {
+                val loaded =
+                    withContext(coreDispatcher) {
+                        Triple(
+                            GraphicsSettings.load(NativeCoreSettings),
+                            NativeLibrary.getAspectRatioNames().toList(),
+                            NativeLibrary.isVulkanFailed(),
+                        )
+                    }
+                aspectRatioNames = loaded.second
+                vulkanFailed = loaded.third
+                graphics = loaded.first
+            }
+        }
+        screen = Screen.entries.first { it.page == entry }
+    }
+
+    /** Back from a settings page to the hub, which focuses the page's entry. */
+    fun closeSettingsPage() {
+        val page = screen.page ?: return
+        if (page == SettingsEntry.Folders) return closeFolders()
+        settingsEntry = page
+        screen = Screen.Settings
+    }
+
+    /**
+     * Saves the Graphics page's change to [new], only the fields that changed, then has the core apply it, on
+     * [coreDispatcher]. The mirror's next push takes settings.ini to the data folder.
+     */
+    fun changeGraphics(new: GraphicsSettings) {
+        val old = graphics ?: return
+        if (new == old) return
+        // Now, so a second change made before this one is saved starts from it.
+        graphics = new
+        scope.launch(coreDispatcher) {
+            new.save(NativeCoreSettings, old)
+            NativeLibrary.applySettings()
+        }
     }
 
     fun closeFolders() {
         if (screen != Screen.Folders || dataChange != null) return
         cancelDataChange()
-        focusFolders = true
-        screen = Screen.Library
+        settingsEntry = SettingsEntry.Folders
+        screen = Screen.Settings
     }
 
     // --- The folder settings ---
@@ -600,7 +694,7 @@ object AppController : NativeCallbacks {
     fun startGame(game: GameEntry) {
         if (!ready || gameActive) return
         lastGamePath = game.path
-        focusFolders = false
+        focusSettings = false
         message = null
         messageIsError = false
         gameActive = true

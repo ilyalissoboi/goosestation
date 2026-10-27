@@ -74,7 +74,7 @@ class LibraryScreenTest {
         games: List<GameEntry> = this.games,
         gridView: () -> Boolean = { true },
         focusPath: String? = null,
-        focusFolders: Boolean = false,
+        focusSettings: Boolean = false,
     ) {
         rule.setContent {
             GooseStationTheme {
@@ -86,11 +86,11 @@ class LibraryScreenTest {
                         message = null,
                         isError = false,
                         onToggleView = {},
-                        onOpenFolders = {},
+                        onOpenSettings = {},
                         onRefresh = {},
                         onStartGame = { started += it },
                         focusPath = focusPath,
-                        focusFolders = focusFolders,
+                        focusSettings = focusSettings,
                     )
                 }
             }
@@ -155,7 +155,7 @@ class LibraryScreenTest {
 
         press(Key.DirectionUp)
 
-        rule.onNode(isFocused()).assert(hasText("List") or hasText("Folders") or hasText("Refresh"))
+        rule.onNode(isFocused()).assert(hasText("List") or hasText("Settings") or hasText("Refresh"))
     }
 
     @Test
@@ -171,17 +171,17 @@ class LibraryScreenTest {
     }
 
     @Test
-    fun noGamesFocusesFolders() {
+    fun noGamesFocusesSettings() {
         show(games = emptyList())
 
         rule.onNodeWithText("No games found in your games folders.").assertExists()
-        rule.onNodeWithText("Folders").assertIsFocused()
+        rule.onNodeWithText("Settings").assertIsFocused()
     }
 
     @Test
-    fun comingBackFromTheFoldersFocusesFolders() {
-        show(focusPath = entry(25).path, focusFolders = true)
+    fun comingBackFromTheSettingsFocusesSettings() {
+        show(focusPath = entry(25).path, focusSettings = true)
 
-        rule.onNodeWithText("Folders").assertIsFocused()
+        rule.onNodeWithText("Settings").assertIsFocused()
     }
 }

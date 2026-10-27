@@ -17,10 +17,14 @@ import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
+import io.github.ilyalissoboi.goosestation.ui.ComingSoonScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
+import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 class MainActivity : ComponentActivity() {
@@ -49,6 +53,30 @@ class MainActivity : ComponentActivity() {
                             onFinish = AppController::finishSetup,
                         )
                     Screen.Game -> GameScreen(onBack = AppController::leaveGame)
+                    Screen.Settings ->
+                        SettingsScreen(
+                            focusEntry = AppController.settingsEntry,
+                            coreReady = AppController.settingsReady,
+                            onOpen = AppController::openSettingsPage,
+                            onBack = AppController::closeSettings,
+                        )
+                    Screen.Graphics -> {
+                        val graphics = AppController.graphics
+                        if (graphics == null) {
+                            // For the moment it takes to read them.
+                            SettingsPage("Graphics", onBack = AppController::closeSettingsPage) {}
+                        } else {
+                            GraphicsScreen(
+                                settings = graphics,
+                                aspectNames = AppController.aspectRatioNames,
+                                vulkanFailed = AppController.vulkanFailed,
+                                onChange = AppController::changeGraphics,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
+                    Screen.Bios -> ComingSoonScreen("BIOS", onBack = AppController::closeSettingsPage)
+                    Screen.Controllers -> ComingSoonScreen("Controllers", onBack = AppController::closeSettingsPage)
                     Screen.Folders -> {
                         val mirrorState by AppController.mirrorState.collectAsState()
                         FoldersScreen(
@@ -79,11 +107,11 @@ class MainActivity : ComponentActivity() {
                             message = AppController.message,
                             isError = AppController.messageIsError,
                             onToggleView = AppController::toggleView,
-                            onOpenFolders = AppController::openFolders,
+                            onOpenSettings = AppController::openSettings,
                             onRefresh = AppController::refresh,
                             onStartGame = AppController::startGame,
                             focusPath = AppController.lastGamePath,
-                            focusFolders = AppController.focusFolders,
+                            focusSettings = AppController.focusSettings,
                         )
                     }
                 }

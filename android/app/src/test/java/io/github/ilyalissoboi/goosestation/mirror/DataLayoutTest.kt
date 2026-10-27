@@ -62,7 +62,13 @@ class DataLayoutTest {
 
         assertTrue(layout.mirrored("shared/one.mcd"))
         assertFalse(layout.mirrored("shared/two.mcd"))
+        assertFalse(layout.mirrored("shared/other.bin"))
+        assertFalse(layout.stray("shared/one.mcd"))
+        assertTrue(layout.stray("shared/other.bin"))
+        // shared/ is listed to reach the card, but nothing under it beyond the card, nor any other folder.
         assertTrue(layout.walks("shared"))
+        assertFalse(layout.walks("shared/sub"))
+        assertFalse(layout.walks("games"))
     }
 
     @Test

@@ -37,8 +37,11 @@ bool GetBoolSetting(const char* section, const char* key, bool default_value);
 void SetBoolSetting(const char* section, const char* key, bool value);
 
 /// Where the memory cards are, relative to the data root (RelativeToDataRoot()): EmuFolders::MemoryCards with a
-/// trailing '/' (empty if it's the data root), then [MemoryCards] Card1Path and Card2Path, resolved as the core does,
-/// if they're set and elsewhere in the data root. nullopt before Initialize() succeeded.
+/// trailing '/' (empty if it's the data root), then the card files: [MemoryCards] Card1Path and Card2Path from
+/// settings.ini and from every EmuFolders::GameSettings *.ini (which override them for a game), resolved as the core
+/// does, then, while a game runs, the cards it has open and the shared card paths its settings give; each if it's set,
+/// elsewhere in the data root and not listed already. Blocks until the CPU thread has read the game's. nullopt before
+/// Initialize() succeeded.
 std::optional<std::vector<std::string>> GetMemoryCardPaths();
 
 /// The folders the core keeps its data in, relative to the data root (RelativeToDataRoot()), each with a trailing '/'

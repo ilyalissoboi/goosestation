@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.app.StartupStep.InitializeCore
 import io.github.ilyalissoboi.goosestation.app.StartupStep.Pull
+import io.github.ilyalissoboi.goosestation.app.StartupStep.ReadCorePaths
 import io.github.ilyalissoboi.goosestation.app.StartupStep.RefreshLibrary
 import io.github.ilyalissoboi.goosestation.app.StartupStep.ReloadSettings
 import io.github.ilyalissoboi.goosestation.app.StartupStep.SetGameFolders
@@ -75,12 +76,26 @@ class StartupPlanTest {
 
         assertEquals(reload, StartupPlan.afterPull(setOf("settings.ini")))
         assertEquals(reload, StartupPlan.afterPull(setOf("memcards/a.mcd", "settings.ini")))
+        // The reload reads the core's paths again anyway.
+        assertEquals(reload, StartupPlan.afterPull(setOf("gamesettings/SLUS-00001.ini", "settings.ini")))
+    }
+
+    // A game's settings can name its own memory card, which the core's paths then hold: in gamesettings/, or wherever
+    // settings.ini puts that folder.
+    @Test
+    fun aPullThatChangedGameSettingsReadsTheCorePathsAgain() {
+        val read = listOf(ReadCorePaths)
+
+        assertEquals(read, StartupPlan.afterPull(setOf("gamesettings/HASH-9FDA0E1A56D8DF5B.ini")))
+        assertEquals(read, StartupPlan.afterPull(setOf("memcards/a.mcd", "my/gamesettings/SLUS-00001.ini")))
+        assertEquals(read, StartupPlan.afterPull(setOf("gamesettings/settings.ini")))
     }
 
     @Test
     fun aPullThatLeftSettingsAloneReloadsNothing() {
         assertEquals(emptyList<StartupStep>(), StartupPlan.afterPull(setOf("memcards/a.mcd")))
-        assertEquals(emptyList<StartupStep>(), StartupPlan.afterPull(setOf("gamesettings/settings.ini")))
+        assertEquals(emptyList<StartupStep>(), StartupPlan.afterPull(setOf("secrets.ini", "custom_properties.ini")))
+        assertEquals(emptyList<StartupStep>(), StartupPlan.afterPull(setOf("gamesettings/SLUS-00001.txt")))
         assertEquals(emptyList<StartupStep>(), StartupPlan.afterPull(emptySet()))
     }
 }

@@ -345,23 +345,80 @@ std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
   if (!s_initialized)
     return std::nullopt;
 
-  // EmuFolders::Update() changes the folder under the lock.
-  const auto lock = Host::GetSettingsLock();
+  // A running game's cards, which the CPU thread owns: the files it has open, and the shared card paths its settings
+  // give (a gamesettings/<serial>.ini can override settings.ini's), resolved as the core does.
+  std::vector<std::string> game_cards;
+  EmuThread::RunOnThread(
+    [&game_cards]() {
+      if (!System::IsValid())
+        return;
+
+      for (u32 slot = 0; slot < NUM_CONTROLLER_AND_CARD_PORTS; slot++)
+      {
+        if (const MemoryCard* card = Pad::GetMemoryCard(slot); card && !card->GetFilename().empty())
+          game_cards.push_back(card->GetFilename());
+        if (!g_settings.memory_card_paths[slot].empty())
+          game_cards.push_back(g_settings.GetSharedMemoryCardPath(slot));
+      }
+    },
+    true);
+
+  // EmuFolders::Update() changes the folders under the lock.
+  std::string memory_cards_dir;
+  std::string game_settings_dir;
+  std::vector<std::string> cards;
+  {
+    const auto lock = Host::GetSettingsLock();
+    memory_cards_dir = EmuFolders::MemoryCards;
+    game_settings_dir = EmuFolders::GameSettings;
+    for (const char* key : {"Card1Path", "Card2Path"})
+      cards.push_back(s_base_settings_interface->GetStringValue("MemoryCards", key));
+  }
+
+  // Every game's own settings, which System::LoadSettings() layers over settings.ini when it runs: read before any
+  // game does, so the app holds its cards from the start.
+  FileSystem::FindResultsArray game_settings;
+  FileSystem::FindFiles(game_settings_dir.c_str(), "*.ini", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES,
+                        &game_settings);
+  std::sort(game_settings.begin(), game_settings.end(),
+            [](const FILESYSTEM_FIND_DATA& a, const FILESYSTEM_FIND_DATA& b) { return a.FileName < b.FileName; });
+  for (const FILESYSTEM_FIND_DATA& file : game_settings)
+  {
+    INISettingsInterface si(file.FileName);
+    Error error;
+    if (!si.Load(&error))
+    {
+      WARNING_LOG("Can't read {}: {}", file.FileName, error.GetDescription());
+      continue;
+    }
+    for (const char* key : {"Card1Path", "Card2Path"})
+      cards.push_back(si.GetStringValue("MemoryCards", key));
+  }
+
   std::vector<std::string> paths;
-  const std::optional<std::string> folder = RelativeToDataRoot(EmuFolders::MemoryCards);
+  const std::optional<std::string> folder = RelativeToDataRoot(memory_cards_dir);
   if (folder.has_value())
     paths.push_back(folder->empty() ? std::string() : *folder + '/');
 
-  for (const char* key : {"Card1Path", "Card2Path"})
+  // As Settings::GetSharedMemoryCardPath() resolves them, then the running game's, which are full paths already.
+  std::vector<std::string> files;
+  for (const std::string& value : cards)
   {
-    const std::string value = s_base_settings_interface->GetStringValue("MemoryCards", key);
-    if (value.empty())
-      continue;
+    if (!value.empty())
+      files.push_back(Path::IsAbsolute(value) ? value : Path::Combine(memory_cards_dir, value));
+  }
+  files.insert(files.end(), game_cards.begin(), game_cards.end());
 
-    // As Settings::GetSharedMemoryCardPath() resolves it.
-    const std::string card = Path::IsAbsolute(value) ? value : Path::Combine(EmuFolders::MemoryCards, value);
+  // Unless the memory card folder holds them already, or they're listed.
+  for (const std::string& card : files)
+  {
     const std::optional<std::string> relative = RelativeToDataRoot(card);
-    if (relative.has_value() && !relative->empty())
+    if (!relative.has_value() || relative->empty())
+      continue;
+    // The data root as the folder holds only its top-level files, as the mirror sees it.
+    const bool in_folder = folder.has_value() && (folder->empty() ? relative->find('/') == std::string::npos :
+                                                                    relative->starts_with(paths.front()));
+    if (!in_folder && std::find(paths.begin(), paths.end(), *relative) == paths.end())
       paths.push_back(*relative);
   }
   return paths;

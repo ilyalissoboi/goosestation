@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.core
 
+import android.graphics.SurfaceTexture
+import android.os.ParcelFileDescriptor
+import android.view.Surface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
@@ -10,10 +13,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** settings.ini as the core reads it at start: each test runs in its own process, so it gets its own initialize(). */
 @RunWith(AndroidJUnit4::class)
@@ -182,6 +188,73 @@ class SettingsSetupTest {
         assertEquals(listOf("cards/", "shared/one.mcd"), NativeLibrary.getMemoryCardPaths()?.toList())
     }
 
+    // A game's own settings can name another card: it's reported before the game runs, so the first pull brings it in
+    // and the mirror never takes it for a stray.
+    @Test
+    fun memoryCardPathsIncludeTheGameSettingsCards() {
+        val gameSettings = File(dataRoot, "gamesettings").apply { mkdirs() }
+        File(gameSettings, "SLUS-00001.ini").writeText("[MemoryCards]\nCard1Path = ../shared/one.mcd\n")
+        File(gameSettings, "SLUS-00002.ini").writeText(
+            "[MemoryCards]\nCard1Path = ../../escape.mcd\nCard2Path = /elsewhere/two.mcd\n",
+        )
+        File(gameSettings, "SLUS-00003.ini").writeText("[MemoryCards]\nCard2Path = ../shared/one.mcd\n")
+        File(gameSettings, "notes.txt").writeText("[MemoryCards]\nCard1Path = ../shared/notes.mcd\n")
+        File(gameSettings, "SLUS-00004.ini").mkdirs()
+
+        initialize(null)
+
+        assertEquals(listOf("memcards/", "shared/one.mcd"), NativeLibrary.getMemoryCardPaths()?.toList())
+    }
+
+    // The running game's cards are reported too, whatever the game settings folder holds now. Needs the emulator's
+    // /sdcard/GooseTest bios/ps-30j.bin and games/padtest.psexe (docs/android.md).
+    @Test
+    fun memoryCardPathsIncludeARunningGamesOwnCard() {
+        val exe = File(root, "padtest.psexe")
+        assumeTrue(
+            "No BIOS or padtest in /sdcard/GooseTest",
+            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe),
+        )
+        val padtestSettings = File(dataRoot, "gamesettings/$PADTEST_SERIAL.ini")
+        padtestSettings.apply {
+            parentFile!!.mkdirs()
+            writeText("[MemoryCards]\nCard1Type = Shared\nCard1Path = ../shared/one.mcd\n")
+        }
+        val started = CountDownLatch(1)
+        val stopped = CountDownLatch(1)
+        NativeLibrary.setCallbacks(
+            object : NativeCallbacks {
+                override fun onGameStarted(title: String) = started.countDown()
+
+                override fun onGameStopped() = stopped.countDown()
+
+                override fun onError(message: String) {}
+            },
+        )
+        initialize(null)
+        val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
+        val surface = Surface(texture)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        try {
+            NativeLibrary.startGame(exe.absolutePath)
+            assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
+            // The game has read it: from now on only the running game names the card.
+            assertTrue(padtestSettings.delete())
+
+            assertEquals(listOf("memcards/", "shared/one.mcd"), NativeLibrary.getMemoryCardPaths()?.toList())
+        } finally {
+            NativeLibrary.shutdownGame()
+            assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.setCallbacks(null)
+            surface.release()
+            texture.release()
+        }
+        // Gone with the game.
+        assertEquals(listOf("memcards/"), NativeLibrary.getMemoryCardPaths()?.toList())
+    }
+
     @Test
     fun dataFoldersAreUnknownBeforeTheCoreStarts() {
         assertNull(NativeLibrary.getDataFolders())
@@ -231,6 +304,19 @@ class SettingsSetupTest {
         assertTrue(NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID))
     }
 
+    // The test app can't read /sdcard; the shell can. False if there's nothing there.
+    private fun copyAsShell(
+        path: String,
+        destination: File,
+    ): Boolean {
+        val output = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("cat $path")
+        destination.parentFile!!.mkdirs()
+        ParcelFileDescriptor.AutoCloseInputStream(output).use { input ->
+            destination.outputStream().use { input.copyTo(it) }
+        }
+        return destination.length() > 0
+    }
+
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())
 
     /** As much of the INI format as the core writes: `[Section]` and `Key = Value` lines, a key once per list item. */
@@ -265,6 +351,8 @@ class SettingsSetupTest {
 
     private companion object {
         const val INSTALL_ID = "test-install"
+        const val SDCARD_TESTS = "/sdcard/GooseTest"
+        const val PADTEST_SERIAL = "HASH-9FDA0E1A56D8DF5B" // padtest.psexe from extras/padtest, as the core logs it
         const val URI_A = "content://com.example.docs/tree/primary%3AGames"
         const val URI_B = "content://com.example.docs/tree/1234-5678%3APS1"
 

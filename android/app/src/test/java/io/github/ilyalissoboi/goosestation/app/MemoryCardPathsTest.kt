@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,6 +32,35 @@ class MemoryCardPathsTest {
     @Test
     fun theDataRootHoldsEverything() {
         assertTrue(MemoryCardPaths.matches("settings.ini", listOf("")))
+    }
+
+    // A running game's per-game card (gamesettings/<serial>.ini) is held back, not only the memory card folder.
+    @Test
+    fun aRunningGamesCardFileIsDeferred() {
+        val paths = listOf("memcards/", "shared/one.mcd")
+
+        assertTrue(MemoryCardPaths.deferred("shared/one.mcd", paths, gameActive = true))
+        assertTrue(MemoryCardPaths.deferred("memcards/a.mcd", paths, gameActive = true))
+        assertFalse(MemoryCardPaths.deferred("shared/other.bin", paths, gameActive = true))
+        assertFalse(MemoryCardPaths.deferred("shared/one.mcd", paths, gameActive = false))
+    }
+
+    // Once the game stops the core no longer reports its card, which stays a card for the rest of the run: the pull
+    // after the game brings in what it held back, and its last writes go out.
+    @Test
+    fun cardFilesReportedEarlierAreKept() {
+        val seen = listOf("memcards/", "shared/one.mcd")
+
+        assertEquals(
+            listOf("cards/", "shared/one.mcd"),
+            MemoryCardPaths.merge(reported = listOf("cards/"), previous = seen),
+        )
+        assertEquals(
+            listOf("memcards/", "shared/one.mcd", "two.mcd"),
+            MemoryCardPaths.merge(reported = listOf("memcards/", "shared/one.mcd", "two.mcd"), previous = seen),
+        )
+        // Folders aren't kept: settings.ini names the memory card folder.
+        assertEquals(listOf("memcards/"), MemoryCardPaths.merge(listOf("memcards/"), previous = listOf("cards/")))
     }
 
     @Test

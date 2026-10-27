@@ -178,7 +178,11 @@ object AppController : NativeCallbacks {
      */
     @Volatile private var holdMemcards = false
 
-    /** Where the memory cards are in the working copy ([MemoryCardPaths]), as the core last said. */
+    /**
+     * Where the memory cards are in the working copy ([MemoryCardPaths]), as the core last said, with the card files
+     * it said earlier in this run ([MemoryCardPaths.merge]). Read again as a game starts and stops: a running game's
+     * own settings can name other cards.
+     */
     @Volatile private var memcardPaths = MemoryCardPaths.DEFAULT
 
     /** What the mirror copies ([DataLayout]): the defaults until the core, once it has started, says otherwise. */
@@ -712,7 +716,7 @@ object AppController : NativeCallbacks {
                 }
                 StartupStep.SetGameFolders -> applyGameFolders()
                 StartupStep.RefreshLibrary -> refreshLibrary(showProgress = true)
-                StartupStep.ShowSetup, StartupStep.ReloadSettings -> {}
+                StartupStep.ShowSetup, StartupStep.ReloadSettings, StartupStep.ReadCorePaths -> {}
             }
         }
     }
@@ -780,8 +784,11 @@ object AppController : NativeCallbacks {
         // Asked for each file as the mirror acts, so a game started meanwhile keeps its cards.
         val result =
             mirror.pull { path ->
-                val memcard = MemoryCardPaths.matches(path, memcardPaths)
-                if (onlyMemcards) !memcard else holdMemcards && memcard
+                if (onlyMemcards) {
+                    !MemoryCardPaths.matches(path, memcardPaths)
+                } else {
+                    MemoryCardPaths.deferred(path, memcardPaths, holdMemcards)
+                }
             }
         return applyChanged(result.changed)
     }
@@ -790,13 +797,14 @@ object AppController : NativeCallbacks {
     private suspend fun push(force: Boolean) {
         val mirror = mirror ?: return
         if (!coreStarted || !dataGranted) return
-        applyChanged(mirror.push(force) { holdMemcards && MemoryCardPaths.matches(it, memcardPaths) }.changed)
+        applyChanged(mirror.push(force) { MemoryCardPaths.deferred(it, memcardPaths, holdMemcards) }.changed)
     }
 
     /**
      * A settings.ini the mirror replaced is read again, before the core can save its old settings over it, then the
      * game folders are set again and the library rescanned, as [StartupPlan.afterPull] says: in one go on
-     * [coreDispatcher], so no scan runs between the reload and the folders. Returns whether it refreshed the library.
+     * [coreDispatcher], so no scan runs between the reload and the folders. A game's settings it replaced have the
+     * core's paths read again, as they can name a memory card. Returns whether it refreshed the library.
      */
     private suspend fun applyChanged(changed: Set<String>): Boolean {
         val steps = StartupPlan.afterPull(changed)
@@ -812,6 +820,7 @@ object AppController : NativeCallbacks {
                             readGridView()
                             layoutGrew = readCorePaths()
                         }
+                        StartupStep.ReadCorePaths -> layoutGrew = readCorePaths()
                         StartupStep.SetGameFolders -> NativeLibrary.setGameFolders(readable)
                         StartupStep.RefreshLibrary -> NativeLibrary.refreshGameList(false)
                         else -> {}
@@ -820,7 +829,7 @@ object AppController : NativeCallbacks {
                 if (StartupStep.RefreshLibrary in steps) NativeLibrary.getGameList().toList() else null
             }
         refreshed?.let { games = it }
-        // The folders the new settings.ini names, which this run left out, come in now.
+        // The folders and cards the new settings.ini or game settings name, which this run left out, come in now.
         if (layoutGrew) scope.launch { pull(onlyMemcards = false) }
         return refreshed != null
     }
@@ -877,7 +886,8 @@ object AppController : NativeCallbacks {
      * file. On coreDispatcher, once the core has read settings.ini.
      */
     private fun readCorePaths(): Boolean {
-        memcardPaths = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
+        val reported = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
+        memcardPaths = MemoryCardPaths.merge(reported, memcardPaths)
         val folders = NativeLibrary.getDataFolders() ?: return false
         val old = dataLayout
         dataLayout = DataLayout.withCorePaths(folders.toList() + memcardPaths, NativeLibrary.getCacheFolder())
@@ -954,6 +964,8 @@ object AppController : NativeCallbacks {
             controllers?.releaseAll()
             // Booted in the background. One the user left while it booted is shut down next anyway.
             if (screen == Screen.Game && !resumed) NativeLibrary.setPaused(true)
+            // The cards its own settings name are held back from now on, and mirrored.
+            scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         }
     }
 
@@ -969,6 +981,7 @@ object AppController : NativeCallbacks {
             if (!messageIsError) message = null
             // The memory cards held back while it ran come in now, then the game's own writes go out.
             scope.launch {
+                withContext(coreDispatcher) { readCorePaths() }
                 pull(onlyMemcards = true)
                 push(force = true)
             }

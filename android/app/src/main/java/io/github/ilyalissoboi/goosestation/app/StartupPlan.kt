@@ -8,7 +8,7 @@ import io.github.ilyalissoboi.goosestation.storage.MissingGrant
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 
 /** A step of a start or a resume, which [AppController] carries out in order. */
-enum class StartupStep { ShowSetup, Pull, InitializeCore, SetGameFolders, RefreshLibrary, ReloadSettings }
+enum class StartupStep { ShowSetup, Pull, InitializeCore, SetGameFolders, RefreshLibrary, ReloadSettings, ReadCorePaths }
 
 /** What a start or a resume does, from the saved folders and the grants they're missing. */
 object StartupPlan {
@@ -36,14 +36,18 @@ object StartupPlan {
 
     /**
      * What follows a pull or a push, once the core runs: a settings.ini it replaced is read again. A foreign one,
-     * adapted on reading, loses the game folders, so they're set again and the library is scanned.
+     * adapted on reading, loses the game folders, so they're set again and the library is scanned. Otherwise, an
+     * `.ini` it replaced in a folder (a game's settings, which can name its own memory card, wherever settings.ini
+     * puts their folder) has the core's paths read again.
      */
     fun afterPull(changed: Set<String>): List<StartupStep> =
-        if (SETTINGS in changed) {
-            listOf(StartupStep.ReloadSettings, StartupStep.SetGameFolders, StartupStep.RefreshLibrary)
-        } else {
-            emptyList()
+        when {
+            SETTINGS in changed ->
+                listOf(StartupStep.ReloadSettings, StartupStep.SetGameFolders, StartupStep.RefreshLibrary)
+            changed.any { '/' in it && it.endsWith(INI) } -> listOf(StartupStep.ReadCorePaths)
+            else -> emptyList()
         }
 
     private const val SETTINGS = "settings.ini"
+    private const val INI = ".ini"
 }

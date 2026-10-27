@@ -36,8 +36,9 @@ object NativeLibrary {
 
     /**
      * Where the memory cards are, relative to the data root: the memory card folder with a trailing `/` (empty if
-     * it's the data root itself), then each shared card file set in settings.ini that's elsewhere in the data root.
-     * Paths outside the data root are left out. Null before [initialize].
+     * it's the data root itself), then each shared card file elsewhere in the data root: set in settings.ini, in a
+     * game's settings in the game settings folder, or open in the running game. Paths outside the data root are left
+     * out. Waits for the core's thread while a game runs; call it off the main thread. Null before [initialize].
      */
     external fun getMemoryCardPaths(): Array<String>?
 

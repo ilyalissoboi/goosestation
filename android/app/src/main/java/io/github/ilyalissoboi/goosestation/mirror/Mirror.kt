@@ -45,9 +45,13 @@ sealed interface MirrorState {
     ) : MirrorState
 }
 
-/** The working-copy files a pull replaced or deleted. */
+/**
+ * The working-copy files a pull replaced or deleted, and whether the run [complete]d its whole plan: false when it
+ * stopped at an unreachable folder, couldn't list a side, skipped a deferred file, or any file failed.
+ */
 data class PullResult(
     val changed: Set<String>,
+    val complete: Boolean,
 )
 
 /**
@@ -72,7 +76,8 @@ private class SyncResult(
  * milliseconds, that working-copy times are compared with. [layout] is what's mirrored, asked at the start of each
  * run: once the core reports it ([DataLayout.fromCore]), each run that lists both sides first deletes the working
  * copy's [DataLayout.stray] files that are in step with the folder, and their manifest entries, never touching the
- * folder.
+ * folder, unless [removeStrays], also asked at the start of each run, says not to: while the layout may still lack
+ * files the core will name (memory cards that game settings not yet pulled name), strays stay.
  *
  * Runs never overlap: they take turns on one thread. A run that can't reach the folder stops, with what it had done
  * kept, and the state [MirrorState.Unreachable]; the next run tries again. A file that fails on its own is left for
@@ -85,6 +90,7 @@ class Mirror(
     private val workingCopy: File,
     private val manifestFile: File,
     private val clock: () -> Long,
+    private val removeStrays: () -> Boolean = { true },
     private val layout: () -> DataLayout,
 ) {
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
@@ -105,11 +111,11 @@ class Mirror(
     /** Folder to working copy, except the [deferred] paths. */
     suspend fun pull(deferred: (String) -> Boolean): PullResult =
         withContext(dispatcher) {
-            PullResult(
+            val result =
                 sync(deferred, saves = false) { folder, local, manifest, layout ->
                     MirrorPlanner.pull(folder, local, manifest, layout, deferred)
-                }.changed,
-            )
+                }
+            PullResult(result.changed, result.complete)
         }
 
     /**
@@ -189,7 +195,7 @@ class Mirror(
         // Whether a working-copy change didn't reach the folder.
         var failed = false
         try {
-            if (layout.fromCore) removeStrays(local, layout)
+            if (layout.fromCore && removeStrays()) dropStrays(local, layout)
             val actions = plan(folder, local, loadManifest(), layout)
             for ((done, action) in actions.withIndex()) {
                 currentCoroutineContext().ensureActive()
@@ -233,7 +239,7 @@ class Mirror(
      * is never mirrored (the cache, the log, a temporary file). A file that can't be deleted keeps its entry and is
      * tried again at the next run: outside the layout, the planner never acts on it.
      */
-    private fun removeStrays(
+    private fun dropStrays(
         local: Map<String, FileState>,
         layout: DataLayout,
     ) {

@@ -40,6 +40,7 @@ jclass s_callbacks_class = nullptr;
 jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
+jmethodID s_on_binding_captured = nullptr;
 jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
@@ -162,6 +163,11 @@ void AndroidHost::NotifyError(std::string_view message)
   CallCallback(s_on_error, message);
 }
 
+void AndroidHost::NotifyBindingCaptured(std::string_view binding)
+{
+  CallCallback(s_on_binding_captured, binding);
+}
+
 extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
@@ -192,7 +198,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_game_started = env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;)V");
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error)
+  s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured)
   {
     ClearException(env);
     return JNI_ERR;
@@ -761,6 +768,16 @@ NATIVE_LIBRARY_FUNCTION(void, setPadBinding)(JNIEnv* env, jobject, jstring descr
 NATIVE_LIBRARY_FUNCTION(void, resetPadBindings)(JNIEnv* env, jobject, jstring descriptor)
 {
   AndroidHost::ResetPadBindings(FromJString(env, descriptor));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, startBindingCapture)(JNIEnv* env, jobject, jstring descriptor)
+{
+  AndroidHost::StartBindingCapture(FromJString(env, descriptor));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, cancelBindingCapture)(JNIEnv*, jobject)
+{
+  AndroidHost::CancelBindingCapture();
 }
 
 } // extern "C"

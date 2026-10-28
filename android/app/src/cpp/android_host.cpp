@@ -139,6 +139,7 @@ static std::optional<std::string> s_pending_boot_path;
 static std::string s_boot_path;
 static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
+static u32 s_binding_capture_id = 0; // changes when a capture starts or is cancelled, so a stale report is dropped
 
 // Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
 static std::atomic_bool s_vulkan_failed{false};
@@ -1160,6 +1161,63 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
       }
 
       System::ReloadInputBindings();
+    },
+    true);
+}
+
+void AndroidHost::StartBindingCapture(std::string descriptor)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      // SetHook() expects no hook, so the capture running is removed first.
+      InputManager::RemoveHook();
+      const u32 id = ++s_binding_capture_id;
+      AndroidInputKeys::BindingCapture capture(index.value());
+      InputManager::SetHook([capture, id](InputBindingKey key, float value) mutable {
+        const std::optional<InputBindingKey> captured = capture.OnEvent(key, value);
+        if (!captured.has_value())
+          return InputInterceptHook::CallbackResult::StopProcessingEvent;
+
+        // HalfAxis for an axis, so the binding has its direction (+Axis23, -Axis0).
+        std::string binding = InputManager::ConvertInputBindingKeyToString(
+          (captured->source_subtype == InputSubclass::ControllerAxis) ? InputBindingInfo::Type::HalfAxis :
+                                                                        InputBindingInfo::Type::Button,
+          captured.value());
+        const std::string::size_type slash = binding.find('/');
+        if (slash != std::string::npos)
+          binding.erase(0, slash + 1);
+
+        // Reported once the event is dispatched: the InputManager holds its hook lock while this runs, so an app
+        // callback that started or cancelled a capture straight away, on this thread, would deadlock. A capture
+        // cancelled or replaced before then isn't reported.
+        EmuThread::RunOnThread(
+          [binding = std::move(binding), id]() {
+            if (id == s_binding_capture_id)
+              NotifyBindingCaptured(binding);
+          },
+          false);
+        return InputInterceptHook::CallbackResult::RemoveHookAndStopProcessingEvent;
+      });
+    },
+    true);
+}
+
+void AndroidHost::CancelBindingCapture()
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    []() {
+      s_binding_capture_id++;
+      InputManager::RemoveHook();
     },
     true);
 }

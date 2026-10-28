@@ -20,4 +20,10 @@ interface NativeCallbacks {
 
     /** Something to show the user. A failed boot can report more than one; it doesn't end the game by itself. */
     fun onError(message: String)
+
+    /**
+     * The input [NativeLibrary.startBindingCapture] captured, as a [PadBinding.binding] for [NativeLibrary.setPadBinding]:
+     * Button99, +Axis23, -Axis0. Each capture ends with at most one call, and none once it's cancelled or replaced.
+     */
+    fun onBindingCaptured(binding: String) {}
 }

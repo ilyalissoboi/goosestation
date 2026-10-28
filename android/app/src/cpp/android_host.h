@@ -134,6 +134,17 @@ void SetPadBinding(std::string descriptor, std::string name, std::string binding
 /// Drops the controller's bindings from every [Pad1] key, then adds its defaults, as a new controller gets them.
 void ResetPadBindings(std::string descriptor);
 
+/// Captures the next input from the controller with descriptor, for binding: the first BindingCapture takes. It's
+/// reported with NotifyBindingCaptured(), without the Android-<index>/ prefix (Button99, +Axis23, -Axis0), and the
+/// capture ends. Until then every input event goes to the capture, so no game or hotkey sees it. A capture already
+/// running is replaced. A descriptor not in the table (one never connected), or a call before Initialize() succeeded,
+/// does nothing. Runs on the CPU thread and blocks.
+void StartBindingCapture(std::string descriptor);
+
+/// Ends the capture running, if any, without a report: once it returns, NotifyBindingCaptured() isn't called for it.
+/// Runs on the CPU thread and blocks.
+void CancelBindingCapture();
+
 /// Lets go of every controller input, from any thread, in order with the events queued before it. For when the app
 /// stops getting a device's events (focus lost, in the background) and when a game boots or stops.
 void QueueReleaseAllInputs();
@@ -156,5 +167,6 @@ void DetachCurrentThreadFromJVM();
 void NotifyGameStarted(std::string_view title);
 void NotifyGameStopped();
 void NotifyError(std::string_view message);
+void NotifyBindingCaptured(std::string_view binding);
 
 } // namespace AndroidHost

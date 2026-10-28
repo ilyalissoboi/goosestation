@@ -51,6 +51,14 @@ inline constexpr s32 AXIS_RTRIGGER = 18;
 inline constexpr s32 AXIS_GAS = 22;
 inline constexpr s32 AXIS_BRAKE = 23;
 
+/// The source type of Android's controllers. Other platforms have no Android source, so they use a type no source has,
+/// which lets these helpers build and be tested there.
+#ifdef __ANDROID__
+inline constexpr InputSourceType PAD_SOURCE_TYPE = InputSourceType::Android;
+#else
+inline constexpr InputSourceType PAD_SOURCE_TYPE = InputSourceType::Count;
+#endif
+
 /// The pad input a key stands for, if any. Back and Mode open the menu, so they have none.
 std::optional<GenericInputBinding> GetBindingForKeyCode(s32 keycode);
 
@@ -115,6 +123,26 @@ private:
 
   // Last value reported for each input, by (subclass, number). Ordered, so releases come in a fixed order.
   std::map<std::pair<InputSubclass, u32>, Reported> m_reported;
+};
+
+/// Picks the input the user means to bind, from one device's events as the InputManager gets them (PadState's, so a
+/// trigger's three inputs and the hat's d-pad buttons are already merged):
+/// - a button when it's pressed (value >= 0.5); one held as the capture starts only sends its release, so it isn't
+///   taken;
+/// - an axis when it's pushed half way (|value| >= 0.5), only once it has been seen near 0 (within 0.25) during this
+///   capture, so one resting away from 0 (a trigger on Z, a stick held as the capture starts) must come back first.
+/// Other devices' events, and other kinds of input, give nothing.
+class BindingCapture
+{
+public:
+  explicit BindingCapture(u32 device_index);
+
+  /// The key to bind: the event's, with modifier Negate for an axis pushed below 0. nullopt until there is one.
+  std::optional<InputBindingKey> OnEvent(InputBindingKey key, float value);
+
+private:
+  u32 m_device_index;
+  std::vector<u32> m_centered_axes;
 };
 
 } // namespace AndroidInputKeys

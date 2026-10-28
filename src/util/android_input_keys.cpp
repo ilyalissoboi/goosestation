@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace AndroidInputKeys {
 namespace {
@@ -89,6 +90,10 @@ constexpr std::array DPAD_DIRECTIONS = {
 
 // Hats report -1, 0 or 1; anything past half way counts as pressed.
 constexpr float HAT_THRESHOLD = 0.5f;
+
+// BindingCapture's: how far an input must go to be taken, and how near 0 an axis must be seen first.
+constexpr float CAPTURE_THRESHOLD = 0.5f;
+constexpr float CAPTURE_CENTER = 0.25f;
 
 const Trigger* FindTriggerForKey(s32 keycode)
 {
@@ -325,6 +330,43 @@ void PadState::ReleaseAll(std::vector<PadEvent>& events)
   m_keys.clear();
   m_axes.clear();
   m_reported.clear();
+}
+
+BindingCapture::BindingCapture(u32 device_index) : m_device_index(device_index)
+{
+}
+
+std::optional<InputBindingKey> BindingCapture::OnEvent(InputBindingKey key, float value)
+{
+  if (key.source_type != PAD_SOURCE_TYPE || key.source_index != m_device_index)
+    return std::nullopt;
+
+  if (key.source_subtype == InputSubclass::ControllerButton)
+  {
+    if (value < CAPTURE_THRESHOLD)
+      return std::nullopt;
+
+    key.modifier = InputModifier::None;
+    return key;
+  }
+
+  if (key.source_subtype != InputSubclass::ControllerAxis)
+    return std::nullopt;
+
+  const bool centered =
+    (std::find(m_centered_axes.begin(), m_centered_axes.end(), key.data) != m_centered_axes.end());
+  if (std::abs(value) <= CAPTURE_CENTER)
+  {
+    if (!centered)
+      m_centered_axes.push_back(key.data);
+    return std::nullopt;
+  }
+
+  if (!centered || std::abs(value) < CAPTURE_THRESHOLD)
+    return std::nullopt;
+
+  key.modifier = (value < 0.0f) ? InputModifier::Negate : InputModifier::None;
+  return key;
 }
 
 } // namespace AndroidInputKeys

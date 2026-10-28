@@ -13,6 +13,7 @@
 // The numbers below are Android's own KeyEvent.KEYCODE_* and MotionEvent.AXIS_* values, written out so that the
 // tests check the mapping against what Android reports, not against the constants it is written with.
 
+using AndroidInputKeys::BindingCapture;
 using AndroidInputKeys::GetBindingForAxis;
 using AndroidInputKeys::GetBindingForKeyCode;
 using AndroidInputKeys::GetDeviceBinding;
@@ -432,4 +433,81 @@ TEST(AndroidInputKeys, GetDeviceBindingTakesTheFirstOfThatDevice)
   EXPECT_EQ(GetDeviceBinding(bindings, 1), std::optional<std::string>("+Axis17"));
   EXPECT_EQ(GetDeviceBinding(bindings, 10), std::optional<std::string>("Button99"));
   EXPECT_EQ(GetDeviceBinding(bindings, 0), std::nullopt);
+}
+
+// Keys as AndroidInputSource builds them for its events (InputSourceType::Android on Android).
+static InputBindingKey PadKey(u32 source_index, InputSubclass subclass, u32 number)
+{
+  InputBindingKey key = {};
+  key.source_type = AndroidInputKeys::PAD_SOURCE_TYPE;
+  key.source_index = source_index;
+  key.source_subtype = subclass;
+  key.data = number;
+  return key;
+}
+
+static InputBindingKey Captured(u32 source_index, InputSubclass subclass, u32 number, InputModifier modifier)
+{
+  InputBindingKey key = PadKey(source_index, subclass, number);
+  key.modifier = modifier;
+  return key;
+}
+
+TEST(AndroidInputKeys, CapturesButtonPress)
+{
+  BindingCapture capture(0);
+
+  EXPECT_EQ(capture.OnEvent(PadKey(0, BUTTON, 96), 1.0f), Captured(0, BUTTON, 96, InputModifier::None));
+}
+
+TEST(AndroidInputKeys, IgnoresReleaseAndOtherDevice)
+{
+  BindingCapture capture(0);
+
+  EXPECT_EQ(capture.OnEvent(PadKey(0, BUTTON, 96), 0.0f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(1, BUTTON, 99), 1.0f), std::nullopt);
+
+  InputBindingKey keyboard = PadKey(0, BUTTON, 99);
+  keyboard.source_type = InputSourceType::Keyboard;
+  EXPECT_EQ(capture.OnEvent(keyboard, 1.0f), std::nullopt);
+}
+
+// Review Focus 2: an axis resting away from 0 (a trigger on Z) must come back before it's taken.
+TEST(AndroidInputKeys, RestingAxisMustReturnFirst)
+{
+  BindingCapture capture(0);
+
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 11), -0.9f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 11), -0.6f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 11), 0.1f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 11), 0.7f), Captured(0, AXIS, 11, InputModifier::None));
+}
+
+TEST(AndroidInputKeys, NegativeDirection)
+{
+  BindingCapture capture(0);
+
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 0), 0.05f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 0), -0.6f), Captured(0, AXIS, 0, InputModifier::Negate));
+}
+
+TEST(AndroidInputKeys, HeldStickIsNotTaken)
+{
+  BindingCapture capture(0);
+
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 1), 0.8f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 1), 1.0f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 1), 0.3f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 1), 0.2f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 1), 0.8f), Captured(0, AXIS, 1, InputModifier::None));
+}
+
+// Each axis comes back on its own: another axis at rest doesn't free a held one.
+TEST(AndroidInputKeys, AxesReturnSeparately)
+{
+  BindingCapture capture(2);
+
+  EXPECT_EQ(capture.OnEvent(PadKey(2, AXIS, 0), 0.0f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(2, AXIS, 1), 0.9f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(2, AXIS, 0), -1.0f), Captured(2, AXIS, 0, InputModifier::Negate));
 }

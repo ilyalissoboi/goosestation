@@ -164,4 +164,16 @@ object NativeLibrary {
 
     /** Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. */
     external fun resetPadBindings(descriptor: String)
+
+    /**
+     * Captures the next button pressed, or axis pushed half way, on the controller with [descriptor], and reports it
+     * to [NativeCallbacks.onBindingCaptured]. An axis must be seen near its centre first, so one resting away from it
+     * (or held as the capture starts) has to come back. Until then the capture takes every controller input: the game
+     * and hotkeys see none. It replaces a capture already running, and does nothing for a controller [getPadBindings]
+     * gives null for.
+     */
+    external fun startBindingCapture(descriptor: String)
+
+    /** Ends the capture running, if any, with no report; none arrives once this returns. */
+    external fun cancelBindingCapture()
 }

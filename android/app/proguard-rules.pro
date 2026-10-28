@@ -9,6 +9,7 @@
     public void onGameStarted(java.lang.String);
     public void onGameStopped();
     public void onError(java.lang.String);
+    public void onBindingCaptured(java.lang.String);
 }
 
 # jni_bridge.cpp finds GameEntry and its constructor by name in JNI_OnLoad, for getGameList().

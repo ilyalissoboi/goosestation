@@ -20,6 +20,7 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -43,6 +44,9 @@ jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
 jmethodID s_bios_image_constructor = nullptr;
+jclass s_pad_binding_class = nullptr;
+jmethodID s_pad_binding_constructor = nullptr;
+jobject s_pad_binding_kinds[3] = {}; // PadBindingKind's Button, Axis and HalfAxis (global references)
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -228,6 +232,53 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     ClearException(env);
     return JNI_ERR;
   }
+
+  jclass pad_binding_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/PadBinding");
+  if (!pad_binding_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_pad_binding_class = static_cast<jclass>(env->NewGlobalRef(pad_binding_class));
+  env->DeleteLocalRef(pad_binding_class);
+  s_pad_binding_constructor =
+    env->GetMethodID(s_pad_binding_class, "<init>",
+                     "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;"
+                     "Ljava/lang/String;)V");
+  if (!s_pad_binding_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass pad_binding_kind_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/PadBindingKind");
+  if (!pad_binding_kind_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  // In AndroidHost::PadBindingKind's order.
+  static constexpr const char* PAD_BINDING_KIND_NAMES[] = {"Button", "Axis", "HalfAxis"};
+  static_assert(std::size(PAD_BINDING_KIND_NAMES) == std::size(s_pad_binding_kinds));
+  for (size_t i = 0; i < std::size(PAD_BINDING_KIND_NAMES); i++)
+  {
+    jfieldID field = env->GetStaticFieldID(pad_binding_kind_class, PAD_BINDING_KIND_NAMES[i],
+                                           "Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;");
+    jobject kind = field ? env->GetStaticObjectField(pad_binding_kind_class, field) : nullptr;
+    if (!kind)
+    {
+      ClearException(env);
+      env->DeleteLocalRef(pad_binding_kind_class);
+      return JNI_ERR;
+    }
+
+    s_pad_binding_kinds[i] = env->NewGlobalRef(kind);
+    env->DeleteLocalRef(kind);
+  }
+
+  env->DeleteLocalRef(pad_binding_kind_class);
 
   if (!AndroidContentProvider::LoadJNIReferences(env))
     return JNI_ERR;
@@ -650,6 +701,66 @@ NATIVE_LIBRARY_FUNCTION(void, onDeviceDisconnected)(JNIEnv*, jobject, jint devic
 NATIVE_LIBRARY_FUNCTION(void, releaseAllInputs)(JNIEnv*, jobject)
 {
   AndroidHost::QueueReleaseAllInputs();
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstring descriptor)
+{
+  const std::optional<std::vector<AndroidHost::PadBinding>> bindings =
+    AndroidHost::GetPadBindings(FromJString(env, descriptor));
+  if (!bindings.has_value())
+    return nullptr;
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(bindings->size()), s_pad_binding_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < bindings->size(); i++)
+  {
+    const AndroidHost::PadBinding& binding = (*bindings)[i];
+    jstring name = ToJString(env, binding.name);
+    jstring display_name = ToJString(env, binding.display_name);
+    jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
+    jobject entry = nullptr;
+    if (name && display_name && (value || !binding.binding.has_value()))
+    {
+      entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
+                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass Port 1's input '{}' to Java.", binding.name);
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setPadBinding)(JNIEnv* env, jobject, jstring descriptor, jstring name, jstring binding)
+{
+  // A null binding is an empty one: none.
+  AndroidHost::SetPadBinding(FromJString(env, descriptor), FromJString(env, name), FromJString(env, binding));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, resetPadBindings)(JNIEnv* env, jobject, jstring descriptor)
+{
+  AndroidHost::ResetPadBindings(FromJString(env, descriptor));
 }
 
 } // extern "C"

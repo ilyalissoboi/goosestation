@@ -13,7 +13,7 @@
 /// Controllers on Android. The app passes their events in through the Queue functions, from any thread; PollEvents()
 /// reports them to the InputManager on the CPU thread. Everything else runs on the CPU thread too.
 ///
-/// Devices are named Android-<index>. The index belongs to the device's descriptor for the life of the process, so a
+/// Devices are named Android-<index>. The host gives the index, which belongs to the device's descriptor, so a
 /// controller that reconnects (and gets a new device ID from Android) keeps its bindings. Two devices with the same
 /// descriptor share an index. Bindings are Button<keycode>, +Axis<n>, -Axis<n> and FullAxis<n>, with Android's keycode
 /// and axis numbers.
@@ -41,7 +41,7 @@ public:
 
   void QueueKeyEvent(s32 device_id, s32 keycode, bool pressed);
   void QueueAxisEvent(s32 device_id, s32 axis, float value);
-  void QueueDeviceConnected(s32 device_id, std::string name, std::string descriptor);
+  void QueueDeviceConnected(s32 device_id, u32 index, std::string name);
   void QueueDeviceDisconnected(s32 device_id);
 
   /// Lets go of everything every device holds, after the events queued before it.
@@ -61,10 +61,10 @@ private:
 
     Type type;
     s32 device_id;
-    s32 code;
+    s32 code;  // keycode or axis
+    u32 index; // Connected's device index
     float value;
     std::string name;
-    std::string descriptor;
   };
 
   struct Device
@@ -78,7 +78,7 @@ private:
   void QueueEvent(QueuedEvent event);
   Device* GetDeviceById(s32 device_id);
   bool IsIndexConnected(u32 index) const;
-  void HandleConnected(s32 device_id, std::string name, const std::string& descriptor);
+  void HandleConnected(s32 device_id, u32 index, std::string name);
   void HandleDisconnected(s32 device_id);
   void ReleaseAll(Device& device);
   void ReportPadEvents(u32 index, const std::vector<AndroidInputKeys::PadEvent>& events);

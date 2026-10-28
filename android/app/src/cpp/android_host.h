@@ -29,8 +29,9 @@ bool Initialize(std::string data_root, std::string resources_root, std::string b
 /// Scans exactly these folders, and all below them, for games: [GameList] RecursivePaths, with no Paths.
 void SetGameFolders(std::vector<std::string> tree_uris);
 
-/// Reads settings.ini again (after the app replaced it), adapts it if it's from another install, and applies it.
-/// Blocks until the CPU thread has done so.
+/// Reads settings.ini again (after the app replaced it), adapts it if it's from another install, and applies it. Each
+/// connected controller the file leaves with no binding of its own gets its defaults. Blocks until the CPU thread has
+/// done so.
 void ReloadSettings();
 
 bool GetBoolSetting(const char* section, const char* key, bool default_value);
@@ -88,11 +89,50 @@ void SetPaused(bool paused);
 void SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale);
 
 /// Controller input, from any thread. It's queued and passed to the input source on the CPU thread; events for a
-/// device only count once its connection is queued. Returns whether the key goes to the emulated pad.
+/// device only count once its connection is queued. Returns whether the key goes to the core: every key but Back and
+/// Mode, which open the menu.
 bool QueueKeyEvent(s32 device_id, s32 keycode, bool pressed);
 void QueueAxisEvent(s32 device_id, s32 axis, float value);
+
+/// A controller is Android-<index> to the core, with the index its descriptor has in [Android] ControllerDescriptors,
+/// so it keeps its bindings from one run to the next. A descriptor not there yet is added, and its default bindings
+/// are added to Port 1's; one seen before gets nothing added, unless no [Pad1] key has a binding of its own. The table
+/// is only appended to, so an index never changes in this process: ReloadSettings() writes it back. A settings.ini
+/// adapted (AdaptForeignSettings()) or reset has none.
 void QueueDeviceConnected(s32 device_id, std::string name, std::string descriptor);
 void QueueDeviceDisconnected(s32 device_id);
+
+enum class PadBindingKind : u8
+{
+  Button,
+  Axis,
+  HalfAxis,
+};
+
+/// One of Port 1's inputs, and the binding one controller has for it, without its Android-<index>/ prefix (Button96,
+/// +Axis23), if it has one.
+struct PadBinding
+{
+  std::string name;         // the [Pad1] key
+  std::string display_name; // the core's, untranslated
+  PadBindingKind kind;
+  std::optional<std::string> binding;
+};
+
+/// Each controller's own bindings on Port 1, by its descriptor. They run on the CPU thread and block; the two that
+/// change bindings save settings.ini and apply them (System::ReloadInputBindings()). For a descriptor not in the table
+/// (one never connected), or before Initialize() succeeded, they do nothing and GetPadBindings() gives nullopt.
+
+/// Port 1's controller type's buttons and axes (Button, Axis and HalfAxis), in the core's order, each with the
+/// controller's first binding for it.
+std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
+
+/// Replaces the controller's bindings for Port 1's input name with binding, or with none if it's empty. Other
+/// controllers' stay as they are. An input Port 1's type doesn't have is refused.
+void SetPadBinding(std::string descriptor, std::string name, std::string binding);
+
+/// Drops the controller's bindings from every [Pad1] key, then adds its defaults, as a new controller gets them.
+void ResetPadBindings(std::string descriptor);
 
 /// Lets go of every controller input, from any thread, in order with the events queued before it. For when the app
 /// stops getting a device's events (focus lost, in the background) and when a game boots or stops.

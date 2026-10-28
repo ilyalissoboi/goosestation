@@ -9,6 +9,9 @@
 
 #include <map>
 #include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -58,6 +61,17 @@ std::optional<GenericInputBinding> GetBindingForAxis(s32 axis, bool positive);
 /// InputManager::MapController. That binds the first string for each input; the others are there for the record.
 GenericInputBindingMapping GetDefaultMapping(u32 device_index);
 
+/// The device index (the n of Android-<n>) of a controller's descriptor: its position in descriptors. A descriptor not
+/// there yet is appended, and *added is set to whether it was.
+u32 IndexForDescriptor(std::vector<std::string>& descriptors, std::string_view descriptor, bool* added);
+
+/// The first of a [PadN] key's bindings that is device index's (Android-<index>/...), without that prefix.
+std::optional<std::string> GetDeviceBinding(std::span<const std::string> bindings, u32 index);
+
+/// A [PadN] key's bindings with every one of device index's dropped and the others kept in order, then
+/// Android-<index>/<binding> appended, unless binding is empty.
+std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings, u32 index, std::string_view binding);
+
 /// An input to report to the core: Button<number> or Axis<number> of the device, at a value.
 struct PadEvent
 {
@@ -68,7 +82,8 @@ struct PadEvent
 };
 
 /// One device's input state. Turns Android's key and axis events into the events to report:
-/// - keys are buttons (pressed 1, released 0), and axes pass their values as they are;
+/// - keys are buttons (pressed 1, released 0), those with no pad input too (GenericInputBinding::Unknown), and axes
+///   pass their values as they are;
 /// - the hat presses the d-pad buttons (Button19-22) instead of moving an axis, and a d-pad direction that comes
 ///   both as a key and from the hat is pressed while either holds it;
 /// - each trigger's key and two axes (L2, LTRIGGER and BRAKE; R2, RTRIGGER and GAS) all report the largest of the

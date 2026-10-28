@@ -6,15 +6,20 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <string>
 #include <string_view>
+#include <vector>
 
 // The numbers below are Android's own KeyEvent.KEYCODE_* and MotionEvent.AXIS_* values, written out so that the
 // tests check the mapping against what Android reports, not against the constants it is written with.
 
 using AndroidInputKeys::GetBindingForAxis;
 using AndroidInputKeys::GetBindingForKeyCode;
+using AndroidInputKeys::GetDeviceBinding;
+using AndroidInputKeys::IndexForDescriptor;
 using AndroidInputKeys::PadEvent;
 using AndroidInputKeys::PadState;
+using AndroidInputKeys::SetDeviceBinding;
 
 TEST(AndroidInputKeys, PadButtons)
 {
@@ -365,4 +370,66 @@ TEST(AndroidInputKeys, PressAgainAfterReleaseAll)
   events = Axis(pad, 18, 1.0f);
   ASSERT_EQ(events.size(), 3u);
   ExpectEvent(events[0], AXIS, 18, 1.0f, GenericInputBinding::R2);
+}
+
+// Keys without a pad binding, such as BUTTON_C, BUTTON_Z and BUTTON_1 to 16, are buttons too, so they can be bound.
+TEST(AndroidInputKeys, UnmappedKeysAreButtons)
+{
+  PadState pad;
+  const std::vector<PadEvent> events = Key(pad, 188, true); // KEYCODE_BUTTON_1
+  ASSERT_EQ(events.size(), 1u);
+  ExpectEvent(events[0], BUTTON, 188, 1.0f, GenericInputBinding::Unknown);
+}
+
+TEST(AndroidInputKeys, IndexForDescriptor)
+{
+  std::vector<std::string> descriptors = {"a"};
+
+  bool added = false;
+  EXPECT_EQ(IndexForDescriptor(descriptors, "b", &added), 1u);
+  EXPECT_TRUE(added);
+  EXPECT_EQ(descriptors, (std::vector<std::string>{"a", "b"}));
+
+  EXPECT_EQ(IndexForDescriptor(descriptors, "a", &added), 0u);
+  EXPECT_FALSE(added);
+  EXPECT_EQ(descriptors, (std::vector<std::string>{"a", "b"}));
+}
+
+TEST(AndroidInputKeys, SetDeviceBinding)
+{
+  const std::vector<std::string> bindings = {"Android-0/Button96", "Android-1/Button96"};
+
+  EXPECT_EQ(SetDeviceBinding(bindings, 1, "Button97"),
+            (std::vector<std::string>{"Android-0/Button96", "Android-1/Button97"}));
+  EXPECT_EQ(SetDeviceBinding(bindings, 1, ""), (std::vector<std::string>{"Android-0/Button96"}));
+}
+
+// Every entry of the device goes, the others stay in order, and Android-10 isn't Android-1.
+TEST(AndroidInputKeys, SetDeviceBindingTouchesOnlyThatDevice)
+{
+  const std::vector<std::string> bindings = {"Android-1/Button96", "Android-10/Button99", "SDL-0/A",
+                                             "Android-1/+Axis17", "Android-0/Button96"};
+
+  EXPECT_EQ(SetDeviceBinding(bindings, 1, "Button97"),
+            (std::vector<std::string>{"Android-10/Button99", "SDL-0/A", "Android-0/Button96", "Android-1/Button97"}));
+  EXPECT_EQ(SetDeviceBinding(bindings, 10, ""),
+            (std::vector<std::string>{"Android-1/Button96", "SDL-0/A", "Android-1/+Axis17", "Android-0/Button96"}));
+  EXPECT_EQ(SetDeviceBinding({}, 2, "+Axis23"), (std::vector<std::string>{"Android-2/+Axis23"}));
+}
+
+TEST(AndroidInputKeys, GetDeviceBinding)
+{
+  const std::vector<std::string> bindings = {"Android-0/Button96", "Android-1/Button96"};
+
+  EXPECT_EQ(GetDeviceBinding(bindings, 1), std::optional<std::string>("Button96"));
+  EXPECT_EQ(GetDeviceBinding(bindings, 2), std::nullopt);
+}
+
+TEST(AndroidInputKeys, GetDeviceBindingTakesTheFirstOfThatDevice)
+{
+  const std::vector<std::string> bindings = {"Android-10/Button99", "Android-1/+Axis17", "Android-1/Button104"};
+
+  EXPECT_EQ(GetDeviceBinding(bindings, 1), std::optional<std::string>("+Axis17"));
+  EXPECT_EQ(GetDeviceBinding(bindings, 10), std::optional<std::string>("Button99"));
+  EXPECT_EQ(GetDeviceBinding(bindings, 0), std::nullopt);
 }

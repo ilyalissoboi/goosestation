@@ -21,6 +21,17 @@
     <init>(java.lang.String, java.lang.String, java.lang.String);
 }
 
+# jni_bridge.cpp finds PadBinding and its constructor, and PadBindingKind's values, by name in JNI_OnLoad, for
+# getPadBindings().
+-keep class io.github.ilyalissoboi.goosestation.core.PadBinding {
+    <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.PadBindingKind, java.lang.String);
+}
+-keep enum io.github.ilyalissoboi.goosestation.core.PadBindingKind {
+    public static final io.github.ilyalissoboi.goosestation.core.PadBindingKind Button;
+    public static final io.github.ilyalissoboi.goosestation.core.PadBindingKind Axis;
+    public static final io.github.ilyalissoboi.goosestation.core.PadBindingKind HalfAxis;
+}
+
 # content_bridge.cpp finds ContentBridge's static methods and NativeDocument's fields by name in JNI_OnLoad, and calls
 # them only from native code.
 -keep class io.github.ilyalissoboi.goosestation.storage.ContentBridge {

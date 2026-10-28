@@ -146,6 +146,47 @@ std::optional<GenericInputBinding> GetBindingForAxis(s32 axis, bool positive)
   return std::nullopt;
 }
 
+u32 IndexForDescriptor(std::vector<std::string>& descriptors, std::string_view descriptor, bool* added)
+{
+  const auto it = std::find(descriptors.begin(), descriptors.end(), descriptor);
+  *added = (it == descriptors.end());
+  if (!*added)
+    return static_cast<u32>(it - descriptors.begin());
+
+  descriptors.emplace_back(descriptor);
+  return static_cast<u32>(descriptors.size() - 1);
+}
+
+std::optional<std::string> GetDeviceBinding(std::span<const std::string> bindings, u32 index)
+{
+  // With the '/', so Android-1/ isn't taken for Android-10/'s start.
+  const std::string prefix = fmt::format("Android-{}/", index);
+  for (const std::string& binding : bindings)
+  {
+    if (binding.starts_with(prefix))
+      return binding.substr(prefix.size());
+  }
+
+  return std::nullopt;
+}
+
+std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings, u32 index, std::string_view binding)
+{
+  const std::string prefix = fmt::format("Android-{}/", index);
+  std::vector<std::string> result;
+  result.reserve(bindings.size() + 1);
+  for (const std::string& existing : bindings)
+  {
+    if (!existing.starts_with(prefix))
+      result.push_back(existing);
+  }
+
+  if (!binding.empty())
+    result.push_back(fmt::format("{}{}", prefix, binding));
+
+  return result;
+}
+
 GenericInputBindingMapping GetDefaultMapping(u32 device_index)
 {
   GenericInputBindingMapping mapping;

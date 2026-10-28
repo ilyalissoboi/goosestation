@@ -60,6 +60,16 @@ class SettingsSetupTest {
         assertEquals("3", ini.value("Main", "SettingsVersion"))
     }
 
+    // Another install's controller indices mean nothing here: its bindings are reset, and so is the table.
+    @Test
+    fun foreignFileDropsDescriptors() {
+        initialize(DESKTOP_FILE + "\n[Android]\nInstallID = other-install\nControllerDescriptors = other-pad\n")
+
+        val ini = readSettings()
+        assertEquals(INSTALL_ID, ini.value("Android", "InstallID"))
+        assertFalse(ini.toString(), ini.allValues().contains("other-pad"))
+    }
+
     @Test
     fun ownFileIsKept() {
         initialize(DESKTOP_FILE + "\n[Android]\nInstallID = $INSTALL_ID\n")
@@ -133,13 +143,19 @@ class SettingsSetupTest {
         initialize(null)
         NativeLibrary.onDeviceConnected(1, "Test Pad", "test-pad")
         waitFor("Port 1 has the pad's bindings") { readSettings().values("Pad1", "Cross").any { it.startsWith("Android-0/") } }
-        settingsFile.writeText("[Main]\nSettingsVersion = 3\n\n[Pad1]\nType = AnalogController\nCross = SDL-0/A\n")
+        settingsFile.writeText(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nControllerDescriptors = other-pad\n\n" +
+                "[Pad1]\nType = AnalogController\nCross = SDL-0/A\n",
+        )
 
         NativeLibrary.reloadSettings()
 
-        val cross = readSettings().values("Pad1", "Cross")
+        val ini = readSettings()
+        val cross = ini.values("Pad1", "Cross")
         assertTrue(cross.toString(), cross.any { it.startsWith("Android-0/") })
         assertFalse(cross.toString(), cross.any { it.contains("SDL-0") })
+        // The pad keeps its index, and the table says so.
+        assertEquals(listOf("test-pad"), ini.values("Android", "ControllerDescriptors"))
     }
 
     @Test

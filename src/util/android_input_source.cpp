@@ -49,20 +49,6 @@ static_assert(AndroidInputKeys::AXIS_BRAKE == AMOTION_EVENT_AXIS_BRAKE);
 
 static constexpr std::string_view DEVICE_PREFIX = "Android-";
 
-// The index belongs to the descriptor until the process exits, even across a restart of the input source. Only the
-// CPU thread touches it.
-static std::vector<std::string> s_descriptors;
-
-static u32 GetIndexForDescriptor(const std::string& descriptor)
-{
-  const auto it = std::find(s_descriptors.begin(), s_descriptors.end(), descriptor);
-  if (it != s_descriptors.end())
-    return static_cast<u32>(it - s_descriptors.begin());
-
-  s_descriptors.push_back(descriptor);
-  return static_cast<u32>(s_descriptors.size() - 1);
-}
-
 static std::optional<u32> ParseDeviceIndex(std::string_view device)
 {
   if (!device.starts_with(DEVICE_PREFIX))
@@ -108,27 +94,27 @@ void AndroidInputSource::QueueEvent(QueuedEvent event)
 
 void AndroidInputSource::QueueKeyEvent(s32 device_id, s32 keycode, bool pressed)
 {
-  QueueEvent(QueuedEvent{QueuedEvent::Type::Key, device_id, keycode, pressed ? 1.0f : 0.0f, {}, {}});
+  QueueEvent(QueuedEvent{QueuedEvent::Type::Key, device_id, keycode, 0, pressed ? 1.0f : 0.0f, {}});
 }
 
 void AndroidInputSource::QueueAxisEvent(s32 device_id, s32 axis, float value)
 {
-  QueueEvent(QueuedEvent{QueuedEvent::Type::Axis, device_id, axis, value, {}, {}});
+  QueueEvent(QueuedEvent{QueuedEvent::Type::Axis, device_id, axis, 0, value, {}});
 }
 
-void AndroidInputSource::QueueDeviceConnected(s32 device_id, std::string name, std::string descriptor)
+void AndroidInputSource::QueueDeviceConnected(s32 device_id, u32 index, std::string name)
 {
-  QueueEvent(QueuedEvent{QueuedEvent::Type::Connected, device_id, 0, 0.0f, std::move(name), std::move(descriptor)});
+  QueueEvent(QueuedEvent{QueuedEvent::Type::Connected, device_id, 0, index, 0.0f, std::move(name)});
 }
 
 void AndroidInputSource::QueueDeviceDisconnected(s32 device_id)
 {
-  QueueEvent(QueuedEvent{QueuedEvent::Type::Disconnected, device_id, 0, 0.0f, {}, {}});
+  QueueEvent(QueuedEvent{QueuedEvent::Type::Disconnected, device_id, 0, 0, 0.0f, {}});
 }
 
 void AndroidInputSource::QueueReleaseAll()
 {
-  QueueEvent(QueuedEvent{QueuedEvent::Type::ReleaseAll, 0, 0, 0.0f, {}, {}});
+  QueueEvent(QueuedEvent{QueuedEvent::Type::ReleaseAll, 0, 0, 0, 0.0f, {}});
 }
 
 void AndroidInputSource::PollEvents()
@@ -162,7 +148,7 @@ void AndroidInputSource::PollEvents()
       break;
 
       case QueuedEvent::Type::Connected:
-        HandleConnected(event.device_id, std::move(event.name), event.descriptor);
+        HandleConnected(event.device_id, event.index, std::move(event.name));
         break;
 
       case QueuedEvent::Type::Disconnected:
@@ -193,12 +179,11 @@ bool AndroidInputSource::IsIndexConnected(u32 index) const
   return std::any_of(m_devices.begin(), m_devices.end(), [index](const Device& d) { return d.index == index; });
 }
 
-void AndroidInputSource::HandleConnected(s32 device_id, std::string name, const std::string& descriptor)
+void AndroidInputSource::HandleConnected(s32 device_id, u32 index, std::string name)
 {
   if (GetDeviceById(device_id))
     return;
 
-  const u32 index = GetIndexForDescriptor(descriptor);
   if (index > 0xFFu)
   {
     // InputBindingKey has 8 bits for it.

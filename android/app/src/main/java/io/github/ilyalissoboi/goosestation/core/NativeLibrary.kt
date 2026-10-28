@@ -7,8 +7,8 @@ import android.view.Surface
 
 /**
  * The emulator core, in libgoosestation.so. The core runs on its own thread: these calls queue work for it and
- * return straight away, except [initialize], [surfaceChanged], [reloadSettings] and [applySettings], which wait for
- * it, and [refreshGameList], which scans on the calling thread.
+ * return straight away, except [initialize], [surfaceChanged], [reloadSettings], [applySettings] and the pad binding
+ * calls, which wait for it, and [refreshGameList], which scans on the calling thread.
  */
 object NativeLibrary {
     init {
@@ -144,4 +144,24 @@ object NativeLibrary {
 
     /** Lets go of every controller input, after the input sent before it. */
     external fun releaseAllInputs()
+
+    // Each controller keeps its own bindings on Port 1, by its InputDevice descriptor, from one run to the next. These
+    // wait for the core and save settings.ini, so call them off the main thread.
+
+    /**
+     * Port 1's buttons and axes, in the core's order, each with the binding the controller with [descriptor] has for
+     * it. Null for a controller never connected to this install, before [initialize], or if the list can't be passed
+     * on (it's logged).
+     */
+    external fun getPadBindings(descriptor: String): Array<PadBinding>?
+
+    /**
+     * Binds the Port 1 input [name] (a [PadBinding.name]) to [binding] on the controller with [descriptor], in place
+     * of the one it had, and applies it. Null or empty leaves the input unbound on that controller. Other controllers
+     * keep theirs. Does nothing for a controller [getPadBindings] gives null for.
+     */
+    external fun setPadBinding(descriptor: String, name: String, binding: String?)
+
+    /** Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. */
+    external fun resetPadBindings(descriptor: String)
 }

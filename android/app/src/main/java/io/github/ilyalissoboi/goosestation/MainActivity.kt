@@ -18,7 +18,7 @@ import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
-import io.github.ilyalissoboi.goosestation.ui.ComingSoonScreen
+import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
@@ -34,6 +34,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var folderPicker: FolderPicker
 
     private val inGame get() = AppController.screen == Screen.Game
+
+    // The controllers' input goes to the core: in a game, or while a capture takes the next input as a binding.
+    private val padInput get() = inGame || AppController.capturingInput
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,7 +96,27 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                    Screen.Controllers -> ComingSoonScreen("Controllers", onBack = AppController::closeSettingsPage)
+                    Screen.Controllers -> {
+                        val state = AppController.controllersState
+                        val bindings = state.bindings
+                        if (bindings == null) {
+                            SettingsLoadingPage("Controllers", onBack = AppController::closeSettingsPage)
+                        } else {
+                            ControllersScreen(
+                                controllers = state.controllers,
+                                selected = state.selected,
+                                bindings = bindings,
+                                capturing = state.capturing,
+                                secondsLeft = state.secondsLeft,
+                                onSelect = AppController::selectController,
+                                onCapture = AppController::captureBinding,
+                                onCancelCapture = AppController::cancelCapture,
+                                onClear = AppController::clearBinding,
+                                onReset = AppController::resetBindings,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
                     Screen.Folders -> {
                         val mirrorState by AppController.mirrorState.collectAsState()
                         FoldersScreen(
@@ -174,16 +197,17 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    // On the game screen, controllers go to the core; elsewhere, they move Compose's focus.
+    // With padInput, controllers go to the core; otherwise they move Compose's focus. A key-up goes where its key-down
+    // went, either way, and a stick the core was given stays its until it's back near rest.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val controllers = AppController.controllers
-        if (inGame && controllers != null && controllers.onKeyEvent(event)) return true
+        if (controllers != null && controllers.onKeyEvent(event, padInput)) return true
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         val controllers = AppController.controllers
-        if (inGame && controllers != null && controllers.onMotionEvent(event)) return true
+        if (controllers != null && controllers.onMotionEvent(event, padInput)) return true
         return super.dispatchGenericMotionEvent(event)
     }
 }

@@ -18,7 +18,9 @@ import androidx.core.content.ContextCompat
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.Resources
+import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
@@ -79,6 +81,19 @@ enum class Screen(
 }
 
 /**
+ * The Controllers page: the [controllers] connected, the [selected] one's descriptor, and its [bindings], null until
+ * they're first read. While [capturing] is a binding's name, the next input on that controller becomes its binding,
+ * unless [secondsLeft] runs out first.
+ */
+data class ControllersState(
+    val controllers: List<ConnectedController> = emptyList(),
+    val selected: String? = null,
+    val bindings: List<PadBinding>? = null,
+    val capturing: String? = null,
+    val secondsLeft: Int = 0,
+)
+
+/**
  * The core, the folders, the mirror and what the app shows, for the life of the process, so a recreated activity
  * carries on. Main thread only, except the [NativeCallbacks], which the core calls on its threads: they post to the
  * main thread and never wait for it, since it may be waiting for the core in [NativeLibrary.surfaceChanged].
@@ -94,6 +109,7 @@ object AppController : NativeCallbacks {
     private const val CARD_REMOVED = "the SD card was removed"
     private const val GAME_STOPPED_FOR_EJECT =
         "The SD card was removed, so the game was stopped. Its memory cards are saved on this device."
+    private const val CAPTURE_SECONDS = 5
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = MainScope()
@@ -165,6 +181,27 @@ object AppController : NativeCallbacks {
     /** The BIOS page's images and settings, as read on opening it; null until they are. */
     var bios by mutableStateOf<BiosPage?>(null)
         private set
+
+    /** The Controllers page's controllers, bindings and capture. */
+    var controllersState by mutableStateOf(ControllersState())
+        private set
+
+    /** A capture runs: the controllers' input goes to the core, which takes the next one as a binding. */
+    val capturingInput: Boolean get() = controllersState.capturing != null
+
+    /** The controller last picked on the Controllers page, which it selects whenever it's connected. */
+    private var pickedController: String? = null
+    private var controllersJob: Job? = null
+    private var captureTimer: Job? = null
+
+    /** The latest bindings read, so an older read that comes back later is dropped. */
+    private var bindingsRead = 0
+
+    /** Changes as each capture starts or ends, so a report the main thread gets late is dropped. */
+    private var captureId = 0
+
+    /** [captureId] of the capture the core runs: set on [coreDispatcher], read where the core reports. */
+    @Volatile private var nativeCaptureId = 0
 
     /** An import copied images before the core started: the overrides they leave stale are dropped once it has. */
     private var biosOverridesToCheck = false
@@ -475,7 +512,8 @@ object AppController : NativeCallbacks {
                         }
                 }
             }
-            SettingsEntry.Controllers, SettingsEntry.Folders -> {}
+            SettingsEntry.Controllers -> watchControllers()
+            SettingsEntry.Folders -> {}
         }
         screen = Screen.entries.first { it.page == entry }
     }
@@ -484,6 +522,11 @@ object AppController : NativeCallbacks {
     fun closeSettingsPage() {
         val page = screen.page ?: return
         if (page == SettingsEntry.Folders) return closeFolders()
+        if (page == SettingsEntry.Controllers) {
+            cancelCapture()
+            controllersJob?.cancel()
+            controllersJob = null
+        }
         settingsEntry = page
         screen = Screen.Settings
     }
@@ -526,6 +569,135 @@ object AppController : NativeCallbacks {
             BiosFastBoot.save(NativeCoreSettings, on)
             NativeLibrary.applySettings()
         }
+    }
+
+    // --- The Controllers page ---
+
+    /** Shows the controller with [descriptor]'s bindings, and selects it whenever it's connected from now on. */
+    fun selectController(descriptor: String) {
+        pickedController = descriptor
+        val state = controllersState
+        if (descriptor == state.selected || state.controllers.none { it.descriptor == descriptor }) return
+        cancelCapture()
+        controllersState = controllersState.copy(selected = descriptor)
+        readBindings(descriptor)
+    }
+
+    /**
+     * Captures the selected controller's next input as [name]'s binding ([onBindingCaptured]): for 5 s, counting down
+     * once a second, and then it's cancelled. Its controllers' input goes to the core meanwhile ([capturingInput]).
+     */
+    fun captureBinding(name: String) {
+        val state = controllersState
+        val descriptor = state.selected ?: return
+        if (screen != Screen.Controllers || state.bindings?.any { it.name == name } != true) return
+        val id = ++captureId
+        captureTimer?.cancel()
+        controllersState = state.copy(capturing = name, secondsLeft = CAPTURE_SECONDS)
+        scope.launch(coreDispatcher) {
+            // Nothing from an earlier capture comes once the cancel returns: what's reported next is this one's.
+            NativeLibrary.cancelBindingCapture()
+            nativeCaptureId = id
+            NativeLibrary.startBindingCapture(descriptor)
+        }
+        captureTimer =
+            scope.launch {
+                for (left in CAPTURE_SECONDS downTo 1) {
+                    controllersState = controllersState.copy(secondsLeft = left)
+                    delay(1_000)
+                }
+                cancelCapture()
+            }
+    }
+
+    /** Ends the capture running, if any, leaving the binding as it was. */
+    fun cancelCapture() {
+        if (controllersState.capturing == null) return
+        endCapture()
+        scope.launch {
+            withContext(coreDispatcher) { NativeLibrary.cancelBindingCapture() }
+            // Once the capture is gone, as it would swallow the releases too.
+            controllers?.releaseAll()
+        }
+    }
+
+    /** Leaves [name] unbound on the selected controller. */
+    fun clearBinding(name: String) {
+        val descriptor = controllersState.selected ?: return
+        if (capturingInput) return
+        setBindingShown(name, null)
+        readBindings(descriptor) { NativeLibrary.setPadBinding(descriptor, name, null) }
+    }
+
+    /** Gives the selected controller its default bindings again. */
+    fun resetBindings() {
+        val descriptor = controllersState.selected ?: return
+        if (capturingInput) return
+        readBindings(descriptor) { NativeLibrary.resetPadBindings(descriptor) }
+    }
+
+    /** Follows the controllers connected while the Controllers page is open, from no bindings read yet. */
+    private fun watchControllers() {
+        controllersJob?.cancel()
+        controllersState = ControllersState()
+        val input = controllers ?: return
+        controllersJob = scope.launch { input.connected.collect(::onControllersChanged) }
+    }
+
+    /**
+     * The page lists [connected], and selects the controller last picked if it's among them, or else the first. A
+     * capture on a controller that's gone is cancelled.
+     */
+    private fun onControllersChanged(connected: List<ConnectedController>) {
+        val old = controllersState
+        val selected =
+            (connected.firstOrNull { it.descriptor == pickedController } ?: connected.firstOrNull())?.descriptor
+        if (selected != old.selected) cancelCapture()
+        controllersState = controllersState.copy(controllers = connected, selected = selected)
+        when {
+            selected == null -> {
+                bindingsRead++
+                controllersState = controllersState.copy(bindings = emptyList())
+            }
+            selected != old.selected -> readBindings(selected)
+        }
+    }
+
+    /**
+     * Runs [change], if any, then reads [descriptor]'s bindings, on [coreDispatcher]; they show if it's still selected
+     * and no later read was asked for.
+     */
+    private fun readBindings(
+        descriptor: String,
+        change: (() -> Unit)? = null,
+    ) {
+        val read = ++bindingsRead
+        scope.launch {
+            val loaded =
+                withContext(coreDispatcher) {
+                    change?.invoke()
+                    NativeLibrary.getPadBindings(descriptor)?.toList()
+                }
+            if (read != bindingsRead || controllersState.selected != descriptor) return@launch
+            controllersState = controllersState.copy(bindings = loaded.orEmpty())
+        }
+    }
+
+    // Shows [name] bound to [binding] now, until the bindings are read again.
+    private fun setBindingShown(
+        name: String,
+        binding: String?,
+    ) {
+        val bindings = controllersState.bindings ?: return
+        controllersState =
+            controllersState.copy(bindings = bindings.map { if (it.name == name) it.copy(binding = binding) else it })
+    }
+
+    private fun endCapture() {
+        captureId++
+        captureTimer?.cancel()
+        captureTimer = null
+        controllersState = controllersState.copy(capturing = null, secondsLeft = 0)
     }
 
     fun closeFolders() {
@@ -1153,6 +1325,24 @@ object AppController : NativeCallbacks {
                 pull(onlyMemcards = true)
                 push(force = true)
             }
+        }
+    }
+
+    override fun onBindingCaptured(binding: String) {
+        // The capture's, as the core reports it: a later one only starts once this one can't report any more.
+        val id = nativeCaptureId
+        mainHandler.post {
+            val state = controllersState
+            val name = state.capturing
+            val descriptor = state.selected
+            // Cancelled, timed out or replaced since it was posted.
+            if (id != captureId || name == null || descriptor == null) return@post
+            Log.i(TAG, "Captured $binding for $name")
+            endCapture()
+            // The core removed the capture as it took the input, so the releases reach it.
+            controllers?.releaseAll()
+            setBindingShown(name, binding)
+            readBindings(descriptor) { NativeLibrary.setPadBinding(descriptor, name, binding) }
         }
     }
 

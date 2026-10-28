@@ -3,16 +3,12 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 
@@ -62,21 +58,5 @@ fun SettingsScreen(
                 enabled = enabled(entry),
             )
         }
-    }
-}
-
-/** A page still to come, with only its [title] and a line saying so. B or Back go back ([onBack]). */
-@Composable
-fun ComingSoonScreen(
-    title: String,
-    onBack: () -> Unit,
-) {
-    SettingsPage(title, onBack = onBack) {
-        Text(
-            "Coming soon.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
     }
 }

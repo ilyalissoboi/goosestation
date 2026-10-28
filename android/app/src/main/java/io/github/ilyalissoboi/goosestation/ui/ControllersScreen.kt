@@ -5,7 +5,8 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.input.BindingLabels
@@ -29,6 +29,7 @@ import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.ChoiceRow
+import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 
@@ -120,7 +121,10 @@ fun ControllersScreen(
     }
 }
 
-/** One of Port 1's inputs: its name and what it's bound to, or the [prompt] while it's captured; then its Clear. */
+/**
+ * One of Port 1's inputs: its name and what it's bound to, or the [prompt] while it's captured; then its Clear. The
+ * prompt is longer than a binding's name, so the row grows: it's kept in view, as when it was focused.
+ */
 @Composable
 private fun BindingRow(
     binding: PadBinding,
@@ -130,25 +134,28 @@ private fun BindingRow(
     modifier: Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val inView = remember { BringIntoViewRequester() }
+    val capturing = prompt != null
+    LaunchedEffect(capturing) { if (capturing) inView.bringIntoView() }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Row(
+        LabelValue(
             modifier =
                 modifier
                     .weight(1f)
+                    .bringIntoViewRequester(inView)
                     .focusRing(role = Role.Button, onClick = onCapture)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(binding.displayName, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
-            Text(
-                prompt ?: BindingLabels.label(binding.binding),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (prompt != null) colors.tertiary else colors.primary,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
-            )
-        }
+            label = {
+                Text(binding.displayName, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+            },
+            value = {
+                Text(
+                    prompt ?: BindingLabels.label(binding.binding),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (prompt != null) colors.tertiary else colors.primary,
+                )
+            },
+        )
         ActionButton("Clear", onClick = onClear)
     }
 }

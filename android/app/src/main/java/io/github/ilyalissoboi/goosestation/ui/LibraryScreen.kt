@@ -6,8 +6,8 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -95,16 +95,22 @@ fun LibraryScreen(
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The buttons go under the name when they don't fit beside it, on a narrow screen or with large text.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 "GooseStation",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
             )
-            ActionButton(if (gridView) "List" else "Grid", onClick = onToggleView)
-            ActionButton("Settings", onClick = onOpenSettings, modifier = Modifier.focusRequester(settings))
-            ActionButton("Refresh", onClick = onRefresh)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(if (gridView) "List" else "Grid", onClick = onToggleView)
+                ActionButton("Settings", onClick = onOpenSettings, modifier = Modifier.focusRequester(settings))
+                ActionButton("Refresh", onClick = onRefresh)
+            }
         }
 
         banners.forEach { Banner(it) }

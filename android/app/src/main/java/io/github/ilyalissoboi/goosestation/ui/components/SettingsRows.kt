@@ -37,7 +37,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 
 /** One of a [ChoiceRow]'s choices: [value] as settings.ini has it, [label] as the row shows it. */
@@ -216,7 +218,7 @@ fun NavRow(
     }
 }
 
-/** A row's focusable line: [label] on the left, [value] on the right. */
+/** A row's focusable line: [label] on the left, [value] on the right, or under the label when they don't fit. */
 @Composable
 private fun RowLine(
     label: String,
@@ -226,24 +228,68 @@ private fun RowLine(
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    Row(
+    LabelValue(
         modifier =
             modifier
                 .fillMaxWidth()
                 .focusRing(role = role, onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Text(value, style = MaterialTheme.typography.bodyLarge, color = colors.primary)
+        label = { Text(label, style = MaterialTheme.typography.titleMedium, color = colors.onSurface) },
+        value = { Text(value, style = MaterialTheme.typography.bodyLarge, color = colors.primary) },
+    )
+}
+
+/**
+ * A [label] with its [value] at the end of the line, when both fit on it, or the value is short enough for the label
+ * to wrap beside it; otherwise, as on a narrow screen or with large text, the value goes under the label. Either way
+ * each gets the width to wrap at its spaces, rather than one squeezing the other. It takes the width it's given.
+ */
+@Composable
+fun LabelValue(
+    label: @Composable () -> Unit,
+    value: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(
+        content = {
+            label()
+            value()
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val (labelMeasurable, valueMeasurable) = measurables
+        val gap = LABEL_VALUE_GAP.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val labelWidth = labelMeasurable.maxIntrinsicWidth(Constraints.Infinity)
+        val valueWidth = valueMeasurable.maxIntrinsicWidth(Constraints.Infinity)
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else labelWidth + gap + valueWidth
+        if (labelWidth + gap + valueWidth <= width || valueWidth <= (width - gap) / SHORT_VALUE_SHARE) {
+            val valuePlaceable = valueMeasurable.measure(loose)
+            val labelMax = (width - gap - valuePlaceable.width).coerceAtLeast(0)
+            val labelPlaceable = labelMeasurable.measure(loose.copy(maxWidth = labelMax))
+            val height = maxOf(labelPlaceable.height, valuePlaceable.height).coerceAtLeast(constraints.minHeight)
+            layout(width, height) {
+                labelPlaceable.place(0, (height - labelPlaceable.height) / 2)
+                valuePlaceable.place(width - valuePlaceable.width, (height - valuePlaceable.height) / 2)
+            }
+        } else {
+            val labelPlaceable = labelMeasurable.measure(loose)
+            val valuePlaceable = valueMeasurable.measure(loose)
+            val between = STACKED_GAP.roundToPx()
+            val height = (labelPlaceable.height + between + valuePlaceable.height).coerceAtLeast(constraints.minHeight)
+            layout(width, height) {
+                labelPlaceable.place(0, 0)
+                valuePlaceable.place(0, labelPlaceable.height + between)
+            }
+        }
     }
 }
+
+private val LABEL_VALUE_GAP = 16.dp
+private val STACKED_GAP = 4.dp
+
+/** A value up to this share of the line (one in three) stays beside its label, which wraps instead. */
+private const val SHORT_VALUE_SHARE = 3
 
 /** One choice in an open [ChoiceRow]: its label and note, and a mark when it's the one [checked]. */
 @Composable

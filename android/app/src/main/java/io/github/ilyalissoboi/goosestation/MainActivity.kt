@@ -27,7 +27,6 @@ import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
-import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 class MainActivity : ComponentActivity() {
@@ -76,8 +75,7 @@ class MainActivity : ComponentActivity() {
                     Screen.Graphics -> {
                         val graphics = AppController.graphics
                         if (graphics == null) {
-                            // For the moment it takes to read them.
-                            SettingsPage("Graphics", onBack = AppController::closeSettingsPage) {}
+                            SettingsLoadingPage("Graphics", onBack = AppController::closeSettingsPage)
                         } else {
                             GraphicsScreen(
                                 settings = graphics,

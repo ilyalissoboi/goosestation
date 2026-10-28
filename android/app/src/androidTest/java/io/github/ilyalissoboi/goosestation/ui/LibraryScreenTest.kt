@@ -7,15 +7,19 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -23,7 +27,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -75,6 +81,7 @@ class LibraryScreenTest {
         gridView: () -> Boolean = { true },
         focusPath: String? = null,
         focusSettings: Boolean = false,
+        onToggleView: () -> Unit = {},
     ) {
         rule.setContent {
             GooseStationTheme {
@@ -85,7 +92,7 @@ class LibraryScreenTest {
                         banners = emptyList(),
                         message = null,
                         isError = false,
-                        onToggleView = {},
+                        onToggleView = onToggleView,
                         onOpenSettings = {},
                         onRefresh = {},
                         onStartGame = { started += it },
@@ -150,6 +157,18 @@ class LibraryScreenTest {
     }
 
     @Test
+    fun theToggleButtonHandsTheFocusToTheGame() {
+        var grid by mutableStateOf(true)
+        show(gridView = { grid }, focusPath = entry(25).path, onToggleView = { grid = !grid })
+        rule.onNodeWithText("List").requestFocus()
+
+        press(Key.Enter)
+
+        rule.onNodeWithText("NTSC-U · SLUS-00025 · Never played").assertExists()
+        rule.onNodeWithText("Game 25").assertIsFocused()
+    }
+
+    @Test
     fun upFromTheFirstRowReachesTheTopBar() {
         show()
 
@@ -182,6 +201,43 @@ class LibraryScreenTest {
     fun comingBackFromTheSettingsFocusesSettings() {
         show(focusPath = entry(25).path, focusSettings = true)
 
+        rule.onNodeWithText("Settings").assertIsFocused()
+    }
+
+    @Test
+    fun stalePendingFocusIsDropped() {
+        // Settings takes the focus after the screen asks for the last game, before the grid has composed it: the
+        // test's effect runs after the screen's, and the game's own effect, which focuses it, comes after both.
+        rule.setContent {
+            val focusManager = LocalFocusManager.current
+            GooseStationTheme {
+                Box(Modifier.width(460.dp)) {
+                    LibraryScreen(
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = entry(30).path,
+                    )
+                }
+            }
+            LaunchedEffect(Unit) {
+                // List (the view toggle), then Settings.
+                focusManager.moveFocus(FocusDirection.Next)
+                focusManager.moveFocus(FocusDirection.Next)
+            }
+        }
+        rule.waitForIdle()
+
+        rule.onNode(hasScrollToIndexAction()).performScrollToIndex(29)
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Game 30").assertExists()
         rule.onNodeWithText("Settings").assertIsFocused()
     }
 }

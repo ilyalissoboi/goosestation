@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
@@ -91,6 +92,7 @@ fun LibraryScreen(
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .then(focus.screenModifier)
                 .safeDrawingPadding()
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -155,10 +157,17 @@ fun LibraryScreen(
     }
 }
 
-/** Which game has focus, by path, and which one is to take it once it's composed. */
+/**
+ * Which game has focus, by path, and which one is to take it once it's composed: [pending], until anything in the
+ * screen takes the focus, that game or anything else. A game scrolled away from before it was composed doesn't take
+ * the focus later, when it's scrolled back in.
+ */
 private class GameFocus {
     var focused: String? = null
     var pending by mutableStateOf<String?>(null)
+
+    /** For the whole screen, which sees the focus move anywhere in it. */
+    val screenModifier = Modifier.onFocusEvent { if (it.hasFocus) pending = null }
 
     /** For the item showing the game at [path]. */
     @Composable
@@ -166,8 +175,11 @@ private class GameFocus {
         val requester = remember { FocusRequester() }
         if (pending == path) {
             LaunchedEffect(Unit) {
-                requester.requestFocus()
-                pending = null
+                // Not if something else has taken the focus since the item was composed.
+                if (pending == path) {
+                    requester.requestFocus()
+                    pending = null
+                }
             }
         }
         return Modifier.focusRequester(requester).onFocusChanged { if (it.isFocused) focused = path }

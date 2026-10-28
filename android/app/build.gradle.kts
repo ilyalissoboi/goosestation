@@ -119,6 +119,64 @@ val stageResources = tasks.register<StageFiles>("stageResources") {
     subdirectory = "resources"
 }
 
+/**
+ * Fails on a call or import, in [sources], of anything that opens a window of its own: such a window takes the keys,
+ * and a controller's can be lost to it. Each is matched as a word, comments included.
+ */
+@CacheableTask
+abstract class CheckNoWindowDialogs : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:IgnoreEmptyDirectories
+    abstract val sources: ConfigurableFileCollection
+
+    /** What the files are named relative to, in the failure. */
+    @get:Internal
+    abstract val baseDirectory: DirectoryProperty
+
+    /** Written once the check passes, so an unchanged tree is up to date. */
+    @get:OutputFile
+    abstract val result: RegularFileProperty
+
+    private val forbidden =
+        listOf(
+            "AlertDialog",
+            "BasicAlertDialog",
+            "DatePickerDialog",
+            "TimePickerDialog",
+            "DropdownMenu",
+            "ExposedDropdownMenuBox",
+            "ModalBottomSheet",
+            "androidx.compose.ui.window.Dialog",
+            "androidx.compose.ui.window.Popup",
+            "android.app.Dialog",
+        ).map { it to Regex("""\b${Regex.escape(it)}\b""") }
+
+    @TaskAction
+    fun check() {
+        val base = baseDirectory.get().asFile
+        val found =
+            sources.files.sorted().flatMap { file ->
+                file.readLines().flatMapIndexed { index, line ->
+                    forbidden.filter { (_, pattern) -> pattern.containsMatchIn(line) }.map { (name, _) ->
+                        "${file.relativeTo(base)}:${index + 1}: $name opens its own window, which can swallow " +
+                            "controller keys. Draw it in the screen instead."
+                    }
+                }
+            }
+        if (found.isNotEmpty()) throw GradleException(found.joinToString("\n"))
+        result.get().asFile.writeText("No window dialogs.\n")
+    }
+}
+
+val checkNoWindowDialogs = tasks.register<CheckNoWindowDialogs>("checkNoWindowDialogs") {
+    sources.from(fileTree("src/main/java") { include("**/*.kt") })
+    baseDirectory = layout.projectDirectory
+    result = layout.buildDirectory.file("checkNoWindowDialogs/result.txt")
+}
+
+tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
+
 androidComponents {
     onVariants { variant ->
         variant.sources.jniLibs?.addGeneratedSourceDirectory(stageDepsLibraries, StageFiles::outputDirectory)

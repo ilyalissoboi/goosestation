@@ -7,6 +7,7 @@ import android.content.Context
 import android.hardware.input.InputManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -36,10 +37,19 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
     private val devices = LinkedHashMap<Int, Device>()
     private val router = KeyRouter()
     private val axisHold = AxisHold()
+    private val menuTrigger = MenuTrigger()
+    private val lateRelease = LateRelease()
+    private val handler = Handler(Looper.getMainLooper())
+
+    // For MenuTrigger's and LateRelease's deadlines, whichever comes first.
+    private val timer = Runnable { onTimer() }
     private val mutableConnected = MutableStateFlow(emptyList<ConnectedController>())
 
     /** The controllers reported to the core, one per descriptor (its first device), in the order they connected. */
     val connected: StateFlow<List<ConnectedController>> = mutableConnected.asStateFlow()
+
+    /** Called when a controller asks for the game's menu: Mode, or Select and Start held together ([MenuTrigger]). */
+    var onMenuRequested: (() -> Unit)? = null
 
     fun start() {
         inputManager.registerInputDeviceListener(this, Handler(Looper.getMainLooper()))
@@ -50,14 +60,20 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
 
     /**
      * Sends a controller's gamepad button or D-pad key to the core while [padInput] (a game or a capture takes the
-     * pads), and the rest of any press whose first key-down went there, whatever [padInput] is now ([KeyRouter]).
-     * Returns false for any other key, such as Back, volume or media keys, or any key while the pads are the app's, so
-     * that Compose or the system handles it.
+     * pads), and the rest of any press whose first key-down went there, whatever [padInput] is now ([KeyRouter]). The
+     * menu's triggers are taken out first ([MenuTrigger]), and a press they send late is held down a moment
+     * ([LateRelease]). Returns false for any other key, such as Back, volume or media keys, or any key while the pads
+     * are the app's, so that Compose or the system handles it.
      */
     fun onKeyEvent(
         event: KeyEvent,
         padInput: Boolean,
     ): Boolean {
+        // A late press of this key still waiting to be let go ends before anything else happens to the key.
+        if (lateRelease.flush(event.deviceId, event.keyCode)) {
+            NativeLibrary.onKey(event.deviceId, event.keyCode, false)
+            schedule()
+        }
         val toCore = padInput && isControllerEvent(event.source) && isPadKey(event.keyCode)
         val pressed =
             when (event.action) {
@@ -70,8 +86,49 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
 
         // Auto-repeat changes nothing for the pad.
         if (repeat) return true
-        if (ensureConnected(event.deviceId)) NativeLibrary.onKey(event.deviceId, event.keyCode, pressed)
+        val deviceId = event.deviceId
+        val result = menuTrigger.onKey(deviceId, event.keyCode, pressed, event.eventTime)
+        if (pressed && !result.openMenu && MenuTrigger.KeyPress(event.keyCode, true) !in result.send) {
+            router.markHeldBack(deviceId, event.keyCode)
+        }
+        if (ensureConnected(deviceId)) {
+            for (press in lateRelease.plan(deviceId, result.send, event.eventTime)) {
+                if (press.pressed) router.markSent(deviceId, press.keyCode)
+                NativeLibrary.onKey(deviceId, press.keyCode, press.pressed)
+            }
+        }
+        schedule()
+        if (result.openMenu) onMenuRequested?.invoke()
         return true
+    }
+
+    // Late presses whose time is up are let go. Select and Start held together long enough: the press held back is
+    // dropped, and the menu opens.
+    private fun onTimer() {
+        val now = SystemClock.uptimeMillis()
+        sendReleases(lateRelease.due(now))
+        if (menuTrigger.onTime(now)) {
+            dropHeldBack()
+            onMenuRequested?.invoke()
+        }
+        schedule()
+    }
+
+    // Key events' times are uptimeMillis(), as the handler's are.
+    private fun schedule() {
+        handler.removeCallbacks(timer)
+        listOfNotNull(menuTrigger.deadline(), lateRelease.deadline()).minOrNull()?.let { handler.postAtTime(timer, it) }
+    }
+
+    // Every press held back is dropped, on every device, so none is sent late after the menu or a release.
+    private fun dropHeldBack() {
+        menuTrigger.reset()
+        router.dropHeldBack()
+        schedule()
+    }
+
+    private fun sendReleases(releases: List<LateRelease.Release>) {
+        for (release in releases) NativeLibrary.onKey(release.deviceId, release.keyCode, false)
     }
 
     /**
@@ -101,8 +158,12 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
      * Lets go of everything the controllers hold, in the core and here, so the next value of each axis is sent even if
      * it's the last one. Android sends no axis events when the app loses focus, nor any input on the game list. The
      * keys held stay where they were pressed: their key-ups still go to the core, which has nothing left to release.
+     * A press held back for the menu ([MenuTrigger]) is dropped: it never reached the core, so the rest of it goes to
+     * Compose. A late press still held down a moment ([LateRelease]) is let go, as the menu opens too.
      */
     fun releaseAll() {
+        sendReleases(lateRelease.flushAll())
+        dropHeldBack()
         forgetAxes()
         NativeLibrary.releaseAllInputs()
     }
@@ -117,6 +178,8 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
 
     override fun onInputDeviceRemoved(deviceId: Int) {
         if (devices.remove(deviceId) == null) return
+        for (keyCode in lateRelease.flushDevice(deviceId)) NativeLibrary.onKey(deviceId, keyCode, false)
+        schedule()
         router.forget(deviceId)
         axisHold.forget(deviceId)
         NativeLibrary.onDeviceDisconnected(deviceId)

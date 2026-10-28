@@ -215,6 +215,13 @@ object AppController : NativeCallbacks {
     var screen by mutableStateOf(Screen.Library)
         private set
 
+    /**
+     * The game's prompt (Resume or Quit to library) shows over it: the game is paused, and the controllers move the
+     * prompt's focus rather than play.
+     */
+    var promptOpen by mutableStateOf(false)
+        private set
+
     /** Saved folders whose grant is gone, as the last check found. */
     var missingGrants by mutableStateOf(emptyList<MissingGrant>())
         private set
@@ -272,6 +279,12 @@ object AppController : NativeCallbacks {
         private set
 
     var resumed = false
+
+    /**
+     * The app paused the game while it booted ([pauseGame]). That pause can reach the core just after the boot, so
+     * [onGameStarted] unpauses the game if it may run by then. Reset as the game starts or stops.
+     */
+    private var pausedDuringBoot = false
     var controllers: ControllerInput? = null
         private set
 
@@ -935,9 +948,42 @@ object AppController : NativeCallbacks {
 
     // Back to the library, which waits for the game's onGameStopped() before it starts another.
     fun leaveGame() {
+        promptOpen = false
         screen = Screen.Library
         if (!messageIsError) message = "Stopping the game…"
         NativeLibrary.shutdownGame()
+    }
+
+    /**
+     * Pauses the game and shows its prompt, from Back, Mode or Select + Start held. Everything the controllers hold is
+     * let go first, so nothing pressed now is still pressed after Resume. The pause writes the memory cards. A game
+     * still booting is paused once it has booted ([onGameStarted]).
+     */
+    fun openPrompt() {
+        if (screen != Screen.Game || promptOpen) return
+        promptOpen = true
+        controllers?.releaseAll()
+        pauseGame()
+    }
+
+    /** Pauses the game, which writes its memory cards: for the prompt, or the app going to the background. */
+    fun pauseGame() {
+        if (gameActive && !gameRunning) pausedDuringBoot = true
+        NativeLibrary.setPaused(true)
+    }
+
+    /** Closes the prompt, and carries on with the game if the app is in front ([PausePolicy]). */
+    fun resumeFromPrompt() {
+        if (!promptOpen) return
+        promptOpen = false
+        if (gameRunning && PausePolicy.running(resumed, promptOpen = false)) NativeLibrary.setPaused(false)
+    }
+
+    /** Closes the prompt, and stops the game. */
+    fun quitFromPrompt() {
+        if (!promptOpen) return
+        promptOpen = false
+        leaveGame()
     }
 
     // --- SD card removal ---
@@ -1195,7 +1241,11 @@ object AppController : NativeCallbacks {
         if (biosOverridesToCheck) dropStaleBiosOverrides()
         if (!messageIsError) message = null
         // Reported once the core takes input; it keeps connections made before then anyway.
-        controllers = ControllerInput(context).also { it.start() }
+        controllers =
+            ControllerInput(context).also {
+                it.onMenuRequested = ::openPrompt
+                it.start()
+            }
         return true
     }
 
@@ -1302,8 +1352,12 @@ object AppController : NativeCallbacks {
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
             controllers?.releaseAll()
-            // Booted in the background. One the user left while it booted is shut down next anyway.
-            if (screen == Screen.Game && !resumed) NativeLibrary.setPaused(true)
+            // Booted in the background or with the prompt open, it waits paused. One the app paused while it booted
+            // runs if it may by now, as that pause may have reached the core just after the boot. One the user left
+            // while it booted is shut down next anyway.
+            val paused = PausePolicy.atBoot(pausedDuringBoot, PausePolicy.running(resumed, promptOpen))
+            pausedDuringBoot = false
+            if (screen == Screen.Game && paused != null) NativeLibrary.setPaused(paused)
             // The cards its own settings name are held back from now on, and mirrored.
             scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         }
@@ -1313,8 +1367,10 @@ object AppController : NativeCallbacks {
         mainHandler.post {
             Log.i(TAG, "Game stopped.")
             gameRunning = false
+            pausedDuringBoot = false
             // Same as on start: release in order with this thread's input.
             controllers?.releaseAll()
+            promptOpen = false
             gameActive = false
             holdMemcards = false
             if (screen == Screen.Game) screen = Screen.Library

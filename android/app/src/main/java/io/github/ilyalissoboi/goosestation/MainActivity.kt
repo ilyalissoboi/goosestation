@@ -14,6 +14,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
+import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
@@ -35,8 +36,9 @@ class MainActivity : ComponentActivity() {
 
     private val inGame get() = AppController.screen == Screen.Game
 
-    // The controllers' input goes to the core: in a game, or while a capture takes the next input as a binding.
-    private val padInput get() = inGame || AppController.capturingInput
+    // The controllers' input goes to the core: in a game with its prompt closed, or while a capture takes the next
+    // input as a binding.
+    private val padInput get() = (inGame && !AppController.promptOpen) || AppController.capturingInput
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,7 +59,13 @@ class MainActivity : ComponentActivity() {
                             releaseFolder = AppController::releaseFolder,
                             onFinish = AppController::finishSetup,
                         )
-                    Screen.Game -> GameScreen(onBack = AppController::leaveGame)
+                    Screen.Game ->
+                        GameScreen(
+                            promptOpen = AppController.promptOpen,
+                            onOpenPrompt = AppController::openPrompt,
+                            onResume = AppController::resumeFromPrompt,
+                            onQuit = AppController::quitFromPrompt,
+                        )
                     Screen.Settings ->
                         SettingsScreen(
                             focusEntry = AppController.settingsEntry,
@@ -167,14 +175,16 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         AppController.resumed = true
-        if (inGame && AppController.gameRunning) NativeLibrary.setPaused(false)
+        // A game left paused under its prompt stays so.
+        val running = PausePolicy.running(AppController.resumed, AppController.promptOpen)
+        if (inGame && AppController.gameRunning && running) NativeLibrary.setPaused(false)
     }
 
     override fun onPause() {
         AppController.resumed = false
         if (inGame) {
             AppController.controllers?.releaseAll()
-            NativeLibrary.setPaused(true)
+            AppController.pauseGame()
         }
         super.onPause()
     }

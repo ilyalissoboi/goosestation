@@ -14,6 +14,8 @@ class KeyRouterTest {
         const val OTHER_PAD = 8
         const val B = 97
         const val X = 99
+        const val START = 108
+        const val SELECT = 109
     }
 
     private val router = KeyRouter()
@@ -95,5 +97,53 @@ class KeyRouterTest {
 
         assertFalse(router.route(PAD, B, pressed = false, toCore = false))
         assertTrue(router.route(OTHER_PAD, B, pressed = false, toCore = false))
+    }
+
+    @Test
+    fun aHeldBackPressStillEndsInTheCore() {
+        router.route(PAD, START, pressed = true, toCore = true)
+        router.markHeldBack(PAD, START)
+
+        // Its key-up decides what the core is sent.
+        assertTrue(router.route(PAD, START, pressed = true, toCore = false, repeat = true))
+        assertTrue(router.route(PAD, START, pressed = false, toCore = false))
+    }
+
+    @Test
+    fun aDroppedPressEndsInCompose() {
+        router.route(PAD, SELECT, pressed = true, toCore = true)
+        router.route(PAD, START, pressed = true, toCore = true)
+        router.markHeldBack(PAD, START)
+
+        router.dropHeldBack()
+
+        // Its key-down never reached the core, so nor do its repeats and key-up. Select's did.
+        assertFalse(router.route(PAD, START, pressed = true, toCore = false, repeat = true))
+        assertFalse(router.route(PAD, START, pressed = false, toCore = false))
+        assertTrue(router.route(PAD, SELECT, pressed = false, toCore = false))
+    }
+
+    @Test
+    fun aHeldBackPressSentLateIsKept() {
+        router.route(PAD, START, pressed = true, toCore = true)
+        router.markHeldBack(PAD, START)
+        router.markSent(PAD, START)
+
+        router.dropHeldBack()
+
+        assertTrue(router.route(PAD, START, pressed = false, toCore = false))
+    }
+
+    @Test
+    fun aHeldBackPressEndsWithItsKeyUp() {
+        router.route(PAD, START, pressed = true, toCore = true)
+        router.markHeldBack(PAD, START)
+        router.route(PAD, START, pressed = false, toCore = true)
+        router.route(PAD, START, pressed = true, toCore = true)
+
+        router.dropHeldBack()
+
+        // The next press of the key was sent as it came.
+        assertTrue(router.route(PAD, START, pressed = false, toCore = false))
     }
 }

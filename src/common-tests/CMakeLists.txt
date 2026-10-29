@@ -28,4 +28,14 @@ if(NOT ANDROID)
   )
 endif()
 
+# Android's stand-in for the fullscreen UI, which replaces fullscreen_ui.cpp there, with the ImGuiFullscreen it drives.
+if(ANDROID)
+  target_sources(common-tests PRIVATE
+    fullscreen_ui_stubs_tests.cpp
+    ../../android/app/src/cpp/fullscreen_ui_stubs.cpp
+    ../util/imgui_fullscreen.cpp
+  )
+  target_link_libraries(common-tests PRIVATE imgui)
+endif()
+
 target_link_libraries(common-tests PRIVATE common gtest gtest_main)

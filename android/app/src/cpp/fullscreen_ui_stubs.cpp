@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
-// The fullscreen UI (Big Picture mode) is compiled out on Android, where the app has its own UI. These no-op
-// definitions stand in for what the rest of the core still calls: nothing is ever initialised or open.
+// The fullscreen UI (Big Picture mode) is compiled out on Android, where the app has its own UI. These mostly no-op
+// definitions stand in for what the rest of the core still calls: nothing is ever initialised or open. Shutdown
+// still releases ImGuiFullscreen's per-device state, such as the loading screen's cached logo.
 
 #include "core/fullscreen_ui.h"
 
@@ -47,6 +48,8 @@ void FullscreenUI::OnSystemDestroyed()
 
 void FullscreenUI::Shutdown()
 {
+  // The loading screen's logo is in ImGuiFullscreen's texture cache, which must go with the GPU device it was made on.
+  ImGuiFullscreen::Shutdown();
 }
 
 void FullscreenUI::Render()

@@ -2246,11 +2246,13 @@ bool VulkanDevice::ReadPipelineCache(std::optional<DynamicHeapArray<u8>> data)
       ERROR_LOG("Pipeline cache is too small, ignoring.");
       data.reset();
     }
-
-    VK_PIPELINE_CACHE_HEADER header;
-    std::memcpy(&header, data->data(), sizeof(header));
-    if (!ValidatePipelineCacheHeader(header))
-      data.reset();
+    else
+    {
+      VK_PIPELINE_CACHE_HEADER header;
+      std::memcpy(&header, data->data(), sizeof(header));
+      if (!ValidatePipelineCacheHeader(header))
+        data.reset();
+    }
   }
 
   const VkPipelineCacheCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, nullptr, 0,

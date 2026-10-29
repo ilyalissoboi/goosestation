@@ -515,16 +515,19 @@ std::string GPUDevice::GetShaderCacheBaseName(std::string_view type) const
 
 bool GPUDevice::OpenPipelineCache(const std::string& filename)
 {
-  if (FileSystem::GetPathFileSize(filename.c_str()) <= 0)
-    return false;
-
-  Error error;
-  CompressHelpers::OptionalByteBuffer data =
-    CompressHelpers::DecompressFile(CompressHelpers::CompressType::Zstandard, filename.c_str(), std::nullopt, &error);
-  if (!data.has_value())
+  // No file yet (first run, or it was squished with the shader cache): start an empty cache, written on close.
+  CompressHelpers::OptionalByteBuffer data;
+  if (FileSystem::GetPathFileSize(filename.c_str()) > 0)
   {
-    ERROR_LOG("Failed to load pipeline cache from '{}': {}", Path::GetFileName(filename), error.GetDescription());
-    data.reset();
+    Error error;
+    data =
+      CompressHelpers::DecompressFile(CompressHelpers::CompressType::Zstandard, filename.c_str(), std::nullopt, &error);
+    if (!data.has_value())
+      ERROR_LOG("Failed to load pipeline cache from '{}': {}", Path::GetFileName(filename), error.GetDescription());
+  }
+  else
+  {
+    INFO_LOG("Pipeline cache '{}' does not exist, creating.", Path::GetFileName(filename));
   }
 
   if (data.has_value())

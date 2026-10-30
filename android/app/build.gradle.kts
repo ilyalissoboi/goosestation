@@ -6,6 +6,12 @@ import javax.inject.Inject
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ktlint)
+}
+
+// ktlintCheck runs over the app's Kotlin, main and tests, and with check; the rules are in android/.editorconfig.
+ktlint {
+    version.set(libs.versions.ktlint)
 }
 
 // The prefix built by scripts/deps/build-dependencies-android.sh, as in android/scripts/configure-native.sh.
@@ -81,11 +87,10 @@ android {
 }
 
 /** Copies files or a directory tree into a subdirectory of its output, for use as a generated source directory. */
-abstract class StageFiles
-@Inject
-constructor(
-    private val fs: FileSystemOperations,
-) : DefaultTask() {
+abstract class StageFiles : DefaultTask() {
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val source: ConfigurableFileCollection
@@ -108,16 +113,18 @@ constructor(
     }
 }
 
-val stageDepsLibraries = tasks.register<StageFiles>("stageDepsLibraries") {
-    source.from(depsSharedLibraries.map { "$depsPrefix/lib/$it" })
-    subdirectory = "arm64-v8a"
-}
+val stageDepsLibraries =
+    tasks.register<StageFiles>("stageDepsLibraries") {
+        source.from(depsSharedLibraries.map { "$depsPrefix/lib/$it" })
+        subdirectory = "arm64-v8a"
+    }
 
 // The core's resources, extracted to the app's files on first run (core/Resources.kt).
-val stageResources = tasks.register<StageFiles>("stageResources") {
-    source.from(rootProject.file("../data/resources"))
-    subdirectory = "resources"
-}
+val stageResources =
+    tasks.register<StageFiles>("stageResources") {
+        source.from(rootProject.file("../data/resources"))
+        subdirectory = "resources"
+    }
 
 /**
  * Fails on a call or import, in [sources], of anything that opens a window of its own: such a window takes the keys,
@@ -164,11 +171,20 @@ abstract class CheckNoWindowDialogs : DefaultTask() {
             var i = 0
             while (i < line.length) {
                 when {
-                    inBlock && line.startsWith("*/", i) -> { inBlock = false; i += 2 }
+                    inBlock && line.startsWith("*/", i) -> {
+                        inBlock = false
+                        i += 2
+                    }
                     inBlock -> i++
-                    line.startsWith("/*", i) -> { inBlock = true; i += 2 }
+                    line.startsWith("/*", i) -> {
+                        inBlock = true
+                        i += 2
+                    }
                     line.startsWith("//", i) -> i = line.length
-                    else -> { code.append(line[i]); i++ }
+                    else -> {
+                        code.append(line[i])
+                        i++
+                    }
                 }
             }
             code.toString()
@@ -192,11 +208,12 @@ abstract class CheckNoWindowDialogs : DefaultTask() {
     }
 }
 
-val checkNoWindowDialogs = tasks.register<CheckNoWindowDialogs>("checkNoWindowDialogs") {
-    sources.from(fileTree("src/main/java") { include("**/*.kt") })
-    baseDirectory = layout.projectDirectory
-    result = layout.buildDirectory.file("checkNoWindowDialogs/result.txt")
-}
+val checkNoWindowDialogs =
+    tasks.register<CheckNoWindowDialogs>("checkNoWindowDialogs") {
+        sources.from(fileTree("src/main/java") { include("**/*.kt") })
+        baseDirectory = layout.projectDirectory
+        result = layout.buildDirectory.file("checkNoWindowDialogs/result.txt")
+    }
 
 tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
 

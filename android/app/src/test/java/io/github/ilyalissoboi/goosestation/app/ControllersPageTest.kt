@@ -43,7 +43,12 @@ class ControllersPageTest {
 
             assertTrue(calls.none { it.startsWith("setPadBinding") })
             assertNull(page.state.capturing)
-            assertEquals("Button96", page.state.bindings!!.single { it.name == "Cross" }.binding)
+            assertEquals(
+                "Button96",
+                page.state.bindings!!
+                    .single { it.name == "Cross" }
+                    .binding,
+            )
         }
 
     @Test
@@ -136,7 +141,12 @@ class ControllersPageTest {
 
             assertEquals(listOf("setPadBinding $PAD_A Cross Button96"), calls)
             assertNull(page.state.undo)
-            assertEquals("Button96", page.state.bindings!!.single { it.name == "Cross" }.binding)
+            assertEquals(
+                "Button96",
+                page.state.bindings!!
+                    .single { it.name == "Cross" }
+                    .binding,
+            )
         }
 
     @Test
@@ -198,7 +208,8 @@ class ControllersPageTest {
     @Test
     fun aSwitchSaysWhoseBindingsAreShown() =
         runTest {
-            pads.connected.value = listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", "pad-b"))
+            pads.connected.value =
+                listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", "pad-b"))
             val page = openPage()
             assertEquals(PAD_A, page.state.bindingsFor)
 

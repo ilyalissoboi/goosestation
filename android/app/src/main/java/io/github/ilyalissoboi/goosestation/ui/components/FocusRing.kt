@@ -50,8 +50,7 @@ fun Modifier.focusRing(
         .onFocusChanged {
             focused = it.isFocused
             if (!it.isFocused) buttonADown = false
-        }
-        .onKeyEvent { event ->
+        }.onKeyEvent { event ->
             if (event.key != Key.ButtonA) return@onKeyEvent false
             when (event.type) {
                 KeyEventType.KeyDown -> buttonADown = true

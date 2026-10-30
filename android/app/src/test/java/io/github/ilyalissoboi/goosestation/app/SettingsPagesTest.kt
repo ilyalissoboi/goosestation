@@ -114,7 +114,12 @@ class SettingsPagesTest {
             runCurrent()
 
             assertEquals(
-                before + mapOf("Display/ShowFPS" to "true", "BIOS/PathNTSCJ" to "scph5500.bin", "BIOS/PatchFastBoot" to "true"),
+                before +
+                    mapOf(
+                        "Display/ShowFPS" to "true",
+                        "BIOS/PathNTSCJ" to "scph5500.bin",
+                        "BIOS/PatchFastBoot" to "true",
+                    ),
                 settings.values,
             )
             assertEquals(listOf("applySettings", "applySettings", "applySettings"), calls)

@@ -229,13 +229,22 @@ class ControllersPage(
      */
     private fun readLabels(connected: List<ConnectedController>) {
         val read = ++labelsRead
-        val shared = connected.groupBy { it.name }.values.filter { it.size > 1 }.flatten()
+        val shared =
+            connected
+                .groupBy { it.name }
+                .values
+                .filter { it.size > 1 }
+                .flatten()
         if (shared.isEmpty()) return
         scope.launch {
-            val indices = withContext(core) { shared.associate { it.descriptor to api.getControllerIndex(it.descriptor) } }
+            val indices =
+                withContext(core) { shared.associate { it.descriptor to api.getControllerIndex(it.descriptor) } }
             if (read != labelsRead) return@launch
             val numbered =
-                shared.associate { pad -> pad.descriptor to (indices[pad.descriptor]?.let { "${pad.name} (${it + 1})" } ?: pad.name) }
+                shared.associate { pad ->
+                    pad.descriptor to
+                        (indices[pad.descriptor]?.let { "${pad.name} (${it + 1})" } ?: pad.name)
+                }
             state = state.copy(labels = state.labels + numbered)
         }
     }

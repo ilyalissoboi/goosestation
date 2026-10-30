@@ -51,7 +51,9 @@ class BindingCaptureTest {
             },
         )
         val resources = Resources.extract(context)
-        assertTrue(NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID))
+        assertTrue(
+            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+        )
         NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", "pad-a")
 
         // The connection is queued: wait until the core has pad-a in its table, so a capture can find it.
@@ -137,7 +139,8 @@ class BindingCaptureTest {
         val axes = intArrayOf(0, 1) // AXIS_X, AXIS_Y
         val memory = AxisMemory(axes)
         memory.record(DEVICE_ID) { 0f }
-        for ((index, value) in memory.latest(DEVICE_ID)!!.withIndex()) NativeLibrary.onAxis(DEVICE_ID, axes[index], value)
+        val latest = memory.latest(DEVICE_ID)!!
+        for ((index, value) in latest.withIndex()) NativeLibrary.onAxis(DEVICE_ID, axes[index], value)
         NativeLibrary.startBindingCapture("pad-a")
         NativeLibrary.onAxis(DEVICE_ID, 0, 0.8f)
 

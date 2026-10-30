@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation
 
+import android.annotation.SuppressLint
 import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
@@ -211,7 +212,9 @@ class MainActivity : ComponentActivity() {
     }
 
     // With padInput, controllers go to the core; otherwise they move Compose's focus. A key-up goes where its key-down
-    // went, either way, and a stick the core was given stays its until it's back near rest.
+    // went, either way, and a stick the core was given stays its until it's back near rest. Lint's RestrictedApi is a
+    // false positive here: the restricted one is androidx.core's override of Activity.dispatchKeyEvent, which is public.
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val controllers = AppController.controllers
         if (controllers != null && controllers.onKeyEvent(event, padInput)) return true

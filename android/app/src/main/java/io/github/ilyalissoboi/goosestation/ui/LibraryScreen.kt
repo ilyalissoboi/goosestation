@@ -188,7 +188,10 @@ private class GameFocus {
 
 /** The app's latest error ([isError]) or what it's doing, under a screen's top bar. */
 @Composable
-internal fun MessageBar(message: String, isError: Boolean) {
+internal fun MessageBar(
+    message: String,
+    isError: Boolean,
+) {
     val colors = MaterialTheme.colorScheme
     Text(
         text = message,

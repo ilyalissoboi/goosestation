@@ -1063,17 +1063,18 @@ object AppController : NativeCallbacks {
                     workingCopy.mkdirs()
                     val resources = Resources.extract(context)
                     NativeLibrary.setCallbacks(this@AppController)
-                    NativeLibrary.initialize(
-                        workingCopy.absolutePath,
-                        resources.absolutePath,
-                        biosDir.absolutePath,
-                        prefs.installId(),
-                    ).also {
-                        if (it) {
-                            readGridView()
-                            readCorePaths()
+                    NativeLibrary
+                        .initialize(
+                            workingCopy.absolutePath,
+                            resources.absolutePath,
+                            biosDir.absolutePath,
+                            prefs.installId(),
+                        ).also {
+                            if (it) {
+                                readGridView()
+                                readCorePaths()
+                            }
                         }
-                    }
                 }
             }
         // onError(), posted before initialize() returned, has already run.

@@ -43,7 +43,8 @@ interface CoreApi {
 }
 
 object NativeCoreApi : CoreApi {
-    override fun getPadBindings(descriptor: String): List<PadBinding>? = NativeLibrary.getPadBindings(descriptor)?.toList()
+    override fun getPadBindings(descriptor: String): List<PadBinding>? =
+        NativeLibrary.getPadBindings(descriptor)?.toList()
 
     override fun setPadBinding(
         descriptor: String,

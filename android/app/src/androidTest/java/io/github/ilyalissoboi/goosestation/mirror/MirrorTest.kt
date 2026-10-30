@@ -89,9 +89,19 @@ class MirrorTest {
     }
 
     /** Every name in the folder's tree, relative, for checking that no temporary document is left. */
-    private fun folderNames() = folder.walk().filter { it.isFile }.map { it.relativeTo(folder).path }.toSet()
+    private fun folderNames() =
+        folder
+            .walk()
+            .filter { it.isFile }
+            .map { it.relativeTo(folder).path }
+            .toSet()
 
-    private fun localNames() = workingCopy.walk().filter { it.isFile }.map { it.relativeTo(workingCopy).path }.toSet()
+    private fun localNames() =
+        workingCopy
+            .walk()
+            .filter { it.isFile }
+            .map { it.relativeTo(workingCopy).path }
+            .toSet()
 
     private fun assertNoTemporaries() {
         val names = folderNames()

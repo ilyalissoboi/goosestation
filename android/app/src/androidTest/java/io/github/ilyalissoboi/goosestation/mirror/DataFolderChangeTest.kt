@@ -260,7 +260,11 @@ class DataFolderChangeTest {
     }
 
     private fun files(root: File) =
-        root.walk().filter { it.isFile }.map { it.relativeTo(root).invariantSeparatorsPath }.toSet()
+        root
+            .walk()
+            .filter { it.isFile }
+            .map { it.relativeTo(root).invariantSeparatorsPath }
+            .toSet()
 
     private companion object {
         val LAYOUT = DataLayout.withCorePaths(listOf("memcards/"), cacheFolder = "cache/")

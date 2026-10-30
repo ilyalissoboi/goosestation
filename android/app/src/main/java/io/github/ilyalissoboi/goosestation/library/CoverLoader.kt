@@ -16,17 +16,25 @@ import java.io.File
  * Cover images from the working copy, decoded no larger than needed and kept in memory, up to [maxBytes] of bitmaps.
  * A file replaced since it was decoded (a new modified time) is decoded again.
  */
-class CoverLoader(maxBytes: Int) {
+class CoverLoader(
+    maxBytes: Int,
+) {
     private val cache =
         object : LruCache<String, Bitmap>(maxBytes) {
-            override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
+            override fun sizeOf(
+                key: String,
+                value: Bitmap,
+            ) = value.allocationByteCount
         }
 
     /**
      * The image at [path], at least [targetPx] on its longer side where the file is that large, or null if it's
      * missing or isn't an image.
      */
-    suspend fun load(path: String, targetPx: Int): ImageBitmap? =
+    suspend fun load(
+        path: String,
+        targetPx: Int,
+    ): ImageBitmap? =
         withContext(Dispatchers.IO) {
             val file = File(path)
             // 0 for a file that's gone.
@@ -37,7 +45,10 @@ class CoverLoader(maxBytes: Int) {
             bitmap?.asImageBitmap()
         }
 
-    private fun decode(file: File, targetPx: Int): Bitmap? {
+    private fun decode(
+        file: File,
+        targetPx: Int,
+    ): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
         val longer = maxOf(bounds.outWidth, bounds.outHeight)

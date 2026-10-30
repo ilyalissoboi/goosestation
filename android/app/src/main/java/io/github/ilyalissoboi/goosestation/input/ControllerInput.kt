@@ -31,7 +31,10 @@ data class ConnectedController(
  * arrive first. One instance lives as long as the process, listening from [start] on. Call everything on the main
  * thread.
  */
-class ControllerInput(context: Context) : InputManager.InputDeviceListener, PadPort {
+class ControllerInput(
+    context: Context,
+) : InputManager.InputDeviceListener,
+    PadPort {
     private val inputManager = context.getSystemService(InputManager::class.java)
 
     // The devices reported to the core, in the order they were, with the last value sent for each of AXES.
@@ -271,9 +274,14 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener, PadP
 
         fun isController(device: InputDevice): Boolean =
             !device.isVirtual &&
-                (hasSource(device.sources, InputDevice.SOURCE_GAMEPAD) ||
-                    hasSource(device.sources, InputDevice.SOURCE_JOYSTICK))
+                (
+                    hasSource(device.sources, InputDevice.SOURCE_GAMEPAD) ||
+                        hasSource(device.sources, InputDevice.SOURCE_JOYSTICK)
+                )
 
-        fun hasSource(sources: Int, source: Int): Boolean = (sources and source) == source
+        fun hasSource(
+            sources: Int,
+            source: Int,
+        ): Boolean = (sources and source) == source
     }
 }

@@ -338,7 +338,8 @@ void AndroidHost::ReloadSettings()
         Error error;
         if (!si.Reload(&error))
         {
-          ERROR_LOG("Failed to reload the settings from {}, keeping them: {}", si.GetFileName(), error.GetDescription());
+          ERROR_LOG("Failed to reload the settings from {}, keeping them: {}", si.GetFileName(),
+                    error.GetDescription());
           return;
         }
 

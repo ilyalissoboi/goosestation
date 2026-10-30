@@ -18,6 +18,8 @@ androidxTestRunner = "1.7.0"
 androidxTestExtJunit = "1.3.0"
 androidxTestOrchestrator = "1.6.1"
 androidxTestEspresso = "3.7.0"
+ktlintGradle = "14.2.0"
+ktlint = "1.8.0"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -40,3 +42,4 @@ androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espres
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintGradle" }

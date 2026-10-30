@@ -212,14 +212,22 @@ class CatchUpRunnerTest {
         runTest {
             val scope = appScope()
             runner.layoutGrew()
-            val first = runner.launch(scope, pull = { delay(10_000) ; false })!!
+            val first =
+                runner.launch(scope, pull = {
+                    delay(10_000)
+                    false
+                })!!
             runCurrent()
             first.cancel()
             runCurrent()
             assertTrue(runner.startsAllowed)
 
             runner.layoutGrew()
-            val second = runner.launch(scope, pull = { delay(10_000) ; false })!!
+            val second =
+                runner.launch(scope, pull = {
+                    delay(10_000)
+                    false
+                })!!
             runCurrent()
             // A pull from outside the run grows the layout; its own catch-up is asked for once it's done.
             runner.layoutGrew()
@@ -234,7 +242,11 @@ class CatchUpRunnerTest {
         runTest {
             val scope = appScope()
             runner.layoutGrew()
-            val job = runner.launch(scope, pull = { delay(1_000) ; false })
+            val job =
+                runner.launch(scope, pull = {
+                    delay(1_000)
+                    false
+                })
             runCurrent()
 
             assertEquals(job, runner.launch(scope, pull = { false }))

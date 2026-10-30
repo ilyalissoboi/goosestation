@@ -46,7 +46,11 @@ object Resources {
     }
 
     // AssetManager has no way to tell a file from a folder: a name with children is a folder.
-    private fun copyAssets(assets: AssetManager, path: String, destination: File) {
+    private fun copyAssets(
+        assets: AssetManager,
+        path: String,
+        destination: File,
+    ) {
         val children = assets.list(path).orEmpty()
         if (children.isEmpty()) {
             destination.parentFile?.mkdirs()

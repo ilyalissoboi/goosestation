@@ -54,7 +54,12 @@ class FolderPrefs(
         SavedFolders(
             bios = store.getString(BIOS),
             // Content URIs are percent-encoded, so they never hold a line break.
-            games = store.getString(GAMES)?.lines()?.filter { it.isNotEmpty() }.orEmpty(),
+            games =
+                store
+                    .getString(GAMES)
+                    ?.lines()
+                    ?.filter { it.isNotEmpty() }
+                    .orEmpty(),
             data = store.getString(DATA),
             setupComplete = store.getString(SETUP_COMPLETE) == "true",
         )
@@ -71,7 +76,12 @@ class FolderPrefs(
     }
 
     /** The BIOS images the last import found, as [saveBiosImages] saved them; empty if none was saved. */
-    fun biosImages(): List<String> = store.getString(BIOS_IMAGES)?.lines()?.filter { it.isNotEmpty() }.orEmpty()
+    fun biosImages(): List<String> =
+        store
+            .getString(BIOS_IMAGES)
+            ?.lines()
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
 
     /** Returns false if the write failed. An image's description never holds a line break. */
     fun saveBiosImages(images: List<String>): Boolean =

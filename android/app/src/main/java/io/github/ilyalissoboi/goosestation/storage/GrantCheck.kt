@@ -37,7 +37,9 @@ object GrantCheck {
         persisted: List<PersistedGrant>,
     ): List<MissingGrant> {
         val byUri = persisted.associateBy { it.uri }
+
         fun readable(uri: String) = byUri[uri]?.read == true
+
         fun writable(uri: String) = byUri[uri]?.let { it.read && it.write } == true
 
         return buildList {

@@ -185,9 +185,11 @@ class SettingsScreenTest {
             }
         }
         rule.waitForIdle()
-        rule.onNode(hasText("Vulkan didn't start on this device, so games use OpenGL ES until the app restarts."))
+        rule
+            .onNode(hasText("Vulkan didn't start on this device, so games use OpenGL ES until the app restarts."))
             .assertDoesNotExist()
-        rule.onNode(hasText("Higher is sharper and slower. Match the screen picks the highest that fits."))
+        rule
+            .onNode(hasText("Higher is sharper and slower. Match the screen picks the highest that fits."))
             .assertDoesNotExist()
 
         // Renderer, Internal resolution, Aspect ratio, then Show FPS.

@@ -152,8 +152,9 @@ std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads);
 /// - a button when it's pressed (value >= 0.5); one held as the capture starts only sends its release, so it isn't
 ///   taken;
 /// - an axis when it's pushed half way (|value| >= 0.5), only once it has been seen near 0 (within 0.25), during this
-///   capture or before it (centered_axes, from PadState::GetCenteredAxes()), so one resting away from 0 (a trigger on
-///   Z, a stick held as the capture starts) must come back first, and one already at rest is taken on its first push.
+///   capture or before it (centered_axes, from GetCenteredAxes() over every pad with the device index, as
+///   AndroidInputSource::GetCenteredAxes() gives them), so one resting away from 0 (a trigger on Z, a stick held as
+///   the capture starts) must come back first, and one already at rest is taken on its first push.
 /// Other devices' events, and other kinds of input, give nothing.
 class BindingCapture
 {

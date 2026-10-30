@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 GooseStation contributors
+# SPDX-License-Identifier: GPL-3.0
+
+# ktlint's rules for the Android project's Kotlin (./gradlew ktlintCheck), set to the code as it's written.
+root = true
+
+[*.{kt,kts}]
+ktlint_code_style = ktlint_official
+max_line_length = 120
+indent_size = 4
+insert_final_newline = true
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+# Composables are named as types are, as Compose names them.
+ktlint_function_naming_ignore_when_annotated_with = Composable
+# The code writes a when's entries without blank lines between them, and braces only the bodies that need them.
+ktlint_standard_blank-line-between-when-conditions = disabled
+ktlint_standard_when-entry-bracing = disabled

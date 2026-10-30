@@ -205,7 +205,15 @@ class TestDocumentsProvider : DocumentsProvider() {
             add(Document.COLUMN_SIZE, if (file.isDirectory) null else file.length())
             add(Document.COLUMN_LAST_MODIFIED, file.lastModified())
             val flags = if (file.isDirectory) DIRECTORY_FLAGS else FILE_FLAGS
-            add(Document.COLUMN_FLAGS, if (canRename(documentId)) flags else flags and Document.FLAG_SUPPORTS_RENAME.inv())
+            add(
+                Document.COLUMN_FLAGS,
+                if (canRename(documentId)) {
+                    flags
+                } else {
+                    flags and
+                        Document.FLAG_SUPPORTS_RENAME.inv()
+                },
+            )
         }
     }
 }

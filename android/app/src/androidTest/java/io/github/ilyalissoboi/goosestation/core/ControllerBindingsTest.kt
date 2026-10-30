@@ -176,7 +176,9 @@ class ControllerBindingsTest {
         )
         // A GunCon gets no pad defaults, so wait for the pad to be known instead.
         NativeLibrary.onDeviceConnected(1, "Pad pad-a", "pad-a")
-        waitFor("pad-a is in the table") { readSettings().values("Android", "ControllerDescriptors") == listOf("pad-a") }
+        waitFor(
+            "pad-a is in the table",
+        ) { readSettings().values("Android", "ControllerDescriptors") == listOf("pad-a") }
 
         NativeLibrary.setPadBinding("pad-a", "Pointer", "Button96")
 
@@ -262,7 +264,9 @@ class ControllerBindingsTest {
     private fun initialize(settings: String?) {
         if (settings != null) settingsFile.writeText(settings)
         val resources = Resources.extract(context)
-        assertTrue(NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID))
+        assertTrue(
+            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+        )
     }
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())

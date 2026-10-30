@@ -25,7 +25,6 @@ import androidx.compose.ui.test.FontScale
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.then
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
@@ -39,6 +38,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.then
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpRect
@@ -333,12 +333,14 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Renderer"))
             assertFocusedInView()
 
-            for ((row, last) in
-                listOf(
-                    "Renderer" to "Software (from settings.ini)",
-                    "Internal resolution" to "12x (from settings.ini)",
-                    "Aspect ratio" to "21:9 (from settings.ini)",
-                )) {
+            for (
+            (row, last) in
+            listOf(
+                "Renderer" to "Software (from settings.ini)",
+                "Internal resolution" to "12x (from settings.ini)",
+                "Aspect ratio" to "21:9 (from settings.ini)",
+            )
+            ) {
                 pressUntilFocused(Key.DirectionDown, row)
                 press(Key.Enter)
                 assertFocusedInView()

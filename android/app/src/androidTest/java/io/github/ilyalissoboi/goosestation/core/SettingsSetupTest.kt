@@ -128,7 +128,9 @@ class SettingsSetupTest {
     @Test
     fun reloadReadsFileAgain() {
         initialize(null)
-        settingsFile.writeText("[Main]\nSettingsVersion = 3\n\n[GPU]\nRenderer = Software\n\n[Display]\nShowFPS = true\n")
+        settingsFile.writeText(
+            "[Main]\nSettingsVersion = 3\n\n[GPU]\nRenderer = Software\n\n[Display]\nShowFPS = true\n",
+        )
 
         NativeLibrary.reloadSettings()
 
@@ -142,7 +144,9 @@ class SettingsSetupTest {
     fun connectedPadKeepsBindingsAfterReload() {
         initialize(null)
         NativeLibrary.onDeviceConnected(1, "Test Pad", "test-pad")
-        waitFor("Port 1 has the pad's bindings") { readSettings().values("Pad1", "Cross").any { it.startsWith("Android-0/") } }
+        waitFor(
+            "Port 1 has the pad's bindings",
+        ) { readSettings().values("Pad1", "Cross").any { it.startsWith("Android-0/") } }
         settingsFile.writeText(
             "[Main]\nSettingsVersion = 3\n\n[Android]\nControllerDescriptors = other-pad\n\n" +
                 "[Pad1]\nType = AnalogController\nCross = SDL-0/A\n",
@@ -284,8 +288,19 @@ class SettingsSetupTest {
         // Not the BIOS folder: the app's own, outside the data root.
         assertEquals(
             listOf(
-                "cheats/", "covers/", "dump/", "gameicons/", "gamesettings/", "inputprofiles/", "memcards/",
-                "savestates/", "screenshots/", "shaders/", "textures/", "resources/", "videos/",
+                "cheats/",
+                "covers/",
+                "dump/",
+                "gameicons/",
+                "gamesettings/",
+                "inputprofiles/",
+                "memcards/",
+                "savestates/",
+                "screenshots/",
+                "shaders/",
+                "textures/",
+                "resources/",
+                "videos/",
             ),
             NativeLibrary.getDataFolders()?.toList(),
         )
@@ -306,7 +321,10 @@ class SettingsSetupTest {
         assertEquals("mycache/", NativeLibrary.getCacheFolder())
     }
 
-    private fun waitFor(what: String, condition: () -> Boolean) {
+    private fun waitFor(
+        what: String,
+        condition: () -> Boolean,
+    ) {
         val deadline = System.nanoTime() + 5_000_000_000L
         while (!condition()) {
             if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting: $what")
@@ -317,7 +335,9 @@ class SettingsSetupTest {
     private fun initialize(settings: String?) {
         if (settings != null) settingsFile.writeText(settings)
         val resources = Resources.extract(context)
-        assertTrue(NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID))
+        assertTrue(
+            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+        )
     }
 
     // The test app can't read /sdcard; the shell can. False if there's nothing there.

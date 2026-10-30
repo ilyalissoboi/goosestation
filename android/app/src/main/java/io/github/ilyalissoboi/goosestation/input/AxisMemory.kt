@@ -13,7 +13,9 @@ interface SentAxes {
  * Each controller's latest value for each of [axes], from every motion it sends, whether it went to the core or not.
  * A binding capture sends them to the core as it starts, so the core knows which axes are at rest.
  */
-class AxisMemory(private val axes: IntArray) {
+class AxisMemory(
+    private val axes: IntArray,
+) {
     private val values = HashMap<Int, FloatArray>()
 
     /** A motion from [deviceId]: [valueOf] gives each axis's value. */

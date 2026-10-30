@@ -50,7 +50,12 @@ fun GameTile(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(shape).background(colors.surfaceVariant),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(shape)
+                    .background(colors.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             val targetPx = constraints.maxWidth

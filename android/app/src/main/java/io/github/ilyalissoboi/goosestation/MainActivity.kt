@@ -73,21 +73,21 @@ class MainActivity : ComponentActivity() {
                             onBack = AppController::closeSettings,
                         )
                     Screen.Graphics -> {
-                        val graphics = AppController.graphics
+                        val graphics = AppController.settingsPages.graphics
                         if (graphics == null) {
                             SettingsLoadingPage("Graphics", onBack = AppController::closeSettingsPage)
                         } else {
                             GraphicsScreen(
                                 settings = graphics,
-                                aspectNames = AppController.aspectRatioNames,
-                                vulkanFailed = AppController.vulkanFailed,
-                                onChange = AppController::changeGraphics,
+                                aspectNames = AppController.settingsPages.aspectRatioNames,
+                                vulkanFailed = AppController.settingsPages.vulkanFailed,
+                                onChange = AppController.settingsPages::changeGraphics,
                                 onBack = AppController::closeSettingsPage,
                             )
                         }
                     }
                     Screen.Bios -> {
-                        val bios = AppController.bios
+                        val bios = AppController.settingsPages.bios
                         if (bios == null) {
                             SettingsLoadingPage("BIOS", onBack = AppController::closeSettingsPage)
                         } else {
@@ -96,8 +96,8 @@ class MainActivity : ComponentActivity() {
                                 auto = bios.auto,
                                 overrides = bios.overrides,
                                 fastBoot = bios.fastBoot,
-                                onSetOverride = AppController::setBiosOverride,
-                                onFastBoot = AppController::setFastBoot,
+                                onSetOverride = AppController.settingsPages::setBiosOverride,
+                                onFastBoot = AppController.settingsPages::setFastBoot,
                                 onBack = AppController::closeSettingsPage,
                             )
                         }

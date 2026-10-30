@@ -60,7 +60,8 @@ fun BiosScreen(
 
 /**
  * [region]'s choices: Automatic (null), naming the image the core picks ([auto]); each image, noting one made for
- * another region; and an [override] that isn't among the images, marked as from settings.ini.
+ * another region, and with its file name when another image has its description; and an [override] that isn't among
+ * the images, marked as from settings.ini.
  */
 private fun biosChoices(
     region: BiosRegion,
@@ -69,10 +70,12 @@ private fun biosChoices(
     override: String?,
 ): List<Choice<String?>> {
     val automatic = Choice<String?>(null, "Automatic: ${auto ?: "none found"}")
+    val shared = images.groupingBy { it.description }.eachCount().filterValues { it > 1 }.keys
     val offered =
         images.map { image ->
             val other = image.region != ANY_REGION && image.region != region.coreName
-            Choice<String?>(image.fileName, image.description, if (other) "made for ${image.region}" else null)
+            val label = if (image.description in shared) "${image.description} (${image.fileName})" else image.description
+            Choice<String?>(image.fileName, label, if (other) "made for ${image.region}" else null)
         }
     val unoffered =
         override

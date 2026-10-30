@@ -17,6 +17,9 @@ class FakeCoreApi(
     private val bindings = mutableMapOf<String, String?>("Cross" to "Button96", "Circle" to "Button97")
     var images = emptyList<BiosImage>()
 
+    /** Runs as a read of the Graphics or the BIOS page reaches the core, as if the user acted meanwhile. */
+    var duringRead: () -> Unit = {}
+
     override fun getPadBindings(descriptor: String): List<PadBinding>? =
         bindings.map { (name, binding) -> PadBinding(name, name, PadBindingKind.Button, binding) }
 
@@ -45,11 +48,19 @@ class FakeCoreApi(
         calls += "applySettings"
     }
 
-    override fun getAspectRatioNames(): List<String> = listOf("Auto (Game Native)", "4:3").also { calls += "getAspectRatioNames" }
+    override fun getAspectRatioNames(): List<String> {
+        calls += "getAspectRatioNames"
+        duringRead()
+        return listOf("Auto (Game Native)", "4:3")
+    }
 
     override fun isVulkanFailed(): Boolean = false
 
-    override fun getBiosImages(): List<BiosImage> = images.also { calls += "getBiosImages" }
+    override fun getBiosImages(): List<BiosImage> {
+        calls += "getBiosImages"
+        duringRead()
+        return images
+    }
 
     override fun getAutoBios(region: String): String? = images.firstOrNull()?.description
 }

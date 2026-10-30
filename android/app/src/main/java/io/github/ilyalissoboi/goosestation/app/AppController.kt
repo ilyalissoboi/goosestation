@@ -26,11 +26,7 @@ import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
-import io.github.ilyalissoboi.goosestation.settings.BiosFastBoot
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
-import io.github.ilyalissoboi.goosestation.settings.BiosPage
-import io.github.ilyalissoboi.goosestation.settings.BiosRegion
-import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
@@ -151,21 +147,8 @@ object AppController : NativeCallbacks {
     var settingsEntry by mutableStateOf<SettingsEntry?>(null)
         private set
 
-    /** The Graphics page's settings, as loaded on opening it; null until they are. */
-    var graphics by mutableStateOf<GraphicsSettings?>(null)
-        private set
-
-    /** The core's `[Display] AspectRatio` names, read with [graphics]. */
-    var aspectRatioNames by mutableStateOf(emptyList<String>())
-        private set
-
-    /** Vulkan didn't start in this run, as the core said when [graphics] were read. */
-    var vulkanFailed by mutableStateOf(false)
-        private set
-
-    /** The BIOS page's images and settings, as read on opening it; null until they are. */
-    var bios by mutableStateOf<BiosPage?>(null)
-        private set
+    /** The Graphics and BIOS pages' values. */
+    val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
 
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
@@ -475,42 +458,14 @@ object AppController : NativeCallbacks {
     val settingsReady get() = ready && !gameActive
 
     /**
-     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. The Graphics page shows once its
-     * settings are read, on [coreDispatcher].
+     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. Graphics and BIOS show once their
+     * settings are read, on [coreDispatcher]; Controllers once its bindings are.
      */
     fun openSettingsPage(entry: SettingsEntry) {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
         when (entry) {
-            SettingsEntry.Graphics -> {
-                graphics = null
-                scope.launch {
-                    val loaded =
-                        withContext(coreDispatcher) {
-                            Triple(
-                                GraphicsSettings.load(NativeCoreSettings),
-                                NativeLibrary.getAspectRatioNames().toList(),
-                                NativeLibrary.isVulkanFailed(),
-                            )
-                        }
-                    aspectRatioNames = loaded.second
-                    vulkanFailed = loaded.third
-                    graphics = loaded.first
-                }
-            }
-            SettingsEntry.Bios -> {
-                bios = null
-                scope.launch {
-                    bios =
-                        withContext(coreDispatcher) {
-                            BiosPage(
-                                images = NativeLibrary.getBiosImages().toList(),
-                                auto = BiosRegion.entries.associateWith { NativeLibrary.getAutoBios(it.coreName) },
-                                overrides = BiosOverrides.load(NativeCoreSettings),
-                                fastBoot = BiosFastBoot.load(NativeCoreSettings),
-                            )
-                        }
-                }
-            }
+            SettingsEntry.Graphics -> settingsPages.loadGraphics()
+            SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.Folders -> {}
         }
@@ -520,50 +475,9 @@ object AppController : NativeCallbacks {
     /** Back from a settings page to the hub, which focuses the page's entry. */
     fun closeSettingsPage() {
         val page = screen.page ?: return
-        if (page == SettingsEntry.Folders) return closeFolders()
         if (page == SettingsEntry.Controllers) controllersPage.close()
         settingsEntry = page
         screen = Screen.Settings
-    }
-
-    /**
-     * Saves the Graphics page's change to [new], only the fields that changed, then has the core apply it, on
-     * [coreDispatcher]. The mirror's next push takes settings.ini to the data folder.
-     */
-    fun changeGraphics(new: GraphicsSettings) {
-        val old = graphics ?: return
-        if (new == old) return
-        // Now, so a second change made before this one is saved starts from it.
-        graphics = new
-        scope.launch(coreDispatcher) {
-            new.save(NativeCoreSettings, old)
-            NativeLibrary.applySettings()
-        }
-    }
-
-    /** Sets [region]'s BIOS image to [fileName], or back to Automatic with null, then has the core apply it. */
-    fun setBiosOverride(
-        region: BiosRegion,
-        fileName: String?,
-    ) {
-        val page = bios ?: return
-        val overrides = if (fileName == null) page.overrides - region else page.overrides + (region to fileName)
-        // Now, so a second change made before this one is saved starts from it.
-        bios = page.copy(overrides = overrides)
-        scope.launch(coreDispatcher) {
-            BiosOverrides.set(NativeCoreSettings, region, fileName)
-            NativeLibrary.applySettings()
-        }
-    }
-
-    /** Turns fast boot on or off, then has the core apply it. */
-    fun setFastBoot(on: Boolean) {
-        val page = bios ?: return
-        bios = page.copy(fastBoot = on)
-        scope.launch(coreDispatcher) {
-            BiosFastBoot.save(NativeCoreSettings, on)
-            NativeLibrary.applySettings()
-        }
     }
 
     // --- The Controllers page ([ControllersPage]) ---
@@ -788,6 +702,8 @@ object AppController : NativeCallbacks {
             return
         }
         message = null
+        // The BIOS page, if it was opened meanwhile, shows the images just copied.
+        settingsPages.reloadShown(screen.page)
         val old = folders.bios
         if (uri == old) return
         folders = folders.copy(bios = uri)
@@ -1140,6 +1056,7 @@ object AppController : NativeCallbacks {
                 if (StartupStep.RefreshLibrary in steps) NativeLibrary.getGameList().toList() else null
             }
         refreshed?.let { games = it }
+        if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
         return Applied(refreshed != null, layoutGrew)
     }
 

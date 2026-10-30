@@ -3,12 +3,20 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -154,5 +162,83 @@ class CatchUpRunnerTest {
 
             assertEquals(1, requested)
             assertFalse(runner.startsAllowed)
+        }
+
+    // A scope as AppController's MainScope is: a run that fails takes nothing else down, and the failure is only logged.
+    private fun TestScope.appScope() =
+        CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler) + CoroutineExceptionHandler { _, _ -> })
+
+    // T10-9: the push's request the failed run took is still pulled, and starts stay refused until it is.
+    @Test
+    fun anAbnormalEndWithARoundQueuedStillCatchesUp() =
+        runTest {
+            runner.layoutGrew()
+            val allowed = mutableListOf<Boolean>()
+            assertNotNull(
+                runner.launch(appScope(), pull = {
+                    pulls++
+                    if (pulls == 1) {
+                        // A push grows the layout, and asks the run for its catch-up, just before the pull fails.
+                        assertFalse(grow())
+                        error("the core went away")
+                    }
+                    allowed += runner.startsAllowed
+                    false
+                }),
+            )
+            runCurrent()
+
+            assertEquals(2, pulls)
+            assertEquals(listOf(false), allowed)
+            assertTrue(runner.startsAllowed)
+        }
+
+    // T10-8: a catch-up's job cancelled before it ran can't leave starts refused for good.
+    @Test
+    fun aJobCancelledBeforeItStartsAllowsStarts() =
+        runTest {
+            runner.layoutGrew()
+            val job = runner.launch(appScope(), pull = { false })!!
+
+            job.cancel()
+            runCurrent()
+
+            assertTrue(runner.startsAllowed)
+            assertTrue(runner.request())
+        }
+
+    @Test
+    fun aCancelledRunAllowsStartsUnlessAGrowthIsPending() =
+        runTest {
+            val scope = appScope()
+            runner.layoutGrew()
+            val first = runner.launch(scope, pull = { delay(10_000) ; false })!!
+            runCurrent()
+            first.cancel()
+            runCurrent()
+            assertTrue(runner.startsAllowed)
+
+            runner.layoutGrew()
+            val second = runner.launch(scope, pull = { delay(10_000) ; false })!!
+            runCurrent()
+            // A pull from outside the run grows the layout; its own catch-up is asked for once it's done.
+            runner.layoutGrew()
+            second.cancel()
+            runCurrent()
+            assertFalse(runner.startsAllowed)
+        }
+
+    // While a catch-up runs, a request is the running one's job, which callers wait on.
+    @Test
+    fun aRequestWhileRunningGivesTheRunningJob() =
+        runTest {
+            val scope = appScope()
+            runner.layoutGrew()
+            val job = runner.launch(scope, pull = { delay(1_000) ; false })
+            runCurrent()
+
+            assertEquals(job, runner.launch(scope, pull = { false }))
+            runCurrent()
+            assertEquals(job, runner.job)
         }
 }

@@ -240,9 +240,6 @@ object AppController : NativeCallbacks {
     /** The pulls that follow a growth of the layout ([catchUp]), one at a time, and whether a game may start. */
     private val catchUps = CatchUpRunner { Log.w(TAG, it) }
 
-    /** The catch-up running, or the last one; main thread only. */
-    private var catchUpJob: Job? = null
-
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
         private set
@@ -1000,15 +997,11 @@ object AppController : NativeCallbacks {
      */
     private fun catchUp(): Job? {
         layoutSettling.unsettle()
-        if (!catchUps.request()) return catchUpJob
-        return scope
-            .launch {
-                try {
-                    catchUps.run { pullGrew() }
-                } finally {
-                    if (message == COPYING) message = null
-                }
-            }.also { catchUpJob = it }
+        return catchUps.launch(
+            scope,
+            // Not while starts are still refused, as by a catch-up run again: a start refused meanwhile says why.
+            onEnd = { if (message == COPYING && catchUps.startsAllowed) message = null },
+        ) { pullGrew() }
     }
 
     /** What [applyChanged] did: whether it [refreshed] the library, and whether the core's paths [layoutGrew]. */
@@ -1232,7 +1225,8 @@ object AppController : NativeCallbacks {
             gameActive = false
             holdMemcards = false
             if (screen == Screen.Game) screen = Screen.Library
-            if (!messageIsError) message = null
+            // A start refused meanwhile, while a catch-up runs, still says why.
+            if (!messageIsError && catchUps.startsAllowed) message = null
             // The memory cards held back while it ran come in now, then the game's own writes go out.
             scope.launch {
                 withContext(coreDispatcher) { readCorePaths() }

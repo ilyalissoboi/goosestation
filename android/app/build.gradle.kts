@@ -163,24 +163,52 @@ abstract class CheckNoWindowDialogs : DefaultTask() {
                 it to Regex("""\bimport\s+${Regex.escape(it)}""")
             }
 
-    /** [lines] with their `//` and `/* */` comments blanked out; a block comment may span lines. */
+    /**
+     * [lines] with their `//` and `/* */` comments blanked out. A block comment may span lines and nest, as Kotlin's
+     * do. String literals, raw ones across lines too, and character literals are kept as code, so a comment's
+     * opening inside one doesn't start a comment.
+     */
     private fun withoutComments(lines: List<String>): List<String> {
-        var inBlock = false
+        var depth = 0
+        var inRaw = false
         return lines.map { line ->
             val code = StringBuilder()
             var i = 0
+
+            // Keeps the literal starting at i, which `quote` ends (or the line, if it doesn't), and moves past it.
+            fun keep(quote: String) {
+                var end = i + quote.length
+                while (end < line.length && !line.startsWith(quote, end)) end += if (line[end] == '\\') 2 else 1
+                val stop = if (end < line.length) end + quote.length else line.length
+                code.append(line, i, stop)
+                i = stop
+            }
             while (i < line.length) {
                 when {
-                    inBlock && line.startsWith("*/", i) -> {
-                        inBlock = false
+                    inRaw -> {
+                        val end = line.indexOf("\"\"\"", i)
+                        val stop = if (end < 0) line.length else end + 3
+                        code.append(line, i, stop)
+                        i = stop
+                        if (end >= 0) inRaw = false
+                    }
+                    depth > 0 && line.startsWith("*/", i) -> {
+                        depth--
                         i += 2
                     }
-                    inBlock -> i++
                     line.startsWith("/*", i) -> {
-                        inBlock = true
+                        depth++
                         i += 2
                     }
+                    depth > 0 -> i++
                     line.startsWith("//", i) -> i = line.length
+                    line.startsWith("\"\"\"", i) -> {
+                        code.append("\"\"\"")
+                        i += 3
+                        inRaw = true
+                    }
+                    line[i] == '"' -> keep("\"")
+                    line[i] == '\'' -> keep("'")
                     else -> {
                         code.append(line[i])
                         i++

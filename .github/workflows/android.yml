@@ -1,0 +1,92 @@
+name: Android build
+
+# Builds the debug APK and runs the JVM tests and the Kotlin checks. It has no secrets, and isn't part of a release.
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'src/**'
+      - 'dep/**'
+      - 'CMakeModules/**'
+      - 'CMakeLists.txt'
+      - 'data/resources/**'
+      - 'scripts/deps/build-dependencies-android.sh'
+      - '.github/workflows/android.yml'
+  push:
+    branches:
+      - master
+    paths:
+      - 'android/**'
+      - 'src/**'
+      - 'dep/**'
+      - 'CMakeModules/**'
+      - 'CMakeLists.txt'
+      - 'data/resources/**'
+      - 'scripts/deps/build-dependencies-android.sh'
+      - '.github/workflows/android.yml'
+  # As in rolling-release.yml: running on master twice a week keeps the dependency cache from being evicted.
+  schedule:
+    - cron: '0 4 * * 1,4'
+  workflow_dispatch:
+
+# A new push to a pull request cancels the run for its previous push. Branch pushes, schedules and
+# manual runs each get their own group, so they are never cancelled or skipped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  NDK_VERSION: 30.0.16248370
+  CMAKE_VERSION: 4.1.2
+
+jobs:
+  android-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+    # The whole history, for the version stamp (git describe).
+    - uses: actions/checkout@v4.1.6
+      with:
+        fetch-depth: 0
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    # The SDK's CMake package brings Ninja too: the dependency build uses the same CMake and Ninja as Gradle's.
+    - name: Install the NDK, CMake and the platform
+      run: |
+        yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+          "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION" "platforms;android-37.0" "build-tools;37.0.0"
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+        echo "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin" >> "$GITHUB_PATH"
+
+    - name: Cache the Android dependencies
+      id: cache-deps
+      uses: actions/cache@v4
+      with:
+        path: ~/deps-android
+        key: deps-android-ndk${{ env.NDK_VERSION }} ${{ hashFiles('scripts/deps/build-dependencies-android.sh') }}
+
+    - name: Build the Android dependencies
+      if: steps.cache-deps.outputs.cache-hit != 'true'
+      run: scripts/deps/build-dependencies-android.sh "$HOME/deps-android"
+
+    - name: Build the APK, and run the JVM tests and the Kotlin checks
+      working-directory: android
+      run: |
+        export GOOSESTATION_ANDROID_DEPS="$HOME/deps-android"
+        ./gradlew assembleDebug testDebugUnitTest ktlintCheck checkNoWindowDialogs
+
+    - name: Upload the debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-debug-apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
+        if-no-files-found: error

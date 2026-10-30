@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation
 
+import android.annotation.SuppressLint
 import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
@@ -73,21 +74,21 @@ class MainActivity : ComponentActivity() {
                             onBack = AppController::closeSettings,
                         )
                     Screen.Graphics -> {
-                        val graphics = AppController.graphics
+                        val graphics = AppController.settingsPages.graphics
                         if (graphics == null) {
                             SettingsLoadingPage("Graphics", onBack = AppController::closeSettingsPage)
                         } else {
                             GraphicsScreen(
                                 settings = graphics,
-                                aspectNames = AppController.aspectRatioNames,
-                                vulkanFailed = AppController.vulkanFailed,
-                                onChange = AppController::changeGraphics,
+                                aspectNames = AppController.settingsPages.aspectRatioNames,
+                                vulkanFailed = AppController.settingsPages.vulkanFailed,
+                                onChange = AppController.settingsPages::changeGraphics,
                                 onBack = AppController::closeSettingsPage,
                             )
                         }
                     }
                     Screen.Bios -> {
-                        val bios = AppController.bios
+                        val bios = AppController.settingsPages.bios
                         if (bios == null) {
                             SettingsLoadingPage("BIOS", onBack = AppController::closeSettingsPage)
                         } else {
@@ -96,28 +97,33 @@ class MainActivity : ComponentActivity() {
                                 auto = bios.auto,
                                 overrides = bios.overrides,
                                 fastBoot = bios.fastBoot,
-                                onSetOverride = AppController::setBiosOverride,
-                                onFastBoot = AppController::setFastBoot,
+                                onSetOverride = AppController.settingsPages::setBiosOverride,
+                                onFastBoot = AppController.settingsPages::setFastBoot,
                                 onBack = AppController::closeSettingsPage,
                             )
                         }
                     }
                     Screen.Controllers -> {
-                        val state = AppController.controllersState
+                        val state = AppController.controllersPage.state
                         val bindings = state.bindings
                         if (bindings == null) {
                             SettingsLoadingPage("Controllers", onBack = AppController::closeSettingsPage)
                         } else {
                             ControllersScreen(
                                 controllers = state.controllers,
+                                labels = state.labels,
                                 selected = state.selected,
                                 bindings = bindings,
+                                bindingsFor = state.bindingsFor,
                                 capturing = state.capturing,
                                 secondsLeft = state.secondsLeft,
+                                undoFor = state.undo?.name,
                                 onSelect = AppController::selectController,
                                 onCapture = AppController::captureBinding,
                                 onCancelCapture = AppController::cancelCapture,
                                 onClear = AppController::clearBinding,
+                                onUndo = AppController.controllersPage::undo,
+                                onDropUndo = AppController.controllersPage::dropUndo,
                                 onReset = AppController::resetBindings,
                                 onBack = AppController::closeSettingsPage,
                             )
@@ -206,7 +212,9 @@ class MainActivity : ComponentActivity() {
     }
 
     // With padInput, controllers go to the core; otherwise they move Compose's focus. A key-up goes where its key-down
-    // went, either way, and a stick the core was given stays its until it's back near rest.
+    // went, either way, and a stick the core was given stays its until it's back near rest. Lint's RestrictedApi is a
+    // false positive here: the restricted one is androidx.core's override of Activity.dispatchKeyEvent, which is public.
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val controllers = AppController.controllers
         if (controllers != null && controllers.onKeyEvent(event, padInput)) return true

@@ -3,6 +3,8 @@
 
 #include "android_input_keys.h"
 
+#include "common/string_util.h"
+
 #include "fmt/format.h"
 
 #include <algorithm>
@@ -420,6 +422,13 @@ std::optional<InputBindingKey> BindingCapture::OnEvent(InputBindingKey key, floa
 
   key.modifier = (value < 0.0f) ? InputModifier::Negate : InputModifier::None;
   return key;
+}
+
+std::optional<u32> ParseDeviceIndex(std::string_view identifier)
+{
+  if (!identifier.starts_with(DEVICE_PREFIX))
+    return std::nullopt;
+  return StringUtil::FromChars<u32>(identifier.substr(DEVICE_PREFIX.size()));
 }
 
 } // namespace AndroidInputKeys

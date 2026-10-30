@@ -759,6 +759,12 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstr
   return result;
 }
 
+NATIVE_LIBRARY_FUNCTION(jint, getControllerIndex)(JNIEnv* env, jobject, jstring descriptor)
+{
+  const std::optional<u32> index = AndroidHost::GetControllerIndex(FromJString(env, descriptor));
+  return index.has_value() ? static_cast<jint>(index.value()) : -1;
+}
+
 NATIVE_LIBRARY_FUNCTION(void, setPadBinding)(JNIEnv* env, jobject, jstring descriptor, jstring name, jstring binding)
 {
   // A null binding is an empty one: none.

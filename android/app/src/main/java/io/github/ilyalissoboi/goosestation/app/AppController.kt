@@ -18,9 +18,7 @@ import androidx.core.content.ContextCompat
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
-import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.Resources
-import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
@@ -28,11 +26,7 @@ import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
-import io.github.ilyalissoboi.goosestation.settings.BiosFastBoot
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
-import io.github.ilyalissoboi.goosestation.settings.BiosPage
-import io.github.ilyalissoboi.goosestation.settings.BiosRegion
-import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
@@ -81,19 +75,6 @@ enum class Screen(
 }
 
 /**
- * The Controllers page: the [controllers] connected, the [selected] one's descriptor, and its [bindings], null until
- * they're first read. While [capturing] is a binding's name, the next input on that controller becomes its binding,
- * unless [secondsLeft] runs out first.
- */
-data class ControllersState(
-    val controllers: List<ConnectedController> = emptyList(),
-    val selected: String? = null,
-    val bindings: List<PadBinding>? = null,
-    val capturing: String? = null,
-    val secondsLeft: Int = 0,
-)
-
-/**
  * The core, the folders, the mirror and what the app shows, for the life of the process, so a recreated activity
  * carries on. Main thread only, except the [NativeCallbacks], which the core calls on its threads: they post to the
  * main thread and never wait for it, since it may be waiting for the core in [NativeLibrary.surfaceChanged].
@@ -109,7 +90,6 @@ object AppController : NativeCallbacks {
     private const val CARD_REMOVED = "the SD card was removed"
     private const val GAME_STOPPED_FOR_EJECT =
         "The SD card was removed, so the game was stopped. Its memory cards are saved on this device."
-    private const val CAPTURE_SECONDS = 5
     private const val COPYING = "Copying your data from the data folder…"
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -167,42 +147,17 @@ object AppController : NativeCallbacks {
     var settingsEntry by mutableStateOf<SettingsEntry?>(null)
         private set
 
-    /** The Graphics page's settings, as loaded on opening it; null until they are. */
-    var graphics by mutableStateOf<GraphicsSettings?>(null)
-        private set
-
-    /** The core's `[Display] AspectRatio` names, read with [graphics]. */
-    var aspectRatioNames by mutableStateOf(emptyList<String>())
-        private set
-
-    /** Vulkan didn't start in this run, as the core said when [graphics] were read. */
-    var vulkanFailed by mutableStateOf(false)
-        private set
-
-    /** The BIOS page's images and settings, as read on opening it; null until they are. */
-    var bios by mutableStateOf<BiosPage?>(null)
-        private set
+    /** The Graphics and BIOS pages' values. */
+    val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
 
     /** The Controllers page's controllers, bindings and capture. */
-    var controllersState by mutableStateOf(ControllersState())
-        private set
+    val controllersPage =
+        ControllersPage(scope, coreDispatcher, NativeCoreApi, { controllers }, { screen == Screen.Controllers }) {
+            Log.i(TAG, it)
+        }
 
     /** A capture runs: the controllers' input goes to the core, which takes the next one as a binding. */
-    val capturingInput: Boolean get() = controllersState.capturing != null
-
-    /** The controller last picked on the Controllers page, which it selects whenever it's connected. */
-    private var pickedController: String? = null
-    private var controllersJob: Job? = null
-    private var captureTimer: Job? = null
-
-    /** The latest bindings read, so an older read that comes back later is dropped. */
-    private var bindingsRead = 0
-
-    /** Changes as each capture starts or ends, so a report the main thread gets late is dropped. */
-    private var captureId = 0
-
-    /** [captureId] of the capture the core runs: set on [coreDispatcher], read where the core reports. */
-    @Volatile private var nativeCaptureId = 0
+    val capturingInput: Boolean get() = controllersPage.capturingInput
 
     /** An import copied images before the core started: the overrides they leave stale are dropped once it has. */
     private var biosOverridesToCheck = false
@@ -284,9 +239,6 @@ object AppController : NativeCallbacks {
 
     /** The pulls that follow a growth of the layout ([catchUp]), one at a time, and whether a game may start. */
     private val catchUps = CatchUpRunner { Log.w(TAG, it) }
-
-    /** The catch-up running, or the last one; main thread only. */
-    private var catchUpJob: Job? = null
 
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
@@ -503,43 +455,15 @@ object AppController : NativeCallbacks {
     val settingsReady get() = ready && !gameActive
 
     /**
-     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. The Graphics page shows once its
-     * settings are read, on [coreDispatcher].
+     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. Graphics and BIOS show once their
+     * settings are read, on [coreDispatcher]; Controllers once its bindings are.
      */
     fun openSettingsPage(entry: SettingsEntry) {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
         when (entry) {
-            SettingsEntry.Graphics -> {
-                graphics = null
-                scope.launch {
-                    val loaded =
-                        withContext(coreDispatcher) {
-                            Triple(
-                                GraphicsSettings.load(NativeCoreSettings),
-                                NativeLibrary.getAspectRatioNames().toList(),
-                                NativeLibrary.isVulkanFailed(),
-                            )
-                        }
-                    aspectRatioNames = loaded.second
-                    vulkanFailed = loaded.third
-                    graphics = loaded.first
-                }
-            }
-            SettingsEntry.Bios -> {
-                bios = null
-                scope.launch {
-                    bios =
-                        withContext(coreDispatcher) {
-                            BiosPage(
-                                images = NativeLibrary.getBiosImages().toList(),
-                                auto = BiosRegion.entries.associateWith { NativeLibrary.getAutoBios(it.coreName) },
-                                overrides = BiosOverrides.load(NativeCoreSettings),
-                                fastBoot = BiosFastBoot.load(NativeCoreSettings),
-                            )
-                        }
-                }
-            }
-            SettingsEntry.Controllers -> watchControllers()
+            SettingsEntry.Graphics -> settingsPages.loadGraphics()
+            SettingsEntry.Bios -> settingsPages.loadBios()
+            SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.Folders -> {}
         }
         screen = Screen.entries.first { it.page == entry }
@@ -548,191 +472,22 @@ object AppController : NativeCallbacks {
     /** Back from a settings page to the hub, which focuses the page's entry. */
     fun closeSettingsPage() {
         val page = screen.page ?: return
-        if (page == SettingsEntry.Folders) return closeFolders()
-        if (page == SettingsEntry.Controllers) {
-            cancelCapture()
-            controllersJob?.cancel()
-            controllersJob = null
-        }
+        if (page == SettingsEntry.Controllers) controllersPage.close()
         settingsEntry = page
         screen = Screen.Settings
     }
 
-    /**
-     * Saves the Graphics page's change to [new], only the fields that changed, then has the core apply it, on
-     * [coreDispatcher]. The mirror's next push takes settings.ini to the data folder.
-     */
-    fun changeGraphics(new: GraphicsSettings) {
-        val old = graphics ?: return
-        if (new == old) return
-        // Now, so a second change made before this one is saved starts from it.
-        graphics = new
-        scope.launch(coreDispatcher) {
-            new.save(NativeCoreSettings, old)
-            NativeLibrary.applySettings()
-        }
-    }
+    // --- The Controllers page ([ControllersPage]) ---
 
-    /** Sets [region]'s BIOS image to [fileName], or back to Automatic with null, then has the core apply it. */
-    fun setBiosOverride(
-        region: BiosRegion,
-        fileName: String?,
-    ) {
-        val page = bios ?: return
-        val overrides = if (fileName == null) page.overrides - region else page.overrides + (region to fileName)
-        // Now, so a second change made before this one is saved starts from it.
-        bios = page.copy(overrides = overrides)
-        scope.launch(coreDispatcher) {
-            BiosOverrides.set(NativeCoreSettings, region, fileName)
-            NativeLibrary.applySettings()
-        }
-    }
+    fun selectController(descriptor: String) = controllersPage.select(descriptor)
 
-    /** Turns fast boot on or off, then has the core apply it. */
-    fun setFastBoot(on: Boolean) {
-        val page = bios ?: return
-        bios = page.copy(fastBoot = on)
-        scope.launch(coreDispatcher) {
-            BiosFastBoot.save(NativeCoreSettings, on)
-            NativeLibrary.applySettings()
-        }
-    }
+    fun captureBinding(name: String) = controllersPage.capture(name)
 
-    // --- The Controllers page ---
+    fun cancelCapture() = controllersPage.cancelCapture()
 
-    /** Shows the controller with [descriptor]'s bindings, and selects it whenever it's connected from now on. */
-    fun selectController(descriptor: String) {
-        pickedController = descriptor
-        val state = controllersState
-        if (descriptor == state.selected || state.controllers.none { it.descriptor == descriptor }) return
-        cancelCapture()
-        controllersState = controllersState.copy(selected = descriptor)
-        readBindings(descriptor)
-    }
+    fun clearBinding(name: String) = controllersPage.clear(name)
 
-    /**
-     * Captures the selected controller's next input as [name]'s binding ([onBindingCaptured]): for 5 s, counting down
-     * once a second, and then it's cancelled. Its controllers' input goes to the core meanwhile ([capturingInput]).
-     */
-    fun captureBinding(name: String) {
-        val state = controllersState
-        val descriptor = state.selected ?: return
-        if (screen != Screen.Controllers || state.bindings?.any { it.name == name } != true) return
-        val id = ++captureId
-        captureTimer?.cancel()
-        controllersState = state.copy(capturing = name, secondsLeft = CAPTURE_SECONDS)
-        scope.launch {
-            // Nothing from an earlier capture comes once the cancel returns: what's reported next is this one's.
-            withContext(coreDispatcher) { NativeLibrary.cancelBindingCapture() }
-            if (id != captureId) return@launch
-            // Here, on the main thread, after the releaseAll() an earlier capture's end runs once its cancel returns,
-            // which was before this one's: the pad's current axes, so the capture knows which are at rest. The core
-            // takes in the input sent before the start.
-            controllers?.sendAxes(descriptor)
-            withContext(coreDispatcher) {
-                nativeCaptureId = id
-                NativeLibrary.startBindingCapture(descriptor)
-            }
-        }
-        captureTimer =
-            scope.launch {
-                for (left in CAPTURE_SECONDS downTo 1) {
-                    controllersState = controllersState.copy(secondsLeft = left)
-                    delay(1_000)
-                }
-                cancelCapture()
-            }
-    }
-
-    /** Ends the capture running, if any, leaving the binding as it was. */
-    fun cancelCapture() {
-        if (controllersState.capturing == null) return
-        endCapture()
-        scope.launch {
-            withContext(coreDispatcher) { NativeLibrary.cancelBindingCapture() }
-            // Once the capture is gone, as it would swallow the releases too.
-            controllers?.releaseAll()
-        }
-    }
-
-    /** Leaves [name] unbound on the selected controller. */
-    fun clearBinding(name: String) {
-        val descriptor = controllersState.selected ?: return
-        if (capturingInput) return
-        setBindingShown(name, null)
-        readBindings(descriptor) { NativeLibrary.setPadBinding(descriptor, name, null) }
-    }
-
-    /** Gives the selected controller its default bindings again. */
-    fun resetBindings() {
-        val descriptor = controllersState.selected ?: return
-        if (capturingInput) return
-        readBindings(descriptor) { NativeLibrary.resetPadBindings(descriptor) }
-    }
-
-    /** Follows the controllers connected while the Controllers page is open, from no bindings read yet. */
-    private fun watchControllers() {
-        controllersJob?.cancel()
-        controllersState = ControllersState()
-        val input = controllers ?: return
-        controllersJob = scope.launch { input.connected.collect(::onControllersChanged) }
-    }
-
-    /**
-     * The page lists [connected], and selects the controller last picked if it's among them, or else the first. A
-     * capture on a controller that's gone is cancelled.
-     */
-    private fun onControllersChanged(connected: List<ConnectedController>) {
-        val old = controllersState
-        val selected =
-            (connected.firstOrNull { it.descriptor == pickedController } ?: connected.firstOrNull())?.descriptor
-        if (selected != old.selected) cancelCapture()
-        controllersState = controllersState.copy(controllers = connected, selected = selected)
-        when {
-            selected == null -> {
-                bindingsRead++
-                controllersState = controllersState.copy(bindings = emptyList())
-            }
-            selected != old.selected -> readBindings(selected)
-        }
-    }
-
-    /**
-     * Runs [change], if any, then reads [descriptor]'s bindings, on [coreDispatcher]; they show if it's still selected
-     * and no later read was asked for.
-     */
-    private fun readBindings(
-        descriptor: String,
-        change: (() -> Unit)? = null,
-    ) {
-        val read = ++bindingsRead
-        scope.launch {
-            val loaded =
-                withContext(coreDispatcher) {
-                    change?.invoke()
-                    NativeLibrary.getPadBindings(descriptor)?.toList()
-                }
-            if (read != bindingsRead || controllersState.selected != descriptor) return@launch
-            controllersState = controllersState.copy(bindings = loaded.orEmpty())
-        }
-    }
-
-    // Shows [name] bound to [binding] now, until the bindings are read again.
-    private fun setBindingShown(
-        name: String,
-        binding: String?,
-    ) {
-        val bindings = controllersState.bindings ?: return
-        controllersState =
-            controllersState.copy(bindings = bindings.map { if (it.name == name) it.copy(binding = binding) else it })
-    }
-
-    private fun endCapture() {
-        captureId++
-        captureTimer?.cancel()
-        captureTimer = null
-        controllersState = controllersState.copy(capturing = null, secondsLeft = 0)
-    }
+    fun resetBindings() = controllersPage.reset()
 
     fun closeFolders() {
         if (screen != Screen.Folders || dataChange != null) return
@@ -944,6 +699,8 @@ object AppController : NativeCallbacks {
             return
         }
         message = null
+        // The BIOS page, if it was opened meanwhile, shows the images just copied.
+        settingsPages.reloadShown(screen.page)
         val old = folders.bios
         if (uri == old) return
         folders = folders.copy(bios = uri)
@@ -1001,6 +758,9 @@ object AppController : NativeCallbacks {
     fun resumeFromPrompt() {
         if (!promptOpen) return
         promptOpen = false
+        // As the prompt opened: an axis the core still had, such as a trigger let go once the stick it came with was
+        // back at rest, isn't left held in the game.
+        controllers?.releaseAll()
         if (gameRunning && PausePolicy.running(resumed, promptOpen = false)) NativeLibrary.setPaused(false)
     }
 
@@ -1240,15 +1000,11 @@ object AppController : NativeCallbacks {
      */
     private fun catchUp(): Job? {
         layoutSettling.unsettle()
-        if (!catchUps.request()) return catchUpJob
-        return scope
-            .launch {
-                try {
-                    catchUps.run { pullGrew() }
-                } finally {
-                    if (message == COPYING) message = null
-                }
-            }.also { catchUpJob = it }
+        return catchUps.launch(
+            scope,
+            // Not while starts are still refused, as by a catch-up run again: a start refused meanwhile says why.
+            onEnd = { if (message == COPYING && !catchUps.keepsLine(message, COPYING)) message = null },
+        ) { pullGrew() }
     }
 
     /** What [applyChanged] did: whether it [refreshed] the library, and whether the core's paths [layoutGrew]. */
@@ -1296,6 +1052,7 @@ object AppController : NativeCallbacks {
                 if (StartupStep.RefreshLibrary in steps) NativeLibrary.getGameList().toList() else null
             }
         refreshed?.let { games = it }
+        if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
         return Applied(refreshed != null, layoutGrew)
     }
 
@@ -1309,17 +1066,18 @@ object AppController : NativeCallbacks {
                     workingCopy.mkdirs()
                     val resources = Resources.extract(context)
                     NativeLibrary.setCallbacks(this@AppController)
-                    NativeLibrary.initialize(
-                        workingCopy.absolutePath,
-                        resources.absolutePath,
-                        biosDir.absolutePath,
-                        prefs.installId(),
-                    ).also {
-                        if (it) {
-                            readGridView()
-                            readCorePaths()
+                    NativeLibrary
+                        .initialize(
+                            workingCopy.absolutePath,
+                            resources.absolutePath,
+                            biosDir.absolutePath,
+                            prefs.installId(),
+                        ).also {
+                            if (it) {
+                                readGridView()
+                                readCorePaths()
+                            }
                         }
-                    }
                 }
             }
         // onError(), posted before initialize() returned, has already run.
@@ -1471,7 +1229,8 @@ object AppController : NativeCallbacks {
             gameActive = false
             holdMemcards = false
             if (screen == Screen.Game) screen = Screen.Library
-            if (!messageIsError) message = null
+            // A start refused meanwhile, while a catch-up runs, still says why.
+            if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
             // The memory cards held back while it ran come in now, then the game's own writes go out.
             scope.launch {
                 withContext(coreDispatcher) { readCorePaths() }
@@ -1481,23 +1240,7 @@ object AppController : NativeCallbacks {
         }
     }
 
-    override fun onBindingCaptured(binding: String) {
-        // The capture's, as the core reports it: a later one only starts once this one can't report any more.
-        val id = nativeCaptureId
-        mainHandler.post {
-            val state = controllersState
-            val name = state.capturing
-            val descriptor = state.selected
-            // Cancelled, timed out or replaced since it was posted.
-            if (id != captureId || name == null || descriptor == null) return@post
-            Log.i(TAG, "Captured $binding for $name")
-            endCapture()
-            // The core removed the capture as it took the input, so the releases reach it.
-            controllers?.releaseAll()
-            setBindingShown(name, binding)
-            readBindings(descriptor) { NativeLibrary.setPadBinding(descriptor, name, binding) }
-        }
-    }
+    override fun onBindingCaptured(binding: String) = controllersPage.onBindingCaptured(binding)
 
     override fun onError(message: String) {
         mainHandler.post {

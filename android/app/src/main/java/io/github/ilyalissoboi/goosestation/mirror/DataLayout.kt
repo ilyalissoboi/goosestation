@@ -74,8 +74,21 @@ class DataLayout private constructor(
         private val TOP_FILES = setOf("settings.ini", "secrets.ini", "playtime.dat", "custom_properties.ini")
         private val FOLDERS =
             listOf(
-                "bios", "cheats", "covers", "dump", "gameicons", "gamesettings", "inputprofiles", "memcards",
-                "savestates", "screenshots", "shaders", "textures", "resources", "videos", "emusync",
+                "bios",
+                "cheats",
+                "covers",
+                "dump",
+                "gameicons",
+                "gamesettings",
+                "inputprofiles",
+                "memcards",
+                "savestates",
+                "screenshots",
+                "shaders",
+                "textures",
+                "resources",
+                "videos",
+                "emusync",
             ).map { "$it/" }.toSet()
 
         /** The layout before the core says otherwise: its defaults. */

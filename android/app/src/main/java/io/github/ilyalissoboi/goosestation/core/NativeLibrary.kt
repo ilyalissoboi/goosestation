@@ -20,7 +20,12 @@ object NativeLibrary {
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
      * settings reset.
      */
-    external fun initialize(dataRoot: String, resourcesRoot: String, biosDir: String, installId: String): Boolean
+    external fun initialize(
+        dataRoot: String,
+        resourcesRoot: String,
+        biosDir: String,
+        installId: String,
+    ): Boolean
 
     // The settings calls work on settings.ini, which they save, and can be made from any thread.
 
@@ -30,18 +35,42 @@ object NativeLibrary {
     /** Reads settings.ini again, after the app replaced it, and applies it. Waits for the core. */
     external fun reloadSettings()
 
-    external fun getBoolSetting(section: String, key: String, default: Boolean): Boolean
+    external fun getBoolSetting(
+        section: String,
+        key: String,
+        default: Boolean,
+    ): Boolean
 
-    external fun setBoolSetting(section: String, key: String, value: Boolean)
+    external fun setBoolSetting(
+        section: String,
+        key: String,
+        value: Boolean,
+    )
 
-    external fun getStringSetting(section: String, key: String, default: String): String
+    external fun getStringSetting(
+        section: String,
+        key: String,
+        default: String,
+    ): String
 
     /** Sets [key] to [value], or deletes it if [value] is null. */
-    external fun setStringSetting(section: String, key: String, value: String?)
+    external fun setStringSetting(
+        section: String,
+        key: String,
+        value: String?,
+    )
 
-    external fun getIntSetting(section: String, key: String, default: Int): Int
+    external fun getIntSetting(
+        section: String,
+        key: String,
+        default: Int,
+    ): Int
 
-    external fun setIntSetting(section: String, key: String, value: Int)
+    external fun setIntSetting(
+        section: String,
+        key: String,
+        value: Int,
+    )
 
     /** Applies settings.ini as it is now, as the core does after its own settings change. Waits for the core. */
     external fun applySettings()
@@ -86,7 +115,10 @@ object NativeLibrary {
      * is deleted either. Doesn't need [initialize]. It runs on the calling thread and does I/O, so call it off the
      * main thread.
      */
-    external fun importBios(sourceTreeUri: String, destDir: String): Array<String>?
+    external fun importBios(
+        sourceTreeUri: String,
+        destDir: String,
+    ): Array<String>?
 
     /**
      * The BIOS images the core recognises among the app's copies (the [initialize] biosDir), in file name order.
@@ -130,15 +162,32 @@ object NativeLibrary {
     external fun setPaused(paused: Boolean)
 
     /** A new or resized surface, or null when it's destroyed. Returns once the core has stopped using the old one. */
-    external fun surfaceChanged(surface: Surface?, width: Int, height: Int, scale: Float)
+    external fun surfaceChanged(
+        surface: Surface?,
+        width: Int,
+        height: Int,
+        scale: Float,
+    )
 
     /** A controller key; returns whether it went to the emulated pad. */
-    external fun onKey(deviceId: Int, keyCode: Int, pressed: Boolean): Boolean
+    external fun onKey(
+        deviceId: Int,
+        keyCode: Int,
+        pressed: Boolean,
+    ): Boolean
 
-    external fun onAxis(deviceId: Int, axis: Int, value: Float)
+    external fun onAxis(
+        deviceId: Int,
+        axis: Int,
+        value: Float,
+    )
 
     /** Report every controller before its input, including those present at start. */
-    external fun onDeviceConnected(deviceId: Int, name: String, descriptor: String)
+    external fun onDeviceConnected(
+        deviceId: Int,
+        name: String,
+        descriptor: String,
+    )
 
     external fun onDeviceDisconnected(deviceId: Int)
 
@@ -156,11 +205,21 @@ object NativeLibrary {
     external fun getPadBindings(descriptor: String): Array<PadBinding>?
 
     /**
+     * The controller with [descriptor]'s place in the table of controllers this install has seen, which stays the same
+     * from one run to the next; -1 for one never connected, or before [initialize].
+     */
+    external fun getControllerIndex(descriptor: String): Int
+
+    /**
      * Binds the Port 1 input [name] (a [PadBinding.name]) to [binding] on the controller with [descriptor], in place
      * of the one it had, and applies it. Null or empty leaves the input unbound on that controller. Other controllers
      * keep theirs. Does nothing for a controller [getPadBindings] gives null for.
      */
-    external fun setPadBinding(descriptor: String, name: String, binding: String?)
+    external fun setPadBinding(
+        descriptor: String,
+        name: String,
+        binding: String?,
+    )
 
     /** Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. */
     external fun resetPadBindings(descriptor: String)

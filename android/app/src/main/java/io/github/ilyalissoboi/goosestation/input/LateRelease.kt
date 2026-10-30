@@ -10,9 +10,14 @@ import io.github.ilyalissoboi.goosestation.input.MenuTrigger.KeyPress
  * the pad once a frame, sees it. Its key-up waits, and goes once it's [due], or at once ([flush]) before anything else
  * for that key, and when everything is let go. Pure: the caller gives the time, and calls [due] at [deadline].
  */
-internal class LateRelease(private val holdMs: Long = 100) {
+internal class LateRelease(
+    private val holdMs: Long = 100,
+) {
     /** A waiting key-up to send now: [keyCode]'s on [deviceId]. */
-    data class Release(val deviceId: Int, val keyCode: Int)
+    data class Release(
+        val deviceId: Int,
+        val keyCode: Int,
+    )
 
     // The waiting key-ups, (device, key code) to when each is due, in the order they were held.
     private val waiting = LinkedHashMap<Release, Long>()

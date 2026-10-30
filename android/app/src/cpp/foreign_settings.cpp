@@ -5,6 +5,7 @@
 
 #include "core/settings.h"
 
+#include "util/android_input_keys.h"
 #include "util/input_manager.h"
 
 #include "common/log.h"
@@ -80,7 +81,7 @@ std::optional<std::string> AndroidHost::RelativeToDataRoot(std::string_view path
 
 bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view install_id)
 {
-  const std::string file_install_id = si.GetStringValue("Android", "InstallID");
+  const std::string file_install_id = si.GetStringValue(AndroidInputKeys::SETTINGS_SECTION, "InstallID");
   if (file_install_id == install_id)
     return false;
 
@@ -100,7 +101,7 @@ bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view i
   Settings::SetDefaultHotkeyConfig(si);
 
   // Its controller indices are another install's: here every controller is new.
-  si.DeleteValue("Android", "ControllerDescriptors");
+  si.DeleteValue(AndroidInputKeys::SETTINGS_SECTION, AndroidInputKeys::DESCRIPTORS_KEY);
 
   for (const FolderKey& folder : FOLDER_KEYS)
   {
@@ -132,6 +133,6 @@ bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view i
     }
   }
 
-  si.SetStringValue("Android", "InstallID", std::string(install_id).c_str());
+  si.SetStringValue(AndroidInputKeys::SETTINGS_SECTION, "InstallID", std::string(install_id).c_str());
   return true;
 }

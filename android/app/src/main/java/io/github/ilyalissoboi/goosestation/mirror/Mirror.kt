@@ -328,8 +328,7 @@ class Mirror(
         mutableState.value = MirrorState.Unreachable(e.message ?: e.javaClass.name)
     }
 
-    private fun loadManifest(): Manifest =
-        manifest ?: readManifest().also { manifest = it }
+    private fun loadManifest(): Manifest = manifest ?: readManifest().also { manifest = it }
 
     private fun readManifest(): Manifest {
         if (!manifestFile.exists()) return Manifest(emptyMap())

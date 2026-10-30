@@ -65,7 +65,10 @@ class SettingsAccessTest {
     fun aspectRatioNamesAreDesktops() {
         val names = NativeLibrary.getAspectRatioNames().toList()
 
-        assertTrue(names.toString(), names.containsAll(listOf("Stretch To Fill", "Auto (Game Native)", "4:3", "PAR 1:1")))
+        assertTrue(
+            names.toString(),
+            names.containsAll(listOf("Stretch To Fill", "Auto (Game Native)", "4:3", "PAR 1:1")),
+        )
         assertFalse(names.toString(), "Auto (Match Window)" in names)
     }
 
@@ -77,7 +80,9 @@ class SettingsAccessTest {
 
     private fun initialize() {
         val resources = Resources.extract(context)
-        assertTrue(NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID))
+        assertTrue(
+            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+        )
     }
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())

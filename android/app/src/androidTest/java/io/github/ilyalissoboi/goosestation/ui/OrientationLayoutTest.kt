@@ -25,7 +25,6 @@ import androidx.compose.ui.test.FontScale
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.then
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
@@ -39,6 +38,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.then
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpRect
@@ -333,12 +333,14 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Renderer"))
             assertFocusedInView()
 
-            for ((row, last) in
-                listOf(
-                    "Renderer" to "Software (from settings.ini)",
-                    "Internal resolution" to "12x (from settings.ini)",
-                    "Aspect ratio" to "21:9 (from settings.ini)",
-                )) {
+            for (
+            (row, last) in
+            listOf(
+                "Renderer" to "Software (from settings.ini)",
+                "Internal resolution" to "12x (from settings.ini)",
+                "Aspect ratio" to "21:9 (from settings.ini)",
+            )
+            ) {
                 pressUntilFocused(Key.DirectionDown, row)
                 press(Key.Enter)
                 assertFocusedInView()
@@ -398,14 +400,19 @@ class OrientationLayoutTest {
         eachConfig({
             ControllersScreen(
                 controllers = listOf(PAD, LONG_PAD),
+                labels = emptyMap(),
                 selected = LONG_PAD.descriptor,
                 bindings = BINDINGS,
+                bindingsFor = LONG_PAD.descriptor,
                 capturing = null,
                 secondsLeft = 0,
+                undoFor = null,
                 onSelect = {},
                 onCapture = {},
                 onCancelCapture = {},
                 onClear = {},
+                onUndo = {},
+                onDropUndo = {},
                 onReset = {},
                 onBack = {},
             )
@@ -436,14 +443,19 @@ class OrientationLayoutTest {
         eachConfig({
             ControllersScreen(
                 controllers = pads.value,
+                labels = emptyMap(),
                 selected = pads.value.firstOrNull()?.descriptor,
                 bindings = if (pads.value.isEmpty()) emptyList() else BINDINGS,
+                bindingsFor = pads.value.firstOrNull()?.descriptor,
                 capturing = null,
                 secondsLeft = 0,
+                undoFor = null,
                 onSelect = {},
                 onCapture = {},
                 onCancelCapture = {},
                 onClear = {},
+                onUndo = {},
+                onDropUndo = {},
                 onReset = {},
                 onBack = {},
             )
@@ -452,7 +464,7 @@ class OrientationLayoutTest {
             rule.waitForIdle()
             assertTextsLaidOut()
             assertShows(PAD.name)
-            assertTrue(focusedHas("D-Pad Up"))
+            assertTrue(focusedHas(PAD.name))
             assertFocusedInView()
             pressUntilFocused(Key.DirectionDown, "Reset to defaults")
 
@@ -470,14 +482,19 @@ class OrientationLayoutTest {
         eachConfig({
             ControllersScreen(
                 controllers = listOf(LONG_PAD),
+                labels = emptyMap(),
                 selected = LONG_PAD.descriptor,
                 bindings = BINDINGS,
+                bindingsFor = LONG_PAD.descriptor,
                 capturing = capturing.value,
                 secondsLeft = 5,
+                undoFor = null,
                 onSelect = {},
                 onCapture = { capturing.value = it },
                 onCancelCapture = { capturing.value = null },
                 onClear = {},
+                onUndo = {},
+                onDropUndo = {},
                 onReset = {},
                 onBack = {},
             )
@@ -486,7 +503,7 @@ class OrientationLayoutTest {
             pressUntilFocused(Key.DirectionDown, "Right Stick Down")
             press(Key.Enter)
             assertTextsLaidOut()
-            assertTrue(focusedHas("Press a button or move a stick on ${LONG_PAD.name}… (5)"))
+            assertTrue(focusedHas("Press the new button for Right Stick Down… Back cancels (5)"))
             assertFocusedInView()
             press(Key.Back)
             assertTrue(capturing.value == null)

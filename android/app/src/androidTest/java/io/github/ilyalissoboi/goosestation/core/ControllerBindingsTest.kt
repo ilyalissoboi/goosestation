@@ -114,6 +114,18 @@ class ControllerBindingsTest {
         assertEquals("Button96", crossOf("pad-c"))
     }
 
+    // A pad's place in the descriptor table, which numbers pads that share a name the same way in every run.
+    @Test
+    fun controllerIndexFollowsTheTable() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+        connectNewPad(2, "pad-b", 1)
+
+        assertEquals(0, NativeLibrary.getControllerIndex("pad-a"))
+        assertEquals(1, NativeLibrary.getControllerIndex("pad-b"))
+        assertEquals(-1, NativeLibrary.getControllerIndex("never-connected"))
+    }
+
     @Test
     fun unknownPadHasNoBindings() {
         initialize(null)
@@ -154,6 +166,23 @@ class ControllerBindingsTest {
         assertEquals("Button96", crossOf("pad-a"))
         assertEquals("Button99", crossOf("pad-b"))
         assertEquals(listOf("Android-0/Button96", "Android-1/Button99"), readSettings().values("Pad1", "Cross"))
+    }
+
+    // getPadBindings lists only buttons and axes, so setPadBinding takes only those: never a GunCon's pointer.
+    @Test
+    fun setPadBindingRefusesAPointer() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad1]\nType = GunCon\n",
+        )
+        // A GunCon gets no pad defaults, so wait for the pad to be known instead.
+        NativeLibrary.onDeviceConnected(1, "Pad pad-a", "pad-a")
+        waitFor(
+            "pad-a is in the table",
+        ) { readSettings().values("Android", "ControllerDescriptors") == listOf("pad-a") }
+
+        NativeLibrary.setPadBinding("pad-a", "Pointer", "Button96")
+
+        assertEquals(emptyList<String>(), readSettings().values("Pad1", "Pointer"))
     }
 
     @Test
@@ -235,7 +264,9 @@ class ControllerBindingsTest {
     private fun initialize(settings: String?) {
         if (settings != null) settingsFile.writeText(settings)
         val resources = Resources.extract(context)
-        assertTrue(NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID))
+        assertTrue(
+            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+        )
     }
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())

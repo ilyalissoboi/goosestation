@@ -593,3 +593,13 @@ TEST(AndroidInputKeys, CenteredAxesOfPadsSharingAnIndex)
   EXPECT_EQ(AndroidInputKeys::GetCenteredAxes(pads), (std::vector<u32>{1, 11}));
   EXPECT_EQ(AndroidInputKeys::GetCenteredAxes(std::vector<const PadState*>{&a}), (std::vector<u32>{0, 1}));
 }
+
+// The device names the Android source gives its pads (Android-<n>), parsed in one place for the host and the source.
+TEST(AndroidInputKeys, ParseDeviceIndex)
+{
+  EXPECT_EQ(AndroidInputKeys::ParseDeviceIndex("Android-3"), 3u);
+  EXPECT_EQ(AndroidInputKeys::ParseDeviceIndex("Android-0"), 0u);
+  EXPECT_EQ(AndroidInputKeys::ParseDeviceIndex("Android-"), std::nullopt);
+  EXPECT_EQ(AndroidInputKeys::ParseDeviceIndex("SDL-0"), std::nullopt);
+  EXPECT_EQ(AndroidInputKeys::ParseDeviceIndex("Android-x"), std::nullopt);
+}

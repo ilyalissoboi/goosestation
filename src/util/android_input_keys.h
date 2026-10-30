@@ -19,6 +19,16 @@
 /// tested on every platform; the Android input source feeds it events and passes its output to the InputManager.
 namespace AndroidInputKeys {
 
+/// The pads' device names are this, then their index: Android-<n>.
+inline constexpr std::string_view DEVICE_PREFIX = "Android-";
+
+/// Where settings.ini keeps the descriptor of each Android-<n>, in index order: [Android] ControllerDescriptors.
+inline constexpr const char* SETTINGS_SECTION = "Android";
+inline constexpr const char* DESCRIPTORS_KEY = "ControllerDescriptors";
+
+/// The n of an Android-<n> device name, or nullopt for any other name.
+std::optional<u32> ParseDeviceIndex(std::string_view identifier);
+
 // Android's KeyEvent.KEYCODE_* numbers.
 inline constexpr s32 KEYCODE_BACK = 4;
 inline constexpr s32 KEYCODE_DPAD_UP = 19;
@@ -142,8 +152,9 @@ std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads);
 /// - a button when it's pressed (value >= 0.5); one held as the capture starts only sends its release, so it isn't
 ///   taken;
 /// - an axis when it's pushed half way (|value| >= 0.5), only once it has been seen near 0 (within 0.25), during this
-///   capture or before it (centered_axes, from PadState::GetCenteredAxes()), so one resting away from 0 (a trigger on
-///   Z, a stick held as the capture starts) must come back first, and one already at rest is taken on its first push.
+///   capture or before it (centered_axes, from GetCenteredAxes() over every pad with the device index, as
+///   AndroidInputSource::GetCenteredAxes() gives them), so one resting away from 0 (a trigger on Z, a stick held as
+///   the capture starts) must come back first, and one already at rest is taken on its first push.
 /// Other devices' events, and other kinds of input, give nothing.
 class BindingCapture
 {

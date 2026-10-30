@@ -16,10 +16,17 @@ internal class PadKeys {
      * Whether the key event goes [toCore] (else to Compose), what to [send] the core for it now, in order, and whether
      * to open the menu.
      */
-    data class Outcome(val toCore: Boolean, val send: List<KeyPress>, val openMenu: Boolean)
+    data class Outcome(
+        val toCore: Boolean,
+        val send: List<KeyPress>,
+        val openMenu: Boolean,
+    )
 
     /** The late key-ups due, to send now, and whether a hold completed and the menu opens. */
-    data class Tick(val releases: List<LateRelease.Release>, val openMenu: Boolean)
+    data class Tick(
+        val releases: List<LateRelease.Release>,
+        val openMenu: Boolean,
+    )
 
     private val router = KeyRouter()
     private val menuTrigger = MenuTrigger()

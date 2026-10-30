@@ -4,6 +4,10 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * Pulls until the data layout stops growing. A pull can bring in settings that name more of the data folder: a
@@ -49,6 +53,19 @@ class CatchUpRunner(
     /** No game starts while this is false. */
     val startsAllowed get() = !growthPending && !running
 
+    /**
+     * Whether [message], the line on screen, stays as a game stops or a catch-up ends: only while starts are refused,
+     * and only if it's the [refusal] line a refused start shows, which says why.
+     */
+    fun keepsLine(
+        message: String?,
+        refusal: String,
+    ): Boolean = message == refusal && !startsAllowed
+
+    /** The catch-up running, or the last one. */
+    var job: Job? = null
+        private set
+
     /** The core's paths grew the layout: starts are refused from now on, until a catch-up round starts after it. */
     fun layoutGrew() {
         growthPending = true
@@ -86,12 +103,40 @@ class CatchUpRunner(
     }
 
     /**
+     * Asks for a catch-up ([request]) and, unless one is running, runs it in [scope] ([run]), then [onEnd]. Returns
+     * the catch-up's [job]: this one, or the one running, which takes the request. A catch-up that ends abnormally
+     * with a request it took still to pull runs again.
+     */
+    fun launch(
+        scope: CoroutineScope,
+        onEnd: () -> Unit = {},
+        pull: suspend () -> Boolean,
+    ): Job? {
+        if (!request()) return job
+        // Atomically: a job cancelled before it starts still runs, to its first suspension, so run()'s finally lets go
+        // of running.
+        job =
+            scope.launch(start = CoroutineStart.ATOMIC) {
+                try {
+                    run(rerun = { launch(scope, onEnd, pull) }, pull = pull)
+                } finally {
+                    onEnd()
+                }
+            }
+        return job
+    }
+
+    /**
      * The catch-up [request] gave the caller: [pull] returns whether it grew the layout. However it ends (at the cap,
      * failed or cancelled), starts are allowed again, unless a pull or push grew the layout since its last round
      * started: that one asks for its own catch-up, which allows them once it's done. A growth its own rounds left
-     * unpulled, at the cap, is a later pull's.
+     * unpulled, at the cap, is a later pull's. One that fails or is cancelled with such a request taken, which it would
+     * have pulled next, keeps starts refused and calls [rerun], not to drop it.
      */
-    suspend fun run(pull: suspend () -> Boolean) {
+    suspend fun run(
+        rerun: () -> Unit = {},
+        pull: suspend () -> Boolean,
+    ) {
         try {
             do {
                 again = false
@@ -102,8 +147,14 @@ class CatchUpRunner(
                 }
             } while (again)
         } finally {
+            // Only after an abnormal end: a normal one pulls every request it took.
+            val owed = again
             again = false
             running = false
+            if (owed) {
+                growthPending = true
+                rerun()
+            }
         }
     }
 }

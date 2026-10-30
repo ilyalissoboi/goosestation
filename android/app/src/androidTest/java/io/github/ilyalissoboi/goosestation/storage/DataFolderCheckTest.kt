@@ -56,7 +56,14 @@ class DataFolderCheckTest {
         val inspection = DataFolderCheck.inspect(resolver, data, games = listOf(games))
 
         assertEquals(DataFolderInspection.Refused(DataFolderCheck.DATA_OVERLAPS_GAMES), inspection)
-        assertEquals(setOf("settings.ini"), TestTrees.directory(context, games).resolve("data").list()!!.toSet())
+        assertEquals(
+            setOf("settings.ini"),
+            TestTrees
+                .directory(context, games)
+                .resolve("data")
+                .list()!!
+                .toSet(),
+        )
     }
 
     @Test

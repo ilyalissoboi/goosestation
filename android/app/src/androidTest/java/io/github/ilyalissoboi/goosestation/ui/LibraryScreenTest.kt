@@ -55,7 +55,9 @@ class LibraryScreenTest {
     fun makeGames() {
         val cover = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "cover-01.png")
         cover.outputStream().use { out ->
-            Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+            Bitmap
+                .createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+                .apply { eraseColor(Color.RED) }
                 .compress(Bitmap.CompressFormat.PNG, 100, out)
         }
         games =

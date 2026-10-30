@@ -125,6 +125,18 @@ class BiosScreenTest {
         rule.onAllNodes(hasText("made for NTSC-J")).assertCountEquals(0)
     }
 
+    // Two dumps of one model, say a bad one and a good one: each is labelled with its file.
+    @Test
+    fun sameDescriptionsShowTheirFiles() {
+        show(images = listOf(IMAGE, BiosImage("scph5500.bin", SCPH5500, "NTSC-J")))
+
+        press(Key.DirectionDown)
+        press(Key.Enter)
+
+        rule.onNode(hasText("$SCPH5500 (ps-30j.bin)")).assertExists()
+        rule.onNode(hasText("$SCPH5500 (scph5500.bin)")).assertExists()
+    }
+
     @Test
     fun noImageFound() {
         show(auto = BiosRegion.entries.associateWith { null }, images = emptyList())

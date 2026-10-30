@@ -6,4 +6,5 @@ plugins {
     // AGP compiles Kotlin itself; declaring the Kotlin plugin here only pins the Kotlin version it uses.
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.ktlint) apply false
 }

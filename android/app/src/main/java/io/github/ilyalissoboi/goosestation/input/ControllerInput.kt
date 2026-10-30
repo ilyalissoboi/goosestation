@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import io.github.ilyalissoboi.goosestation.app.PadPort
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,10 @@ data class ConnectedController(
  * arrive first. One instance lives as long as the process, listening from [start] on. Call everything on the main
  * thread.
  */
-class ControllerInput(context: Context) : InputManager.InputDeviceListener {
+class ControllerInput(
+    context: Context,
+) : InputManager.InputDeviceListener,
+    PadPort {
     private val inputManager = context.getSystemService(InputManager::class.java)
 
     // The devices reported to the core, in the order they were, with the last value sent for each of AXES.
@@ -45,7 +49,7 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
     private val mutableConnected = MutableStateFlow(emptyList<ConnectedController>())
 
     /** The controllers reported to the core, one per descriptor (its first device), in the order they connected. */
-    val connected: StateFlow<List<ConnectedController>> = mutableConnected.asStateFlow()
+    override val connected: StateFlow<List<ConnectedController>> = mutableConnected.asStateFlow()
 
     /** Called when a controller asks for the game's menu: Mode, or Select and Start held together ([MenuTrigger]). */
     var onMenuRequested: (() -> Unit)? = null
@@ -125,7 +129,9 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
         if (!isControllerEvent(event.source)) return false
         // Every motion, forwarded or not, for sendAxes().
         if (event.action == MotionEvent.ACTION_MOVE) axisMemory.record(event.deviceId) { event.getAxisValue(it) }
-        if (!axisHold.route(event.deviceId, padInput, deflection(event))) return false
+        val bar = devices[event.deviceId]?.bar ?: AxisHold.barFor(0f)
+        val route = axisHold.route(event.deviceId, padInput, deflection(event), bar)
+        if (route == AxisHold.Route.App) return false
         if (event.action != MotionEvent.ACTION_MOVE || !ensureConnected(event.deviceId)) return true
 
         val last = devices.getValue(event.deviceId).axes
@@ -134,6 +140,16 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
             if (value != last[index]) {
                 last[index] = value
                 NativeLibrary.onAxis(event.deviceId, axis, value)
+            }
+        }
+        // The hold ends under the bar, not at 0: the core is told the stick is at rest, so a game resumed with the
+        // stick untouched doesn't see it pushed.
+        if (route == AxisHold.Route.CoreThenRest) {
+            for ((index, axis) in AXES.withIndex()) {
+                if (axis in DPAD_AXES && last[index] != 0f) {
+                    last[index] = 0f
+                    NativeLibrary.onAxis(event.deviceId, axis, 0f)
+                }
             }
         }
         return true
@@ -145,7 +161,7 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
      * Call it after any [releaseAll] before the capture, which forgets them in the core. A device that hasn't moved
      * since it connected sends nothing: its values aren't known.
      */
-    fun sendAxes(descriptor: String) {
+    override fun sendAxes(descriptor: String) {
         axisMemory.replay(descriptor, devices) { deviceId, axis, value -> NativeLibrary.onAxis(deviceId, axis, value) }
     }
 
@@ -156,7 +172,7 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
      * A press held back for the menu is dropped: it never reached the core, so the rest of it goes to Compose. A late
      * press still held down a moment is let go, as the menu opens too ([PadKeys]).
      */
-    fun releaseAll() {
+    override fun releaseAll() {
         sendReleases(keys.releaseAll())
         schedule()
         forgetAxes()
@@ -174,10 +190,10 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
     override fun onInputDeviceRemoved(deviceId: Int) {
         // Even one never reported to the core: its motion is remembered all the same.
         axisMemory.forget(deviceId)
+        axisHold.forget(deviceId)
         if (devices.remove(deviceId) == null) return
         for (keyCode in keys.forget(deviceId)) NativeLibrary.onKey(deviceId, keyCode, false)
         schedule()
-        axisHold.forget(deviceId)
         NativeLibrary.onDeviceDisconnected(deviceId)
         publishConnected()
     }
@@ -194,7 +210,8 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
 
     private fun connect(device: InputDevice) {
         if (devices.containsKey(device.id)) return
-        devices[device.id] = Device(device.name, device.descriptor, FloatArray(AXES.size))
+        val bar = AxisHold.barFor(dpadFlat(device))
+        devices[device.id] = Device(device.name, device.descriptor, FloatArray(AXES.size), bar)
         NativeLibrary.onDeviceConnected(device.id, device.name, device.descriptor)
         publishConnected()
     }
@@ -202,6 +219,10 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
     // How far the stick or hat Android would turn into D-pad keys is from rest. Other axes give the app no input, and
     // can rest away from 0 (a trigger on Z rests at -1), which would hold the device for good.
     private fun deflection(event: MotionEvent): Float = DPAD_AXES.maxOf { abs(event.getAxisValue(it)) }
+
+    // The largest dead zone the device declares for those axes, or 0 when it declares none.
+    private fun dpadFlat(device: InputDevice): Float =
+        device.motionRanges.filter { it.axis in DPAD_AXES }.maxOfOrNull { it.flat } ?: 0f
 
     private fun publishConnected() {
         mutableConnected.value =
@@ -214,6 +235,8 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
         val name: String,
         override val descriptor: String,
         override val axes: FloatArray,
+        // Where its held stick counts as back at rest (AxisHold.barFor).
+        val bar: Float,
     ) : SentAxes
 
     private companion object {
@@ -251,9 +274,14 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
 
         fun isController(device: InputDevice): Boolean =
             !device.isVirtual &&
-                (hasSource(device.sources, InputDevice.SOURCE_GAMEPAD) ||
-                    hasSource(device.sources, InputDevice.SOURCE_JOYSTICK))
+                (
+                    hasSource(device.sources, InputDevice.SOURCE_GAMEPAD) ||
+                        hasSource(device.sources, InputDevice.SOURCE_JOYSTICK)
+                )
 
-        fun hasSource(sources: Int, source: Int): Boolean = (sources and source) == source
+        fun hasSource(
+            sources: Int,
+            source: Int,
+        ): Boolean = (sources and source) == source
     }
 }

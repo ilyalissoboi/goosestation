@@ -127,6 +127,10 @@ struct PadBinding
 /// controller's first binding for it.
 std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
 
+/// The controller's place in the descriptor table, as its Android-<index> devices are numbered, which stays the same
+/// from one run to the next; nullopt for one never connected, or before Initialize() succeeded.
+std::optional<u32> GetControllerIndex(std::string descriptor);
+
 /// Replaces the controller's bindings for Port 1's input name with binding, or with none if it's empty. Other
 /// controllers' stay as they are. An input Port 1's type doesn't have is refused.
 void SetPadBinding(std::string descriptor, std::string name, std::string binding);

@@ -4,11 +4,18 @@
 package io.github.ilyalissoboi.goosestation.core
 
 /** As much of the INI format as the core writes: `[Section]` and `Key = Value` lines, a key once per list item. */
-class Ini(private val sections: Map<String, List<Pair<String, String>>>) {
-    fun values(section: String, key: String): List<String> =
-        sections[section].orEmpty().filter { it.first == key }.map { it.second }
+class Ini(
+    private val sections: Map<String, List<Pair<String, String>>>,
+) {
+    fun values(
+        section: String,
+        key: String,
+    ): List<String> = sections[section].orEmpty().filter { it.first == key }.map { it.second }
 
-    fun value(section: String, key: String): String? = values(section, key).singleOrNull()
+    fun value(
+        section: String,
+        key: String,
+    ): String? = values(section, key).singleOrNull()
 
     fun allValues(): List<String> = sections.values.flatten().map { it.second }
 

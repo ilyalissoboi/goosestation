@@ -13,12 +13,17 @@ class DocumentResolverTest {
     private val tree = "content://a.b/tree/root"
 
     /** A tree held in memory: document IDs are the paths from the root, which is "root". */
-    private class FakeLister(private val children: Map<String, List<NativeDocument>>) : DocumentLister {
+    private class FakeLister(
+        private val children: Map<String, List<NativeDocument>>,
+    ) : DocumentLister {
         val calls = mutableMapOf<String, Int>()
 
         override fun rootDocumentId(treeUri: String) = "root"
 
-        override fun listChildren(treeUri: String, parentDocumentId: String): List<NativeDocument>? {
+        override fun listChildren(
+            treeUri: String,
+            parentDocumentId: String,
+        ): List<NativeDocument>? {
             calls[parentDocumentId] = (calls[parentDocumentId] ?: 0) + 1
             return children[parentDocumentId]
         }
@@ -26,9 +31,15 @@ class DocumentResolverTest {
 
     private var now = 1_000_000L
 
-    private fun file(parent: String, name: String) = NativeDocument(name, "$parent/$name", 10, 2000, false)
+    private fun file(
+        parent: String,
+        name: String,
+    ) = NativeDocument(name, "$parent/$name", 10, 2000, false)
 
-    private fun dir(parent: String, name: String) = NativeDocument(name, "$parent/$name", 0, 2000, true)
+    private fun dir(
+        parent: String,
+        name: String,
+    ) = NativeDocument(name, "$parent/$name", 0, 2000, true)
 
     private fun path(vararg segments: String) = ContentPath(tree, segments.toList())
 

@@ -8,7 +8,15 @@ import io.github.ilyalissoboi.goosestation.storage.MissingGrant
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 
 /** A step of a start or a resume, which [AppController] carries out in order. */
-enum class StartupStep { ShowSetup, Pull, InitializeCore, SetGameFolders, RefreshLibrary, ReloadSettings, ReadCorePaths }
+enum class StartupStep {
+    ShowSetup,
+    Pull,
+    InitializeCore,
+    SetGameFolders,
+    RefreshLibrary,
+    ReloadSettings,
+    ReadCorePaths,
+}
 
 /** What a start or a resume does, from the saved folders and the grants they're missing. */
 object StartupPlan {

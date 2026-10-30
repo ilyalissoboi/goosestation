@@ -6,6 +6,12 @@ import javax.inject.Inject
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ktlint)
+}
+
+// ktlintCheck runs over the app's Kotlin, main and tests, and with check; the rules are in android/.editorconfig.
+ktlint {
+    version.set(libs.versions.ktlint)
 }
 
 // The prefix built by scripts/deps/build-dependencies-android.sh, as in android/scripts/configure-native.sh.
@@ -81,11 +87,10 @@ android {
 }
 
 /** Copies files or a directory tree into a subdirectory of its output, for use as a generated source directory. */
-abstract class StageFiles
-@Inject
-constructor(
-    private val fs: FileSystemOperations,
-) : DefaultTask() {
+abstract class StageFiles : DefaultTask() {
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val source: ConfigurableFileCollection
@@ -108,20 +113,23 @@ constructor(
     }
 }
 
-val stageDepsLibraries = tasks.register<StageFiles>("stageDepsLibraries") {
-    source.from(depsSharedLibraries.map { "$depsPrefix/lib/$it" })
-    subdirectory = "arm64-v8a"
-}
+val stageDepsLibraries =
+    tasks.register<StageFiles>("stageDepsLibraries") {
+        source.from(depsSharedLibraries.map { "$depsPrefix/lib/$it" })
+        subdirectory = "arm64-v8a"
+    }
 
 // The core's resources, extracted to the app's files on first run (core/Resources.kt).
-val stageResources = tasks.register<StageFiles>("stageResources") {
-    source.from(rootProject.file("../data/resources"))
-    subdirectory = "resources"
-}
+val stageResources =
+    tasks.register<StageFiles>("stageResources") {
+        source.from(rootProject.file("../data/resources"))
+        subdirectory = "resources"
+    }
 
 /**
  * Fails on a call or import, in [sources], of anything that opens a window of its own: such a window takes the keys,
- * and a controller's can be lost to it. Each is matched as a word, comments included.
+ * and a controller's can be lost to it. Each is matched as a word, outside comments, and so is a wildcard import of a
+ * package that has them.
  */
 @CacheableTask
 abstract class CheckNoWindowDialogs : DefaultTask() {
@@ -150,14 +158,45 @@ abstract class CheckNoWindowDialogs : DefaultTask() {
             "androidx.compose.ui.window.Dialog",
             "androidx.compose.ui.window.Popup",
             "android.app.Dialog",
-        ).map { it to Regex("""\b${Regex.escape(it)}\b""") }
+        ).map { it to Regex("""\b${Regex.escape(it)}\b""") } +
+            listOf("androidx.compose.ui.window.*", "android.app.*").map {
+                it to Regex("""\bimport\s+${Regex.escape(it)}""")
+            }
+
+    /** [lines] with their `//` and `/* */` comments blanked out; a block comment may span lines. */
+    private fun withoutComments(lines: List<String>): List<String> {
+        var inBlock = false
+        return lines.map { line ->
+            val code = StringBuilder()
+            var i = 0
+            while (i < line.length) {
+                when {
+                    inBlock && line.startsWith("*/", i) -> {
+                        inBlock = false
+                        i += 2
+                    }
+                    inBlock -> i++
+                    line.startsWith("/*", i) -> {
+                        inBlock = true
+                        i += 2
+                    }
+                    line.startsWith("//", i) -> i = line.length
+                    else -> {
+                        code.append(line[i])
+                        i++
+                    }
+                }
+            }
+            code.toString()
+        }
+    }
 
     @TaskAction
     fun check() {
         val base = baseDirectory.get().asFile
         val found =
             sources.files.sorted().flatMap { file ->
-                file.readLines().flatMapIndexed { index, line ->
+                withoutComments(file.readLines()).flatMapIndexed { index, line ->
                     forbidden.filter { (_, pattern) -> pattern.containsMatchIn(line) }.map { (name, _) ->
                         "${file.relativeTo(base)}:${index + 1}: $name opens its own window, which can swallow " +
                             "controller keys. Draw it in the screen instead."
@@ -169,11 +208,12 @@ abstract class CheckNoWindowDialogs : DefaultTask() {
     }
 }
 
-val checkNoWindowDialogs = tasks.register<CheckNoWindowDialogs>("checkNoWindowDialogs") {
-    sources.from(fileTree("src/main/java") { include("**/*.kt") })
-    baseDirectory = layout.projectDirectory
-    result = layout.buildDirectory.file("checkNoWindowDialogs/result.txt")
-}
+val checkNoWindowDialogs =
+    tasks.register<CheckNoWindowDialogs>("checkNoWindowDialogs") {
+        sources.from(fileTree("src/main/java") { include("**/*.kt") })
+        baseDirectory = layout.projectDirectory
+        result = layout.buildDirectory.file("checkNoWindowDialogs/result.txt")
+    }
 
 tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
 

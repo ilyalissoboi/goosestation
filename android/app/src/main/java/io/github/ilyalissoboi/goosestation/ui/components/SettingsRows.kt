@@ -242,10 +242,11 @@ private fun RowLine(
 /**
  * A [label] with its [value] at the end of the line, when both fit on it, or the value is short enough for the label
  * to wrap beside it; otherwise, as on a narrow screen or with large text, the value goes under the label. Either way
- * each gets the width to wrap at its spaces, rather than one squeezing the other. It takes the width it's given.
+ * each gets the width to wrap at its spaces, rather than one squeezing the other. It takes the width it's given. It
+ * isn't hardened for a parent that asks for intrinsic sizes, nor for an unbounded width: no row of the app does.
  */
 @Composable
-fun LabelValue(
+internal fun LabelValue(
     label: @Composable () -> Unit,
     value: @Composable () -> Unit,
     modifier: Modifier = Modifier,

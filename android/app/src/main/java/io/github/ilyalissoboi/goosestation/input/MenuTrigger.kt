@@ -9,20 +9,29 @@ package io.github.ilyalissoboi.goosestation.input
  * the hold completes, when it's dropped, or until one of them goes up, when it's sent late. Every other key, and Select
  * or Start alone, is sent as it comes. Pure: the caller gives the time, and calls [onTime] at [deadline].
  */
-class MenuTrigger(private val holdMs: Long = 1000) {
+class MenuTrigger(
+    private val holdMs: Long = 1000,
+) {
     companion object {
         const val KEYCODE_BUTTON_MODE = 110
         const val SELECT = 109
         const val START = 108
     }
 
-    data class KeyPress(val keyCode: Int, val pressed: Boolean)
+    data class KeyPress(
+        val keyCode: Int,
+        val pressed: Boolean,
+    )
 
     /**
      * The key events to [send] to the core, in order, whether to open the menu, and the key whose press held back was
      * [dropped], never to be sent ([cancel]).
      */
-    data class Result(val send: List<KeyPress>, val openMenu: Boolean, val dropped: Int? = null)
+    data class Result(
+        val send: List<KeyPress>,
+        val openMenu: Boolean,
+        val dropped: Int? = null,
+    )
 
     // Each device's Select and Start that are down, sent or not, and the one held back with when its hold completes.
     private class Pad {

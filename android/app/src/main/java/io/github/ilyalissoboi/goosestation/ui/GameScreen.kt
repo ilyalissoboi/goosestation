@@ -57,12 +57,19 @@ fun GameScreen(
 }
 
 // Each call waits until the core has finished with the previous surface, so a destroyed one is never drawn to.
-private class SurfaceCallback(private val scale: Float) : SurfaceHolder.Callback {
+private class SurfaceCallback(
+    private val scale: Float,
+) : SurfaceHolder.Callback {
     override fun surfaceCreated(holder: SurfaceHolder) {
         // surfaceChanged() always follows, with the size.
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+    override fun surfaceChanged(
+        holder: SurfaceHolder,
+        format: Int,
+        width: Int,
+        height: Int,
+    ) {
         NativeLibrary.surfaceChanged(holder.surface, width, height, scale)
     }
 

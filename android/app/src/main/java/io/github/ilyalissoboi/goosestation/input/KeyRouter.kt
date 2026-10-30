@@ -54,6 +54,15 @@ internal class KeyRouter {
         heldBack.remove(key(deviceId, keyCode))
     }
 
+    /** Drops [keyCode]'s press on [deviceId] if it's held back: its repeats and key-up go to Compose. */
+    fun drop(
+        deviceId: Int,
+        keyCode: Int,
+    ) {
+        val key = key(deviceId, keyCode)
+        if (heldBack.remove(key)) inCore.remove(key)
+    }
+
     /** Drops every press held back: their repeats and key-ups go to Compose. */
     fun dropHeldBack() {
         inCore.removeAll(heldBack)

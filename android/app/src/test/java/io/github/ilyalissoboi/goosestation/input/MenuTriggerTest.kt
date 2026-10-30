@@ -102,4 +102,47 @@ class MenuTriggerTest {
         assertNull(trigger.deadline())
         assertFalse(trigger.onTime(5000))
     }
+
+    @Test
+    fun aCancelledHeldBackPressSendsNothing() {
+        trigger.onKey(PAD, SELECT, true, 0)
+        trigger.onKey(PAD, START, true, 100)
+
+        // The window lost focus mid-chord: Start never happened.
+        assertEquals(Result(emptyList(), openMenu = false, dropped = START), trigger.cancel(PAD, START))
+        assertNull(trigger.deadline())
+        assertEquals(sent(up(SELECT)), trigger.onKey(PAD, SELECT, false, 300))
+    }
+
+    @Test
+    fun aCancelledFirstKeyIsLetGoAndDropsTheOneHeldBack() {
+        trigger.onKey(PAD, SELECT, true, 0)
+        trigger.onKey(PAD, START, true, 100)
+
+        assertEquals(Result(listOf(up(SELECT)), openMenu = false, dropped = START), trigger.cancel(PAD, SELECT))
+        assertNull(trigger.deadline())
+        assertFalse(trigger.onTime(5000))
+    }
+
+    @Test
+    fun aCancelledKeyWithNothingHeldBackIsLetGo() {
+        trigger.onKey(PAD, SELECT, true, 0)
+
+        assertEquals(sent(up(SELECT)), trigger.cancel(PAD, SELECT))
+        assertEquals(sent(up(BUTTON_A)), trigger.cancel(PAD, BUTTON_A))
+        assertEquals(sent(), trigger.cancel(PAD, KEYCODE_BUTTON_MODE))
+    }
+
+    @Test
+    fun aGonePadsHoldIsForgotten() {
+        trigger.onKey(PAD, SELECT, true, 0)
+        trigger.onKey(PAD, START, true, 100)
+        trigger.onKey(OTHER_PAD, SELECT, true, 0)
+        trigger.onKey(OTHER_PAD, START, true, 200)
+
+        trigger.forget(PAD)
+
+        assertEquals(1200L, trigger.deadline())
+        assertFalse(trigger.onTime(1100))
+    }
 }

@@ -146,4 +146,21 @@ class KeyRouterTest {
         // The next press of the key was sent as it came.
         assertTrue(router.route(PAD, START, pressed = false, toCore = false))
     }
+
+    @Test
+    fun oneHeldBackPressCanBeDropped() {
+        router.route(PAD, START, pressed = true, toCore = true)
+        router.markHeldBack(PAD, START)
+        router.route(OTHER_PAD, START, pressed = true, toCore = true)
+        router.markHeldBack(OTHER_PAD, START)
+        router.route(PAD, SELECT, pressed = true, toCore = true)
+
+        router.drop(PAD, START)
+        router.drop(PAD, SELECT)
+
+        assertFalse(router.route(PAD, START, pressed = false, toCore = false))
+        // The other pad's press, and a press that was sent, are still the core's.
+        assertTrue(router.route(OTHER_PAD, START, pressed = false, toCore = false))
+        assertTrue(router.route(PAD, SELECT, pressed = false, toCore = false))
+    }
 }

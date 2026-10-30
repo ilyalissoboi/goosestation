@@ -18,8 +18,11 @@ class MenuTrigger(private val holdMs: Long = 1000) {
 
     data class KeyPress(val keyCode: Int, val pressed: Boolean)
 
-    /** The key events to [send] to the core, in order, and whether to open the menu. */
-    data class Result(val send: List<KeyPress>, val openMenu: Boolean)
+    /**
+     * The key events to [send] to the core, in order, whether to open the menu, and the key whose press held back was
+     * [dropped], never to be sent ([cancel]).
+     */
+    data class Result(val send: List<KeyPress>, val openMenu: Boolean, val dropped: Int? = null)
 
     // Each device's Select and Start that are down, sent or not, and the one held back with when its hold completes.
     private class Pad {
@@ -72,6 +75,31 @@ class MenuTrigger(private val holdMs: Long = 1000) {
         val done = pads.filterValues { it.heldBack != null && nowMs >= it.deadline }.keys
         pads.keys -= done
         return done.isNotEmpty()
+    }
+
+    /**
+     * A cancelled key-up ([android.view.KeyEvent.FLAG_CANCELED]: the window lost focus, say), which ends the chord
+     * without the user finishing it. The press held back is [Result.dropped], whichever of the two was cancelled, and
+     * never sent. A key that was sent is let go, as on any key-up.
+     */
+    fun cancel(
+        deviceId: Int,
+        keyCode: Int,
+    ): Result {
+        val pad = pads[deviceId]
+        val heldBack = pad?.heldBack
+        if (heldBack == null || (keyCode != SELECT && keyCode != START)) return onKey(deviceId, keyCode, false, 0)
+
+        pad.heldBack = null
+        pad.down -= keyCode
+        pad.down -= heldBack
+        val send = if (keyCode == heldBack) emptyList() else listOf(KeyPress(keyCode, false))
+        return Result(send, openMenu = false, dropped = heldBack)
+    }
+
+    /** Forgets [deviceId]'s keys and its hold: it's gone. */
+    fun forget(deviceId: Int) {
+        pads.remove(deviceId)
     }
 
     /** Forgets every key down and every press held back: they were let go. */

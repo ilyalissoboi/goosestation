@@ -202,13 +202,18 @@ class ControllersPage(
     }
 
     /**
-     * The page lists [connected], and selects the controller last picked if it's among them, or else the first. A
-     * capture on a controller that's gone is cancelled.
+     * The page lists [connected], and keeps the controller selected while it's among them. On opening, or once it's
+     * gone, it selects the controller last picked if it's among them, or else the first: a picked controller coming
+     * back doesn't take the page from the one in use. A capture on a controller that's gone is cancelled.
      */
     private fun onControllersChanged(connected: List<ConnectedController>) {
         val old = state
         val selected =
-            (connected.firstOrNull { it.descriptor == pickedController } ?: connected.firstOrNull())?.descriptor
+            (
+                connected.firstOrNull { it.descriptor == old.selected }
+                    ?: connected.firstOrNull { it.descriptor == pickedController }
+                    ?: connected.firstOrNull()
+            )?.descriptor
         if (selected != old.selected) cancelCapture()
         state = state.copy(controllers = connected, labels = labelsFor(connected, old.labels), selected = selected)
         if (selected != old.selected) state = state.copy(undo = null)

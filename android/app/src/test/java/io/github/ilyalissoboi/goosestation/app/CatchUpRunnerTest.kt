@@ -168,6 +168,23 @@ class CatchUpRunnerTest {
     private fun TestScope.appScope() =
         CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler) + CoroutineExceptionHandler { _, _ -> })
 
+    // Review finding (T10-4): only the refusal's own line stays while starts are refused; any other goes as before.
+    @Test
+    fun onlyTheRefusalLineOutlastsARefusal() {
+        runner.layoutGrew()
+
+        assertTrue(runner.keepsLine("Copying…", refusal = "Copying…"))
+        assertFalse(runner.keepsLine("Stopping the game…", refusal = "Copying…"))
+        assertFalse(runner.keepsLine(null, refusal = "Copying…"))
+    }
+
+    @Test
+    fun noLineOutlastsTheCatchUp() {
+        assertTrue(runner.startsAllowed)
+
+        assertFalse(runner.keepsLine("Copying…", refusal = "Copying…"))
+    }
+
     // T10-9: the push's request the failed run took is still pulled, and starts stay refused until it is.
     @Test
     fun anAbnormalEndWithARoundQueuedStillCatchesUp() =

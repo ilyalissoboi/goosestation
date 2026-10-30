@@ -758,6 +758,9 @@ object AppController : NativeCallbacks {
     fun resumeFromPrompt() {
         if (!promptOpen) return
         promptOpen = false
+        // As the prompt opened: an axis the core still had, such as a trigger let go once the stick it came with was
+        // back at rest, isn't left held in the game.
+        controllers?.releaseAll()
         if (gameRunning && PausePolicy.running(resumed, promptOpen = false)) NativeLibrary.setPaused(false)
     }
 
@@ -1000,7 +1003,7 @@ object AppController : NativeCallbacks {
         return catchUps.launch(
             scope,
             // Not while starts are still refused, as by a catch-up run again: a start refused meanwhile says why.
-            onEnd = { if (message == COPYING && catchUps.startsAllowed) message = null },
+            onEnd = { if (message == COPYING && !catchUps.keepsLine(message, COPYING)) message = null },
         ) { pullGrew() }
     }
 
@@ -1227,7 +1230,7 @@ object AppController : NativeCallbacks {
             holdMemcards = false
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
-            if (!messageIsError && catchUps.startsAllowed) message = null
+            if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
             // The memory cards held back while it ran come in now, then the game's own writes go out.
             scope.launch {
                 withContext(coreDispatcher) { readCorePaths() }

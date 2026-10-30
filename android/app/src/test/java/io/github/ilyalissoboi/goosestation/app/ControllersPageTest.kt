@@ -224,6 +224,46 @@ class ControllersPageTest {
             assertTrue(calls.none { it.startsWith("setPadBinding") || it.startsWith("startBindingCapture") })
         }
 
+    // Review finding: the pad picked earlier coming back mustn't take the page from the one in use, mid-capture.
+    @Test
+    fun aPickedPadReconnectingKeepsThePadInUse() =
+        runTest {
+            val padA = ConnectedController(1, "Pad A", PAD_A)
+            val padB = ConnectedController(2, "Pad B", "pad-b")
+            pads.connected.value = listOf(padA, padB)
+            val page = openPage()
+            page.select("pad-b")
+            runCurrent()
+            pads.connected.value = listOf(padA)
+            runCurrent()
+            assertEquals(PAD_A, page.state.selected)
+            page.capture("Cross")
+            runCurrent()
+
+            pads.connected.value = listOf(padA, padB)
+            runCurrent()
+
+            assertEquals(PAD_A, page.state.selected)
+            assertEquals("Cross", page.state.capturing)
+        }
+
+    // On opening, the pad picked last is selected again, if it's connected.
+    @Test
+    fun theOpeningSelectsThePadPickedLast() =
+        runTest {
+            pads.connected.value =
+                listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", "pad-b"))
+            val page = openPage()
+            page.select("pad-b")
+            runCurrent()
+
+            page.close()
+            page.open()
+            runCurrent()
+
+            assertEquals("pad-b", page.state.selected)
+        }
+
     // After the start, the capture's last cancelBindingCapture, if any, comes before a releaseAll.
     private fun assertReleasedAfterTheCancel() {
         val started = calls.indexOf("startBindingCapture $PAD_A")

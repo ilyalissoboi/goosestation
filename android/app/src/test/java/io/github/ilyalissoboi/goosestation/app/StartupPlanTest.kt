@@ -91,6 +91,39 @@ class StartupPlanTest {
         assertEquals(read, StartupPlan.afterPull(setOf("gamesettings/settings.ini")))
     }
 
+    // A library scan can take a while: nothing may start with the grown layout meanwhile.
+    @Test
+    fun growthIsReportedBeforeTheNextStep() {
+        val events = mutableListOf<Any>()
+        val perform = { step: StartupStep ->
+            events += step
+            step == ReloadSettings || step == ReadCorePaths
+        }
+
+        val grew = StartupPlan.carryOut(StartupPlan.afterPull(setOf("settings.ini")), { events += "grew" }, perform)
+
+        assertEquals(true, grew)
+        assertEquals(listOf(ReloadSettings, "grew", SetGameFolders, RefreshLibrary), events)
+
+        events.clear()
+        StartupPlan.carryOut(StartupPlan.afterPull(setOf("mygs/SLUS-00001.ini")), { events += "grew" }, perform)
+        assertEquals(listOf(ReadCorePaths, "grew"), events)
+    }
+
+    @Test
+    fun stepsThatDoNotGrowTheLayoutReportNoGrowth() {
+        val events = mutableListOf<Any>()
+
+        val grew =
+            StartupPlan.carryOut(StartupPlan.afterPull(setOf("settings.ini")), { events += "grew" }) { step ->
+                events += step
+                false
+            }
+
+        assertEquals(false, grew)
+        assertEquals(listOf(ReloadSettings, SetGameFolders, RefreshLibrary), events)
+    }
+
     @Test
     fun aPullThatLeftSettingsAloneReloadsNothing() {
         assertEquals(emptyList<StartupStep>(), StartupPlan.afterPull(setOf("memcards/a.mcd")))

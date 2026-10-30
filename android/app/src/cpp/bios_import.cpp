@@ -4,6 +4,7 @@
 #include "bios_import.h"
 
 #include "core/bios.h"
+#include "core/settings.h"
 
 #include "common/error.h"
 #include "common/log.h"
@@ -12,6 +13,40 @@
 #include <algorithm>
 
 Log_SetChannel(BIOSImport);
+
+namespace {
+/// BIOS::FindBIOSImagesInDirectory()'s images that the core recognises, in file name order.
+std::vector<std::pair<std::string, const BIOS::ImageInfo*>> FindKnownImages(const std::string& dir)
+{
+  std::vector<std::pair<std::string, const BIOS::ImageInfo*>> images = BIOS::FindBIOSImagesInDirectory(dir.c_str());
+  std::erase_if(images, [](const auto& image) { return (image.second == nullptr); });
+  std::sort(images.begin(), images.end(), [](const auto& lhs, const auto& rhs) { return (lhs.first < rhs.first); });
+  return images;
+}
+} // namespace
+
+std::vector<BIOSImport::Image> BIOSImport::ListImages(std::string_view dir)
+{
+  std::vector<Image> result;
+  for (const auto& [name, info] : FindKnownImages(std::string(dir)))
+    result.push_back({name, info->description, Settings::GetConsoleRegionName(info->region)});
+
+  return result;
+}
+
+std::optional<std::string> BIOSImport::FindAutomaticImage(std::string_view region_name, std::string_view dir)
+{
+  const std::optional<ConsoleRegion> region = Settings::ParseConsoleRegionName(std::string(region_name).c_str());
+  if (!region.has_value())
+    return std::nullopt;
+
+  const std::optional<BIOS::Image> image = BIOS::FindBIOSImageInDirectory(region.value(), std::string(dir).c_str(),
+                                                                          nullptr);
+  if (!image.has_value() || !image->info)
+    return std::nullopt;
+
+  return std::string(image->info->description);
+}
 
 std::optional<std::vector<std::string>> BIOSImport::Import(FileSystem::ContentProvider& provider,
                                                            std::string_view source_tree_uri, std::string_view dest_dir,
@@ -26,9 +61,7 @@ std::optional<std::vector<std::string>> BIOSImport::Import(FileSystem::ContentPr
   if (!provider.ListDirectory(source, &entries, error))
     return std::nullopt;
 
-  std::vector<std::pair<std::string, const BIOS::ImageInfo*>> images = BIOS::FindBIOSImagesInDirectory(source.c_str());
-  std::erase_if(images, [](const auto& image) { return (image.second == nullptr); });
-  std::sort(images.begin(), images.end(), [](const auto& lhs, const auto& rhs) { return (lhs.first < rhs.first); });
+  const std::vector<std::pair<std::string, const BIOS::ImageInfo*>> images = FindKnownImages(source);
 
   // A folder with no BIOS replaces nothing: the copies already made keep working.
   if (images.empty())

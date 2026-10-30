@@ -18,7 +18,9 @@ import androidx.core.content.ContextCompat
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.Resources
+import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
@@ -26,6 +28,12 @@ import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
+import io.github.ilyalissoboi.goosestation.settings.BiosFastBoot
+import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
+import io.github.ilyalissoboi.goosestation.settings.BiosPage
+import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
@@ -42,6 +50,7 @@ import io.github.ilyalissoboi.goosestation.storage.VolumeMatch
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.storage.persistedGrants
 import io.github.ilyalissoboi.goosestation.ui.DataFolderCandidate
+import io.github.ilyalissoboi.goosestation.ui.SettingsEntry
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,8 +65,33 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.system.exitProcess
 
-/** The app's screens. */
-enum class Screen { Setup, Library, Folders, Game }
+/** The app's screens: the settings hub, and its pages ([Screen.page]), open from the library. */
+enum class Screen(
+    /** The hub's entry for this page of the settings; null for any other screen. */
+    val page: SettingsEntry? = null,
+) {
+    Setup,
+    Library,
+    Settings,
+    Controllers(SettingsEntry.Controllers),
+    Graphics(SettingsEntry.Graphics),
+    Bios(SettingsEntry.Bios),
+    Folders(SettingsEntry.Folders),
+    Game,
+}
+
+/**
+ * The Controllers page: the [controllers] connected, the [selected] one's descriptor, and its [bindings], null until
+ * they're first read. While [capturing] is a binding's name, the next input on that controller becomes its binding,
+ * unless [secondsLeft] runs out first.
+ */
+data class ControllersState(
+    val controllers: List<ConnectedController> = emptyList(),
+    val selected: String? = null,
+    val bindings: List<PadBinding>? = null,
+    val capturing: String? = null,
+    val secondsLeft: Int = 0,
+)
 
 /**
  * The core, the folders, the mirror and what the app shows, for the life of the process, so a recreated activity
@@ -75,6 +109,8 @@ object AppController : NativeCallbacks {
     private const val CARD_REMOVED = "the SD card was removed"
     private const val GAME_STOPPED_FOR_EJECT =
         "The SD card was removed, so the game was stopped. Its memory cards are saved on this device."
+    private const val CAPTURE_SECONDS = 5
+    private const val COPYING = "Copying your data from the data folder…"
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = MainScope()
@@ -123,9 +159,53 @@ object AppController : NativeCallbacks {
     var dataChange by mutableStateOf<String?>(null)
         private set
 
-    /** The library focuses its Folders button when it opens, as it does coming back from the folder settings. */
-    var focusFolders by mutableStateOf(false)
+    /** The library focuses its Settings button when it opens, as it does coming back from the settings. */
+    var focusSettings by mutableStateOf(false)
         private set
+
+    /** The hub's entry for the page last left, which the hub focuses; null on opening it from the library. */
+    var settingsEntry by mutableStateOf<SettingsEntry?>(null)
+        private set
+
+    /** The Graphics page's settings, as loaded on opening it; null until they are. */
+    var graphics by mutableStateOf<GraphicsSettings?>(null)
+        private set
+
+    /** The core's `[Display] AspectRatio` names, read with [graphics]. */
+    var aspectRatioNames by mutableStateOf(emptyList<String>())
+        private set
+
+    /** Vulkan didn't start in this run, as the core said when [graphics] were read. */
+    var vulkanFailed by mutableStateOf(false)
+        private set
+
+    /** The BIOS page's images and settings, as read on opening it; null until they are. */
+    var bios by mutableStateOf<BiosPage?>(null)
+        private set
+
+    /** The Controllers page's controllers, bindings and capture. */
+    var controllersState by mutableStateOf(ControllersState())
+        private set
+
+    /** A capture runs: the controllers' input goes to the core, which takes the next one as a binding. */
+    val capturingInput: Boolean get() = controllersState.capturing != null
+
+    /** The controller last picked on the Controllers page, which it selects whenever it's connected. */
+    private var pickedController: String? = null
+    private var controllersJob: Job? = null
+    private var captureTimer: Job? = null
+
+    /** The latest bindings read, so an older read that comes back later is dropped. */
+    private var bindingsRead = 0
+
+    /** Changes as each capture starts or ends, so a report the main thread gets late is dropped. */
+    private var captureId = 0
+
+    /** [captureId] of the capture the core runs: set on [coreDispatcher], read where the core reports. */
+    @Volatile private var nativeCaptureId = 0
+
+    /** An import copied images before the core started: the overrides they leave stale are dropped once it has. */
+    private var biosOverridesToCheck = false
 
     /** initialize() succeeded: from then on, starts are resumes. */
     private var coreStarted = false
@@ -134,6 +214,13 @@ object AppController : NativeCallbacks {
     private var coldStarting = false
 
     var screen by mutableStateOf(Screen.Library)
+        private set
+
+    /**
+     * The game's prompt (Resume or Quit to library) shows over it: the game is paused, and the controllers move the
+     * prompt's focus rather than play.
+     */
+    var promptOpen by mutableStateOf(false)
         private set
 
     /** Saved folders whose grant is gone, as the last check found. */
@@ -155,7 +242,7 @@ object AppController : NativeCallbacks {
     var lastGamePath by mutableStateOf<String?>(null)
         private set
 
-    /** The core is initialized: games can start, and the game screen can show. */
+    /** The core is initialized, and the data folder pulled in full: games can start, and the game screen can show. */
     var ready by mutableStateOf(false)
         private set
 
@@ -188,11 +275,30 @@ object AppController : NativeCallbacks {
     /** What the mirror copies ([DataLayout]): the defaults until the core, once it has started, says otherwise. */
     @Volatile private var dataLayout = DataLayout.DEFAULT
 
+    /**
+     * Whether a complete pull has found nothing that grows the [dataLayout] since it last grew: until then, the mirror
+     * leaves the working copy's strays alone, as the layout may still lack the memory cards of game settings not yet
+     * pulled. Asked on the mirror's thread.
+     */
+    private val layoutSettling = LayoutSettling()
+
+    /** The pulls that follow a growth of the layout ([catchUp]), one at a time, and whether a game may start. */
+    private val catchUps = CatchUpRunner { Log.w(TAG, it) }
+
+    /** The catch-up running, or the last one; main thread only. */
+    private var catchUpJob: Job? = null
+
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
         private set
 
     var resumed = false
+
+    /**
+     * The app paused the game while it booted ([pauseGame]). That pause can reach the core just after the boot, so
+     * [onGameStarted] unpauses the game if it may run by then. Reset as the game starts or stops.
+     */
+    private var pausedDuringBoot = false
     var controllers: ControllerInput? = null
         private set
 
@@ -268,12 +374,16 @@ object AppController : NativeCallbacks {
 
     // --- Setup ---
 
-    /** Copies the BIOS images in [treeUri], and remembers what it found, if anything. */
+    /**
+     * Copies the BIOS images in [treeUri], and remembers what it found, if anything. A region whose image isn't among
+     * the new copies goes back to Automatic, once the core has started ([dropStaleBiosOverrides]).
+     */
     suspend fun importBios(treeUri: String): BiosImportResult {
         val result = biosImporter.import(treeUri)
         if (result.images.isNotEmpty()) {
             biosImages = result.images
             withContext(prefsDispatcher) { prefs.saveBiosImages(result.images) }
+            if (coreStarted) dropStaleBiosOverrides() else biosOverridesToCheck = true
         }
         return result
     }
@@ -373,15 +483,262 @@ object AppController : NativeCallbacks {
         refreshJob = scope.launch { refreshLibrary(showProgress = true) }
     }
 
-    fun openFolders() {
-        if (screen == Screen.Library) screen = Screen.Folders
+    // --- The settings ---
+
+    /** Opens the settings hub, from the library. */
+    fun openSettings() {
+        if (screen != Screen.Library) return
+        settingsEntry = null
+        screen = Screen.Settings
+    }
+
+    /** Back to the library, which focuses its Settings button. */
+    fun closeSettings() {
+        if (screen != Screen.Settings) return
+        focusSettings = true
+        screen = Screen.Library
+    }
+
+    /** The settings pages that need the core can open: it has started, and no game is under way. */
+    val settingsReady get() = ready && !gameActive
+
+    /**
+     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. The Graphics page shows once its
+     * settings are read, on [coreDispatcher].
+     */
+    fun openSettingsPage(entry: SettingsEntry) {
+        if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
+        when (entry) {
+            SettingsEntry.Graphics -> {
+                graphics = null
+                scope.launch {
+                    val loaded =
+                        withContext(coreDispatcher) {
+                            Triple(
+                                GraphicsSettings.load(NativeCoreSettings),
+                                NativeLibrary.getAspectRatioNames().toList(),
+                                NativeLibrary.isVulkanFailed(),
+                            )
+                        }
+                    aspectRatioNames = loaded.second
+                    vulkanFailed = loaded.third
+                    graphics = loaded.first
+                }
+            }
+            SettingsEntry.Bios -> {
+                bios = null
+                scope.launch {
+                    bios =
+                        withContext(coreDispatcher) {
+                            BiosPage(
+                                images = NativeLibrary.getBiosImages().toList(),
+                                auto = BiosRegion.entries.associateWith { NativeLibrary.getAutoBios(it.coreName) },
+                                overrides = BiosOverrides.load(NativeCoreSettings),
+                                fastBoot = BiosFastBoot.load(NativeCoreSettings),
+                            )
+                        }
+                }
+            }
+            SettingsEntry.Controllers -> watchControllers()
+            SettingsEntry.Folders -> {}
+        }
+        screen = Screen.entries.first { it.page == entry }
+    }
+
+    /** Back from a settings page to the hub, which focuses the page's entry. */
+    fun closeSettingsPage() {
+        val page = screen.page ?: return
+        if (page == SettingsEntry.Folders) return closeFolders()
+        if (page == SettingsEntry.Controllers) {
+            cancelCapture()
+            controllersJob?.cancel()
+            controllersJob = null
+        }
+        settingsEntry = page
+        screen = Screen.Settings
+    }
+
+    /**
+     * Saves the Graphics page's change to [new], only the fields that changed, then has the core apply it, on
+     * [coreDispatcher]. The mirror's next push takes settings.ini to the data folder.
+     */
+    fun changeGraphics(new: GraphicsSettings) {
+        val old = graphics ?: return
+        if (new == old) return
+        // Now, so a second change made before this one is saved starts from it.
+        graphics = new
+        scope.launch(coreDispatcher) {
+            new.save(NativeCoreSettings, old)
+            NativeLibrary.applySettings()
+        }
+    }
+
+    /** Sets [region]'s BIOS image to [fileName], or back to Automatic with null, then has the core apply it. */
+    fun setBiosOverride(
+        region: BiosRegion,
+        fileName: String?,
+    ) {
+        val page = bios ?: return
+        val overrides = if (fileName == null) page.overrides - region else page.overrides + (region to fileName)
+        // Now, so a second change made before this one is saved starts from it.
+        bios = page.copy(overrides = overrides)
+        scope.launch(coreDispatcher) {
+            BiosOverrides.set(NativeCoreSettings, region, fileName)
+            NativeLibrary.applySettings()
+        }
+    }
+
+    /** Turns fast boot on or off, then has the core apply it. */
+    fun setFastBoot(on: Boolean) {
+        val page = bios ?: return
+        bios = page.copy(fastBoot = on)
+        scope.launch(coreDispatcher) {
+            BiosFastBoot.save(NativeCoreSettings, on)
+            NativeLibrary.applySettings()
+        }
+    }
+
+    // --- The Controllers page ---
+
+    /** Shows the controller with [descriptor]'s bindings, and selects it whenever it's connected from now on. */
+    fun selectController(descriptor: String) {
+        pickedController = descriptor
+        val state = controllersState
+        if (descriptor == state.selected || state.controllers.none { it.descriptor == descriptor }) return
+        cancelCapture()
+        controllersState = controllersState.copy(selected = descriptor)
+        readBindings(descriptor)
+    }
+
+    /**
+     * Captures the selected controller's next input as [name]'s binding ([onBindingCaptured]): for 5 s, counting down
+     * once a second, and then it's cancelled. Its controllers' input goes to the core meanwhile ([capturingInput]).
+     */
+    fun captureBinding(name: String) {
+        val state = controllersState
+        val descriptor = state.selected ?: return
+        if (screen != Screen.Controllers || state.bindings?.any { it.name == name } != true) return
+        val id = ++captureId
+        captureTimer?.cancel()
+        controllersState = state.copy(capturing = name, secondsLeft = CAPTURE_SECONDS)
+        scope.launch {
+            // Nothing from an earlier capture comes once the cancel returns: what's reported next is this one's.
+            withContext(coreDispatcher) { NativeLibrary.cancelBindingCapture() }
+            if (id != captureId) return@launch
+            // Here, on the main thread, after the releaseAll() an earlier capture's end runs once its cancel returns,
+            // which was before this one's: the pad's current axes, so the capture knows which are at rest. The core
+            // takes in the input sent before the start.
+            controllers?.sendAxes(descriptor)
+            withContext(coreDispatcher) {
+                nativeCaptureId = id
+                NativeLibrary.startBindingCapture(descriptor)
+            }
+        }
+        captureTimer =
+            scope.launch {
+                for (left in CAPTURE_SECONDS downTo 1) {
+                    controllersState = controllersState.copy(secondsLeft = left)
+                    delay(1_000)
+                }
+                cancelCapture()
+            }
+    }
+
+    /** Ends the capture running, if any, leaving the binding as it was. */
+    fun cancelCapture() {
+        if (controllersState.capturing == null) return
+        endCapture()
+        scope.launch {
+            withContext(coreDispatcher) { NativeLibrary.cancelBindingCapture() }
+            // Once the capture is gone, as it would swallow the releases too.
+            controllers?.releaseAll()
+        }
+    }
+
+    /** Leaves [name] unbound on the selected controller. */
+    fun clearBinding(name: String) {
+        val descriptor = controllersState.selected ?: return
+        if (capturingInput) return
+        setBindingShown(name, null)
+        readBindings(descriptor) { NativeLibrary.setPadBinding(descriptor, name, null) }
+    }
+
+    /** Gives the selected controller its default bindings again. */
+    fun resetBindings() {
+        val descriptor = controllersState.selected ?: return
+        if (capturingInput) return
+        readBindings(descriptor) { NativeLibrary.resetPadBindings(descriptor) }
+    }
+
+    /** Follows the controllers connected while the Controllers page is open, from no bindings read yet. */
+    private fun watchControllers() {
+        controllersJob?.cancel()
+        controllersState = ControllersState()
+        val input = controllers ?: return
+        controllersJob = scope.launch { input.connected.collect(::onControllersChanged) }
+    }
+
+    /**
+     * The page lists [connected], and selects the controller last picked if it's among them, or else the first. A
+     * capture on a controller that's gone is cancelled.
+     */
+    private fun onControllersChanged(connected: List<ConnectedController>) {
+        val old = controllersState
+        val selected =
+            (connected.firstOrNull { it.descriptor == pickedController } ?: connected.firstOrNull())?.descriptor
+        if (selected != old.selected) cancelCapture()
+        controllersState = controllersState.copy(controllers = connected, selected = selected)
+        when {
+            selected == null -> {
+                bindingsRead++
+                controllersState = controllersState.copy(bindings = emptyList())
+            }
+            selected != old.selected -> readBindings(selected)
+        }
+    }
+
+    /**
+     * Runs [change], if any, then reads [descriptor]'s bindings, on [coreDispatcher]; they show if it's still selected
+     * and no later read was asked for.
+     */
+    private fun readBindings(
+        descriptor: String,
+        change: (() -> Unit)? = null,
+    ) {
+        val read = ++bindingsRead
+        scope.launch {
+            val loaded =
+                withContext(coreDispatcher) {
+                    change?.invoke()
+                    NativeLibrary.getPadBindings(descriptor)?.toList()
+                }
+            if (read != bindingsRead || controllersState.selected != descriptor) return@launch
+            controllersState = controllersState.copy(bindings = loaded.orEmpty())
+        }
+    }
+
+    // Shows [name] bound to [binding] now, until the bindings are read again.
+    private fun setBindingShown(
+        name: String,
+        binding: String?,
+    ) {
+        val bindings = controllersState.bindings ?: return
+        controllersState =
+            controllersState.copy(bindings = bindings.map { if (it.name == name) it.copy(binding = binding) else it })
+    }
+
+    private fun endCapture() {
+        captureId++
+        captureTimer?.cancel()
+        captureTimer = null
+        controllersState = controllersState.copy(capturing = null, secondsLeft = 0)
     }
 
     fun closeFolders() {
         if (screen != Screen.Folders || dataChange != null) return
         cancelDataChange()
-        focusFolders = true
-        screen = Screen.Library
+        settingsEntry = SettingsEntry.Folders
+        screen = Screen.Settings
     }
 
     // --- The folder settings ---
@@ -599,8 +956,12 @@ object AppController : NativeCallbacks {
 
     fun startGame(game: GameEntry) {
         if (!ready || gameActive) return
+        if (!catchUps.startsAllowed) {
+            showMessage(COPYING)
+            return
+        }
         lastGamePath = game.path
-        focusFolders = false
+        focusSettings = false
         message = null
         messageIsError = false
         gameActive = true
@@ -612,9 +973,42 @@ object AppController : NativeCallbacks {
 
     // Back to the library, which waits for the game's onGameStopped() before it starts another.
     fun leaveGame() {
+        promptOpen = false
         screen = Screen.Library
         if (!messageIsError) message = "Stopping the game…"
         NativeLibrary.shutdownGame()
+    }
+
+    /**
+     * Pauses the game and shows its prompt, from Back, Mode or Select + Start held. Everything the controllers hold is
+     * let go first, so nothing pressed now is still pressed after Resume. The pause writes the memory cards. A game
+     * still booting is paused once it has booted ([onGameStarted]).
+     */
+    fun openPrompt() {
+        if (screen != Screen.Game || promptOpen) return
+        promptOpen = true
+        controllers?.releaseAll()
+        pauseGame()
+    }
+
+    /** Pauses the game, which writes its memory cards: for the prompt, or the app going to the background. */
+    fun pauseGame() {
+        if (gameActive && !gameRunning) pausedDuringBoot = true
+        NativeLibrary.setPaused(true)
+    }
+
+    /** Closes the prompt, and carries on with the game if the app is in front ([PausePolicy]). */
+    fun resumeFromPrompt() {
+        if (!promptOpen) return
+        promptOpen = false
+        if (gameRunning && PausePolicy.running(resumed, promptOpen = false)) NativeLibrary.setPaused(false)
+    }
+
+    /** Closes the prompt, and stops the game. */
+    fun quitFromPrompt() {
+        if (!promptOpen) return
+        promptOpen = false
+        leaveGame()
     }
 
     // --- SD card removal ---
@@ -711,8 +1105,11 @@ object AppController : NativeCallbacks {
                 StartupStep.Pull -> firstPull()
                 StartupStep.InitializeCore -> {
                     if (!initializeCore()) return
-                    // The folders the core's settings.ini names beyond the defaults, which the first pull left out.
-                    if (dataLayout.addsTo(DataLayout.DEFAULT)) pull(onlyMemcards = false)
+                    // The folders the core's settings.ini names beyond the defaults, which the first pull left out,
+                    // then the cards the game settings in them name: no game starts before they're in.
+                    if (!messageIsError) message = COPYING
+                    catchUp()?.join()
+                    ready = true
                 }
                 StartupStep.SetGameFolders -> applyGameFolders()
                 StartupStep.RefreshLibrary -> refreshLibrary(showProgress = true)
@@ -739,7 +1136,14 @@ object AppController : NativeCallbacks {
     private fun useMirror(data: String) {
         mirrorStateJob?.cancel()
         val store = SafFolderStore(context.contentResolver, data)
-        val created = Mirror(store, workingCopy, manifestFile, System::currentTimeMillis) { dataLayout }
+        val created =
+            Mirror(
+                store,
+                workingCopy,
+                manifestFile,
+                System::currentTimeMillis,
+                removeStrays = { layoutSettling.settled },
+            ) { dataLayout }
         mirror = created
         mirrorStateJob = scope.launch { created.state.collect { mutableMirrorState.value = it } }
     }
@@ -748,13 +1152,12 @@ object AppController : NativeCallbacks {
     private suspend fun firstPull() {
         val mirror = mirror ?: return
         prepareWorkingCopy()
-        val copying = "Copying your data from the data folder…"
-        message = copying
+        message = COPYING
         val progress =
             scope.launch {
                 mirror.state.collect { state ->
                     // done counts the actions finished, so the one under way is done + 1.
-                    if (state is MirrorState.Syncing) message = "$copying (${state.done + 1} of ${state.total})"
+                    if (state is MirrorState.Syncing) message = "$COPYING (${state.done + 1} of ${state.total})"
                 }
             }
         mirror.pull { false }
@@ -775,12 +1178,34 @@ object AppController : NativeCallbacks {
 
     /**
      * A pull of everything but the running game's memory cards (only the memory cards when [onlyMemcards]), then what
-     * [StartupPlan.afterPull] says. Only once the core runs, so never before the first pull, and never without the
+     * [StartupPlan.afterPull] says, and a [catchUp] if that grew the layout, however it ends
+     * ([CatchUpRunner.guardGrowth]). Only once the core runs, so never before the first pull, and never without the
      * data grant. Returns whether that refreshed the library.
      */
-    private suspend fun pull(onlyMemcards: Boolean): Boolean {
-        val mirror = mirror ?: return false
-        if (!coreStarted || !dataGranted) return false
+    private suspend fun pull(onlyMemcards: Boolean): Boolean =
+        catchUps.guardGrowth(::catchUp) { onGrowth -> pullOnce(onlyMemcards, onGrowth).refreshed }
+
+    /**
+     * A catch-up's pull ([CatchUp.run]): as [pull], but returns whether it grew the layout, for the next one. Its
+     * growth isn't flagged: the run refuses starts while it lasts.
+     */
+    private suspend fun pullGrew(): Boolean {
+        val grew = pullOnce(onlyMemcards = false, onGrowth = {}).layoutGrew
+        Log.i(TAG, "Catch-up pull: the data layout ${if (grew) "grew" else "stopped growing"}.")
+        return grew
+    }
+
+    /**
+     * A pull, then [applyChanged], with [onGrowth]. A pull of everything that did its whole plan settles the layout,
+     * unless it grew meanwhile ([LayoutSettling.pulled]).
+     */
+    private suspend fun pullOnce(
+        onlyMemcards: Boolean,
+        onGrowth: () -> Unit,
+    ): Applied {
+        val mirror = mirror ?: return Applied.NOTHING
+        if (!coreStarted || !dataGranted) return Applied.NOTHING
+        val pull = layoutSettling.pullStarting()
         // Asked for each file as the mirror acts, so a game started meanwhile keeps its cards.
         val result =
             mirror.pull { path ->
@@ -790,48 +1215,88 @@ object AppController : NativeCallbacks {
                     MemoryCardPaths.deferred(path, memcardPaths, holdMemcards)
                 }
             }
-        return applyChanged(result.changed)
+        val applied = applyChanged(result.changed, onGrowth)
+        // Only the memory cards: game settings that name more files may be among those it left.
+        if (!onlyMemcards) layoutSettling.pulled(pull, result.complete)
+        return applied
     }
 
-    // As pull(): a push can copy files in as well, where the folder's side changed too.
+    // As pull(): a push can copy files in as well, where the folder's side changed too. The ticker's is cancelled as
+    // the app goes to the background, maybe just after it grew the layout.
     private suspend fun push(force: Boolean) {
         val mirror = mirror ?: return
         if (!coreStarted || !dataGranted) return
-        applyChanged(mirror.push(force) { MemoryCardPaths.deferred(it, memcardPaths, holdMemcards) }.changed)
+        catchUps.guardGrowth(::catchUp) { onGrowth ->
+            val result = mirror.push(force) { MemoryCardPaths.deferred(it, memcardPaths, holdMemcards) }
+            applyChanged(result.changed, onGrowth)
+        }
+    }
+
+    /**
+     * Pulls until the layout stops growing ([CatchUp]): the folders and cards that new settings.ini or game settings
+     * name, which the run that brought them left out. Until it's done no game starts ([CatchUpRunner]), and strays
+     * stay until a complete pull settles the layout ([layoutSettling]), maybe after it's done. One under way pulls
+     * again once it's done instead, from the layout as it is then: its job is returned. Main thread only.
+     */
+    private fun catchUp(): Job? {
+        layoutSettling.unsettle()
+        if (!catchUps.request()) return catchUpJob
+        return scope
+            .launch {
+                try {
+                    catchUps.run { pullGrew() }
+                } finally {
+                    if (message == COPYING) message = null
+                }
+            }.also { catchUpJob = it }
+    }
+
+    /** What [applyChanged] did: whether it [refreshed] the library, and whether the core's paths [layoutGrew]. */
+    private class Applied(
+        val refreshed: Boolean,
+        val layoutGrew: Boolean,
+    ) {
+        companion object {
+            val NOTHING = Applied(refreshed = false, layoutGrew = false)
+        }
     }
 
     /**
      * A settings.ini the mirror replaced is read again, before the core can save its old settings over it, then the
      * game folders are set again and the library rescanned, as [StartupPlan.afterPull] says: in one go on
      * [coreDispatcher], so no scan runs between the reload and the folders. A game's settings it replaced have the
-     * core's paths read again, as they can name a memory card. Returns whether it refreshed the library.
+     * core's paths read again, as they can name a memory card. If that grows the layout, [onGrowth] runs at once, on
+     * [coreDispatcher], before the steps that follow: from outside a catch-up, it refuses starts until the catch-up
+     * the caller then asks for is done.
      */
-    private suspend fun applyChanged(changed: Set<String>): Boolean {
+    private suspend fun applyChanged(
+        changed: Set<String>,
+        onGrowth: () -> Unit,
+    ): Applied {
         val steps = StartupPlan.afterPull(changed)
-        if (steps.isEmpty()) return false
+        if (steps.isEmpty()) return Applied.NOTHING
         val readable = readableGameFolders()
         var layoutGrew = false
         val refreshed =
             withContext(coreDispatcher) {
-                for (step in steps) {
-                    when (step) {
-                        StartupStep.ReloadSettings -> {
-                            NativeLibrary.reloadSettings()
-                            readGridView()
-                            layoutGrew = readCorePaths()
+                layoutGrew =
+                    StartupPlan.carryOut(steps, onGrowth) { step ->
+                        when (step) {
+                            StartupStep.ReloadSettings -> {
+                                NativeLibrary.reloadSettings()
+                                readGridView()
+                                readCorePaths()
+                            }
+                            StartupStep.ReadCorePaths -> readCorePaths()
+                            StartupStep.SetGameFolders -> false.also { NativeLibrary.setGameFolders(readable) }
+                            StartupStep.RefreshLibrary -> false.also { NativeLibrary.refreshGameList(false) }
+                            else -> false
                         }
-                        StartupStep.ReadCorePaths -> layoutGrew = readCorePaths()
-                        StartupStep.SetGameFolders -> NativeLibrary.setGameFolders(readable)
-                        StartupStep.RefreshLibrary -> NativeLibrary.refreshGameList(false)
-                        else -> {}
                     }
-                }
                 if (StartupStep.RefreshLibrary in steps) NativeLibrary.getGameList().toList() else null
             }
         refreshed?.let { games = it }
-        // The folders and cards the new settings.ini or game settings name, which this run left out, come in now.
-        if (layoutGrew) scope.launch { pull(onlyMemcards = false) }
-        return refreshed != null
+        return Applied(refreshed != null, layoutGrew)
     }
 
     // initialize() waits for the core's thread to start, and the resources are copied out first.
@@ -868,11 +1333,30 @@ object AppController : NativeCallbacks {
         }
         Log.i(TAG, "The core is ready.")
         coreStarted = true
-        ready = true
-        if (!messageIsError) message = null
+        if (biosOverridesToCheck) dropStaleBiosOverrides()
         // Reported once the core takes input; it keeps connections made before then anyway.
-        controllers = ControllerInput(context).also { it.start() }
+        controllers =
+            ControllerInput(context).also {
+                it.onMenuRequested = ::openPrompt
+                it.start()
+            }
         return true
+    }
+
+    /**
+     * Sets each region whose image filesDir/bios no longer has back to Automatic, then has the core apply that, on
+     * [coreDispatcher]. Only once the core has started: it reads and writes the core's settings.ini.
+     */
+    private suspend fun dropStaleBiosOverrides() {
+        biosOverridesToCheck = false
+        withContext(coreDispatcher) {
+            val copies = File(context.filesDir, "bios").list()?.toList().orEmpty()
+            val stale = BiosOverrides.stale(BiosOverrides.load(NativeCoreSettings), copies)
+            if (stale.isEmpty()) return@withContext
+            Log.i(TAG, "Back to Automatic, as the BIOS folder no longer has their image: $stale")
+            stale.forEach { BiosOverrides.set(NativeCoreSettings, it, null) }
+            NativeLibrary.applySettings()
+        }
     }
 
     // On coreDispatcher, once the core has read settings.ini.
@@ -883,15 +1367,18 @@ object AppController : NativeCallbacks {
 
     /**
      * The memory card paths and the [dataLayout], as the core has them; returns whether the layout gained a folder or
-     * file. On coreDispatcher, once the core has read settings.ini.
+     * file, which unsettles it ([layoutSettling]). On coreDispatcher, once the core has read settings.ini.
      */
     private fun readCorePaths(): Boolean {
         val reported = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
         memcardPaths = MemoryCardPaths.merge(reported, memcardPaths)
         val folders = NativeLibrary.getDataFolders() ?: return false
-        val old = dataLayout
-        dataLayout = DataLayout.withCorePaths(folders.toList() + memcardPaths, NativeLibrary.getCacheFolder())
-        return dataLayout.addsTo(old)
+        val layout = DataLayout.withCorePaths(folders.toList() + memcardPaths, NativeLibrary.getCacheFolder())
+        val grew = layout.addsTo(dataLayout)
+        // Before a mirror run can start with it.
+        if (grew) layoutSettling.unsettle()
+        dataLayout = layout
+        return grew
     }
 
     // The games folders the app can read: one without its grant is left out until it's picked again.
@@ -962,8 +1449,12 @@ object AppController : NativeCallbacks {
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
             controllers?.releaseAll()
-            // Booted in the background. One the user left while it booted is shut down next anyway.
-            if (screen == Screen.Game && !resumed) NativeLibrary.setPaused(true)
+            // Booted in the background or with the prompt open, it waits paused. One the app paused while it booted
+            // runs if it may by now, as that pause may have reached the core just after the boot. One the user left
+            // while it booted is shut down next anyway.
+            val paused = PausePolicy.atBoot(pausedDuringBoot, PausePolicy.running(resumed, promptOpen))
+            pausedDuringBoot = false
+            if (screen == Screen.Game && paused != null) NativeLibrary.setPaused(paused)
             // The cards its own settings name are held back from now on, and mirrored.
             scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         }
@@ -973,8 +1464,10 @@ object AppController : NativeCallbacks {
         mainHandler.post {
             Log.i(TAG, "Game stopped.")
             gameRunning = false
+            pausedDuringBoot = false
             // Same as on start: release in order with this thread's input.
             controllers?.releaseAll()
+            promptOpen = false
             gameActive = false
             holdMemcards = false
             if (screen == Screen.Game) screen = Screen.Library
@@ -985,6 +1478,24 @@ object AppController : NativeCallbacks {
                 pull(onlyMemcards = true)
                 push(force = true)
             }
+        }
+    }
+
+    override fun onBindingCaptured(binding: String) {
+        // The capture's, as the core reports it: a later one only starts once this one can't report any more.
+        val id = nativeCaptureId
+        mainHandler.post {
+            val state = controllersState
+            val name = state.capturing
+            val descriptor = state.selected
+            // Cancelled, timed out or replaced since it was posted.
+            if (id != captureId || name == null || descriptor == null) return@post
+            Log.i(TAG, "Captured $binding for $name")
+            endCapture()
+            // The core removed the capture as it took the input, so the releases reach it.
+            controllers?.releaseAll()
+            setBindingShown(name, binding)
+            readBindings(descriptor) { NativeLibrary.setPadBinding(descriptor, name, binding) }
         }
     }
 

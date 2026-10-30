@@ -7,8 +7,8 @@ import android.view.Surface
 
 /**
  * The emulator core, in libgoosestation.so. The core runs on its own thread: these calls queue work for it and
- * return straight away, except [initialize], [surfaceChanged] and [reloadSettings], which wait for it, and
- * [refreshGameList], which scans on the calling thread.
+ * return straight away, except [initialize], [surfaceChanged], [reloadSettings], [applySettings] and the pad binding
+ * calls, which wait for it, and [refreshGameList], which scans on the calling thread.
  */
 object NativeLibrary {
     init {
@@ -33,6 +33,30 @@ object NativeLibrary {
     external fun getBoolSetting(section: String, key: String, default: Boolean): Boolean
 
     external fun setBoolSetting(section: String, key: String, value: Boolean)
+
+    external fun getStringSetting(section: String, key: String, default: String): String
+
+    /** Sets [key] to [value], or deletes it if [value] is null. */
+    external fun setStringSetting(section: String, key: String, value: String?)
+
+    external fun getIntSetting(section: String, key: String, default: Int): Int
+
+    external fun setIntSetting(section: String, key: String, value: Int)
+
+    /** Applies settings.ini as it is now, as the core does after its own settings change. Waits for the core. */
+    external fun applySettings()
+
+    /**
+     * Whether Vulkan didn't start in this process, so games use OpenGL ES until the app restarts. Doesn't need
+     * [initialize].
+     */
+    external fun isVulkanFailed(): Boolean
+
+    /**
+     * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game
+     * Native)`, `Stretch To Fill` and `4:3`. Doesn't need [initialize].
+     */
+    external fun getAspectRatioNames(): Array<String>
 
     /**
      * Where the memory cards are, relative to the data root: the memory card folder with a trailing `/` (empty if
@@ -63,6 +87,19 @@ object NativeLibrary {
      * main thread.
      */
     external fun importBios(sourceTreeUri: String, destDir: String): Array<String>?
+
+    /**
+     * The BIOS images the core recognises among the app's copies (the [initialize] biosDir), in file name order.
+     * Empty before [initialize]. It reads every image, so call it off the main thread.
+     */
+    external fun getBiosImages(): Array<BiosImage>
+
+    /**
+     * The description of the image the core picks for [region] (`NTSC-U`, `NTSC-J` or `PAL`) when none is set for it:
+     * one made for the region if there is one, or else another. Null if there's none it recognises, or before
+     * [initialize]. It reads every image, so call it off the main thread.
+     */
+    external fun getAutoBios(region: String): String?
 
     /**
      * Scans the game folders ([setGameFolders]) for games, reading each folder afresh. A file whose path and modified
@@ -107,4 +144,36 @@ object NativeLibrary {
 
     /** Lets go of every controller input, after the input sent before it. */
     external fun releaseAllInputs()
+
+    // Each controller keeps its own bindings on Port 1, by its InputDevice descriptor, from one run to the next. These
+    // wait for the core and save settings.ini, so call them off the main thread.
+
+    /**
+     * Port 1's buttons and axes, in the core's order, each with the binding the controller with [descriptor] has for
+     * it. Null for a controller never connected to this install, before [initialize], or if the list can't be passed
+     * on (it's logged).
+     */
+    external fun getPadBindings(descriptor: String): Array<PadBinding>?
+
+    /**
+     * Binds the Port 1 input [name] (a [PadBinding.name]) to [binding] on the controller with [descriptor], in place
+     * of the one it had, and applies it. Null or empty leaves the input unbound on that controller. Other controllers
+     * keep theirs. Does nothing for a controller [getPadBindings] gives null for.
+     */
+    external fun setPadBinding(descriptor: String, name: String, binding: String?)
+
+    /** Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. */
+    external fun resetPadBindings(descriptor: String)
+
+    /**
+     * Captures the next button pressed, or axis pushed half way, on the controller with [descriptor], and reports it
+     * to [NativeCallbacks.onBindingCaptured]. An axis must be seen near its centre first, so one resting away from it
+     * (or held as the capture starts) has to come back. Until then the capture takes every controller input: the game
+     * and hotkeys see none. It replaces a capture already running, and does nothing for a controller [getPadBindings]
+     * gives null for.
+     */
+    external fun startBindingCapture(descriptor: String)
+
+    /** Ends the capture running, if any, with no report; none arrives once this returns. */
+    external fun cancelBindingCapture()
 }

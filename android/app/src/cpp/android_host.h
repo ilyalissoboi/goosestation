@@ -29,12 +29,25 @@ bool Initialize(std::string data_root, std::string resources_root, std::string b
 /// Scans exactly these folders, and all below them, for games: [GameList] RecursivePaths, with no Paths.
 void SetGameFolders(std::vector<std::string> tree_uris);
 
-/// Reads settings.ini again (after the app replaced it), adapts it if it's from another install, and applies it.
-/// Blocks until the CPU thread has done so.
+/// Reads settings.ini again (after the app replaced it), adapts it if it's from another install, and applies it. Each
+/// connected controller the file leaves with no binding of its own gets its defaults. Blocks until the CPU thread has
+/// done so.
 void ReloadSettings();
 
 bool GetBoolSetting(const char* section, const char* key, bool default_value);
 void SetBoolSetting(const char* section, const char* key, bool value);
+std::string GetStringSetting(const char* section, const char* key, const char* default_value);
+/// Deletes the key if value is nullptr.
+void SetStringSetting(const char* section, const char* key, const char* value);
+s32 GetIntSetting(const char* section, const char* key, s32 default_value);
+void SetIntSetting(const char* section, const char* key, s32 value);
+
+/// Applies the settings: System::ApplySettings(false). Blocks until the CPU thread has done so.
+void ApplySettings();
+
+/// Whether the Vulkan device failed to start in this process, so games use OpenGL ES until the app restarts. From any
+/// thread.
+bool IsVulkanFailed();
 
 /// Where the memory cards are, relative to the data root (RelativeToDataRoot()): EmuFolders::MemoryCards with a
 /// trailing '/' (empty if it's the data root), then the card files: [MemoryCards] Card1Path and Card2Path from
@@ -52,6 +65,10 @@ std::optional<std::vector<std::string>> GetDataFolders();
 /// EmuFolders::Cache as GetDataFolders() gives a folder: nullopt if it's outside the data root, or the data root
 /// itself, or before Initialize() succeeded.
 std::optional<std::string> GetCacheFolder();
+
+/// The folder the BIOS images are read from, EmuFolders::Bios: Initialize()'s bios_dir, canonicalized, whatever
+/// settings.ini says. From any thread. nullopt before Initialize() succeeded.
+std::optional<std::string> GetBIOSDirectory();
 
 /// Scans the game folders: GameList::Refresh(). Blocks, on the calling thread, which should be the JVM's; one refresh
 /// runs at a time. Does nothing before Initialize() succeeded.
@@ -72,11 +89,61 @@ void SetPaused(bool paused);
 void SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale);
 
 /// Controller input, from any thread. It's queued and passed to the input source on the CPU thread; events for a
-/// device only count once its connection is queued. Returns whether the key goes to the emulated pad.
+/// device only count once its connection is queued. Returns whether the key goes to the core: every key but Back and
+/// Mode, which open the menu.
 bool QueueKeyEvent(s32 device_id, s32 keycode, bool pressed);
 void QueueAxisEvent(s32 device_id, s32 axis, float value);
+
+/// A controller is Android-<index> to the core, with the index its descriptor has in [Android] ControllerDescriptors,
+/// so it keeps its bindings from one run to the next. A descriptor not there yet is added, and its default bindings
+/// are added to Port 1's; one seen before gets nothing added, unless no [Pad1] key has a binding of its own. The table
+/// is only appended to, so an index never changes in this process: ReloadSettings() writes it back. A settings.ini
+/// adapted (AdaptForeignSettings()) or reset has none.
 void QueueDeviceConnected(s32 device_id, std::string name, std::string descriptor);
 void QueueDeviceDisconnected(s32 device_id);
+
+enum class PadBindingKind : u8
+{
+  Button,
+  Axis,
+  HalfAxis,
+};
+
+/// One of Port 1's inputs, and the binding one controller has for it, without its Android-<index>/ prefix (Button96,
+/// +Axis23), if it has one.
+struct PadBinding
+{
+  std::string name;         // the [Pad1] key
+  std::string display_name; // the core's, untranslated
+  PadBindingKind kind;
+  std::optional<std::string> binding;
+};
+
+/// Each controller's own bindings on Port 1, by its descriptor. They run on the CPU thread and block; the two that
+/// change bindings save settings.ini and apply them (System::ReloadInputBindings()). For a descriptor not in the table
+/// (one never connected), or before Initialize() succeeded, they do nothing and GetPadBindings() gives nullopt.
+
+/// Port 1's controller type's buttons and axes (Button, Axis and HalfAxis), in the core's order, each with the
+/// controller's first binding for it.
+std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
+
+/// Replaces the controller's bindings for Port 1's input name with binding, or with none if it's empty. Other
+/// controllers' stay as they are. An input Port 1's type doesn't have is refused.
+void SetPadBinding(std::string descriptor, std::string name, std::string binding);
+
+/// Drops the controller's bindings from every [Pad1] key, then adds its defaults, as a new controller gets them.
+void ResetPadBindings(std::string descriptor);
+
+/// Captures the next input from the controller with descriptor, for binding: the first BindingCapture takes. It's
+/// reported with NotifyBindingCaptured(), without the Android-<index>/ prefix (Button99, +Axis23, -Axis0), and the
+/// capture ends. Until then every input event goes to the capture, so no game or hotkey sees it. A capture already
+/// running is replaced. A descriptor not in the table (one never connected), or a call before Initialize() succeeded,
+/// does nothing. Runs on the CPU thread and blocks.
+void StartBindingCapture(std::string descriptor);
+
+/// Ends the capture running, if any, without a report: once it returns, NotifyBindingCaptured() isn't called for it.
+/// Runs on the CPU thread and blocks.
+void CancelBindingCapture();
 
 /// Lets go of every controller input, from any thread, in order with the events queued before it. For when the app
 /// stops getting a device's events (focus lost, in the background) and when a game boots or stops.
@@ -100,5 +167,6 @@ void DetachCurrentThreadFromJVM();
 void NotifyGameStarted(std::string_view title);
 void NotifyGameStopped();
 void NotifyError(std::string_view message);
+void NotifyBindingCaptured(std::string_view binding);
 
 } // namespace AndroidHost

@@ -239,18 +239,19 @@ system folder picker is the exception, and may need touch (each step says so). I
     create files in this folder. Pick another."
 
 Finish starts the core and shows the **library**: a grid of covers by default, or a list (the **List** and **Grid**
-button switches, and the choice is saved as `[UI] GameListGridView` in `settings.ini`). **Folders** opens the folder
-settings, and **Refresh** scans the games folders again. The library also refreshes when the app comes back to the
-foreground. A, Enter or a tap starts the selected game; Back leaves it. The tile for the last game played is
-focused when the library comes back. A tile shows the game's cover from `covers/` in the data folder, or its title
-when there's none; a list row shows the title, region, serial and play time.
+button switches, and the choice is saved as `[UI] GameListGridView` in `settings.ini`). **Settings** opens the
+settings (see "Changing settings"), and **Refresh** scans the games folders again. The library also refreshes when
+the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves it. The tile for the
+last game played is focused when the library comes back. A tile shows the game's cover from `covers/` in the data
+folder, or its title when there's none; a list row shows the title, region, serial and play time.
 
 The library lists what the core's game list finds in the games folders, as on desktop: disc images (CUE/BIN, CHD,
 ISO and the rest), M3U playlists, and PS-X EXE files. Disc images in the same folder as a CUE resolve by name, with
 a case-insensitive match when the case differs (`FILE "TRACK 01.BIN"` next to `Track 01.bin`), and names holding
 `#`, `%` or `?` work as they are.
 
-Home pauses the game, and reopening the app resumes it. Pausing also writes any memory card changes to their files
+In a game, Back opens a prompt to resume or quit to the library (see "Leaving a game"). Home pauses the game, and
+reopening the app resumes it. Pausing also writes any memory card changes to their files
 straight away (a paused game never reaches the card's usual save, 5 emulated seconds after the last write), so a save
 made just before Home survives the app being killed in the background. Going to the background, or losing focus to
 the notification shade or a dialog, also lets go of every button and stick, so press or move them again after
@@ -264,7 +265,7 @@ folder.
 
 ### The folder settings
 
-**Folders** in the library opens them, with the same D-pad rules as setup:
+**Settings** → **Folders** in the library opens them, with the same D-pad rules as setup:
 
 - **BIOS folder**: **Change** picks another folder, which replaces the old one only if it holds a BIOS image.
   **Rescan** copies the images in the same folder again, after you add one to it.
@@ -305,12 +306,16 @@ The rules:
   `screenshots`, `shaders`, `textures`, `resources` and `videos`, and `emusync` (memory card sync, a later stage).
   Once the core has started, the folders its `settings.ini` names inside the data folder (a `[Folders]` entry, or
   `[MemoryCards] Directory`, such as `mycheats`) and the shared memory cards are mirrored too; the app asks the core
-  for them, and pulls once more when that adds any. `cache/` (and the core's cache folder, wherever it is) and
+  for them, and pulls again while that adds any (a game settings folder, then the cards its files name), at most 4
+  times. These catch-up pulls run before a game can start: at a cold start the library says "Copying your data from
+  the data folder…" until they're done, and when a pull on coming back adds paths, a game started before its
+  catch-up is done is refused with the same message. `cache/` (and the core's cache folder, wherever it is) and
   `goosestation.log` stay on the device. **Anything else in the data folder is left alone**: a `games/` folder, say,
   is never copied in, never written to and never deleted, and the mirror doesn't even list what's inside it. Folder
   names are matched as the desktop writes them, in lower case: a `Memcards/` folder counts as something else. Files
   outside the layout in the working copy (an earlier build copied in everything) are deleted from the working copy,
-  never from the folder, once the core has said where its folders are, and their manifest entries go too; only those
+  never from the folder, once the core has said where its folders are and a complete pull (every file it planned)
+  has found nothing more for the layout, and their manifest entries go too; only those
   in step with the folder, though. One changed since the last run, or never mirrored (a card in a folder
   `settings.ini` no longer names, say), stays in the working copy, as it may hold a change the folder lacks. A
   leftover `.goosetmp` or `.goosebak` in a folder that is no longer part of the layout isn't cleaned up: it stays in
@@ -383,11 +388,46 @@ by the ones setup picked. That happens once; other settings are kept.
 
 ### Changing settings
 
-There's no settings screen yet, so settings are changed by editing `settings.ini` in the data folder, on the device
-or from a computer. Then switch to the app, or reopen it: the pull on coming back copies the file in, and the core
-reloads it, then scans the library again. While the app stays in front, the next push (within 2 s) also notices the
-change and copies it in. Edit the file the app wrote, so it keeps its `[Android] InstallID` (see below). For
-example, to pick the renderer and turn on the OSD's frame rates:
+**Settings**, in the library's top bar, opens a hub with four pages: **Controllers**, **Graphics**, **BIOS** and
+**Folders** (the folder settings above). Every page works with a D-pad alone, as setup does: the first row is focused
+when a page opens, A or Enter activates, and B or Back goes back. Back from a page focuses its entry in the hub, and
+Back from the hub focuses **Settings** in the library. A setting with several values opens as a list right under its
+row, drawn in the page itself, with the current value focused and marked "✓": A picks one and closes the list, and B
+or Back closes it with no change. Touch works too.
+
+- **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
+  pull, so the folders can still be picked again. Controllers, Graphics and BIOS need the core: until it has started
+  (and its first catch-up pulls are done, see "The data folder and its mirror"), they're shown disabled, with
+  "Available once GooseStation has started.", and the hub's focus starts on Folders.
+- **Settings change only from the library**, never while a game runs.
+- **Each change is saved at once**, to the working copy's `settings.ini`, which the core then applies
+  (`System::ApplySettings`); the next push, within 2 s, takes it to the data folder. The pages use desktop's keys and
+  values, so the file stays one desktop can read.
+- A value in `settings.ini` that a page doesn't offer (set by hand or on desktop, such as `Renderer = Software`,
+  `ResolutionScale = 12` or `AspectRatio = Custom`) is shown marked "(from settings.ini)", and kept until another is
+  picked.
+
+| Page | Row | Key | Values |
+| --- | --- | --- | --- |
+| Graphics | Renderer | `[GPU] Renderer` | Automatic ("Automatic (Vulkan where it works well)", the default), Vulkan, OpenGL ES (`OpenGL`) |
+| Graphics | Internal resolution | `[GPU] ResolutionScale` | Match the screen (`0`), 1x (native) (`1`, the default), 2x to 8x |
+| Graphics | Aspect ratio | `[Display] AspectRatio` | Every name the core has but `Custom`: "The game's own (4:3 for most games)" (`Auto (Game Native)`, the default), "Stretch to the screen" (`Stretch To Fill`), "Square pixels" (`PAR 1:1`), and the others as they are, such as `4:3` and `16:9` |
+| Graphics | Show FPS | `[Display] ShowFPS` | On, Off (the default) |
+| BIOS | NTSC-U (Americas), NTSC-J (Japan), PAL (Europe) | `[BIOS] PathNTSCU`, `PathNTSCJ`, `PathPAL` | "Automatic: <the image the core picks>" (no key, the default), or "Automatic: none found"; then each image copied from the BIOS folder, by its description, noted "made for <region>" when it's for another region |
+| BIOS | Fast boot (skip the BIOS intro) | `[BIOS] PatchFastBoot` | On (Android's default), Off |
+
+The internal resolution's note, for any value but 1x, says "Higher is sharper and slower. Match the screen picks the
+highest that fits." The BIOS page ends with "The images come from your BIOS folder. Change it, or rescan it, in
+Folders." A region whose image the BIOS folder no longer has, after a **Change**, a **Rescan**, a re-pick or setup's
+import, goes back to Automatic: its key is deleted, with no prompt (`Back to Automatic, as the BIOS folder no longer
+has their image: [NtscU, Pal]`, say, in the log). After setup that waits until the core has started, since only
+the core reads and writes `settings.ini`. Controllers is under "Controllers" below.
+
+**Every other setting** is changed by editing `settings.ini` in the data folder, on the device or from a computer.
+Then switch to the app, or reopen it: the pull on coming back copies the file in, and the core reloads it, then scans
+the library again. While the app stays in front, the next push (within 2 s) also notices the change and copies it in.
+Edit the file the app wrote, so it keeps its `[Android] InstallID` (see below). For example, to pick the renderer and
+turn on the OSD's speed and frame times as well as its frame rates:
 
 ```bash
 adb pull /sdcard/GooseStation/data/settings.ini /tmp/settings.ini
@@ -407,23 +447,95 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
   `[Android] InstallID`; when that isn't this install's, the device-specific keys are rewritten: the renderer goes back
   to `Automatic`; `[GameList]` paths are replaced by the games folders; the BIOS image choices are dropped, and the
   BIOS search folder is the app's copy folder; the input sources, Port 1 bindings and hotkeys are reset to their
-  defaults, then each connected pad adds its own; and any folder outside the data folder (an absolute path elsewhere,
-  or a Windows path such as `C:\Users\…\memcards`) is set back to its default under the data folder. Everything else,
-  such as the OSD or enhancement settings, is kept. The adapted file is saved with this install's ID, and goes back
-  to the data folder with the next push.
+  defaults, and `[Android] ControllerDescriptors` is deleted, so every controller is new here and adds its own
+  bindings; and any folder outside the data folder (an absolute path elsewhere, or a Windows path such as
+  `C:\Users\…\memcards`) is set back to its default under the data folder. Everything else, such as the OSD or
+  enhancement settings, is kept. The adapted file is saved with this install's ID, and goes back to the data folder
+  with the next push.
 - `[GPU] Renderer` is `Automatic` (the default), `Vulkan`, `OpenGL` or `Software`. On Android, `Automatic` prefers
   Vulkan, as on Linux: `VulkanDevice::IsSuitableDefaultRenderer()` takes the first Vulkan GPU unless it's a software
   one (its name starts with `llvmpipe` or `SwiftShader`) or an Intel one, and OpenGL ES otherwise. `Vulkan` and
-  `OpenGL` (OpenGL ES on Android) force one. There's no fallback from Vulkan to OpenGL ES yet (Plan 3): if the
-  Vulkan device can't be created, the boot fails with `Failed to create render device`, and if the device is created
-  but the hardware renderer fails, the core falls back to its software renderer. Set `Renderer = OpenGL` if that
-  happens.
+  `OpenGL` (OpenGL ES on Android) force one. If the device is created but the hardware renderer fails, the core
+  falls back to its software renderer.
+- **If the Vulkan device can't be created**, with `Vulkan`, or `Automatic` where it means Vulkan, the game boots on
+  OpenGL ES instead, straight away. The log has `Vulkan didn't start (…), using OpenGL ES until the app restarts.`,
+  the OSD says "Vulkan didn't start on this device, so GooseStation is using OpenGL ES.", and the Graphics page's
+  Renderer row says "Vulkan didn't start on this device, so games use OpenGL ES until the app restarts." That lasts
+  for the rest of the process: later hardware-renderer games go straight to OpenGL ES, and a settings reload doesn't
+  switch back. `settings.ini` keeps the choice the user made, so the next start of the app tries Vulkan again, once.
+  The device's API changes, not the renderer: `Software` stays the software renderer, on an OpenGL ES device for that
+  game (a later `Software` game tries Vulkan for its device again).
+- **To test the fallback**, `adb shell setprop debug.goosestation.fail_vulkan 1` makes the next Vulkan device fail
+  (`Failing the Vulkan device for testing (debug.goosestation.fail_vulkan).`), as long as Vulkan hasn't failed yet in
+  this process. Set it before starting a game, since any Vulkan device created while it's set fails, and set it back
+  with `adb shell setprop debug.goosestation.fail_vulkan 0`. Only `adb shell` can set `debug.` properties.
 - `ShowFPS`, `ShowSpeed` and `ShowCPU` turn on the OSD's frame rates (`G:` game, `V:` video), speed and frame times.
   With the default CPU settings, `ShowCPU` adds a `CPU[I]` line when the CPU falls back to the interpreter, and none
   on the recompiler.
-- The Port 1 bindings live in this file too. Leaving them out is fine: whenever a controller connects, the core adds
-  its default bindings to Port 1's (each binding is a list, so every connected pad drives Port 1), skips those
-  already there, and saves the file.
+- The Port 1 bindings live in this file too, with `[Android] ControllerDescriptors` (see "Controllers"). Leaving
+  them out is fine: each controller adds its default bindings the first time it's seen.
+
+### Controllers
+
+Every connected controller drives Port 1. The core knows each one as `Android-<n>`, and `[Pad1]`'s bindings name it
+that way (`Cross = Android-0/Button96`, one entry per controller, as each binding is a list). `[Android]
+ControllerDescriptors` in `settings.ini` keeps the numbers: a list of Android's input device descriptors, one
+`ControllerDescriptors = …` line each, whose position is `<n>`. So a controller keeps its number, and its bindings,
+across restarts, whatever order the controllers connect in.
+
+- **The first time a controller is seen**, its descriptor is added to the list, and its default bindings to Port 1's:
+  the log has `'<name>' is a new controller, Android-<n>.` and `Added 24 bindings for Android-<n> to Port 1.` A
+  controller seen before gets nothing added, so a binding removed from it stays removed. The exception is one with no
+  binding at all in `[Pad1]` (a `settings.ini` restored from an older copy, say): it gets its defaults again when it
+  connects, and after a settings reload.
+- **Two identical controllers that Android gives the same descriptor** are one controller to the app: they share a
+  mapping, and the Controllers page lists them once.
+
+**Settings** → **Controllers** remaps them, one controller at a time:
+
+- First, a card: "Back, the Mode (Home or Guide) button, or holding Select + Start for a second pauses the game and
+  opens the menu. These buttons always do this, whatever is mapped to them."
+- With no controller connected, "Connect a controller to remap it." follows, and nothing else. With more than one, a
+  **Controller** row picks which (it's focused on opening); with one, its name. Then "Every connected controller
+  drives Port 1. Each one keeps its own mapping."
+- Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on), with the binding's
+  name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
+  <n>` for any other key, or `Not set`. The first one is focused on opening, with a single controller.
+- A on a row asks for the input: "Press a button or move a stick on <name>… (5)", counting down. The controller's next
+  press, or a stick or trigger pushed past halfway, becomes that row's binding for this controller only; the other
+  controllers' entries in the key stay. A button already held when it starts isn't taken, nor is an axis until it has
+  been near rest (within a quarter): during the capture, or as the pad last reported it before the capture began. The
+  app remembers each pad's latest axis values from every motion it sends, passed to the core or not, and sends them as
+  the capture starts, so a quick flick of a centred stick is taken on its first push. A pad that hasn't sent any motion
+  since it connected has no known values: its axes must come back to rest first, and so must a trigger resting at −1 or
+  a stick still held. Left alone, the capture ends after 5 s with the binding unchanged. Back (the system's Back key or
+  gesture) cancels it; B is captured like any other button.
+- **Clear**, at the end of each row (Right reaches it), removes this controller's binding for it. **Reset to
+  defaults**, at the end, drops all of this controller's bindings and adds its defaults again.
+- **The menu's triggers can't be remapped.** Back and Mode can't be bound: Back never reaches the core, and the core
+  refuses Mode, so a capture never sees either. Select and Start can be bound to anything, but the controller's own
+  Select and Start keys, held together, open the prompt whatever they're mapped to (see "Leaving a game").
+
+### Leaving a game
+
+In a game, three things pause it and open a prompt, "Paused", with **Resume** (focused) and **Quit to library**:
+
+- **Back**: the Back gesture, the system's Back key, or a controller's own Back key (the Thor's pad has one);
+- **Mode**: a controller's Home or Guide button (`KEYCODE_BUTTON_MODE`), on its key-down;
+- **Select and Start held together for a second**, on one controller.
+
+The game never sees the press that opens it. While the prompt shows, the controllers move its focus, as on any
+other screen; A presses the focused button, and B, Back or Mode resume. Everything held when it opens is let go, so
+nothing stays pressed after **Resume**. The pause writes the memory cards, as Home's does, and **Quit to library**
+stops the game (`Game stopped.`). With the prompt open, Home and back keeps the game paused, with the prompt
+showing. Back while a game is still booting opens the prompt too: the game pauses once it has booted, and **Resume**
+starts it.
+
+Select and Start keep working in games. Pressed alone, each goes to the game as it comes. When one is held and the
+other goes down, that second press is held back: if both are still held 1 s later, the prompt opens and the held-back
+press is never sent. If either is let go first, the held-back press is sent then, late. A Start tapped while Select is
+held therefore reaches the game when it's let go, and lasts 100 ms (6 frames at 60 Hz), however short the tap, so the
+game's once-a-frame read of the pad sees it.
 
 ### Known limits
 
@@ -436,12 +548,17 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
   mirrored at once: the run under way stops before its next file, and the library shows the unreachable banner ("The
   data folder isn't reachable (the SD card was removed)…"). Once the card is mounted again, the next run saves the
   changes to it. With no game running, only the mirror stops. The Thor result below is from the build before this.
-- **In a game, a controller alone can't get back to the library.** B goes to the game, as Circle. Use the Back gesture,
-  or Home. A later plan adds the Mode button and Select+Start.
+  Ejecting the data folder's card stops the game even when the game itself is on internal storage: rechecked with the
+  user on 2026-10-27, and kept.
+- **The Vulkan fallback lasts until the app restarts.** Once Vulkan has failed, every game in that process uses
+  OpenGL ES, even after `Renderer` is changed back to `Vulkan`. Each new process tries Vulkan once more, as
+  `settings.ini` keeps the user's choice.
+- **The settings pages are reachable only from the library**, not from a game or its prompt. Leave the game to change
+  them.
 - **Leaving during a boot freezes the UI until the boot is done.** Destroying the surface waits for the CPU thread,
-  which is still booting. On the emulator, Back during an Ace Combat 3 boot froze the UI for 0.7 to 1.2 s (43 and
-  67 skipped frames), and the boot took 1.2 to 1.4 s. That's well under the 5 s ANR limit, but a slow first boot on a
-  device could take longer.
+  which is still booting. On the emulator, leaving during an Ace Combat 3 boot (with Back, in Plan 1's build) froze
+  the UI for 0.7 to 1.2 s (43 and 67 skipped frames), and the boot took 1.2 to 1.4 s. That's well under the 5 s ANR
+  limit, but a slow first boot on a device could take longer.
 - **Switching audio output mid-game is untested.** The AAudio stream is reopened when its device goes away, as when
   headphones are unplugged. The emulator can't check this; the device checklist below does.
 - **A missing grant can't be made with `adb`.** Deleting a folder through the Storage Access Framework (the
@@ -553,12 +670,44 @@ picker with taps; the games with a gamepad made with `uinput`, as above.
 | A desktop `settings.ini` | Pass. A version 3 file with `Renderer = Software`, `[Pad1]` bound to `SDL-0` (D-pad, Cross, Circle, Start), `[InputSources] SDL = true`, Windows paths for the game list, the BIOS folder and the memory card folder, and `ShowFPS = true`, was pushed over the folder's. Home and reopening: `Reloaded the settings …`, `The settings are from another install (''), adapting them.`, `[MemoryCards] Directory 'C:\Users\goose\Documents\GooseStation\memcards' is outside the data folder, using 'memcards'.` and `Added 24 bindings for Android-0 to Port 1.` The working copy's file had no `Renderer` and no `SDL-0` binding, `RecursivePaths` set to the games folder, `[BIOS] SearchDirectory = bios`, no `PathNTSCJ`, and `ShowFPS = true` still; the folder's copy got this install's `[Android] InstallID` with the next push. padtest then booted with `Allowing Vulkan as default renderer.` (Automatic), the OSD's frame rates showed, and the pad's Cross and D-pad right lit up. |
 | Crashes | None: `adb logcat -b crash -d` was empty at the end, and the app's process stayed the same from setup to the `am kill` (PID 9010), and from then to the end (PID 11609). The crash buffer was also cleared with each `adb logcat -c` along the way. |
 
+**Settings and controls** (Plan 3), checked on 2026-10-28 with the debug APK built from `f40e18f92`, on the same
+emulator, with the folders as in Plan 2's checks (`/sdcard/GooseTest/bios`, `games` and `data`). The pages were driven
+with D-pad key events, the picker with taps, and the games with `uinput` gamepads, as above: "Goose Virtual Pad" and
+"Second Wireless Controller With A Long Name" (vid 1118, pid 654 and 655), and for the prompt "Goose Prompt Pad"
+(vid 1118, pid 655, with Select, Start and Mode). On this emulator's key layout (`Vendor_045e_Product_028f.kl`),
+`BTN_WEST` (308) is `BUTTON_Y` and 307 is `BUTTON_X`. padtest is `padtest.psexe`.
+
+| Check | Result |
+| --- | --- |
+| A BIOS override the BIOS folder lacks, at setup | Pass. Before setup, the data folder's `settings.ini` had `[BIOS] PathNTSCU = missing.bin` and this install's `InstallID` (put in the app's preferences before the first launch, so the file wasn't adapted). Setup's BIOS step copied only `ps-30j.bin`. Once the core started: `The core is ready.`, then `Back to Automatic, as the BIOS folder no longer has their image: [NtscU]` 1 ms later. `PathNTSCU` was gone from both copies of `settings.ini`, and the BIOS page showed NTSC-U as "Automatic: SCPH-5500 (v3.0 09-09-96 J)". |
+| BIOS override, then a new BIOS folder | Pass. NTSC-U and PAL set to the image on the BIOS page (its list noted "made for NTSC-J"): the data folder's file had `PathNTSCU = ps-30j.bin` and `PathPAL = ps-30j.bin`. padtest (a PAL executable) booted with no `Searching for a PAL BIOS` line and no `No BIOS image found`, and `BIOS region NTSC-J does not match requested region PAL.` and `Using BIOS: SCPH-5500 (v3.0 09-09-96 J)`. Then **Folders** → **BIOS folder** → **Change** to a folder holding the same image as `scph5500-copy.bin`: `Back to Automatic, as the BIOS folder no longer has their image: [NtscU, Pal]`, both keys were gone from the data folder's file, and the page showed Automatic for each region. |
+| Graphics round trip | Pass. From the defaults, the page set OpenGL ES, 3x, "Stretch to the screen" and Show FPS (the resolution's note showed under 3x). The data folder's file had `Renderer = OpenGL`, `ResolutionScale = 3`, `AspectRatio = Stretch To Fill` and `ShowFPS = true` 1 s after the last change. Back went to the hub with Graphics focused, and to the library with **Settings** focused. padtest then logged `Trying to create a OpenGL GPU device...`, filled the screen's width, and showed `G:`/`V:`. |
+| A desktop `settings.ini` with `AspectRatio = Stretch To Fill` | Pass. The page's aspect ratio was set to 4:3 first. A file with no `InstallID`, `Renderer = Software`, `ResolutionScale = 2`, `AspectRatio = Stretch To Fill`, `ShowFPS = true`, a Windows BIOS folder, `PathNTSCJ` and `SDL-0` bindings was pushed into the data folder. Home and reopening: `Reloaded the settings …` and `The settings are from another install (''), adapting them.` The Graphics page then showed Automatic, 2x, "Stretch to the screen" and Show FPS On, and padtest booted on Vulkan (`Trying to create a Vulkan GPU device...`), filling the screen. |
+| Vulkan fallback, `Renderer = Vulkan` | Pass. Vulkan set on the page, `setprop debug.goosestation.fail_vulkan 1`, then padtest: `Trying to create a Vulkan GPU device...`, `Failing the Vulkan device for testing (debug.goosestation.fail_vulkan).`, `Vulkan didn't start (…), using OpenGL ES until the app restarts.`, `Trying to create a OpenGL GPU device...`, then `Game started: padtest`, all within 0.6 s. padtest drew, with the OSD message. The Graphics page's Renderer row then said "Vulkan didn't start on this device, so games use OpenGL ES until the app restarts." Booting padtest again in the same process logged only `Trying to create a OpenGL GPU device...`. Both copies of `settings.ini` kept `Renderer = Vulkan`. With the property at 0, a force-stop and a new start used Vulkan (`using first (Goldfish GFXStream …)`). |
+| Vulkan fallback, `Renderer = Automatic` | Pass. The same lines in the same order, the OSD message, OpenGL ES only on the second boot in the process, `Renderer = Automatic` kept, and Vulkan again in a new process with the property at 0. |
+| Remapping, and a restart in swapped order | Pass. Both pads connected as new: `'Goose Virtual Pad' is a new controller, Android-0.` and `Added 24 bindings for Android-0 to Port 1.`, then the same for the second as `Android-1`. `[Android] ControllerDescriptors` listed both. Settings → Controllers: the card, then the Controller row, focused. On the second pad, Cross captured 307 (`Captured Button99 for Cross`, the row read X) and Circle captured `BTN_SOUTH` (`Captured Button96 for Circle`, A). The data folder's file had `Cross = Android-1/Button99` and `Circle = Android-1/Button96`, and the first pad's `Button96`/`Button97` unchanged. A capture left alone counted down and ended with the row back at X, and no `Captured` line. In padtest, the second pad's X lit Cross (and Square, whose default is the same `BUTTON_X`), its A lit Circle, and the first pad's A lit Cross. Then both pads were removed, the app force-stopped and started, and the second pad registered before the first: `Device 'Android-1' connected: 'Second …'`, then `Device 'Android-0' connected: 'Goose Virtual Pad'`, with no `is a new controller` or `Added` line. `settings.ini` was byte-identical to before the restart, with no `Android-1/Button96` for Cross, and the page listed the second pad first, with Cross = X. |
+| Two pads with one descriptor | Seen by chance: "Goose Prompt Pad" has the same vendor and product as the second pad, and no serial number, so Android gave it the same descriptor (`37bf902b…`). It connected as `Android-1`, with no new bindings, and used the second pad's remap. |
+| A stick held as a game starts | No repeat found. In the library, a stick held right moved the focus three tiles in under a second (Android's joystick-to-D-pad repeat). With the stick held down on padtest's tile (no tile below), A started padtest: padtest showed no D-pad press and the stick at 0 (the core releases everything at a game's start, and the held stick sent nothing new); letting the stick go in the game showed nothing either. After quitting, the D-pad moved the focus up, and nothing moved it back down in the next 3.5 s, so no repeat was still running in the app. The capture variant (a stick held as a capture starts) wasn't tried. |
+| Prompt: Back | Pass. `input keyevent KEYCODE_BACK` in padtest opened "Paused", with **Resume** focused and **Quit to library**, and the core's pause icon showed (padtest has no frame counter; the pause is the icon and `AAudioStream_requestPause`). The pad's B resumed (`requestStart`), and padtest didn't light Circle. Back again, the hat down moved the focus to **Quit to library**, and A gave `Game stopped.` and the library, with padtest's tile focused. |
+| Prompt: Mode | Pass. `BTN_MODE` down opened the prompt, its key-up didn't close it, and a second press resumed (`requestStart`). The prompt covers padtest while it's open, so a Mode press there isn't visible; padtest has no Mode button to light, and after resuming with Mode (in the D-pad check below) nothing was lit. |
+| Prompt: Select+Start | Pass. Select held, Start down 0.4 s later and held: at 0.8 s padtest showed Select lit and Start not; by 1.8 s the prompt was open. After letting both go and A on **Resume**, nothing was lit. A Start tapped for 0.3 s while Select was held, in a 4 s `screenrecord` (76 frames): Select lit in 32 frames, Start in 2, and nothing stayed lit. |
+| Prompt: D-pad held | Pass for the hat. Hat right held (D-pad right lit), Mode opened the prompt with the focus staying on **Resume**, the hat let go, Mode again: nothing lit. The D-pad as keys couldn't be checked: this key layout maps no `BTN_DPAD_*` key. The Thor checklist has it. |
+| Prompt: Home with it open | Pass. Home, then reopening: the prompt still showed, with **Resume** focused, two screenshots 1.5 s apart were identical, and there was no `requestStart`. |
+| Prompt: Back during a boot | Pass. Back 0.3 s after starting Ace Combat 3 Disc 1: the prompt showed; `Game started` came at 22:11:20.061 and the pause 19 ms later; screenshots 3 s apart were identical. **Resume** gave `requestStart`, and the picture moved. |
+| Catch-up at a cold start | Pass. The data folder got `[Folders] GameSettings = mygs`, `mygs/PADTESTEXE.ini` (`Card1Type = Shared`, `Card1Path = ../cards/padtest.mcd`), `cards/padtest.mcd` and a 200 MB `mygs/big.bin`, all pulled in once. Then, with the app stopped, the working copy's `mygs/` and its manifest lines were deleted, and the app cold-started: the library said "Copying your data from the data folder…", then `The core is ready.`, `Catch-up pull: the data layout grew.` and `… stopped growing.` 0.66 s later, and `mygs/` (with `big.bin`) was back. `files/data/cards/padtest.mcd` kept inode 574438 and its time throughout, polled every 0.4 s. |
+| Catch-up on coming back | Pass. In the background, `Card2Path = ../cards2/big.mcd` was added to the game settings, with a 500 MB `cards2/big.mcd`. On reopening, A on padtest's tile was refused with "Copying your data from the data folder…"; the catch-up ended 2.5 s after that press (`… stopped growing.` at 22:15:03.414), and the next A started padtest (`Game started` at 22:15:05.295). Afterwards, with the extra folders and the key removed, a cold start removed the working copy's `mygs/`, `cards/` and `cards2/` as strays. |
+| Release build (R8) | Pass. `./gradlew assembleRelease` builds. R8's `seeds.txt` keeps `NativeCallbacks.onBindingCaptured`, `AppController.onBindingCaptured`, the `PadBinding` and `BiosImage` constructors and `PadBindingKind`'s values. The release APK, signed with the debug key and installed over the debug one, started the core, listed the BIOS page, and captured a binding (`Captured Button102 for Select`); **Reset to defaults** then put the defaults back. |
+| Portrait | Not possible full screen. With `wm set-ignore-orientation-request true` and the rotation at 0, the app was letterboxed in a landscape-shaped window (411x309 dp) in the middle of the portrait screen. Plan 3's layout check used freeform portrait windows instead (411x862 and 360x800 dp). The Thor checklist has it. |
+| Crashes | None: `adb logcat -b crash -d` was empty at the end, and logcat had no `FATAL EXCEPTION` or `Fatal signal`. Every new process came from a force-stop or an install. |
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
 8 Gen 2 (QCS8550), Adreno 740, 4 KB pages. The built-in pad connects as `Odin Controller` (`Android-0`) and reports
 X/Y (left stick), Z/RZ (right stick), HAT_X/HAT_Y (D-pad) and BRAKE/GAS (L2/R2), all of which the app forwards. Its
-key layout has real BACK, HOME and BUTTON_MODE keys, so on the Thor the pad's Back key leaves a game.
+key layout has real BACK, HOME and BUTTON_MODE keys, so on the Thor the pad's Back key left a game (in that build;
+it now opens the prompt, see "Leaving a game"). No physical button on the Thor sends `BTN_MODE`, though: its only
+buttons besides the gamepad controls are Back and Home (found 2026-10-30).
 
 | Check | Result |
 |---|---|
@@ -612,6 +761,35 @@ in upper case). The data folder was `GooseStation` on the SD card, then `GooseSt
 Not checked: whether setup's data step showed the "other things" line on the Thor (not reported), padtest's controls
 again (Plan 1's results stand), and a games folder on internal storage as a boot-time baseline.
 
+**Settings and controls** (Plan 3, step 8 below), checked on 2026-10-29 with the debug APK built from `f40e18f92`,
+installed over Plan 2's (`adb install -r`), on the same Thor. Its folders and grants were kept, and it went straight to
+the library (`The core is ready.`, then `Catch-up pull: the data layout stopped growing.`). The Thor has a second,
+lower screen (1080x1240), which shows the launcher; the app runs on the main one, in landscape (1920x1080). These
+checks were driven with `adb` (`input -d 0 keyevent` for the pages, `setprop`, logcat and screenshots), apart from
+those with the built-in pad, which the user did between 12:10 and 12:16, with `getevent -lt` recording the pad's
+events. `uiautomator dump` doesn't work on this device ("null root node"), so screenshots were the evidence.
+`[Display] ShowSpeed = true` was already in the data folder's `settings.ini`, so the OSD showed the speed. The built-in
+pad connects as `Odin Controller` (descriptor `8e1073ea…`); its key layout (`Vendor_2020_Product_0111.kl`) maps both
+`BTN_DPAD_*` keys and `ABS_HAT0X`/`ABS_HAT0Y`, but its D-pad sent only the hat. Afterwards the data folder's
+`settings.ini` was put back as it was before these checks.
+
+| Check | Result |
+| --- | --- |
+| Graphics: OpenGL ES, 4x, Show FPS | Pass. Set on the page (the resolution note showed). Ace Combat 3 (the CUE/BIN) logged `Trying to create a OpenGL GPU device...` and `GL_RENDERER: Adreno (TM) 740`; in the attract FMVs from 40 s, four OSD readings were `G: 14.95` to `16.95`, `V: 59.82`, `100% (100%)`. |
+| Graphics: Vulkan, 4x, Show FPS | **Found: a crash, once in five Vulkan boots.** The first Vulkan boot, in a process whose previous game had used OpenGL ES, ended 1 s in with `Fatal signal 6 (SIGABRT)` on the CPU thread, while the loading screen showed `Compiling Pipelines: 1034/2257`. The core's crash handler caught a fault in `VulkanTexture::TransitionSubresourcesToLayout`, from `VulkanTexture::TransitionToLayout`, `GPUDevice::RenderImGui` and `Host::DisplayLoadingScreen`, in `GPU_HW::CompilePipelines` during `System::BootSystem` (`thor/crash-1.txt`). Four later Vulkan boots, in new processes and after an OpenGL ES game in the same process, ran (`No GPU requested, using first (Adreno (TM) 740)`): `G: 14.95`, `V: 59.79` to `59.82`, `100% (100%)` in the FMVs. Every Vulkan boot logged `Failed to read pipeline cache.` and compiled the 2257 pipelines again (about 2.6 s). **Cause and fix:** Android's `FullscreenUI::Shutdown()` stub didn't call `ImGuiFullscreen::Shutdown()`, so an OpenGL ES loading-screen texture stayed cached and was used as a `VulkanTexture` on the next Vulkan device. Fixed in `652a4f808`: the stub now calls it, as desktop's does. Checked on the emulator, in the same OpenGL ES to Vulkan switch in one process: 4 crashes in 4 before the fix, 0 in 4 after. A native test (`FullscreenUIStubs.ShutdownReleasesCachedTextures`) covers it. Rechecked on the Thor on 2026-10-30: 0 crashes in 3 (next row). |
+| Vulkan crash recheck, 2026-10-30 | Pass: **0 crashes in 3 valid attempts** with the debug APK built from `85f32f5be` (the fix and master's pipeline cache, #27 and #28), where the same scenario crashed 3 times in 3 before the fix. Each attempt, in one process: `adb install -r` (which leaves the driver's shader cache cold), the core's `opengles_pipelines.bin`, `vulkan_pipelines.bin` and `vulkan_shaders.bin`/`.idx` deleted from the working copy's `cache/` (with `run-as`), Ace Combat 3 on OpenGL ES at 4x, whose loading screen showed (`Compiling Pipelines: 1988/2254`), Back and **Quit to library**, `settings.ini` switched to Vulkan at 4x and the app brought back (`Reloaded the settings …`), then Ace Combat 3 on Vulkan. With #27 a Vulkan compile from nothing takes about 0.87 s here, under the loading screen's 1 s, so three first attempts drew no loading screen on Vulkan and don't count; the three that count had 16 `yes` processes running during the Vulkan boot, which then took 3.7 to 4.8 s and drew its loading screen 16 to 25 times, with the logo (`thor/recheck/T-GREEN4/T-GREEN4-vulkan-second/ls07.png`). The OSD then showed `V: 59.82` and `100% (100%)`. With the pipeline cache saved (`Compressing and writing 464781 bytes to 'vulkan_pipelines.bin'`), the next Vulkan boot loaded it (`Pipeline cache hash: 35A614F1…`) and went from `Trying to create a Vulkan GPU device...` to `Created HW framebuffer` in 0.10 s, with no loading screen. The crash buffer was empty. |
+| Vulkan fallback (test switch only) | Pass. A real Vulkan failure can't be forced on the Thor. With `Renderer = Vulkan` and `debug.goosestation.fail_vulkan` at 1, Ace Combat 3 logged `Trying to create a Vulkan GPU device...`, `Failing the Vulkan device for testing …`, `Vulkan didn't start (…), using OpenGL ES until the app restarts.`, the OSD message, `Trying to create a OpenGL GPU device...` and `Game started` 0.33 s later; the OSD showed the message, then `G: 59.82`, `V: 59.82`, 100%. The Graphics page's Renderer row then had the note. The property was set back to 0 and the app restarted, and the next boot used Vulkan. |
+| Fast boot | Pass. Off (`PatchFastBoot = false`): the BIOS intro played, its diamond at 7 s and the Sony Computer Entertainment screen at 10 s after starting the game, and the log had no fast boot line. On: `Patching BIOS for fast boot.` and `Using Type 1 fast boot patch at offset 0x00018000.`, black until the "Produced by namco" screen, and no Sony screen in five screenshots over 17 s. |
+| Portrait | Not applicable. The main screen's smallest width is about 468 dp, under the 600 dp at which Android may ignore the app's landscape lock, and the app was always shown in landscape. |
+| Built-in controller alone, every page | User-reported: as expected (the focus ring always showed, and B went back with the entry focused). The pad's events (`getevent` on `Odin Controller`) show the walk through the pages driven with the D-pad, A, B and the Back key, with no touch. |
+| Remap on the built-in pad, restart, reset | Pass, but on **D-Pad Up**, not Cross: the user remapped the first row, which is focused when the page opens. `Captured Button19 for Up` (the D-pad itself, at 12:11:58), then `Captured Button100 for Up` 16 s later, as the top face button (`BTN_WEST`, `BUTTON_Y`) went down. After a restart from Recents (a new process at 12:12:39), the log had no `is a new controller` line, so nothing was added back. **Reset to defaults** at 12:12:46 rewrote `settings.ini` (its working copy's time is 12:12:46.666, the folder's 12:12:49.973), and `Up = Android-0/Button19` is the default again. User-reported: the remap held after the restart. padtest wasn't run while the remap was in place, so its effect in a game wasn't seen. **Again on 2026-10-30, partly:** `Captured Button100 for Up` at 11:02:33 (the top face button, on the first row again), a restart from Recents (a new process at 11:02:46), then `Captured Button100 for Cross` at 11:03:14 and padtest 2 s later in the same process, with no restart in between. In padtest the pad sent the top face button six times and never the bottom one (`getevent`); the user reports it worked as expected. **Reset to defaults** then left `settings.ini` byte-identical to the copy taken before the steps (`Up = Android-0/Button19`, `Cross = Android-0/Button96`). So the remap seen in padtest after a restart is still not shown. |
+| A Bluetooth pad | **Not done**: no other controller connected during the session (no `connected` line besides `Odin Controller`, and `dumpsys input` lists none). Still not done on 2026-10-30: no Bluetooth pad was available. |
+| Ace Combat 3: Back, Mode, Select+Start | Back and Select+Start: pass. The pad's Back key at 12:13:34.364 paused the game 0.15 s later (`AAudioStream_requestPause`), and A on **Resume** restarted it. Select held, then Start, both held: the pause came 1.008 s after Start went down (12:14:00.025), and A resumed it. A Select tap followed by a separate Start tap (not held together) went to the game, as it should. **Mode wasn't pressed**: the pad sent no `BTN_MODE` all session. User-reported: no in-game pause menu after **Resume**. **Mode can't be checked on the Thor:** besides the gamepad controls, its only buttons are Back and Home (the system's Home), so nothing sends the `BTN_MODE` its key layout lists. Mode was checked on the emulator with a `uinput` pad ("Prompt: Mode" there), and is still open on real hardware with a Guide or PS button. |
+| The memory card reaches the data folder | Pass. The game wrote sector 63 at 12:13:46.084 and `Saving memory card to Ace Combat 3 - Electrosphere (Japan)_1...` followed 5 s later (the core's own timer, before **Quit to library**, so the quit had nothing new to write). The folder's copy had a new time 2.2 s after that (12:13:53.301), with the working copy's MD5 (`f8eaf894…`). Back then opened the prompt and **Quit to library** gave `Game stopped.` at 12:14:33. |
+| D-pad held across the prompt | The built-in D-pad sends a hat only (`ABS_HAT0X`/`ABS_HAT0Y`, no `BTN_DPAD_*` key all session), so the keys variant can't be done with it. With the hat: padtest, hat right held from 12:14:57.941, the Back key opened the prompt (pause at 12:14:58.727), the hat was let go with the prompt open (12:15:01.267), and A resumed: a screenshot about a minute later shows nothing lit (`thor/now-state.png`). The prompt was opened with Back, not Mode. |
+| Vulkan during the user's steps | The user's Ace Combat 3 ran on Vulkan at 4x (12:13:03 to 12:14:33) with no crash; at 12:16 the crash buffer still held only the 01:30 crash. |
+| Crash buffer | **Not empty**: it holds the Vulkan crash above (saved as `thor/crash-1.txt`; the buffer was cleared afterwards). No other crash. That crash is fixed in `652a4f808` (see the Vulkan row): 0 crashes in 4 on the emulator after it, where it was 4 in 4 before, and a native test covers it. Checked again on 2026-10-30 with the fix: empty after the recheck and the user's steps. |
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
@@ -655,8 +833,8 @@ adb logcat -v time > thor.log
    - [ ] Both sticks move their crosses and go back to 0 when let go.
    - [ ] Nothing sticks or repeats: hold each button, then let go.
    - [ ] L2 and R2 press once each, and let go cleanly, whether they're analog or digital.
-   - [ ] No button leaves the game on its own. Only the Back gesture and Home should do that; note any button that
-     sends Back.
+   - [ ] No button leaves the game on its own; Home does, and Back, Mode or Select+Start open the prompt (step 8).
+     Note any other button that sends Back.
 2. **padtest, with a Bluetooth pad**, paired in Android's settings. Start padtest with the pad off.
    - [ ] Switch the pad on mid-game: padtest keeps rendering, with no relaunch and no black screen (a new input
      device is a configuration change, which the manifest handles).
@@ -712,11 +890,11 @@ adb logcat -v time > thor.log
      (no `exited due to signal` in the log). Note what the library shows after it (a banner for the games folder, or
      none). Nothing is lost: the memory card in the data folder has the game's last save. Put the card back and
      reopen the app: the games are listed again.
-   - [ ] Repeat with the data folder on the SD card. Make a `GooseStation/data` folder there, then **Folders** →
-     **Data folder** → **Change**, pick it, and choose **Copy this device's data into it**; the app restarts on it.
-     Then remove the card mid-game, a moment after a save: the game stops with the same message, the unreachable
-     banner shows "(the SD card was removed)", the working copy keeps the save, and it reaches the folder once the
-     card is back.
+   - [ ] Repeat with the data folder on the SD card. Make a `GooseStation/data` folder there, then **Settings** →
+     **Folders** → **Data folder** → **Change**, pick it, and choose **Copy this device's data into it**; the app
+     restarts on it. Then remove the card mid-game, a moment after a save: the game stops with the same message, the
+     unreachable banner shows "(the SD card was removed)", the working copy keeps the save, and it reaches the folder
+     once the card is back.
    - [ ] Kill the app during a large push. Make a 200 MB file (`adb shell "dd if=/dev/urandom
      of=/data/local/tmp/big.bin bs=1048576 count=200 && chmod 644 /data/local/tmp/big.bin"`), copy it in with
      `adb shell run-as io.github.ilyalissoboi.goosestation cp /data/local/tmp/big.bin files/data/screenshots/big.bin`,
@@ -728,9 +906,51 @@ adb logcat -v time > thor.log
      then reopen. The renderer is back to Automatic, and the pad maps.
    - [ ] Boot time from the library: the time from `System: Boot Filename: …` to `AndroidHost: Game started: …` in
      the log, for Ace Combat 3 read in place from the SD card, three boots. For a baseline, also boot it from a games
-     folder on internal storage (add one in **Folders**), or with Plan 1's build (#23, from `7e1d16150`, installed
-     over this one with `adb install -r -d`) and the CHD pushed into
+     folder on internal storage (add one in **Settings** → **Folders**), or with Plan 1's build (#23, from
+     `7e1d16150`, installed over this one with `adb install -r -d`) and the CHD pushed into
      `/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files/games`; its log has the same two lines. Plan 1
      didn't record a boot time on the Thor; on the emulator it was 0.7 to 1.4 s. This shows whether reading in place
      is slower.
    - [ ] `adb logcat -b crash -d` is empty.
+8. **Settings and controls.** With the build that has the settings pages, after step 7's setup.
+   - [x] Everything with the built-in controller alone, no touch: **Settings**, each page, every list (Renderer,
+     Internal resolution, Aspect ratio, each BIOS region, the Controller row with a second pad connected), the
+     Controllers page and a capture on it, then back to the library. The focused element always has a ring, B goes
+     back a step, and each page's entry in the hub (or **Settings** in the library) has the focus again after it.
+   - [ ] B also goes back from a page whose only focusable line does nothing: "Reading the settings…" while a page
+     loads, and "Connect a controller to remap it." with no controller connected (the framework turns `BUTTON_B`
+     into Back there).
+   - [ ] Remap a button on the built-in pad (Controllers → Cross, then another button), then swipe the app away and
+     start it again: the remap holds, in the page and in padtest. **Reset to defaults** restores the default.
+   - [ ] A Bluetooth pad, connected for the first time, gets its own mapping (`'<name>' is a new controller,
+     Android-<n>.` and `Added … bindings for Android-<n> to Port 1.`). Remapping it leaves the built-in pad's
+     mapping alone, in the page and in padtest.
+   - [ ] In Ace Combat 3, the pad's Back key, the Mode key, and holding Select+Start for a second each open the
+     prompt, and the game doesn't react to the press: no in-game pause menu after **Resume**. **Quit to library**
+     saves the memory card (`Saving memory card to …`), and the card reaches the data folder
+     (`/sdcard/GooseStation/data/memcards/`).
+   - [ ] Hold the D-pad as keys while opening the prompt, let go, then **Resume**: nothing stays pressed in padtest.
+     padtest can't tell keys from a hat, so check what the D-pad sends first, with `adb shell getevent -l` on the
+     pad's `/dev/input/event…` (`BTN_DPAD_*` keys or `ABS_HAT0X`/`ABS_HAT0Y`), or use a Bluetooth pad whose D-pad
+     sends keys. With a hat only, this item can't be done with that pad.
+   - [x] Graphics: OpenGL ES, then Vulkan, each with 4x and Show FPS, in Ace Combat 3: the OSD's `G:` and `V:` show,
+     the log has the renderer's `Trying to create a … GPU device...`, and the speed stays at 100% (turn on
+     `[Display] ShowSpeed` in `settings.ini` for the speed; Show FPS alone gives only `G:` and `V:`).
+   - [x] The Vulkan fallback. A real Vulkan failure can't be forced on the Thor, so this checks it with the test
+     switch only: `adb shell setprop debug.goosestation.fail_vulkan 1`, then Ace Combat 3 with Vulkan. The OSD says
+     "Vulkan didn't start on this device, so GooseStation is using OpenGL ES.", the game runs on OpenGL ES, and the
+     Graphics page's Renderer row says so. Set it back with `adb shell setprop debug.goosestation.fail_vulkan 0`
+     and restart the app.
+   - [x] BIOS: Fast boot off, start a game: the BIOS intro plays. On: it doesn't.
+   - [ ] If the Thor shows the app in portrait (a large screen's orientation override), the settings pages look
+     right, with nothing under the navigation bar.
+   - [x] `adb logcat -b crash -d` is empty.
+
+   Checked on 2026-10-29 and 2026-10-30 (see "Results on the AYN Thor"). Still open: B on the lines with no action
+   (not reachable on the Thor: the loading line lasts milliseconds, and the built-in pad is always connected), the
+   remap seen in padtest after a restart (the capture, padtest with a remap, and the reset were seen, but not the
+   restart in between), a Bluetooth pad (none available), the Mode key in a game (the Thor has no Mode button; it
+   was checked on the emulator with `uinput`, and is open on real hardware with a Guide or PS button), and the D-pad
+   as keys (the built-in one sends a hat). The Vulkan crash from 2026-10-29 (an OpenGL ES loading-screen texture
+   left cached by Android's `FullscreenUI::Shutdown()` stub, then used as a `VulkanTexture` on the next Vulkan
+   device) is fixed in `652a4f808`: 0 crashes in 3 on the Thor afterwards, where it was 3 in 3 before.

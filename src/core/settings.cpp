@@ -448,10 +448,6 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
 #ifdef __ANDROID__
   // No expansion due to license incompatibility.
   audio_stream_parameters.expansion_mode = AudioExpansionMode::Disabled;
-
-  // Android users are incredibly silly and don't understand that stretch is in the aspect ratio list...
-  if (si.GetBoolValue("Display", "Stretch", false))
-    display_aspect_ratio = DisplayAspectRatio::MatchWindow;
 #endif
 }
 
@@ -1381,15 +1377,9 @@ const char* Settings::GetDisplayCropModeDisplayName(DisplayCropMode crop_mode)
 }
 
 static constexpr const std::array s_display_aspect_ratio_names = {
-#ifndef __ANDROID__
   TRANSLATE_NOOP("DisplayAspectRatio", "Auto (Game Native)"),
   TRANSLATE_NOOP("DisplayAspectRatio", "Stretch To Fill"),
   TRANSLATE_NOOP("DisplayAspectRatio", "Custom"),
-#else
-  "Auto (Game Native)",
-  "Auto (Match Window)",
-  "Custom",
-#endif
   "4:3",
   "16:9",
   "19:9",

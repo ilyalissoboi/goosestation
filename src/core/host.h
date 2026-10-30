@@ -92,6 +92,11 @@ void RunOnCPUThread(std::function<void()> function, bool block = false);
 /// Attempts to create the rendering device backend.
 bool CreateGPUDevice(RenderAPI api, Error* error);
 
+#ifdef __ANDROID__
+/// The Vulkan device couldn't be created: returns whether to try OpenGL ES instead.
+bool OnVulkanDeviceFailed(const Error& error);
+#endif
+
 /// Handles fullscreen transitions and such.
 void UpdateDisplayWindow();
 

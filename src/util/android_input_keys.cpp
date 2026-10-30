@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <utility>
 
 namespace AndroidInputKeys {
 namespace {
@@ -90,6 +92,10 @@ constexpr std::array DPAD_DIRECTIONS = {
 // Hats report -1, 0 or 1; anything past half way counts as pressed.
 constexpr float HAT_THRESHOLD = 0.5f;
 
+// BindingCapture's: how far an input must go to be taken, and how near 0 an axis must be seen first.
+constexpr float CAPTURE_THRESHOLD = 0.5f;
+constexpr float CAPTURE_CENTER = 0.25f;
+
 const Trigger* FindTriggerForKey(s32 keycode)
 {
   const auto it =
@@ -144,6 +150,47 @@ std::optional<GenericInputBinding> GetBindingForAxis(s32 axis, bool positive)
   }
 
   return std::nullopt;
+}
+
+u32 IndexForDescriptor(std::vector<std::string>& descriptors, std::string_view descriptor, bool* added)
+{
+  const auto it = std::find(descriptors.begin(), descriptors.end(), descriptor);
+  *added = (it == descriptors.end());
+  if (!*added)
+    return static_cast<u32>(it - descriptors.begin());
+
+  descriptors.emplace_back(descriptor);
+  return static_cast<u32>(descriptors.size() - 1);
+}
+
+std::optional<std::string> GetDeviceBinding(std::span<const std::string> bindings, u32 index)
+{
+  // With the '/', so Android-1/ isn't taken for Android-10/'s start.
+  const std::string prefix = fmt::format("Android-{}/", index);
+  for (const std::string& binding : bindings)
+  {
+    if (binding.starts_with(prefix))
+      return binding.substr(prefix.size());
+  }
+
+  return std::nullopt;
+}
+
+std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings, u32 index, std::string_view binding)
+{
+  const std::string prefix = fmt::format("Android-{}/", index);
+  std::vector<std::string> result;
+  result.reserve(bindings.size() + 1);
+  for (const std::string& existing : bindings)
+  {
+    if (!existing.starts_with(prefix))
+      result.push_back(existing);
+  }
+
+  if (!binding.empty())
+    result.push_back(fmt::format("{}{}", prefix, binding));
+
+  return result;
 }
 
 GenericInputBindingMapping GetDefaultMapping(u32 device_index)
@@ -284,6 +331,95 @@ void PadState::ReleaseAll(std::vector<PadEvent>& events)
   m_keys.clear();
   m_axes.clear();
   m_reported.clear();
+}
+
+std::vector<u32> PadState::GetCenteredAxes() const
+{
+  // The core's value for an axis Android gave only at 0 is 0, as Report() passes no first value of 0 on.
+  std::vector<u32> axes;
+  for (const auto& [axis, value] : m_axes)
+  {
+    if (!IsHatAxis(axis) && !m_reported.contains({InputSubclass::ControllerAxis, static_cast<u32>(axis)}))
+      axes.push_back(static_cast<u32>(axis));
+  }
+
+  for (const auto& [input, reported] : m_reported)
+  {
+    if (input.first == InputSubclass::ControllerAxis && std::abs(reported.value) <= CAPTURE_CENTER)
+      axes.push_back(input.second);
+  }
+
+  std::sort(axes.begin(), axes.end());
+  return axes;
+}
+
+std::vector<u32> PadState::GetPushedAxes() const
+{
+  std::vector<u32> axes;
+  for (const auto& [input, reported] : m_reported)
+  {
+    if (input.first == InputSubclass::ControllerAxis && std::abs(reported.value) > CAPTURE_CENTER)
+      axes.push_back(input.second);
+  }
+
+  return axes;
+}
+
+std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads)
+{
+  std::vector<u32> centered;
+  std::vector<u32> pushed;
+  for (const PadState* pad : pads)
+  {
+    for (const u32 axis : pad->GetCenteredAxes())
+      centered.push_back(axis);
+    for (const u32 axis : pad->GetPushedAxes())
+      pushed.push_back(axis);
+  }
+
+  std::sort(centered.begin(), centered.end());
+  centered.erase(std::unique(centered.begin(), centered.end()), centered.end());
+  std::erase_if(centered,
+                [&pushed](u32 axis) { return std::find(pushed.begin(), pushed.end(), axis) != pushed.end(); });
+  return centered;
+}
+
+BindingCapture::BindingCapture(u32 device_index, std::vector<u32> centered_axes)
+  : m_device_index(device_index), m_centered_axes(std::move(centered_axes))
+{
+}
+
+std::optional<InputBindingKey> BindingCapture::OnEvent(InputBindingKey key, float value)
+{
+  if (key.source_type != PAD_SOURCE_TYPE || key.source_index != m_device_index)
+    return std::nullopt;
+
+  if (key.source_subtype == InputSubclass::ControllerButton)
+  {
+    if (value < CAPTURE_THRESHOLD)
+      return std::nullopt;
+
+    key.modifier = InputModifier::None;
+    return key;
+  }
+
+  if (key.source_subtype != InputSubclass::ControllerAxis)
+    return std::nullopt;
+
+  const bool centered =
+    (std::find(m_centered_axes.begin(), m_centered_axes.end(), key.data) != m_centered_axes.end());
+  if (std::abs(value) <= CAPTURE_CENTER)
+  {
+    if (!centered)
+      m_centered_axes.push_back(key.data);
+    return std::nullopt;
+  }
+
+  if (!centered || std::abs(value) < CAPTURE_THRESHOLD)
+    return std::nullopt;
+
+  key.modifier = (value < 0.0f) ? InputModifier::Negate : InputModifier::None;
+  return key;
 }
 
 } // namespace AndroidInputKeys

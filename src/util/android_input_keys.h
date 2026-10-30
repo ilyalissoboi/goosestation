@@ -9,6 +9,9 @@
 
 #include <map>
 #include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -48,6 +51,14 @@ inline constexpr s32 AXIS_RTRIGGER = 18;
 inline constexpr s32 AXIS_GAS = 22;
 inline constexpr s32 AXIS_BRAKE = 23;
 
+/// The source type of Android's controllers. Other platforms have no Android source, so they use a type no source has,
+/// which lets these helpers build and be tested there.
+#ifdef __ANDROID__
+inline constexpr InputSourceType PAD_SOURCE_TYPE = InputSourceType::Android;
+#else
+inline constexpr InputSourceType PAD_SOURCE_TYPE = InputSourceType::Count;
+#endif
+
 /// The pad input a key stands for, if any. Back and Mode open the menu, so they have none.
 std::optional<GenericInputBinding> GetBindingForKeyCode(s32 keycode);
 
@@ -57,6 +68,17 @@ std::optional<GenericInputBinding> GetBindingForAxis(s32 axis, bool positive);
 /// The binding strings (Android-<index>/Button96, Android-<index>/+Axis17, ...) for a pad, for
 /// InputManager::MapController. That binds the first string for each input; the others are there for the record.
 GenericInputBindingMapping GetDefaultMapping(u32 device_index);
+
+/// The device index (the n of Android-<n>) of a controller's descriptor: its position in descriptors. A descriptor not
+/// there yet is appended, and *added is set to whether it was.
+u32 IndexForDescriptor(std::vector<std::string>& descriptors, std::string_view descriptor, bool* added);
+
+/// The first of a [PadN] key's bindings that is device index's (Android-<index>/...), without that prefix.
+std::optional<std::string> GetDeviceBinding(std::span<const std::string> bindings, u32 index);
+
+/// A [PadN] key's bindings with every one of device index's dropped and the others kept in order, then
+/// Android-<index>/<binding> appended, unless binding is empty.
+std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings, u32 index, std::string_view binding);
 
 /// An input to report to the core: Button<number> or Axis<number> of the device, at a value.
 struct PadEvent
@@ -68,7 +90,8 @@ struct PadEvent
 };
 
 /// One device's input state. Turns Android's key and axis events into the events to report:
-/// - keys are buttons (pressed 1, released 0), and axes pass their values as they are;
+/// - keys are buttons (pressed 1, released 0), those with no pad input too (GenericInputBinding::Unknown), and axes
+///   pass their values as they are;
 /// - the hat presses the d-pad buttons (Button19-22) instead of moving an axis, and a d-pad direction that comes
 ///   both as a key and from the hat is pressed while either holds it;
 /// - each trigger's key and two axes (L2, LTRIGGER and BRAKE; R2, RTRIGGER and GAS) all report the largest of the
@@ -82,6 +105,14 @@ public:
 
   /// Reports every input that isn't at rest as released, and forgets the state.
   void ReleaseAll(std::vector<PadEvent>& events);
+
+  /// The axes known to be near rest (within BindingCapture's 0.25 of 0), in order: those whose last value reported to
+  /// the core was, and those Android has given only at 0, so none was reported. An axis Android has never given isn't
+  /// known, and the hat isn't an axis to the core. For seeding a BindingCapture.
+  std::vector<u32> GetCenteredAxes() const;
+
+  /// The axes whose last value reported to the core is past BindingCapture's 0.25 from 0, in order.
+  std::vector<u32> GetPushedAxes() const;
 
 private:
   struct Reported
@@ -100,6 +131,31 @@ private:
 
   // Last value reported for each input, by (subclass, number). Ordered, so releases come in a fixed order.
   std::map<std::pair<InputSubclass, u32>, Reported> m_reported;
+};
+
+/// The axes near rest on a device index several pads share: those one of them has near rest
+/// (PadState::GetCenteredAxes()) and none has pushed (a stick held on another), in order.
+std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads);
+
+/// Picks the input the user means to bind, from one device's events as the InputManager gets them (PadState's, so a
+/// trigger's three inputs and the hat's d-pad buttons are already merged):
+/// - a button when it's pressed (value >= 0.5); one held as the capture starts only sends its release, so it isn't
+///   taken;
+/// - an axis when it's pushed half way (|value| >= 0.5), only once it has been seen near 0 (within 0.25), during this
+///   capture or before it (centered_axes, from PadState::GetCenteredAxes()), so one resting away from 0 (a trigger on
+///   Z, a stick held as the capture starts) must come back first, and one already at rest is taken on its first push.
+/// Other devices' events, and other kinds of input, give nothing.
+class BindingCapture
+{
+public:
+  explicit BindingCapture(u32 device_index, std::vector<u32> centered_axes = {});
+
+  /// The key to bind: the event's, with modifier Negate for an axis pushed below 0. nullopt until there is one.
+  std::optional<InputBindingKey> OnEvent(InputBindingKey key, float value);
+
+private:
+  u32 m_device_index;
+  std::vector<u32> m_centered_axes;
 };
 
 } // namespace AndroidInputKeys

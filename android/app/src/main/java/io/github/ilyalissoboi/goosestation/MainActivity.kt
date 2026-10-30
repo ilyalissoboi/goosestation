@@ -14,13 +14,19 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
+import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
+import io.github.ilyalissoboi.goosestation.ui.BiosScreen
+import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
+import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 class MainActivity : ComponentActivity() {
@@ -28,6 +34,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var folderPicker: FolderPicker
 
     private val inGame get() = AppController.screen == Screen.Game
+
+    // The controllers' input goes to the core: in a game with its prompt closed, or while a capture takes the next
+    // input as a binding.
+    private val padInput get() = (inGame && !AppController.promptOpen) || AppController.capturingInput
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,7 +58,71 @@ class MainActivity : ComponentActivity() {
                             releaseFolder = AppController::releaseFolder,
                             onFinish = AppController::finishSetup,
                         )
-                    Screen.Game -> GameScreen(onBack = AppController::leaveGame)
+                    Screen.Game ->
+                        GameScreen(
+                            promptOpen = AppController.promptOpen,
+                            onOpenPrompt = AppController::openPrompt,
+                            onResume = AppController::resumeFromPrompt,
+                            onQuit = AppController::quitFromPrompt,
+                        )
+                    Screen.Settings ->
+                        SettingsScreen(
+                            focusEntry = AppController.settingsEntry,
+                            coreReady = AppController.settingsReady,
+                            onOpen = AppController::openSettingsPage,
+                            onBack = AppController::closeSettings,
+                        )
+                    Screen.Graphics -> {
+                        val graphics = AppController.graphics
+                        if (graphics == null) {
+                            SettingsLoadingPage("Graphics", onBack = AppController::closeSettingsPage)
+                        } else {
+                            GraphicsScreen(
+                                settings = graphics,
+                                aspectNames = AppController.aspectRatioNames,
+                                vulkanFailed = AppController.vulkanFailed,
+                                onChange = AppController::changeGraphics,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
+                    Screen.Bios -> {
+                        val bios = AppController.bios
+                        if (bios == null) {
+                            SettingsLoadingPage("BIOS", onBack = AppController::closeSettingsPage)
+                        } else {
+                            BiosScreen(
+                                images = bios.images,
+                                auto = bios.auto,
+                                overrides = bios.overrides,
+                                fastBoot = bios.fastBoot,
+                                onSetOverride = AppController::setBiosOverride,
+                                onFastBoot = AppController::setFastBoot,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
+                    Screen.Controllers -> {
+                        val state = AppController.controllersState
+                        val bindings = state.bindings
+                        if (bindings == null) {
+                            SettingsLoadingPage("Controllers", onBack = AppController::closeSettingsPage)
+                        } else {
+                            ControllersScreen(
+                                controllers = state.controllers,
+                                selected = state.selected,
+                                bindings = bindings,
+                                capturing = state.capturing,
+                                secondsLeft = state.secondsLeft,
+                                onSelect = AppController::selectController,
+                                onCapture = AppController::captureBinding,
+                                onCancelCapture = AppController::cancelCapture,
+                                onClear = AppController::clearBinding,
+                                onReset = AppController::resetBindings,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
                     Screen.Folders -> {
                         val mirrorState by AppController.mirrorState.collectAsState()
                         FoldersScreen(
@@ -79,11 +153,11 @@ class MainActivity : ComponentActivity() {
                             message = AppController.message,
                             isError = AppController.messageIsError,
                             onToggleView = AppController::toggleView,
-                            onOpenFolders = AppController::openFolders,
+                            onOpenSettings = AppController::openSettings,
                             onRefresh = AppController::refresh,
                             onStartGame = AppController::startGame,
                             focusPath = AppController.lastGamePath,
-                            focusFolders = AppController.focusFolders,
+                            focusSettings = AppController.focusSettings,
                         )
                     }
                 }
@@ -99,14 +173,16 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         AppController.resumed = true
-        if (inGame && AppController.gameRunning) NativeLibrary.setPaused(false)
+        // A game left paused under its prompt stays so.
+        val running = PausePolicy.running(AppController.resumed, AppController.promptOpen)
+        if (inGame && AppController.gameRunning && running) NativeLibrary.setPaused(false)
     }
 
     override fun onPause() {
         AppController.resumed = false
         if (inGame) {
             AppController.controllers?.releaseAll()
-            NativeLibrary.setPaused(true)
+            AppController.pauseGame()
         }
         super.onPause()
     }
@@ -129,16 +205,17 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    // On the game screen, controllers go to the core; elsewhere, they move Compose's focus.
+    // With padInput, controllers go to the core; otherwise they move Compose's focus. A key-up goes where its key-down
+    // went, either way, and a stick the core was given stays its until it's back near rest.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val controllers = AppController.controllers
-        if (inGame && controllers != null && controllers.onKeyEvent(event)) return true
+        if (controllers != null && controllers.onKeyEvent(event, padInput)) return true
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         val controllers = AppController.controllers
-        if (inGame && controllers != null && controllers.onMotionEvent(event)) return true
+        if (controllers != null && controllers.onMotionEvent(event, padInput)) return true
         return super.dispatchGenericMotionEvent(event)
     }
 }

@@ -60,6 +60,16 @@ class SettingsSetupTest {
         assertEquals("3", ini.value("Main", "SettingsVersion"))
     }
 
+    // Another install's controller indices mean nothing here: its bindings are reset, and so is the table.
+    @Test
+    fun foreignFileDropsDescriptors() {
+        initialize(DESKTOP_FILE + "\n[Android]\nInstallID = other-install\nControllerDescriptors = other-pad\n")
+
+        val ini = readSettings()
+        assertEquals(INSTALL_ID, ini.value("Android", "InstallID"))
+        assertFalse(ini.toString(), ini.allValues().contains("other-pad"))
+    }
+
     @Test
     fun ownFileIsKept() {
         initialize(DESKTOP_FILE + "\n[Android]\nInstallID = $INSTALL_ID\n")
@@ -133,13 +143,19 @@ class SettingsSetupTest {
         initialize(null)
         NativeLibrary.onDeviceConnected(1, "Test Pad", "test-pad")
         waitFor("Port 1 has the pad's bindings") { readSettings().values("Pad1", "Cross").any { it.startsWith("Android-0/") } }
-        settingsFile.writeText("[Main]\nSettingsVersion = 3\n\n[Pad1]\nType = AnalogController\nCross = SDL-0/A\n")
+        settingsFile.writeText(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nControllerDescriptors = other-pad\n\n" +
+                "[Pad1]\nType = AnalogController\nCross = SDL-0/A\n",
+        )
 
         NativeLibrary.reloadSettings()
 
-        val cross = readSettings().values("Pad1", "Cross")
+        val ini = readSettings()
+        val cross = ini.values("Pad1", "Cross")
         assertTrue(cross.toString(), cross.any { it.startsWith("Android-0/") })
         assertFalse(cross.toString(), cross.any { it.contains("SDL-0") })
+        // The pad keeps its index, and the table says so.
+        assertEquals(listOf("test-pad"), ini.values("Android", "ControllerDescriptors"))
     }
 
     @Test
@@ -318,36 +334,6 @@ class SettingsSetupTest {
     }
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())
-
-    /** As much of the INI format as the core writes: `[Section]` and `Key = Value` lines, a key once per list item. */
-    private class Ini(private val sections: Map<String, List<Pair<String, String>>>) {
-        fun values(section: String, key: String): List<String> =
-            sections[section].orEmpty().filter { it.first == key }.map { it.second }
-
-        fun value(section: String, key: String): String? = values(section, key).singleOrNull()
-
-        fun allValues(): List<String> = sections.values.flatten().map { it.second }
-
-        override fun toString() = sections.toString()
-
-        companion object {
-            fun parse(text: String): Ini {
-                val sections = mutableMapOf<String, MutableList<Pair<String, String>>>()
-                var current = sections.getOrPut("") { mutableListOf() }
-                for (raw in text.lines()) {
-                    val line = raw.trim()
-                    when {
-                        line.isEmpty() || line.startsWith(";") || line.startsWith("#") -> Unit
-                        line.startsWith("[") && line.endsWith("]") ->
-                            current = sections.getOrPut(line.substring(1, line.length - 1)) { mutableListOf() }
-                        "=" in line ->
-                            current += line.substringBefore("=").trim() to line.substringAfter("=").trim()
-                    }
-                }
-                return Ini(sections)
-            }
-        }
-    }
 
     private companion object {
         const val INSTALL_ID = "test-install"

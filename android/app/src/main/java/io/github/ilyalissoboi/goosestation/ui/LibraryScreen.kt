@@ -6,8 +6,8 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
@@ -40,12 +41,12 @@ import io.github.ilyalissoboi.goosestation.ui.components.Banner
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 
 /**
- * The games, as a cover grid ([gridView]) or a list, under a top bar of Grid/List ([onToggleView]), Folders
- * ([onOpenFolders]) and Refresh ([onRefresh]). [banners] and [message] sit under the bar: prompts to pick a folder
+ * The games, as a cover grid ([gridView]) or a list, under a top bar of Grid/List ([onToggleView]), Settings
+ * ([onOpenSettings]) and Refresh ([onRefresh]). [banners] and [message] sit under the bar: prompts to pick a folder
  * again, the latest error ([isError]), or what the app is doing.
  *
- * On opening, Folders has focus when [focusFolders] (coming back from the folder settings), or else the game at
- * [focusPath] (the last one launched), or else the first game; with no games, Folders has it. Toggling the view keeps
+ * On opening, Settings has focus when [focusSettings] (coming back from the settings), or else the game at
+ * [focusPath] (the last one launched), or else the first game; with no games, Settings has it. Toggling the view keeps
  * the focused game. A, Enter or a tap call [onStartGame].
  */
 @Composable
@@ -56,25 +57,25 @@ fun LibraryScreen(
     message: String?,
     isError: Boolean,
     onToggleView: () -> Unit,
-    onOpenFolders: () -> Unit,
+    onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
     onStartGame: (GameEntry) -> Unit,
     focusPath: String?,
-    focusFolders: Boolean = false,
+    focusSettings: Boolean = false,
 ) {
-    val folders = remember { FocusRequester() }
+    val settings = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     val focus = remember { GameFocus() }
     val hasGames = games.isNotEmpty()
     // Only on opening: a toggle, or games coming in, focus a game as usual.
-    var foldersFirst by remember { mutableStateOf(focusFolders) }
+    var settingsFirst by remember { mutableStateOf(focusSettings) }
 
     // Not on every new list, which a resume brings: only on opening, on a toggle, and once there are games.
     LaunchedEffect(gridView, hasGames) {
-        if (!hasGames || foldersFirst) {
-            foldersFirst = false
-            folders.requestFocus()
+        if (!hasGames || settingsFirst) {
+            settingsFirst = false
+            settings.requestFocus()
             return@LaunchedEffect
         }
         val index =
@@ -91,20 +92,27 @@ fun LibraryScreen(
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .then(focus.screenModifier)
                 .safeDrawingPadding()
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The buttons go under the name when they don't fit beside it, on a narrow screen or with large text.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 "GooseStation",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
             )
-            ActionButton(if (gridView) "List" else "Grid", onClick = onToggleView)
-            ActionButton("Folders", onClick = onOpenFolders, modifier = Modifier.focusRequester(folders))
-            ActionButton("Refresh", onClick = onRefresh)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(if (gridView) "List" else "Grid", onClick = onToggleView)
+                ActionButton("Settings", onClick = onOpenSettings, modifier = Modifier.focusRequester(settings))
+                ActionButton("Refresh", onClick = onRefresh)
+            }
         }
 
         banners.forEach { Banner(it) }
@@ -149,10 +157,17 @@ fun LibraryScreen(
     }
 }
 
-/** Which game has focus, by path, and which one is to take it once it's composed. */
+/**
+ * Which game has focus, by path, and which one is to take it once it's composed: [pending], until anything in the
+ * screen takes the focus, that game or anything else. A game scrolled away from before it was composed doesn't take
+ * the focus later, when it's scrolled back in.
+ */
 private class GameFocus {
     var focused: String? = null
     var pending by mutableStateOf<String?>(null)
+
+    /** For the whole screen, which sees the focus move anywhere in it. */
+    val screenModifier = Modifier.onFocusEvent { if (it.hasFocus) pending = null }
 
     /** For the item showing the game at [path]. */
     @Composable
@@ -160,8 +175,11 @@ private class GameFocus {
         val requester = remember { FocusRequester() }
         if (pending == path) {
             LaunchedEffect(Unit) {
-                requester.requestFocus()
-                pending = null
+                // Not if something else has taken the focus since the item was composed.
+                if (pending == path) {
+                    requester.requestFocus()
+                    pending = null
+                }
             }
         }
         return Modifier.focusRequester(requester).onFocusChanged { if (it.isFocused) focused = path }

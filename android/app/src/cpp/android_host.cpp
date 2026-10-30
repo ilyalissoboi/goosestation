@@ -20,6 +20,7 @@
 #include "util/android_input_source.h"
 #include "util/gpu_device.h"
 #include "util/imgui_fullscreen.h"
+#include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
 #include "util/window_info.h"
@@ -34,6 +35,7 @@
 #include "fmt/format.h"
 
 #include <android/native_window.h>
+#include <sys/system_properties.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -71,8 +73,8 @@ struct InputEvent
 struct ConnectedDevice
 {
   s32 device_id;
+  u32 index;
   std::string name;
-  std::string descriptor;
 };
 } // namespace
 
@@ -81,12 +83,24 @@ static void SetDefaultSettings(SettingsInterface& si);
 static void LoadFolders(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
-static void AddControllerToPort1(const std::string& identifier);
+static std::optional<u32> ParseDeviceIndex(std::string_view identifier);
+static std::optional<u32> FindDescriptorIndex(std::string_view descriptor);
+static void WriteDescriptors(SettingsInterface& si);
+static const Controller::ControllerInfo* GetPort1ControllerInfo(SettingsInterface& si);
+static u32 AddDefaultBindings(SettingsInterface& si, u32 index);
+static bool HasDeviceBinding(SettingsInterface& si, u32 index);
+static bool AddControllerToPort1(const std::string& identifier);
+static void MapNewController(const std::string& identifier);
+static bool IsVulkanRenderer(GPURenderer renderer);
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
 
 static constexpr std::string_view DEVICE_PREFIX = "Android-";
+
+// Where each controller's device index (Android-<index>) is kept, by its descriptor.
+static constexpr const char* DESCRIPTORS_SECTION = "Android";
+static constexpr const char* DESCRIPTORS_KEY = "ControllerDescriptors";
 
 static std::mutex s_initialize_mutex;
 static std::atomic_bool s_initialized{false};
@@ -107,9 +121,15 @@ static std::vector<InputEvent> s_input_queue;
 static std::vector<s32> s_queued_device_ids; // connected as far as the queue goes, for QueueKeyEvent()'s result
 static bool s_accept_input_events = false;   // key and axis events are dropped until the CPU thread runs
 
+// Each controller's descriptor, at its device index: [Android] ControllerDescriptors. It's only ever appended to, so a
+// controller's index never changes in this process, and its bindings stay its own. InitializeConfig() seeds it before
+// the CPU thread starts; only the CPU thread touches it after that.
+static std::vector<std::string> s_descriptors;
+
 // CPU thread only.
 static std::vector<InputEvent> s_input_events;
 static std::vector<ConnectedDevice> s_connected_devices;
+static std::vector<u32> s_unmapped_indices; // new descriptors' indices, whose defaults aren't on Port 1 yet
 static AndroidInputSource* s_input_source = nullptr;
 static ANativeWindow* s_window = nullptr;
 static u32 s_window_width = 0;
@@ -119,6 +139,10 @@ static std::optional<std::string> s_pending_boot_path;
 static std::string s_boot_path;
 static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
+static u32 s_binding_capture_id = 0; // changes when a capture starts or is cancelled, so a stale report is dropped
+
+// Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
+static std::atomic_bool s_vulkan_failed{false};
 } // namespace AndroidHost
 
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
@@ -216,6 +240,9 @@ bool AndroidHost::InitializeConfig(Error* error)
   // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
   changed = AdaptForeignSettings(si, s_install_id) || changed;
 
+  // The controllers this install has seen, at the indices their bindings use. An adapted file has none.
+  s_descriptors = si.GetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY);
+
   // Saving the defaults also makes sure the config can be saved at all.
   if (changed && !si.Save(error))
   {
@@ -245,6 +272,9 @@ void AndroidHost::SetDefaultSettings(SettingsInterface& si)
   InputManager::SetDefaultSourceConfig(si);
   Settings::SetDefaultControllerConfig(si);
   Settings::SetDefaultHotkeyConfig(si);
+
+  // The bindings are reset, so the controller indices they were for go too: every controller is new again.
+  si.DeleteValue(DESCRIPTORS_SECTION, DESCRIPTORS_KEY);
 }
 
 void AndroidHost::LoadFolders(SettingsInterface& si)
@@ -268,6 +298,14 @@ void AndroidHost::SetGameFolders(std::vector<std::string> tree_uris)
   Error error;
   if (!si.Save(&error))
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+std::optional<std::string> AndroidHost::GetBIOSDirectory()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  return s_bios_dir;
 }
 
 void AndroidHost::RefreshGameList(bool invalidate_cache)
@@ -299,14 +337,34 @@ void AndroidHost::ReloadSettings()
 
         INFO_LOG("Reloaded the settings from {}.", si.GetFileName());
         adapted = AdaptForeignSettings(si, s_install_id);
-        if (adapted && !si.Save(&error))
+
+        // The indices in use stay as they are, whatever the file has: an adapted one has none.
+        bool changed = adapted;
+        if (si.GetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY) != s_descriptors)
+        {
+          WriteDescriptors(si);
+          changed = true;
+        }
+
+        if (changed && !si.Save(&error))
           ERROR_LOG("Failed to save settings: {}", error.GetDescription());
       }
 
-      // The bindings were reset: map the pads connected now, which won't connect again.
-      if (adapted)
+      // A pad connected now that the file leaves with no binding (all of them, after an adapt) won't connect again:
+      // map it here.
+      for (const auto& device : InputManager::EnumerateDevices())
       {
-        for (const auto& device : InputManager::EnumerateDevices())
+        const std::optional<u32> index = ParseDeviceIndex(device.first);
+        if (!index.has_value())
+          continue;
+
+        bool bound;
+        {
+          const auto lock = Host::GetSettingsLock();
+          bound = HasDeviceBinding(*s_base_settings_interface, index.value());
+        }
+
+        if (!bound)
           AddControllerToPort1(device.first);
       }
 
@@ -338,6 +396,75 @@ void AndroidHost::SetBoolSetting(const char* section, const char* key, bool valu
   Error error;
   if (!s_base_settings_interface->Save(&error))
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+std::string AndroidHost::GetStringSetting(const char* section, const char* key, const char* default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetStringValue(section, key, default_value);
+}
+
+void AndroidHost::SetStringSetting(const char* section, const char* key, const char* value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  if (value)
+    s_base_settings_interface->SetStringValue(section, key, value);
+  else
+    s_base_settings_interface->DeleteValue(section, key);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+s32 AndroidHost::GetIntSetting(const char* section, const char* key, s32 default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetIntValue(section, key, default_value);
+}
+
+void AndroidHost::SetIntSetting(const char* section, const char* key, s32 value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  s_base_settings_interface->SetIntValue(section, key, value);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+void AndroidHost::ApplySettings()
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread([]() { System::ApplySettings(false); }, true);
+}
+
+bool AndroidHost::IsVulkanFailed()
+{
+  return s_vulkan_failed.load();
+}
+
+bool AndroidHost::IsVulkanRenderer(GPURenderer renderer)
+{
+  // As System::CreateGPU() picks the device's API: Software (and Automatic) runs on the preferred API.
+  if (renderer == GPURenderer::Automatic)
+    renderer = Settings::GetAutomaticRenderer();
+
+  return (Settings::GetRenderAPIForRenderer(renderer) == RenderAPI::Vulkan);
 }
 
 std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
@@ -623,8 +750,9 @@ bool AndroidHost::QueueKeyEvent(s32 device_id, s32 keycode, bool pressed)
     }
   }
 
-  // Back and Mode have no pad input, so the app keeps them.
-  if (!AndroidInputKeys::GetBindingForKeyCode(keycode).has_value())
+  // Back and Mode open the menu, so the app keeps them. Every other key can be bound, even with no pad input of its own
+  // (BUTTON_C, BUTTON_Z, BUTTON_1 to 16).
+  if (keycode == AndroidInputKeys::KEYCODE_BACK || keycode == AndroidInputKeys::KEYCODE_BUTTON_MODE)
     return false;
 
   QueueInputEvent(InputEvent{InputEvent::Type::Key, device_id, keycode, pressed ? 1.0f : 0.0f, {}, {}});
@@ -705,7 +833,7 @@ void AndroidHost::ProcessInputQueue()
     if (source)
     {
       for (const ConnectedDevice& device : s_connected_devices)
-        source->QueueDeviceConnected(device.device_id, device.name, device.descriptor);
+        source->QueueDeviceConnected(device.device_id, device.index, device.name);
     }
   }
 
@@ -742,9 +870,27 @@ void AndroidHost::ProcessInputQueue()
         if (device != s_connected_devices.end())
           break;
 
-        s_connected_devices.push_back(ConnectedDevice{event.device_id, event.name, event.descriptor});
+        bool added;
+        const u32 index = AndroidInputKeys::IndexForDescriptor(s_descriptors, event.descriptor, &added);
+        if (added)
+        {
+          INFO_LOG("'{}' is a new controller, {}{}.", event.name, DEVICE_PREFIX, index);
+          {
+            const auto lock = Host::GetSettingsLock();
+            WriteDescriptors(*s_base_settings_interface);
+            Error error;
+            if (!s_base_settings_interface->Save(&error))
+              ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+          }
+
+          // A new controller gets the defaults once the source has it (Host::OnInputDeviceConnected()). One seen before
+          // keeps the bindings it has, unless it has none (MapNewController()).
+          s_unmapped_indices.push_back(index);
+        }
+
+        s_connected_devices.push_back(ConnectedDevice{event.device_id, index, event.name});
         if (source)
-          source->QueueDeviceConnected(event.device_id, std::move(event.name), std::move(event.descriptor));
+          source->QueueDeviceConnected(event.device_id, index, std::move(event.name));
       }
       break;
 
@@ -772,53 +918,94 @@ void AndroidHost::ProcessInputQueue()
   s_input_events.clear();
 }
 
-void AndroidHost::AddControllerToPort1(const std::string& identifier)
+std::optional<u32> AndroidHost::ParseDeviceIndex(std::string_view identifier)
 {
   if (!identifier.starts_with(DEVICE_PREFIX))
-    return;
+    return std::nullopt;
 
-  const std::optional<u32> index = StringUtil::FromChars<u32>(std::string_view(identifier).substr(DEVICE_PREFIX.size()));
+  return StringUtil::FromChars<u32>(identifier.substr(DEVICE_PREFIX.size()));
+}
+
+std::optional<u32> AndroidHost::FindDescriptorIndex(std::string_view descriptor)
+{
+  const auto it = std::find(s_descriptors.begin(), s_descriptors.end(), descriptor);
+  if (it == s_descriptors.end())
+    return std::nullopt;
+
+  return static_cast<u32>(it - s_descriptors.begin());
+}
+
+void AndroidHost::WriteDescriptors(SettingsInterface& si)
+{
+  si.SetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY, s_descriptors);
+}
+
+const Controller::ControllerInfo* AndroidHost::GetPort1ControllerInfo(SettingsInterface& si)
+{
+  const std::string section = Controller::GetSettingsSection(0);
+  const std::string type = si.GetStringValue(section.c_str(), "Type", Controller::GetDefaultPadType(0));
+  const Controller::ControllerInfo* info = Controller::GetControllerInfo(type);
+  if (!info)
+    WARNING_LOG("Port 1 has an unknown controller type '{}'.", type);
+
+  return info;
+}
+
+u32 AndroidHost::AddDefaultBindings(SettingsInterface& si, u32 index)
+{
+  const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+  if (!info)
+    return 0;
+
+  // As InputManager::MapController(): the first binding string for each of the pad's inputs, added to the ones there.
+  const std::string section = Controller::GetSettingsSection(0);
+  const GenericInputBindingMapping mapping = AndroidInputKeys::GetDefaultMapping(index);
+  u32 added = 0;
+  for (const Controller::ControllerBindingInfo& bi : info->bindings)
+  {
+    if (bi.generic_mapping == GenericInputBinding::Unknown)
+      continue;
+
+    const auto it = std::find_if(mapping.begin(), mapping.end(),
+                                 [&bi](const auto& entry) { return entry.first == bi.generic_mapping; });
+    if (it != mapping.end() && si.AddToStringList(section.c_str(), bi.name, it->second.c_str()))
+      added++;
+  }
+
+  return added;
+}
+
+bool AndroidHost::HasDeviceBinding(SettingsInterface& si, u32 index)
+{
+  std::vector<std::string> bindings;
+  for (auto& [key, value] : si.GetKeyValueList(Controller::GetSettingsSection(0).c_str()))
+    bindings.push_back(std::move(value));
+
+  return AndroidInputKeys::GetDeviceBinding(bindings, index).has_value();
+}
+
+bool AndroidHost::AddControllerToPort1(const std::string& identifier)
+{
+  const std::optional<u32> index = ParseDeviceIndex(identifier);
   if (!index.has_value())
-    return;
+    return false;
 
   // Mapped later than it connected: skip it if it's gone again.
   const auto devices = InputManager::EnumerateDevices();
   if (std::none_of(devices.begin(), devices.end(),
                    [&identifier](const auto& device) { return device.first == identifier; }))
   {
-    return;
+    return false;
   }
 
   // Every controller drives Port 1: its default bindings are added to the ones there, so a pad connected later (a
-  // Bluetooth pad next to a handheld's own) works too. One that connects again adds nothing, as its bindings are there.
-  u32 added = 0;
+  // Bluetooth pad next to a handheld's own) works too.
   {
     const auto lock = Host::GetSettingsLock();
     SettingsInterface& si = *s_base_settings_interface;
-    const std::string section = Controller::GetSettingsSection(0);
-    const std::string type = si.GetStringValue(section.c_str(), "Type", Controller::GetDefaultPadType(0));
-    const Controller::ControllerInfo* info = Controller::GetControllerInfo(type);
-    if (!info)
-    {
-      WARNING_LOG("Port 1 has an unknown controller type '{}', not mapping {} to it.", type, identifier);
-      return;
-    }
-
-    // As InputManager::MapController(): the first binding string for each of the pad's inputs.
-    const GenericInputBindingMapping mapping = AndroidInputKeys::GetDefaultMapping(index.value());
-    for (const Controller::ControllerBindingInfo& bi : info->bindings)
-    {
-      if (bi.generic_mapping == GenericInputBinding::Unknown)
-        continue;
-
-      const auto it = std::find_if(mapping.begin(), mapping.end(),
-                                   [&bi](const auto& entry) { return entry.first == bi.generic_mapping; });
-      if (it != mapping.end() && si.AddToStringList(section.c_str(), bi.name, it->second.c_str()))
-        added++;
-    }
-
+    const u32 added = AddDefaultBindings(si, index.value());
     if (added == 0)
-      return;
+      return true;
 
     INFO_LOG("Added {} bindings for {} to Port 1.", added, identifier);
     Error error;
@@ -827,6 +1014,224 @@ void AndroidHost::AddControllerToPort1(const std::string& identifier)
   }
 
   System::ReloadInputBindings();
+  return true;
+}
+
+void AndroidHost::MapNewController(const std::string& identifier)
+{
+  const std::optional<u32> index = ParseDeviceIndex(identifier);
+  if (!index.has_value())
+    return;
+
+  // A new controller, or one seen before with no binding of its own on Port 1, which would be dead. One with even a
+  // single binding keeps what it has, so a remap survives.
+  if (std::find(s_unmapped_indices.begin(), s_unmapped_indices.end(), index.value()) == s_unmapped_indices.end())
+  {
+    const auto lock = Host::GetSettingsLock();
+    if (HasDeviceBinding(*s_base_settings_interface, index.value()))
+      return;
+  }
+
+  // One that's gone again stays unmapped, and gets its defaults when it's back.
+  if (AddControllerToPort1(identifier))
+    std::erase(s_unmapped_indices, index.value());
+}
+
+std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<std::vector<PadBinding>> result;
+  EmuThread::RunOnThread(
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface& si = *s_base_settings_interface;
+      result.emplace();
+      const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+      if (!info)
+        return;
+
+      const std::string section = Controller::GetSettingsSection(0);
+      for (const Controller::ControllerBindingInfo& bi : info->bindings)
+      {
+        PadBindingKind kind;
+        switch (bi.type)
+        {
+          case InputBindingInfo::Type::Button:
+            kind = PadBindingKind::Button;
+            break;
+          case InputBindingInfo::Type::Axis:
+            kind = PadBindingKind::Axis;
+            break;
+          case InputBindingInfo::Type::HalfAxis:
+            kind = PadBindingKind::HalfAxis;
+            break;
+          default:
+            continue;
+        }
+
+        result->push_back(PadBinding{bi.name, bi.display_name, kind,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), bi.name),
+                                                                        index.value())});
+      }
+    },
+    true);
+  return result;
+}
+
+void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::string binding)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor, &name, &binding]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+        if (!info || std::none_of(info->bindings.begin(), info->bindings.end(),
+                                  [&name](const Controller::ControllerBindingInfo& bi) { return name == bi.name; }))
+        {
+          WARNING_LOG("Port 1 has no input '{}', not binding it.", name);
+          return;
+        }
+
+        const std::string section = Controller::GetSettingsSection(0);
+        si.SetStringList(section.c_str(), name.c_str(),
+                         AndroidInputKeys::SetDeviceBinding(si.GetStringList(section.c_str(), name.c_str()),
+                                                            index.value(), binding));
+
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      System::ReloadInputBindings();
+    },
+    true);
+}
+
+void AndroidHost::ResetPadBindings(std::string descriptor)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        const std::string section = Controller::GetSettingsSection(0);
+
+        // From every key, not only the controller type's: another type's, or a macro's, would come back with them.
+        std::vector<std::string> keys;
+        for (const auto& [key, value] : si.GetKeyValueList(section.c_str()))
+        {
+          if (std::find(keys.begin(), keys.end(), key) == keys.end())
+            keys.push_back(key);
+        }
+
+        for (const std::string& key : keys)
+        {
+          const std::vector<std::string> bindings = si.GetStringList(section.c_str(), key.c_str());
+          const std::vector<std::string> kept = AndroidInputKeys::SetDeviceBinding(bindings, index.value(), {});
+          if (kept.size() != bindings.size())
+            si.SetStringList(section.c_str(), key.c_str(), kept);
+        }
+
+        AddDefaultBindings(si, index.value());
+
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      System::ReloadInputBindings();
+    },
+    true);
+}
+
+void AndroidHost::StartBindingCapture(std::string descriptor)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      // SetHook() expects no hook, so the capture running is removed first.
+      InputManager::RemoveHook();
+      const u32 id = ++s_binding_capture_id;
+
+      // Seeded with the axes the pad already has at rest, so a quick flick of a centred stick is taken on its first
+      // event. The input sent before this call (the app sends the pad's current axes just before it) is passed on
+      // first: this thread runs its queued work before it polls the input. So this must never run inline during
+      // event dispatch (from a hook or an input handler): the nested PollEvents() would swap the source's event list
+      // while it's being gone through.
+      AndroidInputSource* const source =
+        static_cast<AndroidInputSource*>(InputManager::GetInputSourceInterface(InputSourceType::Android));
+      ProcessInputQueue();
+      if (source)
+        source->PollEvents();
+      AndroidInputKeys::BindingCapture capture(index.value(),
+                                               source ? source->GetCenteredAxes(index.value()) : std::vector<u32>());
+      InputManager::SetHook([capture, id](InputBindingKey key, float value) mutable {
+        const std::optional<InputBindingKey> captured = capture.OnEvent(key, value);
+        if (!captured.has_value())
+          return InputInterceptHook::CallbackResult::StopProcessingEvent;
+
+        // HalfAxis for an axis, so the binding has its direction (+Axis23, -Axis0).
+        std::string binding = InputManager::ConvertInputBindingKeyToString(
+          (captured->source_subtype == InputSubclass::ControllerAxis) ? InputBindingInfo::Type::HalfAxis :
+                                                                        InputBindingInfo::Type::Button,
+          captured.value());
+        const std::string::size_type slash = binding.find('/');
+        if (slash != std::string::npos)
+          binding.erase(0, slash + 1);
+
+        // Reported once the event is dispatched: the InputManager holds its hook lock while this runs, so an app
+        // callback that started or cancelled a capture straight away, on this thread, would deadlock. A capture
+        // cancelled or replaced before then isn't reported.
+        EmuThread::RunOnThread(
+          [binding = std::move(binding), id]() {
+            if (id == s_binding_capture_id)
+              NotifyBindingCaptured(binding);
+          },
+          false);
+        return InputInterceptHook::CallbackResult::RemoveHookAndStopProcessingEvent;
+      });
+    },
+    true);
+}
+
+void AndroidHost::CancelBindingCapture()
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    []() {
+      s_binding_capture_id++;
+      InputManager::RemoveHook();
+    },
+    true);
 }
 
 void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& lock)
@@ -848,6 +1253,25 @@ void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& loc
 
     g_settings.cpu_fastmem_mode = CPUFastmemMode::Disabled;
   }
+
+  // Once Vulkan has failed, every renderer on it uses OpenGL ES instead, so later boots don't try it again. The
+  // software renderer is left as it is.
+  if (AndroidHost::s_vulkan_failed.load() && g_settings.gpu_renderer != GPURenderer::Software &&
+      AndroidHost::IsVulkanRenderer(g_settings.gpu_renderer))
+  {
+    g_settings.gpu_renderer = GPURenderer::HardwareOpenGL;
+  }
+}
+
+bool Host::OnVulkanDeviceFailed(const Error& error)
+{
+  WARNING_LOG("Vulkan didn't start ({}), using OpenGL ES until the app restarts.", error.GetDescription());
+  AndroidHost::s_vulkan_failed.store(true);
+  if (g_settings.gpu_renderer != GPURenderer::Software)
+    g_settings.gpu_renderer = GPURenderer::HardwareOpenGL;
+  Host::AddOSDMessage("Vulkan didn't start on this device, so GooseStation is using OpenGL ES.",
+                      Host::OSD_WARNING_DURATION);
+  return true;
 }
 
 void Host::CheckForSettingsChanges(const Settings& old_settings)
@@ -1026,6 +1450,22 @@ void Host::FrameDone()
 
 std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)
 {
+  // Test only, for the OpenGL ES fallback: with debug.goosestation.fail_vulkan = 1 (adb shell setprop), creating a
+  // Vulkan device fails until the fallback has happened. Set the property before starting a game: any Vulkan device
+  // created after that fails, such as a switch to Vulkan during a game. Surface changes keep the device, so they don't
+  // come here with recreate_window. The API is worked out from the settings, as System::CreateGPU() does, because
+  // asking the device isn't safe yet: OpenGLDevice::GetRenderAPI() reads a context it hasn't created.
+  if (recreate_window && !AndroidHost::s_vulkan_failed.load())
+  {
+    char value[PROP_VALUE_MAX] = {};
+    if (__system_property_get("debug.goosestation.fail_vulkan", value) > 0 && std::strcmp(value, "1") == 0 &&
+        AndroidHost::IsVulkanRenderer(g_settings.gpu_renderer))
+    {
+      ERROR_LOG("Failing the Vulkan device for testing (debug.goosestation.fail_vulkan).");
+      return std::nullopt;
+    }
+  }
+
   WindowInfo wi;
   if (!AndroidHost::s_window)
   {
@@ -1109,9 +1549,9 @@ void Host::AddFixedInputBindings(SettingsInterface& si)
 
 void Host::OnInputDeviceConnected(std::string_view identifier, std::string_view device_name)
 {
-  // The source reports this from inside its poll: map after it, not while the bindings are in use.
+  // The source reports this from inside its poll: map a new controller after it, not while the bindings are in use.
   Host::RunOnCPUThread(
-    [identifier = std::string(identifier)]() { AndroidHost::AddControllerToPort1(identifier); });
+    [identifier = std::string(identifier)]() { AndroidHost::MapNewController(identifier); });
 }
 
 void Host::OnInputDeviceDisconnected(InputBindingKey key, std::string_view identifier)

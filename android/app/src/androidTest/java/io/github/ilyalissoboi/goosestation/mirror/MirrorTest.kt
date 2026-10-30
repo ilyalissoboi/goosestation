@@ -326,6 +326,34 @@ class MirrorTest {
         assertEquals(setOf("mycards/a.mcd"), manifestPaths())
     }
 
+    @Test
+    fun straysKeptWhileRemovalIsOff() {
+        // A card a game's settings name, synced, which the layout lacks until those settings are in the working copy.
+        createTree(mapOf("cards/ac3.mcd" to CARD))
+        strayFromAnEarlierBuild("cards/ac3.mcd")
+        var removing = false
+        val mirror =
+            Mirror(
+                SafFolderStore(context.contentResolver, tree),
+                workingCopy,
+                manifestFile,
+                System::currentTimeMillis,
+                removeStrays = { removing },
+            ) { LAYOUT }
+
+        runBlocking { mirror.pull(never) }
+
+        assertArrayEquals(CARD, local("cards/ac3.mcd").readBytes())
+        assertEquals(setOf("cards/ac3.mcd"), manifestPaths())
+
+        // Asked at each run.
+        removing = true
+        runBlocking { mirror.pull(never) }
+
+        assertFalse(local("cards/ac3.mcd").exists())
+        assertArrayEquals(CARD, File(folder, "cards/ac3.mcd").readBytes())
+    }
+
     /** A replace that stopped after moving the old file aside: only the `.goosebak` holds it. */
     private fun interruptReplace(path: String) {
         val file = File(folder, path)
@@ -471,6 +499,23 @@ class MirrorTest {
         assertArrayEquals(CARD2, local("memcards/b.mcd").readBytes())
         assertEquals(setOf("memcards/b.mcd"), result.changed)
         assertEquals(MirrorState.Idle, mirror.state.value)
+    }
+
+    @Test
+    fun pullReportsWhetherItsPlanWasComplete() {
+        createTree(mapOf("memcards/a.mcd" to CARD, "memcards/b.mcd" to CARD2))
+        val mirror = mirror()
+
+        // One file fails: the folder is reachable, but the card isn't in the working copy.
+        TestDocumentsProvider.refused = setOf("a.mcd")
+        assertFalse(runBlocking { mirror.pull(never) }.complete)
+        TestDocumentsProvider.refused = emptySet()
+        assertTrue(runBlocking { mirror.pull(never) }.complete)
+        assertArrayEquals(CARD, local("memcards/a.mcd").readBytes())
+
+        // The folder is gone.
+        TestTrees.setProviderEnabled(context, false)
+        assertFalse(runBlocking { mirror.pull(never) }.complete)
     }
 
     @Test

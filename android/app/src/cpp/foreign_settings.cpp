@@ -99,6 +99,9 @@ bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view i
   Settings::SetDefaultControllerConfig(si);
   Settings::SetDefaultHotkeyConfig(si);
 
+  // Its controller indices are another install's: here every controller is new.
+  si.DeleteValue("Android", "ControllerDescriptors");
+
   for (const FolderKey& folder : FOLDER_KEYS)
   {
     const std::string value = si.GetStringValue(folder.section, folder.key);

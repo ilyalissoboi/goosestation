@@ -48,6 +48,26 @@ object StartupPlan {
             else -> emptyList()
         }
 
+    /**
+     * Carries out [steps] in order with [perform], which returns whether the step grew the data layout (reading the
+     * core's paths can). [onGrowth] runs as soon as one has, before the next step: a library scan can take a while,
+     * and nothing may use the grown layout meanwhile as if it were complete. Returns whether any step grew it.
+     */
+    inline fun carryOut(
+        steps: List<StartupStep>,
+        onGrowth: () -> Unit,
+        perform: (StartupStep) -> Boolean,
+    ): Boolean {
+        var grew = false
+        for (step in steps) {
+            if (perform(step)) {
+                grew = true
+                onGrowth()
+            }
+        }
+        return grew
+    }
+
     private const val SETTINGS = "settings.ini"
     private const val INI = ".ini"
 }

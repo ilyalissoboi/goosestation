@@ -2317,7 +2317,11 @@ void System::IncrementInternalFrameNumber()
 
 bool System::CreateGPU(GPURenderer renderer, bool is_switching, Error* error)
 {
+#ifdef __ANDROID__
+  RenderAPI api = Settings::GetRenderAPIForRenderer(renderer);
+#else
   const RenderAPI api = Settings::GetRenderAPIForRenderer(renderer);
+#endif
 
   if (!g_gpu_device ||
       (renderer != GPURenderer::Software && !GPUDevice::IsSameRenderAPI(g_gpu_device->GetRenderAPI(), api)))
@@ -2330,7 +2334,24 @@ bool System::CreateGPU(GPURenderer renderer, bool is_switching, Error* error)
     }
 
     Host::ReleaseGPUDevice();
-    if (!Host::CreateGPUDevice(api, error))
+#ifdef __ANDROID__
+    // A Vulkan device that won't start falls back to OpenGL ES, if the host agrees. The software renderer stays
+    // software, on an OpenGL ES device.
+    Error local_error;
+    Error* const create_error = error ? error : &local_error;
+    bool created = Host::CreateGPUDevice(api, create_error);
+    if (!created && api == RenderAPI::Vulkan && Host::OnVulkanDeviceFailed(*create_error))
+    {
+      if (renderer != GPURenderer::Software)
+        renderer = GPURenderer::HardwareOpenGL;
+      api = RenderAPI::OpenGL;
+      create_error->Clear();
+      created = Host::CreateGPUDevice(api, create_error);
+    }
+#else
+    const bool created = Host::CreateGPUDevice(api, error);
+#endif
+    if (!created)
     {
       Host::ReleaseRenderWindow();
       return false;

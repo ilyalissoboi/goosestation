@@ -7,6 +7,7 @@ import android.app.Activity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,11 +21,17 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 
 /**
  * The running game: a full-screen surface the core draws to, with the system bars hidden and the screen kept on. Show it
- * only once [NativeLibrary.initialize] has succeeded, since the core ignores a surface before then.
+ * only once [NativeLibrary.initialize] has succeeded, since the core ignores a surface before then. Back opens the
+ * game's prompt ([onOpenPrompt]), drawn over the surface while [promptOpen], which then takes Back itself.
  */
 @Composable
-fun GameScreen(onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+fun GameScreen(
+    promptOpen: Boolean,
+    onOpenPrompt: () -> Unit,
+    onResume: () -> Unit,
+    onQuit: () -> Unit,
+) {
+    BackHandler(enabled = !promptOpen, onBack = onOpenPrompt)
 
     val view = LocalView.current
     DisposableEffect(view) {
@@ -35,15 +42,18 @@ fun GameScreen(onBack: () -> Unit) {
         onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { context ->
-            SurfaceView(context).apply {
-                keepScreenOn = true
-                holder.addCallback(SurfaceCallback(context.resources.displayMetrics.density))
-            }
-        },
-    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                SurfaceView(context).apply {
+                    keepScreenOn = true
+                    holder.addCallback(SurfaceCallback(context.resources.displayMetrics.density))
+                }
+            },
+        )
+        if (promptOpen) GamePrompt(onResume = onResume, onQuit = onQuit)
+    }
 }
 
 // Each call waits until the core has finished with the previous surface, so a destroyed one is never drawn to.

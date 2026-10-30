@@ -20,6 +20,7 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -39,8 +40,14 @@ jclass s_callbacks_class = nullptr;
 jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
+jmethodID s_on_binding_captured = nullptr;
 jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
+jclass s_bios_image_class = nullptr;
+jmethodID s_bios_image_constructor = nullptr;
+jclass s_pad_binding_class = nullptr;
+jmethodID s_pad_binding_constructor = nullptr;
+jobject s_pad_binding_kinds[3] = {}; // PadBindingKind's Button, Axis and HalfAxis (global references)
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -156,6 +163,11 @@ void AndroidHost::NotifyError(std::string_view message)
   CallCallback(s_on_error, message);
 }
 
+void AndroidHost::NotifyBindingCaptured(std::string_view binding)
+{
+  CallCallback(s_on_binding_captured, binding);
+}
+
 extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
@@ -186,7 +198,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_game_started = env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;)V");
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error)
+  s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured)
   {
     ClearException(env);
     return JNI_ERR;
@@ -209,6 +222,70 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     ClearException(env);
     return JNI_ERR;
   }
+
+  jclass bios_image_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/BiosImage");
+  if (!bios_image_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_bios_image_class = static_cast<jclass>(env->NewGlobalRef(bios_image_class));
+  env->DeleteLocalRef(bios_image_class);
+  s_bios_image_constructor =
+    env->GetMethodID(s_bios_image_class, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
+  if (!s_bios_image_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass pad_binding_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/PadBinding");
+  if (!pad_binding_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_pad_binding_class = static_cast<jclass>(env->NewGlobalRef(pad_binding_class));
+  env->DeleteLocalRef(pad_binding_class);
+  s_pad_binding_constructor =
+    env->GetMethodID(s_pad_binding_class, "<init>",
+                     "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;"
+                     "Ljava/lang/String;)V");
+  if (!s_pad_binding_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass pad_binding_kind_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/PadBindingKind");
+  if (!pad_binding_kind_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  // In AndroidHost::PadBindingKind's order.
+  static constexpr const char* PAD_BINDING_KIND_NAMES[] = {"Button", "Axis", "HalfAxis"};
+  static_assert(std::size(PAD_BINDING_KIND_NAMES) == std::size(s_pad_binding_kinds));
+  for (size_t i = 0; i < std::size(PAD_BINDING_KIND_NAMES); i++)
+  {
+    jfieldID field = env->GetStaticFieldID(pad_binding_kind_class, PAD_BINDING_KIND_NAMES[i],
+                                           "Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;");
+    jobject kind = field ? env->GetStaticObjectField(pad_binding_kind_class, field) : nullptr;
+    if (!kind)
+    {
+      ClearException(env);
+      env->DeleteLocalRef(pad_binding_kind_class);
+      return JNI_ERR;
+    }
+
+    s_pad_binding_kinds[i] = env->NewGlobalRef(kind);
+    env->DeleteLocalRef(kind);
+  }
+
+  env->DeleteLocalRef(pad_binding_kind_class);
 
   if (!AndroidContentProvider::LoadJNIReferences(env))
     return JNI_ERR;
@@ -278,6 +355,75 @@ NATIVE_LIBRARY_FUNCTION(void, setBoolSetting)(JNIEnv* env, jobject, jstring sect
   AndroidHost::SetBoolSetting(section_str.c_str(), key_str.c_str(), value == JNI_TRUE);
 }
 
+NATIVE_LIBRARY_FUNCTION(jstring, getStringSetting)(JNIEnv* env, jobject, jstring section, jstring key,
+                                                  jstring default_value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  const std::string default_str = FromJString(env, default_value);
+  const std::string value = AndroidHost::GetStringSetting(section_str.c_str(), key_str.c_str(), default_str.c_str());
+
+  // Kotlin takes the result as never null: if it can't be made, the default comes back.
+  jstring result = ToJString(env, value);
+  return result ? result : default_value;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setStringSetting)(JNIEnv* env, jobject, jstring section, jstring key, jstring value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  if (!value)
+  {
+    AndroidHost::SetStringSetting(section_str.c_str(), key_str.c_str(), nullptr);
+    return;
+  }
+
+  const std::string value_str = FromJString(env, value);
+  AndroidHost::SetStringSetting(section_str.c_str(), key_str.c_str(), value_str.c_str());
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getIntSetting)(JNIEnv* env, jobject, jstring section, jstring key, jint default_value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  return AndroidHost::GetIntSetting(section_str.c_str(), key_str.c_str(), default_value);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setIntSetting)(JNIEnv* env, jobject, jstring section, jstring key, jint value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  AndroidHost::SetIntSetting(section_str.c_str(), key_str.c_str(), value);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, applySettings)(JNIEnv*, jobject)
+{
+  AndroidHost::ApplySettings();
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)
+{
+  return AndroidHost::IsVulkanFailed() ? JNI_TRUE : JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)
+{
+  std::vector<std::string> names;
+  names.reserve(static_cast<size_t>(DisplayAspectRatio::Count));
+  for (u32 i = 0; i < static_cast<u32>(DisplayAspectRatio::Count); i++)
+    names.emplace_back(Settings::GetDisplayAspectRatioName(static_cast<DisplayAspectRatio>(i)));
+
+  // Kotlin takes the array as never null: a failure gives an empty one.
+  jobjectArray result = ToJStringArray(env, names);
+  if (!result)
+  {
+    result = env->NewObjectArray(0, s_string_class, nullptr);
+    ClearException(env);
+  }
+
+  return result;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemoryCardPaths)(JNIEnv* env, jobject)
 {
   const std::optional<std::vector<std::string>> paths = AndroidHost::GetMemoryCardPaths();
@@ -328,6 +474,71 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring 
   }
 
   return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getBiosImages)(JNIEnv* env, jobject)
+{
+  const std::optional<std::string> dir = AndroidHost::GetBIOSDirectory();
+  const std::vector<BIOSImport::Image> images =
+    dir.has_value() ? BIOSImport::ListImages(dir.value()) : std::vector<BIOSImport::Image>();
+
+  // Kotlin takes the array as never null: a failure gives an empty one.
+  const auto empty_result = [env]() {
+    jobjectArray empty = env->NewObjectArray(0, s_bios_image_class, nullptr);
+    ClearException(env);
+    return empty;
+  };
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(images.size()), s_bios_image_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return empty_result();
+  }
+
+  for (size_t i = 0; i < images.size(); i++)
+  {
+    const BIOSImport::Image& image = images[i];
+    jstring file_name = ToJString(env, image.file_name);
+    jstring description = ToJString(env, image.description);
+    jstring region = ToJString(env, image.region);
+    jobject entry = nullptr;
+    if (file_name && description && region)
+    {
+      entry = env->NewObject(s_bios_image_class, s_bios_image_constructor, file_name, description, region);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(file_name), static_cast<jobject>(description),
+                        static_cast<jobject>(region)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass the BIOS image '{}' to Java.", image.file_name);
+      env->DeleteLocalRef(result);
+      return empty_result();
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getAutoBios)(JNIEnv* env, jobject, jstring region)
+{
+  const std::optional<std::string> dir = AndroidHost::GetBIOSDirectory();
+  if (!dir.has_value())
+    return nullptr;
+
+  const std::optional<std::string> description = BIOSImport::FindAutomaticImage(FromJString(env, region), dir.value());
+  return description.has_value() ? ToJString(env, description.value()) : nullptr;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, refreshGameList)(JNIEnv*, jobject, jboolean invalidate_cache)
@@ -497,6 +708,76 @@ NATIVE_LIBRARY_FUNCTION(void, onDeviceDisconnected)(JNIEnv*, jobject, jint devic
 NATIVE_LIBRARY_FUNCTION(void, releaseAllInputs)(JNIEnv*, jobject)
 {
   AndroidHost::QueueReleaseAllInputs();
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstring descriptor)
+{
+  const std::optional<std::vector<AndroidHost::PadBinding>> bindings =
+    AndroidHost::GetPadBindings(FromJString(env, descriptor));
+  if (!bindings.has_value())
+    return nullptr;
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(bindings->size()), s_pad_binding_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < bindings->size(); i++)
+  {
+    const AndroidHost::PadBinding& binding = (*bindings)[i];
+    jstring name = ToJString(env, binding.name);
+    jstring display_name = ToJString(env, binding.display_name);
+    jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
+    jobject entry = nullptr;
+    if (name && display_name && (value || !binding.binding.has_value()))
+    {
+      entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
+                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass Port 1's input '{}' to Java.", binding.name);
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setPadBinding)(JNIEnv* env, jobject, jstring descriptor, jstring name, jstring binding)
+{
+  // A null binding is an empty one: none.
+  AndroidHost::SetPadBinding(FromJString(env, descriptor), FromJString(env, name), FromJString(env, binding));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, resetPadBindings)(JNIEnv* env, jobject, jstring descriptor)
+{
+  AndroidHost::ResetPadBindings(FromJString(env, descriptor));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, startBindingCapture)(JNIEnv* env, jobject, jstring descriptor)
+{
+  AndroidHost::StartBindingCapture(FromJString(env, descriptor));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, cancelBindingCapture)(JNIEnv*, jobject)
+{
+  AndroidHost::CancelBindingCapture();
 }
 
 } // extern "C"

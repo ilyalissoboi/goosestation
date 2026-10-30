@@ -120,6 +120,99 @@ class ControllersPageTest {
             assertEquals(listOf("cancelBindingCapture", "releaseAll"), calls)
         }
 
+    @Test
+    fun undoPutsThePreviousBindingBack() =
+        runTest {
+            val page = openPage()
+            page.capture("Cross")
+            runCurrent()
+            page.onBindingCaptured("Button100")
+            runCurrent()
+            assertEquals(Undo("Cross", "Button96"), page.state.undo)
+            calls.clear()
+
+            page.undo()
+            runCurrent()
+
+            assertEquals(listOf("setPadBinding $PAD_A Cross Button96"), calls)
+            assertNull(page.state.undo)
+            assertEquals("Button96", page.state.bindings!!.single { it.name == "Cross" }.binding)
+        }
+
+    @Test
+    fun anotherCaptureDropsTheUndo() =
+        runTest {
+            val page = openPage()
+            page.capture("Cross")
+            runCurrent()
+            page.onBindingCaptured("Button100")
+            runCurrent()
+
+            page.capture("Circle")
+
+            assertNull(page.state.undo)
+        }
+
+    @Test
+    fun dropUndoForgetsIt() =
+        runTest {
+            val page = openPage()
+            page.capture("Cross")
+            runCurrent()
+            page.onBindingCaptured("Button100")
+            runCurrent()
+
+            page.dropUndo()
+            page.undo()
+            runCurrent()
+
+            assertNull(page.state.undo)
+            assertTrue(calls.none { it == "setPadBinding $PAD_A Cross Button96" })
+        }
+
+    // Review Focus 2: by their places in the descriptor table, so the numbers stay the same from one run to the next.
+    @Test
+    fun sameNamesAreNumbered() =
+        runTest {
+            api.indices = mapOf(PAD_A to 1, "pad-b" to 0, "pad-c" to 2)
+            pads.connected.value =
+                listOf(
+                    ConnectedController(1, "Wireless Controller", PAD_A),
+                    ConnectedController(2, "Wireless Controller", "pad-b"),
+                    ConnectedController(3, "Pad C", "pad-c"),
+                )
+            val page = openPage()
+
+            assertEquals(
+                mapOf(PAD_A to "Wireless Controller (2)", "pad-b" to "Wireless Controller (1)", "pad-c" to "Pad C"),
+                page.state.labels,
+            )
+
+            pads.connected.value = listOf(ConnectedController(1, "Wireless Controller", PAD_A))
+            runCurrent()
+
+            assertEquals(mapOf(PAD_A to "Wireless Controller"), page.state.labels)
+        }
+
+    // T7-3: until the new pad's bindings are read, the page knows the ones it has are another's, and edits nothing.
+    @Test
+    fun aSwitchSaysWhoseBindingsAreShown() =
+        runTest {
+            pads.connected.value = listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", "pad-b"))
+            val page = openPage()
+            assertEquals(PAD_A, page.state.bindingsFor)
+
+            page.select("pad-b")
+            page.capture("Cross")
+            page.clear("Cross")
+
+            assertEquals(PAD_A, page.state.bindingsFor)
+            assertNull(page.state.capturing)
+            runCurrent()
+            assertEquals("pad-b", page.state.bindingsFor)
+            assertTrue(calls.none { it.startsWith("setPadBinding") || it.startsWith("startBindingCapture") })
+        }
+
     // After the start, the capture's last cancelBindingCapture, if any, comes before a releaseAll.
     private fun assertReleasedAfterTheCancel() {
         val started = calls.indexOf("startBindingCapture $PAD_A")

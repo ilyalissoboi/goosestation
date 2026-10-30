@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -46,25 +49,42 @@ class ControllersScreenTest {
     private var cancels = 0
     private var resets = 0
     private var backs = 0
+    private var undos = 0
+    private var dropUndos = 0
+
+    // What the page shows, which a test can change once it's open.
+    private var controllers by mutableStateOf(listOf(PAD))
+    private var capturing by mutableStateOf<String?>(null)
 
     private fun show(
         controllers: List<ConnectedController> = listOf(PAD),
+        selected: String? = controllers.firstOrNull()?.descriptor,
         bindings: List<PadBinding> = BINDINGS,
+        bindingsFor: String? = selected,
         capturing: String? = null,
         secondsLeft: Int = 0,
+        undoFor: String? = null,
+        labels: Map<String, String> = emptyMap(),
     ) {
+        this.controllers = controllers
+        this.capturing = capturing
         rule.setContent {
             GooseStationTheme {
                 ControllersScreen(
-                    controllers = controllers,
-                    selected = controllers.firstOrNull()?.descriptor,
+                    controllers = this.controllers,
+                    labels = labels,
+                    selected = selected,
                     bindings = bindings,
-                    capturing = capturing,
+                    bindingsFor = bindingsFor,
+                    capturing = this.capturing,
                     secondsLeft = secondsLeft,
+                    undoFor = undoFor,
                     onSelect = { selects += it },
                     onCapture = { captures += it },
                     onCancelCapture = { cancels++ },
                     onClear = { clears += it },
+                    onUndo = { undos++ },
+                    onDropUndo = { dropUndos++ },
                     onReset = { resets++ },
                     onBack = { backs++ },
                 )
@@ -82,10 +102,13 @@ class ControllersScreenTest {
         texts.forEach { rule.onNode(isFocused()).assert(hasText(it, substring = true)) }
     }
 
+    // F-2: never a binding row, so an A pressed as the page opens captures nothing.
     @Test
-    fun theFirstBindingIsFocusedOnOpening() {
+    fun opensOnTheControllerRow() {
         show()
 
+        assertFocusedHas("Test Pad")
+        press(Key.DirectionDown)
         assertFocusedHas("D-Pad Up", "D-pad up")
     }
 
@@ -94,6 +117,8 @@ class ControllersScreenTest {
         show(controllers = listOf(PAD, OTHER_PAD))
 
         assertFocusedHas("Controller", "Test Pad")
+        press(Key.DirectionDown)
+        assertFocusedHas("D-Pad Up")
     }
 
     @Test
@@ -109,8 +134,7 @@ class ControllersScreenTest {
     fun anUnboundInputIsNotSet() {
         show()
 
-        press(Key.DirectionDown)
-        press(Key.DirectionDown)
+        repeat(3) { press(Key.DirectionDown) }
 
         assertFocusedHas("L2", "Not set")
     }
@@ -119,16 +143,17 @@ class ControllersScreenTest {
     fun enterStartsACapture() {
         show()
 
+        press(Key.DirectionDown)
         press(Key.Enter)
 
         assertEquals(listOf("Up"), captures)
     }
 
     @Test
-    fun aCapturingRowSaysWhatToDo() {
+    fun theCapturePromptSaysBackCancels() {
         show(capturing = "Up", secondsLeft = 4)
 
-        assertFocusedHas("D-Pad Up", "Press a button or move a stick on Test Pad… (4)")
+        rule.onNode(hasText("Press the new button for D-Pad Up… Back cancels (4)")).assertExists()
     }
 
     @Test
@@ -155,7 +180,7 @@ class ControllersScreenTest {
     fun clearIsReachedWithRight() {
         show()
 
-        press(Key.DirectionDown)
+        repeat(2) { press(Key.DirectionDown) }
         press(Key.DirectionRight)
         assertFocusedHas("Clear")
         press(Key.Enter)
@@ -168,11 +193,78 @@ class ControllersScreenTest {
     fun resetToDefaultsIsLast() {
         show()
 
-        repeat(3) { press(Key.DirectionDown) }
+        repeat(4) { press(Key.DirectionDown) }
         assertFocusedHas("Reset to defaults")
         press(Key.Enter)
 
         assertEquals(1, resets)
+    }
+
+    @Test
+    fun undoReplacesClearAfterACapture() {
+        show(undoFor = "Cross")
+
+        rule.onAllNodes(hasText("Clear")).assertCountEquals(2)
+        repeat(2) { press(Key.DirectionDown) }
+        press(Key.DirectionRight)
+        assertFocusedHas("Undo")
+        press(Key.Enter)
+
+        assertEquals(1, undos)
+        assertEquals(emptyList<String>(), clears)
+    }
+
+    @Test
+    fun leavingTheRowDropsTheUndo() {
+        show(undoFor = "Cross")
+        repeat(2) { press(Key.DirectionDown) }
+        press(Key.DirectionRight)
+        press(Key.DirectionLeft)
+        assertEquals(0, dropUndos)
+
+        press(Key.DirectionDown)
+
+        assertFocusedHas("L2")
+        assertEquals(1, dropUndos)
+    }
+
+    // Review Focus 3: a pad connecting moves no focus already in the page, nor a capture's row.
+    @Test
+    fun aPadConnectingKeepsTheFocus() {
+        show()
+        repeat(3) { press(Key.DirectionDown) }
+        assertFocusedHas("L2")
+
+        controllers = listOf(PAD, OTHER_PAD)
+        rule.waitForIdle()
+        assertFocusedHas("L2")
+
+        capturing = "L2"
+        rule.waitForIdle()
+        controllers = listOf(PAD)
+        rule.waitForIdle()
+        assertFocusedHas("L2", "Press the new button for L2")
+    }
+
+    // T7-3: another pad's bindings never show under this one's name.
+    @Test
+    fun switchingPadsShowsReadingNotOldBindings() {
+        show(controllers = listOf(PAD, OTHER_PAD), selected = OTHER_PAD.descriptor, bindingsFor = PAD.descriptor)
+
+        rule.onNode(hasText("Reading Other Pad's bindings…")).assertExists()
+        rule.onAllNodes(hasText("D-Pad Up")).assertCountEquals(0)
+        assertFocusedHas("Controller", "Other Pad")
+    }
+
+    // T7-1: pads that share a name are told apart by their labels.
+    @Test
+    fun theLabelsNameThePads() {
+        show(
+            controllers = listOf(PAD, OTHER_PAD),
+            labels = mapOf(PAD.descriptor to "Test Pad (1)", OTHER_PAD.descriptor to "Other Pad (2)"),
+        )
+
+        assertFocusedHas("Controller", "Test Pad (1)")
     }
 
     @Test

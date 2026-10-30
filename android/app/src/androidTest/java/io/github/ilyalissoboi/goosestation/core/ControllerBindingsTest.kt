@@ -114,6 +114,18 @@ class ControllerBindingsTest {
         assertEquals("Button96", crossOf("pad-c"))
     }
 
+    // A pad's place in the descriptor table, which numbers pads that share a name the same way in every run.
+    @Test
+    fun controllerIndexFollowsTheTable() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+        connectNewPad(2, "pad-b", 1)
+
+        assertEquals(0, NativeLibrary.getControllerIndex("pad-a"))
+        assertEquals(1, NativeLibrary.getControllerIndex("pad-b"))
+        assertEquals(-1, NativeLibrary.getControllerIndex("never-connected"))
+    }
+
     @Test
     fun unknownPadHasNoBindings() {
         initialize(null)

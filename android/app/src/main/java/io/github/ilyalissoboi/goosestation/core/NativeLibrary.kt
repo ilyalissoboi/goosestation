@@ -156,6 +156,12 @@ object NativeLibrary {
     external fun getPadBindings(descriptor: String): Array<PadBinding>?
 
     /**
+     * The controller with [descriptor]'s place in the table of controllers this install has seen, which stays the same
+     * from one run to the next; -1 for one never connected, or before [initialize].
+     */
+    external fun getControllerIndex(descriptor: String): Int
+
+    /**
      * Binds the Port 1 input [name] (a [PadBinding.name]) to [binding] on the controller with [descriptor], in place
      * of the one it had, and applies it. Null or empty leaves the input unbound on that controller. Other controllers
      * keep theirs. Does nothing for a controller [getPadBindings] gives null for.

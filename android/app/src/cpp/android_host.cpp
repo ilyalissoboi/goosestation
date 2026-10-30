@@ -1083,6 +1083,16 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
   return result;
 }
 
+std::optional<u32> AndroidHost::GetControllerIndex(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<u32> result;
+  EmuThread::RunOnThread([&descriptor, &result]() { result = FindDescriptorIndex(descriptor); }, true);
+  return result;
+}
+
 void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::string binding)
 {
   if (!s_initialized)

@@ -17,6 +17,9 @@ class FakeCoreApi(
     private val bindings = mutableMapOf<String, String?>("Cross" to "Button96", "Circle" to "Button97")
     var images = emptyList<BiosImage>()
 
+    /** Each pad's place in the descriptor table, by descriptor; a pad not in it has none. */
+    var indices = emptyMap<String, Int>()
+
     /** Runs as a read of the Graphics or the BIOS page reaches the core, as if the user acted meanwhile. */
     var duringRead: () -> Unit = {}
 
@@ -39,6 +42,8 @@ class FakeCoreApi(
     override fun startBindingCapture(descriptor: String) {
         calls += "startBindingCapture $descriptor"
     }
+
+    override fun getControllerIndex(descriptor: String): Int? = indices[descriptor]
 
     override fun cancelBindingCapture() {
         calls += "cancelBindingCapture"

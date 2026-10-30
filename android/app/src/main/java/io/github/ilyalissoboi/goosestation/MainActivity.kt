@@ -110,14 +110,19 @@ class MainActivity : ComponentActivity() {
                         } else {
                             ControllersScreen(
                                 controllers = state.controllers,
+                                labels = state.labels,
                                 selected = state.selected,
                                 bindings = bindings,
+                                bindingsFor = state.bindingsFor,
                                 capturing = state.capturing,
                                 secondsLeft = state.secondsLeft,
+                                undoFor = state.undo?.name,
                                 onSelect = AppController::selectController,
                                 onCapture = AppController::captureBinding,
                                 onCancelCapture = AppController::cancelCapture,
                                 onClear = AppController::clearBinding,
+                                onUndo = AppController.controllersPage::undo,
+                                onDropUndo = AppController.controllersPage::dropUndo,
                                 onReset = AppController::resetBindings,
                                 onBack = AppController::closeSettingsPage,
                             )

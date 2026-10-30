@@ -344,14 +344,19 @@ class FocusAuditTest {
         show {
             ControllersScreen(
                 controllers = controllers,
+                labels = emptyMap(),
                 selected = controllers.firstOrNull()?.descriptor,
                 bindings = BINDINGS,
+                bindingsFor = controllers.firstOrNull()?.descriptor,
                 capturing = null,
                 secondsLeft = 0,
+                undoFor = null,
                 onSelect = {},
                 onCapture = {},
                 onCancelCapture = {},
                 onClear = {},
+                onUndo = {},
+                onDropUndo = {},
                 onReset = {},
                 onBack = {},
             )

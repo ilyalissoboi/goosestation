@@ -16,16 +16,27 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The Controllers page: the [controllers] connected, the [selected] one's descriptor, and its [bindings], null until
- * they're first read. While [capturing] is a binding's name, the next input on that controller becomes its binding,
- * unless [secondsLeft] runs out first.
+ * The Controllers page: the [controllers] connected, each with its [labels] entry, by descriptor; the [selected] one's
+ * descriptor; and the [bindings] of [bindingsFor], null until they're first read. While [bindingsFor] isn't
+ * [selected], the selected one's are being read. While [capturing] is a binding's name, the next input on that
+ * controller becomes its binding, unless [secondsLeft] runs out first. Once a capture lands, [undo] can put back what
+ * it replaced.
  */
 data class ControllersState(
     val controllers: List<ConnectedController> = emptyList(),
+    val labels: Map<String, String> = emptyMap(),
     val selected: String? = null,
     val bindings: List<PadBinding>? = null,
+    val bindingsFor: String? = null,
     val capturing: String? = null,
     val secondsLeft: Int = 0,
+    val undo: Undo? = null,
+)
+
+/** The binding a capture replaced on the input [name]: [previous], or none. */
+data class Undo(
+    val name: String,
+    val previous: String?,
 )
 
 /**
@@ -56,6 +67,9 @@ class ControllersPage(
     /** The latest bindings read, so an older read that comes back later is dropped. */
     private var bindingsRead = 0
 
+    /** The latest labels read, likewise. */
+    private var labelsRead = 0
+
     /** Changes as each capture starts or ends, so a report the main thread gets late is dropped. */
     private var captureId = 0
 
@@ -83,7 +97,7 @@ class ControllersPage(
         val state = state
         if (descriptor == state.selected || state.controllers.none { it.descriptor == descriptor }) return
         cancelCapture()
-        this.state = this.state.copy(selected = descriptor)
+        this.state = this.state.copy(selected = descriptor, undo = null)
         readBindings(descriptor)
     }
 
@@ -94,10 +108,10 @@ class ControllersPage(
     fun capture(name: String) {
         val state = state
         val descriptor = state.selected ?: return
-        if (!isOpen() || state.bindings?.any { it.name == name } != true) return
+        if (!isOpen() || !showsOwnBindings(state) || state.bindings?.any { it.name == name } != true) return
         val id = ++captureId
         captureTimer?.cancel()
-        this.state = state.copy(capturing = name, secondsLeft = CAPTURE_SECONDS)
+        this.state = state.copy(capturing = name, secondsLeft = CAPTURE_SECONDS, undo = null)
         scope.launch {
             // Nothing from an earlier capture comes once the cancel returns: what's reported next is this one's.
             withContext(core) { api.cancelBindingCapture() }
@@ -135,7 +149,7 @@ class ControllersPage(
     /** Leaves [name] unbound on the selected controller. */
     fun clear(name: String) {
         val descriptor = state.selected ?: return
-        if (capturingInput) return
+        if (capturingInput || !showsOwnBindings(state)) return
         setBindingShown(name, null)
         readBindings(descriptor) { api.setPadBinding(descriptor, name, null) }
     }
@@ -143,8 +157,24 @@ class ControllersPage(
     /** Gives the selected controller its default bindings again. */
     fun reset() {
         val descriptor = state.selected ?: return
-        if (capturingInput) return
+        if (capturingInput || !showsOwnBindings(state)) return
+        state = state.copy(undo = null)
         readBindings(descriptor) { api.resetPadBindings(descriptor) }
+    }
+
+    /** Puts back the binding the last capture replaced, as [ControllersState.undo] says. */
+    fun undo() {
+        val undo = state.undo ?: return
+        val descriptor = state.selected ?: return
+        if (capturingInput || !showsOwnBindings(state)) return
+        state = state.copy(undo = null)
+        setBindingShown(undo.name, undo.previous)
+        readBindings(descriptor) { api.setPadBinding(descriptor, undo.name, undo.previous) }
+    }
+
+    /** The last capture can't be undone any more: the focus left its row. */
+    fun dropUndo() {
+        if (state.undo != null) state = state.copy(undo = null)
     }
 
     /**
@@ -161,9 +191,11 @@ class ControllersPage(
             // Cancelled, timed out or replaced since it was posted.
             if (id != captureId || name == null || descriptor == null) return@launch
             log("Captured $binding for $name")
+            val previous = state.bindings?.firstOrNull { it.name == name }?.binding
             endCapture()
             // The core removed the capture as it took the input, so the releases reach it.
             pads()?.releaseAll()
+            this@ControllersPage.state = this@ControllersPage.state.copy(undo = Undo(name, previous))
             setBindingShown(name, binding)
             readBindings(descriptor) { api.setPadBinding(descriptor, name, binding) }
         }
@@ -178,15 +210,49 @@ class ControllersPage(
         val selected =
             (connected.firstOrNull { it.descriptor == pickedController } ?: connected.firstOrNull())?.descriptor
         if (selected != old.selected) cancelCapture()
-        state = state.copy(controllers = connected, selected = selected)
+        state = state.copy(controllers = connected, labels = labelsFor(connected, old.labels), selected = selected)
+        if (selected != old.selected) state = state.copy(undo = null)
+        readLabels(connected)
         when {
             selected == null -> {
                 bindingsRead++
-                state = state.copy(bindings = emptyList())
+                state = state.copy(bindings = emptyList(), bindingsFor = null)
             }
             selected != old.selected -> readBindings(selected)
         }
     }
+
+    /**
+     * Numbers the [connected] controllers that share a name, by their places in the core's table, so the numbers stay
+     * the same from one run to the next; until they're read, each is labelled with its name. One the table doesn't
+     * have keeps its name.
+     */
+    private fun readLabels(connected: List<ConnectedController>) {
+        val read = ++labelsRead
+        val shared = connected.groupBy { it.name }.values.filter { it.size > 1 }.flatten()
+        if (shared.isEmpty()) return
+        scope.launch {
+            val indices = withContext(core) { shared.associate { it.descriptor to api.getControllerIndex(it.descriptor) } }
+            if (read != labelsRead) return@launch
+            val numbered =
+                shared.associate { pad -> pad.descriptor to (indices[pad.descriptor]?.let { "${pad.name} (${it + 1})" } ?: pad.name) }
+            state = state.copy(labels = state.labels + numbered)
+        }
+    }
+
+    // Each pad's name, but a pad that still shares its name keeps the number it had, until readLabels() lands.
+    private fun labelsFor(
+        connected: List<ConnectedController>,
+        old: Map<String, String>,
+    ): Map<String, String> {
+        val counts = connected.groupingBy { it.name }.eachCount()
+        return connected.associate { pad ->
+            pad.descriptor to (old[pad.descriptor]?.takeIf { counts.getValue(pad.name) > 1 } ?: pad.name)
+        }
+    }
+
+    // The bindings shown are the selected controller's, not those of the one selected before it.
+    private fun showsOwnBindings(state: ControllersState): Boolean = state.bindingsFor == state.selected
 
     /**
      * Runs [change], if any, then reads [descriptor]'s bindings, on [core]; they show if it's still selected and no
@@ -204,7 +270,7 @@ class ControllersPage(
                     api.getPadBindings(descriptor)
                 }
             if (read != bindingsRead || state.selected != descriptor) return@launch
-            state = state.copy(bindings = loaded.orEmpty())
+            state = state.copy(bindings = loaded.orEmpty(), bindingsFor = descriptor)
         }
     }
 

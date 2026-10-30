@@ -28,6 +28,9 @@ interface CoreApi {
 
     fun cancelBindingCapture()
 
+    /** [NativeLibrary.getControllerIndex], or null for a controller not in the table. */
+    fun getControllerIndex(descriptor: String): Int?
+
     fun applySettings()
 
     fun getAspectRatioNames(): List<String>
@@ -53,6 +56,9 @@ object NativeCoreApi : CoreApi {
     override fun startBindingCapture(descriptor: String) = NativeLibrary.startBindingCapture(descriptor)
 
     override fun cancelBindingCapture() = NativeLibrary.cancelBindingCapture()
+
+    override fun getControllerIndex(descriptor: String): Int? =
+        NativeLibrary.getControllerIndex(descriptor).takeIf { it >= 0 }
 
     override fun applySettings() = NativeLibrary.applySettings()
 

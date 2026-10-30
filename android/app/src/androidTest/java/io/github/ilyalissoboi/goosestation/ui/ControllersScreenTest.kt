@@ -229,6 +229,26 @@ class ControllersScreenTest {
         press(Key.Enter)
 
         assertEquals(1, undos)
+        assertFocusedHas("Undone")
+    }
+
+    // A second A on the button, as Undo turns back into Clear, mustn't clear what Undo just put back.
+    @Test
+    fun aSecondPressAfterUndoClearsNothing() {
+        show(undoFor = "Cross")
+        repeat(2) { press(Key.DirectionDown) }
+        press(Key.DirectionRight)
+        press(Key.Enter)
+
+        assertFocusedHas("Undone")
+        press(Key.Enter)
+        assertEquals(emptyList<String>(), clears)
+
+        // Once the focus has left the row, it's Clear again.
+        press(Key.DirectionLeft)
+        press(Key.DirectionDown)
+        press(Key.DirectionUp)
+        press(Key.DirectionRight)
         assertFocusedHas("Clear")
     }
 

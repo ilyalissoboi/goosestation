@@ -97,6 +97,31 @@ class SettingsPagesTest {
             assertTrue(pages.bios!!.fastBoot)
         }
 
+    // The reload's other fields still show once the change is saved: they're read again after it.
+    @Test
+    fun aReloadOvertakenByAChangeStillShowsTheFile() =
+        runTest {
+            val pages = pages()
+            pages.loadGraphics()
+            pages.loadBios()
+            runCurrent()
+            // settings.ini was reloaded with these from elsewhere.
+            settings.setString("GPU", "Renderer", "OpenGL")
+            api.images = listOf(BiosImage("scph5501.bin", "SCPH-5501", "NTSC-U"))
+
+            api.duringRead = { pages.changeGraphics(pages.graphics!!.copy(showFps = true)) }
+            pages.reloadShown(SettingsEntry.Graphics)
+            runCurrent()
+            api.duringRead = { pages.setFastBoot(true) }
+            pages.reloadShown(SettingsEntry.Bios)
+            runCurrent()
+
+            assertEquals("OpenGL", pages.graphics!!.renderer)
+            assertTrue(pages.graphics!!.showFps)
+            assertEquals(api.images, pages.bios!!.images)
+            assertTrue(pages.bios!!.fastBoot)
+        }
+
     @Test
     fun changesSaveOnlyWhatChanged() =
         runTest {

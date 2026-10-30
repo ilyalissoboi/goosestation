@@ -44,9 +44,12 @@ class SettingsPages(
     var bios by mutableStateOf<BiosPage?>(null)
         private set
 
-    // Change as each read is asked for or a change is made, so a read that comes back after either is dropped.
+    // Change as each read is asked for or a change is made, so a read that comes back after either is dropped. A
+    // change made while a read is out reads again once it's saved, so the values the dropped one had still show.
     private var graphicsRead = 0
     private var biosRead = 0
+    private var graphicsReading = false
+    private var biosReading = false
 
     /** Reads the Graphics page's settings, from none shown. */
     fun loadGraphics() {
@@ -78,11 +81,13 @@ class SettingsPages(
         if (new == old) return
         // Now, so a second change made before this one is saved starts from it.
         graphics = new
+        val reread = graphicsReading
         graphicsRead++
         scope.launch(core) {
             new.save(settings, old)
             api.applySettings()
         }
+        if (reread) readGraphics()
     }
 
     /** Sets [region]'s BIOS image to [fileName], or back to Automatic with null, then has the core apply it. */
@@ -94,32 +99,39 @@ class SettingsPages(
         val overrides = if (fileName == null) page.overrides - region else page.overrides + (region to fileName)
         // Now, so a second change made before this one is saved starts from it.
         bios = page.copy(overrides = overrides)
+        val reread = biosReading
         biosRead++
         scope.launch(core) {
             BiosOverrides.set(settings, region, fileName)
             api.applySettings()
         }
+        if (reread) readBios()
     }
 
     /** Turns fast boot on or off, then has the core apply it. */
     fun setFastBoot(on: Boolean) {
         val page = bios ?: return
         bios = page.copy(fastBoot = on)
+        val reread = biosReading
         biosRead++
         scope.launch(core) {
             BiosFastBoot.save(settings, on)
             api.applySettings()
         }
+        if (reread) readBios()
     }
 
+    // Queued on core after any save launched before it, so it reads what that save wrote.
     private fun readGraphics() {
         val read = ++graphicsRead
+        graphicsReading = true
         scope.launch {
             val loaded =
                 withContext(core) {
                     Triple(GraphicsSettings.load(settings), api.getAspectRatioNames(), api.isVulkanFailed())
                 }
             if (read != graphicsRead) return@launch
+            graphicsReading = false
             aspectRatioNames = loaded.second
             vulkanFailed = loaded.third
             graphics = loaded.first
@@ -128,6 +140,7 @@ class SettingsPages(
 
     private fun readBios() {
         val read = ++biosRead
+        biosReading = true
         scope.launch {
             val loaded =
                 withContext(core) {
@@ -138,7 +151,9 @@ class SettingsPages(
                         fastBoot = BiosFastBoot.load(settings),
                     )
                 }
-            if (read == biosRead) bios = loaded
+            if (read != biosRead) return@launch
+            biosReading = false
+            bios = loaded
         }
     }
 }

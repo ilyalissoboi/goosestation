@@ -469,9 +469,11 @@ object AppController : NativeCallbacks {
         screen = Screen.entries.first { it.page == entry }
     }
 
-    /** Back from a settings page to the hub, which focuses the page's entry. */
+    /** Back from a settings page to the hub, which focuses the page's entry. Folders goes back by [closeFolders]. */
     fun closeSettingsPage() {
         val page = screen.page ?: return
+        // Its own way back, which a data folder change under way keeps from running.
+        if (page == SettingsEntry.Folders) return closeFolders()
         if (page == SettingsEntry.Controllers) controllersPage.close()
         settingsEntry = page
         screen = Screen.Settings

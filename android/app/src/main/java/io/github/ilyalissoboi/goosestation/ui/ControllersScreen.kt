@@ -155,8 +155,9 @@ fun ControllersScreen(
 
 /**
  * One of Port 1's inputs: its name and what it's bound to, or the [prompt] while it's captured; then its Clear, or
- * its Undo while [undo] is set, which goes ([onDropUndo]) once the focus leaves the row. The prompt is longer than a
- * binding's name, so the row grows: it's kept in view, as when it was focused.
+ * its Undo while [undo] is set, which goes ([onDropUndo]) once the focus leaves the row. Once Undo is pressed, the
+ * button is "Undone" and does nothing until the focus leaves the row, so a second press doesn't clear what it put
+ * back. The prompt is longer than a binding's name, so the row grows: it's kept in view, as when it was focused.
  */
 @Composable
 private fun BindingRow(
@@ -176,11 +177,13 @@ private fun BindingRow(
     // Moving between the row's own parts loses the focus for a moment: what counts is where it is once that's done.
     var rowFocused by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
+    var undone by remember { mutableStateOf(false) }
     LaunchedEffect(rowFocused) {
         if (rowFocused) {
             hadFocus = true
         } else if (hadFocus) {
             hadFocus = false
+            undone = false
             if (undoShown) onDropUndo()
         }
     }
@@ -207,7 +210,23 @@ private fun BindingRow(
             },
         )
         // One button, so the focus stays on it as Undo turns back into Clear.
-        ActionButton(if (undo) "Undo" else "Clear", onClick = if (undo) onUndo else onClear)
+        ActionButton(
+            when {
+                undo -> "Undo"
+                undone -> "Undone"
+                else -> "Clear"
+            },
+            onClick = {
+                when {
+                    undo -> {
+                        undone = true
+                        onUndo()
+                    }
+                    undone -> {}
+                    else -> onClear()
+                }
+            },
+        )
     }
 }
 

@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Screen.Controllers -> {
-                        val state = AppController.controllersState
+                        val state = AppController.controllersPage.state
                         val bindings = state.bindings
                         if (bindings == null) {
                             SettingsLoadingPage("Controllers", onBack = AppController::closeSettingsPage)

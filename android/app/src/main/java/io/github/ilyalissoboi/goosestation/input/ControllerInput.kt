@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import io.github.ilyalissoboi.goosestation.app.PadPort
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,7 @@ data class ConnectedController(
  * arrive first. One instance lives as long as the process, listening from [start] on. Call everything on the main
  * thread.
  */
-class ControllerInput(context: Context) : InputManager.InputDeviceListener {
+class ControllerInput(context: Context) : InputManager.InputDeviceListener, PadPort {
     private val inputManager = context.getSystemService(InputManager::class.java)
 
     // The devices reported to the core, in the order they were, with the last value sent for each of AXES.
@@ -45,7 +46,7 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
     private val mutableConnected = MutableStateFlow(emptyList<ConnectedController>())
 
     /** The controllers reported to the core, one per descriptor (its first device), in the order they connected. */
-    val connected: StateFlow<List<ConnectedController>> = mutableConnected.asStateFlow()
+    override val connected: StateFlow<List<ConnectedController>> = mutableConnected.asStateFlow()
 
     /** Called when a controller asks for the game's menu: Mode, or Select and Start held together ([MenuTrigger]). */
     var onMenuRequested: (() -> Unit)? = null
@@ -157,7 +158,7 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
      * Call it after any [releaseAll] before the capture, which forgets them in the core. A device that hasn't moved
      * since it connected sends nothing: its values aren't known.
      */
-    fun sendAxes(descriptor: String) {
+    override fun sendAxes(descriptor: String) {
         axisMemory.replay(descriptor, devices) { deviceId, axis, value -> NativeLibrary.onAxis(deviceId, axis, value) }
     }
 
@@ -168,7 +169,7 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
      * A press held back for the menu is dropped: it never reached the core, so the rest of it goes to Compose. A late
      * press still held down a moment is let go, as the menu opens too ([PadKeys]).
      */
-    fun releaseAll() {
+    override fun releaseAll() {
         sendReleases(keys.releaseAll())
         schedule()
         forgetAxes()

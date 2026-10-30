@@ -511,3 +511,85 @@ TEST(AndroidInputKeys, AxesReturnSeparately)
   EXPECT_EQ(capture.OnEvent(PadKey(2, AXIS, 1), 0.9f), std::nullopt);
   EXPECT_EQ(capture.OnEvent(PadKey(2, AXIS, 0), -1.0f), Captured(2, AXIS, 0, InputModifier::Negate));
 }
+
+// Ruling 29: a capture seeded with the axes the pad already has at rest takes a flick on its first event.
+TEST(AndroidInputKeys, SeededAxisIsTakenAtOnce)
+{
+  BindingCapture seeded(0, {0});
+  EXPECT_EQ(seeded.OnEvent(PadKey(0, AXIS, 0), 0.8f), Captured(0, AXIS, 0, InputModifier::None));
+
+  BindingCapture unseeded(0);
+  EXPECT_EQ(unseeded.OnEvent(PadKey(0, AXIS, 0), 0.8f), std::nullopt);
+}
+
+TEST(AndroidInputKeys, SeedIsPerAxis)
+{
+  BindingCapture capture(0, {11});
+
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 14), 0.8f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 11), -0.9f), Captured(0, AXIS, 11, InputModifier::Negate));
+}
+
+// The axes at rest are those the core last got within a quarter of 0. One never reported isn't known to be at rest.
+TEST(AndroidInputKeys, CenteredAxes)
+{
+  PadState pad;
+  Axis(pad, 0, 0.1f);
+  Axis(pad, 1, 0.8f);
+  Axis(pad, 11, 0.0f); // reported by Android, never passed on: still at rest
+
+  EXPECT_EQ(pad.GetCenteredAxes(), (std::vector<u32>{0, 11}));
+}
+
+// A trigger takes the merged value the core got: held by its key, its axes aren't at rest.
+TEST(AndroidInputKeys, CenteredAxesFollowTheTrigger)
+{
+  PadState pad;
+  Axis(pad, 17, 0.0f);
+  Key(pad, 104, true);
+
+  EXPECT_EQ(pad.GetCenteredAxes(), (std::vector<u32>{}));
+
+  Key(pad, 104, false);
+  EXPECT_EQ(pad.GetCenteredAxes(), (std::vector<u32>{17, 23}));
+}
+
+// The hat presses buttons, so it's never an axis to the core; and ReleaseAll() forgets everything.
+TEST(AndroidInputKeys, CenteredAxesSkipTheHatAndReleaseAll)
+{
+  PadState pad;
+  Axis(pad, 15, 0.0f);
+  Axis(pad, 0, 0.0f);
+  EXPECT_EQ(pad.GetCenteredAxes(), (std::vector<u32>{0}));
+
+  std::vector<PadEvent> events;
+  pad.ReleaseAll(events);
+  EXPECT_EQ(pad.GetCenteredAxes(), (std::vector<u32>{}));
+}
+
+// A pad's axes last reported past a quarter from 0.
+TEST(AndroidInputKeys, PushedAxes)
+{
+  PadState pad;
+  Axis(pad, 0, 0.1f);
+  Axis(pad, 1, 0.8f);
+  Axis(pad, 11, 0.0f);
+  Axis(pad, 15, 1.0f); // the hat: buttons to the core
+
+  EXPECT_EQ(pad.GetPushedAxes(), (std::vector<u32>{1}));
+}
+
+// Pads sharing a device index: an axis at rest on one counts, unless another has it pushed (a held stick).
+TEST(AndroidInputKeys, CenteredAxesOfPadsSharingAnIndex)
+{
+  PadState a;
+  Axis(a, 0, 0.1f);
+  Axis(a, 1, 0.0f);
+  PadState b;
+  Axis(b, 0, 0.8f);
+  Axis(b, 11, 0.1f);
+
+  const std::vector<const PadState*> pads = {&a, &b};
+  EXPECT_EQ(AndroidInputKeys::GetCenteredAxes(pads), (std::vector<u32>{1, 11}));
+  EXPECT_EQ(AndroidInputKeys::GetCenteredAxes(std::vector<const PadState*>{&a}), (std::vector<u32>{0, 1}));
+}

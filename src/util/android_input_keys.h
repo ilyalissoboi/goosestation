@@ -106,6 +106,14 @@ public:
   /// Reports every input that isn't at rest as released, and forgets the state.
   void ReleaseAll(std::vector<PadEvent>& events);
 
+  /// The axes known to be near rest (within BindingCapture's 0.25 of 0), in order: those whose last value reported to
+  /// the core was, and those Android has given only at 0, so none was reported. An axis Android has never given isn't
+  /// known, and the hat isn't an axis to the core. For seeding a BindingCapture.
+  std::vector<u32> GetCenteredAxes() const;
+
+  /// The axes whose last value reported to the core is past BindingCapture's 0.25 from 0, in order.
+  std::vector<u32> GetPushedAxes() const;
+
 private:
   struct Reported
   {
@@ -125,17 +133,22 @@ private:
   std::map<std::pair<InputSubclass, u32>, Reported> m_reported;
 };
 
+/// The axes near rest on a device index several pads share: those one of them has near rest
+/// (PadState::GetCenteredAxes()) and none has pushed (a stick held on another), in order.
+std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads);
+
 /// Picks the input the user means to bind, from one device's events as the InputManager gets them (PadState's, so a
 /// trigger's three inputs and the hat's d-pad buttons are already merged):
 /// - a button when it's pressed (value >= 0.5); one held as the capture starts only sends its release, so it isn't
 ///   taken;
-/// - an axis when it's pushed half way (|value| >= 0.5), only once it has been seen near 0 (within 0.25) during this
-///   capture, so one resting away from 0 (a trigger on Z, a stick held as the capture starts) must come back first.
+/// - an axis when it's pushed half way (|value| >= 0.5), only once it has been seen near 0 (within 0.25), during this
+///   capture or before it (centered_axes, from PadState::GetCenteredAxes()), so one resting away from 0 (a trigger on
+///   Z, a stick held as the capture starts) must come back first, and one already at rest is taken on its first push.
 /// Other devices' events, and other kinds of input, give nothing.
 class BindingCapture
 {
 public:
-  explicit BindingCapture(u32 device_index);
+  explicit BindingCapture(u32 device_index, std::vector<u32> centered_axes = {});
 
   /// The key to bind: the event's, with modifier Negate for an axis pushed below 0. nullopt until there is one.
   std::optional<InputBindingKey> OnEvent(InputBindingKey key, float value);

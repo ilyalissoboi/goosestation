@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <utility>
 
 namespace AndroidInputKeys {
 namespace {
@@ -332,7 +333,59 @@ void PadState::ReleaseAll(std::vector<PadEvent>& events)
   m_reported.clear();
 }
 
-BindingCapture::BindingCapture(u32 device_index) : m_device_index(device_index)
+std::vector<u32> PadState::GetCenteredAxes() const
+{
+  // The core's value for an axis Android gave only at 0 is 0, as Report() passes no first value of 0 on.
+  std::vector<u32> axes;
+  for (const auto& [axis, value] : m_axes)
+  {
+    if (!IsHatAxis(axis) && !m_reported.contains({InputSubclass::ControllerAxis, static_cast<u32>(axis)}))
+      axes.push_back(static_cast<u32>(axis));
+  }
+
+  for (const auto& [input, reported] : m_reported)
+  {
+    if (input.first == InputSubclass::ControllerAxis && std::abs(reported.value) <= CAPTURE_CENTER)
+      axes.push_back(input.second);
+  }
+
+  std::sort(axes.begin(), axes.end());
+  return axes;
+}
+
+std::vector<u32> PadState::GetPushedAxes() const
+{
+  std::vector<u32> axes;
+  for (const auto& [input, reported] : m_reported)
+  {
+    if (input.first == InputSubclass::ControllerAxis && std::abs(reported.value) > CAPTURE_CENTER)
+      axes.push_back(input.second);
+  }
+
+  return axes;
+}
+
+std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads)
+{
+  std::vector<u32> centered;
+  std::vector<u32> pushed;
+  for (const PadState* pad : pads)
+  {
+    for (const u32 axis : pad->GetCenteredAxes())
+      centered.push_back(axis);
+    for (const u32 axis : pad->GetPushedAxes())
+      pushed.push_back(axis);
+  }
+
+  std::sort(centered.begin(), centered.end());
+  centered.erase(std::unique(centered.begin(), centered.end()), centered.end());
+  std::erase_if(centered,
+                [&pushed](u32 axis) { return std::find(pushed.begin(), pushed.end(), axis) != pushed.end(); });
+  return centered;
+}
+
+BindingCapture::BindingCapture(u32 device_index, std::vector<u32> centered_axes)
+  : m_device_index(device_index), m_centered_axes(std::move(centered_axes))
 {
 }
 

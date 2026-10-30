@@ -501,11 +501,14 @@ across restarts, whatever order the controllers connect in.
 - Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on), with the binding's
   name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
   <n>` for any other key, or `Not set`. The first one is focused on opening, with a single controller.
-- A on a row asks for the input: "Press a button or move a stick on <name>… (5)", counting down. The controller's
-  next press, or a stick or trigger pushed past halfway, becomes that row's binding for this controller only; the
-  other controllers' entries in the key stay. A button already held when it starts isn't taken, nor is an axis until
-  it has been near rest (within a quarter) during the capture, so a trigger resting at −1 or a stick still held isn't
-  taken either. Left alone, the capture ends after 5 s with the binding unchanged. Back (the system's Back key or
+- A on a row asks for the input: "Press a button or move a stick on <name>… (5)", counting down. The controller's next
+  press, or a stick or trigger pushed past halfway, becomes that row's binding for this controller only; the other
+  controllers' entries in the key stay. A button already held when it starts isn't taken, nor is an axis until it has
+  been near rest (within a quarter): during the capture, or as the pad last reported it before the capture began. The
+  app remembers each pad's latest axis values from every motion it sends, passed to the core or not, and sends them as
+  the capture starts, so a quick flick of a centred stick is taken on its first push. A pad that hasn't sent any motion
+  since it connected has no known values: its axes must come back to rest first, and so must a trigger resting at −1 or
+  a stick still held. Left alone, the capture ends after 5 s with the binding unchanged. Back (the system's Back key or
   gesture) cancels it; B is captured like any other button.
 - **Clear**, at the end of each row (Right reaches it), removes this controller's binding for it. **Reset to
   defaults**, at the end, drops all of this controller's bindings and adds its defaults again.

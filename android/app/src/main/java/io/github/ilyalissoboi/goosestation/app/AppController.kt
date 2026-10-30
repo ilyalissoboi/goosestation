@@ -621,11 +621,18 @@ object AppController : NativeCallbacks {
         val id = ++captureId
         captureTimer?.cancel()
         controllersState = state.copy(capturing = name, secondsLeft = CAPTURE_SECONDS)
-        scope.launch(coreDispatcher) {
+        scope.launch {
             // Nothing from an earlier capture comes once the cancel returns: what's reported next is this one's.
-            NativeLibrary.cancelBindingCapture()
-            nativeCaptureId = id
-            NativeLibrary.startBindingCapture(descriptor)
+            withContext(coreDispatcher) { NativeLibrary.cancelBindingCapture() }
+            if (id != captureId) return@launch
+            // Here, on the main thread, after the releaseAll() an earlier capture's end runs once its cancel returns,
+            // which was before this one's: the pad's current axes, so the capture knows which are at rest. The core
+            // takes in the input sent before the start.
+            controllers?.sendAxes(descriptor)
+            withContext(coreDispatcher) {
+                nativeCaptureId = id
+                NativeLibrary.startBindingCapture(descriptor)
+            }
         }
         captureTimer =
             scope.launch {

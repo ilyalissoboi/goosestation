@@ -167,6 +167,18 @@ void AndroidInputSource::PollEvents()
   m_polled.clear();
 }
 
+std::vector<u32> AndroidInputSource::GetCenteredAxes(u32 index) const
+{
+  std::vector<const AndroidInputKeys::PadState*> pads;
+  for (const Device& device : m_devices)
+  {
+    if (device.index == index)
+      pads.push_back(&device.state);
+  }
+
+  return AndroidInputKeys::GetCenteredAxes(pads);
+}
+
 AndroidInputSource::Device* AndroidInputSource::GetDeviceById(s32 device_id)
 {
   const auto it =

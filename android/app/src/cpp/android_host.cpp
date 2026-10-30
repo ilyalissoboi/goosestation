@@ -1179,7 +1179,19 @@ void AndroidHost::StartBindingCapture(std::string descriptor)
       // SetHook() expects no hook, so the capture running is removed first.
       InputManager::RemoveHook();
       const u32 id = ++s_binding_capture_id;
-      AndroidInputKeys::BindingCapture capture(index.value());
+
+      // Seeded with the axes the pad already has at rest, so a quick flick of a centred stick is taken on its first
+      // event. The input sent before this call (the app sends the pad's current axes just before it) is passed on
+      // first: this thread runs its queued work before it polls the input. So this must never run inline during
+      // event dispatch (from a hook or an input handler): the nested PollEvents() would swap the source's event list
+      // while it's being gone through.
+      AndroidInputSource* const source =
+        static_cast<AndroidInputSource*>(InputManager::GetInputSourceInterface(InputSourceType::Android));
+      ProcessInputQueue();
+      if (source)
+        source->PollEvents();
+      AndroidInputKeys::BindingCapture capture(index.value(),
+                                               source ? source->GetCenteredAxes(index.value()) : std::vector<u32>());
       InputManager::SetHook([capture, id](InputBindingKey key, float value) mutable {
         const std::optional<InputBindingKey> captured = capture.OnEvent(key, value);
         if (!captured.has_value())

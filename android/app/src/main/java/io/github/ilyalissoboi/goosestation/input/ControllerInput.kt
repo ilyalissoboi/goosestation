@@ -37,6 +37,7 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
     private val devices = LinkedHashMap<Int, Device>()
     private val keys = PadKeys()
     private val axisHold = AxisHold()
+    private val axisMemory = AxisMemory(AXES)
     private val handler = Handler(Looper.getMainLooper())
 
     // For the keys' next deadline: a hold's end, or a late key-up's.
@@ -122,6 +123,8 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
         padInput: Boolean,
     ): Boolean {
         if (!isControllerEvent(event.source)) return false
+        // Every motion, forwarded or not, for sendAxes().
+        if (event.action == MotionEvent.ACTION_MOVE) axisMemory.record(event.deviceId) { event.getAxisValue(it) }
         if (!axisHold.route(event.deviceId, padInput, deflection(event))) return false
         if (event.action != MotionEvent.ACTION_MOVE || !ensureConnected(event.deviceId)) return true
 
@@ -134,6 +137,16 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
             }
         }
         return true
+    }
+
+    /**
+     * Sends the core each of [descriptor]'s devices' latest axis values, whether they were forwarded or not, so that a
+     * binding capture starting next knows which axes are at rest, and takes a centred stick's first push (a flick).
+     * Call it after any [releaseAll] before the capture, which forgets them in the core. A device that hasn't moved
+     * since it connected sends nothing: its values aren't known.
+     */
+    fun sendAxes(descriptor: String) {
+        axisMemory.replay(descriptor, devices) { deviceId, axis, value -> NativeLibrary.onAxis(deviceId, axis, value) }
     }
 
     /**
@@ -159,6 +172,8 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
     }
 
     override fun onInputDeviceRemoved(deviceId: Int) {
+        // Even one never reported to the core: its motion is remembered all the same.
+        axisMemory.forget(deviceId)
         if (devices.remove(deviceId) == null) return
         for (keyCode in keys.forget(deviceId)) NativeLibrary.onKey(deviceId, keyCode, false)
         schedule()
@@ -197,9 +212,9 @@ class ControllerInput(context: Context) : InputManager.InputDeviceListener {
 
     private class Device(
         val name: String,
-        val descriptor: String,
-        val axes: FloatArray,
-    )
+        override val descriptor: String,
+        override val axes: FloatArray,
+    ) : SentAxes
 
     private companion object {
         val AXES =

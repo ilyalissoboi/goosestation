@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.input.AxisMemory
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -14,8 +15,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** The core capturing the next input from one controller, for the remap screen. Each test runs in its own process. */
 @RunWith(AndroidJUnit4::class)
@@ -25,6 +28,9 @@ class BindingCaptureTest {
     private val dataRoot = File(root, "data")
     private val biosDir = File(root, "bios")
     private val captured = LinkedBlockingQueue<String>()
+
+    // On the core's thread.
+    @Volatile private var onCaptured: (String) -> Unit = { captured.put(it) }
 
     @Before
     fun setUp() {
@@ -40,7 +46,7 @@ class BindingCaptureTest {
                 override fun onError(message: String) {}
 
                 override fun onBindingCaptured(binding: String) {
-                    captured.put(binding)
+                    onCaptured(binding)
                 }
             },
         )
@@ -111,6 +117,64 @@ class BindingCaptureTest {
 
         val binding = captured.poll(2, TimeUnit.SECONDS)
         assertTrue("binding $binding", binding in setOf("+Axis17", "+Axis23", "Button104"))
+    }
+
+    // Ruling 29: a stick the pad reported at rest before the capture began is taken on its first push, a flick; one
+    // never reported must still come back first. The start takes in the input sent before it.
+    @Test
+    fun stickAtRestBeforeTheCaptureIsTakenAtOnce() {
+        NativeLibrary.onAxis(DEVICE_ID, 0, 0.1f) // AXIS_X
+        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.onAxis(DEVICE_ID, 0, 0.8f)
+
+        assertEquals("+Axis0", captured.poll(2, TimeUnit.SECONDS))
+    }
+
+    // Ruling 30: the app sends a pad's current axes, remembered while they weren't forwarded, just before the start.
+    // The capture takes them in, so the stick's first push is taken.
+    @Test
+    fun axesSentJustBeforeTheStartSeedIt() {
+        val axes = intArrayOf(0, 1) // AXIS_X, AXIS_Y
+        val memory = AxisMemory(axes)
+        memory.record(DEVICE_ID) { 0f }
+        for ((index, value) in memory.latest(DEVICE_ID)!!.withIndex()) NativeLibrary.onAxis(DEVICE_ID, axes[index], value)
+        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.onAxis(DEVICE_ID, 0, 0.8f)
+
+        assertEquals("+Axis0", captured.poll(2, TimeUnit.SECONDS))
+    }
+
+    // The start takes in the input queued before it, even when it runs before the core's thread has polled that input.
+    // onBindingCaptured runs on that thread, in its queued work, which comes before the input in each turn of its loop:
+    // an axis queued from there, then a start (which runs there and then, on that thread), always share one turn.
+    @Test
+    fun startTakesInTheInputQueuedBeforeIt() {
+        val nested = AtomicBoolean(false)
+        val nestedStarted = CountDownLatch(1)
+        onCaptured = { binding ->
+            if (nested.compareAndSet(false, true)) {
+                NativeLibrary.onAxis(DEVICE_ID, 0, 0.0f) // AXIS_X at rest: a first 0, never passed on as an event
+                NativeLibrary.startBindingCapture("pad-a")
+                nestedStarted.countDown()
+            } else {
+                captured.put(binding)
+            }
+        }
+        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.onKey(DEVICE_ID, 99, true)
+        assertTrue(nestedStarted.await(2, TimeUnit.SECONDS))
+
+        NativeLibrary.onAxis(DEVICE_ID, 0, 0.8f)
+
+        assertEquals("+Axis0", captured.poll(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun stickNeverReportedMustReturnFirst() {
+        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.onAxis(DEVICE_ID, 1, 0.7f) // AXIS_Y
+
+        assertNull(captured.poll(500, TimeUnit.MILLISECONDS))
     }
 
     private companion object {

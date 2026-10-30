@@ -47,6 +47,10 @@ public:
   /// Lets go of everything every device holds, after the events queued before it.
   void QueueReleaseAll();
 
+  /// The axes the device index's controllers have near rest (AndroidInputKeys::GetCenteredAxes()), as far as the
+  /// events polled go.
+  std::vector<u32> GetCenteredAxes(u32 index) const;
+
 private:
   struct QueuedEvent
   {

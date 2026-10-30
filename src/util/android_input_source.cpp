@@ -47,15 +47,8 @@ static_assert(AndroidInputKeys::AXIS_RTRIGGER == AMOTION_EVENT_AXIS_RTRIGGER);
 static_assert(AndroidInputKeys::AXIS_GAS == AMOTION_EVENT_AXIS_GAS);
 static_assert(AndroidInputKeys::AXIS_BRAKE == AMOTION_EVENT_AXIS_BRAKE);
 
-static constexpr std::string_view DEVICE_PREFIX = "Android-";
-
-static std::optional<u32> ParseDeviceIndex(std::string_view device)
-{
-  if (!device.starts_with(DEVICE_PREFIX))
-    return std::nullopt;
-
-  return StringUtil::FromChars<u32>(device.substr(DEVICE_PREFIX.size()));
-}
+using AndroidInputKeys::DEVICE_PREFIX;
+using AndroidInputKeys::ParseDeviceIndex;
 
 AndroidInputSource::AndroidInputSource() = default;
 

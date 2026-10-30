@@ -83,7 +83,6 @@ static void SetDefaultSettings(SettingsInterface& si);
 static void LoadFolders(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
-static std::optional<u32> ParseDeviceIndex(std::string_view identifier);
 static std::optional<u32> FindDescriptorIndex(std::string_view descriptor);
 static void WriteDescriptors(SettingsInterface& si);
 static const Controller::ControllerInfo* GetPort1ControllerInfo(SettingsInterface& si);
@@ -96,11 +95,19 @@ static bool IsVulkanRenderer(GPURenderer renderer);
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
 
-static constexpr std::string_view DEVICE_PREFIX = "Android-";
+using AndroidInputKeys::DEVICE_PREFIX;
+using AndroidInputKeys::ParseDeviceIndex;
 
 // Where each controller's device index (Android-<index>) is kept, by its descriptor.
-static constexpr const char* DESCRIPTORS_SECTION = "Android";
-static constexpr const char* DESCRIPTORS_KEY = "ControllerDescriptors";
+static constexpr const char* DESCRIPTORS_SECTION = AndroidInputKeys::SETTINGS_SECTION;
+static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY;
+
+// The inputs the remap page lists (GetPadBindings()) and edits (SetPadBinding()).
+static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
+{
+  return type == InputBindingInfo::Type::Button || type == InputBindingInfo::Type::Axis ||
+         type == InputBindingInfo::Type::HalfAxis;
+}
 
 static std::mutex s_initialize_mutex;
 static std::atomic_bool s_initialized{false};
@@ -918,14 +925,6 @@ void AndroidHost::ProcessInputQueue()
   s_input_events.clear();
 }
 
-std::optional<u32> AndroidHost::ParseDeviceIndex(std::string_view identifier)
-{
-  if (!identifier.starts_with(DEVICE_PREFIX))
-    return std::nullopt;
-
-  return StringUtil::FromChars<u32>(identifier.substr(DEVICE_PREFIX.size()));
-}
-
 std::optional<u32> AndroidHost::FindDescriptorIndex(std::string_view descriptor)
 {
   const auto it = std::find(s_descriptors.begin(), s_descriptors.end(), descriptor);
@@ -1098,13 +1097,19 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
+        // Only what GetPadBindings() lists: a button or an axis, never a pointer or a motor.
         const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
         if (!info || std::none_of(info->bindings.begin(), info->bindings.end(),
-                                  [&name](const Controller::ControllerBindingInfo& bi) { return name == bi.name; }))
+                                  [&name](const Controller::ControllerBindingInfo& bi) {
+                                    return name == bi.name && IsPadBindingType(bi.type);
+                                  }))
         {
-          WARNING_LOG("Port 1 has no input '{}', not binding it.", name);
+          WARNING_LOG("Port 1 has no button or axis '{}', not binding it.", name);
           return;
         }
+
+        // An edit made before a new pad's defaults are mapped: they'd be added over it.
+        std::erase(s_unmapped_indices, index.value());
 
         const std::string section = Controller::GetSettingsSection(0);
         si.SetStringList(section.c_str(), name.c_str(),
@@ -1136,6 +1141,9 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
         const std::string section = Controller::GetSettingsSection(0);
+
+        // Its defaults go on now; the ones a queued first mapping would add are already these.
+        std::erase(s_unmapped_indices, index.value());
 
         // From every key, not only the controller type's: another type's, or a macro's, would come back with them.
         std::vector<std::string> keys;

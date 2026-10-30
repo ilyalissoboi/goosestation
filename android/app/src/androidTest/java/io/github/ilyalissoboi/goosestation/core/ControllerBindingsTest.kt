@@ -156,6 +156,21 @@ class ControllerBindingsTest {
         assertEquals(listOf("Android-0/Button96", "Android-1/Button99"), readSettings().values("Pad1", "Cross"))
     }
 
+    // getPadBindings lists only buttons and axes, so setPadBinding takes only those: never a GunCon's pointer.
+    @Test
+    fun setPadBindingRefusesAPointer() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad1]\nType = GunCon\n",
+        )
+        // A GunCon gets no pad defaults, so wait for the pad to be known instead.
+        NativeLibrary.onDeviceConnected(1, "Pad pad-a", "pad-a")
+        waitFor("pad-a is in the table") { readSettings().values("Android", "ControllerDescriptors") == listOf("pad-a") }
+
+        NativeLibrary.setPadBinding("pad-a", "Pointer", "Button96")
+
+        assertEquals(emptyList<String>(), readSettings().values("Pad1", "Pointer"))
+    }
+
     @Test
     fun clearingTouchesOnlyThatPad() {
         initialize(null)

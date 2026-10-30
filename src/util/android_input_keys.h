@@ -19,6 +19,16 @@
 /// tested on every platform; the Android input source feeds it events and passes its output to the InputManager.
 namespace AndroidInputKeys {
 
+/// The pads' device names are this, then their index: Android-<n>.
+inline constexpr std::string_view DEVICE_PREFIX = "Android-";
+
+/// Where settings.ini keeps the descriptor of each Android-<n>, in index order: [Android] ControllerDescriptors.
+inline constexpr const char* SETTINGS_SECTION = "Android";
+inline constexpr const char* DESCRIPTORS_KEY = "ControllerDescriptors";
+
+/// The n of an Android-<n> device name, or nullopt for any other name.
+std::optional<u32> ParseDeviceIndex(std::string_view identifier);
+
 // Android's KeyEvent.KEYCODE_* numbers.
 inline constexpr s32 KEYCODE_BACK = 4;
 inline constexpr s32 KEYCODE_DPAD_UP = 19;

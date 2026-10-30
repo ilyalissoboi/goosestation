@@ -79,14 +79,8 @@ private fun biosChoices(
     val offered =
         images.map { image ->
             val other = image.region != ANY_REGION && image.region != region.coreName
-            val label =
-                if (image.description in
-                    shared
-                ) {
-                    "${image.description} (${image.fileName})"
-                } else {
-                    image.description
-                }
+            val named = image.description in shared
+            val label = if (named) "${image.description} (${image.fileName})" else image.description
             Choice<String?>(image.fileName, label, if (other) "made for ${image.region}" else null)
         }
     val unoffered =

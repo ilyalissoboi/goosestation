@@ -520,8 +520,8 @@ across restarts, whatever order the controllers connect in.
   name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
   <n>` for any other key, or `Not set`. Picking another controller shows "Reading <name>'s bindings…" in their place
   until its own are read.
-- A on a row asks for the input: "Press the new button for <input>… Back cancels (5)", counting down. The controller's next
-  press, or a stick or trigger pushed past halfway, becomes that row's binding for this controller only; the other
+- A on a row asks for the input: "Press the new button for <input>… Back cancels (5)", counting down. The controller's
+  next press, or a stick or trigger pushed past halfway, becomes that row's binding for this controller only; the other
   controllers' entries in the key stay. A button already held when it starts isn't taken, nor is an axis until it has
   been near rest (within a quarter): during the capture, or as the pad last reported it before the capture began. The
   app remembers each pad's latest axis values from every motion it sends, passed to the core or not, and sends them as
@@ -531,7 +531,8 @@ across restarts, whatever order the controllers connect in.
   gesture) cancels it; B is captured like any other button.
 - **Clear**, at the end of each row (Right reaches it), removes this controller's binding for it. Once a capture
   lands, **Undo** takes Clear's place on that row and puts back the binding the capture replaced, until the focus
-  leaves the row. **Reset to defaults**, at the end, drops all of this controller's bindings and adds its defaults
+  leaves the row. Once pressed it reads **Undone**, and does nothing until the focus has left the row, so a second
+  press doesn't clear what it put back. **Reset to defaults**, at the end, drops all of this controller's bindings and adds its defaults
   again.
 - **The menu's triggers can't be remapped.** Back and Mode can't be bound: Back never reaches the core, and the core
   refuses Mode, so a capture never sees either. Select and Start can be bound to anything, but the controller's own
@@ -546,17 +547,17 @@ In a game, three things pause it and open a prompt, "Paused", with **Resume** (f
 - **Select and Start held together for a second**, on one controller.
 
 The game never sees the press that opens it. While the prompt shows, the controllers move its focus, as on any
-other screen; A presses the focused button, and B, Back or Mode resume. Everything held when it opens is let go, so
-nothing stays pressed after **Resume**.
+other screen; A presses the focused button, and B, Back or Mode resume. Everything held is let go as it opens and
+again on **Resume**, so nothing stays pressed in the game. The pause writes the memory cards, as Home's does, and
+**Quit to library** stops the game (`Game stopped.`). With the prompt open, Home and back keeps the game paused, with
+the prompt showing. Back while a game is still booting opens the prompt too: the game pauses once it has booted, and
+**Resume** starts it.
 
 A stick the game had (or a capture, on the Controllers page) stays the core's after the prompt opens or the capture
 ends, until it's pushed less than 0.45 from rest, so it doesn't move the menus' focus while it's still held. That's
 just under the 0.5 at which Android turns a stick into D-pad presses; a controller that declares a larger dead zone
 for its stick or hat raises it to that, but never to 0.5. As the stick comes under it, the core is told it's at rest,
-so a game resumed with the stick let go doesn't see it pushed, and the menus take it from then on. The pause writes the memory cards, as Home's does, and **Quit to library**
-stops the game (`Game stopped.`). With the prompt open, Home and back keeps the game paused, with the prompt
-showing. Back while a game is still booting opens the prompt too: the game pauses once it has booted, and **Resume**
-starts it.
+so a game resumed with the stick let go doesn't see it pushed, and the menus take it from then on.
 
 Select and Start keep working in games. Pressed alone, each goes to the game as it comes. When one is held and the
 other goes down, that second press is held back: if both are still held 1 s later, the prompt opens and the held-back

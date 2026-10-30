@@ -1105,6 +1105,14 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
       if (!index.has_value())
         return;
 
+      // An edit made before a new pad's first mapping: its defaults go on first, so it has them and the edit. The
+      // mapping, queued meanwhile, then adds nothing (MapNewController()).
+      if (std::find(s_unmapped_indices.begin(), s_unmapped_indices.end(), index.value()) != s_unmapped_indices.end() &&
+          AddControllerToPort1(fmt::format("{}{}", DEVICE_PREFIX, index.value())))
+      {
+        std::erase(s_unmapped_indices, index.value());
+      }
+
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
@@ -1119,7 +1127,7 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
           return;
         }
 
-        // An edit made before a new pad's defaults are mapped: they'd be added over it.
+        // Its defaults went on above if they could; if not (it's gone again), none come over the edit later.
         std::erase(s_unmapped_indices, index.value());
 
         const std::string section = Controller::GetSettingsSection(0);

@@ -230,7 +230,8 @@ class ControllersPage(
     /**
      * Numbers the [connected] controllers that share a name, by their places in the core's table, so the numbers stay
      * the same from one run to the next; until they're read, each is labelled with its name. One the table doesn't
-     * have keeps its name.
+     * have yet is asked for once more, as a new pad's descriptor is added a moment after it connects; one still missing
+     * then keeps its name.
      */
     private fun readLabels(connected: List<ConnectedController>) {
         val read = ++labelsRead
@@ -243,7 +244,11 @@ class ControllersPage(
         if (shared.isEmpty()) return
         scope.launch {
             val indices =
-                withContext(core) { shared.associate { it.descriptor to api.getControllerIndex(it.descriptor) } }
+                withContext(core) {
+                    val first = shared.associate { it.descriptor to api.getControllerIndex(it.descriptor) }
+                    // The core adds it after the work queued before it, this lookup's included.
+                    first.mapValues { (descriptor, index) -> index ?: api.getControllerIndex(descriptor) }
+                }
             if (read != labelsRead) return@launch
             val numbered =
                 shared.associate { pad ->

@@ -20,7 +20,7 @@ class FakeCoreApi(
     /** Each pad's place in the descriptor table, by descriptor; a pad not in it has none. */
     var indices = emptyMap<String, Int>()
 
-    /** Runs as a read of the Graphics or the BIOS page reaches the core, as if the user acted meanwhile. */
+    /** Runs once, as the next read of the Graphics or the BIOS page reaches the core, as if the user acted meanwhile. */
     var duringRead: () -> Unit = {}
 
     override fun getPadBindings(descriptor: String): List<PadBinding>? =
@@ -43,7 +43,13 @@ class FakeCoreApi(
         calls += "startBindingCapture $descriptor"
     }
 
-    override fun getControllerIndex(descriptor: String): Int? = indices[descriptor]
+    /** Pads the table only has from their second lookup on, as a new pad's descriptor is added a moment after. */
+    var notYetInTable = mutableSetOf<String>()
+
+    override fun getControllerIndex(descriptor: String): Int? {
+        calls += "getControllerIndex $descriptor"
+        return if (notYetInTable.remove(descriptor)) null else indices[descriptor]
+    }
 
     override fun cancelBindingCapture() {
         calls += "cancelBindingCapture"
@@ -55,7 +61,7 @@ class FakeCoreApi(
 
     override fun getAspectRatioNames(): List<String> {
         calls += "getAspectRatioNames"
-        duringRead()
+        takeDuringRead()
         return listOf("Auto (Game Native)", "4:3")
     }
 
@@ -63,9 +69,15 @@ class FakeCoreApi(
 
     override fun getBiosImages(): List<BiosImage> {
         calls += "getBiosImages"
-        duringRead()
+        takeDuringRead()
         return images
     }
 
     override fun getAutoBios(region: String): String? = images.firstOrNull()?.description
+
+    private fun takeDuringRead() {
+        val action = duringRead
+        duringRead = {}
+        action()
+    }
 }

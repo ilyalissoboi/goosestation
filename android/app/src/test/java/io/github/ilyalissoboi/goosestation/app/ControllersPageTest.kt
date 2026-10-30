@@ -204,6 +204,41 @@ class ControllersPageTest {
             assertEquals(mapOf(PAD_A to "Wireless Controller"), page.state.labels)
         }
 
+    // A brand-new pad's place can be asked for before the core has added it: it's asked for once more.
+    @Test
+    fun aNewPadIsNumberedOnceTheTableHasIt() =
+        runTest {
+            api.indices = mapOf(PAD_A to 0, "pad-b" to 1)
+            api.notYetInTable += "pad-b"
+            pads.connected.value =
+                listOf(
+                    ConnectedController(1, "Wireless Controller", PAD_A),
+                    ConnectedController(2, "Wireless Controller", "pad-b"),
+                )
+            val page = openPage()
+
+            assertEquals(
+                mapOf(PAD_A to "Wireless Controller (1)", "pad-b" to "Wireless Controller (2)"),
+                page.state.labels,
+            )
+        }
+
+    // A pad the table never has keeps its bare name, and isn't asked for over and over.
+    @Test
+    fun aPadTheTableLacksIsAskedForTwice() =
+        runTest {
+            api.indices = mapOf(PAD_A to 0)
+            pads.connected.value =
+                listOf(
+                    ConnectedController(1, "Wireless Controller", PAD_A),
+                    ConnectedController(2, "Wireless Controller", "pad-b"),
+                )
+            val page = openPage()
+
+            assertEquals("Wireless Controller", page.state.labels["pad-b"])
+            assertEquals(2, calls.count { it == "getControllerIndex pad-b" })
+        }
+
     // T7-3: until the new pad's bindings are read, the page knows the ones it has are another's, and edits nothing.
     @Test
     fun aSwitchSaysWhoseBindingsAreShown() =

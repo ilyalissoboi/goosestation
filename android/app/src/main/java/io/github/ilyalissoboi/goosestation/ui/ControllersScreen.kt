@@ -206,7 +206,8 @@ private fun BindingRow(
                 )
             },
         )
-        if (undo) ActionButton("Undo", onClick = onUndo) else ActionButton("Clear", onClick = onClear)
+        // One button, so the focus stays on it as Undo turns back into Clear.
+        ActionButton(if (undo) "Undo" else "Clear", onClick = if (undo) onUndo else onClear)
     }
 }
 

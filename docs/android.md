@@ -183,6 +183,18 @@ cd android
 ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest   # instrumented tests, in app/src/androidTest
 ```
 
+```bash
+./gradlew ktlintCheck    # the Kotlin layout rules, in android/.editorconfig; ktlintFormat fixes what it can
+./gradlew check          # ktlintCheck, Android Lint, checkNoWindowDialogs and the JVM tests
+```
+
+On GitHub, `.github/workflows/android.yml` ("Android build") runs on pull requests and pushes to `master` that touch
+the app, the core or `scripts/deps/build-dependencies-android.sh`, and twice a week to keep its cache warm. On
+`ubuntu-24.04` it installs the SDK's NDK, CMake (with its Ninja) and platform at the versions above, builds the
+dependency prefix into `~/deps-android` (cached by the script's hash and the NDK version), then runs `assembleDebug`,
+`testDebugUnitTest`, `ktlintCheck` and `checkNoWindowDialogs`, and uploads the debug APK as `android-debug-apk`. It
+has no secrets, and isn't part of a release.
+
 The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
 can only be initialized once per process). Tests that need a document tree build one in `TestDocumentsProvider`, a
 `DocumentsProvider` in the debug build only (`app/src/debug`), over `files/test-documents`. It's disabled until a
@@ -491,18 +503,24 @@ across restarts, whatever order the controllers connect in.
   connects, and after a settings reload.
 - **Two identical controllers that Android gives the same descriptor** are one controller to the app: they share a
   mapping, and the Controllers page lists them once.
+- **Controllers that share a name but not a descriptor** (two DualShock 4s, say) are numbered on the Controllers page
+  by their place in the list, plus one: "Wireless Controller (1)", "Wireless Controller (2)". The numbers stay the
+  same from one run to the next. A controller whose name no other connected one has is shown by its name alone.
 
 **Settings** → **Controllers** remaps them, one controller at a time:
 
 - First, a card: "Back, the Mode (Home or Guide) button, or holding Select + Start for a second pauses the game and
   opens the menu. These buttons always do this, whatever is mapped to them."
 - With no controller connected, "Connect a controller to remap it." follows, and nothing else. With more than one, a
-  **Controller** row picks which (it's focused on opening); with one, its name. Then "Every connected controller
-  drives Port 1. Each one keeps its own mapping."
+  **Controller** row picks which; with one, its name. Either holds the focus on opening: it never starts on a binding,
+  so an A pressed as the page opens captures nothing, and Down reaches the first binding. A controller connecting or
+  going doesn't move a focus already in the page, nor a capture's row. Then "Every connected controller drives Port 1.
+  Each one keeps its own mapping."
 - Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on), with the binding's
   name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
-  <n>` for any other key, or `Not set`. The first one is focused on opening, with a single controller.
-- A on a row asks for the input: "Press a button or move a stick on <name>… (5)", counting down. The controller's next
+  <n>` for any other key, or `Not set`. Picking another controller shows "Reading <name>'s bindings…" in their place
+  until its own are read.
+- A on a row asks for the input: "Press the new button for <input>… Back cancels (5)", counting down. The controller's next
   press, or a stick or trigger pushed past halfway, becomes that row's binding for this controller only; the other
   controllers' entries in the key stay. A button already held when it starts isn't taken, nor is an axis until it has
   been near rest (within a quarter): during the capture, or as the pad last reported it before the capture began. The
@@ -511,8 +529,10 @@ across restarts, whatever order the controllers connect in.
   since it connected has no known values: its axes must come back to rest first, and so must a trigger resting at −1 or
   a stick still held. Left alone, the capture ends after 5 s with the binding unchanged. Back (the system's Back key or
   gesture) cancels it; B is captured like any other button.
-- **Clear**, at the end of each row (Right reaches it), removes this controller's binding for it. **Reset to
-  defaults**, at the end, drops all of this controller's bindings and adds its defaults again.
+- **Clear**, at the end of each row (Right reaches it), removes this controller's binding for it. Once a capture
+  lands, **Undo** takes Clear's place on that row and puts back the binding the capture replaced, until the focus
+  leaves the row. **Reset to defaults**, at the end, drops all of this controller's bindings and adds its defaults
+  again.
 - **The menu's triggers can't be remapped.** Back and Mode can't be bound: Back never reaches the core, and the core
   refuses Mode, so a capture never sees either. Select and Start can be bound to anything, but the controller's own
   Select and Start keys, held together, open the prompt whatever they're mapped to (see "Leaving a game").
@@ -527,7 +547,13 @@ In a game, three things pause it and open a prompt, "Paused", with **Resume** (f
 
 The game never sees the press that opens it. While the prompt shows, the controllers move its focus, as on any
 other screen; A presses the focused button, and B, Back or Mode resume. Everything held when it opens is let go, so
-nothing stays pressed after **Resume**. The pause writes the memory cards, as Home's does, and **Quit to library**
+nothing stays pressed after **Resume**.
+
+A stick the game had (or a capture, on the Controllers page) stays the core's after the prompt opens or the capture
+ends, until it's pushed less than 0.45 from rest, so it doesn't move the menus' focus while it's still held. That's
+just under the 0.5 at which Android turns a stick into D-pad presses; a controller that declares a larger dead zone
+for its stick or hat raises it to that, but never to 0.5. As the stick comes under it, the core is told it's at rest,
+so a game resumed with the stick let go doesn't see it pushed, and the menus take it from then on. The pause writes the memory cards, as Home's does, and **Quit to library**
 stops the game (`Game stopped.`). With the prompt open, Home and back keeps the game paused, with the prompt
 showing. Back while a game is still booting opens the prompt too: the game pauses once it has booted, and **Resume**
 starts it.

@@ -55,6 +55,7 @@ class ControllersScreenTest {
     // What the page shows, which a test can change once it's open.
     private var controllers by mutableStateOf(listOf(PAD))
     private var capturing by mutableStateOf<String?>(null)
+    private var undoFor by mutableStateOf<String?>(null)
 
     private fun show(
         controllers: List<ConnectedController> = listOf(PAD),
@@ -68,6 +69,7 @@ class ControllersScreenTest {
     ) {
         this.controllers = controllers
         this.capturing = capturing
+        this.undoFor = undoFor
         rule.setContent {
             GooseStationTheme {
                 ControllersScreen(
@@ -78,12 +80,15 @@ class ControllersScreenTest {
                     bindingsFor = bindingsFor,
                     capturing = this.capturing,
                     secondsLeft = secondsLeft,
-                    undoFor = undoFor,
+                    undoFor = this.undoFor,
                     onSelect = { selects += it },
                     onCapture = { captures += it },
                     onCancelCapture = { cancels++ },
                     onClear = { clears += it },
-                    onUndo = { undos++ },
+                    onUndo = {
+                        undos++
+                        this.undoFor = null
+                    },
                     onDropUndo = { dropUndos++ },
                     onReset = { resets++ },
                     onBack = { backs++ },
@@ -212,6 +217,19 @@ class ControllersScreenTest {
 
         assertEquals(1, undos)
         assertEquals(emptyList<String>(), clears)
+    }
+
+    // Found by hand: Undo turning back into Clear mustn't lose the focus, which sent it to the top of the page.
+    @Test
+    fun undoKeepsTheFocusOnItsButton() {
+        show(undoFor = "Cross")
+        repeat(2) { press(Key.DirectionDown) }
+        press(Key.DirectionRight)
+
+        press(Key.Enter)
+
+        assertEquals(1, undos)
+        assertFocusedHas("Clear")
     }
 
     @Test

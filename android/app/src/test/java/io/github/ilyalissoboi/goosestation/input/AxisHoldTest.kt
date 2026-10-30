@@ -3,76 +3,98 @@
 
 package io.github.ilyalissoboi.goosestation.input
 
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import io.github.ilyalissoboi.goosestation.input.AxisHold.Route
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** A stick pushed while the core had the pads stays the core's until it's back near rest. */
+/** A stick pushed while the core had the pads stays the core's until it's back under Android's D-pad threshold. */
 class AxisHoldTest {
     private companion object {
         const val PAD = 7
         const val OTHER_PAD = 8
+        const val BAR = 0.45f
     }
 
     private val hold = AxisHold()
 
+    private fun route(
+        deviceId: Int,
+        padInput: Boolean,
+        deflection: Float,
+    ) = hold.route(deviceId, padInput, deflection, BAR)
+
     @Test
     fun motionGoesToTheCoreWhileItHasThePads() {
-        assertTrue(hold.route(PAD, padInput = true, deflection = 0f))
-        assertTrue(hold.route(PAD, padInput = true, deflection = 0.8f))
+        assertEquals(Route.Core, route(PAD, padInput = true, deflection = 0f))
+        assertEquals(Route.Core, route(PAD, padInput = true, deflection = 0.8f))
     }
 
     @Test
     fun aStickHeldPastTheCapturesEndStaysTheCores() {
-        hold.route(PAD, padInput = true, deflection = 0.8f)
+        route(PAD, padInput = true, deflection = 0.8f)
 
-        assertTrue(hold.route(PAD, padInput = false, deflection = 0.8f))
-        assertTrue(hold.route(PAD, padInput = false, deflection = 0.4f))
+        assertEquals(Route.Core, route(PAD, padInput = false, deflection = 0.8f))
+        assertEquals(Route.Core, route(PAD, padInput = false, deflection = 0.5f))
+    }
+
+    // Review Focus 1: a stick that drifts at 0.3 navigates again at once.
+    @Test
+    fun driftBelowTheBarEndsTheHold() {
+        route(PAD, padInput = true, deflection = 0.8f)
+
+        assertEquals(Route.CoreThenRest, route(PAD, padInput = false, deflection = 0.3f))
+        assertEquals(Route.App, route(PAD, padInput = false, deflection = 0.3f))
     }
 
     @Test
-    fun backNearRestTheMotionIsTheAppsAgain() {
-        hold.route(PAD, padInput = true, deflection = 0.8f)
-        hold.route(PAD, padInput = false, deflection = 0.6f)
+    fun aHoldEndsWithRestOnce() {
+        route(PAD, padInput = true, deflection = 0.8f)
+        route(PAD, padInput = false, deflection = 0.6f)
 
-        // The core still gets the stick coming back, so it doesn't keep the last push.
-        assertTrue(hold.route(PAD, padInput = false, deflection = 0.1f))
-        assertFalse(hold.route(PAD, padInput = false, deflection = 0.1f))
-        assertFalse(hold.route(PAD, padInput = false, deflection = 0.8f))
+        assertEquals(Route.CoreThenRest, route(PAD, padInput = false, deflection = 0.1f))
+        assertEquals(Route.App, route(PAD, padInput = false, deflection = 0.1f))
+        assertEquals(Route.App, route(PAD, padInput = false, deflection = 0.8f))
     }
 
     @Test
-    fun aStickAtRestAsTheCaptureEndsIsntHeld() {
-        hold.route(PAD, padInput = true, deflection = 0.8f)
-        hold.route(PAD, padInput = true, deflection = 0.1f)
+    fun aStickUnderTheBarAsTheCaptureEndsIsntHeld() {
+        route(PAD, padInput = true, deflection = 0.8f)
+        route(PAD, padInput = true, deflection = 0.3f)
 
-        assertFalse(hold.route(PAD, padInput = false, deflection = 0.6f))
+        assertEquals(Route.App, route(PAD, padInput = false, deflection = 0.6f))
     }
 
     @Test
     fun anotherDevicesMotionIsntHeld() {
-        hold.route(PAD, padInput = true, deflection = 0.8f)
+        route(PAD, padInput = true, deflection = 0.8f)
 
-        assertFalse(hold.route(OTHER_PAD, padInput = false, deflection = 0.8f))
-        assertTrue(hold.route(PAD, padInput = false, deflection = 0.8f))
+        assertEquals(Route.App, route(OTHER_PAD, padInput = false, deflection = 0.8f))
+        assertEquals(Route.Core, route(PAD, padInput = false, deflection = 0.8f))
     }
 
     @Test
     fun aDisconnectEndsTheHold() {
-        hold.route(PAD, padInput = true, deflection = 0.8f)
-        hold.route(OTHER_PAD, padInput = true, deflection = 0.8f)
+        route(PAD, padInput = true, deflection = 0.8f)
+        route(OTHER_PAD, padInput = true, deflection = 0.8f)
 
         hold.forget(PAD)
 
-        assertFalse(hold.route(PAD, padInput = false, deflection = 0.8f))
-        assertTrue(hold.route(OTHER_PAD, padInput = false, deflection = 0.8f))
+        assertEquals(Route.App, route(PAD, padInput = false, deflection = 0.8f))
+        assertEquals(Route.Core, route(OTHER_PAD, padInput = false, deflection = 0.8f))
     }
 
     @Test
-    fun deflectionUnderAQuarterIsRest() {
-        hold.route(PAD, padInput = true, deflection = 0.25f)
+    fun theBarIsHeldUntilTheValueIsUnderIt() {
+        route(PAD, padInput = true, deflection = BAR)
 
-        assertTrue(hold.route(PAD, padInput = false, deflection = 0.24f))
-        assertFalse(hold.route(PAD, padInput = false, deflection = 0.3f))
+        assertEquals(Route.Core, route(PAD, padInput = false, deflection = BAR))
+        assertEquals(Route.CoreThenRest, route(PAD, padInput = false, deflection = 0.44f))
+    }
+
+    @Test
+    fun aLargerFlatRaisesTheBarButNeverToHalf() {
+        assertEquals(0.45f, AxisHold.barFor(0f), 0f)
+        assertEquals(0.47f, AxisHold.barFor(0.47f), 0f)
+        assertEquals(0.49f, AxisHold.barFor(0.6f), 0f)
     }
 }

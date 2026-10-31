@@ -14,17 +14,24 @@ import java.io.File
 
 /**
  * Cover images from the working copy, decoded no larger than needed and kept in memory, up to [maxBytes] of bitmaps.
- * A file replaced since it was decoded (a new modified time) is decoded again.
+ * A file replaced since it was decoded (a new modified time) is decoded again, and so is one asked for larger than it
+ * was decoded for, as when a cover first seen in the list is shown in the grid.
  */
 class CoverLoader(
     maxBytes: Int,
 ) {
+    /** A decoded [bitmap], and the [targetPx] it was decoded for. */
+    private class Cover(
+        val bitmap: Bitmap,
+        val targetPx: Int,
+    )
+
     private val cache =
-        object : LruCache<String, Bitmap>(maxBytes) {
+        object : LruCache<String, Cover>(maxBytes) {
             override fun sizeOf(
                 key: String,
-                value: Bitmap,
-            ) = value.allocationByteCount
+                value: Cover,
+            ) = value.bitmap.allocationByteCount
         }
 
     /**
@@ -41,7 +48,8 @@ class CoverLoader(
             val modified = file.lastModified()
             if (modified == 0L) return@withContext null
             val key = "$modified:$path"
-            val bitmap = cache.get(key) ?: decode(file, targetPx)?.also { cache.put(key, it) }
+            val cached = cache.get(key)?.takeIf { servesTarget(it.targetPx, targetPx) }
+            val bitmap = cached?.bitmap ?: decode(file, targetPx)?.also { cache.put(key, Cover(it, targetPx)) }
             bitmap?.asImageBitmap()
         }
 
@@ -57,6 +65,12 @@ class CoverLoader(
         return BitmapFactory.decodeFile(file.path, options)
     }
 }
+
+/** Whether a cover decoded for [decodedForPx] is large enough for [targetPx]: one decoded for as much or more is. */
+internal fun servesTarget(
+    decodedForPx: Int,
+    targetPx: Int,
+): Boolean = decodedForPx >= targetPx
 
 /** The largest power of two that keeps an image's [longer] side at [targetPx] or more, and at least 1 px. */
 internal fun sampleSizeFor(

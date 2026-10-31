@@ -568,7 +568,7 @@ class OrientationLayoutTest {
             )
         }) {
             assertTextsLaidOut()
-            for (text in listOf("GooseStation", "Grid", "Settings", "Refresh")) {
+            for (text in listOf("Library", "Grid", "Settings", "Refresh")) {
                 rule.onNodeWithText(text, useUnmergedTree = true).assertIsDisplayed()
             }
             assertTrue(focusedHas("Settings"))

@@ -4,6 +4,8 @@
 package io.github.ilyalissoboi.goosestation.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CoverLoaderTest {
@@ -19,5 +21,17 @@ class CoverLoaderTest {
     fun sampleSizeForNoTargetIsTheSmallestDecode() {
         assertEquals(1024, sampleSizeFor(longer = 1024, targetPx = 0))
         assertEquals(1024, sampleSizeFor(longer = 1024, targetPx = -5))
+    }
+
+    @Test
+    fun aCoverDecodedForALargerTargetServesASmallerOne() {
+        assertTrue(servesTarget(decodedForPx = 400, targetPx = 126))
+        assertTrue(servesTarget(decodedForPx = 400, targetPx = 400))
+    }
+
+    // A thumbnail decoded for the list is decoded again for the grid, not stretched.
+    @Test
+    fun aCoverDecodedForASmallerTargetDoesntServeALargerOne() {
+        assertFalse(servesTarget(decodedForPx = 126, targetPx = 400))
     }
 }

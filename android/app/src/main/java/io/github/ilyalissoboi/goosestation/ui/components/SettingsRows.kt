@@ -247,11 +247,13 @@ private fun CyclerArrow(
 ) {
     val colors = GooseStationTheme.colors
     val tap by rememberUpdatedState(onTap)
+    val canTap by rememberUpdatedState(enabled)
     Box(
         modifier =
             Modifier
                 .size(40.dp)
-                .pointerInput(enabled) { if (enabled) detectTapGestures { tap() } },
+                // Taken even at an end, where it does nothing: let through, it would reach the row and step forward.
+                .pointerInput(Unit) { detectTapGestures { if (canTap) tap() } },
         contentAlignment = Alignment.Center,
     ) {
         Icon(

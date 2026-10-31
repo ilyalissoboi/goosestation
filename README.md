@@ -124,6 +124,11 @@ Requirements:
 4. Compile the source code: `cmake --build build-release --parallel`.
 5. Run the binary, located in the build directory under `bin/GooseStation.app`.
 
+## Design
+
+GooseStation's look (colours, type, icons, components) and how to build new UI that fits it are in
+[docs/design-system.md](docs/design-system.md), with its tokens and SVGs in [docs/design-system](docs/design-system).
+
 ## User Directories
 The "User Directory" is where you should place your BIOS images, where settings are saved to, and memory cards/save states are saved by default.
 An optional [SDL game controller database file](#sdl-game-controller-database) can be also placed here.

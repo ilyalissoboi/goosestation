@@ -175,6 +175,14 @@ prefix, as for the configure script) and `data/resources` as assets under `resou
 to its internal files on first run and whenever the app is reinstalled or updated: it compares the version code and
 the install's `lastUpdateTime` (`<versionCode>-<lastUpdateTime>`) with the last copy's.
 
+## The app's look
+
+The app's colours, fonts, icons and components follow the design system: see
+[docs/design-system.md](design-system.md) before adding a screen or a control. The theme is in `ui/theme/`
+(`Theme.kt`, `GsIcons.kt`, `GooseMark.kt`), the shared components in `ui/components/`, and the bundled fonts in
+`app/src/main/res/font/`, with their licences in `app/src/main/assets/licenses/`. `GsIcons.kt` is generated from
+`docs/design-system/icons/` by `scripts/branding/generate-gsicons.py`.
+
 ## Testing the app
 
 ```bash

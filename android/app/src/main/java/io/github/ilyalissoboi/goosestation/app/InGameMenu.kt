@@ -157,7 +157,10 @@ class InGameMenu(
         state = state.copy(fastForward = enabled)
     }
 
-    override fun resume() = onResume()
+    /** Back to the game, unless Exit game is saving the resume state: the game stops once that's done. */
+    override fun resume() {
+        if (!state.exiting) onResume()
+    }
 
     /**
      * Exit game: a game that has booted, with a serial, saves its resume state first, on [game], then the game stops

@@ -518,6 +518,18 @@ class InGameMenuTest {
         }
 
     @Test
+    fun resumeWhileTheExitSaveRunsIsIgnored() =
+        runTest {
+            val menu = menu()
+
+            menu.exit()
+            menu.resume()
+            runCurrent()
+
+            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+        }
+
+    @Test
     fun theGameStoppingClearsEverything() =
         runTest {
             val menu = menu()

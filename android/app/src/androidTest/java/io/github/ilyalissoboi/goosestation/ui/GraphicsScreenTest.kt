@@ -41,11 +41,9 @@ class GraphicsScreenTest {
         rule.onNode(isFocused()).assert(hasText(text))
     }
 
-    // Opens the focused row's choices, on its current one, and picks the next.
+    // Steps the focused row on to the choice after its current one.
     private fun pickTheNextChoice() {
-        press(Key.Enter)
-        press(Key.DirectionDown)
-        press(Key.Enter)
+        press(Key.DirectionRight)
     }
 
     @Test

@@ -12,12 +12,16 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,14 +32,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.library.CoverLoader
+import io.github.ilyalissoboi.goosestation.ui.components.focusIndicator
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
+import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 
 // For the life of the process, so covers stay decoded across screens: an eighth of the heap.
-private val covers = CoverLoader((Runtime.getRuntime().maxMemory() / 8).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+internal val covers = CoverLoader((Runtime.getRuntime().maxMemory() / 8).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
 
 /**
- * A game in the grid: its cover, fitted into a square, or its title there until it has one, and the title under it.
- * A, Enter or a tap call [onClick].
+ * A game in the grid: its cover, fitted into a square, or the disc icon, its title and serial there until it has one;
+ * then the title and a line of its region and play time under it. Focus rings the cover, so the art stays the hero. A,
+ * Enter or a tap call [onClick].
  */
 @Composable
 fun GameTile(
@@ -43,19 +52,21 @@ fun GameTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(6.dp)
+    val colors = GooseStationTheme.colors
+    var focused by remember { mutableStateOf(false) }
     Column(
-        modifier = modifier.focusRing(onClick = onClick).padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier =
+            modifier.focusRing(focusedFill = null, ring = false, onFocusChange = { focused = it }, onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BoxWithConstraints(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(shape)
-                    .background(colors.surfaceVariant),
+                    .focusIndicator(focused, colors.focus, GsShapes.small)
+                    .clip(GsShapes.small)
+                    .background(colors.sunken),
             contentAlignment = Alignment.Center,
         ) {
             val targetPx = constraints.maxWidth
@@ -64,22 +75,40 @@ fun GameTile(
             }
             cover?.let {
                 Image(it, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-            } ?: Text(
-                game.title,
-                style = MaterialTheme.typography.titleSmall,
-                color = colors.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
+            } ?: Column(
                 modifier = Modifier.padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(GsIcons.disc, contentDescription = null, tint = colors.inkFaint, modifier = Modifier.size(24.dp))
+                Text(
+                    game.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.ink,
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (game.serial.isNotBlank()) {
+                    Text(game.serial, style = GooseStationTheme.type.mono, color = colors.inkMuted, maxLines = 1)
+                }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                game.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                gameDetails(game, serial = false),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.inkMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-        Text(
-            game.title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }

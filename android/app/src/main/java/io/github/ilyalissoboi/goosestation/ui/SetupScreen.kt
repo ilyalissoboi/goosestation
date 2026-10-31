@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,10 @@ import io.github.ilyalissoboi.goosestation.storage.FolderKind
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
+import io.github.ilyalissoboi.goosestation.ui.theme.GooseMark
+import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import kotlinx.coroutines.launch
 
 private enum class SetupStep { Welcome, Bios, Games, Data }
@@ -127,9 +132,16 @@ fun SetupScreen(
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("GooseStation", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GooseMark(Modifier.size(40.dp))
+            Text(
+                "GooseStation",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
         if (step != SetupStep.Welcome) {
-            Text("Step ${step.ordinal} of 3", style = MaterialTheme.typography.labelLarge, color = dim())
+            Eyebrow("Step ${step.ordinal} of 3")
         }
 
         when (step) {
@@ -143,7 +155,12 @@ fun SetupScreen(
                         "save states.",
                 )
                 Body("Android's folder picker may need touch.")
-                ActionButton("Start", onClick = { step = SetupStep.Bios }, modifier = Modifier.focusRequester(primary))
+                ActionButton(
+                    "Start",
+                    onClick = { step = SetupStep.Bios },
+                    modifier = Modifier.focusRequester(primary),
+                    kind = ButtonKind.Primary,
+                )
             }
 
             SetupStep.Bios -> {
@@ -151,6 +168,7 @@ fun SetupScreen(
                 Body("Pick the folder that holds your PS1 BIOS images. Android's folder picker may need touch.")
                 ActionButton(
                     "Pick folder",
+                    icon = GsIcons.folder,
                     onClick = {
                         work {
                             val picked = pickFolder(FolderKind.Bios) ?: return@work
@@ -180,6 +198,7 @@ fun SetupScreen(
                 Body("Add each folder that holds your games. Android's folder picker may need touch.")
                 ActionButton(
                     "Add folder",
+                    icon = GsIcons.plus,
                     onClick = {
                         work {
                             val picked = pickFolder(FolderKind.Games) ?: return@work
@@ -201,6 +220,7 @@ fun SetupScreen(
                         // Before the name, so it lines up with the buttons above and below for the D-pad.
                         ActionButton(
                             "Remove",
+                            kind = ButtonKind.Ghost,
                             onClick = {
                                 // Before the button goes, so focus moves straight to Add folder.
                                 primary.requestFocus()
@@ -223,6 +243,7 @@ fun SetupScreen(
                 )
                 ActionButton(
                     "Pick folder",
+                    icon = GsIcons.folder,
                     onClick = {
                         work {
                             val picked = pickFolder(FolderKind.Data) ?: return@work
@@ -279,7 +300,7 @@ private fun Navigation(
     nextLabel: String = "Next",
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ActionButton(nextLabel, onClick = onNext, enabled = nextEnabled)
-        ActionButton("Back", onClick = onBack)
+        ActionButton(nextLabel, onClick = onNext, enabled = nextEnabled, kind = ButtonKind.Primary)
+        ActionButton("Back", onClick = onBack, kind = ButtonKind.Ghost)
     }
 }

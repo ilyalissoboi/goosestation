@@ -11,7 +11,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.settings.GraphicsChoices
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
-import io.github.ilyalissoboi.goosestation.ui.components.ChoiceRow
+import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 
@@ -32,7 +32,7 @@ fun GraphicsScreen(
     LaunchedEffect(Unit) { first.requestFocus() }
 
     SettingsPage("Graphics", onBack = onBack) {
-        ChoiceRow(
+        CyclerRow(
             "Renderer",
             GraphicsChoices.renderers(settings.renderer),
             settings.renderer,
@@ -45,7 +45,7 @@ fun GraphicsScreen(
                     null
                 },
         )
-        ChoiceRow(
+        CyclerRow(
             "Internal resolution",
             GraphicsChoices.scales(settings.resolutionScale),
             settings.resolutionScale,
@@ -57,7 +57,7 @@ fun GraphicsScreen(
                     null
                 },
         )
-        ChoiceRow(
+        CyclerRow(
             "Aspect ratio",
             GraphicsChoices.aspectRatios(aspectNames, settings.aspectRatio),
             settings.aspectRatio,

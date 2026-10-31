@@ -17,12 +17,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 
 /**
  * The running game: a full-screen surface the core draws to, with the system bars hidden and the screen kept on. Show it
  * only once [NativeLibrary.initialize] has succeeded, since the core ignores a surface before then. Back opens the
- * game's prompt ([onOpenPrompt]), drawn over the surface while [promptOpen], which then takes Back itself.
+ * game's prompt ([onOpenPrompt]), drawn over the surface while [promptOpen], which then takes Back itself; it
+ * names the [game], if it's known.
  */
 @Composable
 fun GameScreen(
@@ -30,6 +32,7 @@ fun GameScreen(
     onOpenPrompt: () -> Unit,
     onResume: () -> Unit,
     onQuit: () -> Unit,
+    game: GameEntry? = null,
 ) {
     BackHandler(enabled = !promptOpen, onBack = onOpenPrompt)
 
@@ -52,7 +55,7 @@ fun GameScreen(
                 }
             },
         )
-        if (promptOpen) GamePrompt(onResume = onResume, onQuit = onQuit)
+        if (promptOpen) GamePrompt(onResume = onResume, onQuit = onQuit, game = game)
     }
 }
 

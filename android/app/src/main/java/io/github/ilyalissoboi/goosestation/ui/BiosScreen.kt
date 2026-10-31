@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
-import io.github.ilyalissoboi.goosestation.ui.components.ChoiceRow
+import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 
@@ -40,7 +40,7 @@ fun BiosScreen(
 
     SettingsPage("BIOS", onBack = onBack) {
         BiosRegion.entries.forEachIndexed { index, region ->
-            ChoiceRow(
+            CyclerRow(
                 region.label,
                 biosChoices(region, images, auto[region], overrides[region]),
                 overrides[region],

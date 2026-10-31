@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
                             onOpenPrompt = AppController::openPrompt,
                             onResume = AppController::resumeFromPrompt,
                             onQuit = AppController::quitFromPrompt,
+                            game = AppController.games.firstOrNull { it.path == AppController.lastGamePath },
                         )
                     Screen.Settings ->
                         SettingsScreen(

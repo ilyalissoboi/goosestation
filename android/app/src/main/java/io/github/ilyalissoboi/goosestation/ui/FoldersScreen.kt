@@ -39,7 +39,9 @@ import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.PICKER_HINT
+import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import kotlinx.coroutines.launch
 
 /** A folder picked to become the data folder, and what it holds, or why it can't be the data folder. */
@@ -142,7 +144,7 @@ fun FoldersScreen(
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Folders", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+        Text("Folders", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
         if (message != null) MessageBar(message, isError)
 
         when {
@@ -154,8 +156,13 @@ fun FoldersScreen(
                 Body(folders.bios?.let(::folderLabel) ?: "None")
                 biosImages.forEach { Body(it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton("Change", onClick = onChangeBios, modifier = Modifier.focusRequester(biosChange))
-                    ActionButton("Rescan", onClick = onRescanBios, enabled = folders.bios != null)
+                    ActionButton(
+                        "Change",
+                        onClick = onChangeBios,
+                        modifier = Modifier.focusRequester(biosChange),
+                        icon = GsIcons.folder,
+                    )
+                    ActionButton("Rescan", onClick = onRescanBios, enabled = folders.bios != null, icon = GsIcons.sync)
                 }
                 Hint()
 
@@ -165,6 +172,7 @@ fun FoldersScreen(
                         // Before the name, so it lines up with the buttons above and below for the D-pad.
                         ActionButton(
                             "Remove",
+                            kind = ButtonKind.Ghost,
                             onClick = {
                                 // Before the button goes, so focus moves straight to Add folder.
                                 addGames.requestFocus()
@@ -174,13 +182,23 @@ fun FoldersScreen(
                         Body(folderLabel(uri))
                     }
                 }
-                ActionButton("Add folder", onClick = onAddGames, modifier = Modifier.focusRequester(addGames))
+                ActionButton(
+                    "Add folder",
+                    onClick = onAddGames,
+                    modifier = Modifier.focusRequester(addGames),
+                    icon = GsIcons.plus,
+                )
                 Hint()
 
                 Heading("Data folder")
                 Body(folders.data?.let(::folderLabel) ?: "None")
                 Body(dataStatus)
-                ActionButton("Change", onClick = onChangeData, modifier = Modifier.focusRequester(dataChange))
+                ActionButton(
+                    "Change",
+                    onClick = onChangeData,
+                    modifier = Modifier.focusRequester(dataChange),
+                    icon = GsIcons.folder,
+                )
                 Hint()
             }
         }
@@ -204,9 +222,14 @@ private fun DataChoice(
             is DataFolderInspection.Usable -> inspection.contents
             is DataFolderInspection.Refused -> {
                 Body(inspection.reason)
-                ActionButton("Pick another", onClick = onPickAnother, modifier = Modifier.focusRequester(first))
+                ActionButton(
+                    "Pick another",
+                    onClick = onPickAnother,
+                    modifier = Modifier.focusRequester(first),
+                    icon = GsIcons.folder,
+                )
                 Hint()
-                ActionButton("Cancel", onClick = onCancel)
+                ActionButton("Cancel", onClick = onCancel, kind = ButtonKind.Ghost)
                 return
             }
         }
@@ -228,7 +251,7 @@ private fun DataChoice(
                 "can't be reached or didn't take them, and are lost."
         },
     )
-    ActionButton("Cancel", onClick = onCancel)
+    ActionButton("Cancel", onClick = onCancel, kind = ButtonKind.Ghost)
 }
 
 @Composable

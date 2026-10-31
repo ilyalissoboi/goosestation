@@ -14,8 +14,10 @@
     <application
         android:allowBackup="false"
         android:appCategory="game"
+        android:icon="@mipmap/ic_launcher"
         android:isGame="true"
         android:label="GooseStation"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
         <!-- One activity, landscape, which handles rotation and controllers coming and going itself. -->

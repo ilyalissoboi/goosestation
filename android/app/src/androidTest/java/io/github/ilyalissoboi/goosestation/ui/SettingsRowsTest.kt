@@ -14,6 +14,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -23,7 +25,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
-import io.github.ilyalissoboi.goosestation.ui.components.ChoiceRow
+import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -32,7 +34,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The settings rows with a D-pad, on a page of two choice rows and a switch, the first focused. */
+/** The settings rows with a D-pad, on a page of two cycler rows and a switch, the first focused. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class SettingsRowsTest {
@@ -45,26 +47,26 @@ class SettingsRowsTest {
     private val toggles = mutableListOf<Boolean>()
     private var backs = 0
 
-    private fun show() {
+    private fun show(size: String = "S") {
         rule.setContent {
             GooseStationTheme {
-                var size by remember { mutableStateOf("S") }
+                var current by remember { mutableStateOf(size) }
                 var colour by remember { mutableStateOf(2) }
                 var on by remember { mutableStateOf(false) }
                 val first = remember { FocusRequester() }
                 LaunchedEffect(Unit) { first.requestFocus() }
                 SettingsPage("Rows", onBack = { backs++ }) {
-                    ChoiceRow(
+                    CyclerRow(
                         "Size",
                         sizes,
-                        size,
+                        current,
                         onSelect = {
                             sizesPicked += it
-                            size = it
+                            current = it
                         },
                         modifier = Modifier.focusRequester(first),
                     )
-                    ChoiceRow(
+                    CyclerRow(
                         "Colour",
                         colours,
                         colour,
@@ -98,100 +100,90 @@ class SettingsRowsTest {
     }
 
     @Test
-    fun enterOpensTheRowWithTheSelectedChoiceFocused() {
+    fun theRowShowsOnlyTheSelectedChoice() {
         show()
+
         assertFocusedHas("Size", "Small")
+        rule.onNodeWithText("Medium").assertDoesNotExist()
         rule.onNodeWithText("Large").assertDoesNotExist()
-
-        press(Key.Enter)
-
-        rule.onNodeWithText("Large").assertExists()
-        assertFocusedHas("Small", "✓")
     }
 
     @Test
-    fun downThenEnterPicksTheNextChoiceAndFocusesTheRow() {
+    fun rightStepsToTheNextChoiceAndKeepsTheFocus() {
         show()
-        press(Key.Enter)
 
-        press(Key.DirectionDown)
-        assertFocusedHas("Medium")
-        press(Key.Enter)
+        press(Key.DirectionRight)
 
         assertEquals(listOf("M"), sizesPicked)
-        rule.onNodeWithText("Large").assertDoesNotExist()
         assertFocusedHas("Size", "Medium")
     }
 
     @Test
-    fun theSelectedChoiceAgainChangesNothing() {
-        show()
-        press(Key.Enter)
+    fun leftStepsBack() {
+        show(size = "L")
 
-        press(Key.Enter)
+        press(Key.DirectionLeft)
+
+        assertEquals(listOf("M"), sizesPicked)
+        assertFocusedHas("Size", "Medium")
+    }
+
+    @Test
+    fun theArrowsStopAtTheEnds() {
+        show()
+        press(Key.DirectionLeft)
 
         assertEquals(emptyList<String>(), sizesPicked)
-        rule.onNodeWithText("Large").assertDoesNotExist()
+        assertFocusedHas("Size", "Small")
+
+        press(Key.DirectionRight)
+        press(Key.DirectionRight)
+        press(Key.DirectionRight)
+
+        assertEquals(listOf("M", "L"), sizesPicked)
+        assertFocusedHas("Size", "Large")
+    }
+
+    @Test
+    fun enterStepsForwardRoundToTheFirst() {
+        show()
+
+        repeat(3) { press(Key.Enter) }
+
+        assertEquals(listOf("M", "L", "S"), sizesPicked)
         assertFocusedHas("Size", "Small")
     }
 
     @Test
-    fun backClosesTheRowWithoutAChange() {
+    fun buttonAStepsForwardToo() {
         show()
-        press(Key.Enter)
-        press(Key.DirectionDown)
 
-        press(Key.Back)
+        press(Key.ButtonA)
+
+        assertEquals(listOf("M"), sizesPicked)
+    }
+
+    @Test
+    fun downMovesToTheNextRowWithoutAChange() {
+        show()
+
+        press(Key.DirectionDown)
 
         assertEquals(emptyList<String>(), sizesPicked)
-        assertEquals(0, backs)
-        rule.onNodeWithText("Large").assertDoesNotExist()
-        assertFocusedHas("Size", "Small")
-
-        press(Key.Back)
-
-        assertEquals(1, backs)
+        assertFocusedHas("Colour", "Green")
     }
 
     @Test
-    fun buttonBClosesTheRowToo() {
-        show()
-        press(Key.Enter)
-
-        press(Key.ButtonB)
-
-        assertEquals(0, backs)
-        rule.onNodeWithText("Large").assertDoesNotExist()
-        assertFocusedHas("Size", "Small")
-    }
-
-    @Test
-    fun openingTheSecondRowClosesTheFirst() {
-        show()
-        press(Key.Enter)
-        rule.onNodeWithText("Large").assertExists()
-
-        // Through Small, Medium and Large to the Colour row.
-        repeat(3) { press(Key.DirectionDown) }
-        assertFocusedHas("Colour")
-        press(Key.Enter)
-
-        rule.onNodeWithText("Large").assertDoesNotExist()
-        rule.onNodeWithText("Red").assertExists()
-        assertFocusedHas("Green", "✓", "The default")
-    }
-
-    @Test
-    fun theSwitchToggles() {
+    fun theSelectedChoicesNoteShowsWithIt() {
         show()
         press(Key.DirectionDown)
-        press(Key.DirectionDown)
-        assertFocusedHas("Honk", "Off")
+        assertFocusedHas("Colour", "Green", "The default")
 
-        press(Key.Enter)
+        press(Key.DirectionLeft)
 
-        assertEquals(listOf(true), toggles)
-        assertFocusedHas("Honk", "On")
+        assertEquals(listOf(1), coloursPicked)
+        assertFocusedHas("Colour", "Red")
+        rule.onNodeWithText("The default").assertDoesNotExist()
     }
 
     @Test
@@ -199,5 +191,38 @@ class SettingsRowsTest {
         show()
 
         rule.onNodeWithText("Of the goose").assertExists()
+    }
+
+    @Test
+    fun backAndButtonBGoBack() {
+        show()
+
+        press(Key.Back)
+        press(Key.ButtonB)
+
+        assertEquals(2, backs)
+        assertEquals(emptyList<String>(), sizesPicked)
+    }
+
+    @Test
+    fun theSwitchToggles() {
+        show()
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        assertFocusedHas("Honk")
+        rule.onNode(isFocused()).assertIsOff()
+
+        press(Key.Enter)
+
+        assertEquals(listOf(true), toggles)
+        rule.onNode(isFocused()).assertIsOn()
+    }
+
+    @Test
+    fun theSwitchShowsNoWord() {
+        show()
+
+        rule.onNodeWithText("Off").assertDoesNotExist()
+        rule.onNodeWithText("On").assertDoesNotExist()
     }
 }

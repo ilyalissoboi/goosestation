@@ -923,6 +923,14 @@ pad connects as `Odin Controller` (descriptor `8e1073ea…`); its key layout (`V
 | Vulkan during the user's steps | The user's Ace Combat 3 ran on Vulkan at 4x (12:13:03 to 12:14:33) with no crash; at 12:16 the crash buffer still held only the 01:30 crash. |
 | Crash buffer | **Not empty**: it holds the Vulkan crash above (saved as `thor/crash-1.txt`; the buffer was cleared afterwards). No other crash. That crash is fixed in `652a4f808` (see the Vulkan row): 0 crashes in 4 on the emulator after it, where it was 4 in 4 before, and a native test covers it. Checked again on 2026-10-30 with the fix: empty after the recheck and the user's steps. |
 
+Checked on 2026-11-01 with the debug APK built from `fdce23d5f` (PR #34), installed over the previous build with its
+data kept. The user drove the checks with the built-in pad.
+
+| Check | Result |
+| --- | --- |
+| Choice lists (checklist step 10) | User-reported: as expected. On Graphics, A opened each row's list on its current value, up and down moved and stopped at the ends, A picked a value, B closed a list unchanged, and left and right still stepped a closed row. |
+| PlayStation glyphs (checklist step 10) | User-reported: as expected. Every Port 1 row on Controllers showed its glyph, readable at the system's largest font size, and the hotkey rows kept their words. |
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with

@@ -38,8 +38,8 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 private val THUMB = 48.dp
 
 /**
- * A game's region, serial (unless not [serial]) and play time, joined; a game without a serial, such as a PS-EXE,
- * leaves it out.
+ * A game's region, serial (unless not [serial]) and play time, joined; a game without one leaves it out. A PS-EXE, or
+ * a disc the core's database doesn't know and with no serial, shows the core's content-hash ID (`HASH-…`) as its serial.
  */
 internal fun gameDetails(
     game: GameEntry,

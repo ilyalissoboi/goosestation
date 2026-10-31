@@ -584,7 +584,9 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   once; a filled one asks "Replace the save in slot 3?" in the panel, Cancel focused. A save or load that works goes
   back to the game, saying "Saved to slot 3", "Loaded slot 3" or "Loaded your resume state"; one that fails stays in
   the panel with the reason ("Couldn't save to slot 3: …"). States are the core's own, at
-  `savestates/<serial>_<n>.sav`, mirrored to the data folder like the rest. The last slot used is kept per game on
+  `savestates/<serial>_<n>.sav`, mirrored to the data folder like the rest. A PS-EXE, or a disc the core's database
+  doesn't know and with no serial of its own, has the core's content-hash ID (`HASH-…`) in the serial's place, so it
+  has slots and a resume state like any game. The last slot used is kept per game on
   this device (`SharedPreferences("game")`).
 - **Fast forward**, with "On" or "Off": switches it and goes back to the game, at `[Main] FastForwardSpeed`. While
   it's on, its marker shows at the top right. It's off again whenever a game starts.
@@ -596,9 +598,9 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
 - **Reset console** asks "Reset the console? Progress since your last save is lost." in the menu, Cancel focused,
   then restarts the game: "Console reset".
 - **Exit game** saves the game's resume state (`savestates/<serial>_resume.sav`, when `[Main] SaveStateOnExit` is on,
-  as it is by default, and the game has a serial), with "Saving your place…" in the menu meanwhile, then stops it. If
-  that save fails, the game still stops, and the library says "Couldn't save your place: <reason>". A game still
-  starting saves none, so a resume state from before isn't replaced. When the game already has a resume state, Exit
+  as it is by default, and the game has an ID, its serial or that content hash), with "Saving your place…" in the menu
+  meanwhile, then stops it. If that save fails, the game still stops, and the library says "Couldn't save your place:
+  <reason>". A game still starting saves none, so a resume state from before isn't replaced. When the game already has a resume state, Exit
   game asks first: "Replace your saved place from Today · 14:05?", with Replace and **Keep it** (focused). Both exit;
   Keep it saves nothing, so the old one stays. B stays in the game.
 - **While the game is writing its memory card** (the menu was opened during a save in the game), Reset console warns

@@ -833,7 +833,9 @@ std::optional<std::string> AndroidHost::SaveResumeState()
   std::optional<std::string> result;
   EmuThread::RunOnThread(
     [&result]() {
-      // A game with no serial (a PS-EXE, the BIOS) has nowhere to keep one, and none could be offered.
+      // A game with no ID (a PSF, the BIOS alone) has nowhere to keep one, and none could be offered. A PS-EXE, or a
+      // disc the database doesn't know and with no serial of its own, has the core's content-hash ID (HASH-…), which
+      // keys its states as a serial does.
       if (!System::IsValid() || !g_settings.save_state_on_exit || System::GetGameSerial().empty())
         return;
 

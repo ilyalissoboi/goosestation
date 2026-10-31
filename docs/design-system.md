@@ -32,6 +32,21 @@ the same values and files.
 and Big Picture (Dear ImGui) still have DuckStation's look; bringing them over is open work, and the tokens are the
 source for it. When a value changes, change `tokens.json` and the implementations together.
 
+## What it looks like
+
+The Android app's screens, in [`docs/design-system/screenshots/`](design-system/screenshots/): rendered from the
+Compose code, off a device, at a handheld's 960 x 540 dp in landscape (the AYN Thor's) and a phone's 411 x 891 dp in
+portrait. The orange outline is the focus, where a controller is.
+
+| | |
+| --- | --- |
+| ![The library as a grid, with a warning notice](design-system/screenshots/library-grid.png) | ![The library as a list, scanning](design-system/screenshots/library-list.png) |
+| ![The settings hub](design-system/screenshots/settings.png) | ![The Graphics page: cyclers and a toggle](design-system/screenshots/graphics.png) |
+| ![The BIOS page](design-system/screenshots/bios.png) | ![The Controllers page](design-system/screenshots/controllers.png) |
+| ![Setup's welcome](design-system/screenshots/setup.png) | ![The pause menu over a game](design-system/screenshots/pause.png) |
+
+![The library on a phone, in portrait](design-system/screenshots/library-phone.png)
+
 ## Principles
 
 1. **The game is the hero.** Chrome stays dark, quiet and out of the way. Colour goes on the one thing to do next and

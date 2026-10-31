@@ -23,6 +23,8 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
+import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -110,6 +112,47 @@ class ScrollingTest {
 
         rule.onNode(isFocused() and hasText("Row $ROWS")).assertExists()
         assertTrue("4 dp below the last row", focused().bottom + 4.dp <= viewport().bottom + 0.5.dp)
+    }
+
+    @Test
+    fun aQuickDownThenAOpensAListAndTheScrollSettles() {
+        rule.setContent {
+            GooseStationTheme {
+                Box(Modifier.requiredSize(640.dp, 360.dp)) {
+                    SettingsPage("Many choices", onBack = {}) {
+                        val first = remember { FocusRequester() }
+                        LaunchedEffect(Unit) { first.requestFocus() }
+                        for (row in 1..ROWS) {
+                            CyclerRow(
+                                "Row $row",
+                                listOf(Choice(1, "One"), Choice(2, "Two"), Choice(3, "Three")),
+                                1,
+                                onSelect = {},
+                                modifier = if (row == 1) Modifier.focusRequester(first) else Modifier,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        press(Key.DirectionDown, 6)
+
+        // No wait between them: the scroll to the row is still running as the list opens.
+        rule.onRoot().performKeyInput {
+            pressKey(Key.DirectionDown)
+            pressKey(Key.ButtonA)
+        }
+        rule.waitForIdle()
+        rule.onNode(isFocused() and hasText("One")).assertExists()
+
+        // And closing then opening again at once.
+        rule.onRoot().performKeyInput {
+            pressKey(Key.ButtonB)
+            pressKey(Key.ButtonA)
+        }
+        rule.waitForIdle()
+        rule.onNode(isFocused() and hasText("One")).assertExists()
     }
 
     private companion object {

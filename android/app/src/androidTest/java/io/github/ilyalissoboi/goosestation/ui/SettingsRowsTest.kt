@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -30,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
@@ -330,6 +332,63 @@ class SettingsRowsTest {
         rule.waitForIdle()
         list().assertDoesNotExist()
         assertFocusedHas("Size")
+    }
+
+    @Test
+    fun removingAnEarlierChoiceKeepsTheFocusOnItsChoice() {
+        show(size = "S")
+        press(Key.ButtonA)
+        press(Key.DirectionDown)
+        assertFocusedChoice("Medium")
+
+        rule.runOnIdle { sizes.removeAt(0) }
+        rule.waitForIdle()
+
+        assertFocusedChoice("Medium")
+        press(Key.ButtonA)
+        assertEquals(listOf("M"), sizesPicked)
+    }
+
+    @Test
+    fun removingAnEarlierChoiceKeepsTheFocusOnTheLast() {
+        show(size = "S")
+        press(Key.ButtonA)
+        repeat(2) { press(Key.DirectionDown) }
+        assertFocusedChoice("Large")
+
+        rule.runOnIdle { sizes.removeAt(0) }
+        rule.waitForIdle()
+
+        assertFocusedChoice("Large")
+    }
+
+    @Test
+    fun aTapElsewhereLeavesTheFocusOnTheRow() {
+        show()
+        press(Key.ButtonA)
+        list().assertExists()
+
+        rule.onNodeWithText("Honk").performClick()
+        rule.waitForIdle()
+
+        list().assertDoesNotExist()
+        assertFocusedHas("Size")
+    }
+
+    @Test
+    fun aDragElsewhereDoesntClose() {
+        show()
+        press(Key.ButtonA)
+
+        rule.onNodeWithText("Honk").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -120f))
+            up()
+        }
+        rule.waitForIdle()
+
+        list().assertExists()
+        assertEquals(emptyList<Boolean>(), toggles)
     }
 
     @Test

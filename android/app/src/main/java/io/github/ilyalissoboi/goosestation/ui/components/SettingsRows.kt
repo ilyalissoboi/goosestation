@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -97,14 +98,21 @@ fun SettingsPage(
                     .background(MaterialTheme.colorScheme.background)
                     .safeDrawingPadding()
                     .onGloballyPositioned { pageCoordinates = it }
-                    // Before the rows see it, and without taking it: a tap closes an open list it ends outside of.
+                    // Before the rows see it, and without taking it: a tap closes an open list it ends outside of. A
+                    // drag (a scroll by touch) doesn't.
                     .pointerInput(lists) {
                         awaitPointerEventScope {
+                            var down: Offset? = null
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull() ?: continue
+                                if (event.type == PointerEventType.Press) down = change.position
                                 if (event.type != PointerEventType.Release) continue
+                                val start = down ?: continue
+                                down = null
+                                if ((change.position - start).getDistance() > viewConfiguration.touchSlop) continue
                                 val page = pageCoordinates?.takeIf { it.isAttached } ?: continue
-                                event.changes.firstOrNull()?.let { lists.tappedAt(page.localToRoot(it.position)) }
+                                lists.tappedAt(page.localToRoot(change.position))
                             }
                         }
                     }
@@ -208,7 +216,7 @@ fun <T> CyclerRow(
                 }.focusRing(onFocusChange = { focused = it }, onClick = {
                     when {
                         open -> close()
-                        choices.isNotEmpty() -> host.open(key)
+                        choices.isNotEmpty() -> host.open(key, row)
                     }
                 })
                 .semantics {

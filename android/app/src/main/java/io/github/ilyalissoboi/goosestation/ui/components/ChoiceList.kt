@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,20 +62,34 @@ class ChoiceListHost {
     /** Where the open row is, list and all, so a tap outside it can close it. */
     internal var openCoordinates: LayoutCoordinates? = null
 
-    fun open(key: Any) {
+    /** The open row's, for the focus to go back to when a tap outside closes its list. */
+    private var openRow: FocusRequester? = null
+
+    /** Opens [key]'s list; [row] takes the focus back if a tap outside closes it. */
+    fun open(
+        key: Any,
+        row: FocusRequester? = null,
+    ) {
         open = key
         openCoordinates = null
+        openRow = row
     }
 
     fun close() {
         open = null
         openCoordinates = null
+        openRow = null
     }
 
-    /** A tap that ended at [position], in root coordinates: outside the open row, it closes the list. */
+    /**
+     * A tap that ended at [position], in root coordinates: outside the open row, it closes the list, the focus back on
+     * the row (a tap doesn't move the focus, and the focused choice goes). What was tapped still acts.
+     */
     internal fun tappedAt(position: Offset) {
         val coordinates = openCoordinates?.takeIf { it.isAttached } ?: return
-        if (!coordinates.boundsInRoot().contains(position)) close()
+        if (coordinates.boundsInRoot().contains(position)) return
+        openRow?.requestFocus()
+        close()
     }
 }
 
@@ -94,13 +109,15 @@ internal fun <T> ChoiceList(
     modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
-    val requesters = remember(choices.size) { List(choices.size) { FocusRequester() } }
+    val values = choices.map { it.value }
+    val requesters = remember(values) { values.map { FocusRequester() } }
     // Which choice has the focus, if one does: a choice's value can be null.
     var focused by remember { mutableStateOf(false) }
     var focusedValue by remember { mutableStateOf<Any?>(null) }
-    val values = choices.map { it.value }
-    // Focusing the choice scrolls it to the middle, as for any row. A second request, to show the whole list, would
-    // fight it: two rects can't both be centred, and the page never settles.
+    // Each choice is composed by its value, so a choice keeps its focus when another before it goes. If the focused one
+    // goes, the focus goes to the current one, else the first. Focusing a choice scrolls it to the middle, as for any
+    // row; a second request, to show the whole list, would fight it (two rects can't both be centred, and the page
+    // never settles).
     LaunchedEffect(values) {
         if (focused && values.any { it == focusedValue }) return@LaunchedEffect
         requesters.getOrNull(values.indexOf(selected).coerceAtLeast(0))?.requestFocus()
@@ -125,41 +142,43 @@ internal fun <T> ChoiceList(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         choices.forEachIndexed { index, choice ->
-            val current = choice.value == selected
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .focusRequester(requesters[index])
-                        .onFocusChanged {
-                            if (it.isFocused) {
-                                focused = true
-                                focusedValue = choice.value
-                            }
-                        }.background(if (current) colors.beakSoft else colors.sunken, GsShapes.medium)
-                        .focusRing(
-                            role = Role.RadioButton,
-                            focusedFill = if (current) null else colors.raised,
-                            onClick = { onPick(choice) },
-                        ).semantics { this.selected = current }
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(choice.label, style = MaterialTheme.typography.titleMedium, color = colors.ink)
-                    choice.note?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
+            key(choice.value) {
+                val current = choice.value == selected
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .focusRequester(requesters[index])
+                            .onFocusChanged {
+                                if (it.isFocused) {
+                                    focused = true
+                                    focusedValue = choice.value
+                                }
+                            }.background(if (current) colors.beakSoft else colors.sunken, GsShapes.medium)
+                            .focusRing(
+                                role = Role.RadioButton,
+                                focusedFill = if (current) null else colors.raised,
+                                onClick = { onPick(choice) },
+                            ).semantics { this.selected = current }
+                            .heightIn(min = 48.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(choice.label, style = MaterialTheme.typography.titleMedium, color = colors.ink)
+                        choice.note?.let {
+                            Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
+                        }
                     }
-                }
-                if (current) {
-                    Icon(
-                        GsIcons.check,
-                        contentDescription = null,
-                        tint = colors.beakInk,
-                        modifier = Modifier.size(20.dp),
-                    )
+                    if (current) {
+                        Icon(
+                            GsIcons.check,
+                            contentDescription = null,
+                            tint = colors.beakInk,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }

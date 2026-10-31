@@ -1322,6 +1322,22 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
   return result;
 }
 
+std::optional<std::string> AndroidHost::GetPort1ControllerType()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [&result]() {
+      const auto lock = Host::GetSettingsLock();
+      if (const Controller::ControllerInfo* info = GetPort1ControllerInfo(*s_base_settings_interface))
+        result = info->name;
+    },
+    true);
+  return result;
+}
+
 std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetHotkeyBindings(std::string descriptor)
 {
   if (!s_initialized)

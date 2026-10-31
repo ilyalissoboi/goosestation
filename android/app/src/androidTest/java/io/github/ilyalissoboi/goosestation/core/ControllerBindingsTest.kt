@@ -347,6 +347,23 @@ class ControllerBindingsTest {
         }
     }
 
+    @Test
+    fun port1TypeIsTheDefaultWithoutASetting() {
+        initialize(null)
+
+        // The core's default for Port 1 (Settings::DEFAULT_CONTROLLER_1_TYPE).
+        assertEquals("AnalogController", NativeLibrary.getPort1ControllerType())
+    }
+
+    @Test
+    fun port1TypeIsTheSettings() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad1]\nType = DigitalController\n",
+        )
+
+        assertEquals("DigitalController", NativeLibrary.getPort1ControllerType())
+    }
+
     private fun initialize(settings: String?) {
         if (settings != null) settingsFile.writeText(settings)
         val resources = Resources.extract(context)

@@ -259,6 +259,12 @@ object NativeLibrary {
     external fun getPadBindings(descriptor: String): Array<PadBinding>?
 
     /**
+     * Port 1's controller type, as the core names it (`AnalogController`, `DigitalController`, …): `[Pad1] Type`, or
+     * the core's default. Null before [initialize], or for a type the core doesn't know.
+     */
+    external fun getPort1ControllerType(): String?
+
+    /**
      * The controller with [descriptor]'s place in the table of controllers this install has seen, which stays the same
      * from one run to the next; -1 for one never connected, or before [initialize].
      */

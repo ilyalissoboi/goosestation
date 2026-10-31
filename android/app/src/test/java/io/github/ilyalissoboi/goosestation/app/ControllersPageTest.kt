@@ -30,6 +30,16 @@ class ControllersPageTest {
     }
 
     @Test
+    fun thePort1TypeIsReadWithTheBindings() =
+        runTest {
+            api.port1Type = "PlayStationMouse"
+
+            val page = openPage()
+
+            assertEquals("PlayStationMouse", page.state.port1Type)
+        }
+
+    @Test
     fun aResultAfterACancelIsDropped() =
         runTest {
             val page = openPage()

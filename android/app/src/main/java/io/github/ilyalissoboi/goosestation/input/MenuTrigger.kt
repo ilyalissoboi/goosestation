@@ -73,6 +73,9 @@ class MenuTrigger(
         }
     }
 
+    /** Whether a press of [deviceId]'s Select and Start is held back: the two are held together. */
+    fun isHolding(deviceId: Int): Boolean = pads[deviceId]?.heldBack != null
+
     /** When [onTime] must next be called: the soonest hold's end, or null with none. */
     fun deadline(): Long? = pads.values.filter { it.heldBack != null }.minOfOrNull { it.deadline }
 

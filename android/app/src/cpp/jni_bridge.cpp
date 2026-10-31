@@ -882,6 +882,23 @@ NATIVE_LIBRARY_FUNCTION(jboolean, onKey)(JNIEnv*, jobject, jint device_id, jint 
   return AndroidHost::QueueKeyEvent(device_id, keycode, pressed == JNI_TRUE) ? JNI_TRUE : JNI_FALSE;
 }
 
+NATIVE_LIBRARY_FUNCTION(void, onKeys)(JNIEnv* env, jobject, jint device_id, jintArray keycodes, jbooleanArray pressed)
+{
+  const jsize count = std::min(env->GetArrayLength(keycodes), env->GetArrayLength(pressed));
+  std::vector<jint> codes(static_cast<size_t>(count));
+  std::vector<jboolean> downs(static_cast<size_t>(count));
+  env->GetIntArrayRegion(keycodes, 0, count, codes.data());
+  env->GetBooleanArrayRegion(pressed, 0, count, downs.data());
+  if (ClearException(env))
+    return;
+
+  std::vector<std::pair<s32, bool>> keys;
+  keys.reserve(codes.size());
+  for (size_t i = 0; i < codes.size(); i++)
+    keys.emplace_back(codes[i], downs[i] != JNI_FALSE);
+  AndroidHost::QueueKeyEvents(device_id, keys);
+}
+
 NATIVE_LIBRARY_FUNCTION(void, onAxis)(JNIEnv*, jobject, jint device_id, jint axis, jfloat value)
 {
   AndroidHost::QueueAxisEvent(device_id, axis, value);

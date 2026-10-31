@@ -951,6 +951,32 @@ bool AndroidHost::QueueKeyEvent(s32 device_id, s32 keycode, bool pressed)
   return true;
 }
 
+void AndroidHost::QueueKeyEvents(s32 device_id, std::span<const std::pair<s32, bool>> keys)
+{
+  bool wake;
+  {
+    std::unique_lock lock(s_input_mutex);
+    if (!s_accept_input_events ||
+        std::find(s_queued_device_ids.begin(), s_queued_device_ids.end(), device_id) == s_queued_device_ids.end())
+    {
+      return;
+    }
+
+    // All under the one lock: the CPU thread takes the queue whole, so it sees them together.
+    wake = s_input_queue.empty();
+    for (const auto& [keycode, pressed] : keys)
+    {
+      if (keycode == AndroidInputKeys::KEYCODE_BACK || keycode == AndroidInputKeys::KEYCODE_BUTTON_MODE)
+        continue;
+
+      s_input_queue.push_back(InputEvent{InputEvent::Type::Key, device_id, keycode, pressed ? 1.0f : 0.0f, {}, {}});
+    }
+  }
+
+  if (wake)
+    EmuThread::Wake();
+}
+
 void AndroidHost::QueueAxisEvent(s32 device_id, s32 axis, float value)
 {
   QueueInputEvent(InputEvent{InputEvent::Type::Axis, device_id, axis, value, {}, {}});

@@ -218,6 +218,13 @@ object NativeLibrary {
         pressed: Boolean,
     ): Boolean
 
+    /** Several controller keys on [deviceId], in order, taken by the core in one pass of its input. */
+    external fun onKeys(
+        deviceId: Int,
+        keyCodes: IntArray,
+        pressed: BooleanArray,
+    )
+
     external fun onAxis(
         deviceId: Int,
         axis: Int,

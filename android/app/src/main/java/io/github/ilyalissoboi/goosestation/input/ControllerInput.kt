@@ -54,6 +54,12 @@ class ControllerInput(
     /** Called when a controller asks for the game's menu: Mode, or Select and Start held together ([MenuTrigger]). */
     var onMenuRequested: (() -> Unit)? = null
 
+    /**
+     * The descriptors of the controllers with a hotkey chord bound (Select + a button), whose Select is held back so
+     * the game doesn't see it before the chord completes ([SelectChord]). Set as a game starts, empty without one.
+     */
+    var selectChordDescriptors: Set<String> = emptySet()
+
     fun start() {
         inputManager.registerInputDeviceListener(this, Handler(Looper.getMainLooper()))
         for (id in InputDevice.getDeviceIds()) {
@@ -90,19 +96,22 @@ class ControllerInput(
                 // Both are uptimeMillis(), as the handler's times are.
                 eventMs = event.eventTime,
                 nowMs = SystemClock.uptimeMillis(),
+                selectChords = devices[event.deviceId]?.descriptor in selectChordDescriptors,
             )
-        if (outcome.send.isNotEmpty() && ensureConnected(event.deviceId)) {
-            for (press in outcome.send) NativeLibrary.onKey(event.deviceId, press.keyCode, press.pressed)
-        }
+        if (outcome.send.isNotEmpty() && ensureConnected(event.deviceId)) send(event.deviceId, outcome.send)
         schedule()
         if (outcome.openMenu) onMenuRequested?.invoke()
         return outcome.toCore
     }
 
-    // Late presses whose time is up are let go. Select and Start held together long enough: the menu opens.
+    // Late presses whose time is up are let go. Select and Start held together long enough: the menu opens. A Select
+    // held back long enough for its chords goes to the game.
     private fun onTimer() {
         val tick = keys.onTime(SystemClock.uptimeMillis())
         sendReleases(tick.releases)
+        for (deviceId in tick.lateSelects) {
+            if (devices.containsKey(deviceId)) NativeLibrary.onKey(deviceId, MenuTrigger.SELECT, true)
+        }
         schedule()
         if (tick.openMenu) onMenuRequested?.invoke()
     }
@@ -110,6 +119,23 @@ class ControllerInput(
     private fun schedule() {
         handler.removeCallbacks(timer)
         keys.deadline()?.let { handler.postAtTime(timer, it) }
+    }
+
+    // One event's presses, in one batch when there are several, so the core takes a chord's Select and button in the
+    // same pass of its input, with no frame between them.
+    private fun send(
+        deviceId: Int,
+        presses: List<MenuTrigger.KeyPress>,
+    ) {
+        if (presses.size == 1) {
+            NativeLibrary.onKey(deviceId, presses[0].keyCode, presses[0].pressed)
+        } else {
+            NativeLibrary.onKeys(
+                deviceId,
+                IntArray(presses.size) { presses[it].keyCode },
+                BooleanArray(presses.size) { presses[it].pressed },
+            )
+        }
     }
 
     private fun sendReleases(releases: List<LateRelease.Release>) {

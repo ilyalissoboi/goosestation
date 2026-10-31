@@ -145,4 +145,18 @@ class MenuTriggerTest {
         assertEquals(1200L, trigger.deadline())
         assertFalse(trigger.onTime(1100))
     }
+
+    @Test
+    fun isHoldingFollowsThePair() {
+        val trigger = MenuTrigger()
+        trigger.onKey(1, SELECT, true, 0)
+        assertFalse(trigger.isHolding(1))
+
+        trigger.onKey(1, START, true, 100)
+        assertTrue(trigger.isHolding(1))
+        assertFalse(trigger.isHolding(2))
+
+        trigger.onKey(1, START, false, 300)
+        assertFalse(trigger.isHolding(1))
+    }
 }

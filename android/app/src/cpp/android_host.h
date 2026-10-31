@@ -6,8 +6,10 @@
 #include "common/types.h"
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 class Error;
@@ -128,6 +130,9 @@ void SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale);
 /// device only count once its connection is queued. Returns whether the key goes to the core: every key but Back and
 /// Mode, which open the menu.
 bool QueueKeyEvent(s32 device_id, s32 keycode, bool pressed);
+/// Several keys of one device, (keycode, pressed) in order, queued at once: the CPU thread passes them on in one batch,
+/// with no frame between them. Filtered as QueueKeyEvent() does.
+void QueueKeyEvents(s32 device_id, std::span<const std::pair<s32, bool>> keys);
 void QueueAxisEvent(s32 device_id, s32 axis, float value);
 
 /// A controller is Android-<index> to the core, with the index its descriptor has in [Android] ControllerDescriptors,

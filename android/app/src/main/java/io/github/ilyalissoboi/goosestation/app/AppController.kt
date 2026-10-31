@@ -10,11 +10,13 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
@@ -239,6 +241,13 @@ object AppController : NativeCallbacks {
 
     /** The pulls that follow a growth of the layout ([catchUp]), one at a time, and whether a game may start. */
     private val catchUps = CatchUpRunner { Log.w(TAG, it) }
+
+    /** The messages shown over the game, the app's and the core's ([CoreMessages]). */
+    val osd = OsdMessages(SystemClock::uptimeMillis)
+
+    /** Fast forward is on in the running game: its marker shows over the game. */
+    var fastForward by mutableStateOf(false)
+        private set
 
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
@@ -1230,6 +1239,8 @@ object AppController : NativeCallbacks {
             promptOpen = false
             gameActive = false
             holdMemcards = false
+            osd.clear()
+            fastForward = false
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
             if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
@@ -1243,6 +1254,25 @@ object AppController : NativeCallbacks {
     }
 
     override fun onBindingCaptured(binding: String) = controllersPage.onBindingCaptured(binding)
+
+    override fun onOsdMessage(
+        key: String,
+        text: String,
+        seconds: Float,
+        icon: ArgbImage?,
+    ) {
+        mainHandler.post {
+            if (seconds == 0f) {
+                osd.remove(key)
+            } else {
+                CoreMessages.translate(key, text)?.let { osd.post(it, key.ifEmpty { null }, seconds, icon) }
+            }
+        }
+    }
+
+    override fun onFastForwardChanged(enabled: Boolean) {
+        mainHandler.post { fastForward = enabled }
+    }
 
     override fun onError(message: String) {
         mainHandler.post {

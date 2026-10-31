@@ -146,6 +146,7 @@ static std::optional<std::string> s_pending_boot_path;
 static std::string s_boot_path;
 static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
+static bool s_fast_forward_reported = false; // as the app was last told, CPU thread
 static u32 s_binding_capture_id = 0; // changes when a capture starts or is cancelled, so a stale report is dropped
 
 // Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
@@ -1435,6 +1436,13 @@ void Host::OnSystemDestroyed()
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
 
+  // Fast forward ends with the game.
+  if (AndroidHost::s_fast_forward_reported)
+  {
+    AndroidHost::s_fast_forward_reported = false;
+    AndroidHost::NotifyFastForwardChanged(false);
+  }
+
   // A boot that failed destroys the system too: BootPendingGame() reports that one.
   if (!AndroidHost::s_game_started)
     return;
@@ -1473,6 +1481,29 @@ void Host::RequestResizeHostDisplay(s32 width, s32 height)
 
 void Host::FrameDone()
 {
+  // The app shows a marker while fast forward is on, whether the menu or a hotkey turned it on.
+  const bool fast_forward = System::IsFastForwardEnabled();
+  if (fast_forward != AndroidHost::s_fast_forward_reported)
+  {
+    AndroidHost::s_fast_forward_reported = fast_forward;
+    AndroidHost::NotifyFastForwardChanged(fast_forward);
+  }
+}
+
+void Host::OnOSDMessagePosted(std::string_view key, std::string_view message, float duration, const OSDImage* image)
+{
+  // An icon message is the icon, two spaces, then the text.
+  const std::string text = ImGuiManager::StripIconCharacters(message);
+  const std::string_view trimmed = StringUtil::StripWhitespace(text);
+  if (image && image->width > 0 && image->frame_height > 0 &&
+      image->pixels.size() >= static_cast<size_t>(image->width) * image->frame_height)
+  {
+    AndroidHost::NotifyOsdMessage(key, trimmed, duration, image->pixels.data(), image->width, image->frame_height);
+  }
+  else
+  {
+    AndroidHost::NotifyOsdMessage(key, trimmed, duration, nullptr, 0, 0);
+  }
 }
 
 std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)

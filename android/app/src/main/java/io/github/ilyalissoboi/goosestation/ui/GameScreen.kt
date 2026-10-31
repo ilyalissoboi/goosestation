@@ -17,6 +17,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import io.github.ilyalissoboi.goosestation.app.OsdMessage
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 
@@ -24,7 +25,8 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
  * The running game: a full-screen surface the core draws to, with the system bars hidden and the screen kept on. Show it
  * only once [NativeLibrary.initialize] has succeeded, since the core ignores a surface before then. Back opens the
  * game's prompt ([onOpenPrompt]), drawn over the surface while [promptOpen], which then takes Back itself; it
- * names the [game], if it's known.
+ * names the [game], if it's known. The [osd] messages and, while [fastForward], its marker show over the game, under the
+ * prompt; [onOsdExpire] runs at [osdExpiry].
  */
 @Composable
 fun GameScreen(
@@ -33,6 +35,10 @@ fun GameScreen(
     onResume: () -> Unit,
     onQuit: () -> Unit,
     game: GameEntry? = null,
+    osd: List<OsdMessage> = emptyList(),
+    fastForward: Boolean = false,
+    osdExpiry: Long? = null,
+    onOsdExpire: () -> Unit = {},
 ) {
     BackHandler(enabled = !promptOpen, onBack = onOpenPrompt)
 
@@ -55,6 +61,7 @@ fun GameScreen(
                 }
             },
         )
+        OsdLayer(osd, fastForward, osdExpiry, onOsdExpire)
         if (promptOpen) GamePrompt(onResume = onResume, onQuit = onQuit, game = game)
     }
 }

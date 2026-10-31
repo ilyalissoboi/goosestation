@@ -156,4 +156,10 @@ struct OSDImage
 void AddImageOSDMessage(std::string key, OSDImage image, std::string message, float duration = 2.0f);
 void RemoveKeyedOSDMessage(std::string key);
 void ClearOSDMessages();
+
+#ifdef __ANDROID__
+/// Android: the app draws on-screen messages. Each message posted, and each keyed removal (an empty message, duration
+/// 0), goes here instead of to the ImGui OSD. From any thread.
+void OnOSDMessagePosted(std::string_view key, std::string_view message, float duration, const OSDImage* image);
+#endif
 } // namespace Host

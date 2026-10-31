@@ -123,7 +123,7 @@ the system's fonts.
 | `body` | text 16/24, 400 | Reading text. | `typography.bodyLarge` |
 | `body-sm` | text 14/20, 400 | Notes under a label, a game's details. | `typography.bodyMedium` |
 | `mono` | mono 14/20, 500 | Serials, times, versions. | `GooseStationTheme.type.mono` |
-| `osd` | mono 16/20, 600 | Messages over the game. | (the core's OSD; not yet) |
+| `osd` | mono 16/20, 600 | Messages over the game. | `GooseStationTheme.type.osd` |
 
 Write text in sentence case even where it shows in capitals: `Eyebrow("Paused")` shows "PAUSED".
 
@@ -252,6 +252,13 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.
 - `GamePrompt`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, "Paused" over the game's
   title and details, then menu rows (an icon and a label; focused, the icon turns `beak-ink`).
+- `OsdLayer`: the messages over the running game, the app's and the core's, at the top left, oldest first, at most
+  four. Each is `osd` type in `osd-ink` on the `osd` ground at `radius-sm`, with the core's icon (a memory card's,
+  say) when it has one, showing its first frame only. The app's messages last 3 s, and the core's keep their own time.
+  Each fades out over 160 ms, the only thing that moves during a game; with animations off, it just goes. While fast
+  forward is on, its marker (the `fastForward` icon on `osd`) shows at the top right. On Android the core's messages
+  are routed here, not to its own OSD: `CoreMessages` puts those for the in-game menu's actions in the app's words
+  and drops those the app says itself. The core's FPS and speed overlay is unchanged.
 
 ### `GooseMark` (`ui/theme/GooseMark.kt`)
 
@@ -335,6 +342,6 @@ See [docs/android.md](android.md) for running them.
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
 Android; badges for region and memory card sync;
-progress bars; save-state slots; on-screen messages over the game in the system's style; on-screen touch controls; the
+progress bars; save-state slots; on-screen touch controls; the
 desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

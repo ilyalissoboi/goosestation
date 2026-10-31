@@ -66,6 +66,10 @@ class MainActivity : ComponentActivity() {
                             onResume = AppController::resumeFromPrompt,
                             onQuit = AppController::quitFromPrompt,
                             game = AppController.games.firstOrNull { it.path == AppController.lastGamePath },
+                            osd = AppController.osd.shown,
+                            fastForward = AppController.fastForward,
+                            osdExpiry = AppController.osd.nextExpiry(),
+                            onOsdExpire = AppController.osd::expire,
                         )
                     Screen.Settings ->
                         SettingsScreen(

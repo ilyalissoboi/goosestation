@@ -41,6 +41,10 @@ jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
 jmethodID s_on_binding_captured = nullptr;
+jmethodID s_on_osd_message = nullptr;
+jmethodID s_on_fast_forward_changed = nullptr;
+jclass s_argb_image_class = nullptr;
+jmethodID s_argb_image_constructor = nullptr;
 jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
@@ -92,6 +96,43 @@ void CallCallback(jmethodID method, std::optional<std::string_view> arg)
   }
 
   env->DeleteLocalRef(callbacks);
+}
+
+// The registered NativeCallbacks as a local reference, or null with none.
+jobject GetCallbacks(JNIEnv* env)
+{
+  std::unique_lock lock(s_callbacks_mutex);
+  return s_callbacks ? env->NewLocalRef(s_callbacks) : nullptr;
+}
+
+// An ArgbImage of width x height RGBA8 pixels (0xAABBGGRR), or null (with no exception pending) if it can't be made.
+// Each becomes 0xAARRGGBB, as Bitmap.createBitmap() takes it; opaque forces alpha to 0xFF.
+jobject ToArgbImage(JNIEnv* env, const u32* rgba, u32 width, u32 height, bool opaque)
+{
+  const size_t count = static_cast<size_t>(width) * height;
+  std::vector<jint> argb(count);
+  for (size_t i = 0; i < count; i++)
+  {
+    const u32 p = rgba[i];
+    const u32 a = opaque ? 0xFF000000u : (p & 0xFF000000u);
+    argb[i] = static_cast<jint>(a | ((p & 0xFFu) << 16) | (p & 0xFF00u) | ((p >> 16) & 0xFFu));
+  }
+
+  jintArray pixels = env->NewIntArray(static_cast<jsize>(count));
+  if (!pixels)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  env->SetIntArrayRegion(pixels, 0, static_cast<jsize>(count), argb.data());
+  jobject image = env->NewObject(s_argb_image_class, s_argb_image_constructor, static_cast<jint>(width),
+                                 static_cast<jint>(height), pixels);
+  env->DeleteLocalRef(pixels);
+  if (ClearException(env))
+    return nullptr;
+
+  return image;
 }
 
 // A String[] of strings, or null (with no exception pending) if it can't be made.
@@ -168,6 +209,50 @@ void AndroidHost::NotifyBindingCaptured(std::string_view binding)
   CallCallback(s_on_binding_captured, binding);
 }
 
+void AndroidHost::NotifyOsdMessage(std::string_view key, std::string_view text, float seconds, const u32* image_pixels,
+                                   u32 image_width, u32 image_height)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  jstring jkey = ToJString(env.get(), key);
+  jstring jtext = ToJString(env.get(), text);
+  jobject icon = image_pixels ? ToArgbImage(env.get(), image_pixels, image_width, image_height, false) : nullptr;
+  if (jkey && jtext)
+  {
+    env->CallVoidMethod(callbacks, s_on_osd_message, jkey, jtext, static_cast<jfloat>(seconds), icon);
+    ClearException(env.get());
+  }
+
+  if (icon)
+    env->DeleteLocalRef(icon);
+  if (jtext)
+    env->DeleteLocalRef(jtext);
+  if (jkey)
+    env->DeleteLocalRef(jkey);
+  env->DeleteLocalRef(callbacks);
+}
+
+void AndroidHost::NotifyFastForwardChanged(bool enabled)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  env->CallVoidMethod(callbacks, s_on_fast_forward_changed, static_cast<jboolean>(enabled));
+  ClearException(env.get());
+  env->DeleteLocalRef(callbacks);
+}
+
 extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
@@ -199,7 +284,28 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured)
+  s_on_osd_message =
+    env->GetMethodID(s_callbacks_class, "onOsdMessage",
+                     "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
+  s_on_fast_forward_changed = env->GetMethodID(s_callbacks_class, "onFastForwardChanged", "(Z)V");
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
+      !s_on_fast_forward_changed)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass argb_image_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/ArgbImage");
+  if (!argb_image_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_argb_image_class = static_cast<jclass>(env->NewGlobalRef(argb_image_class));
+  env->DeleteLocalRef(argb_image_class);
+  s_argb_image_constructor = env->GetMethodID(s_argb_image_class, "<init>", "(II[I)V");
+  if (!s_argb_image_constructor)
   {
     ClearException(env);
     return JNI_ERR;

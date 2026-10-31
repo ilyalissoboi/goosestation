@@ -173,4 +173,12 @@ void NotifyGameStopped();
 void NotifyError(std::string_view message);
 void NotifyBindingCaptured(std::string_view binding);
 
+/// An on-screen message for the app to show, or a keyed one to take away (seconds 0): the core's text, with its icon
+/// characters gone, and the first frame of its image, if it has one (RGBA8, width x height pixels).
+void NotifyOsdMessage(std::string_view key, std::string_view text, float seconds, const u32* image_pixels,
+                      u32 image_width, u32 image_height);
+
+/// Fast forward was turned on or off, by the menu or a hotkey.
+void NotifyFastForwardChanged(bool enabled);
+
 } // namespace AndroidHost

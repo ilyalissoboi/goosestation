@@ -26,4 +26,18 @@ interface NativeCallbacks {
      * Button99, +Axis23, -Axis0. Each capture ends with at most one call, and none once it's cancelled or replaced.
      */
     fun onBindingCaptured(binding: String) {}
+
+    /**
+     * An on-screen message from the core: its [text] (icon characters gone), shown for [seconds], replacing any with
+     * the same [key] (empty for none), and its [icon], if it has one. [seconds] 0 takes [key]'s message away.
+     */
+    fun onOsdMessage(
+        key: String,
+        text: String,
+        seconds: Float,
+        icon: ArgbImage?,
+    ) {}
+
+    /** Fast forward was turned on or off, by the menu or a hotkey. */
+    fun onFastForwardChanged(enabled: Boolean) {}
 }

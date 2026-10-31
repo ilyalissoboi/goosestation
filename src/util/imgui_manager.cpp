@@ -966,6 +966,9 @@ void ImGuiManager::PostOSDMessage(std::string key, std::string message, float du
   if (!s_show_osd_messages)
     return;
 
+#ifdef __ANDROID__
+  Host::OnOSDMessagePosted(key, message, duration, image.has_value() ? &image.value() : nullptr);
+#else
   const Common::Timer::Value current_time = Common::Timer::GetCurrentValue();
 
   OSDMessage msg;
@@ -980,6 +983,7 @@ void ImGuiManager::PostOSDMessage(std::string key, std::string message, float du
 
   std::unique_lock<std::mutex> lock(s_osd_messages_lock);
   s_osd_posted_messages.push_back(std::move(msg));
+#endif
 }
 
 void Host::AddIconOSDMessage(std::string key, const char* icon, std::string message, float duration /* = 2.0f */)
@@ -992,12 +996,16 @@ void Host::RemoveKeyedOSDMessage(std::string key)
   if (!ImGuiManager::s_show_osd_messages)
     return;
 
+#ifdef __ANDROID__
+  Host::OnOSDMessagePosted(key, {}, 0.0f, nullptr);
+#else
   ImGuiManager::OSDMessage msg = {};
   msg.key = std::move(key);
   msg.duration = 0.0f;
 
   std::unique_lock<std::mutex> lock(ImGuiManager::s_osd_messages_lock);
   ImGuiManager::s_osd_posted_messages.push_back(std::move(msg));
+#endif
 }
 
 void Host::ClearOSDMessages()

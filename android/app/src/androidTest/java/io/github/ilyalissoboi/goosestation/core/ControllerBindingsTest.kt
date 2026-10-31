@@ -225,7 +225,7 @@ class ControllerBindingsTest {
 
         val hotkeys = NativeLibrary.getHotkeyBindings("pad-a")!!.toList()
 
-        assertEquals(listOf("ToggleFastForward", "Analog", "Screenshot"), hotkeys.map { it.name })
+        assertEquals(listOf("ToggleFastForward", "ToggleAnalogMode", "Screenshot"), hotkeys.map { it.name })
         // Unassigned by default.
         assertTrue(hotkeys.all { it.binding == null && it.kind == PadBindingKind.Button })
         assertNull(NativeLibrary.getHotkeyBindings("pad-unknown"))
@@ -239,18 +239,32 @@ class ControllerBindingsTest {
         NativeLibrary.setHotkeyBinding("pad-a", "ToggleFastForward", "Button100")
 
         NativeLibrary.setHotkeyBinding("pad-b", "ToggleFastForward", "Button99")
-        NativeLibrary.setHotkeyBinding("pad-b", "Analog", "Button98")
+        NativeLibrary.setHotkeyBinding("pad-b", "ToggleAnalogMode", "Button98")
 
         val ini = readSettings()
         assertEquals(
             listOf("Android-0/Button109 & Android-0/Button100", "Android-1/Button109 & Android-1/Button99"),
             ini.values("Hotkeys", "ToggleFastForward"),
         )
-        assertEquals(listOf("Android-1/Button109 & Android-1/Button98"), ini.values("Pad1", "Analog"))
+        assertEquals(listOf("Android-1/Button109 & Android-1/Button98"), ini.values("Hotkeys", "ToggleAnalogMode"))
+        assertEquals(emptyList<String>(), ini.values("Pad1", "Analog"))
         val hotkeys = NativeLibrary.getHotkeyBindings("pad-b")!!.associate { it.name to it.binding }
         assertEquals("Button109 & Android-1/Button99", hotkeys["ToggleFastForward"])
-        assertEquals("Button109 & Android-1/Button98", hotkeys["Analog"])
+        assertEquals("Button109 & Android-1/Button98", hotkeys["ToggleAnalogMode"])
         assertNull(hotkeys["Screenshot"])
+    }
+
+    // The old Analog Toggle row's binding, in a settings.ini from before the Hotkeys section, becomes the hotkey.
+    @Test
+    fun anOldAnalogToggleBindingBecomesTheHotkey() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\nControllerDescriptors = pad-a\n\n" +
+                "[Pad1]\nType = AnalogController\nCross = Android-0/Button96\nAnalog = Android-0/Button100\n",
+        )
+
+        val ini = readSettings()
+        assertEquals(listOf("Android-0/Button109 & Android-0/Button100"), ini.values("Hotkeys", "ToggleAnalogMode"))
+        assertEquals(emptyList<String>(), ini.values("Pad1", "Analog"))
     }
 
     @Test
@@ -281,13 +295,13 @@ class ControllerBindingsTest {
         connectNewPad(2, "pad-b", 1)
         NativeLibrary.setHotkeyBinding("pad-a", "Screenshot", "Button100")
         NativeLibrary.setHotkeyBinding("pad-b", "Screenshot", "Button99")
-        NativeLibrary.setHotkeyBinding("pad-b", "Analog", "Button98")
+        NativeLibrary.setHotkeyBinding("pad-b", "ToggleAnalogMode", "Button98")
 
         NativeLibrary.resetPadBindings("pad-b")
 
         val ini = readSettings()
         assertEquals(listOf("Android-0/Button109 & Android-0/Button100"), ini.values("Hotkeys", "Screenshot"))
-        assertEquals(emptyList<String>(), ini.values("Pad1", "Analog"))
+        assertEquals(emptyList<String>(), ini.values("Hotkeys", "ToggleAnalogMode"))
     }
 
     // Every pad key but the menu's reaches the core, so BUTTON_1 to 16, C and Z can be bound.

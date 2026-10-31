@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -148,9 +149,12 @@ fun SaveSlotPanel(
     }
 }
 
+/** The test tag of a slot row's picture. */
+internal const val SLOT_PICTURE = "slotPicture"
+
 /**
  * A slot: its screenshot (or the memory card icon), its name, Saved or Empty, and when it was saved. The picture is
- * 112 × 84 dp, or 64 × 48 dp in a row under 320 dp wide, so the words beside it fit at a large text size.
+ * 112 × 84 dp, or 64 × 48 dp in a row under 240 dp wide, so the words beside it fit at a large text size.
  */
 @Composable
 private fun SlotRow(
@@ -169,7 +173,7 @@ private fun SlotRow(
                 .focusRing(enabled = enabled, role = Role.Button, onClick = onClick)
                 .padding(8.dp),
     ) {
-        val compact = maxWidth < 320.dp
+        val compact = maxWidth < 240.dp
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 16.dp),
@@ -177,6 +181,7 @@ private fun SlotRow(
             Box(
                 modifier =
                     Modifier
+                        .testTag(SLOT_PICTURE)
                         .size(if (compact) 64.dp else 112.dp, if (compact) 48.dp else 84.dp)
                         .clip(GsShapes.small)
                         .background(colors.sunken),

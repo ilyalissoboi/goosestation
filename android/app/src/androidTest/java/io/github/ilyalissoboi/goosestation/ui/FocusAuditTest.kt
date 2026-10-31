@@ -372,6 +372,10 @@ class FocusAuditTest {
         override fun cancelReset() {}
 
         override fun exit() {}
+
+        override fun confirmExit() {}
+
+        override fun cancelExit() {}
     }
 
     private fun showSetup() =

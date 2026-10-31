@@ -64,6 +64,9 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 import java.time.ZonedDateTime
 
+/** What Reset console and Exit game say while the game is writing a memory card ([GameMenuState.cardBusy]). */
+private const val CARD_BUSY = "It's still saving to its memory card, and that save may be damaged."
+
 /** From this screen width on, the slot panel opens beside the menu panel, whatever the screen's shape. */
 private val SIDE_BY_SIDE = 720.dp
 
@@ -92,18 +95,20 @@ fun GameMenu(
             shown.slots?.replacing != null -> actions.cancelReplace()
             shown.slots != null -> actions.closeSlots()
             shown.confirmingReset -> actions.cancelReset()
+            shown.confirmingExit -> actions.cancelExit()
             else -> actions.resume()
         }
     }
     val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     // The keys whose key-down this layer has seen, and whose key-up hasn't come yet.
-    val layer = Triple(state.slots?.mode, state.slots?.replacing, state.confirmingReset)
+    val layer = listOf(state.slots?.mode, state.slots?.replacing, state.confirmingReset, state.confirmingExit)
     val down = remember(layer) { HashSet<Key>() }
     // Kept here, outside the menu panel, which is composed afresh when the layout changes.
     val cameFrom = remember { CameFrom() }
     SideEffect {
         state.slots?.let { cameFrom.slots = it.mode }
         if (state.confirmingReset) cameFrom.reset = true
+        if (state.confirmingExit) cameFrom.exit = true
     }
     val colors = GooseStationTheme.colors
 
@@ -135,7 +140,9 @@ fun GameMenu(
         val slots = state.slots
         if (screenWidth >= SIDE_BY_SIDE || screenWidth >= screenHeight) {
             Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                MenuPanel(state, actions, game, cameFrom, Modifier.width(300.dp))
+                // Narrower beside the slot panel on a small screen (the Thor's 640 dp), so its pictures stay full size.
+                val menuWidth = if (slots != null && screenWidth < SIDE_BY_SIDE) 240.dp else 300.dp
+                MenuPanel(state, actions, game, cameFrom, Modifier.width(menuWidth))
                 if (slots != null) SaveSlotPanel(slots, actions, now, Modifier.weight(1f).fillMaxHeight())
             }
         } else {
@@ -153,6 +160,7 @@ fun GameMenu(
 private class CameFrom {
     var slots: SlotMode? = null
     var reset = false
+    var exit = false
 }
 
 @Composable
@@ -168,14 +176,15 @@ private fun MenuPanel(
     val saveRow = remember { FocusRequester() }
     val loadRow = remember { FocusRequester() }
     val resetRow = remember { FocusRequester() }
+    val exitRow = remember { FocusRequester() }
     val booted = state.booted
     val openMode = state.slots?.mode
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
-    LaunchedEffect(openMode, state.confirmingReset) {
+    LaunchedEffect(openMode, state.confirmingReset, state.confirmingExit) {
         val from = cameFrom.slots
         when {
-            openMode != null || state.confirmingReset -> {}
+            openMode != null || state.confirmingReset || state.confirmingExit -> {}
             from != null -> {
                 cameFrom.slots = null
                 (if (from == SlotMode.Save) saveRow else loadRow).requestFocus()
@@ -183,6 +192,10 @@ private fun MenuPanel(
             cameFrom.reset -> {
                 cameFrom.reset = false
                 resetRow.requestFocus()
+            }
+            cameFrom.exit -> {
+                cameFrom.exit = false
+                exitRow.requestFocus()
             }
             else -> resume.requestFocus()
         }
@@ -203,7 +216,12 @@ private fun MenuPanel(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            val details = if (!booted) "Starting…" else game?.let(::gameDetails)
+            val details =
+                when {
+                    !booted -> "Starting…"
+                    state.exiting -> "Saving your place…"
+                    else -> game?.let(::gameDetails)
+                }
             details?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted) }
         }
         Column(
@@ -212,10 +230,21 @@ private fun MenuPanel(
         ) {
             if (state.confirmingReset) {
                 Question(
-                    "Reset the console? Progress since your last save is lost.",
+                    if (state.cardBusy) {
+                        "Reset the console? $CARD_BUSY Progress since your last save is lost."
+                    } else {
+                        "Reset the console? Progress since your last save is lost."
+                    },
                     "Reset",
                     onConfirm = actions::confirmReset,
                     onCancel = actions::cancelReset,
+                )
+            } else if (state.confirmingExit) {
+                Question(
+                    "Exit the game? $CARD_BUSY",
+                    "Exit",
+                    onConfirm = actions::confirmExit,
+                    onCancel = actions::cancelExit,
                 )
             } else {
                 MenuItem("Resume", GsIcons.play, actions::resume, Modifier.focusRequester(resume))
@@ -266,7 +295,13 @@ private fun MenuPanel(
                     Modifier.focusRequester(resetRow),
                     enabled = booted,
                 )
-                MenuItem("Exit game", GsIcons.power, actions::exit)
+                MenuItem(
+                    "Exit game",
+                    GsIcons.power,
+                    actions::exit,
+                    Modifier.focusRequester(exitRow),
+                    enabled = !state.exiting,
+                )
             }
         }
         KeyHints(listOf(KeyHint(PadGlyphs.confirm, "Select"), KeyHint(PadGlyphs.back, "Back")))

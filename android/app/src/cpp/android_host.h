@@ -82,10 +82,8 @@ void RefreshGameList(bool invalidate_cache);
 /// StartGame() before it boots.
 void StartGame(std::string path, std::string resume_serial);
 
-/// Shuts the running game down, or cancels a boot still waiting for a surface. With save_resume_state, a game with a
-/// serial first saves its resume state, if [Main] SaveStateOnExit is on; a failure is reported with NotifyError(), and
-/// the game stops all the same.
-void ShutdownGame(bool save_resume_state);
+/// Shuts the running game down, or cancels a boot still waiting for a surface.
+void ShutdownGame();
 
 /// A picture from the core: width x height RGBA8 pixels.
 struct Picture
@@ -95,7 +93,7 @@ struct Picture
   std::vector<u32> pixels;
 };
 
-/// The in-game menu's calls. Each runs on the CPU thread; the first five block until it has.
+/// The in-game menu's calls. Each runs on the CPU thread; the first six block until it has.
 
 /// The modified times (Unix seconds) of serial's save states, 0 for none: [0] the resume state, [n] slot n, for
 /// System::PER_GAME_SAVE_STATE_SLOTS slots. All 0 for an empty serial, or before Initialize() succeeded.
@@ -108,6 +106,13 @@ std::optional<Picture> GetSaveStateScreenshot(std::string serial, s32 slot);
 /// not: no game, no serial, or the core's error.
 std::optional<std::string> SaveState(s32 slot);
 std::optional<std::string> LoadState(s32 slot);
+
+/// Saves the running game's resume state, as Exit game does before it stops it, if [Main] SaveStateOnExit is on and
+/// the game has a serial. nullopt when it's saved or there's nothing to save, else why not.
+std::optional<std::string> SaveResumeState();
+
+/// Whether the running game is writing to a memory card (System::IsSavingMemoryCards()).
+bool IsSavingMemoryCards();
 
 /// Port 1's analog mode: -1 if its controller isn't a DualShock (AnalogController) or no game runs, 0 digital, 1
 /// analog.

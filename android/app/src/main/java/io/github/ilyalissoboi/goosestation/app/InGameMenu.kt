@@ -41,8 +41,9 @@ data class SlotPanel(
 
 /**
  * The in-game menu: whether the game has [booted] (until then only Resume and Exit game work), whether fast forward is
- * on, Port 1's analog mode (null when it isn't a DualShock: the row is hidden), the slot panel, if it's open, and
- * whether it asks before a reset.
+ * on, Port 1's analog mode (null when it isn't a DualShock: the row is hidden), the slot panel, if it's open,
+ * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, and whether Exit
+ * game is saving the resume state ([exiting]).
  */
 data class GameMenuState(
     val booted: Boolean = false,
@@ -50,6 +51,9 @@ data class GameMenuState(
     val analogMode: Boolean? = null,
     val slots: SlotPanel? = null,
     val confirmingReset: Boolean = false,
+    val exiting: Boolean = false,
+    val cardBusy: Boolean = false,
+    val confirmingExit: Boolean = false,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -79,6 +83,10 @@ interface GameMenuActions {
     fun cancelReset()
 
     fun exit()
+
+    fun confirmExit()
+
+    fun cancelExit()
 }
 
 /**
@@ -93,7 +101,7 @@ class InGameMenu(
     private val lastSlots: LastSlotStore,
     private val onMessage: (String) -> Unit,
     private val onResume: () -> Unit,
-    private val onExit: () -> Unit,
+    private val onExit: (resumeError: String?) -> Unit,
 ) : GameMenuActions {
     var state by mutableStateOf(GameMenuState())
         private set
@@ -115,7 +123,7 @@ class InGameMenu(
         panelId++
         this.serial = serial
         state = GameMenuState(booted = true)
-        readAnalogMode()
+        readGameState()
     }
 
     /** The game is gone. */
@@ -126,11 +134,14 @@ class InGameMenu(
         state = GameMenuState()
     }
 
-    /** The menu opens: on its rows, with nothing asked, and the analog mode read again, as the game can change it. */
+    /**
+     * The menu opens: on its rows, with nothing asked, and the analog mode and whether a memory card is being written
+     * read again, as the game changes them. The paused game can't change them while it shows.
+     */
     fun opened() {
         panelId++
-        state = state.copy(slots = null, confirmingReset = false)
-        if (state.booted) readAnalogMode()
+        state = state.copy(slots = null, confirmingReset = false, confirmingExit = false)
+        if (state.booted) readGameState()
     }
 
     /** Fast forward was turned on or off, by the menu or a hotkey. */
@@ -140,7 +151,25 @@ class InGameMenu(
 
     override fun resume() = onResume()
 
-    override fun exit() = onExit()
+    /**
+     * Exit game: a game that has booted, with a serial, saves its resume state first, on [game], then the game stops
+     * ([onExit], with the reason if the save failed: the game stops all the same). Before the boot there's no state
+     * to save, and none replaces the one the player may want.
+     */
+    override fun exit() {
+        if (state.exiting) return
+        if (state.cardBusy && !state.confirmingExit) {
+            state = state.copy(confirmingExit = true)
+            return
+        }
+        state = state.copy(confirmingExit = false)
+        if (!canSave) return onExit(null)
+        state = state.copy(exiting = true)
+        scope.launch {
+            val error = withContext(game) { api.saveResumeState() }
+            onExit(error)
+        }
+    }
 
     override fun openSlots(mode: SlotMode) {
         val serial = serial
@@ -232,8 +261,20 @@ class InGameMenu(
         state = state.copy(confirmingReset = false)
     }
 
+    /** Exit game, though the game is writing a memory card. */
+    override fun confirmExit() {
+        if (state.confirmingExit) exit()
+    }
+
+    override fun cancelExit() {
+        state = state.copy(confirmingExit = false)
+    }
+
     private fun save(slot: Int) =
-        run(slot, { api.saveState(slot) }, "Saved to slot $slot") { "Couldn't save to slot $slot: $it" }
+        run(slot, { api.saveState(slot) }, "Saved to slot $slot") {
+            // The paused game can't finish its card write: it has to run for a moment first.
+            if (it == CARD_BUSY) CARD_BUSY_SAVE else "Couldn't save to slot $slot: $it"
+        }
 
     private fun load(slot: Int) {
         val resume = slot == SaveSlots.RESUME
@@ -280,11 +321,11 @@ class InGameMenu(
         }
     }
 
-    private fun readAnalogMode() {
+    private fun readGameState() {
         val id = gameId
         scope.launch {
-            val mode = withContext(game) { api.getAnalogMode() }
-            if (id == gameId) state = state.copy(analogMode = if (mode < 0) null else mode == 1)
+            val (mode, cardBusy) = withContext(game) { api.getAnalogMode() to api.isSavingMemoryCards() }
+            if (id == gameId) state = state.copy(analogMode = if (mode < 0) null else mode == 1, cardBusy = cardBusy)
         }
     }
 
@@ -298,6 +339,11 @@ class InGameMenu(
     }
 
     private companion object {
+        /** The core's reason for refusing a save while the game writes a memory card, and what the app says instead. */
+        const val CARD_BUSY = "Cannot save state while memory card is being saved."
+        const val CARD_BUSY_SAVE =
+            "The game is still saving to its memory card. Resume it for a moment, then save again."
+
         /** Save lists slots 1 to 10; Load lists the resume state first, when there is one, then 1 to 10. */
         fun entries(
             mode: SlotMode,

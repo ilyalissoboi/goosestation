@@ -833,9 +833,9 @@ NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jst
   AndroidHost::StartGame(FromJString(env, path), resume_serial ? FromJString(env, resume_serial) : std::string());
 }
 
-NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject, jboolean save_resume_state)
+NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject)
 {
-  AndroidHost::ShutdownGame(save_resume_state);
+  AndroidHost::ShutdownGame();
 }
 
 NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jstring serial)
@@ -877,6 +877,16 @@ NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jint slot)
 NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jint slot)
 {
   return ToResult(env, AndroidHost::LoadState(static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, saveResumeState)(JNIEnv* env, jobject)
+{
+  return ToResult(env, AndroidHost::SaveResumeState());
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, isSavingMemoryCards)(JNIEnv*, jobject)
+{
+  return AndroidHost::IsSavingMemoryCards();
 }
 
 NATIVE_LIBRARY_FUNCTION(jint, getAnalogMode)(JNIEnv*, jobject)

@@ -258,9 +258,10 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
   B steps out one layer at a time, back to the row it came from.
-- `SaveSlotPanel`: the slot list, a second `surface` panel beside the menu, filling the rest of the screen; on a
-  narrow portrait screen, below it, the menu keeping the top 40%. Each slot row shows its screenshot at 4:3 (112 x 84
-  dp, 64 x 48 dp in a row under 320 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
+- `SaveSlotPanel`: the slot list, a second `surface` panel beside the menu, filling the rest of the screen (on a
+  screen under 720 dp wide, the menu narrows to 240 dp while it shows); on a narrow portrait screen, below it, the
+  menu keeping the top 40%. Each slot row shows its screenshot at 4:3 (112 x 84
+  dp, 64 x 48 dp in a row under 240 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
   `label`; Saved or Empty; and the time in `mono`. Rows that can't be picked are disabled. Replacing a save asks in the
   panel, as the menu does. The focus can't leave the panel.
 - `ResumePrompt`: "Resume where you left off?" over the library, a centred `surface` panel at `radius-lg`: the game's

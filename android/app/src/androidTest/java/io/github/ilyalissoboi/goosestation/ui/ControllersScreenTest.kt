@@ -45,7 +45,7 @@ class ControllersScreenTest {
                     PadBindingKind.Button,
                     "Button109 & Android-0/Button99",
                 ),
-                PadBinding("Analog", "Analog Toggle", PadBindingKind.Button, null),
+                PadBinding("ToggleAnalogMode", "Toggle Analog Mode", PadBindingKind.Button, null),
                 PadBinding("Screenshot", "Save Screenshot", PadBindingKind.Button, null),
             )
 

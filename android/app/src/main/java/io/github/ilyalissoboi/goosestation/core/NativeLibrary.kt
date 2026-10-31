@@ -161,14 +161,10 @@ object NativeLibrary {
         resumeSerial: String?,
     )
 
-    /**
-     * Stops the game. With [saveResumeState], a game with a serial saves its resume state first, if `[Main]
-     * SaveStateOnExit` is on; a failure is reported to onError() ("Couldn't save your place: …"), and it stops anyway.
-     */
-    external fun shutdownGame(saveResumeState: Boolean)
+    external fun shutdownGame()
 
     // The in-game menu's calls ([io.github.ilyalissoboi.goosestation.app.GameCoreApi]). They run on the core's thread:
-    // the first five wait for it, so call them off the main thread; the last four queue and return.
+    // the first seven wait for it, so call them off the main thread; the last four queue and return.
 
     /**
      * When [serial]'s save states were saved, in Unix seconds, 0 for none: `[0]` the resume state, `[n]` slot n, for
@@ -188,8 +184,17 @@ object NativeLibrary {
     /** Loads [slot] (-1: the resume state) into the running game. Null when it's loaded, or else why not. */
     external fun loadState(slot: Int): String?
 
+    /**
+     * Saves the running game's resume state, as Exit game does before it stops the game, if `[Main] SaveStateOnExit` is
+     * on and the game has a serial. Null when it's saved or there's nothing to save, else why not.
+     */
+    external fun saveResumeState(): String?
+
     /** Port 1's analog mode: -1 if it isn't a DualShock or no game runs, 0 digital, 1 analog. */
     external fun getAnalogMode(): Int
+
+    /** The running game is writing to a memory card, part-way through a save of its own. */
+    external fun isSavingMemoryCards(): Boolean
 
     external fun resetGame()
 
@@ -277,9 +282,9 @@ object NativeLibrary {
     external fun resetPadBindings(descriptor: String)
 
     /**
-     * The hotkeys the controller with [descriptor] has, in order: `ToggleFastForward` and `Screenshot` (`[Hotkeys]`),
-     * with `Analog` (`[Pad1]`, the DualShock's Analog button) between them when Port 1 has it. Each [PadBinding.binding]
-     * is a Select chord (`Button109 & Android-<n>/Button99`), or null. Null as [getPadBindings] is.
+     * The hotkeys the controller with [descriptor] has, all in `[Hotkeys]`, in order: `ToggleFastForward`,
+     * `ToggleAnalogMode` (the DualShock's Analog button, only when Port 1 has it) and `Screenshot`. Each
+     * [PadBinding.binding] is a Select chord (`Button109 & Android-<n>/Button99`), or null. Null as [getPadBindings] is.
      */
     external fun getHotkeyBindings(descriptor: String): Array<PadBinding>?
 

@@ -549,13 +549,16 @@ across restarts, whatever order the controllers connect in.
 - **The menu's triggers can't be remapped.** Back and Mode can't be bound: Back never reaches the core, and the core
   refuses Mode, so a capture never sees either. Select and Start can be bound to anything, but the controller's own
   Select and Start keys, held together, open the menu whatever they're mapped to (see "The in-game menu").
-- **Hotkeys**, after the bindings: **Fast forward**, **Analog mode** (the DualShock's Analog button, which was the
-  "Analog Toggle" row; only for a DualShock) and **Screenshot**, each Select held with a button. A on a row asks "Hold
+- **Hotkeys**, after the bindings: **Fast forward**, **Analog mode** (presses the DualShock's Analog button, in place
+  of the old "Analog Toggle" row; only for a DualShock) and **Screenshot**, each Select held with a button. A on a row asks "Hold
   Select and press a button for <hotkey>… Back cancels (5)" and takes the next button but Select and Start (Back and
   Mode never reach it); its value then reads "Select + X". Clear and Undo work as on a binding, and Reset to defaults
-  clears them (they're unassigned by default). Each controller has its own: `[Hotkeys] ToggleFastForward` and
-  `Screenshot`, and `[Pad1] Analog`, as the core's chord bindings (`Android-0/Button109 & Android-0/Button99`). They
-  work while a game runs and the menu is closed.
+  clears them (they're unassigned by default). Each controller has its own: `[Hotkeys] ToggleFastForward`,
+  `ToggleAnalogMode` (a hotkey of the app's own) and `Screenshot`, as the core's chord bindings (`Android-0/Button109 &
+  Android-0/Button99`). They work while a game runs and the menu is closed. A chord's keys don't reach the game: when
+  one completes, the core lets go of the pad buttons on its keys in the same pass (`InputManager::ProcessEvent`, on
+  Android only), so the game sees neither Select nor the button. An "Analog Toggle" binding from before (`[Pad1]
+  Analog`) becomes the Analog mode hotkey, with Select, the first time the settings are read.
 - **Select on a controller with a hotkey** is held back from the game until it's known not to start a chord: it goes
   to the game when it's let go (held down 100 ms, as a tap), together with the next button pressed (in one batch, so
   the core's chord fires and the game sees neither), or once held for 500 ms, for a game that wants Select held (a map,
@@ -593,8 +596,13 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
 - **Reset console** asks "Reset the console? Progress since your last save is lost." in the menu, Cancel focused,
   then restarts the game: "Console reset".
 - **Exit game** saves the game's resume state (`savestates/<serial>_resume.sav`, when `[Main] SaveStateOnExit` is on,
-  as it is by default, and the game has a serial), then stops it. If that save fails, the game still stops, and the
-  library says "Couldn't save your place: <reason>".
+  as it is by default, and the game has a serial), with "Saving your place…" in the menu meanwhile, then stops it. If
+  that save fails, the game still stops, and the library says "Couldn't save your place: <reason>". A game still
+  starting saves none, so a resume state from before isn't replaced.
+- **While the game is writing its memory card** (the menu was opened during a save in the game), Reset console warns
+  that the save may be damaged, Exit game asks first ("Exit the game? It's still saving to its memory card, and that
+  save may be damaged."), and Save state says "The game is still saving to its memory card. Resume it for a moment,
+  then save again." A load that fails part-way puts the game back where it was (the core's undo state).
 
 Until a game has booted, only Resume and Exit game work, and the details line says "Starting…". The foot of each panel
 names the buttons: **A** Select (or Save, or Load), **B** Back. While the menu shows, the controllers move its focus,
@@ -1087,4 +1095,10 @@ adb logcat -v time > thor.log
      and padtest lights neither Select nor the button; a Select tap lights Select briefly; Select held lights it from
      about half a second; Select + Start held opens the menu without Select lighting.
    - [ ] In a game with a map or menu on Select, holding Select still shows it.
+   - [ ] With the Analog mode hotkey set (Select + Square's button), a single press of that button in a game does
+     nothing to the analog mode; Select + it toggles it once.
+   - [ ] In a game where Square does something visible, Select + Square's button fires its hotkey and Square doesn't
+     happen.
+   - [ ] Start a game with a resume state, choose Start over, then Back and Exit game at once: the resume state is
+     still there next time (a game still starting saves none).
    - [ ] `adb logcat -b crash -d` is empty.

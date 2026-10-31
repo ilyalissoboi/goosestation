@@ -94,6 +94,20 @@ std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings,
 /// "Button109 & Android-<index>/<button>". GetDeviceBinding() gives it back the same.
 std::string SelectChord(u32 device_index, std::string_view button);
 
+/// [Pad1] Analog and [Hotkeys] ToggleAnalogMode, once MoveAnalogBindings() has moved the first's Android bindings to
+/// the second, and whether it moved any.
+struct AnalogBindings
+{
+  std::vector<std::string> analog;
+  std::vector<std::string> hotkey;
+  bool changed;
+};
+
+/// The Controllers page's old Analog Toggle row bound [Pad1] Analog, which the analog mode hotkey replaces: each
+/// device's binding there moves to the hotkey, as a Select chord (a chord stays as it is), unless the device has a
+/// hotkey already, when it's dropped. Other sources' bindings stay in [Pad1] Analog.
+AnalogBindings MoveAnalogBindings(std::span<const std::string> analog, std::span<const std::string> hotkey);
+
 /// An input to report to the core: Button<number> or Axis<number> of the device, at a value.
 struct PadEvent
 {

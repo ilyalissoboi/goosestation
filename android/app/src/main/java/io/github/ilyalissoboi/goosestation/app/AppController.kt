@@ -258,7 +258,7 @@ object AppController : NativeCallbacks {
             LastSlots(SharedPreferencesStore(context, "game")),
             onMessage = { osd.post(it) },
             onResume = ::resumeFromPrompt,
-            onExit = ::quitFromPrompt,
+            onExit = ::exitGame,
         )
     }
 
@@ -771,13 +771,12 @@ object AppController : NativeCallbacks {
         NativeLibrary.startGame(game.path, resumeSerial)
     }
 
-    // Back to the library, which waits for the game's onGameStopped() before it starts another. With
-    // saveResumeState, the game saves its resume state first.
-    fun leaveGame(saveResumeState: Boolean = false) {
+    // Back to the library, which waits for the game's onGameStopped() before it starts another.
+    fun leaveGame() {
         promptOpen = false
         screen = Screen.Library
         if (!messageIsError) message = "Stopping the game…"
-        NativeLibrary.shutdownGame(saveResumeState)
+        NativeLibrary.shutdownGame()
     }
 
     /**
@@ -809,11 +808,17 @@ object AppController : NativeCallbacks {
         if (gameRunning && PausePolicy.running(resumed, promptOpen = false)) NativeLibrary.setPaused(false)
     }
 
-    /** Closes the prompt, and stops the game, which saves its resume state first: Exit game. */
+    /** Closes the prompt, and stops the game. */
     fun quitFromPrompt() {
         if (!promptOpen) return
         promptOpen = false
-        leaveGame(saveResumeState = true)
+        leaveGame()
+    }
+
+    // Exit game, once the menu has saved the resume state, or failed to ([InGameMenu.exit]).
+    private fun exitGame(resumeError: String?) {
+        quitFromPrompt()
+        resumeError?.let { showError("Couldn't save your place: $it") }
     }
 
     // --- SD card removal ---
@@ -863,7 +868,7 @@ object AppController : NativeCallbacks {
             // (android_host.cpp), before anything else the core runs. onGameStopped() follows.
             NativeLibrary.setPaused(true)
             if (screen == Screen.Game) screen = Screen.Library
-            NativeLibrary.shutdownGame(false)
+            NativeLibrary.shutdownGame()
         }
         if (EjectAction.StopMirror in actions) mirror?.hold(CARD_REMOVED)
     }

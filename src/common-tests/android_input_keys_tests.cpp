@@ -627,3 +627,32 @@ TEST(AndroidInputKeys, ChordCaptureSkipsSelectStartAndAxes)
   EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 0), 1.0f), std::nullopt);
   EXPECT_EQ(capture.OnEvent(PadKey(0, BUTTON, 99), 1.0f), Captured(0, BUTTON, 99, InputModifier::None));
 }
+
+// An Analog Toggle binding from the old Controllers page row moves to the analog mode hotkey, as a Select chord.
+TEST(AndroidInputKeys, OldAnalogBindingsBecomeTheHotkey)
+{
+  const std::vector<std::string> analog = {"Android-0/Button100", "SDL-0/Back", "Android-1/Button109 & Android-1/Button99",
+                                           "Android-2/Button98"};
+  const std::vector<std::string> hotkey = {"Android-2/Button109 & Android-2/Button97"};
+
+  const AndroidInputKeys::AnalogBindings moved = AndroidInputKeys::MoveAnalogBindings(analog, hotkey);
+
+  EXPECT_EQ(moved.analog, (std::vector<std::string>{"SDL-0/Back"}));
+  // Android-2 had a hotkey already: its old binding goes, and the hotkey stays.
+  EXPECT_EQ(moved.hotkey, (std::vector<std::string>{"Android-2/Button109 & Android-2/Button97",
+                                                    "Android-0/Button109 & Android-0/Button100",
+                                                    "Android-1/Button109 & Android-1/Button99"}));
+  EXPECT_TRUE(moved.changed);
+}
+
+TEST(AndroidInputKeys, NoOldAnalogBindingsChangeNothing)
+{
+  const std::vector<std::string> analog = {"SDL-0/Back"};
+  const std::vector<std::string> hotkey = {"Android-0/Button109 & Android-0/Button97"};
+
+  const AndroidInputKeys::AnalogBindings moved = AndroidInputKeys::MoveAnalogBindings(analog, hotkey);
+
+  EXPECT_EQ(moved.analog, analog);
+  EXPECT_EQ(moved.hotkey, hotkey);
+  EXPECT_FALSE(moved.changed);
+}

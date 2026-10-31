@@ -18,7 +18,7 @@ class FakeCoreApi(
     private val hotkeys =
         mutableMapOf<String, String?>(
             "ToggleFastForward" to null,
-            "Analog" to null,
+            "ToggleAnalogMode" to null,
             "Screenshot" to null,
         )
     var images = emptyList<BiosImage>()

@@ -93,7 +93,8 @@ static bool AddControllerToPort1(const std::string& identifier);
 static void MapNewController(const std::string& identifier);
 static bool IsVulkanRenderer(GPURenderer renderer);
 static bool Port1HasAnalogButton(SettingsInterface& si);
-static std::string HotkeySection(std::string_view name);
+static bool MoveAnalogBindings(SettingsInterface& si);
+static void PressAnalogButton();
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
@@ -106,11 +107,15 @@ static constexpr const char* DESCRIPTORS_SECTION = AndroidInputKeys::SETTINGS_SE
 static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY;
 
 // The inputs the remap page lists (GetPadBindings()) and edits (SetPadBinding()).
-// The DualShock's Analog button, Port 1's, which the app has as a hotkey.
+// The DualShock's Analog button, Port 1's, which the app presses with a hotkey.
 static constexpr std::string_view ANALOG_BUTTON = "Analog";
 
-// The hotkeys the Controllers page has, in its order: each a Select chord.
-static constexpr std::string_view HOTKEYS[] = {"ToggleFastForward", ANALOG_BUTTON, "Screenshot"};
+// The hotkey that presses it: the host's own (g_host_hotkeys), so it's a chord as the core's hotkeys are. A pad binding
+// would fire on each of a chord's keys.
+static constexpr std::string_view ANALOG_HOTKEY = "ToggleAnalogMode";
+
+// The hotkeys the Controllers page has, in its order, all in [Hotkeys]: each a Select chord.
+static constexpr std::string_view HOTKEYS[] = {"ToggleFastForward", ANALOG_HOTKEY, "Screenshot"};
 
 static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 {
@@ -257,6 +262,7 @@ bool AndroidHost::InitializeConfig(Error* error)
 
   // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
   changed = AdaptForeignSettings(si, s_install_id) || changed;
+  changed = MoveAnalogBindings(si) || changed;
 
   // The controllers this install has seen, at the indices their bindings use. An adapted file has none.
   s_descriptors = si.GetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY);
@@ -358,7 +364,7 @@ void AndroidHost::ReloadSettings()
         adapted = AdaptForeignSettings(si, s_install_id);
 
         // The indices in use stay as they are, whatever the file has: an adapted one has none.
-        bool changed = adapted;
+        bool changed = MoveAnalogBindings(si) || adapted;
         if (si.GetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY) != s_descriptors)
         {
           WriteDescriptors(si);
@@ -676,10 +682,10 @@ void AndroidHost::BootPendingGame()
   }
 }
 
-void AndroidHost::ShutdownGame(bool save_resume_state)
+void AndroidHost::ShutdownGame()
 {
   EmuThread::RunOnThread(
-    [save_resume_state]() {
+    []() {
       if (s_pending_boot_path.has_value())
       {
         INFO_LOG("Cancelling the boot of '{}'.", Path::GetFileName(s_pending_boot_path.value()));
@@ -688,21 +694,8 @@ void AndroidHost::ShutdownGame(bool save_resume_state)
         NotifyGameStopped();
       }
 
-      if (!System::IsValid())
-        return;
-
-      // A game with no serial (a PS-EXE, the BIOS) has nowhere to keep one, and none could be offered.
-      if (save_resume_state && g_settings.save_state_on_exit && !System::GetGameSerial().empty())
-      {
-        Error error;
-        if (!System::SaveResumeState(&error))
-        {
-          ERROR_LOG("Failed to save the resume state: {}", error.GetDescription());
-          NotifyError(fmt::format("Couldn't save your place: {}", error.GetDescription()));
-        }
-      }
-
-      System::ShutdownSystem(false);
+      if (System::IsValid())
+        System::ShutdownSystem(false);
     },
     false);
 }
@@ -827,8 +820,42 @@ std::optional<std::string> AndroidHost::LoadState(s32 slot)
       return false;
     }
 
-    return System::LoadState(path.c_str(), error, false);
+    // With the core's undo state: a load that fails part-way puts the game back where it was.
+    return System::LoadState(path.c_str(), error, true);
   });
+}
+
+std::optional<std::string> AndroidHost::SaveResumeState()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [&result]() {
+      // A game with no serial (a PS-EXE, the BIOS) has nowhere to keep one, and none could be offered.
+      if (!System::IsValid() || !g_settings.save_state_on_exit || System::GetGameSerial().empty())
+        return;
+
+      Error error;
+      if (!System::SaveResumeState(&error))
+      {
+        ERROR_LOG("Failed to save the resume state: {}", error.GetDescription());
+        result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
+      }
+    },
+    true);
+  return result;
+}
+
+bool AndroidHost::IsSavingMemoryCards()
+{
+  if (!s_initialized)
+    return false;
+
+  bool saving = false;
+  EmuThread::RunOnThread([&saving]() { saving = System::IsValid() && System::IsSavingMemoryCards(); }, true);
+  return saving;
 }
 
 s32 AndroidHost::GetAnalogMode()
@@ -864,18 +891,7 @@ void AndroidHost::SetFastForward(bool enabled)
 
 void AndroidHost::ToggleAnalogMode()
 {
-  EmuThread::RunOnThread(
-    []() {
-      Controller* controller = System::IsValid() ? System::GetController(0) : nullptr;
-      if (!controller || controller->GetType() != ControllerType::AnalogController)
-        return;
-
-      // As the controller's own Analog button: the press toggles, the release does nothing.
-      const u32 analog = static_cast<u32>(AnalogController::Button::Analog);
-      controller->SetBindState(analog, 1.0f);
-      controller->SetBindState(analog, 0.0f);
-    },
-    false);
+  EmuThread::RunOnThread(&PressAnalogButton, false);
 }
 
 void AndroidHost::SaveScreenshot()
@@ -1324,13 +1340,12 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetHotkeyBindin
       result.emplace();
       for (const std::string_view name : HOTKEYS)
       {
-        if (name == ANALOG_BUTTON && !analog)
+        if (name == ANALOG_HOTKEY && !analog)
           continue;
 
-        const std::string section = HotkeySection(name);
-        result->push_back(PadBinding{std::string(name), std::string(name), PadBindingKind::Button,
-                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(),
-                                                                                         std::string(name).c_str()),
+        const std::string key(name);
+        result->push_back(PadBinding{key, key, PadBindingKind::Button,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList("Hotkeys", key.c_str()),
                                                                         index.value())});
       }
     },
@@ -1353,17 +1368,16 @@ void AndroidHost::SetHotkeyBinding(std::string descriptor, std::string name, std
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
         if (std::find(std::begin(HOTKEYS), std::end(HOTKEYS), name) == std::end(HOTKEYS) ||
-            (name == ANALOG_BUTTON && !Port1HasAnalogButton(si)))
+            (name == ANALOG_HOTKEY && !Port1HasAnalogButton(si)))
         {
           WARNING_LOG("'{}' isn't a hotkey this pad can have, not binding it.", name);
           return;
         }
 
-        const std::string section = HotkeySection(name);
         const std::string binding = button.empty() ? std::string() : AndroidInputKeys::SelectChord(index.value(), button);
-        si.SetStringList(section.c_str(), name.c_str(),
-                         AndroidInputKeys::SetDeviceBinding(si.GetStringList(section.c_str(), name.c_str()),
-                                                            index.value(), binding));
+        si.SetStringList("Hotkeys", name.c_str(),
+                         AndroidInputKeys::SetDeviceBinding(si.GetStringList("Hotkeys", name.c_str()), index.value(),
+                                                            binding));
 
         Error error;
         if (!si.Save(&error))
@@ -1444,10 +1458,34 @@ bool AndroidHost::Port1HasAnalogButton(SettingsInterface& si)
                              [](const Controller::ControllerBindingInfo& bi) { return bi.name == ANALOG_BUTTON; });
 }
 
-// Analog is Port 1's button, in [Pad1]; the others are the core's hotkeys.
-std::string AndroidHost::HotkeySection(std::string_view name)
+// Moves [Pad1] Analog's Android bindings (the old Analog Toggle row's) to the analog mode hotkey, under the settings
+// lock. Returns whether it changed anything, to save.
+bool AndroidHost::MoveAnalogBindings(SettingsInterface& si)
 {
-  return (name == ANALOG_BUTTON) ? Controller::GetSettingsSection(0) : std::string("Hotkeys");
+  const std::string section = Controller::GetSettingsSection(0);
+  const std::string hotkey(ANALOG_HOTKEY);
+  const AndroidInputKeys::AnalogBindings moved = AndroidInputKeys::MoveAnalogBindings(
+    si.GetStringList(section.c_str(), "Analog"), si.GetStringList("Hotkeys", hotkey.c_str()));
+  if (!moved.changed)
+    return false;
+
+  INFO_LOG("Moved the Analog Toggle bindings to the {} hotkey.", hotkey);
+  si.SetStringList(section.c_str(), "Analog", moved.analog);
+  si.SetStringList("Hotkeys", hotkey.c_str(), moved.hotkey);
+  return true;
+}
+
+// CPU thread: presses Port 1's Analog button, as the DualShock's own does, if it's a DualShock.
+void AndroidHost::PressAnalogButton()
+{
+  Controller* controller = System::IsValid() ? System::GetController(0) : nullptr;
+  if (!controller || controller->GetType() != ControllerType::AnalogController)
+    return;
+
+  // The press toggles, the release does nothing.
+  const u32 analog = static_cast<u32>(AnalogController::Button::Analog);
+  controller->SetBindState(analog, 1.0f);
+  controller->SetBindState(analog, 0.0f);
 }
 
 void AndroidHost::ResetPadBindings(std::string descriptor)
@@ -1485,12 +1523,9 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
             si.SetStringList(section.c_str(), key.c_str(), kept);
         }
 
-        // Its hotkeys too: unassigned by default. [Pad1] Analog went with the keys above.
+        // Its hotkeys too: unassigned by default.
         for (const std::string_view name : HOTKEYS)
         {
-          if (name == ANALOG_BUTTON)
-            continue;
-
           const std::string key(name);
           const std::vector<std::string> bindings = si.GetStringList("Hotkeys", key.c_str());
           const std::vector<std::string> kept = AndroidInputKeys::SetDeviceBinding(bindings, index.value(), {});
@@ -1957,4 +1992,11 @@ const char* InputManager::ConvertHostKeyboardCodeToIcon(u32 code)
 
 // No host hotkeys yet.
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
+// The Controllers page's Analog mode hotkey: the DualShock's Analog button, on the chord's release, as the core's
+// toggles are.
+DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANSLATE_NOOP("Hotkeys", "Toggle Analog Mode"),
+              [](s32 pressed) {
+                if (pressed == 0)
+                  AndroidHost::PressAnalogButton();
+              })
 END_HOTKEY_LIST()

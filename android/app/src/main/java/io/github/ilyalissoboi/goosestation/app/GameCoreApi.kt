@@ -35,8 +35,14 @@ interface GameCoreApi {
     /** Null when it's loaded, or else why not. */
     fun loadState(slot: Int): String?
 
+    /** Saves the running game's resume state for Exit game: null when it's saved or there's none to save, else why not. */
+    fun saveResumeState(): String?
+
     /** -1 if Port 1 isn't a DualShock, 0 digital, 1 analog. */
     fun getAnalogMode(): Int
+
+    /** The game is writing to a memory card: a reset or an exit now can damage that save. */
+    fun isSavingMemoryCards(): Boolean
 
     fun resetGame()
 
@@ -59,7 +65,11 @@ object NativeGameCoreApi : GameCoreApi {
 
     override fun loadState(slot: Int): String? = NativeLibrary.loadState(slot)
 
+    override fun saveResumeState(): String? = NativeLibrary.saveResumeState()
+
     override fun getAnalogMode(): Int = NativeLibrary.getAnalogMode()
+
+    override fun isSavingMemoryCards(): Boolean = NativeLibrary.isSavingMemoryCards()
 
     override fun resetGame() = NativeLibrary.resetGame()
 

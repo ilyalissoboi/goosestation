@@ -31,7 +31,7 @@ class InGameMenuTest {
                 lastSlots,
                 onMessage = { calls += "message $it" },
                 onResume = { calls += "resume" },
-                onExit = { calls += "exit" },
+                onExit = { calls += "exit $it" },
             )
         if (booted) {
             menu.gameStarted(SERIAL)
@@ -221,7 +221,7 @@ class InGameMenuTest {
     @Test
     fun aFailedSaveKeepsTheMenuOpenWithTheReason() =
         runTest {
-            api.saveError = "Cannot save state while memory card is being saved."
+            api.saveError = "No space left on device."
             lastSlots.set(SERIAL, 5)
             val menu = menu()
             menu.openSlots(SlotMode.Save)
@@ -233,7 +233,7 @@ class InGameMenuTest {
 
             assertEquals(listOf("saveState 2"), calls)
             assertEquals(
-                "Couldn't save to slot 2: Cannot save state while memory card is being saved.",
+                "Couldn't save to slot 2: No space left on device.",
                 menu.slots().error,
             )
             assertFalse(menu.slots().busy)
@@ -440,14 +440,74 @@ class InGameMenuTest {
         }
 
     @Test
-    fun resumeAndExitAreTheApps() =
+    fun resumeIsTheApps() =
         runTest {
             val menu = menu()
 
             menu.resume()
-            menu.exit()
 
-            assertEquals(listOf("resume", "exit"), calls)
+            assertEquals(listOf("resume"), calls)
+        }
+
+    @Test
+    fun exitSavesTheResumeStateFirst() =
+        runTest {
+            val menu = menu()
+
+            menu.exit()
+            runCurrent()
+
+            assertEquals(listOf("saveResumeState", "exit null"), calls)
+        }
+
+    @Test
+    fun exitBeforeTheBootSavesNothing() =
+        runTest {
+            val menu = menu(booted = false)
+
+            menu.exit()
+            runCurrent()
+
+            assertEquals(listOf("exit null"), calls)
+        }
+
+    @Test
+    fun aGameWithoutASerialExitsWithoutSaving() =
+        runTest {
+            val menu = menu(booted = false)
+            menu.gameStarted("")
+            runCurrent()
+            calls.clear()
+
+            menu.exit()
+            runCurrent()
+
+            assertEquals(listOf("exit null"), calls)
+        }
+
+    @Test
+    fun aFailedResumeSaveStillExitsWithTheReason() =
+        runTest {
+            api.resumeError = "No space left on device."
+            val menu = menu()
+
+            menu.exit()
+            runCurrent()
+
+            assertEquals(listOf("saveResumeState", "exit No space left on device."), calls)
+        }
+
+    @Test
+    fun aSecondExitWhileSavingIsIgnored() =
+        runTest {
+            val menu = menu()
+
+            menu.exit()
+            assertTrue(menu.state.exiting)
+            menu.exit()
+            runCurrent()
+
+            assertEquals(listOf("saveResumeState", "exit null"), calls)
         }
 
     @Test
@@ -461,6 +521,72 @@ class InGameMenuTest {
             menu.gameStopped()
 
             assertEquals(GameMenuState(), menu.state)
+        }
+
+    @Test
+    fun theCardBeingWrittenIsReadAsTheMenuOpens() =
+        runTest {
+            api.cardBusy = true
+            val menu = menu()
+
+            menu.opened()
+            runCurrent()
+
+            assertTrue(menu.state.cardBusy)
+        }
+
+    @Test
+    fun exitAsksWhileTheCardIsBeingWritten() =
+        runTest {
+            api.cardBusy = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.exit()
+            runCurrent()
+            assertTrue(menu.state.confirmingExit)
+            assertEquals(emptyList<String>(), calls)
+
+            menu.confirmExit()
+            runCurrent()
+            assertFalse(menu.state.confirmingExit)
+            assertEquals(listOf("saveResumeState", "exit null"), calls)
+        }
+
+    @Test
+    fun cancellingExitStays() =
+        runTest {
+            api.cardBusy = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.exit()
+            menu.cancelExit()
+            runCurrent()
+
+            assertFalse(menu.state.confirmingExit)
+            assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun aSaveRefusedForTheCardSaysToResumeFirst() =
+        runTest {
+            api.saveError = "Cannot save state while memory card is being saved."
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+
+            menu.pickSlot(2)
+            runCurrent()
+
+            assertEquals(
+                "The game is still saving to its memory card. Resume it for a moment, then save again.",
+                menu.slots().error,
+            )
         }
 
     private class MemoryLastSlots : LastSlotStore {

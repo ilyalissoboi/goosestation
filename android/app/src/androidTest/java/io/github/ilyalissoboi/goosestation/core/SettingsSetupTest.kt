@@ -267,7 +267,7 @@ class SettingsSetupTest {
 
             assertEquals(listOf("memcards/", "shared/one.mcd"), NativeLibrary.getMemoryCardPaths()?.toList())
         } finally {
-            NativeLibrary.shutdownGame(false)
+            NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
             NativeLibrary.surfaceChanged(null, 0, 0, 1f)
             NativeLibrary.setCallbacks(null)

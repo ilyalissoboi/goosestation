@@ -27,6 +27,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -119,6 +120,15 @@ class GameMenuTest {
 
             override fun exit() {
                 calls += "exit"
+            }
+
+            override fun confirmExit() {
+                calls += "confirmExit"
+            }
+
+            override fun cancelExit() {
+                calls += "cancelExit"
+                state = state.copy(confirmingExit = false)
             }
         }
 
@@ -354,6 +364,36 @@ class GameMenuTest {
     }
 
     @Test
+    fun exitAsksWhileTheCardIsBeingWritten() {
+        state = GameMenuState(booted = true, cardBusy = true, confirmingExit = true)
+        show()
+
+        rule
+            .onNodeWithText("Exit the game? It's still saving to its memory card, and that save may be damaged.")
+            .assertExists()
+        rule.onNodeWithText("Cancel").assertIsFocused()
+        press(Key.DirectionLeft)
+        press(Key.Enter)
+        assertEquals(listOf("confirmExit"), calls)
+
+        press(Key.ButtonB)
+        assertEquals(listOf("confirmExit", "cancelExit"), calls)
+        rule.onNodeWithText("Exit game").assertIsFocused()
+    }
+
+    @Test
+    fun resetWarnsWhileTheCardIsBeingWritten() {
+        state = GameMenuState(booted = true, cardBusy = true, confirmingReset = true)
+        show()
+
+        rule
+            .onNodeWithText(
+                "Reset the console? It's still saving to its memory card, and that save may be damaged. " +
+                    "Progress since your last save is lost.",
+            ).assertExists()
+    }
+
+    @Test
     fun anErrorShowsInThePanel() {
         val error = "Couldn't save to slot 2: Cannot save state while memory card is being saved."
         state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(), focus = 2, error = error))
@@ -388,6 +428,17 @@ class GameMenuTest {
         press(Key.ButtonB)
 
         rule.onNode(hasText("Save state") and hasClickAction()).assertIsFocused()
+    }
+
+    // The AYN Thor at 480 dpi: the menu narrows while the slot panel shows, so the pictures stay full size.
+    @Test
+    fun theThorsSlotPicturesAreFullSize() {
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(1), focus = 1))
+        show(width = 640, height = 360)
+
+        val picture = rule.onAllNodesWithTag(SLOT_PICTURE, useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
+        assertEquals(112f, (picture.right - picture.left).value, 0.5f)
+        assertEquals(84f, (picture.bottom - picture.top).value, 0.5f)
     }
 
     @Test

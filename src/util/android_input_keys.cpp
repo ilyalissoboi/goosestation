@@ -183,6 +183,35 @@ std::string SelectChord(u32 device_index, std::string_view button)
   return fmt::format("Button{} & Android-{}/{}", KEYCODE_BUTTON_SELECT, device_index, button);
 }
 
+AnalogBindings MoveAnalogBindings(std::span<const std::string> analog, std::span<const std::string> hotkey)
+{
+  AnalogBindings result{{}, std::vector<std::string>(hotkey.begin(), hotkey.end()), false};
+  for (const std::string& binding : analog)
+  {
+    const std::string_view prefix = "Android-";
+    const std::string::size_type slash = binding.find('/');
+    std::optional<u32> index;
+    if (binding.starts_with(prefix) && slash != std::string::npos)
+      index = StringUtil::FromChars<u32>(std::string_view(binding).substr(prefix.size(), slash - prefix.size()));
+    if (!index.has_value())
+    {
+      result.analog.push_back(binding);
+      continue;
+    }
+
+    result.changed = true;
+    if (GetDeviceBinding(result.hotkey, index.value()).has_value())
+      continue;
+
+    const std::string rest = binding.substr(slash + 1);
+    result.hotkey.push_back((rest.find('&') != std::string::npos) ? binding :
+                                                                     fmt::format("Android-{}/{}", index.value(),
+                                                                                 SelectChord(index.value(), rest)));
+  }
+
+  return result;
+}
+
 std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings, u32 index, std::string_view binding)
 {
   const std::string prefix = fmt::format("Android-{}/", index);

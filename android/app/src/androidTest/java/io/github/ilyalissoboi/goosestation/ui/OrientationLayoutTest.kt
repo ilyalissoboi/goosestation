@@ -96,7 +96,7 @@ class OrientationLayoutTest {
                     PadBindingKind.Button,
                     "Button109 & Android-1/Button99",
                 ),
-                PadBinding("Analog", "Analog Toggle", PadBindingKind.Button, null),
+                PadBinding("ToggleAnalogMode", "Toggle Analog Mode", PadBindingKind.Button, null),
                 PadBinding("Screenshot", "Save Screenshot", PadBindingKind.Button, "Button109 & Android-1/Button188"),
             )
 
@@ -454,6 +454,10 @@ class OrientationLayoutTest {
         override fun cancelReset() {}
 
         override fun exit() {}
+
+        override fun confirmExit() {}
+
+        override fun cancelExit() {}
     }
 
     @Test

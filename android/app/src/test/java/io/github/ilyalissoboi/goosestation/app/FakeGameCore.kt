@@ -16,6 +16,8 @@ class FakeGameCore(
     val screenshots = HashMap<Int, ArgbImage>()
     var saveError: String? = null
     var loadError: String? = null
+    var resumeError: String? = null
+    var cardBusy = false
     var analog = -1
 
     override fun getSaveStateTimes(serial: String): LongArray {
@@ -39,6 +41,16 @@ class FakeGameCore(
     override fun loadState(slot: Int): String? {
         calls += "loadState $slot"
         return loadError
+    }
+
+    override fun saveResumeState(): String? {
+        calls += "saveResumeState"
+        return resumeError
+    }
+
+    override fun isSavingMemoryCards(): Boolean {
+        calls += "isSavingMemoryCards"
+        return cardBusy
     }
 
     override fun getAnalogMode(): Int {

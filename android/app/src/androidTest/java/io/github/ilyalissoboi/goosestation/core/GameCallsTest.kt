@@ -19,7 +19,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 
 /** The in-game menu's core calls: save state times and pictures, saving and loading, and the analog mode. */
@@ -131,7 +133,7 @@ class GameCallsTest {
             assertTrue(NativeLibrary.loadState(5)!!.isNotEmpty())
             assertTrue(NativeLibrary.getAnalogMode() >= 0)
         } finally {
-            NativeLibrary.shutdownGame(false)
+            NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
             NativeLibrary.surfaceChanged(null, 0, 0, 1f)
             NativeLibrary.setCallbacks(null)
@@ -140,6 +142,135 @@ class GameCallsTest {
         }
         // No resume state: the shutdown was told not to save one.
         assertEquals(0L, NativeLibrary.getSaveStateTimes(PADTEST_SERIAL)[0])
+    }
+
+    // The pad's Analog button on X alone, and fast forward on Select + X. padtest locks the controller in analog mode,
+    // so each press of the game's Analog button posts "… is locked to analog mode by the game": a press the game got.
+    @Test
+    fun aChordDoesntPressItsButtonForTheGame() {
+        val fastForward = LinkedBlockingQueue<Boolean>()
+        val analogPresses = AtomicInteger()
+        withPadtest(onFastForward = { fastForward.put(it) }, onAnalogPress = { analogPresses.incrementAndGet() }) {
+            NativeLibrary.setPadBinding(PAD, "Analog", "Button99")
+            NativeLibrary.setHotkeyBinding(PAD, "ToggleFastForward", "Button99")
+            Thread.sleep(500)
+            analogPresses.set(0)
+
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+            Thread.sleep(300)
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+
+            assertEquals("the hotkey fired", true, fastForward.poll(3, TimeUnit.SECONDS))
+            Thread.sleep(300)
+            assertEquals("the game's Analog button wasn't pressed", 0, analogPresses.get())
+        }
+    }
+
+    // The analog mode hotkey presses the game's Analog button once per chord, and neither key alone does.
+    @Test
+    fun theAnalogModeHotkeyIsAChord() {
+        val analogPresses = AtomicInteger()
+        withPadtest(onAnalogPress = { analogPresses.incrementAndGet() }) {
+            NativeLibrary.setHotkeyBinding(PAD, "ToggleAnalogMode", "Button99")
+            Thread.sleep(500)
+            analogPresses.set(0)
+
+            NativeLibrary.onKey(DEVICE_ID, SELECT, true)
+            Thread.sleep(200)
+            NativeLibrary.onKey(DEVICE_ID, SELECT, false)
+            NativeLibrary.onKey(DEVICE_ID, X, true)
+            Thread.sleep(200)
+            NativeLibrary.onKey(DEVICE_ID, X, false)
+            Thread.sleep(500)
+            assertEquals("Select or X alone", 0, analogPresses.get())
+
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+            Thread.sleep(300)
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+            Thread.sleep(500)
+            assertEquals("Select + X", 1, analogPresses.get())
+        }
+    }
+
+    // The control: without Select, X is the pad's Analog button.
+    @Test
+    fun aButtonAloneStillPressesItsBinding() {
+        val analogPresses = AtomicInteger()
+        withPadtest(onAnalogPress = { analogPresses.incrementAndGet() }) {
+            NativeLibrary.setPadBinding(PAD, "Analog", "Button99")
+            NativeLibrary.setHotkeyBinding(PAD, "ToggleFastForward", "Button99")
+            Thread.sleep(500)
+            analogPresses.set(0)
+
+            NativeLibrary.onKey(DEVICE_ID, X, true)
+            Thread.sleep(300)
+            NativeLibrary.onKey(DEVICE_ID, X, false)
+            Thread.sleep(500)
+
+            assertEquals(1, analogPresses.get())
+        }
+    }
+
+    /** Boots padtest with a pad connected, runs [body], and shuts it down; skipped without the files. */
+    private fun withPadtest(
+        onFastForward: (Boolean) -> Unit = {},
+        onAnalogPress: () -> Unit = {},
+        body: () -> Unit,
+    ) {
+        val exe = File(root, "padtest.psexe")
+        assumeTrue(
+            "No BIOS or padtest in /sdcard/GooseTest",
+            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe),
+        )
+        val started = CountDownLatch(1)
+        val stopped = CountDownLatch(1)
+        NativeLibrary.setCallbacks(
+            object : NativeCallbacks {
+                override fun onGameStarted(
+                    title: String,
+                    serial: String,
+                ) = started.countDown()
+
+                override fun onGameStopped() = stopped.countDown()
+
+                override fun onError(message: String) {}
+
+                override fun onFastForwardChanged(enabled: Boolean) = onFastForward(enabled)
+
+                override fun onOsdMessage(
+                    key: String,
+                    text: String,
+                    seconds: Float,
+                    icon: ArgbImage?,
+                ) {
+                    if (key == "Controller0AnalogMode" && "locked" in text) onAnalogPress()
+                }
+            },
+        )
+        initialize()
+        NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", PAD)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (NativeLibrary.getPadBindings(PAD) == null) {
+            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for the pad to connect")
+            Thread.sleep(50)
+        }
+        val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
+        val surface = Surface(texture)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        try {
+            NativeLibrary.startGame(exe.absolutePath, null)
+            assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
+            Thread.sleep(1_000)
+            body()
+        } finally {
+            NativeLibrary.shutdownGame()
+            assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.setCallbacks(null)
+            surface.release()
+            texture.release()
+        }
     }
 
     @Volatile private var lastSerial = ""
@@ -169,5 +300,9 @@ class GameCallsTest {
         const val SERIAL = "SLUS-00000"
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val PADTEST_SERIAL = "HASH-9FDA0E1A56D8DF5B"
+        const val PAD = "pad-a"
+        const val DEVICE_ID = 1
+        const val SELECT = 109
+        const val X = 99
     }
 }

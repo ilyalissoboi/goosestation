@@ -44,7 +44,7 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 
 /** The hotkeys' names, by the core's: they're the app's words, not the core's. */
 private val HOTKEY_LABELS =
-    mapOf("ToggleFastForward" to "Fast forward", "Analog" to "Analog mode", "Screenshot" to "Screenshot")
+    mapOf("ToggleFastForward" to "Fast forward", "ToggleAnalogMode" to "Analog mode", "Screenshot" to "Screenshot")
 
 /** What the Back key, Mode, and Select + Start do in a game, whatever the mapping. */
 private const val MENU_TRIGGERS =

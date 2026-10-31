@@ -130,7 +130,10 @@ class ControllersPageTest {
         runTest {
             val page = openPage()
 
-            assertEquals(listOf("ToggleFastForward", "Analog", "Screenshot"), page.state.hotkeys!!.map { it.name })
+            assertEquals(
+                listOf("ToggleFastForward", "ToggleAnalogMode", "Screenshot"),
+                page.state.hotkeys!!.map { it.name },
+            )
         }
 
     @Test

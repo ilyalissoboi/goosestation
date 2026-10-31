@@ -249,9 +249,21 @@ object AppController : NativeCallbacks {
     /** The messages shown over the game, the app's and the core's ([CoreMessages]). */
     val osd = OsdMessages(SystemClock::uptimeMillis)
 
+    /** The in-game menu: its rows, its slot panel, and what they do. */
+    val gameMenu by lazy {
+        InGameMenu(
+            scope,
+            gameDispatcher,
+            NativeGameCoreApi,
+            LastSlots(SharedPreferencesStore(context, "game")),
+            onMessage = { osd.post(it) },
+            onResume = ::resumeFromPrompt,
+            onExit = ::quitFromPrompt,
+        )
+    }
+
     /** Fast forward is on in the running game: its marker shows over the game. */
-    var fastForward by mutableStateOf(false)
-        private set
+    val fastForward get() = gameMenu.state.fastForward
 
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
@@ -760,6 +772,7 @@ object AppController : NativeCallbacks {
     fun openPrompt() {
         if (screen != Screen.Game || promptOpen) return
         promptOpen = true
+        gameMenu.opened()
         controllers?.releaseAll()
         pauseGame()
     }
@@ -1223,6 +1236,7 @@ object AppController : NativeCallbacks {
         mainHandler.post {
             Log.i(TAG, "Game started: $title")
             gameRunning = true
+            gameMenu.gameStarted(serial)
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
             controllers?.releaseAll()
@@ -1248,7 +1262,7 @@ object AppController : NativeCallbacks {
             gameActive = false
             holdMemcards = false
             osd.clear()
-            fastForward = false
+            gameMenu.gameStopped()
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
             if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
@@ -1279,7 +1293,7 @@ object AppController : NativeCallbacks {
     }
 
     override fun onFastForwardChanged(enabled: Boolean) {
-        mainHandler.post { fastForward = enabled }
+        mainHandler.post { gameMenu.fastForwardChanged(enabled) }
     }
 
     override fun onError(message: String) {

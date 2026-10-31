@@ -115,7 +115,12 @@ fun ResumePrompt(
                 val picture = offer.picture
                 if (picture != null) {
                     val bitmap = remember(picture) { picture.toImageBitmap() }
-                    Image(bitmap, contentDescription = null, contentScale = ContentScale.Fit)
+                    Image(
+                        bitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 } else {
                     Icon(
                         GsIcons.memoryCard,

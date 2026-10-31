@@ -64,4 +64,20 @@ class CoreMessagesTest {
         assertEquals("Controller connected.", CoreMessages.translate("", "Controller connected."))
         assertEquals("Memory card saved.", CoreMessages.translate("MemoryCardSave0", "Memory card saved."))
     }
+
+    @Test
+    fun theCoresEmojiAreLeftOut() {
+        val key = "ScreenshotSaver_/data/screenshots/x.png"
+        assertEquals("Screenshot saved", CoreMessages.translate(key, "\uD83D\uDCF7  Saved screenshot to 'x.png'."))
+        assertEquals(
+            "Couldn't save the screenshot",
+            CoreMessages.translate(key, "\uD83D\uDCF7  Failed to save screenshot to 'x.png'."),
+        )
+        assertNull(CoreMessages.translate(key, "\uD83D\uDCF8  Saving screenshot to 'x.png'."))
+        assertEquals(
+            "Memory card saved.",
+            CoreMessages.translate("MemoryCardSave0", "\uD83D\uDCBE  Memory card saved."),
+        )
+        assertEquals("Paused \u00B7 2 of 3", CoreMessages.translate("", "\u23F8\uFE0F Paused \u00B7 2 of 3"))
+    }
 }

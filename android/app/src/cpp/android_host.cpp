@@ -1451,6 +1451,10 @@ void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& loc
   g_settings.log_to_debug = true;
   Log::SetDebugOutputParams(true);
 
+  // The app shows fast forward over the game itself (OsdLayer), and the paused game has its menu: the core's own
+  // status icons would show the same things twice.
+  g_settings.display_show_status_indicators = false;
+
   // The build's page size is a multiple of 4 KB pages, but fastmem can't map pages smaller than the system's.
   const long system_page_size = sysconf(_SC_PAGESIZE);
   if (system_page_size > static_cast<long>(HOST_PAGE_SIZE) && g_settings.cpu_fastmem_mode != CPUFastmemMode::Disabled)

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -184,7 +185,12 @@ private fun SlotRow(
                 val picture = entry.picture
                 if (picture != null) {
                     val bitmap = remember(picture) { picture.toImageBitmap() }
-                    Image(bitmap, contentDescription = null, contentScale = ContentScale.Fit)
+                    Image(
+                        bitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 } else {
                     Icon(
                         GsIcons.memoryCard,

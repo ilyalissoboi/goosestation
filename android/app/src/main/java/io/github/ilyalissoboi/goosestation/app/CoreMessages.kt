@@ -10,12 +10,21 @@ package io.github.ilyalissoboi.goosestation.app
  * source strings.
  */
 object CoreMessages {
-    /** What to show for the core's message [text] with [key] (empty for none), or null to show nothing. */
+    // Emoji and other pictographs (the core puts one before many messages), with their variation selectors and joiners:
+    // the interface shows none.
+    private val symbols = Regex("""[\p{So}\uFE0E\uFE0F\u200D]""")
+    private val spaces = Regex("\\s+")
+
+    /**
+     * What to show for the core's message [message] with [key] (empty for none), or null to show nothing. Its emoji are
+     * left out.
+     */
     fun translate(
         key: String,
-        text: String,
-    ): String? =
-        when {
+        message: String,
+    ): String? {
+        val text = message.replace(symbols, "").replace(spaces, " ").trim()
+        return when {
             key == "save_state" || key == "load_state" -> null
             key == "system_reset" -> "Console reset"
             key == "analog_mode_toggle_0" || key == "Controller0AnalogMode" -> analogMode(text)
@@ -27,6 +36,7 @@ object CoreMessages {
                 }
             else -> text
         }
+    }
 
     private fun analogMode(text: String): String {
         val analog = "analog mode" in text

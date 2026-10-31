@@ -416,8 +416,11 @@ by the ones setup picked. That happens once; other settings are kept.
 when a page opens, A or Enter activates, and B or Back goes back. Back from a page focuses its entry in the hub, and
 Back from the hub focuses **Settings** in the library. A setting with several values shows its current one between
 two arrows: left and right step through the values, stopping at the first and the last, and each step is the change;
-A, Enter or a tap on the row step forward, round to the first after the last, and a tap on an arrow steps its way. A
-value's own note, such as "made for NTSC-J", shows under the row while it's the current one. An on/off setting is a
+a tap on an arrow steps its way. A, Enter or a tap on the row open its choices as a list under it, in the page: each
+value with its note, the current one marked and focused. Up and down move through the list (the focus stays in it),
+A picks a value and closes the list, and B, Back or a tap on the row close it with nothing changed; a tap elsewhere
+closes it and does what it would have. One list is open at a time. A value's own note, such as "made for NTSC-J",
+shows under the row while it's the current one. An on/off setting is a
 square toggle, which A, Enter or a tap flip. Touch works too.
 
 - **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
@@ -528,8 +531,10 @@ across restarts, whatever order the controllers connect in.
   so an A pressed as the page opens captures nothing, and Down reaches the first binding. A controller connecting or
   going doesn't move a focus already in the page, nor a capture's row. Then "Every connected controller drives Port 1.
   Each one keeps its own mapping."
-- Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on), with the binding's
-  name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
+- Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on). On a digital pad
+  or DualShock (`[Pad1] Type`), each input shows as its PlayStation button: the face buttons as their symbols in their
+  colours, the D-pad, the sticks with their direction, the shoulder buttons, Select and Start; screen readers say its
+  name. Other controller types keep the names. Each row has the binding's name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
   <n>` for any other key, or `Not set`. Picking another controller shows "Reading <name>'s bindings…" in their place
   until its own are read.
 - A on a row asks for the input: "Press the new button for <input>… Back cancels (5)", counting down. The controller's
@@ -1109,3 +1114,10 @@ adb logcat -v time > thor.log
    - Exiting a game that's still starting (it saves no resume state) is too quick to try by hand on the Thor; it's
      covered by `InGameMenuTest.exitBeforeTheBootSavesNothing` and `GameMenuTest.gameRowsWaitForTheBoot`.
    - [ ] `adb logcat -b crash -d` is empty.
+
+10. **Choice lists and PlayStation glyphs.** With the build that has them.
+   - [ ] On Graphics, A on each row opens its list, with the current value focused and marked. Up and down move and
+     stop at the ends; A on another value picks it, and the row shows it; B closes a list with nothing changed. Left
+     and right on a closed row still step.
+   - [ ] On Controllers, every Port 1 row shows its PlayStation glyph (△ ○ × □ in their colours, the D-pad, sticks,
+     L1–R3, Select, Start), readable with the system's largest font size; the hotkey rows keep their words.

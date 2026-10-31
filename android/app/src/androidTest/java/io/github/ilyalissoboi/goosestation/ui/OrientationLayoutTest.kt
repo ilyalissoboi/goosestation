@@ -29,6 +29,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -695,6 +696,46 @@ class OrientationLayoutTest {
             assertShows("Every connected controller drives Port 1")
         }
     }
+
+    @Test
+    fun controllersWithGlyphsAtLargeText() {
+        eachConfig({
+            ControllersScreen(
+                controllers = listOf(PAD),
+                labels = emptyMap(),
+                selected = PAD.descriptor,
+                bindings = BINDINGS,
+                hotkeys = HOTKEYS,
+                bindingsFor = PAD.descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                glyphs = true,
+            )
+        }) {
+            assertTextsLaidOut()
+            // Every row, its glyph and binding, reached with the D-pad and all in view, to the last input.
+            var steps = 0
+            while (!focusedDescribedAs("Right Stick Right")) {
+                assertTrue("the D-pad never reached Right Stick Right", steps++ < 60)
+                press(Key.DirectionDown)
+                assertFocusedInView()
+            }
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "Reset to defaults")
+        }
+    }
+
+    private fun focusedDescribedAs(name: String) =
+        rule.onAllNodes(isFocused() and hasContentDescription(name)).fetchSemanticsNodes().isNotEmpty()
 
     @Test
     fun controllersWithOnePadAndNone() {

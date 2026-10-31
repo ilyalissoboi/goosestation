@@ -53,7 +53,8 @@ fun PsGlyph(
     val unit = GLYPH_HEIGHT * LocalDensity.current.fontScale / UNITS
     Box(
         modifier
-            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription }
+            // Not a merge boundary: in a row, the row says the input's name with the rest of it.
+            .semantics { this.contentDescription = contentDescription }
             .size(unit * glyph.width, unit * UNITS),
     ) {
         Canvas(Modifier.size(unit * glyph.width, unit * UNITS)) {

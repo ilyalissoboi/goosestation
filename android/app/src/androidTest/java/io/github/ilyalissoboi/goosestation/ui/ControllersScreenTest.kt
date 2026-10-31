@@ -11,9 +11,11 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -23,6 +25,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.input.BindingLabels
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -55,6 +58,14 @@ class ControllersScreenTest {
                 PadBinding("Cross", "Cross", PadBindingKind.Button, "Button96"),
                 PadBinding("L2", "L2", PadBindingKind.Button, null),
             )
+
+        // With an axis that has a glyph, and an input that has none.
+        val GLYPH_BINDINGS =
+            BINDINGS +
+                listOf(
+                    PadBinding("LLeft", "Left Stick Left", PadBindingKind.HalfAxis, null),
+                    PadBinding("Turbo", "Turbo", PadBindingKind.Button, null),
+                )
     }
 
     @get:Rule val rule = createComposeRule()
@@ -84,6 +95,7 @@ class ControllersScreenTest {
         undoFor: String? = null,
         labels: Map<String, String> = emptyMap(),
         hotkeys: List<PadBinding> = emptyList(),
+        glyphs: Boolean = false,
     ) {
         this.controllers = controllers
         this.capturing = capturing
@@ -112,10 +124,58 @@ class ControllersScreenTest {
                     onDropUndo = { dropUndos++ },
                     onReset = { resets++ },
                     onBack = { backs++ },
+                    glyphs = glyphs,
                 )
             }
         }
         rule.waitForIdle()
+    }
+
+    @Test
+    fun port1ShowsGlyphsWithTheirNamesForScreenReaders() {
+        show(bindings = GLYPH_BINDINGS, glyphs = true)
+
+        for (name in listOf("D-Pad Up", "Cross", "L2", "Left Stick Left")) {
+            rule.onNodeWithContentDescription(name, useUnmergedTree = true).assertExists()
+        }
+        // The names aren't shown as words (L2's glyph has "L2" on it, as the controller does).
+        for (name in listOf("D-Pad Up", "Cross", "Left Stick Left")) {
+            rule.onNode(hasText(name), useUnmergedTree = true).assertDoesNotExist()
+        }
+        // The row says both: its input, through the glyph, and what it's bound to.
+        rule
+            .onNode(hasContentDescription("Cross") and hasText(BindingLabels.label("Button96")))
+            .assertExists()
+    }
+
+    @Test
+    fun aNameWithoutAGlyphStaysText() {
+        show(bindings = GLYPH_BINDINGS, glyphs = true)
+
+        rule.onNodeWithText("Turbo").assertExists()
+    }
+
+    @Test
+    fun anotherControllerTypeKeepsText() {
+        show(bindings = GLYPH_BINDINGS, glyphs = false)
+
+        rule.onNodeWithText("Cross").assertExists()
+        rule.onNodeWithText("Left Stick Left").assertExists()
+        rule.onNodeWithContentDescription("Cross").assertDoesNotExist()
+    }
+
+    @Test
+    fun theCapturePromptKeepsTheWord() {
+        show(bindings = GLYPH_BINDINGS, glyphs = true, capturing = "Cross", secondsLeft = 5)
+
+        rule.onNode(hasText("Press the new button for Cross", substring = true)).assertExists()
+    }
+
+    @Test
+    fun hotkeysKeepTheirWords() {
+        show(bindings = GLYPH_BINDINGS, glyphs = true, hotkeys = HOTKEYS)
+
+        rule.onNode(hasText("Fast forward", substring = true), useUnmergedTree = true).assertExists()
     }
 
     private fun press(key: Key) {

@@ -24,7 +24,18 @@ interface CoreApi {
 
     fun resetPadBindings(descriptor: String)
 
-    fun startBindingCapture(descriptor: String)
+    fun getHotkeyBindings(descriptor: String): List<PadBinding>?
+
+    fun setHotkeyBinding(
+        descriptor: String,
+        name: String,
+        button: String?,
+    )
+
+    fun startBindingCapture(
+        descriptor: String,
+        selectChord: Boolean,
+    )
 
     fun cancelBindingCapture()
 
@@ -54,7 +65,19 @@ object NativeCoreApi : CoreApi {
 
     override fun resetPadBindings(descriptor: String) = NativeLibrary.resetPadBindings(descriptor)
 
-    override fun startBindingCapture(descriptor: String) = NativeLibrary.startBindingCapture(descriptor)
+    override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
+        NativeLibrary.getHotkeyBindings(descriptor)?.toList()
+
+    override fun setHotkeyBinding(
+        descriptor: String,
+        name: String,
+        button: String?,
+    ) = NativeLibrary.setHotkeyBinding(descriptor, name, button)
+
+    override fun startBindingCapture(
+        descriptor: String,
+        selectChord: Boolean,
+    ) = NativeLibrary.startBindingCapture(descriptor, selectChord)
 
     override fun cancelBindingCapture() = NativeLibrary.cancelBindingCapture()
 

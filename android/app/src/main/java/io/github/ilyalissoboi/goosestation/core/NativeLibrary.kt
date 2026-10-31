@@ -270,17 +270,41 @@ object NativeLibrary {
         binding: String?,
     )
 
-    /** Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. */
+    /**
+     * Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. Its hotkeys,
+     * unassigned by default, are cleared.
+     */
     external fun resetPadBindings(descriptor: String)
+
+    /**
+     * The hotkeys the controller with [descriptor] has, in order: `ToggleFastForward` and `Screenshot` (`[Hotkeys]`),
+     * with `Analog` (`[Pad1]`, the DualShock's Analog button) between them when Port 1 has it. Each [PadBinding.binding]
+     * is a Select chord (`Button109 & Android-<n>/Button99`), or null. Null as [getPadBindings] is.
+     */
+    external fun getHotkeyBindings(descriptor: String): Array<PadBinding>?
+
+    /**
+     * Binds the hotkey [name] (a [getHotkeyBindings] name) on the controller with [descriptor] to Select held with
+     * [button] (a captured binding, such as `Button99`), or unbinds it if [button] is null or empty, and applies it.
+     * Other controllers keep theirs.
+     */
+    external fun setHotkeyBinding(
+        descriptor: String,
+        name: String,
+        button: String?,
+    )
 
     /**
      * Captures the next button pressed, or axis pushed half way, on the controller with [descriptor], and reports it
      * to [NativeCallbacks.onBindingCaptured]. An axis must be seen near its centre first, so one resting away from it
      * (or held as the capture starts) has to come back. Until then the capture takes every controller input: the game
      * and hotkeys see none. It replaces a capture already running, and does nothing for a controller [getPadBindings]
-     * gives null for.
+     * gives null for. With [selectChord], for a hotkey, only a button is taken, never Select or Start.
      */
-    external fun startBindingCapture(descriptor: String)
+    external fun startBindingCapture(
+        descriptor: String,
+        selectChord: Boolean,
+    )
 
     /** Ends the capture running, if any, with no report; none arrives once this returns. */
     external fun cancelBindingCapture()

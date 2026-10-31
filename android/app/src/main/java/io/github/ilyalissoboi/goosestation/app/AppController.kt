@@ -513,6 +513,8 @@ object AppController : NativeCallbacks {
 
     fun captureBinding(name: String) = controllersPage.capture(name)
 
+    fun captureHotkey(name: String) = controllersPage.captureHotkey(name)
+
     fun cancelCapture() = controllersPage.cancelCapture()
 
     fun clearBinding(name: String) = controllersPage.clear(name)
@@ -1251,6 +1253,7 @@ object AppController : NativeCallbacks {
             Log.i(TAG, "Game started: $title")
             gameRunning = true
             gameMenu.gameStarted(serial)
+            readSelectChords()
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
             controllers?.releaseAll()
@@ -1277,6 +1280,7 @@ object AppController : NativeCallbacks {
             holdMemcards = false
             osd.clear()
             gameMenu.gameStopped()
+            controllers?.selectChordDescriptors = emptySet()
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
             if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
@@ -1290,6 +1294,25 @@ object AppController : NativeCallbacks {
     }
 
     override fun onBindingCaptured(binding: String) = controllersPage.onBindingCaptured(binding)
+
+    /**
+     * The controllers with a hotkey bound, whose Select the game sees only once it's known not to be a chord
+     * ([io.github.ilyalissoboi.goosestation.input.SelectChord]). Read as the game starts: hotkeys change only outside
+     * a game, and a controller connected during one has its Select held back from the next.
+     */
+    private fun readSelectChords() {
+        val input = controllers ?: return
+        val connected = input.connected.value.map { it.descriptor }
+        scope.launch {
+            val chorded =
+                withContext(gameDispatcher) {
+                    connected.filter { descriptor ->
+                        NativeLibrary.getHotkeyBindings(descriptor)?.any { it.binding != null } == true
+                    }
+                }
+            if (gameRunning) input.selectChordDescriptors = chorded.toSet()
+        }
+    }
 
     override fun onOsdMessage(
         key: String,

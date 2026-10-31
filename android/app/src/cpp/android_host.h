@@ -176,15 +176,26 @@ std::optional<u32> GetControllerIndex(std::string descriptor);
 /// controllers' stay as they are. An input Port 1's type doesn't have is refused.
 void SetPadBinding(std::string descriptor, std::string name, std::string binding);
 
-/// Drops the controller's bindings from every [Pad1] key, then adds its defaults, as a new controller gets them.
+/// Drops the controller's bindings from every [Pad1] key and its hotkeys, then adds its defaults, as a new controller
+/// gets them.
 void ResetPadBindings(std::string descriptor);
+
+/// The controller's hotkeys, each a Select chord (Button109 & Android-<index>/Button99) or none: [Hotkeys]
+/// ToggleFastForward, then [Pad1] Analog when Port 1's type has it, then [Hotkeys] Screenshot. nullopt as
+/// GetPadBindings() gives it.
+std::optional<std::vector<PadBinding>> GetHotkeyBindings(std::string descriptor);
+
+/// Binds the hotkey name (one GetHotkeyBindings() lists) to Select held with button (Button99) on the controller, or
+/// unbinds it if button is empty. Other controllers keep theirs. Saves and applies it.
+void SetHotkeyBinding(std::string descriptor, std::string name, std::string button);
 
 /// Captures the next input from the controller with descriptor, for binding: the first BindingCapture takes. It's
 /// reported with NotifyBindingCaptured(), without the Android-<index>/ prefix (Button99, +Axis23, -Axis0), and the
 /// capture ends. Until then every input event goes to the capture, so no game or hotkey sees it. A capture already
 /// running is replaced. A descriptor not in the table (one never connected), or a call before Initialize() succeeded,
 /// does nothing. Runs on the CPU thread and blocks.
-void StartBindingCapture(std::string descriptor);
+/// With select_chord, for a hotkey, only a button is taken, never Select or Start.
+void StartBindingCapture(std::string descriptor, bool select_chord);
 
 /// Ends the capture running, if any, without a report: once it returns, NotifyBindingCaptured() isn't called for it.
 /// Runs on the CPU thread and blocks.

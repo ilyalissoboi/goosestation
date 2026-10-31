@@ -17,16 +17,17 @@ import kotlinx.coroutines.withContext
 
 /**
  * The Controllers page: the [controllers] connected, each with its [labels] entry, by descriptor; the [selected] one's
- * descriptor; and the [bindings] of [bindingsFor], null until they're first read. While [bindingsFor] isn't
- * [selected], the selected one's are being read. While [capturing] is a binding's name, the next input on that
- * controller becomes its binding, unless [secondsLeft] runs out first. Once a capture lands, [undo] can put back what
- * it replaced.
+ * descriptor; and the [bindings] and [hotkeys] of [bindingsFor], null until they're first read. While [bindingsFor]
+ * isn't [selected], the selected one's are being read. While [capturing] is a binding's or hotkey's name, the next
+ * input on that controller becomes its binding (for a hotkey, the button held with Select), unless [secondsLeft] runs
+ * out first. Once a capture lands, [undo] can put back what it replaced.
  */
 data class ControllersState(
     val controllers: List<ConnectedController> = emptyList(),
     val labels: Map<String, String> = emptyMap(),
     val selected: String? = null,
     val bindings: List<PadBinding>? = null,
+    val hotkeys: List<PadBinding>? = null,
     val bindingsFor: String? = null,
     val capturing: String? = null,
     val secondsLeft: Int = 0,
@@ -76,6 +77,9 @@ class ControllersPage(
     /** [captureId] of the capture the core runs: set on [core], read where the core reports. */
     @Volatile private var nativeCaptureId = 0
 
+    /** The capture running is a hotkey's, a Select chord. */
+    private var capturingHotkey = false
+
     /** Follows the controllers connected while the page is open, from no bindings read yet. */
     fun open() {
         controllersJob?.cancel()
@@ -105,12 +109,25 @@ class ControllersPage(
      * Captures the selected controller's next input as [name]'s binding ([onBindingCaptured]): for 5 s, counting down
      * once a second, and then it's cancelled. Its controllers' input goes to the core meanwhile ([capturingInput]).
      */
-    fun capture(name: String) {
+    fun capture(name: String) = startCapture(name, hotkey = false)
+
+    /**
+     * Captures the button the selected controller presses with Select as the hotkey [name]'s ([onBindingCaptured]), as
+     * [capture] does a binding. Select and Start aren't taken.
+     */
+    fun captureHotkey(name: String) = startCapture(name, hotkey = true)
+
+    private fun startCapture(
+        name: String,
+        hotkey: Boolean,
+    ) {
         val state = state
         val descriptor = state.selected ?: return
-        if (!isOpen() || !showsOwnBindings(state) || state.bindings?.any { it.name == name } != true) return
+        val list = if (hotkey) state.hotkeys else state.bindings
+        if (!isOpen() || !showsOwnBindings(state) || list?.any { it.name == name } != true) return
         val id = ++captureId
         captureTimer?.cancel()
+        capturingHotkey = hotkey
         this.state = state.copy(capturing = name, secondsLeft = CAPTURE_SECONDS, undo = null)
         scope.launch {
             // Nothing from an earlier capture comes once the cancel returns: what's reported next is this one's.
@@ -122,7 +139,7 @@ class ControllersPage(
             pads()?.sendAxes(descriptor)
             withContext(core) {
                 nativeCaptureId = id
-                api.startBindingCapture(descriptor)
+                api.startBindingCapture(descriptor, hotkey)
             }
         }
         captureTimer =
@@ -146,12 +163,13 @@ class ControllersPage(
         }
     }
 
-    /** Leaves [name] unbound on the selected controller. */
+    /** Leaves the binding or hotkey [name] unbound on the selected controller. */
     fun clear(name: String) {
         val descriptor = state.selected ?: return
         if (capturingInput || !showsOwnBindings(state)) return
+        val hotkey = isHotkey(name)
         setBindingShown(name, null)
-        readBindings(descriptor) { api.setPadBinding(descriptor, name, null) }
+        readBindings(descriptor) { set(descriptor, name, null, hotkey) }
     }
 
     /** Gives the selected controller its default bindings again. */
@@ -169,7 +187,10 @@ class ControllersPage(
         if (capturingInput || !showsOwnBindings(state)) return
         state = state.copy(undo = null)
         setBindingShown(undo.name, undo.previous)
-        readBindings(descriptor) { api.setPadBinding(descriptor, undo.name, undo.previous) }
+        // A hotkey's binding is the chord: the button is its last part.
+        val hotkey = isHotkey(undo.name)
+        val previous = if (hotkey) undo.previous?.substringAfterLast('/') else undo.previous
+        readBindings(descriptor) { set(descriptor, undo.name, previous, hotkey) }
     }
 
     /** The last capture can't be undone any more: the focus left its row. */
@@ -191,13 +212,15 @@ class ControllersPage(
             // Cancelled, timed out or replaced since it was posted.
             if (id != captureId || name == null || descriptor == null) return@launch
             log("Captured $binding for $name")
-            val previous = state.bindings?.firstOrNull { it.name == name }?.binding
+            val hotkey = capturingHotkey
+            val previous = (if (hotkey) state.hotkeys else state.bindings)?.firstOrNull { it.name == name }?.binding
             endCapture()
             // The core removed the capture as it took the input, so the releases reach it.
             pads()?.releaseAll()
             this@ControllersPage.state = this@ControllersPage.state.copy(undo = Undo(name, previous))
-            setBindingShown(name, binding)
-            readBindings(descriptor) { api.setPadBinding(descriptor, name, binding) }
+            // Until the read lands, a hotkey shows as its chord with Select, without the device.
+            setBindingShown(name, if (hotkey) "Button109 & $binding" else binding)
+            readBindings(descriptor) { set(descriptor, name, binding, hotkey) }
         }
     }
 
@@ -221,7 +244,7 @@ class ControllersPage(
         when {
             selected == null -> {
                 bindingsRead++
-                state = state.copy(bindings = emptyList(), bindingsFor = null)
+                state = state.copy(bindings = emptyList(), hotkeys = emptyList(), bindingsFor = null)
             }
             selected != old.selected -> readBindings(selected)
         }
@@ -283,13 +306,13 @@ class ControllersPage(
     ) {
         val read = ++bindingsRead
         scope.launch {
-            val loaded =
+            val (loaded, hotkeys) =
                 withContext(core) {
                     change?.invoke()
-                    api.getPadBindings(descriptor)
+                    api.getPadBindings(descriptor) to api.getHotkeyBindings(descriptor)
                 }
             if (read != bindingsRead || state.selected != descriptor) return@launch
-            state = state.copy(bindings = loaded.orEmpty(), bindingsFor = descriptor)
+            state = state.copy(bindings = loaded.orEmpty(), hotkeys = hotkeys.orEmpty(), bindingsFor = descriptor)
         }
     }
 
@@ -298,8 +321,20 @@ class ControllersPage(
         name: String,
         binding: String?,
     ) {
-        val bindings = state.bindings ?: return
-        state = state.copy(bindings = bindings.map { if (it.name == name) it.copy(binding = binding) else it })
+        fun List<PadBinding>.shown() = map { if (it.name == name) it.copy(binding = binding) else it }
+        state = state.copy(bindings = state.bindings?.shown(), hotkeys = state.hotkeys?.shown())
+    }
+
+    private fun isHotkey(name: String) = state.hotkeys?.any { it.name == name } == true
+
+    // On [core]: a [hotkey]'s button, or a binding.
+    private fun set(
+        descriptor: String,
+        name: String,
+        binding: String?,
+        hotkey: Boolean,
+    ) {
+        if (hotkey) api.setHotkeyBinding(descriptor, name, binding) else api.setPadBinding(descriptor, name, binding)
     }
 
     private fun endCapture() {

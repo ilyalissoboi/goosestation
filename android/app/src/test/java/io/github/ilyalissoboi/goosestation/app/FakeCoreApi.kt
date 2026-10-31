@@ -15,6 +15,12 @@ class FakeCoreApi(
     private val calls: MutableList<String>,
 ) : CoreApi {
     private val bindings = mutableMapOf<String, String?>("Cross" to "Button96", "Circle" to "Button97")
+    private val hotkeys =
+        mutableMapOf<String, String?>(
+            "ToggleFastForward" to null,
+            "Analog" to null,
+            "Screenshot" to null,
+        )
     var images = emptyList<BiosImage>()
 
     /** Each pad's place in the descriptor table, by descriptor; a pad not in it has none. */
@@ -35,12 +41,28 @@ class FakeCoreApi(
         bindings[name] = binding
     }
 
+    override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
+        hotkeys.map { (name, binding) -> PadBinding(name, name, PadBindingKind.Button, binding) }
+
+    // As the core keeps it: Select with the button, on the pad's Android-0.
+    override fun setHotkeyBinding(
+        descriptor: String,
+        name: String,
+        button: String?,
+    ) {
+        calls += "setHotkeyBinding $descriptor $name $button"
+        hotkeys[name] = button?.let { "Button109 & Android-0/$it" }
+    }
+
     override fun resetPadBindings(descriptor: String) {
         calls += "resetPadBindings $descriptor"
     }
 
-    override fun startBindingCapture(descriptor: String) {
-        calls += "startBindingCapture $descriptor"
+    override fun startBindingCapture(
+        descriptor: String,
+        selectChord: Boolean,
+    ) {
+        calls += "startBindingCapture $descriptor" + if (selectChord) " chord" else ""
     }
 
     /** Pads the table only has from their second lookup on, as a new pad's descriptor is added a moment after. */

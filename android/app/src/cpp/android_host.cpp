@@ -92,6 +92,8 @@ static bool HasDeviceBinding(SettingsInterface& si, u32 index);
 static bool AddControllerToPort1(const std::string& identifier);
 static void MapNewController(const std::string& identifier);
 static bool IsVulkanRenderer(GPURenderer renderer);
+static bool Port1HasAnalogButton(SettingsInterface& si);
+static std::string HotkeySection(std::string_view name);
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
@@ -104,6 +106,12 @@ static constexpr const char* DESCRIPTORS_SECTION = AndroidInputKeys::SETTINGS_SE
 static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY;
 
 // The inputs the remap page lists (GetPadBindings()) and edits (SetPadBinding()).
+// The DualShock's Analog button, Port 1's, which the app has as a hotkey.
+static constexpr std::string_view ANALOG_BUTTON = "Analog";
+
+// The hotkeys the Controllers page has, in its order: each a Select chord.
+static constexpr std::string_view HOTKEYS[] = {"ToggleFastForward", ANALOG_BUTTON, "Screenshot"};
+
 static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 {
   return type == InputBindingInfo::Type::Button || type == InputBindingInfo::Type::Axis ||
@@ -1269,6 +1277,10 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
       const std::string section = Controller::GetSettingsSection(0);
       for (const Controller::ControllerBindingInfo& bi : info->bindings)
       {
+        // A hotkey (GetHotkeyBindings()).
+        if (std::string_view(bi.name) == ANALOG_BUTTON)
+          continue;
+
         PadBindingKind kind;
         switch (bi.type)
         {
@@ -1292,6 +1304,75 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
     },
     true);
   return result;
+}
+
+std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetHotkeyBindings(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<std::vector<PadBinding>> result;
+  EmuThread::RunOnThread(
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface& si = *s_base_settings_interface;
+      const bool analog = Port1HasAnalogButton(si);
+      result.emplace();
+      for (const std::string_view name : HOTKEYS)
+      {
+        if (name == ANALOG_BUTTON && !analog)
+          continue;
+
+        const std::string section = HotkeySection(name);
+        result->push_back(PadBinding{std::string(name), std::string(name), PadBindingKind::Button,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(),
+                                                                                         std::string(name).c_str()),
+                                                                        index.value())});
+      }
+    },
+    true);
+  return result;
+}
+
+void AndroidHost::SetHotkeyBinding(std::string descriptor, std::string name, std::string button)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor, &name, &button]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        if (std::find(std::begin(HOTKEYS), std::end(HOTKEYS), name) == std::end(HOTKEYS) ||
+            (name == ANALOG_BUTTON && !Port1HasAnalogButton(si)))
+        {
+          WARNING_LOG("'{}' isn't a hotkey this pad can have, not binding it.", name);
+          return;
+        }
+
+        const std::string section = HotkeySection(name);
+        const std::string binding = button.empty() ? std::string() : AndroidInputKeys::SelectChord(index.value(), button);
+        si.SetStringList(section.c_str(), name.c_str(),
+                         AndroidInputKeys::SetDeviceBinding(si.GetStringList(section.c_str(), name.c_str()),
+                                                            index.value(), binding));
+
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      System::ReloadInputBindings();
+    },
+    true);
 }
 
 std::optional<u32> AndroidHost::GetControllerIndex(std::string descriptor)
@@ -1355,6 +1436,20 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
     true);
 }
 
+// Whether Port 1's controller type has the Analog button (a DualShock), under the settings lock.
+bool AndroidHost::Port1HasAnalogButton(SettingsInterface& si)
+{
+  const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+  return info && std::any_of(info->bindings.begin(), info->bindings.end(),
+                             [](const Controller::ControllerBindingInfo& bi) { return bi.name == ANALOG_BUTTON; });
+}
+
+// Analog is Port 1's button, in [Pad1]; the others are the core's hotkeys.
+std::string AndroidHost::HotkeySection(std::string_view name)
+{
+  return (name == ANALOG_BUTTON) ? Controller::GetSettingsSection(0) : std::string("Hotkeys");
+}
+
 void AndroidHost::ResetPadBindings(std::string descriptor)
 {
   if (!s_initialized)
@@ -1390,6 +1485,19 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
             si.SetStringList(section.c_str(), key.c_str(), kept);
         }
 
+        // Its hotkeys too: unassigned by default. [Pad1] Analog went with the keys above.
+        for (const std::string_view name : HOTKEYS)
+        {
+          if (name == ANALOG_BUTTON)
+            continue;
+
+          const std::string key(name);
+          const std::vector<std::string> bindings = si.GetStringList("Hotkeys", key.c_str());
+          const std::vector<std::string> kept = AndroidInputKeys::SetDeviceBinding(bindings, index.value(), {});
+          if (kept.size() != bindings.size())
+            si.SetStringList("Hotkeys", key.c_str(), kept);
+        }
+
         AddDefaultBindings(si, index.value());
 
         Error error;
@@ -1402,13 +1510,13 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
     true);
 }
 
-void AndroidHost::StartBindingCapture(std::string descriptor)
+void AndroidHost::StartBindingCapture(std::string descriptor, bool select_chord)
 {
   if (!s_initialized)
     return;
 
   EmuThread::RunOnThread(
-    [&descriptor]() {
+    [&descriptor, select_chord]() {
       const std::optional<u32> index = FindDescriptorIndex(descriptor);
       if (!index.has_value())
         return;
@@ -1427,8 +1535,8 @@ void AndroidHost::StartBindingCapture(std::string descriptor)
       ProcessInputQueue();
       if (source)
         source->PollEvents();
-      AndroidInputKeys::BindingCapture capture(index.value(),
-                                               source ? source->GetCenteredAxes(index.value()) : std::vector<u32>());
+      AndroidInputKeys::BindingCapture capture(
+        index.value(), source ? source->GetCenteredAxes(index.value()) : std::vector<u32>(), select_chord);
       InputManager::SetHook([capture, id](InputBindingKey key, float value) mutable {
         const std::optional<InputBindingKey> captured = capture.OnEvent(key, value);
         if (!captured.has_value())

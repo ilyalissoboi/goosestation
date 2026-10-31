@@ -88,6 +88,18 @@ class OrientationLayoutTest {
     }
 
     private companion object {
+        val HOTKEYS =
+            listOf(
+                PadBinding(
+                    "ToggleFastForward",
+                    "Toggle Fast Forward",
+                    PadBindingKind.Button,
+                    "Button109 & Android-1/Button99",
+                ),
+                PadBinding("Analog", "Analog Toggle", PadBindingKind.Button, null),
+                PadBinding("Screenshot", "Save Screenshot", PadBindingKind.Button, "Button109 & Android-1/Button188"),
+            )
+
         val LONG_GAME =
             GameEntry(
                 path = "content://test/tree/games/document/long.cue",
@@ -559,6 +571,7 @@ class OrientationLayoutTest {
                 labels = emptyMap(),
                 selected = selected,
                 bindings = BINDINGS,
+                hotkeys = HOTKEYS,
                 bindingsFor = LONG_PAD.descriptor,
                 capturing = null,
                 secondsLeft = 0,
@@ -591,6 +604,8 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Clear"))
             assertFocusedInView()
             press(Key.DirectionLeft)
+            pressUntilFocused(Key.DirectionDown, "Analog mode")
+            assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "Reset to defaults")
             assertShows("Every connected controller drives Port 1")
         }

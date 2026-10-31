@@ -160,6 +160,53 @@ jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& strings
 
   return result;
 }
+// A PadBinding[] of bindings, or null (with no exception pending) for none or if it can't be made.
+jobjectArray ToPadBindingArray(JNIEnv* env, const std::optional<std::vector<AndroidHost::PadBinding>>& bindings)
+{
+  if (!bindings.has_value())
+    return nullptr;
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(bindings->size()), s_pad_binding_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < bindings->size(); i++)
+  {
+    const AndroidHost::PadBinding& binding = (*bindings)[i];
+    jstring name = ToJString(env, binding.name);
+    jstring display_name = ToJString(env, binding.display_name);
+    jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
+    jobject entry = nullptr;
+    if (name && display_name && (value || !binding.binding.has_value()))
+    {
+      entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
+                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass Port 1's input '{}' to Java.", binding.name);
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return result;
+}
 } // namespace
 
 void AndroidHost::AttachCurrentThreadToJVM(const char* name)
@@ -922,51 +969,18 @@ NATIVE_LIBRARY_FUNCTION(void, releaseAllInputs)(JNIEnv*, jobject)
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstring descriptor)
 {
-  const std::optional<std::vector<AndroidHost::PadBinding>> bindings =
-    AndroidHost::GetPadBindings(FromJString(env, descriptor));
-  if (!bindings.has_value())
-    return nullptr;
+  return ToPadBindingArray(env, AndroidHost::GetPadBindings(FromJString(env, descriptor)));
+}
 
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(bindings->size()), s_pad_binding_class, nullptr);
-  if (!result)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getHotkeyBindings)(JNIEnv* env, jobject, jstring descriptor)
+{
+  return ToPadBindingArray(env, AndroidHost::GetHotkeyBindings(FromJString(env, descriptor)));
+}
 
-  for (size_t i = 0; i < bindings->size(); i++)
-  {
-    const AndroidHost::PadBinding& binding = (*bindings)[i];
-    jstring name = ToJString(env, binding.name);
-    jstring display_name = ToJString(env, binding.display_name);
-    jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
-    jobject entry = nullptr;
-    if (name && display_name && (value || !binding.binding.has_value()))
-    {
-      entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
-                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
-      if (ClearException(env))
-        entry = nullptr;
-    }
-
-    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
-    {
-      if (ref)
-        env->DeleteLocalRef(ref);
-    }
-
-    if (!entry)
-    {
-      ERROR_LOG("Failed to pass Port 1's input '{}' to Java.", binding.name);
-      env->DeleteLocalRef(result);
-      return nullptr;
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
-  }
-
-  return result;
+NATIVE_LIBRARY_FUNCTION(void, setHotkeyBinding)(JNIEnv* env, jobject, jstring descriptor, jstring name, jstring button)
+{
+  AndroidHost::SetHotkeyBinding(FromJString(env, descriptor), FromJString(env, name),
+                                button ? FromJString(env, button) : std::string());
 }
 
 NATIVE_LIBRARY_FUNCTION(jint, getControllerIndex)(JNIEnv* env, jobject, jstring descriptor)
@@ -986,9 +1000,9 @@ NATIVE_LIBRARY_FUNCTION(void, resetPadBindings)(JNIEnv* env, jobject, jstring de
   AndroidHost::ResetPadBindings(FromJString(env, descriptor));
 }
 
-NATIVE_LIBRARY_FUNCTION(void, startBindingCapture)(JNIEnv* env, jobject, jstring descriptor)
+NATIVE_LIBRARY_FUNCTION(void, startBindingCapture)(JNIEnv* env, jobject, jstring descriptor, jboolean select_chord)
 {
-  AndroidHost::StartBindingCapture(FromJString(env, descriptor));
+  AndroidHost::StartBindingCapture(FromJString(env, descriptor), select_chord);
 }
 
 NATIVE_LIBRARY_FUNCTION(void, cancelBindingCapture)(JNIEnv*, jobject)

@@ -126,6 +126,8 @@ class MainActivity : ComponentActivity() {
                                 undoFor = state.undo?.name,
                                 onSelect = AppController::selectController,
                                 onCapture = AppController::captureBinding,
+                                hotkeys = state.hotkeys.orEmpty(),
+                                onCaptureHotkey = AppController::captureHotkey,
                                 onCancelCapture = AppController::cancelCapture,
                                 onClear = AppController::clearBinding,
                                 onUndo = AppController.controllersPage::undo,

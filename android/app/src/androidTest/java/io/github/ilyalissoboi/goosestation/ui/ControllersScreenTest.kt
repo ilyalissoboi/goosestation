@@ -10,11 +10,15 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -33,6 +37,18 @@ class ControllersScreenTest {
     private companion object {
         val PAD = ConnectedController(deviceId = 5, name = "Test Pad", descriptor = "pad-a")
         val OTHER_PAD = ConnectedController(deviceId = 6, name = "Other Pad", descriptor = "pad-b")
+        val HOTKEYS =
+            listOf(
+                PadBinding(
+                    "ToggleFastForward",
+                    "Toggle Fast Forward",
+                    PadBindingKind.Button,
+                    "Button109 & Android-0/Button99",
+                ),
+                PadBinding("Analog", "Analog Toggle", PadBindingKind.Button, null),
+                PadBinding("Screenshot", "Save Screenshot", PadBindingKind.Button, null),
+            )
+
         val BINDINGS =
             listOf(
                 PadBinding("Up", "D-Pad Up", PadBindingKind.Button, "Button19"),
@@ -45,6 +61,7 @@ class ControllersScreenTest {
 
     private val selects = mutableListOf<String>()
     private val captures = mutableListOf<String>()
+    private val hotkeyCaptures = mutableListOf<String>()
     private val clears = mutableListOf<String>()
     private var cancels = 0
     private var resets = 0
@@ -66,6 +83,7 @@ class ControllersScreenTest {
         secondsLeft: Int = 0,
         undoFor: String? = null,
         labels: Map<String, String> = emptyMap(),
+        hotkeys: List<PadBinding> = emptyList(),
     ) {
         this.controllers = controllers
         this.capturing = capturing
@@ -77,12 +95,14 @@ class ControllersScreenTest {
                     labels = labels,
                     selected = selected,
                     bindings = bindings,
+                    hotkeys = hotkeys,
                     bindingsFor = bindingsFor,
                     capturing = this.capturing,
                     secondsLeft = secondsLeft,
                     undoFor = this.undoFor,
                     onSelect = { selects += it },
                     onCapture = { captures += it },
+                    onCaptureHotkey = { hotkeyCaptures += it },
                     onCancelCapture = { cancels++ },
                     onClear = { clears += it },
                     onUndo = {
@@ -329,5 +349,34 @@ class ControllersScreenTest {
                         "and opens the menu. These buttons always do this, whatever is mapped to them.",
                 ),
             ).assertExists()
+    }
+
+    @Test
+    fun theHotkeysSectionFollowsThePad() {
+        show(hotkeys = HOTKEYS)
+
+        rule.onNodeWithText("Hotkeys").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Select + X").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Fast forward").assertExists()
+        rule.onNodeWithText("Analog mode").assertExists()
+        rule.onNodeWithText("Screenshot").assertExists()
+    }
+
+    @Test
+    fun aHotkeyRowCapturesAHotkey() {
+        show(hotkeys = HOTKEYS)
+
+        rule.onNodeWithText("Screenshot").performScrollTo().performClick()
+        rule.waitForIdle()
+
+        assertEquals(listOf("Screenshot"), hotkeyCaptures)
+        assertEquals(emptyList<String>(), captures)
+    }
+
+    @Test
+    fun aHotkeyCapturePrompts() {
+        show(capturing = "Screenshot", secondsLeft = 5, hotkeys = HOTKEYS)
+
+        rule.onNodeWithText("Hold Select and press a button for Screenshot… Back cancels (5)").assertExists()
     }
 }

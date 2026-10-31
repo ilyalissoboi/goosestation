@@ -90,6 +90,10 @@ std::optional<std::string> GetDeviceBinding(std::span<const std::string> binding
 /// Android-<index>/<binding> appended, unless binding is empty.
 std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings, u32 index, std::string_view binding);
 
+/// A hotkey's binding for SetDeviceBinding(): Select held with button (Button99), as the core's chord,
+/// "Button109 & Android-<index>/<button>". GetDeviceBinding() gives it back the same.
+std::string SelectChord(u32 device_index, std::string_view button);
+
 /// An input to report to the core: Button<number> or Axis<number> of the device, at a value.
 struct PadEvent
 {
@@ -159,7 +163,8 @@ std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads);
 class BindingCapture
 {
 public:
-  explicit BindingCapture(u32 device_index, std::vector<u32> centered_axes = {});
+  /// With select_chord, for a hotkey: only a button's press is taken, never Select or Start, and axes are passed over.
+  explicit BindingCapture(u32 device_index, std::vector<u32> centered_axes = {}, bool select_chord = false);
 
   /// The key to bind: the event's, with modifier Negate for an axis pushed below 0. nullopt until there is one.
   std::optional<InputBindingKey> OnEvent(InputBindingKey key, float value);
@@ -167,6 +172,7 @@ public:
 private:
   u32 m_device_index;
   std::vector<u32> m_centered_axes;
+  bool m_select_chord;
 };
 
 } // namespace AndroidInputKeys

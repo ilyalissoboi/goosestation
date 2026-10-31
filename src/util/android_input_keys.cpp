@@ -178,6 +178,11 @@ std::optional<std::string> GetDeviceBinding(std::span<const std::string> binding
   return std::nullopt;
 }
 
+std::string SelectChord(u32 device_index, std::string_view button)
+{
+  return fmt::format("Button{} & Android-{}/{}", KEYCODE_BUTTON_SELECT, device_index, button);
+}
+
 std::vector<std::string> SetDeviceBinding(std::span<const std::string> bindings, u32 index, std::string_view binding)
 {
   const std::string prefix = fmt::format("Android-{}/", index);
@@ -386,8 +391,8 @@ std::vector<u32> GetCenteredAxes(std::span<const PadState* const> pads)
   return centered;
 }
 
-BindingCapture::BindingCapture(u32 device_index, std::vector<u32> centered_axes)
-  : m_device_index(device_index), m_centered_axes(std::move(centered_axes))
+BindingCapture::BindingCapture(u32 device_index, std::vector<u32> centered_axes, bool select_chord)
+  : m_device_index(device_index), m_centered_axes(std::move(centered_axes)), m_select_chord(select_chord)
 {
 }
 
@@ -401,11 +406,18 @@ std::optional<InputBindingKey> BindingCapture::OnEvent(InputBindingKey key, floa
     if (value < CAPTURE_THRESHOLD)
       return std::nullopt;
 
+    // A chord's button is pressed with Select, and Select with Start opens the menu.
+    if (m_select_chord && (key.data == static_cast<u32>(KEYCODE_BUTTON_SELECT) ||
+                           key.data == static_cast<u32>(KEYCODE_BUTTON_START)))
+    {
+      return std::nullopt;
+    }
+
     key.modifier = InputModifier::None;
     return key;
   }
 
-  if (key.source_subtype != InputSubclass::ControllerAxis)
+  if (key.source_subtype != InputSubclass::ControllerAxis || m_select_chord)
     return std::nullopt;
 
   const bool centered =

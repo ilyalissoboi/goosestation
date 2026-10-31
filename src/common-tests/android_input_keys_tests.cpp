@@ -603,3 +603,27 @@ TEST(AndroidInputKeys, ParseDeviceIndex)
   EXPECT_EQ(AndroidInputKeys::ParseDeviceIndex("SDL-0"), std::nullopt);
   EXPECT_EQ(AndroidInputKeys::ParseDeviceIndex("Android-x"), std::nullopt);
 }
+
+// A hotkey is Select (109) held with a button, as the core's chord binding.
+TEST(AndroidInputKeys, SelectChordRoundTrip)
+{
+  const std::string chord = AndroidInputKeys::SelectChord(2, "Button99");
+
+  EXPECT_EQ(chord, "Button109 & Android-2/Button99");
+  const std::vector<std::string> existing = {"Android-0/Button109 & Android-0/Button100"};
+  const std::vector<std::string> bindings = SetDeviceBinding(existing, 2, chord);
+  EXPECT_EQ(bindings,
+            (std::vector<std::string>{"Android-0/Button109 & Android-0/Button100", "Android-2/Button109 & Android-2/Button99"}));
+  EXPECT_EQ(GetDeviceBinding(bindings, 2), std::optional<std::string>("Button109 & Android-2/Button99"));
+}
+
+// A chord's capture takes the button pressed with Select: never Select (109) or Start (108), never an axis.
+TEST(AndroidInputKeys, ChordCaptureSkipsSelectStartAndAxes)
+{
+  BindingCapture capture(0, {0}, true);
+
+  EXPECT_EQ(capture.OnEvent(PadKey(0, BUTTON, 109), 1.0f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, BUTTON, 108), 1.0f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, AXIS, 0), 1.0f), std::nullopt);
+  EXPECT_EQ(capture.OnEvent(PadKey(0, BUTTON, 99), 1.0f), Captured(0, BUTTON, 99, InputModifier::None));
+}

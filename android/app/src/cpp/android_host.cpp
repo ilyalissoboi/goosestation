@@ -6,6 +6,7 @@
 #include "foreign_settings.h"
 
 #include "core/achievements.h"
+#include "core/analog_controller.h"
 #include "core/controller.h"
 #include "core/fullscreen_ui.h"
 #include "core/game_database.h"
@@ -143,6 +144,7 @@ static u32 s_window_width = 0;
 static u32 s_window_height = 0;
 static float s_window_scale = 1.0f;
 static std::optional<std::string> s_pending_boot_path;
+static std::string s_pending_boot_state; // the save state the pending boot starts from, if any
 static std::string s_boot_path;
 static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
@@ -592,7 +594,7 @@ std::optional<std::string> AndroidHost::GetCacheFolder()
   return *relative + '/';
 }
 
-void AndroidHost::StartGame(std::string path)
+void AndroidHost::StartGame(std::string path, std::string resume_serial)
 {
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to
   // boot, is refused or is cancelled before it boots. The app can't tell which game a late callback was for otherwise.
@@ -604,7 +606,7 @@ void AndroidHost::StartGame(std::string path)
   }
 
   EmuThread::RunOnThread(
-    [path = std::move(path)]() mutable {
+    [path = std::move(path), resume_serial = std::move(resume_serial)]() mutable {
       // A running game isn't replaced: the app shuts it down first. One that's stopping (shut down from inside a
       // frame, and only destroyed once System::Execute() returns) is waited for.
       const System::State state = System::GetState();
@@ -623,6 +625,8 @@ void AndroidHost::StartGame(std::string path)
       }
 
       s_pending_boot_path = std::move(path);
+      s_pending_boot_state =
+        resume_serial.empty() ? std::string() : System::GetGameSaveStateFileName(resume_serial, -1);
       if (state == System::State::Stopping)
         INFO_LOG("Waiting for the last game to stop to start '{}'.", Path::GetFileName(s_pending_boot_path.value()));
       else if (!s_window)
@@ -647,9 +651,16 @@ void AndroidHost::BootPendingGame()
   // Nothing held before the boot carries over into the game, nor stops its first press from counting.
   QueueReleaseAllInputs();
 
-  INFO_LOG("Starting '{}'.", s_boot_path);
+  SystemBootParameters parameters(s_boot_path);
+  parameters.save_state = std::move(s_pending_boot_state);
+  s_pending_boot_state.clear();
+  if (parameters.save_state.empty())
+    INFO_LOG("Starting '{}'.", s_boot_path);
+  else
+    INFO_LOG("Starting '{}' from '{}'.", s_boot_path, Path::GetFileName(parameters.save_state));
+
   Error error;
-  if (!System::BootSystem(SystemBootParameters(s_boot_path), &error))
+  if (!System::BootSystem(std::move(parameters), &error))
   {
     ERROR_LOG("Failed to start '{}': {}", s_boot_path, error.GetDescription());
     NotifyError(fmt::format("Failed to start {}: {}", Path::GetFileName(s_boot_path), error.GetDescription()));
@@ -657,19 +668,33 @@ void AndroidHost::BootPendingGame()
   }
 }
 
-void AndroidHost::ShutdownGame()
+void AndroidHost::ShutdownGame(bool save_resume_state)
 {
   EmuThread::RunOnThread(
-    []() {
+    [save_resume_state]() {
       if (s_pending_boot_path.has_value())
       {
         INFO_LOG("Cancelling the boot of '{}'.", Path::GetFileName(s_pending_boot_path.value()));
         s_pending_boot_path.reset();
+        s_pending_boot_state.clear();
         NotifyGameStopped();
       }
 
-      if (System::IsValid())
-        System::ShutdownSystem(false);
+      if (!System::IsValid())
+        return;
+
+      // A game with no serial (a PS-EXE, the BIOS) has nowhere to keep one, and none could be offered.
+      if (save_resume_state && g_settings.save_state_on_exit && !System::GetGameSerial().empty())
+      {
+        Error error;
+        if (!System::SaveResumeState(&error))
+        {
+          ERROR_LOG("Failed to save the resume state: {}", error.GetDescription());
+          NotifyError(fmt::format("Couldn't save your place: {}", error.GetDescription()));
+        }
+      }
+
+      System::ShutdownSystem(false);
     },
     false);
 }
@@ -693,6 +718,164 @@ void AndroidHost::SetPaused(bool paused)
             card->Flush();
         }
       }
+    },
+    false);
+}
+
+static constexpr const char* NO_GAME_RUNNING = "No game is running.";
+static constexpr const char* NO_SERIAL = "This game has no serial, so it can't have save states.";
+
+std::vector<s64> AndroidHost::GetSaveStateTimes(std::string serial)
+{
+  std::vector<s64> times(System::PER_GAME_SAVE_STATE_SLOTS + 1, 0);
+  if (!s_initialized || serial.empty())
+    return times;
+
+  EmuThread::RunOnThread(
+    [&serial, &times]() {
+      for (s32 slot = 0; slot <= System::PER_GAME_SAVE_STATE_SLOTS; slot++)
+      {
+        // [0] is the resume state, slot -1 to the core.
+        const std::optional<SaveStateInfo> info = System::GetSaveStateInfo(serial.c_str(), (slot == 0) ? -1 : slot);
+        if (info.has_value())
+          times[static_cast<size_t>(slot)] = static_cast<s64>(info->timestamp);
+      }
+    },
+    true);
+  return times;
+}
+
+std::optional<AndroidHost::Picture> AndroidHost::GetSaveStateScreenshot(std::string serial, s32 slot)
+{
+  if (!s_initialized || serial.empty())
+    return std::nullopt;
+
+  std::optional<Picture> result;
+  EmuThread::RunOnThread(
+    [&serial, slot, &result]() {
+      const std::string path = System::GetGameSaveStateFileName(serial, slot);
+      if (!FileSystem::FileExists(path.c_str()))
+        return;
+
+      const std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(path.c_str());
+      if (!info.has_value() || !info->screenshot.IsValid())
+        return;
+
+      const RGBA8Image& image = info->screenshot;
+      const u32* pixels = image.GetPixels();
+      result.emplace(Picture{image.GetWidth(), image.GetHeight(),
+                             std::vector<u32>(pixels, pixels + image.GetWidth() * image.GetHeight())});
+    },
+    true);
+  return result;
+}
+
+/// Runs action(path, error) on the CPU thread for the running game's slot file: the reason it couldn't, or nullopt.
+template<typename Action>
+static std::optional<std::string> RunOnSlot(s32 slot, const Action& action)
+{
+  if (!AndroidHost::s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [slot, &action, &result]() {
+      if (!System::IsValid())
+      {
+        result = NO_GAME_RUNNING;
+        return;
+      }
+
+      const std::string& serial = System::GetGameSerial();
+      if (serial.empty())
+      {
+        result = NO_SERIAL;
+        return;
+      }
+
+      Error error;
+      const std::string path = System::GetGameSaveStateFileName(serial, slot);
+      if (!action(path, &error))
+        result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
+    },
+    true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::SaveState(s32 slot)
+{
+  return RunOnSlot(slot, [](const std::string& path, Error* error) {
+    return System::SaveState(path.c_str(), error, false);
+  });
+}
+
+std::optional<std::string> AndroidHost::LoadState(s32 slot)
+{
+  return RunOnSlot(slot, [](const std::string& path, Error* error) {
+    // LoadState() doesn't say when the file is missing in so many words.
+    if (!FileSystem::FileExists(path.c_str()))
+    {
+      Error::SetStringView(error, "There's no save in this slot.");
+      return false;
+    }
+
+    return System::LoadState(path.c_str(), error, false);
+  });
+}
+
+s32 AndroidHost::GetAnalogMode()
+{
+  if (!s_initialized)
+    return -1;
+
+  s32 mode = -1;
+  EmuThread::RunOnThread(
+    [&mode]() {
+      const Controller* controller = System::IsValid() ? System::GetController(0) : nullptr;
+      if (controller && controller->GetType() == ControllerType::AnalogController)
+        mode = controller->InAnalogMode() ? 1 : 0;
+    },
+    true);
+  return mode;
+}
+
+void AndroidHost::ResetGame()
+{
+  EmuThread::RunOnThread(
+    []() {
+      if (System::IsValid())
+        System::ResetSystem();
+    },
+    false);
+}
+
+void AndroidHost::SetFastForward(bool enabled)
+{
+  EmuThread::RunOnThread([enabled]() { System::SetFastForwardEnabled(enabled); }, false);
+}
+
+void AndroidHost::ToggleAnalogMode()
+{
+  EmuThread::RunOnThread(
+    []() {
+      Controller* controller = System::IsValid() ? System::GetController(0) : nullptr;
+      if (!controller || controller->GetType() != ControllerType::AnalogController)
+        return;
+
+      // As the controller's own Analog button: the press toggles, the release does nothing.
+      const u32 analog = static_cast<u32>(AnalogController::Button::Analog);
+      controller->SetBindState(analog, 1.0f);
+      controller->SetBindState(analog, 0.0f);
+    },
+    false);
+}
+
+void AndroidHost::SaveScreenshot()
+{
+  EmuThread::RunOnThread(
+    []() {
+      if (System::IsValid())
+        System::SaveScreenshot();
     },
     false);
 }
@@ -1428,7 +1611,8 @@ void Host::OnSystemStarted()
   const std::string& title = System::GetGameTitle();
   INFO_LOG("Game started: {}", title);
   AndroidHost::s_game_started = true;
-  AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title);
+  AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
+                                 System::GetGameSerial());
 }
 
 void Host::OnSystemDestroyed()

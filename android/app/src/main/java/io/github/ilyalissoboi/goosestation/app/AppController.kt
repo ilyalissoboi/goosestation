@@ -100,6 +100,10 @@ object AppController : NativeCallbacks {
     // refreshGameList and reloadSettings never overlap: reloadSettings rewrites the folder paths a scan reads.
     private val coreDispatcher = Dispatchers.IO.limitedParallelism(1)
 
+    // The in-game menu's core calls (GameCoreApi), one at a time, apart from coreDispatcher: a library scan running
+    // there never holds up the menu.
+    private val gameDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     // Saves in the order they're made, so an older one never lands last.
     private val prefsDispatcher = Dispatchers.IO.limitedParallelism(1)
 
@@ -736,15 +740,16 @@ object AppController : NativeCallbacks {
         holdMemcards = true
         screen = Screen.Game
         // It boots once the game screen's surface exists.
-        NativeLibrary.startGame(game.path)
+        NativeLibrary.startGame(game.path, null)
     }
 
-    // Back to the library, which waits for the game's onGameStopped() before it starts another.
-    fun leaveGame() {
+    // Back to the library, which waits for the game's onGameStopped() before it starts another. With
+    // saveResumeState, the game saves its resume state first.
+    fun leaveGame(saveResumeState: Boolean = false) {
         promptOpen = false
         screen = Screen.Library
         if (!messageIsError) message = "Stopping the game…"
-        NativeLibrary.shutdownGame()
+        NativeLibrary.shutdownGame(saveResumeState)
     }
 
     /**
@@ -829,7 +834,7 @@ object AppController : NativeCallbacks {
             // (android_host.cpp), before anything else the core runs. onGameStopped() follows.
             NativeLibrary.setPaused(true)
             if (screen == Screen.Game) screen = Screen.Library
-            NativeLibrary.shutdownGame()
+            NativeLibrary.shutdownGame(false)
         }
         if (EjectAction.StopMirror in actions) mirror?.hold(CARD_REMOVED)
     }
@@ -1211,7 +1216,10 @@ object AppController : NativeCallbacks {
 
     // --- NativeCallbacks ---
 
-    override fun onGameStarted(title: String) {
+    override fun onGameStarted(
+        title: String,
+        serial: String,
+    ) {
         mainHandler.post {
             Log.i(TAG, "Game started: $title")
             gameRunning = true

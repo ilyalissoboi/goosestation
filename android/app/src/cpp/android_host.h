@@ -74,13 +74,49 @@ std::optional<std::string> GetBIOSDirectory();
 /// runs at a time. Does nothing before Initialize() succeeded.
 void RefreshGameList(bool invalidate_cache);
 
-/// Boots a game, once the app has given a surface. NotifyGameStarted() reports that it booted. Every call ends with
-/// one NotifyGameStopped(): when the game stops, or straight away if it fails to boot (after NotifyError()), is
-/// refused, or is cancelled by ShutdownGame() or another StartGame() before it boots.
-void StartGame(std::string path);
+/// Boots a game, once the app has given a surface, from resume_serial's resume state if that isn't empty.
+/// NotifyGameStarted() reports that it booted. Every call ends with one NotifyGameStopped(): when the game stops, or
+/// straight away if it fails to boot (after NotifyError()), is refused, or is cancelled by ShutdownGame() or another
+/// StartGame() before it boots.
+void StartGame(std::string path, std::string resume_serial);
 
-/// Shuts the running game down, or cancels a boot still waiting for a surface.
-void ShutdownGame();
+/// Shuts the running game down, or cancels a boot still waiting for a surface. With save_resume_state, a game with a
+/// serial first saves its resume state, if [Main] SaveStateOnExit is on; a failure is reported with NotifyError(), and
+/// the game stops all the same.
+void ShutdownGame(bool save_resume_state);
+
+/// A picture from the core: width x height RGBA8 pixels.
+struct Picture
+{
+  u32 width;
+  u32 height;
+  std::vector<u32> pixels;
+};
+
+/// The in-game menu's calls. Each runs on the CPU thread; the first five block until it has.
+
+/// The modified times (Unix seconds) of serial's save states, 0 for none: [0] the resume state, [n] slot n, for
+/// System::PER_GAME_SAVE_STATE_SLOTS slots. All 0 for an empty serial, or before Initialize() succeeded.
+std::vector<s64> GetSaveStateTimes(std::string serial);
+
+/// The screenshot inside serial's state in slot (-1 for the resume state); nullopt if there's none or it can't be read.
+std::optional<Picture> GetSaveStateScreenshot(std::string serial, s32 slot);
+
+/// Saves the running game to slot, or loads slot (-1 for the resume state) into it. nullopt when it worked, else why
+/// not: no game, no serial, or the core's error.
+std::optional<std::string> SaveState(s32 slot);
+std::optional<std::string> LoadState(s32 slot);
+
+/// Port 1's analog mode: -1 if its controller isn't a DualShock (AnalogController) or no game runs, 0 digital, 1
+/// analog.
+s32 GetAnalogMode();
+
+/// These queue and return.
+void ResetGame();
+void SetFastForward(bool enabled);
+/// Presses Port 1's Analog button, as the controller's own does, if it's a DualShock.
+void ToggleAnalogMode();
+void SaveScreenshot();
 
 void SetPaused(bool paused);
 
@@ -168,7 +204,7 @@ void AttachCurrentThreadToJVM(const char* name);
 void DetachCurrentThreadFromJVM();
 
 /// Calls the app's NativeCallbacks, from any thread. Does nothing while the app has registered none.
-void NotifyGameStarted(std::string_view title);
+void NotifyGameStarted(std::string_view title, std::string_view serial);
 void NotifyGameStopped();
 void NotifyError(std::string_view message);
 void NotifyBindingCaptured(std::string_view binding);

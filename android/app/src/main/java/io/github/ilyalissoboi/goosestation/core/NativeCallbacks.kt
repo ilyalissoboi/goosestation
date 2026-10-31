@@ -8,8 +8,11 @@ package io.github.ilyalissoboi.goosestation.core
  * UI's: post to the UI thread, and never wait for it (it may be waiting for the core in [NativeLibrary.surfaceChanged]).
  */
 interface NativeCallbacks {
-    /** The game from [NativeLibrary.startGame] booted. */
-    fun onGameStarted(title: String)
+    /** The game from [NativeLibrary.startGame] booted: its [title], and its [serial] (blank for none). */
+    fun onGameStarted(
+        title: String,
+        serial: String,
+    )
 
     /**
      * The game from [NativeLibrary.startGame] is gone. Every startGame() ends with exactly one call: when the game

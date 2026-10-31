@@ -153,11 +153,53 @@ object NativeLibrary {
 
     /**
      * Boots a game once a surface exists; the result arrives through [NativeCallbacks], ending with onGameStopped().
-     * [path] is a [GameEntry.path], content path or not, as it is.
+     * [path] is a [GameEntry.path], content path or not, as it is. With a [resumeSerial], it boots from that serial's
+     * resume state.
      */
-    external fun startGame(path: String)
+    external fun startGame(
+        path: String,
+        resumeSerial: String?,
+    )
 
-    external fun shutdownGame()
+    /**
+     * Stops the game. With [saveResumeState], a game with a serial saves its resume state first, if `[Main]
+     * SaveStateOnExit` is on; a failure is reported to onError() ("Couldn't save your place: …"), and it stops anyway.
+     */
+    external fun shutdownGame(saveResumeState: Boolean)
+
+    // The in-game menu's calls ([io.github.ilyalissoboi.goosestation.app.GameCoreApi]). They run on the core's thread:
+    // the first five wait for it, so call them off the main thread; the last four queue and return.
+
+    /**
+     * When [serial]'s save states were saved, in Unix seconds, 0 for none: `[0]` the resume state, `[n]` slot n, for
+     * 10 slots. All 0 for a blank serial, or before [initialize].
+     */
+    external fun getSaveStateTimes(serial: String): LongArray
+
+    /** The screenshot in [serial]'s state in [slot] (-1: the resume state), opaque; null without one. */
+    external fun getSaveStateScreenshot(
+        serial: String,
+        slot: Int,
+    ): ArgbImage?
+
+    /** Saves the running game to [slot] (1 to 10). Null when it's saved, or else why not. */
+    external fun saveState(slot: Int): String?
+
+    /** Loads [slot] (-1: the resume state) into the running game. Null when it's loaded, or else why not. */
+    external fun loadState(slot: Int): String?
+
+    /** Port 1's analog mode: -1 if it isn't a DualShock or no game runs, 0 digital, 1 analog. */
+    external fun getAnalogMode(): Int
+
+    external fun resetGame()
+
+    external fun setFastForward(enabled: Boolean)
+
+    /** Presses Port 1's Analog button, as the DualShock's own does. */
+    external fun toggleAnalogMode()
+
+    /** Saves a screenshot of the game to the screenshots folder. */
+    external fun saveScreenshot()
 
     external fun setPaused(paused: Boolean)
 

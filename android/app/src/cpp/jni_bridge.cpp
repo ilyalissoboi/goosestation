@@ -189,9 +189,29 @@ void AndroidHost::DetachCurrentThreadFromJVM()
   s_attached_env = nullptr;
 }
 
-void AndroidHost::NotifyGameStarted(std::string_view title)
+void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view serial)
 {
-  CallCallback(s_on_game_started, title);
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  jstring jtitle = ToJString(env.get(), title);
+  jstring jserial = ToJString(env.get(), serial);
+  if (jtitle && jserial)
+  {
+    env->CallVoidMethod(callbacks, s_on_game_started, jtitle, jserial);
+    ClearException(env.get());
+  }
+
+  if (jserial)
+    env->DeleteLocalRef(jserial);
+  if (jtitle)
+    env->DeleteLocalRef(jtitle);
+  env->DeleteLocalRef(callbacks);
 }
 
 void AndroidHost::NotifyGameStopped()
@@ -280,7 +300,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 
   s_callbacks_class = static_cast<jclass>(env->NewGlobalRef(callbacks_class));
   env->DeleteLocalRef(callbacks_class);
-  s_on_game_started = env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;)V");
+  s_on_game_started =
+    env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;Ljava/lang/String;)V");
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
@@ -760,14 +781,80 @@ NATIVE_LIBRARY_FUNCTION(void, setCallbacks)(JNIEnv* env, jobject, jobject callba
     env->DeleteGlobalRef(old_callbacks);
 }
 
-NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path)
+NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jstring resume_serial)
 {
-  AndroidHost::StartGame(FromJString(env, path));
+  AndroidHost::StartGame(FromJString(env, path), resume_serial ? FromJString(env, resume_serial) : std::string());
 }
 
-NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject)
+NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject, jboolean save_resume_state)
 {
-  AndroidHost::ShutdownGame();
+  AndroidHost::ShutdownGame(save_resume_state);
+}
+
+NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jstring serial)
+{
+  const std::vector<s64> times = AndroidHost::GetSaveStateTimes(FromJString(env, serial));
+  jlongArray result = env->NewLongArray(static_cast<jsize>(times.size()));
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  std::vector<jlong> values(times.begin(), times.end());
+  env->SetLongArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getSaveStateScreenshot)(JNIEnv* env, jobject, jstring serial, jint slot)
+{
+  const std::optional<AndroidHost::Picture> picture =
+    AndroidHost::GetSaveStateScreenshot(FromJString(env, serial), static_cast<s32>(slot));
+  if (!picture.has_value())
+    return nullptr;
+
+  return ToArgbImage(env, picture->pixels.data(), picture->width, picture->height, true);
+}
+
+// The reason a save or load failed, or null when it worked.
+static jstring ToResult(JNIEnv* env, const std::optional<std::string>& error)
+{
+  return error.has_value() ? ToJString(env, error.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jint slot)
+{
+  return ToResult(env, AndroidHost::SaveState(static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jint slot)
+{
+  return ToResult(env, AndroidHost::LoadState(static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getAnalogMode)(JNIEnv*, jobject)
+{
+  return AndroidHost::GetAnalogMode();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, resetGame)(JNIEnv*, jobject)
+{
+  AndroidHost::ResetGame();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setFastForward)(JNIEnv*, jobject, jboolean enabled)
+{
+  AndroidHost::SetFastForward(enabled);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, toggleAnalogMode)(JNIEnv*, jobject)
+{
+  AndroidHost::ToggleAnalogMode();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, saveScreenshot)(JNIEnv*, jobject)
+{
+  AndroidHost::SaveScreenshot();
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setPaused)(JNIEnv*, jobject, jboolean paused)

@@ -39,7 +39,10 @@ class BindingCaptureTest {
         ContentBridge.init(context)
         NativeLibrary.setCallbacks(
             object : NativeCallbacks {
-                override fun onGameStarted(title: String) {}
+                override fun onGameStarted(
+                    title: String,
+                    serial: String,
+                ) {}
 
                 override fun onGameStopped() {}
 

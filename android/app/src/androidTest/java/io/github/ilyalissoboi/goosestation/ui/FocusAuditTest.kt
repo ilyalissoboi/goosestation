@@ -316,8 +316,7 @@ class FocusAuditTest {
 
     @Test
     fun gameMenuLoadWithNoSaves() {
-        val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, null) }
-        show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries)), NoMenuActions) }
+        show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
 
         rule.assertControllerReady()
     }
@@ -376,6 +375,12 @@ class FocusAuditTest {
         override fun confirmExit() {}
 
         override fun cancelExit() {}
+
+        override fun replaceResume() {}
+
+        override fun keepResume() {}
+
+        override fun cancelReplaceResume() {}
     }
 
     private fun showSetup() =

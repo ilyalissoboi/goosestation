@@ -18,6 +18,7 @@ class FakeGameCore(
     var loadError: String? = null
     var resumeError: String? = null
     var cardBusy = false
+    var resumeOn = true
     var analog = -1
 
     override fun getSaveStateTimes(serial: String): LongArray {
@@ -41,6 +42,11 @@ class FakeGameCore(
     override fun loadState(slot: Int): String? {
         calls += "loadState $slot"
         return loadError
+    }
+
+    override fun savesResumeState(): Boolean {
+        calls += "savesResumeState"
+        return resumeOn
     }
 
     override fun saveResumeState(): String? {

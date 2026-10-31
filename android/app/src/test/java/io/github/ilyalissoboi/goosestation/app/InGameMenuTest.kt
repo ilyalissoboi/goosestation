@@ -77,10 +77,10 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Load)
             runCurrent()
 
-            assertEquals(listOf(SaveSlots.RESUME) + (1..10), menu.entries().map { it.slot })
+            // Only the saved ones: an empty slot can't be loaded.
+            assertEquals(listOf(SaveSlots.RESUME, 3), menu.entries().map { it.slot })
             assertEquals(3, menu.slots().focus)
             assertEquals(300L, menu.entries().first { it.slot == 3 }.savedAt)
-            assertNull(menu.entries().first { it.slot == 2 }.savedAt)
         }
 
     @Test
@@ -106,8 +106,7 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Load)
             runCurrent()
 
-            assertEquals((1..10).toList(), menu.entries().map { it.slot })
-            assertTrue(menu.entries().all { it.savedAt == null })
+            assertEquals(emptyList<SlotEntry>(), menu.entries())
             assertNull(menu.slots().focus)
         }
 
@@ -457,7 +456,7 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
 
-            assertEquals(listOf("saveResumeState", "exit null"), calls)
+            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
         }
 
     @Test
@@ -494,7 +493,15 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
 
-            assertEquals(listOf("saveResumeState", "exit No space left on device."), calls)
+            assertEquals(
+                listOf(
+                    "savesResumeState",
+                    "getSaveStateTimes $SERIAL",
+                    "saveResumeState",
+                    "exit No space left on device.",
+                ),
+                calls,
+            )
         }
 
     @Test
@@ -507,7 +514,7 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
 
-            assertEquals(listOf("saveResumeState", "exit null"), calls)
+            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
         }
 
     @Test
@@ -552,7 +559,7 @@ class InGameMenuTest {
             menu.confirmExit()
             runCurrent()
             assertFalse(menu.state.confirmingExit)
-            assertEquals(listOf("saveResumeState", "exit null"), calls)
+            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
         }
 
     @Test
@@ -587,6 +594,68 @@ class InGameMenuTest {
                 "The game is still saving to its memory card. Resume it for a moment, then save again.",
                 menu.slots().error,
             )
+        }
+
+    @Test
+    fun exitAsksBeforeReplacingAResumeState() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 500
+            val menu = menu()
+
+            menu.exit()
+            runCurrent()
+            assertEquals(500L, menu.state.replacingResume)
+            assertTrue(calls.none { it == "saveResumeState" || it.startsWith("exit") })
+
+            calls.clear()
+            menu.replaceResume()
+            runCurrent()
+            assertNull(menu.state.replacingResume)
+            assertEquals(listOf("saveResumeState", "exit null"), calls)
+        }
+
+    @Test
+    fun keepingTheResumeStateExitsWithoutSaving() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 500
+            val menu = menu()
+            menu.exit()
+            runCurrent()
+            calls.clear()
+
+            menu.keepResume()
+            runCurrent()
+
+            assertEquals(listOf("exit null"), calls)
+        }
+
+    @Test
+    fun cancellingTheReplaceStaysInTheGame() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 500
+            val menu = menu()
+            menu.exit()
+            runCurrent()
+            calls.clear()
+
+            menu.cancelReplaceResume()
+            runCurrent()
+
+            assertNull(menu.state.replacingResume)
+            assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun withSaveStateOnExitOffExitSavesNothing() =
+        runTest {
+            api.resumeOn = false
+            api.times[SaveSlots.RESUME] = 500
+            val menu = menu()
+
+            menu.exit()
+            runCurrent()
+
+            assertEquals(listOf("savesResumeState", "exit null"), calls)
         }
 
     private class MemoryLastSlots : LastSlotStore {

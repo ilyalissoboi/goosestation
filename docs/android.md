@@ -577,10 +577,10 @@ The game never sees the press that opens it. The menu is a panel at the left, ov
 game's title, its region, serial and play time, then its rows, **Resume** focused:
 
 - **Save state** and **Load state** open the slot panel beside the menu (below it on a phone held upright, with the
-  menu keeping the top 40% of the screen). It lists Slot 1 to Slot 10 (and, in Load, **Resume**, the resume state,
-  first), each with the screenshot saved in it, "Saved" or "Empty" and when, in the form "Today · 14:05". The slot
-  last saved to or loaded from in this game is focused, or else Slot 1 (Save) or the newest save (Load). In Load,
-  empty slots can't be picked; with no saves at all, "No saves yet for this game." Saving to an empty slot saves at
+  menu keeping the top 40% of the screen). Save lists Slot 1 to Slot 10; Load lists only the slots that hold a
+  save, with **Resume**, the resume state, first. Each shows the screenshot saved in it, "Saved" or "Empty" and when,
+  in the form "Today · 14:05". The slot last saved to or loaded from in this game is focused, or else Slot 1 (Save)
+  or the newest save (Load). With no saves at all, Load says "No saves yet for this game." Saving to an empty slot saves at
   once; a filled one asks "Replace the save in slot 3?" in the panel, Cancel focused. A save or load that works goes
   back to the game, saying "Saved to slot 3", "Loaded slot 3" or "Loaded your resume state"; one that fails stays in
   the panel with the reason ("Couldn't save to slot 3: …"). States are the core's own, at
@@ -598,7 +598,9 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
 - **Exit game** saves the game's resume state (`savestates/<serial>_resume.sav`, when `[Main] SaveStateOnExit` is on,
   as it is by default, and the game has a serial), with "Saving your place…" in the menu meanwhile, then stops it. If
   that save fails, the game still stops, and the library says "Couldn't save your place: <reason>". A game still
-  starting saves none, so a resume state from before isn't replaced.
+  starting saves none, so a resume state from before isn't replaced. When the game already has a resume state, Exit
+  game asks first: "Replace your saved place from Today · 14:05?", with Replace and **Keep it** (focused). Both exit;
+  Keep it saves nothing, so the old one stays. B stays in the game.
 - **While the game is writing its memory card** (the menu was opened during a save in the game), Reset console warns
   that the save may be damaged, Exit game asks first ("Exit the game? It's still saving to its memory card, and that
   save may be damaged."), and Save state says "The game is still saving to its memory card. Resume it for a moment,
@@ -1091,6 +1093,8 @@ adb logcat -v time > thor.log
      Resume.
    - [ ] Exit game, then start the game again: "Resume where you left off?", with its picture and time; Resume, Start
      over and B each work.
+   - [ ] Exit game again: "Replace your saved place from …?", Keep it focused. Keep it exits and the next start
+     offers the old resume state's picture; Replace exits and replaces it; B stays in the game.
    - [ ] Set each hotkey on the Controllers page (Select + a face button). In padtest: Select + that button fires it,
      and padtest lights neither Select nor the button; a Select tap lights Select briefly; Select held lights it from
      about half a second; Select + Start held opens the menu without Select lighting.
@@ -1099,6 +1103,9 @@ adb logcat -v time > thor.log
      nothing to the analog mode; Select + it toggles it once.
    - [ ] In a game where Square does something visible, Select + Square's button fires its hotkey and Square doesn't
      happen.
-   - [ ] Start a game with a resume state, choose Start over, then Back and Exit game at once: the resume state is
-     still there next time (a game still starting saves none).
+   - [ ] Scrolling: on a long settings page, the focused row stays in the middle; at the bottom the last row's ring
+     shows whole, and going back up shows the page's title. The ring of a focused menu row isn't cut by the row
+     below.
+   - Exiting a game that's still starting (it saves no resume state) is too quick to try by hand on the Thor; it's
+     covered by `InGameMenuTest.exitBeforeTheBootSavesNothing` and `GameMenuTest.gameRowsWaitForTheBoot`.
    - [ ] `adb logcat -b crash -d` is empty.

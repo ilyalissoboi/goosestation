@@ -42,8 +42,9 @@ data class SlotPanel(
 /**
  * The in-game menu: whether the game has [booted] (until then only Resume and Exit game work), whether fast forward is
  * on, Port 1's analog mode (null when it isn't a DualShock: the row is hidden), the slot panel, if it's open,
- * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, and whether Exit
- * game is saving the resume state ([exiting]).
+ * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, whether Exit game
+ * asks before it replaces the resume state saved at [replacingResume] (Unix seconds), and whether it's saving the
+ * resume state ([exiting]).
  */
 data class GameMenuState(
     val booted: Boolean = false,
@@ -54,6 +55,7 @@ data class GameMenuState(
     val exiting: Boolean = false,
     val cardBusy: Boolean = false,
     val confirmingExit: Boolean = false,
+    val replacingResume: Long? = null,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -87,6 +89,12 @@ interface GameMenuActions {
     fun confirmExit()
 
     fun cancelExit()
+
+    fun replaceResume()
+
+    fun keepResume()
+
+    fun cancelReplaceResume()
 }
 
 /**
@@ -140,7 +148,7 @@ class InGameMenu(
      */
     fun opened() {
         panelId++
-        state = state.copy(slots = null, confirmingReset = false, confirmingExit = false)
+        state = state.copy(slots = null, confirmingReset = false, confirmingExit = false, replacingResume = null)
         if (state.booted) readGameState()
     }
 
@@ -153,22 +161,52 @@ class InGameMenu(
 
     /**
      * Exit game: a game that has booted, with a serial, saves its resume state first, on [game], then the game stops
-     * ([onExit], with the reason if the save failed: the game stops all the same). Before the boot there's no state
-     * to save, and none replaces the one the player may want.
+     * ([onExit], with the reason if the save failed: the game stops all the same). One that has a resume state already
+     * asks first ([replacingResume]). Before the boot, or with `SaveStateOnExit` off, nothing is saved.
      */
     override fun exit() {
-        if (state.exiting) return
+        val serial = serial
+        if (state.exiting || state.replacingResume != null) return
         if (state.cardBusy && !state.confirmingExit) {
             state = state.copy(confirmingExit = true)
             return
         }
         state = state.copy(confirmingExit = false)
-        if (!canSave) return onExit(null)
+        if (!canSave || serial == null) return onExit(null)
         state = state.copy(exiting = true)
         scope.launch {
-            val error = withContext(game) { api.saveResumeState() }
-            onExit(error)
+            if (!withContext(game) { api.savesResumeState() }) return@launch onExit(null)
+            val savedAt = withContext(game) { api.getSaveStateTimes(serial)[0] }
+            if (savedAt > 0) {
+                state = state.copy(exiting = false, replacingResume = savedAt)
+            } else {
+                saveAndExit()
+            }
         }
+    }
+
+    /** Exit game, replacing the resume state. */
+    override fun replaceResume() {
+        if (state.replacingResume == null) return
+        state = state.copy(replacingResume = null, exiting = true)
+        scope.launch { saveAndExit() }
+    }
+
+    /** Exit game, keeping the resume state as it is. */
+    override fun keepResume() {
+        if (state.replacingResume == null) return
+        state = state.copy(replacingResume = null)
+        onExit(null)
+    }
+
+    /** Stay in the game. */
+    override fun cancelReplaceResume() {
+        state = state.copy(replacingResume = null)
+    }
+
+    private suspend fun saveAndExit() {
+        val error = withContext(game) { api.saveResumeState() }
+        onExit(error)
     }
 
     override fun openSlots(mode: SlotMode) {
@@ -344,15 +382,16 @@ class InGameMenu(
         const val CARD_BUSY_SAVE =
             "The game is still saving to its memory card. Resume it for a moment, then save again."
 
-        /** Save lists slots 1 to 10; Load lists the resume state first, when there is one, then 1 to 10. */
+        /** Save lists slots 1 to 10; Load lists the saved ones, the resume state first, when there is one. */
         fun entries(
             mode: SlotMode,
             times: LongArray,
         ): List<SlotEntry> {
             val slots = (1..SaveSlots.COUNT).map { SlotEntry(it, times.getOrNull(it)?.takeIf { time -> time > 0 }) }
-            val resume = times.getOrNull(0)?.takeIf { it > 0 }
-            if (mode == SlotMode.Save || resume == null) return slots
-            return listOf(SlotEntry(SaveSlots.RESUME, resume)) + slots
+            if (mode == SlotMode.Save) return slots
+            // Load lists what can be loaded: the saved slots, the resume state first.
+            val resume = times.getOrNull(0)?.takeIf { it > 0 }?.let { SlotEntry(SaveSlots.RESUME, it) }
+            return listOfNotNull(resume) + slots.filter { it.savedAt != null }
         }
 
         /**

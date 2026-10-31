@@ -38,6 +38,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 
@@ -65,7 +66,8 @@ fun Modifier.focusIndicator(
 /**
  * Makes an element focusable and clickable for a D-pad: A, Enter, the D-pad centre or a tap call [onClick]. A
  * disabled element can't take focus. While focused it wears the focus ring, unless [ring] is off (the element draws
- * it on a part of itself, told by [onFocusChange]), and [focusedFill] under its content, if any.
+ * it on a part of itself, told by [onFocusChange]), and [focusedFill] under its content, if any. It's drawn above its
+ * siblings while focused, so they don't cover the ring.
  */
 @Composable
 fun Modifier.focusRing(
@@ -85,6 +87,8 @@ fun Modifier.focusRing(
     val focusColor = GooseStationTheme.colors.focus
 
     return this
+        // Above its neighbours while focused, so the next element's fill doesn't cover the ring's edge.
+        .zIndex(if (focused) 1f else 0f)
         // A controller's A button; clickable() handles Enter and the D-pad centre.
         .onFocusChanged {
             if (focused != it.isFocused) onFocusChange?.invoke(it.isFocused)

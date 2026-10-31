@@ -130,6 +130,19 @@ class GameMenuTest {
                 calls += "cancelExit"
                 state = state.copy(confirmingExit = false)
             }
+
+            override fun replaceResume() {
+                calls += "replaceResume"
+            }
+
+            override fun keepResume() {
+                calls += "keepResume"
+            }
+
+            override fun cancelReplaceResume() {
+                calls += "cancelReplaceResume"
+                state = state.copy(replacingResume = null)
+            }
         }
 
     private fun saved(vararg slots: Int): List<SlotEntry> =
@@ -279,8 +292,8 @@ class GameMenuTest {
     }
 
     @Test
-    fun emptySlotsInLoadAreSkipped() {
-        val entries = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) + saved(4)
+    fun loadListsTheSavedSlots() {
+        val entries = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) + saved(4).filter { it.savedAt != null }
         state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = SaveSlots.RESUME))
         show()
         rule
@@ -290,15 +303,16 @@ class GameMenuTest {
         press(Key.DirectionDown)
 
         rule.onNode(isFocused() and hasText("Slot 4", substring = true)).assertExists()
+        rule.onNodeWithText("Slot 1").assertDoesNotExist()
     }
 
     @Test
     fun noSavesSaysSo() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, saved(), focus = null))
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList(), focus = null))
         show()
 
         rule.onNodeWithText("No saves yet for this game.").assertExists()
-        rule.onNodeWithText("Slot 1").assertIsNotEnabled()
+        rule.onNodeWithText("Slot 1").assertDoesNotExist()
     }
 
     @Test
@@ -378,6 +392,23 @@ class GameMenuTest {
 
         press(Key.ButtonB)
         assertEquals(listOf("confirmExit", "cancelExit"), calls)
+        rule.onNodeWithText("Exit game").assertIsFocused()
+    }
+
+    @Test
+    fun exitAsksBeforeReplacingTheResumeState() {
+        state = GameMenuState(booted = true, replacingResume = now.toEpochSecond() - 3_600)
+        show()
+
+        rule.onNodeWithText("Replace your saved place from Today · 13:05?").assertExists()
+        rule.onNodeWithText("Keep it").assertIsFocused()
+        press(Key.Enter)
+        press(Key.DirectionLeft)
+        press(Key.Enter)
+        assertEquals(listOf("keepResume", "replaceResume"), calls)
+
+        press(Key.ButtonB)
+        assertEquals(listOf("keepResume", "replaceResume", "cancelReplaceResume"), calls)
         rule.onNodeWithText("Exit game").assertIsFocused()
     }
 

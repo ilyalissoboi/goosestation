@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.ui.theme
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -214,9 +217,28 @@ object GooseStationTheme {
         get() = LocalGsType.current
 }
 
+// LocalBringIntoViewSpec is still experimental in Compose Foundation.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GooseStationTheme(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalGsColors provides gsColors, LocalGsType provides gsType) {
+    CompositionLocalProvider(
+        LocalGsColors provides gsColors,
+        LocalGsType provides gsType,
+        LocalBringIntoViewSpec provides CentredScrolling,
+    ) {
         MaterialTheme(colorScheme = colorScheme, typography = typography, shapes = shapes, content = content)
     }
+}
+
+/**
+ * How a scrolling list follows the focus: it keeps the focused element in the middle, as consoles do, and stops at its
+ * ends, which shows the title at the top and the padding below the last element. Something taller than the list
+ * shows its start.
+ */
+private object CentredScrolling : BringIntoViewSpec {
+    override fun calculateScrollDistance(
+        offset: Float,
+        size: Float,
+        containerSize: Float,
+    ): Float = if (size >= containerSize) offset else offset - (containerSize - size) / 2
 }

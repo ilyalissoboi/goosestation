@@ -49,7 +49,7 @@ the "Paused" eyebrow, the game's title and details, then these rows, in this ord
 Parts 2 and 3 add **Change disc** after Load state, and **Patch codes** and **Achievements** after Screenshot. Part 1
 shows none of them *(writer's call: no greyed rows for unbuilt features)*.
 
-Icons (from `GsIcons`): Resume `play`, Save and Load state `memoryCard`, Fast forward `fastForward`, Analog mode
+Icons (from `GsIcons`): Resume `play`, Save state `saveState` and Load state `loadState` (a memory card with an arrow in or out), Fast forward `fastForward`, Analog mode
 `gamepad`, Screenshot `camera`, Reset console `rewind`, Exit game `power`. *(Writer's call; a builder may draw a
 better reset icon in the system's style.)*
 
@@ -82,11 +82,12 @@ The core keeps 10 slots per game (`System::PER_GAME_SAVE_STATE_SLOTS`), at `save
 per-game only)*.
 
 - **Save state** lists Slot 1 to Slot 10 (not the resume state). **Load state** lists **Resume** first, when a resume
-  state exists, then Slot 1 to Slot 10.
+  state exists, then the slots that hold a save.
 - When the list opens, the **slot last saved to or loaded from** in this game is focused; with none, Slot 1 (Save)
   or the newest save (Load) *(writer's call)*.
-- **In Load state, empty slots** are shown but can't be focused or picked *(writer's call)*. Load state with no saves
-  at all shows the empty slots and a line saying there are no saves yet; the menu's Load state row is still enabled.
+- **In Load state, empty slots** aren't listed: they can't be picked, and a list the focus skips through is
+  confusing *(changed after the first device pass; it showed them disabled)*. Load state with no saves at all shows
+  a line saying there are no saves yet; the menu's Load state row is still enabled.
 - Reading the slots (and their screenshots) happens off the UI thread; rows show without a picture until it arrives,
   and the panel never waits for the core to draw.
 
@@ -112,6 +113,9 @@ per-game only)*.
 
 - **Exit game** saves a resume state (`System::ShutdownSystem(true)`, which writes `<serial>_resume.sav`), then
   returns to the library. Today Android always shuts down with `false`.
+- **When a resume state already exists**, Exit game asks first, in the menu: "Replace your saved place from <time>?",
+  with Replace (`Danger`) and Keep it (`Secondary`, focused). Both exit; Keep it exits without saving, so the old
+  resume state stays. B cancels and stays in the game *(added after the first device pass)*.
 - The next time the player starts that game, before it boots, the app asks: **"Resume where you left off?"**, with
   the resume state's screenshot and time, and **Resume** (`Primary`, focused) and **Start over** (`Secondary`). Resume
   boots from the resume state (`SystemBootParameters.save_state`); Start over boots normally. B or Back cancels and

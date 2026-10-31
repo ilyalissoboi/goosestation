@@ -458,6 +458,12 @@ class OrientationLayoutTest {
         override fun confirmExit() {}
 
         override fun cancelExit() {}
+
+        override fun replaceResume() {}
+
+        override fun keepResume() {}
+
+        override fun cancelReplaceResume() {}
     }
 
     @Test

@@ -279,6 +279,22 @@ object GsIcons {
         }
     }
 
+    val loadState: ImageVector by lazy {
+        icon("load-state") {
+            moveTo(6f, 3f)
+            lineTo(15f, 3f)
+            lineTo(18f, 6f)
+            lineTo(18f, 21f)
+            lineTo(6f, 21f)
+            close()
+            moveTo(12f, 16f)
+            lineTo(12f, 8f)
+            moveTo(9f, 11f)
+            lineTo(12f, 8f)
+            lineTo(15f, 11f)
+        }
+    }
+
     val memoryCard: ImageVector by lazy {
         icon("memory-card") {
             moveTo(6f, 3f)
@@ -350,6 +366,22 @@ object GsIcons {
             lineTo(13f, 12f)
             lineTo(20f, 18f)
             close()
+        }
+    }
+
+    val saveState: ImageVector by lazy {
+        icon("save-state") {
+            moveTo(6f, 3f)
+            lineTo(15f, 3f)
+            lineTo(18f, 6f)
+            lineTo(18f, 21f)
+            lineTo(6f, 21f)
+            close()
+            moveTo(12f, 8f)
+            lineTo(12f, 16f)
+            moveTo(9f, 13f)
+            lineTo(12f, 16f)
+            lineTo(15f, 13f)
         }
     }
 

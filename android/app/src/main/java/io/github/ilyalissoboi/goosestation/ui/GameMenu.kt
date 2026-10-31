@@ -96,19 +96,27 @@ fun GameMenu(
             shown.slots != null -> actions.closeSlots()
             shown.confirmingReset -> actions.cancelReset()
             shown.confirmingExit -> actions.cancelExit()
+            shown.replacingResume != null -> actions.cancelReplaceResume()
             else -> actions.resume()
         }
     }
     val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     // The keys whose key-down this layer has seen, and whose key-up hasn't come yet.
-    val layer = listOf(state.slots?.mode, state.slots?.replacing, state.confirmingReset, state.confirmingExit)
+    val layer =
+        listOf(
+            state.slots?.mode,
+            state.slots?.replacing,
+            state.confirmingReset,
+            state.confirmingExit,
+            state.replacingResume,
+        )
     val down = remember(layer) { HashSet<Key>() }
     // Kept here, outside the menu panel, which is composed afresh when the layout changes.
     val cameFrom = remember { CameFrom() }
     SideEffect {
         state.slots?.let { cameFrom.slots = it.mode }
         if (state.confirmingReset) cameFrom.reset = true
-        if (state.confirmingExit) cameFrom.exit = true
+        if (state.confirmingExit || state.replacingResume != null) cameFrom.exit = true
     }
     val colors = GooseStationTheme.colors
 
@@ -142,14 +150,14 @@ fun GameMenu(
             Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 // Narrower beside the slot panel on a small screen (the Thor's 640 dp), so its pictures stay full size.
                 val menuWidth = if (slots != null && screenWidth < SIDE_BY_SIDE) 240.dp else 300.dp
-                MenuPanel(state, actions, game, cameFrom, Modifier.width(menuWidth))
+                MenuPanel(state, actions, game, cameFrom, now, Modifier.width(menuWidth))
                 if (slots != null) SaveSlotPanel(slots, actions, now, Modifier.weight(1f).fillMaxHeight())
             }
         } else {
             // A phone in portrait: the slot panel under the menu, which keeps the top 40% and scrolls its rows.
             Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 val menuMax = if (slots == null) height else screenHeight * 0.4f - 32.dp
-                MenuPanel(state, actions, game, cameFrom, Modifier.fillMaxWidth().heightIn(max = menuMax))
+                MenuPanel(state, actions, game, cameFrom, now, Modifier.fillMaxWidth().heightIn(max = menuMax))
                 if (slots != null) SaveSlotPanel(slots, actions, now, Modifier.weight(1f).fillMaxWidth())
             }
         }
@@ -169,6 +177,7 @@ private fun MenuPanel(
     actions: GameMenuActions,
     game: GameEntry?,
     cameFrom: CameFrom,
+    now: ZonedDateTime,
     modifier: Modifier,
 ) {
     val colors = GooseStationTheme.colors
@@ -181,10 +190,11 @@ private fun MenuPanel(
     val openMode = state.slots?.mode
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
-    LaunchedEffect(openMode, state.confirmingReset, state.confirmingExit) {
+    val asking = state.confirmingReset || state.confirmingExit || state.replacingResume != null
+    LaunchedEffect(openMode, asking) {
         val from = cameFrom.slots
         when {
-            openMode != null || state.confirmingReset || state.confirmingExit -> {}
+            openMode != null || asking -> {}
             from != null -> {
                 cameFrom.slots = null
                 (if (from == SlotMode.Save) saveRow else loadRow).requestFocus()
@@ -246,11 +256,21 @@ private fun MenuPanel(
                     onConfirm = actions::confirmExit,
                     onCancel = actions::cancelExit,
                 )
+            } else if (state.replacingResume != null) {
+                // Both answers exit: Keep it leaves the resume state as it is. B stays in the game.
+                Question(
+                    "Replace your saved place from ${SaveTimes.label(state.replacingResume, now)}?",
+                    "Replace",
+                    onConfirm = actions::replaceResume,
+                    onCancel = actions::keepResume,
+                    cancel = "Keep it",
+                    cancelKind = ButtonKind.Secondary,
+                )
             } else {
                 MenuItem("Resume", GsIcons.play, actions::resume, Modifier.focusRequester(resume))
                 MenuItem(
                     "Save state",
-                    GsIcons.memoryCard,
+                    GsIcons.saveState,
                     { actions.openSlots(SlotMode.Save) },
                     Modifier.focusRequester(saveRow),
                     enabled = booted,
@@ -258,7 +278,7 @@ private fun MenuPanel(
                 )
                 MenuItem(
                     "Load state",
-                    GsIcons.memoryCard,
+                    GsIcons.loadState,
                     { actions.openSlots(SlotMode.Load) },
                     Modifier.focusRequester(loadRow),
                     enabled = booted,
@@ -368,7 +388,7 @@ private fun MenuItem(
 
 /**
  * A question asked in a panel, in place of what it's about: [text], then [confirm] (it overwrites or destroys, so it's
- * `Danger`) and Cancel, which takes the focus.
+ * `Danger`) and [cancel] (Cancel, unless it says otherwise, in [cancelKind]), which takes the focus.
  */
 @Composable
 internal fun Question(
@@ -376,19 +396,16 @@ internal fun Question(
     confirm: String,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
+    cancel: String = "Cancel",
+    cancelKind: ButtonKind = ButtonKind.Ghost,
 ) {
-    val cancel = remember { FocusRequester() }
-    LaunchedEffect(Unit) { cancel.requestFocus() }
+    val cancelFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { cancelFocus.requestFocus() }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(text, style = MaterialTheme.typography.headlineSmall, color = GooseStationTheme.colors.ink)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionButton(confirm, onClick = onConfirm, kind = ButtonKind.Danger)
-            ActionButton(
-                "Cancel",
-                onClick = onCancel,
-                kind = ButtonKind.Ghost,
-                modifier = Modifier.focusRequester(cancel),
-            )
+            ActionButton(cancel, onClick = onCancel, kind = cancelKind, modifier = Modifier.focusRequester(cancelFocus))
         }
     }
 }

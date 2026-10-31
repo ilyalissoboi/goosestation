@@ -155,7 +155,11 @@ Every screen must work with a D-pad alone. That's tested (see Checking a new scr
 - **The focus ring** is a 2 dp `focus` outline drawn 2 dp outside the element, at the element's radius. Rows also
   lift to `raised` under it. A game tile rings its cover, not the whole tile.
 - **Because the ring is outside the element, give it room:** a scrolling or lazy container that clips needs at least
-  4 dp of content padding around focusable items, or the ring is cut.
+  4 dp of content padding around focusable items, or the ring is cut. `focusRing` draws its element above its
+  siblings while focused, so a neighbour's fill doesn't cover the ring.
+- **Scrolling keeps the focus in the middle,** as on consoles: once a list scrolls, the focused element stays at its
+  centre, and the list stops at its ends, with the title showing at the top and the last element's ring at the
+  bottom. `GooseStationTheme` provides this for every scrolling and lazy container; don't override it.
 - **A, Enter, the D-pad centre or a tap activate.** Only an A *pressed* on the element counts, not the release of one
   held from the previous screen. `focusRing` does this.
 - **B and Back go back** (from the innermost thing that takes Back first, such as a dialog).
@@ -257,12 +261,14 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line` divider before Reset console, and `KeyHints`
   at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
+  Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),
+  since both exit.
   B steps out one layer at a time, back to the row it came from.
 - `SaveSlotPanel`: the slot list, a second `surface` panel beside the menu, filling the rest of the screen (on a
   screen under 720 dp wide, the menu narrows to 240 dp while it shows); on a narrow portrait screen, below it, the
   menu keeping the top 40%. Each slot row shows its screenshot at 4:3 (112 x 84
   dp, 64 x 48 dp in a row under 240 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
-  `label`; Saved or Empty; and the time in `mono`. Rows that can't be picked are disabled. Replacing a save asks in the
+  `label`; Saved or Empty; and the time in `mono`. Rows that can't be picked are disabled; Load lists only the slots that hold a save. Replacing a save asks in the
   panel, as the menu does. The focus can't leave the panel.
 - `ResumePrompt`: "Resume where you left off?" over the library, a centred `surface` panel at `radius-lg`: the game's
   title, the resume state's screenshot (224 x 168 dp) and time, then Resume (`Primary`, focused) and Start over. The

@@ -35,6 +35,9 @@ interface GameCoreApi {
     /** Null when it's loaded, or else why not. */
     fun loadState(slot: Int): String?
 
+    /** Whether Exit game saves a resume state: `[Main] SaveStateOnExit`. */
+    fun savesResumeState(): Boolean
+
     /** Saves the running game's resume state for Exit game: null when it's saved or there's none to save, else why not. */
     fun saveResumeState(): String?
 
@@ -64,6 +67,8 @@ object NativeGameCoreApi : GameCoreApi {
     override fun saveState(slot: Int): String? = NativeLibrary.saveState(slot)
 
     override fun loadState(slot: Int): String? = NativeLibrary.loadState(slot)
+
+    override fun savesResumeState(): Boolean = NativeLibrary.getBoolSetting("Main", "SaveStateOnExit", true)
 
     override fun saveResumeState(): String? = NativeLibrary.saveResumeState()
 

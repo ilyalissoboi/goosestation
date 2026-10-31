@@ -22,6 +22,7 @@ with an orange beak, on the dark water of a night pond.
 | The Android components | `android/app/src/main/java/io/github/ilyalissoboi/goosestation/ui/components/` |
 | The bundled fonts and their licences | `android/app/src/main/res/font/`, `android/app/src/main/assets/licenses/` |
 | `GsIcons.kt`'s generator | [`scripts/branding/generate-gsicons.py`](../scripts/branding/generate-gsicons.py) |
+| The Android launcher icon's generator | [`scripts/branding/generate-android-icon.py`](../scripts/branding/generate-android-icon.py) |
 
 The design system is also published as a browsable page with live previews of every component, in both themes:
 <https://claude.ai/artifact/BZV2gRHHmrSCzRmyWcrqwU> (ask a maintainer for access). `tokens.json` and the SVGs here are
@@ -248,6 +249,14 @@ beside a screen's title on the library and setup screens.
   `goose-mark-mono.svg` is the one-colour silhouette for Android notification and themed icons and the macOS menu
   bar. Never recolour or redraw the goose. The wordmark is the name in Chakra Petch 600 beside the mark; there's no
   logotype file.
+- **The Android launcher icon** is an adaptive icon made from the goose mark, in vector layers on the 108 dp canvas
+  (`res/mipmap-anydpi/ic_launcher.xml`): the `surface`-dark background, the mark in full colour as the foreground, its
+  head and beak inside the 66 dp safe circle and its neck running off the bottom edge, so the goose rises out of
+  whatever shape the launcher masks it to; and the silhouette as the monochrome layer, which Android 13 and up tint
+  for themed icons. With `minSdk` 29, vectors cover every supported version, so there are no PNGs per density. It's
+  generated from `logos/goose-mark.svg` and `goose-mark-mono.svg` by
+  `python scripts/branding/generate-android-icon.py`, which also checks the safe zone; change the mark there, not
+  the XML. The desktop icons (`scripts/branding/generate-icons.py`) still use the full goose.
 - **No emoji** and no decorative illustrations in the interface. The only pictures are the players' covers and
   screenshots.
 

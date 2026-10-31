@@ -181,7 +181,9 @@ The app's colours, fonts, icons and components follow the design system: see
 [docs/design-system.md](design-system.md) before adding a screen or a control. The theme is in `ui/theme/`
 (`Theme.kt`, `GsIcons.kt`, `GooseMark.kt`), the shared components in `ui/components/`, and the bundled fonts in
 `app/src/main/res/font/`, with their licences in `app/src/main/assets/licenses/`. `GsIcons.kt` is generated from
-`docs/design-system/icons/` by `scripts/branding/generate-gsicons.py`.
+`docs/design-system/icons/` by `scripts/branding/generate-gsicons.py`. The launcher icon is an adaptive icon of
+vector layers (background, the goose mark, and a monochrome layer for themed icons) in `res/mipmap-anydpi/`,
+generated from the design system's goose mark by `scripts/branding/generate-android-icon.py`.
 
 ## Testing the app
 

@@ -20,6 +20,12 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.GameMenuActions
+import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.SaveSlots
+import io.github.ilyalissoboi.goosestation.app.SlotEntry
+import io.github.ilyalissoboi.goosestation.app.SlotMode
+import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -281,10 +287,82 @@ class FocusAuditTest {
     }
 
     @Test
-    fun gamePrompt() {
-        show { GamePrompt(onResume = {}, onQuit = {}) }
+    fun gameMenu() {
+        show { GameMenu(GameMenuState(booted = true, analogMode = true), NoMenuActions) }
 
         rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuWhileBooting() {
+        show { GameMenu(GameMenuState(booted = false), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuSaveSlots() {
+        val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, if (it == 2) 1_700_000_000L else null) }
+        show {
+            GameMenu(
+                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, entries, focus = 2)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuLoadWithNoSaves() {
+        val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, null) }
+        show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries)), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuReplacing() {
+        val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, 1_700_000_000L) }
+        val panel = SlotPanel(SlotMode.Save, entries, focus = 1, replacing = 1)
+        show { GameMenu(GameMenuState(booted = true, slots = panel), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuResetting() {
+        show { GameMenu(GameMenuState(booted = true, confirmingReset = true), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    private object NoMenuActions : GameMenuActions {
+        override fun resume() {}
+
+        override fun openSlots(mode: SlotMode) {}
+
+        override fun closeSlots() {}
+
+        override fun pickSlot(slot: Int) {}
+
+        override fun confirmReplace() {}
+
+        override fun cancelReplace() {}
+
+        override fun toggleFastForward() {}
+
+        override fun toggleAnalogMode() {}
+
+        override fun screenshot() {}
+
+        override fun askReset() {}
+
+        override fun confirmReset() {}
+
+        override fun cancelReset() {}
+
+        override fun exit() {}
     }
 
     private fun showSetup() =

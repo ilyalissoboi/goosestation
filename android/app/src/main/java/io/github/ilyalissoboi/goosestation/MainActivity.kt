@@ -61,10 +61,10 @@ class MainActivity : ComponentActivity() {
                         )
                     Screen.Game ->
                         GameScreen(
-                            promptOpen = AppController.promptOpen,
-                            onOpenPrompt = AppController::openPrompt,
-                            onResume = AppController::resumeFromPrompt,
-                            onQuit = AppController::quitFromPrompt,
+                            menuOpen = AppController.promptOpen,
+                            onOpenMenu = AppController::openPrompt,
+                            menu = AppController.gameMenu.state,
+                            actions = AppController.gameMenu,
                             game = AppController.games.firstOrNull { it.path == AppController.lastGamePath },
                             osd = AppController.osd.shown,
                             fastForward = AppController.fastForward,

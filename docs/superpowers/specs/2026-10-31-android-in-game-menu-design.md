@@ -62,7 +62,9 @@ call)*. Focus moves into the slot panel; B or Back returns focus to the menu row
 panel.
 
 On a screen too narrow for both panels side by side (under about 720 dp wide, e.g. a phone in portrait), the slot
-panel replaces the menu panel in the same place, and B returns to the menu *(writer's call)*.
+panel opens below the menu panel instead: the menu keeps the top of the screen (at most 40% of its height, its rows
+scrolling) and the slot panel takes the rest. B returns to the menu row, as on a wide screen (the player's choice,
+2026-10-31, in place of the slot panel replacing the menu).
 
 ### The slot list
 

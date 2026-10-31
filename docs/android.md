@@ -940,7 +940,9 @@ data kept. The user drove the checks with the built-in pad.
 | Scrolling and focus rings | User-reported: as expected. |
 | Crash buffer | Pass: empty before (01:55) and after (02:08). |
 
-Found: padtest, which has no serial, saved a resume state on Exit (`HASH-9FDA0E1A56D8DF5B_resume.sav`, 01:58:34). The app takes the core's hash for a serial, where the design says a game without one exits without saving.
+padtest saved a resume state on Exit (`HASH-9FDA0E1A56D8DF5B_resume.sav`, 01:58:34): the core gives a PS-EXE its
+content-hash ID in the serial's place, and its slots, resume state and resume prompt key on it as on a serial. That's
+by design (#35 corrects the design's wording, which said such a game had no serial and saved none).
 
 ## Checks on the AYN Thor
 

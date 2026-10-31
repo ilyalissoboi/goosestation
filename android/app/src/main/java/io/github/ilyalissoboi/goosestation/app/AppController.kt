@@ -262,6 +262,9 @@ object AppController : NativeCallbacks {
         )
     }
 
+    /** A game's start, which asks first whether to resume where it was left. */
+    val gameStarts = GameStarts(scope, gameDispatcher, NativeGameCoreApi, ::startGameNow)
+
     /** Fast forward is on in the running game: its marker shows over the game. */
     val fastForward get() = gameMenu.state.fastForward
 
@@ -738,7 +741,18 @@ object AppController : NativeCallbacks {
 
     // --- Games ---
 
+    /** Starts [game], once it's asked whether to resume where it was left, if it has a resume state ([gameStarts]). */
     fun startGame(game: GameEntry) {
+        if (!ready || gameActive) return
+        gameStarts.play(game)
+    }
+
+    // The start itself, from its resume state with a resumeSerial. Checked again: things may have changed while the
+    // player answered.
+    private fun startGameNow(
+        game: GameEntry,
+        resumeSerial: String?,
+    ) {
         if (!ready || gameActive) return
         if (!catchUps.startsAllowed) {
             showMessage(COPYING)
@@ -752,7 +766,7 @@ object AppController : NativeCallbacks {
         holdMemcards = true
         screen = Screen.Game
         // It boots once the game screen's surface exists.
-        NativeLibrary.startGame(game.path, null)
+        NativeLibrary.startGame(game.path, resumeSerial)
     }
 
     // Back to the library, which waits for the game's onGameStopped() before it starts another. With
@@ -793,11 +807,11 @@ object AppController : NativeCallbacks {
         if (gameRunning && PausePolicy.running(resumed, promptOpen = false)) NativeLibrary.setPaused(false)
     }
 
-    /** Closes the prompt, and stops the game. */
+    /** Closes the prompt, and stops the game, which saves its resume state first: Exit game. */
     fun quitFromPrompt() {
         if (!promptOpen) return
         promptOpen = false
-        leaveGame()
+        leaveGame(saveResumeState = true)
     }
 
     // --- SD card removal ---

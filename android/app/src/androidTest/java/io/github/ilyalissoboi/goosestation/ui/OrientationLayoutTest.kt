@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -368,6 +369,21 @@ class OrientationLayoutTest {
             assertTextsLaidOut(inView = true)
             // As the next config's menu opens.
             menu.value = GameMenuState(booted = true, analogMode = true)
+        }
+    }
+
+    @Test
+    fun theResumePromptWithALongTitle() {
+        val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+        val offer = ResumeOffer(LONG_GAME, now.toEpochSecond() - 86_400, null)
+        eachConfig({ ResumePrompt(offer, onResume = {}, onStartOver = {}, onCancel = {}, now = now) }) {
+            assertTextsLaidOut()
+            assertTrue("Resume is focused, not ${focusedText()}", focusedHas("Resume"))
+            assertFocusedInView()
+            // Beside Resume, or under it once the buttons wrap.
+            press(Key.DirectionRight)
+            if (!focusedHas("Start over")) pressUntilFocused(Key.DirectionDown, "Start over")
+            assertFocusedInView()
         }
     }
 

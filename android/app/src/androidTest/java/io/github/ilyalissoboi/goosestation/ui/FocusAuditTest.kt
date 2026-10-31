@@ -22,6 +22,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -326,6 +327,14 @@ class FocusAuditTest {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, 1_700_000_000L) }
         val panel = SlotPanel(SlotMode.Save, entries, focus = 1, replacing = 1)
         show { GameMenu(GameMenuState(booted = true, slots = panel), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun resumePrompt() {
+        val game = GameEntry("content://games/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
+        show { ResumePrompt(ResumeOffer(game, 1_700_000_000L, null), onResume = {}, onStartOver = {}, onCancel = {}) }
 
         rule.assertControllerReady()
     }

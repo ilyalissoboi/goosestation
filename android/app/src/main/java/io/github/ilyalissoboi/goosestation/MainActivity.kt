@@ -25,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
@@ -170,6 +171,15 @@ class MainActivity : ComponentActivity() {
                             focusPath = AppController.lastGamePath,
                             focusSettings = AppController.focusSettings,
                         )
+                        val starts = AppController.gameStarts
+                        starts.offer?.let { offer ->
+                            ResumePrompt(
+                                offer,
+                                onResume = starts::resume,
+                                onStartOver = starts::startOver,
+                                onCancel = starts::cancel,
+                            )
+                        }
                     }
                 }
             }

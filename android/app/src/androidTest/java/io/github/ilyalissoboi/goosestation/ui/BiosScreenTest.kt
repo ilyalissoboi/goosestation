@@ -3,10 +3,15 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -46,12 +51,16 @@ class BiosScreenTest {
     ) {
         rule.setContent {
             GooseStationTheme {
+                var current by remember { mutableStateOf(overrides) }
                 BiosScreen(
                     images = images,
                     auto = auto,
-                    overrides = overrides,
+                    overrides = current,
                     fastBoot = true,
-                    onSetOverride = { region, file -> overridesSet += region to file },
+                    onSetOverride = { region, file ->
+                        overridesSet += region to file
+                        current = if (file == null) current - region else current + (region to file)
+                    },
                     onFastBoot = { fastBoots += it },
                     onBack = { backs++ },
                 )
@@ -77,31 +86,26 @@ class BiosScreenTest {
     }
 
     @Test
-    fun pickingTheImageSetsTheOverride() {
+    fun steppingToTheImageSetsTheOverride() {
         show()
 
         press(Key.DirectionDown)
-        assertFocusedHas("NTSC-J (Japan)")
-        press(Key.Enter)
-        assertFocusedHas("Automatic: $SCPH5500")
-        press(Key.DirectionDown)
-        assertFocusedHas(SCPH5500)
-        press(Key.Enter)
+        assertFocusedHas("NTSC-J (Japan)", "Automatic: $SCPH5500")
+        press(Key.DirectionRight)
 
+        assertFocusedHas("NTSC-J (Japan)", SCPH5500)
         assertEquals(listOf(BiosRegion.NtscJ to "ps-30j.bin"), overridesSet)
     }
 
     @Test
-    fun pickingAutomaticClearsTheOverride() {
+    fun steppingBackToAutomaticClearsTheOverride() {
         show(overrides = mapOf(BiosRegion.NtscJ to "ps-30j.bin"))
 
         press(Key.DirectionDown)
         assertFocusedHas("NTSC-J (Japan)", SCPH5500)
-        press(Key.Enter)
-        press(Key.DirectionUp)
-        assertFocusedHas("Automatic: $SCPH5500")
-        press(Key.Enter)
+        press(Key.DirectionLeft)
 
+        assertFocusedHas("NTSC-J (Japan)", "Automatic: $SCPH5500")
         assertEquals(listOf<Pair<BiosRegion, String?>>(BiosRegion.NtscJ to null), overridesSet)
     }
 
@@ -109,10 +113,9 @@ class BiosScreenTest {
     fun anImageForAnotherRegionSaysSo() {
         show()
 
-        press(Key.Enter)
-        press(Key.DirectionDown)
+        press(Key.DirectionRight)
 
-        assertFocusedHas(SCPH5500, "made for NTSC-J")
+        assertFocusedHas("NTSC-U (Americas)", SCPH5500, "made for NTSC-J")
     }
 
     @Test
@@ -120,8 +123,9 @@ class BiosScreenTest {
         show()
 
         press(Key.DirectionDown)
-        press(Key.Enter)
+        press(Key.DirectionRight)
 
+        assertFocusedHas(SCPH5500)
         rule.onAllNodes(hasText("made for NTSC-J")).assertCountEquals(0)
     }
 
@@ -131,10 +135,10 @@ class BiosScreenTest {
         show(images = listOf(IMAGE, BiosImage("scph5500.bin", SCPH5500, "NTSC-J")))
 
         press(Key.DirectionDown)
-        press(Key.Enter)
-
-        rule.onNode(hasText("$SCPH5500 (ps-30j.bin)")).assertExists()
-        rule.onNode(hasText("$SCPH5500 (scph5500.bin)")).assertExists()
+        press(Key.DirectionRight)
+        assertFocusedHas("$SCPH5500 (ps-30j.bin)")
+        press(Key.DirectionRight)
+        assertFocusedHas("$SCPH5500 (scph5500.bin)")
     }
 
     @Test
@@ -156,7 +160,8 @@ class BiosScreenTest {
         show()
 
         repeat(3) { press(Key.DirectionDown) }
-        assertFocusedHas("Fast boot (skip the BIOS intro)", "On")
+        assertFocusedHas("Fast boot (skip the BIOS intro)")
+        rule.onNode(isFocused()).assertIsOn()
         press(Key.Enter)
 
         assertEquals(listOf(false), fastBoots)

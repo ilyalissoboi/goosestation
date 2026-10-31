@@ -26,6 +26,7 @@ import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
@@ -233,6 +234,26 @@ class OrientationLayoutTest {
         if (!focusedHas(text)) fail("$key never focused \"$text\"")
     }
 
+    private fun focusedText(): String = rule.onNode(isFocused()).fetchSemanticsNode().mergedText()
+
+    /**
+     * Steps the focused cycler row with [key] until its value stops changing, at an end of its choices, checking at
+     * each choice that every text is laid out and the row is in view.
+     */
+    private fun stepToTheEnd(
+        key: Key,
+        limit: Int = 30,
+    ) {
+        repeat(limit) {
+            val before = focusedText()
+            press(key)
+            assertTextsLaidOut()
+            assertFocusedInView()
+            if (focusedText() == before) return
+        }
+        fail("$key never reached the end of ${focusedText()}")
+    }
+
     /**
      * Every text on screen: laid out whole (not cut off, no word broken over lines), inside the screen across, and
      * clear of every other text.
@@ -321,7 +342,7 @@ class OrientationLayoutTest {
     }
 
     @Test
-    fun graphicsWithEachRowOpen() {
+    fun graphicsThroughEachRowsChoices() {
         eachConfig({
             // Values from settings.ini that the page doesn't offer, so each list ends with one.
             var settings by remember { mutableStateOf(GraphicsSettings("Software", 12, "21:9", showFps = true)) }
@@ -333,6 +354,7 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Renderer"))
             assertFocusedInView()
 
+            // Each row starts on its value from settings.ini, the last of its choices, and steps back to the first.
             for (
             (row, last) in
             listOf(
@@ -342,15 +364,12 @@ class OrientationLayoutTest {
             )
             ) {
                 pressUntilFocused(Key.DirectionDown, row)
-                press(Key.Enter)
-                assertFocusedInView()
-                assertTextsLaidOut()
-                pressUntilFocused(Key.DirectionDown, last)
-                press(Key.Back)
-                assertTrue("Back didn't focus $row", focusedHas(row))
+                assertTrue("$row isn't on $last", focusedHas(last))
+                stepToTheEnd(Key.DirectionLeft)
+                assertTrue("$row stepped past its first choice", focusedHas(row))
             }
             pressUntilFocused(Key.DirectionDown, "Show FPS")
-            assertTrue(focusedHas("On"))
+            rule.onNode(isFocused()).assertIsOn()
         }
     }
 
@@ -364,12 +383,15 @@ class OrientationLayoutTest {
             )
         val auto = mapOf(BiosRegion.NtscU to SCPH5500, BiosRegion.NtscJ to SCPH5500, BiosRegion.Pal to null)
         eachConfig({
+            var overrides by remember { mutableStateOf(mapOf(BiosRegion.Pal to "scph5552.bin")) }
             BiosScreen(
                 images = images,
                 auto = auto,
-                overrides = mapOf(BiosRegion.Pal to "scph5552.bin"),
+                overrides = overrides,
                 fastBoot = true,
-                onSetOverride = { _, _ -> },
+                onSetOverride = { region, file ->
+                    overrides = if (file == null) overrides - region else overrides + (region to file)
+                },
                 onFastBoot = {},
                 onBack = {},
             )
@@ -378,17 +400,18 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("NTSC-U (Americas)"))
             assertFocusedInView()
 
-            press(Key.Enter)
+            // Automatic, then the Japanese image, noted, on to the last.
+            press(Key.DirectionRight)
             assertTextsLaidOut()
             assertShows("made for NTSC-J")
-            pressUntilFocused(Key.DirectionDown, "SCPH-7502")
-            press(Key.Back)
+            stepToTheEnd(Key.DirectionRight)
+            assertTrue(focusedHas("SCPH-7502"))
 
+            // From the override settings.ini names, the last, back to Automatic.
             pressUntilFocused(Key.DirectionDown, "PAL (Europe)")
-            press(Key.Enter)
-            assertTextsLaidOut()
-            pressUntilFocused(Key.DirectionDown, "scph5552.bin (from settings.ini)")
-            press(Key.Back)
+            assertTrue(focusedHas("scph5552.bin (from settings.ini)"))
+            stepToTheEnd(Key.DirectionLeft)
+            assertTrue(focusedHas("Automatic"))
 
             pressUntilFocused(Key.DirectionDown, "Fast boot")
             assertShows("The images come from your BIOS folder")
@@ -398,16 +421,17 @@ class OrientationLayoutTest {
     @Test
     fun controllersWithTwoPadsAndEveryInput() {
         eachConfig({
+            var selected by remember { mutableStateOf(LONG_PAD.descriptor) }
             ControllersScreen(
                 controllers = listOf(PAD, LONG_PAD),
                 labels = emptyMap(),
-                selected = LONG_PAD.descriptor,
+                selected = selected,
                 bindings = BINDINGS,
                 bindingsFor = LONG_PAD.descriptor,
                 capturing = null,
                 secondsLeft = 0,
                 undoFor = null,
-                onSelect = {},
+                onSelect = { selected = it },
                 onCapture = {},
                 onCancelCapture = {},
                 onClear = {},
@@ -422,10 +446,13 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Controller"))
             assertFocusedInView()
 
-            press(Key.Enter)
+            // To the other pad and back, its bindings read again meanwhile.
+            press(Key.DirectionLeft)
             assertTextsLaidOut()
-            pressUntilFocused(Key.DirectionDown, LONG_PAD.name)
-            press(Key.Back)
+            assertTrue(focusedHas(PAD.name))
+            press(Key.DirectionRight)
+            assertTextsLaidOut()
+            assertTrue(focusedHas(LONG_PAD.name))
 
             pressUntilFocused(Key.DirectionDown, "Right Stick Right")
             press(Key.DirectionRight)

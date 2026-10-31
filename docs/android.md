@@ -404,9 +404,11 @@ by the ones setup picked. That happens once; other settings are kept.
 **Settings**, in the library's top bar, opens a hub with four pages: **Controllers**, **Graphics**, **BIOS** and
 **Folders** (the folder settings above). Every page works with a D-pad alone, as setup does: the first row is focused
 when a page opens, A or Enter activates, and B or Back goes back. Back from a page focuses its entry in the hub, and
-Back from the hub focuses **Settings** in the library. A setting with several values opens as a list right under its
-row, drawn in the page itself, with the current value focused and marked "✓": A picks one and closes the list, and B
-or Back closes it with no change. Touch works too.
+Back from the hub focuses **Settings** in the library. A setting with several values shows its current one between
+two arrows: left and right step through the values, stopping at the first and the last, and each step is the change;
+A, Enter or a tap on the row step forward, round to the first after the last, and a tap on an arrow steps its way. A
+value's own note, such as "made for NTSC-J", shows under the row while it's the current one. An on/off setting is a
+square toggle, which A, Enter or a tap flip. Touch works too.
 
 - **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
   pull, so the folders can still be picked again. Controllers, Graphics and BIOS need the core: until it has started
@@ -540,7 +542,8 @@ across restarts, whatever order the controllers connect in.
 
 ### Leaving a game
 
-In a game, three things pause it and open a prompt, "Paused", with **Resume** (focused) and **Quit to library**:
+In a game, three things pause it and open a prompt: "Paused" over the game's title, its region, serial and play
+time, then **Resume** (focused) and **Quit to library**:
 
 - **Back**: the Back gesture, the system's Back key, or a controller's own Back key (the Thor's pad has one);
 - **Mode**: a controller's Home or Guide button (`KEYCODE_BUTTON_MODE`), on its key-down;

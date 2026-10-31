@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -40,9 +41,9 @@ class GamePromptTest {
     private var resumes = 0
     private var quits = 0
 
-    private fun show() {
+    private fun show(game: GameEntry? = null) {
         rule.setContent {
-            GooseStationTheme { GamePrompt(onResume = { resumes++ }, onQuit = { quits++ }) }
+            GooseStationTheme { GamePrompt(onResume = { resumes++ }, onQuit = { quits++ }, game = game) }
         }
         rule.waitForIdle()
     }
@@ -64,8 +65,27 @@ class GamePromptTest {
     fun resumeIsFocusedWhenItOpens() {
         show()
 
-        rule.onNodeWithText("Paused").assertExists()
+        rule.onNodeWithText("PAUSED").assertExists()
         rule.onNodeWithText("Resume").assertIsFocused()
+    }
+
+    @Test
+    fun itNamesTheGame() {
+        show(
+            GameEntry(
+                path = "content://test/tree/games/document/crash.cue",
+                title = "Crash Bandicoot",
+                serial = "SCUS-94900",
+                region = "NTSC-U",
+                totalPlayedSeconds = 3 * 3600 + 12 * 60,
+                lastPlayedSeconds = 0,
+                coverPath = null,
+            ),
+        )
+
+        rule.onNodeWithText("PAUSED").assertExists()
+        rule.onNodeWithText("Crash Bandicoot").assertExists()
+        rule.onNodeWithText("NTSC-U · SCUS-94900 · 3h 12m").assertExists()
     }
 
     @Test

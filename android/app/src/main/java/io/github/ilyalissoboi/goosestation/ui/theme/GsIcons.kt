@@ -1,0 +1,350 @@
+// SPDX-FileCopyrightText: 2026 GooseStation contributors
+// SPDX-License-Identifier: GPL-3.0
+
+package io.github.ilyalissoboi.goosestation.ui.theme
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathBuilder
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.unit.dp
+
+/**
+ * GooseStation's icons, as the design system draws them: a 24 dp grid, 2 dp strokes, square caps, mitred corners,
+ * octagons where a circle would be. Drawn in black; [androidx.compose.material3.Icon]'s tint colours them.
+ */
+object GsIcons {
+    val play: ImageVector by lazy {
+        icon("play") {
+            moveTo(7f, 4f)
+            lineTo(19f, 12f)
+            lineTo(7f, 20f)
+            close()
+        }
+    }
+
+    val pause: ImageVector by lazy {
+        icon("pause") {
+            moveTo(6f, 5f)
+            lineTo(10f, 5f)
+            lineTo(10f, 19f)
+            lineTo(6f, 19f)
+            close()
+            moveTo(14f, 5f)
+            lineTo(18f, 5f)
+            lineTo(18f, 19f)
+            lineTo(14f, 19f)
+            close()
+        }
+    }
+
+    val power: ImageVector by lazy {
+        icon("power") {
+            moveTo(12f, 3f)
+            lineTo(12f, 11f)
+            moveTo(7f, 6f)
+            lineTo(4f, 10f)
+            lineTo(4f, 15f)
+            lineTo(8f, 20f)
+            lineTo(16f, 20f)
+            lineTo(20f, 15f)
+            lineTo(20f, 10f)
+            lineTo(17f, 6f)
+        }
+    }
+
+    val back: ImageVector by lazy {
+        icon("back") {
+            moveTo(15f, 5f)
+            lineTo(8f, 12f)
+            lineTo(15f, 19f)
+        }
+    }
+
+    val forward: ImageVector by lazy {
+        icon("forward") {
+            moveTo(9f, 5f)
+            lineTo(16f, 12f)
+            lineTo(9f, 19f)
+        }
+    }
+
+    val close: ImageVector by lazy {
+        icon("close") {
+            moveTo(6f, 6f)
+            lineTo(18f, 18f)
+            moveTo(18f, 6f)
+            lineTo(6f, 18f)
+        }
+    }
+
+    val check: ImageVector by lazy {
+        icon("check") {
+            moveTo(4f, 12f)
+            lineTo(9f, 17f)
+            lineTo(20f, 6f)
+        }
+    }
+
+    val plus: ImageVector by lazy {
+        icon("plus") {
+            moveTo(12f, 5f)
+            lineTo(12f, 19f)
+            moveTo(5f, 12f)
+            lineTo(19f, 12f)
+        }
+    }
+
+    val grid: ImageVector by lazy {
+        icon("grid") {
+            moveTo(4f, 4f)
+            lineTo(10f, 4f)
+            lineTo(10f, 10f)
+            lineTo(4f, 10f)
+            close()
+            moveTo(14f, 4f)
+            lineTo(20f, 4f)
+            lineTo(20f, 10f)
+            lineTo(14f, 10f)
+            close()
+            moveTo(4f, 14f)
+            lineTo(10f, 14f)
+            lineTo(10f, 20f)
+            lineTo(4f, 20f)
+            close()
+            moveTo(14f, 14f)
+            lineTo(20f, 14f)
+            lineTo(20f, 20f)
+            lineTo(14f, 20f)
+            close()
+        }
+    }
+
+    val list: ImageVector by lazy {
+        icon("list") {
+            moveTo(4f, 6f)
+            lineTo(20f, 6f)
+            moveTo(4f, 12f)
+            lineTo(20f, 12f)
+            moveTo(4f, 18f)
+            lineTo(20f, 18f)
+        }
+    }
+
+    val search: ImageVector by lazy {
+        icon("search") {
+            moveTo(16.51f, 12.99f)
+            lineTo(12.99f, 16.51f)
+            lineTo(8.01f, 16.51f)
+            lineTo(4.49f, 12.99f)
+            lineTo(4.49f, 8.01f)
+            lineTo(8.01f, 4.49f)
+            lineTo(12.99f, 4.49f)
+            lineTo(16.51f, 8.01f)
+            close()
+            moveTo(15.5f, 15.5f)
+            lineTo(20f, 20f)
+        }
+    }
+
+    val folder: ImageVector by lazy {
+        icon("folder") {
+            moveTo(3f, 5f)
+            lineTo(9f, 5f)
+            lineTo(11f, 7f)
+            lineTo(21f, 7f)
+            lineTo(21f, 19f)
+            lineTo(3f, 19f)
+            close()
+        }
+    }
+
+    val disc: ImageVector by lazy {
+        icon("disc") {
+            moveTo(20.31f, 15.44f)
+            lineTo(15.44f, 20.31f)
+            lineTo(8.56f, 20.31f)
+            lineTo(3.69f, 15.44f)
+            lineTo(3.69f, 8.56f)
+            lineTo(8.56f, 3.69f)
+            lineTo(15.44f, 3.69f)
+            lineTo(20.31f, 8.56f)
+            close()
+            moveTo(14.31f, 12.96f)
+            lineTo(12.96f, 14.31f)
+            lineTo(11.04f, 14.31f)
+            lineTo(9.69f, 12.96f)
+            lineTo(9.69f, 11.04f)
+            lineTo(11.04f, 9.69f)
+            lineTo(12.96f, 9.69f)
+            lineTo(14.31f, 11.04f)
+            close()
+        }
+    }
+
+    val memoryCard: ImageVector by lazy {
+        icon("memory-card") {
+            moveTo(6f, 3f)
+            lineTo(15f, 3f)
+            lineTo(18f, 6f)
+            lineTo(18f, 21f)
+            lineTo(6f, 21f)
+            close()
+            moveTo(9f, 15f)
+            lineTo(15f, 15f)
+        }
+    }
+
+    val sync: ImageVector by lazy {
+        icon("sync") {
+            moveTo(20f, 8f)
+            lineTo(5f, 8f)
+            moveTo(9f, 4f)
+            lineTo(5f, 8f)
+            lineTo(9f, 12f)
+            moveTo(4f, 16f)
+            lineTo(19f, 16f)
+            moveTo(15f, 12f)
+            lineTo(19f, 16f)
+            lineTo(15f, 20f)
+        }
+    }
+
+    val settings: ImageVector by lazy {
+        icon("settings") {
+            moveTo(4f, 7f)
+            lineTo(13f, 7f)
+            moveTo(17f, 7f)
+            lineTo(20f, 7f)
+            moveTo(4f, 17f)
+            lineTo(6f, 17f)
+            moveTo(10f, 17f)
+            lineTo(20f, 17f)
+            moveTo(13f, 5f)
+            lineTo(17f, 5f)
+            lineTo(17f, 9f)
+            lineTo(13f, 9f)
+            close()
+            moveTo(6f, 15f)
+            lineTo(10f, 15f)
+            lineTo(10f, 19f)
+            lineTo(6f, 19f)
+            close()
+        }
+    }
+
+    val gamepad: ImageVector by lazy {
+        icon("gamepad") {
+            moveTo(6f, 7f)
+            lineTo(18f, 7f)
+            lineTo(22f, 17f)
+            lineTo(19f, 19f)
+            lineTo(15f, 15f)
+            lineTo(9f, 15f)
+            lineTo(5f, 19f)
+            lineTo(2f, 17f)
+            close()
+            moveTo(7f, 11f)
+            lineTo(11f, 11f)
+            moveTo(9f, 9f)
+            lineTo(9f, 13f)
+            moveTo(15f, 10.5f)
+            lineTo(15.01f, 10.5f)
+            moveTo(17f, 12.5f)
+            lineTo(17.01f, 12.5f)
+        }
+    }
+
+    val info: ImageVector by lazy {
+        icon("info") {
+            moveTo(3f, 3f)
+            lineTo(21f, 3f)
+            lineTo(21f, 21f)
+            lineTo(3f, 21f)
+            close()
+            moveTo(12f, 11f)
+            lineTo(12f, 17f)
+            moveTo(12f, 7.5f)
+            lineTo(12f, 8.5f)
+        }
+    }
+
+    val success: ImageVector by lazy {
+        icon("success") {
+            moveTo(3f, 3f)
+            lineTo(21f, 3f)
+            lineTo(21f, 21f)
+            lineTo(3f, 21f)
+            close()
+            moveTo(7f, 12f)
+            lineTo(10.5f, 15.5f)
+            lineTo(17f, 9f)
+        }
+    }
+
+    val warning: ImageVector by lazy {
+        icon("warning") {
+            moveTo(12f, 3f)
+            lineTo(22f, 20f)
+            lineTo(2f, 20f)
+            close()
+            moveTo(12f, 9f)
+            lineTo(12f, 14f)
+            moveTo(12f, 16.5f)
+            lineTo(12f, 17.5f)
+        }
+    }
+
+    val error: ImageVector by lazy {
+        icon("error") {
+            moveTo(20.78f, 15.64f)
+            lineTo(15.64f, 20.78f)
+            lineTo(8.36f, 20.78f)
+            lineTo(3.22f, 15.64f)
+            lineTo(3.22f, 8.36f)
+            lineTo(8.36f, 3.22f)
+            lineTo(15.64f, 3.22f)
+            lineTo(20.78f, 8.36f)
+            close()
+            moveTo(12f, 7f)
+            lineTo(12f, 13f)
+            moveTo(12f, 15.5f)
+            lineTo(12f, 16.5f)
+        }
+    }
+
+    val clock: ImageVector by lazy {
+        icon("clock") {
+            moveTo(20.31f, 15.44f)
+            lineTo(15.44f, 20.31f)
+            lineTo(8.56f, 20.31f)
+            lineTo(3.69f, 15.44f)
+            lineTo(3.69f, 8.56f)
+            lineTo(8.56f, 3.69f)
+            lineTo(15.44f, 3.69f)
+            lineTo(20.31f, 8.56f)
+            close()
+            moveTo(12f, 7f)
+            lineTo(12f, 12f)
+            lineTo(16f, 12f)
+        }
+    }
+}
+
+private fun icon(
+    name: String,
+    draw: PathBuilder.() -> Unit,
+): ImageVector =
+    ImageVector
+        .Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .path(
+            fill = null,
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Square,
+            strokeLineJoin = StrokeJoin.Miter,
+            pathBuilder = draw,
+        ).build()

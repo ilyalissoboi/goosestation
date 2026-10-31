@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,11 +32,15 @@ import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.input.BindingLabels
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
-import io.github.ilyalissoboi.goosestation.ui.components.ChoiceRow
+import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
+import io.github.ilyalissoboi.goosestation.ui.components.Notice
+import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 
 /** What the Back key, Mode, and Select + Start do in a game, whatever the mapping. */
 private const val MENU_TRIGGERS =
@@ -85,15 +87,11 @@ fun ControllersScreen(
     SettingsPage("Controllers", onBack = onBack) {
         // After the page's own, so it takes Back first while a capture runs.
         BackHandler(enabled = capturing != null, onBack = onCancelCapture)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        Notice(NoticeStatus.Info, icon = GsIcons.gamepad) {
             Text(
                 MENU_TRIGGERS,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(16.dp),
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         Column(
@@ -107,7 +105,7 @@ fun ControllersScreen(
             }
             val label = labels[controller.descriptor] ?: controller.name
             if (choosing) {
-                ChoiceRow(
+                CyclerRow(
                     "Controller",
                     controllers.map { Choice(it.descriptor, labels[it.descriptor] ?: it.name) },
                     controller.descriptor,
@@ -148,7 +146,7 @@ fun ControllersScreen(
                     onDropUndo = onDropUndo,
                 )
             }
-            ActionButton("Reset to defaults", onClick = onReset)
+            ActionButton("Reset to defaults", onClick = onReset, kind = ButtonKind.Danger)
         }
     }
 }
@@ -205,7 +203,7 @@ private fun BindingRow(
                 Text(
                     prompt ?: BindingLabels.label(binding.binding),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (prompt != null) colors.tertiary else colors.primary,
+                    color = if (prompt != null) colors.tertiary else colors.onSurfaceVariant,
                 )
             },
         )
@@ -216,6 +214,7 @@ private fun BindingRow(
                 undone -> "Undone"
                 else -> "Clear"
             },
+            kind = ButtonKind.Ghost,
             onClick = {
                 when {
                     undo -> {

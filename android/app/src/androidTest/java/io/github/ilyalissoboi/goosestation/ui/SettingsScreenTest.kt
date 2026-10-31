@@ -9,6 +9,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -194,7 +195,8 @@ class SettingsScreenTest {
 
         // Renderer, Internal resolution, Aspect ratio, then Show FPS.
         repeat(3) { press(Key.DirectionDown) }
-        assertFocusedHas("Show FPS", "Off")
+        assertFocusedHas("Show FPS")
+        rule.onNode(isFocused()).assertIsOff()
         press(Key.Enter)
 
         assertEquals(listOf(settings.copy(showFps = true)), changes)

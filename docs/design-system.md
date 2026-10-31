@@ -227,6 +227,19 @@ SettingsPage("Graphics", onBack = onBack) {
 - `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.
 - A row's `note` explains a consequence ("Higher is sharper and slower.") or a fallback. Never repeat the label.
 
+### `KeyHints` (`KeyHints.kt`)
+
+```kotlin
+KeyHints(listOf(KeyHint(PadGlyphs.confirm, "Select"), KeyHint(PadGlyphs.back, "Back")))
+```
+
+The button-hint footer: each button's glyph in a key chip (`key` type, a `line-strong` edge at `radius-sm`), then the
+action it takes, in a row that wraps on a narrow screen. It goes at the foot of a panel, such as the pause menu.
+
+- Name the buttons with `PadGlyphs`, which labels them as the Controllers page does ("A" for `BUTTON_A`).
+- Actions are short verbs, in sentence case: Select, Back, Save.
+- It takes no input: nothing in it is focusable, and each hint reads as "A: Select".
+
 ### `Eyebrow` (`Eyebrow.kt`)
 
 A small capitalised label over what it names: "Paused" over a game's title, "Step 1 of 3" over a setup step.
@@ -321,7 +334,7 @@ See [docs/android.md](android.md) for running them.
 ## Not built yet
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
-Android; the button-hint footer (`KeyHints`) naming each controller button; badges for region and memory card sync;
+Android; badges for region and memory card sync;
 progress bars; save-state slots; on-screen messages over the game in the system's style; on-screen touch controls; the
 desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

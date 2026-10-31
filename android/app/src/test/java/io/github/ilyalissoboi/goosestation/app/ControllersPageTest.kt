@@ -126,6 +126,82 @@ class ControllersPageTest {
         }
 
     @Test
+    fun hotkeysAreReadWithTheBindings() =
+        runTest {
+            val page = openPage()
+
+            assertEquals(
+                listOf("ToggleFastForward", "ToggleAnalogMode", "Screenshot"),
+                page.state.hotkeys!!.map { it.name },
+            )
+        }
+
+    @Test
+    fun aHotkeyCaptureSetsTheHotkey() =
+        runTest {
+            val page = openPage()
+            calls.clear()
+
+            page.captureHotkey("ToggleFastForward")
+            runCurrent()
+            assertEquals("ToggleFastForward", page.state.capturing)
+            page.onBindingCaptured("Button99")
+            runCurrent()
+
+            assertTrue(calls.contains("startBindingCapture $PAD_A chord"))
+            assertTrue(calls.contains("setHotkeyBinding $PAD_A ToggleFastForward Button99"))
+            assertTrue(calls.none { it.startsWith("setPadBinding") })
+            assertEquals(
+                "Button109 & Android-0/Button99",
+                page.state.hotkeys!!
+                    .single { it.name == "ToggleFastForward" }
+                    .binding,
+            )
+        }
+
+    @Test
+    fun aPadCaptureIsntAChord() =
+        runTest {
+            val page = openPage()
+            calls.clear()
+
+            page.capture("Cross")
+            runCurrent()
+
+            assertTrue(calls.contains("startBindingCapture $PAD_A"))
+        }
+
+    @Test
+    fun clearAndUndoWorkOnHotkeys() =
+        runTest {
+            val page = openPage()
+            page.captureHotkey("Screenshot")
+            runCurrent()
+            page.onBindingCaptured("Button99")
+            runCurrent()
+            page.captureHotkey("Screenshot")
+            runCurrent()
+            page.onBindingCaptured("Button100")
+            runCurrent()
+            assertEquals(Undo("Screenshot", "Button109 & Android-0/Button99"), page.state.undo)
+            calls.clear()
+
+            page.undo()
+            runCurrent()
+            assertEquals(listOf("setHotkeyBinding $PAD_A Screenshot Button99"), calls)
+
+            calls.clear()
+            page.clear("Screenshot")
+            runCurrent()
+            assertEquals(listOf("setHotkeyBinding $PAD_A Screenshot null"), calls)
+            assertNull(
+                page.state.hotkeys!!
+                    .single { it.name == "Screenshot" }
+                    .binding,
+            )
+        }
+
+    @Test
     fun undoPutsThePreviousBindingBack() =
         runTest {
             val page = openPage()

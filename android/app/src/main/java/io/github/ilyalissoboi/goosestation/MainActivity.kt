@@ -25,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
@@ -61,11 +62,15 @@ class MainActivity : ComponentActivity() {
                         )
                     Screen.Game ->
                         GameScreen(
-                            promptOpen = AppController.promptOpen,
-                            onOpenPrompt = AppController::openPrompt,
-                            onResume = AppController::resumeFromPrompt,
-                            onQuit = AppController::quitFromPrompt,
+                            menuOpen = AppController.promptOpen,
+                            onOpenMenu = AppController::openPrompt,
+                            menu = AppController.gameMenu.state,
+                            actions = AppController.gameMenu,
                             game = AppController.games.firstOrNull { it.path == AppController.lastGamePath },
+                            osd = AppController.osd.shown,
+                            fastForward = AppController.fastForward,
+                            osdExpiry = AppController.osd.nextExpiry(),
+                            onOsdExpire = AppController.osd::expire,
                         )
                     Screen.Settings ->
                         SettingsScreen(
@@ -121,6 +126,8 @@ class MainActivity : ComponentActivity() {
                                 undoFor = state.undo?.name,
                                 onSelect = AppController::selectController,
                                 onCapture = AppController::captureBinding,
+                                hotkeys = state.hotkeys.orEmpty(),
+                                onCaptureHotkey = AppController::captureHotkey,
                                 onCancelCapture = AppController::cancelCapture,
                                 onClear = AppController::clearBinding,
                                 onUndo = AppController.controllersPage::undo,
@@ -166,6 +173,15 @@ class MainActivity : ComponentActivity() {
                             focusPath = AppController.lastGamePath,
                             focusSettings = AppController.focusSettings,
                         )
+                        val starts = AppController.gameStarts
+                        starts.offer?.let { offer ->
+                            ResumePrompt(
+                                offer,
+                                onResume = starts::resume,
+                                onStartOver = starts::startOver,
+                                onCancel = starts::cancel,
+                            )
+                        }
                     }
                 }
             }

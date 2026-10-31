@@ -12,6 +12,7 @@ import io.github.ilyalissoboi.goosestation.input.PadKeys.Outcome
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** ControllerInput's key decisions: where each key event goes, and what the core is sent for it. */
@@ -20,6 +21,7 @@ class PadKeysTest {
         const val PAD = 1
         const val OTHER_PAD = 2
         const val BUTTON_A = 96
+        const val BUTTON_X = 99
     }
 
     private val keys = PadKeys()
@@ -150,5 +152,84 @@ class PadKeysTest {
         assertEquals(listOf(START), keys.forget(OTHER_PAD))
         assertNull(keys.deadline())
         assertFalse(keys.onTime(5000).openMenu)
+    }
+
+    // With a hotkey chord on the pad: Select is held back (SelectChord).
+    private fun chordKey(
+        keyCode: Int,
+        pressed: Boolean,
+        eventMs: Long,
+        canceled: Boolean = false,
+    ): Outcome = keys.onKey(PAD, keyCode, pressed, false, canceled, true, eventMs, eventMs, selectChords = true)
+
+    @Test
+    fun selectAndStartStillOpenTheMenuAndTheGameNeverSeesSelect() {
+        assertEquals(core(), chordKey(SELECT, true, 0))
+        assertEquals(core(), chordKey(START, true, 100))
+        // Select's own 500 ms waits while the pair is held.
+        assertEquals(1_100L, keys.deadline())
+
+        val tick = keys.onTime(1_100)
+
+        assertTrue(tick.openMenu)
+        assertEquals(emptyList<Int>(), tick.lateSelects)
+        assertEquals(compose, chordKey(SELECT, false, 1_200))
+        assertEquals(compose, chordKey(START, false, 1_250))
+    }
+
+    @Test
+    fun startTappedWhileSelectHeld() {
+        chordKey(SELECT, true, 0)
+        chordKey(START, true, 100)
+
+        assertEquals(core(down(SELECT), down(START)), chordKey(START, false, 300))
+        assertEquals(400L, keys.deadline())
+        assertEquals(listOf(Release(PAD, START)), keys.onTime(400).releases)
+    }
+
+    @Test
+    fun aChordSendsOneBatch() {
+        assertEquals(core(), chordKey(SELECT, true, 0))
+
+        assertEquals(core(down(SELECT), down(BUTTON_X)), chordKey(BUTTON_X, true, 100))
+        assertEquals(core(up(BUTTON_X)), chordKey(BUTTON_X, false, 200))
+        assertEquals(core(up(SELECT)), chordKey(SELECT, false, 260))
+    }
+
+    @Test
+    fun aSelectTapIsHeld100ms() {
+        chordKey(SELECT, true, 0)
+
+        assertEquals(core(down(SELECT)), chordKey(SELECT, false, 50))
+        assertEquals(150L, keys.deadline())
+        assertEquals(listOf(Release(PAD, SELECT)), keys.onTime(150).releases)
+    }
+
+    @Test
+    fun aHeldSelectGoesLateAndItsReleaseFollows() {
+        chordKey(SELECT, true, 0)
+        assertEquals(500L, keys.deadline())
+
+        assertEquals(listOf(PAD), keys.onTime(500).lateSelects)
+
+        assertEquals(core(up(SELECT)), chordKey(SELECT, false, 900))
+    }
+
+    @Test
+    fun releaseAllDropsAHeldSelect() {
+        chordKey(SELECT, true, 0)
+
+        assertEquals(emptyList<Release>(), keys.releaseAll())
+
+        assertNull(keys.deadline())
+        assertEquals(compose, chordKey(SELECT, false, 300))
+    }
+
+    @Test
+    fun aCancelledHeldSelectSendsNothing() {
+        chordKey(SELECT, true, 0)
+
+        assertEquals(core(), chordKey(SELECT, false, 100, canceled = true))
+        assertNull(keys.deadline())
     }
 }

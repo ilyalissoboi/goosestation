@@ -10,11 +10,13 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
@@ -97,6 +99,10 @@ object AppController : NativeCallbacks {
 
     // refreshGameList and reloadSettings never overlap: reloadSettings rewrites the folder paths a scan reads.
     private val coreDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+    // The in-game menu's core calls (GameCoreApi), one at a time, apart from coreDispatcher: a library scan running
+    // there never holds up the menu.
+    private val gameDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     // Saves in the order they're made, so an older one never lands last.
     private val prefsDispatcher = Dispatchers.IO.limitedParallelism(1)
@@ -239,6 +245,28 @@ object AppController : NativeCallbacks {
 
     /** The pulls that follow a growth of the layout ([catchUp]), one at a time, and whether a game may start. */
     private val catchUps = CatchUpRunner { Log.w(TAG, it) }
+
+    /** The messages shown over the game, the app's and the core's ([CoreMessages]). */
+    val osd = OsdMessages(SystemClock::uptimeMillis)
+
+    /** The in-game menu: its rows, its slot panel, and what they do. */
+    val gameMenu by lazy {
+        InGameMenu(
+            scope,
+            gameDispatcher,
+            NativeGameCoreApi,
+            LastSlots(SharedPreferencesStore(context, "game")),
+            onMessage = { osd.post(it) },
+            onResume = ::resumeFromPrompt,
+            onExit = ::exitGame,
+        )
+    }
+
+    /** A game's start, which asks first whether to resume where it was left. */
+    val gameStarts = GameStarts(scope, gameDispatcher, NativeGameCoreApi, ::startGameNow)
+
+    /** Fast forward is on in the running game: its marker shows over the game. */
+    val fastForward get() = gameMenu.state.fastForward
 
     /** The core has a game running, from onGameStarted to onGameStopped. */
     var gameRunning = false
@@ -485,6 +513,8 @@ object AppController : NativeCallbacks {
 
     fun captureBinding(name: String) = controllersPage.capture(name)
 
+    fun captureHotkey(name: String) = controllersPage.captureHotkey(name)
+
     fun cancelCapture() = controllersPage.cancelCapture()
 
     fun clearBinding(name: String) = controllersPage.clear(name)
@@ -713,7 +743,18 @@ object AppController : NativeCallbacks {
 
     // --- Games ---
 
+    /** Starts [game], once it's asked whether to resume where it was left, if it has a resume state ([gameStarts]). */
     fun startGame(game: GameEntry) {
+        if (!ready || gameActive) return
+        gameStarts.play(game)
+    }
+
+    // The start itself, from its resume state with a resumeSerial. Checked again: things may have changed while the
+    // player answered.
+    private fun startGameNow(
+        game: GameEntry,
+        resumeSerial: String?,
+    ) {
         if (!ready || gameActive) return
         if (!catchUps.startsAllowed) {
             showMessage(COPYING)
@@ -727,7 +768,7 @@ object AppController : NativeCallbacks {
         holdMemcards = true
         screen = Screen.Game
         // It boots once the game screen's surface exists.
-        NativeLibrary.startGame(game.path)
+        NativeLibrary.startGame(game.path, resumeSerial)
     }
 
     // Back to the library, which waits for the game's onGameStopped() before it starts another.
@@ -746,6 +787,7 @@ object AppController : NativeCallbacks {
     fun openPrompt() {
         if (screen != Screen.Game || promptOpen) return
         promptOpen = true
+        gameMenu.opened()
         controllers?.releaseAll()
         pauseGame()
     }
@@ -771,6 +813,12 @@ object AppController : NativeCallbacks {
         if (!promptOpen) return
         promptOpen = false
         leaveGame()
+    }
+
+    // Exit game, once the menu has saved the resume state, or failed to ([InGameMenu.exit]).
+    private fun exitGame(resumeError: String?) {
+        quitFromPrompt()
+        resumeError?.let { showError("Couldn't save your place: $it") }
     }
 
     // --- SD card removal ---
@@ -1202,10 +1250,15 @@ object AppController : NativeCallbacks {
 
     // --- NativeCallbacks ---
 
-    override fun onGameStarted(title: String) {
+    override fun onGameStarted(
+        title: String,
+        serial: String,
+    ) {
         mainHandler.post {
             Log.i(TAG, "Game started: $title")
             gameRunning = true
+            gameMenu.gameStarted(serial)
+            readSelectChords()
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
             controllers?.releaseAll()
@@ -1230,6 +1283,9 @@ object AppController : NativeCallbacks {
             promptOpen = false
             gameActive = false
             holdMemcards = false
+            osd.clear()
+            gameMenu.gameStopped()
+            controllers?.selectChordDescriptors = emptySet()
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
             if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
@@ -1243,6 +1299,44 @@ object AppController : NativeCallbacks {
     }
 
     override fun onBindingCaptured(binding: String) = controllersPage.onBindingCaptured(binding)
+
+    /**
+     * The controllers with a hotkey bound, whose Select the game sees only once it's known not to be a chord
+     * ([io.github.ilyalissoboi.goosestation.input.SelectChord]). Read as the game starts: hotkeys change only outside
+     * a game, and a controller connected during one has its Select held back from the next.
+     */
+    private fun readSelectChords() {
+        val input = controllers ?: return
+        val connected = input.connected.value.map { it.descriptor }
+        scope.launch {
+            val chorded =
+                withContext(gameDispatcher) {
+                    connected.filter { descriptor ->
+                        NativeLibrary.getHotkeyBindings(descriptor)?.any { it.binding != null } == true
+                    }
+                }
+            if (gameRunning) input.selectChordDescriptors = chorded.toSet()
+        }
+    }
+
+    override fun onOsdMessage(
+        key: String,
+        text: String,
+        seconds: Float,
+        icon: ArgbImage?,
+    ) {
+        mainHandler.post {
+            if (seconds == 0f) {
+                osd.remove(key)
+            } else {
+                CoreMessages.translate(key, text)?.let { osd.post(it, key.ifEmpty { null }, seconds, icon) }
+            }
+        }
+    }
+
+    override fun onFastForwardChanged(enabled: Boolean) {
+        mainHandler.post { gameMenu.fastForwardChanged(enabled) }
+    }
 
     override fun onError(message: String) {
         mainHandler.post {

@@ -6,8 +6,10 @@
 #include "common/types.h"
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 class Error;
@@ -74,13 +76,54 @@ std::optional<std::string> GetBIOSDirectory();
 /// runs at a time. Does nothing before Initialize() succeeded.
 void RefreshGameList(bool invalidate_cache);
 
-/// Boots a game, once the app has given a surface. NotifyGameStarted() reports that it booted. Every call ends with
-/// one NotifyGameStopped(): when the game stops, or straight away if it fails to boot (after NotifyError()), is
-/// refused, or is cancelled by ShutdownGame() or another StartGame() before it boots.
-void StartGame(std::string path);
+/// Boots a game, once the app has given a surface, from resume_serial's resume state if that isn't empty.
+/// NotifyGameStarted() reports that it booted. Every call ends with one NotifyGameStopped(): when the game stops, or
+/// straight away if it fails to boot (after NotifyError()), is refused, or is cancelled by ShutdownGame() or another
+/// StartGame() before it boots.
+void StartGame(std::string path, std::string resume_serial);
 
 /// Shuts the running game down, or cancels a boot still waiting for a surface.
 void ShutdownGame();
+
+/// A picture from the core: width x height RGBA8 pixels.
+struct Picture
+{
+  u32 width;
+  u32 height;
+  std::vector<u32> pixels;
+};
+
+/// The in-game menu's calls. Each runs on the CPU thread; the first six block until it has.
+
+/// The modified times (Unix seconds) of serial's save states, 0 for none: [0] the resume state, [n] slot n, for
+/// System::PER_GAME_SAVE_STATE_SLOTS slots. All 0 for an empty serial, or before Initialize() succeeded.
+std::vector<s64> GetSaveStateTimes(std::string serial);
+
+/// The screenshot inside serial's state in slot (-1 for the resume state); nullopt if there's none or it can't be read.
+std::optional<Picture> GetSaveStateScreenshot(std::string serial, s32 slot);
+
+/// Saves the running game to slot, or loads slot (-1 for the resume state) into it. nullopt when it worked, else why
+/// not: no game, no serial, or the core's error.
+std::optional<std::string> SaveState(s32 slot);
+std::optional<std::string> LoadState(s32 slot);
+
+/// Saves the running game's resume state, as Exit game does before it stops it, if [Main] SaveStateOnExit is on and
+/// the game has a serial. nullopt when it's saved or there's nothing to save, else why not.
+std::optional<std::string> SaveResumeState();
+
+/// Whether the running game is writing to a memory card (System::IsSavingMemoryCards()).
+bool IsSavingMemoryCards();
+
+/// Port 1's analog mode: -1 if its controller isn't a DualShock (AnalogController) or no game runs, 0 digital, 1
+/// analog.
+s32 GetAnalogMode();
+
+/// These queue and return.
+void ResetGame();
+void SetFastForward(bool enabled);
+/// Presses Port 1's Analog button, as the controller's own does, if it's a DualShock.
+void ToggleAnalogMode();
+void SaveScreenshot();
 
 void SetPaused(bool paused);
 
@@ -92,6 +135,9 @@ void SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale);
 /// device only count once its connection is queued. Returns whether the key goes to the core: every key but Back and
 /// Mode, which open the menu.
 bool QueueKeyEvent(s32 device_id, s32 keycode, bool pressed);
+/// Several keys of one device, (keycode, pressed) in order, queued at once: the CPU thread passes them on in one batch,
+/// with no frame between them. Filtered as QueueKeyEvent() does.
+void QueueKeyEvents(s32 device_id, std::span<const std::pair<s32, bool>> keys);
 void QueueAxisEvent(s32 device_id, s32 axis, float value);
 
 /// A controller is Android-<index> to the core, with the index its descriptor has in [Android] ControllerDescriptors,
@@ -135,15 +181,26 @@ std::optional<u32> GetControllerIndex(std::string descriptor);
 /// controllers' stay as they are. An input Port 1's type doesn't have is refused.
 void SetPadBinding(std::string descriptor, std::string name, std::string binding);
 
-/// Drops the controller's bindings from every [Pad1] key, then adds its defaults, as a new controller gets them.
+/// Drops the controller's bindings from every [Pad1] key and its hotkeys, then adds its defaults, as a new controller
+/// gets them.
 void ResetPadBindings(std::string descriptor);
+
+/// The controller's hotkeys, each a Select chord (Button109 & Android-<index>/Button99) or none: [Hotkeys]
+/// ToggleFastForward, then [Pad1] Analog when Port 1's type has it, then [Hotkeys] Screenshot. nullopt as
+/// GetPadBindings() gives it.
+std::optional<std::vector<PadBinding>> GetHotkeyBindings(std::string descriptor);
+
+/// Binds the hotkey name (one GetHotkeyBindings() lists) to Select held with button (Button99) on the controller, or
+/// unbinds it if button is empty. Other controllers keep theirs. Saves and applies it.
+void SetHotkeyBinding(std::string descriptor, std::string name, std::string button);
 
 /// Captures the next input from the controller with descriptor, for binding: the first BindingCapture takes. It's
 /// reported with NotifyBindingCaptured(), without the Android-<index>/ prefix (Button99, +Axis23, -Axis0), and the
 /// capture ends. Until then every input event goes to the capture, so no game or hotkey sees it. A capture already
 /// running is replaced. A descriptor not in the table (one never connected), or a call before Initialize() succeeded,
 /// does nothing. Runs on the CPU thread and blocks.
-void StartBindingCapture(std::string descriptor);
+/// With select_chord, for a hotkey, only a button is taken, never Select or Start.
+void StartBindingCapture(std::string descriptor, bool select_chord);
 
 /// Ends the capture running, if any, without a report: once it returns, NotifyBindingCaptured() isn't called for it.
 /// Runs on the CPU thread and blocks.
@@ -168,9 +225,17 @@ void AttachCurrentThreadToJVM(const char* name);
 void DetachCurrentThreadFromJVM();
 
 /// Calls the app's NativeCallbacks, from any thread. Does nothing while the app has registered none.
-void NotifyGameStarted(std::string_view title);
+void NotifyGameStarted(std::string_view title, std::string_view serial);
 void NotifyGameStopped();
 void NotifyError(std::string_view message);
 void NotifyBindingCaptured(std::string_view binding);
+
+/// An on-screen message for the app to show, or a keyed one to take away (seconds 0): the core's text, with its icon
+/// characters gone, and the first frame of its image, if it has one (RGBA8, width x height pixels).
+void NotifyOsdMessage(std::string_view key, std::string_view text, float seconds, const u32* image_pixels,
+                      u32 image_width, u32 image_height);
+
+/// Fast forward was turned on or off, by the menu or a hotkey.
+void NotifyFastForwardChanged(bool enabled);
 
 } // namespace AndroidHost

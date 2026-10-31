@@ -28,11 +28,12 @@ interface KeyValueStore {
     ): Boolean
 }
 
-/** [KeyValueStore] on `SharedPreferences("folders")`, written synchronously. A failed write is logged. */
+/** [KeyValueStore] on `SharedPreferences(name)`, written synchronously. A failed write is logged. */
 class SharedPreferencesStore(
     context: Context,
+    name: String = "folders",
 ) : KeyValueStore {
-    private val prefs = context.getSharedPreferences("folders", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
 
     override fun getString(key: String): String? = prefs.getString(key, null)
 
@@ -41,7 +42,7 @@ class SharedPreferencesStore(
         value: String?,
     ): Boolean {
         val written = prefs.edit().putString(key, value).commit()
-        if (!written) Log.e("GooseStation", "Can't save the folder preference $key.")
+        if (!written) Log.e("GooseStation", "Can't save the preference $key.")
         return written
     }
 }

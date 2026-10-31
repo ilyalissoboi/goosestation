@@ -6,6 +6,7 @@
 #include "foreign_settings.h"
 
 #include "core/achievements.h"
+#include "core/analog_controller.h"
 #include "core/controller.h"
 #include "core/fullscreen_ui.h"
 #include "core/game_database.h"
@@ -91,6 +92,9 @@ static bool HasDeviceBinding(SettingsInterface& si, u32 index);
 static bool AddControllerToPort1(const std::string& identifier);
 static void MapNewController(const std::string& identifier);
 static bool IsVulkanRenderer(GPURenderer renderer);
+static bool Port1HasAnalogButton(SettingsInterface& si);
+static bool MoveAnalogBindings(SettingsInterface& si);
+static void PressAnalogButton();
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
@@ -103,6 +107,16 @@ static constexpr const char* DESCRIPTORS_SECTION = AndroidInputKeys::SETTINGS_SE
 static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY;
 
 // The inputs the remap page lists (GetPadBindings()) and edits (SetPadBinding()).
+// The DualShock's Analog button, Port 1's, which the app presses with a hotkey.
+static constexpr std::string_view ANALOG_BUTTON = "Analog";
+
+// The hotkey that presses it: the host's own (g_host_hotkeys), so it's a chord as the core's hotkeys are. A pad binding
+// would fire on each of a chord's keys.
+static constexpr std::string_view ANALOG_HOTKEY = "ToggleAnalogMode";
+
+// The hotkeys the Controllers page has, in its order, all in [Hotkeys]: each a Select chord.
+static constexpr std::string_view HOTKEYS[] = {"ToggleFastForward", ANALOG_HOTKEY, "Screenshot"};
+
 static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 {
   return type == InputBindingInfo::Type::Button || type == InputBindingInfo::Type::Axis ||
@@ -143,9 +157,11 @@ static u32 s_window_width = 0;
 static u32 s_window_height = 0;
 static float s_window_scale = 1.0f;
 static std::optional<std::string> s_pending_boot_path;
+static std::string s_pending_boot_state; // the save state the pending boot starts from, if any
 static std::string s_boot_path;
 static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
+static bool s_fast_forward_reported = false; // as the app was last told, CPU thread
 static u32 s_binding_capture_id = 0; // changes when a capture starts or is cancelled, so a stale report is dropped
 
 // Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
@@ -246,6 +262,7 @@ bool AndroidHost::InitializeConfig(Error* error)
 
   // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
   changed = AdaptForeignSettings(si, s_install_id) || changed;
+  changed = MoveAnalogBindings(si) || changed;
 
   // The controllers this install has seen, at the indices their bindings use. An adapted file has none.
   s_descriptors = si.GetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY);
@@ -347,7 +364,7 @@ void AndroidHost::ReloadSettings()
         adapted = AdaptForeignSettings(si, s_install_id);
 
         // The indices in use stay as they are, whatever the file has: an adapted one has none.
-        bool changed = adapted;
+        bool changed = MoveAnalogBindings(si) || adapted;
         if (si.GetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY) != s_descriptors)
         {
           WriteDescriptors(si);
@@ -591,7 +608,7 @@ std::optional<std::string> AndroidHost::GetCacheFolder()
   return *relative + '/';
 }
 
-void AndroidHost::StartGame(std::string path)
+void AndroidHost::StartGame(std::string path, std::string resume_serial)
 {
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to
   // boot, is refused or is cancelled before it boots. The app can't tell which game a late callback was for otherwise.
@@ -603,7 +620,7 @@ void AndroidHost::StartGame(std::string path)
   }
 
   EmuThread::RunOnThread(
-    [path = std::move(path)]() mutable {
+    [path = std::move(path), resume_serial = std::move(resume_serial)]() mutable {
       // A running game isn't replaced: the app shuts it down first. One that's stopping (shut down from inside a
       // frame, and only destroyed once System::Execute() returns) is waited for.
       const System::State state = System::GetState();
@@ -622,6 +639,8 @@ void AndroidHost::StartGame(std::string path)
       }
 
       s_pending_boot_path = std::move(path);
+      s_pending_boot_state =
+        resume_serial.empty() ? std::string() : System::GetGameSaveStateFileName(resume_serial, -1);
       if (state == System::State::Stopping)
         INFO_LOG("Waiting for the last game to stop to start '{}'.", Path::GetFileName(s_pending_boot_path.value()));
       else if (!s_window)
@@ -646,9 +665,16 @@ void AndroidHost::BootPendingGame()
   // Nothing held before the boot carries over into the game, nor stops its first press from counting.
   QueueReleaseAllInputs();
 
-  INFO_LOG("Starting '{}'.", s_boot_path);
+  SystemBootParameters parameters(s_boot_path);
+  parameters.save_state = std::move(s_pending_boot_state);
+  s_pending_boot_state.clear();
+  if (parameters.save_state.empty())
+    INFO_LOG("Starting '{}'.", s_boot_path);
+  else
+    INFO_LOG("Starting '{}' from '{}'.", s_boot_path, Path::GetFileName(parameters.save_state));
+
   Error error;
-  if (!System::BootSystem(SystemBootParameters(s_boot_path), &error))
+  if (!System::BootSystem(std::move(parameters), &error))
   {
     ERROR_LOG("Failed to start '{}': {}", s_boot_path, error.GetDescription());
     NotifyError(fmt::format("Failed to start {}: {}", Path::GetFileName(s_boot_path), error.GetDescription()));
@@ -664,6 +690,7 @@ void AndroidHost::ShutdownGame()
       {
         INFO_LOG("Cancelling the boot of '{}'.", Path::GetFileName(s_pending_boot_path.value()));
         s_pending_boot_path.reset();
+        s_pending_boot_state.clear();
         NotifyGameStopped();
       }
 
@@ -692,6 +719,187 @@ void AndroidHost::SetPaused(bool paused)
             card->Flush();
         }
       }
+    },
+    false);
+}
+
+static constexpr const char* NO_GAME_RUNNING = "No game is running.";
+static constexpr const char* NO_SERIAL = "This game has no serial, so it can't have save states.";
+
+std::vector<s64> AndroidHost::GetSaveStateTimes(std::string serial)
+{
+  std::vector<s64> times(System::PER_GAME_SAVE_STATE_SLOTS + 1, 0);
+  if (!s_initialized || serial.empty())
+    return times;
+
+  EmuThread::RunOnThread(
+    [&serial, &times]() {
+      for (s32 slot = 0; slot <= System::PER_GAME_SAVE_STATE_SLOTS; slot++)
+      {
+        // [0] is the resume state, slot -1 to the core.
+        const std::optional<SaveStateInfo> info = System::GetSaveStateInfo(serial.c_str(), (slot == 0) ? -1 : slot);
+        if (info.has_value())
+          times[static_cast<size_t>(slot)] = static_cast<s64>(info->timestamp);
+      }
+    },
+    true);
+  return times;
+}
+
+std::optional<AndroidHost::Picture> AndroidHost::GetSaveStateScreenshot(std::string serial, s32 slot)
+{
+  if (!s_initialized || serial.empty())
+    return std::nullopt;
+
+  std::optional<Picture> result;
+  EmuThread::RunOnThread(
+    [&serial, slot, &result]() {
+      const std::string path = System::GetGameSaveStateFileName(serial, slot);
+      if (!FileSystem::FileExists(path.c_str()))
+        return;
+
+      const std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(path.c_str());
+      if (!info.has_value() || !info->screenshot.IsValid())
+        return;
+
+      const RGBA8Image& image = info->screenshot;
+      const u32* pixels = image.GetPixels();
+      result.emplace(Picture{image.GetWidth(), image.GetHeight(),
+                             std::vector<u32>(pixels, pixels + image.GetWidth() * image.GetHeight())});
+    },
+    true);
+  return result;
+}
+
+/// Runs action(path, error) on the CPU thread for the running game's slot file: the reason it couldn't, or nullopt.
+template<typename Action>
+static std::optional<std::string> RunOnSlot(s32 slot, const Action& action)
+{
+  if (!AndroidHost::s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [slot, &action, &result]() {
+      if (!System::IsValid())
+      {
+        result = NO_GAME_RUNNING;
+        return;
+      }
+
+      const std::string& serial = System::GetGameSerial();
+      if (serial.empty())
+      {
+        result = NO_SERIAL;
+        return;
+      }
+
+      Error error;
+      const std::string path = System::GetGameSaveStateFileName(serial, slot);
+      if (!action(path, &error))
+        result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
+    },
+    true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::SaveState(s32 slot)
+{
+  return RunOnSlot(slot, [](const std::string& path, Error* error) {
+    return System::SaveState(path.c_str(), error, false);
+  });
+}
+
+std::optional<std::string> AndroidHost::LoadState(s32 slot)
+{
+  return RunOnSlot(slot, [](const std::string& path, Error* error) {
+    // LoadState() doesn't say when the file is missing in so many words.
+    if (!FileSystem::FileExists(path.c_str()))
+    {
+      Error::SetStringView(error, "There's no save in this slot.");
+      return false;
+    }
+
+    // With the core's undo state: a load that fails part-way puts the game back where it was.
+    return System::LoadState(path.c_str(), error, true);
+  });
+}
+
+std::optional<std::string> AndroidHost::SaveResumeState()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [&result]() {
+      // A game with no serial (a PS-EXE, the BIOS) has nowhere to keep one, and none could be offered.
+      if (!System::IsValid() || !g_settings.save_state_on_exit || System::GetGameSerial().empty())
+        return;
+
+      Error error;
+      if (!System::SaveResumeState(&error))
+      {
+        ERROR_LOG("Failed to save the resume state: {}", error.GetDescription());
+        result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
+      }
+    },
+    true);
+  return result;
+}
+
+bool AndroidHost::IsSavingMemoryCards()
+{
+  if (!s_initialized)
+    return false;
+
+  bool saving = false;
+  EmuThread::RunOnThread([&saving]() { saving = System::IsValid() && System::IsSavingMemoryCards(); }, true);
+  return saving;
+}
+
+s32 AndroidHost::GetAnalogMode()
+{
+  if (!s_initialized)
+    return -1;
+
+  s32 mode = -1;
+  EmuThread::RunOnThread(
+    [&mode]() {
+      const Controller* controller = System::IsValid() ? System::GetController(0) : nullptr;
+      if (controller && controller->GetType() == ControllerType::AnalogController)
+        mode = controller->InAnalogMode() ? 1 : 0;
+    },
+    true);
+  return mode;
+}
+
+void AndroidHost::ResetGame()
+{
+  EmuThread::RunOnThread(
+    []() {
+      if (System::IsValid())
+        System::ResetSystem();
+    },
+    false);
+}
+
+void AndroidHost::SetFastForward(bool enabled)
+{
+  EmuThread::RunOnThread([enabled]() { System::SetFastForwardEnabled(enabled); }, false);
+}
+
+void AndroidHost::ToggleAnalogMode()
+{
+  EmuThread::RunOnThread(&PressAnalogButton, false);
+}
+
+void AndroidHost::SaveScreenshot()
+{
+  EmuThread::RunOnThread(
+    []() {
+      if (System::IsValid())
+        System::SaveScreenshot();
     },
     false);
 }
@@ -765,6 +973,32 @@ bool AndroidHost::QueueKeyEvent(s32 device_id, s32 keycode, bool pressed)
 
   QueueInputEvent(InputEvent{InputEvent::Type::Key, device_id, keycode, pressed ? 1.0f : 0.0f, {}, {}});
   return true;
+}
+
+void AndroidHost::QueueKeyEvents(s32 device_id, std::span<const std::pair<s32, bool>> keys)
+{
+  bool wake;
+  {
+    std::unique_lock lock(s_input_mutex);
+    if (!s_accept_input_events ||
+        std::find(s_queued_device_ids.begin(), s_queued_device_ids.end(), device_id) == s_queued_device_ids.end())
+    {
+      return;
+    }
+
+    // All under the one lock: the CPU thread takes the queue whole, so it sees them together.
+    wake = s_input_queue.empty();
+    for (const auto& [keycode, pressed] : keys)
+    {
+      if (keycode == AndroidInputKeys::KEYCODE_BACK || keycode == AndroidInputKeys::KEYCODE_BUTTON_MODE)
+        continue;
+
+      s_input_queue.push_back(InputEvent{InputEvent::Type::Key, device_id, keycode, pressed ? 1.0f : 0.0f, {}, {}});
+    }
+  }
+
+  if (wake)
+    EmuThread::Wake();
 }
 
 void AndroidHost::QueueAxisEvent(s32 device_id, s32 axis, float value)
@@ -1059,6 +1293,10 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
       const std::string section = Controller::GetSettingsSection(0);
       for (const Controller::ControllerBindingInfo& bi : info->bindings)
       {
+        // A hotkey (GetHotkeyBindings()).
+        if (std::string_view(bi.name) == ANALOG_BUTTON)
+          continue;
+
         PadBindingKind kind;
         switch (bi.type)
         {
@@ -1082,6 +1320,73 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
     },
     true);
   return result;
+}
+
+std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetHotkeyBindings(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<std::vector<PadBinding>> result;
+  EmuThread::RunOnThread(
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface& si = *s_base_settings_interface;
+      const bool analog = Port1HasAnalogButton(si);
+      result.emplace();
+      for (const std::string_view name : HOTKEYS)
+      {
+        if (name == ANALOG_HOTKEY && !analog)
+          continue;
+
+        const std::string key(name);
+        result->push_back(PadBinding{key, key, PadBindingKind::Button,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList("Hotkeys", key.c_str()),
+                                                                        index.value())});
+      }
+    },
+    true);
+  return result;
+}
+
+void AndroidHost::SetHotkeyBinding(std::string descriptor, std::string name, std::string button)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor, &name, &button]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        if (std::find(std::begin(HOTKEYS), std::end(HOTKEYS), name) == std::end(HOTKEYS) ||
+            (name == ANALOG_HOTKEY && !Port1HasAnalogButton(si)))
+        {
+          WARNING_LOG("'{}' isn't a hotkey this pad can have, not binding it.", name);
+          return;
+        }
+
+        const std::string binding = button.empty() ? std::string() : AndroidInputKeys::SelectChord(index.value(), button);
+        si.SetStringList("Hotkeys", name.c_str(),
+                         AndroidInputKeys::SetDeviceBinding(si.GetStringList("Hotkeys", name.c_str()), index.value(),
+                                                            binding));
+
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      System::ReloadInputBindings();
+    },
+    true);
 }
 
 std::optional<u32> AndroidHost::GetControllerIndex(std::string descriptor)
@@ -1145,6 +1450,44 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
     true);
 }
 
+// Whether Port 1's controller type has the Analog button (a DualShock), under the settings lock.
+bool AndroidHost::Port1HasAnalogButton(SettingsInterface& si)
+{
+  const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+  return info && std::any_of(info->bindings.begin(), info->bindings.end(),
+                             [](const Controller::ControllerBindingInfo& bi) { return bi.name == ANALOG_BUTTON; });
+}
+
+// Moves [Pad1] Analog's Android bindings (the old Analog Toggle row's) to the analog mode hotkey, under the settings
+// lock. Returns whether it changed anything, to save.
+bool AndroidHost::MoveAnalogBindings(SettingsInterface& si)
+{
+  const std::string section = Controller::GetSettingsSection(0);
+  const std::string hotkey(ANALOG_HOTKEY);
+  const AndroidInputKeys::AnalogBindings moved = AndroidInputKeys::MoveAnalogBindings(
+    si.GetStringList(section.c_str(), "Analog"), si.GetStringList("Hotkeys", hotkey.c_str()));
+  if (!moved.changed)
+    return false;
+
+  INFO_LOG("Moved the Analog Toggle bindings to the {} hotkey.", hotkey);
+  si.SetStringList(section.c_str(), "Analog", moved.analog);
+  si.SetStringList("Hotkeys", hotkey.c_str(), moved.hotkey);
+  return true;
+}
+
+// CPU thread: presses Port 1's Analog button, as the DualShock's own does, if it's a DualShock.
+void AndroidHost::PressAnalogButton()
+{
+  Controller* controller = System::IsValid() ? System::GetController(0) : nullptr;
+  if (!controller || controller->GetType() != ControllerType::AnalogController)
+    return;
+
+  // The press toggles, the release does nothing.
+  const u32 analog = static_cast<u32>(AnalogController::Button::Analog);
+  controller->SetBindState(analog, 1.0f);
+  controller->SetBindState(analog, 0.0f);
+}
+
 void AndroidHost::ResetPadBindings(std::string descriptor)
 {
   if (!s_initialized)
@@ -1180,6 +1523,16 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
             si.SetStringList(section.c_str(), key.c_str(), kept);
         }
 
+        // Its hotkeys too: unassigned by default.
+        for (const std::string_view name : HOTKEYS)
+        {
+          const std::string key(name);
+          const std::vector<std::string> bindings = si.GetStringList("Hotkeys", key.c_str());
+          const std::vector<std::string> kept = AndroidInputKeys::SetDeviceBinding(bindings, index.value(), {});
+          if (kept.size() != bindings.size())
+            si.SetStringList("Hotkeys", key.c_str(), kept);
+        }
+
         AddDefaultBindings(si, index.value());
 
         Error error;
@@ -1192,13 +1545,13 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
     true);
 }
 
-void AndroidHost::StartBindingCapture(std::string descriptor)
+void AndroidHost::StartBindingCapture(std::string descriptor, bool select_chord)
 {
   if (!s_initialized)
     return;
 
   EmuThread::RunOnThread(
-    [&descriptor]() {
+    [&descriptor, select_chord]() {
       const std::optional<u32> index = FindDescriptorIndex(descriptor);
       if (!index.has_value())
         return;
@@ -1217,8 +1570,8 @@ void AndroidHost::StartBindingCapture(std::string descriptor)
       ProcessInputQueue();
       if (source)
         source->PollEvents();
-      AndroidInputKeys::BindingCapture capture(index.value(),
-                                               source ? source->GetCenteredAxes(index.value()) : std::vector<u32>());
+      AndroidInputKeys::BindingCapture capture(
+        index.value(), source ? source->GetCenteredAxes(index.value()) : std::vector<u32>(), select_chord);
       InputManager::SetHook([capture, id](InputBindingKey key, float value) mutable {
         const std::optional<InputBindingKey> captured = capture.OnEvent(key, value);
         if (!captured.has_value())
@@ -1266,6 +1619,10 @@ void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& loc
   // Settings::UpdateLogSettings() follows Logging/LogToDebug, but on Android the core always logs to logcat.
   g_settings.log_to_debug = true;
   Log::SetDebugOutputParams(true);
+
+  // The app shows fast forward over the game itself (OsdLayer), and the paused game has its menu: the core's own
+  // status icons would show the same things twice.
+  g_settings.display_show_status_indicators = false;
 
   // The build's page size is a multiple of 4 KB pages, but fastmem can't map pages smaller than the system's.
   const long system_page_size = sysconf(_SC_PAGESIZE);
@@ -1427,13 +1784,21 @@ void Host::OnSystemStarted()
   const std::string& title = System::GetGameTitle();
   INFO_LOG("Game started: {}", title);
   AndroidHost::s_game_started = true;
-  AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title);
+  AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
+                                 System::GetGameSerial());
 }
 
 void Host::OnSystemDestroyed()
 {
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
+
+  // Fast forward ends with the game.
+  if (AndroidHost::s_fast_forward_reported)
+  {
+    AndroidHost::s_fast_forward_reported = false;
+    AndroidHost::NotifyFastForwardChanged(false);
+  }
 
   // A boot that failed destroys the system too: BootPendingGame() reports that one.
   if (!AndroidHost::s_game_started)
@@ -1473,6 +1838,29 @@ void Host::RequestResizeHostDisplay(s32 width, s32 height)
 
 void Host::FrameDone()
 {
+  // The app shows a marker while fast forward is on, whether the menu or a hotkey turned it on.
+  const bool fast_forward = System::IsFastForwardEnabled();
+  if (fast_forward != AndroidHost::s_fast_forward_reported)
+  {
+    AndroidHost::s_fast_forward_reported = fast_forward;
+    AndroidHost::NotifyFastForwardChanged(fast_forward);
+  }
+}
+
+void Host::OnOSDMessagePosted(std::string_view key, std::string_view message, float duration, const OSDImage* image)
+{
+  // An icon message is the icon, two spaces, then the text.
+  const std::string text = ImGuiManager::StripIconCharacters(message);
+  const std::string_view trimmed = StringUtil::StripWhitespace(text);
+  if (image && image->width > 0 && image->frame_height > 0 &&
+      image->pixels.size() >= static_cast<size_t>(image->width) * image->frame_height)
+  {
+    AndroidHost::NotifyOsdMessage(key, trimmed, duration, image->pixels.data(), image->width, image->frame_height);
+  }
+  else
+  {
+    AndroidHost::NotifyOsdMessage(key, trimmed, duration, nullptr, 0, 0);
+  }
 }
 
 std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)
@@ -1604,4 +1992,11 @@ const char* InputManager::ConvertHostKeyboardCodeToIcon(u32 code)
 
 // No host hotkeys yet.
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
+// The Controllers page's Analog mode hotkey: the DualShock's Analog button, on the chord's release, as the core's
+// toggles are.
+DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANSLATE_NOOP("Hotkeys", "Toggle Analog Mode"),
+              [](s32 pressed) {
+                if (pressed == 0)
+                  AndroidHost::PressAnalogButton();
+              })
 END_HOTKEY_LIST()

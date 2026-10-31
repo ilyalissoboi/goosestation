@@ -27,6 +27,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
@@ -46,6 +47,13 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.GameMenuActions
+import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SaveSlots
+import io.github.ilyalissoboi.goosestation.app.SlotEntry
+import io.github.ilyalissoboi.goosestation.app.SlotMode
+import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -60,6 +68,8 @@ import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /**
  * The settings pages and the library's top bar at phone portrait and handheld landscape sizes, at font scales 1.0 and
@@ -78,6 +88,29 @@ class OrientationLayoutTest {
     }
 
     private companion object {
+        val HOTKEYS =
+            listOf(
+                PadBinding(
+                    "ToggleFastForward",
+                    "Toggle Fast Forward",
+                    PadBindingKind.Button,
+                    "Button109 & Android-1/Button99",
+                ),
+                PadBinding("ToggleAnalogMode", "Toggle Analog Mode", PadBindingKind.Button, null),
+                PadBinding("Screenshot", "Save Screenshot", PadBindingKind.Button, "Button109 & Android-1/Button188"),
+            )
+
+        val LONG_GAME =
+            GameEntry(
+                path = "content://test/tree/games/document/long.cue",
+                title = "The Legend of the Extraordinarily Long-Named Adventure: Director's Cut Special Edition",
+                serial = "SLPS-01234",
+                region = "NTSC-J",
+                totalPlayedSeconds = 12 * 3600 + 34 * 60,
+                lastPlayedSeconds = 0,
+                coverPath = null,
+            )
+
         const val SCREEN = "screen"
         const val SCPH5500 = "SCPH-5500 (v3.0 09-09-96 J)"
 
@@ -256,16 +289,22 @@ class OrientationLayoutTest {
 
     /**
      * Every text on screen: laid out whole (not cut off, no word broken over lines), inside the screen across, and
-     * clear of every other text.
+     * clear of every other text. With [inView], only the part of each text its scrolling containers show is compared,
+     * and texts scrolled out of view are left out: for a screen of several scrolling panels.
      */
-    private fun assertTextsLaidOut() {
+    private fun assertTextsLaidOut(inView: Boolean = false) {
         val screen = screen()
         val nodes =
             rule
                 .onAllNodes(hasText("", substring = true), useUnmergedTree = true)
                 .fetchSemanticsNodes()
                 .filter { it.config.getOrNull(SemanticsActions.GetTextLayoutResult) != null }
-        val boxes = nodes.map { it to bounds(rule.onNode(matchesId(it.id), useUnmergedTree = true)) }
+        val boxes =
+            nodes
+                .map { node ->
+                    val interaction = rule.onNode(matchesId(node.id), useUnmergedTree = true)
+                    node to if (inView) interaction.getBoundsInRoot() else bounds(interaction)
+                }.filter { (_, box) -> !inView || (box.right > box.left && box.bottom > box.top) }
         for ((node, box) in boxes) {
             val text = node.text()
             val results = mutableListOf<TextLayoutResult>()
@@ -310,6 +349,121 @@ class OrientationLayoutTest {
         val node = rule.onAllNodesWithText(text, substring = true, useUnmergedTree = true)[index]
         node.performScrollTo()
         node.assertIsDisplayed()
+    }
+
+    @Test
+    fun theGameMenuAndItsSlots() {
+        val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+        val entries =
+            (1..SaveSlots.COUNT).map {
+                SlotEntry(
+                    it,
+                    if (it % 3 ==
+                        0
+                    ) {
+                        null
+                    } else {
+                        now.toEpochSecond() - 86_400 * it
+                    },
+                )
+            }
+        val menu = mutableStateOf(GameMenuState(booted = true, analogMode = true))
+        eachConfig({ GameMenu(menu.value, NoMenuActions, LONG_GAME, now) }) {
+            assertTextsLaidOut(inView = true)
+            assertTrue("Resume is focused, not ${focusedText()}", focusedHas("Resume"))
+            pressUntilFocusedInView(Key.DirectionDown, "Exit game")
+
+            menu.value = menu.value.copy(slots = SlotPanel(SlotMode.Save, entries, focus = 1))
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            assertTrue("Slot 1 is focused, not ${focusedText()}", focusedHas("Slot 1"))
+            pressUntilFocusedInView(Key.DirectionDown, "Slot 10")
+            assertTextsLaidOut(inView = true)
+            // As the next config's menu opens.
+            menu.value = GameMenuState(booted = true, analogMode = true)
+        }
+    }
+
+    @Test
+    fun theResumePromptWithALongTitle() {
+        val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+        val offer = ResumeOffer(LONG_GAME, now.toEpochSecond() - 86_400, null)
+        eachConfig({ ResumePrompt(offer, onResume = {}, onStartOver = {}, onCancel = {}, now = now) }) {
+            assertTextsLaidOut()
+            assertTrue("Resume is focused, not ${focusedText()}", focusedHas("Resume"))
+            assertFocusedInView()
+            // Beside Resume, or under it once the buttons wrap.
+            press(Key.DirectionRight)
+            if (!focusedHas("Start over")) pressUntilFocused(Key.DirectionDown, "Start over")
+            assertFocusedInView()
+        }
+    }
+
+    /** As [pressUntilFocused], each focused element all in view in the scrolling container around it. */
+    private fun pressUntilFocusedInView(
+        key: Key,
+        text: String,
+        limit: Int = 30,
+    ) {
+        repeat(limit) {
+            if (focusedHas(text)) return
+            press(key)
+            assertFocusedInView(scrollerAroundFocused())
+        }
+        if (!focusedHas(text)) fail("$key never focused \"$text\"")
+    }
+
+    /** The scrolling container the focused element is in, of the several a screen can have. */
+    private fun scrollerAroundFocused(): DpRect {
+        val focused = bounds(rule.onNode(isFocused()))
+        val scrollers = rule.onAllNodes(hasScrollAction())
+        val count = scrollers.fetchSemanticsNodes().size
+        // The one it overlaps most: a row half scrolled out still mostly overlaps its own.
+        return (0 until count)
+            .map { bounds(scrollers[it]) }
+            .maxBy { box ->
+                val across = minOf(box.right, focused.right) - maxOf(box.left, focused.left)
+                val down = minOf(box.bottom, focused.bottom) - maxOf(box.top, focused.top)
+                if (across > 0.dp && down > 0.dp) across.value * down.value else 0f
+            }
+    }
+
+    private object NoMenuActions : GameMenuActions {
+        override fun resume() {}
+
+        override fun openSlots(mode: SlotMode) {}
+
+        override fun closeSlots() {}
+
+        override fun pickSlot(slot: Int) {}
+
+        override fun confirmReplace() {}
+
+        override fun cancelReplace() {}
+
+        override fun toggleFastForward() {}
+
+        override fun toggleAnalogMode() {}
+
+        override fun screenshot() {}
+
+        override fun askReset() {}
+
+        override fun confirmReset() {}
+
+        override fun cancelReset() {}
+
+        override fun exit() {}
+
+        override fun confirmExit() {}
+
+        override fun cancelExit() {}
+
+        override fun replaceResume() {}
+
+        override fun keepResume() {}
+
+        override fun cancelReplaceResume() {}
     }
 
     @Test
@@ -427,6 +581,7 @@ class OrientationLayoutTest {
                 labels = emptyMap(),
                 selected = selected,
                 bindings = BINDINGS,
+                hotkeys = HOTKEYS,
                 bindingsFor = LONG_PAD.descriptor,
                 capturing = null,
                 secondsLeft = 0,
@@ -459,6 +614,8 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Clear"))
             assertFocusedInView()
             press(Key.DirectionLeft)
+            pressUntilFocused(Key.DirectionDown, "Analog mode")
+            assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "Reset to defaults")
             assertShows("Every connected controller drives Port 1")
         }

@@ -150,4 +150,17 @@ class DataLayoutTest {
             default.others(listOf("memcards" to false, "settings.ini" to true)),
         )
     }
+
+    @Test
+    fun theCoresSaveStateTempFilesStayOnTheDevice() {
+        assertTrue(default.mirrored("savestates/SCUS-94900_1.sav"))
+        assertFalse(default.mirrored("savestates/SCUS-94900_1.sav.a1B2c3"))
+        assertFalse(default.stray("savestates/SCUS-94900_1.sav.a1B2c3"))
+        // Wherever the save states folder is.
+        val moved = DataLayout.withCorePaths(listOf("states/"), null)
+        assertFalse(moved.mirrored("states/SCUS-94900_resume.sav.Zz09aB"))
+        // Only a save state's: other names keep their dots.
+        assertTrue(default.mirrored("memcards/x.mcd.a1B2c3"))
+        assertTrue(default.mirrored("savestates/SCUS-94900_1.sav.backup1"))
+    }
 }

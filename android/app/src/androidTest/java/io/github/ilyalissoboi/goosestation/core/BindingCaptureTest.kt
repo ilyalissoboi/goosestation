@@ -39,7 +39,10 @@ class BindingCaptureTest {
         ContentBridge.init(context)
         NativeLibrary.setCallbacks(
             object : NativeCallbacks {
-                override fun onGameStarted(title: String) {}
+                override fun onGameStarted(
+                    title: String,
+                    serial: String,
+                ) {}
 
                 override fun onGameStopped() {}
 
@@ -72,18 +75,36 @@ class BindingCaptureTest {
 
     @Test
     fun capturesAButtonUntilCancelled() {
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.onKey(DEVICE_ID, 99, true) // KEYCODE_BUTTON_X
         NativeLibrary.onKey(DEVICE_ID, 99, false)
 
         assertEquals("Button99", captured.poll(2, TimeUnit.SECONDS))
 
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.cancelBindingCapture()
         NativeLibrary.onKey(DEVICE_ID, 100, true) // KEYCODE_BUTTON_Y
         NativeLibrary.onKey(DEVICE_ID, 100, false)
 
         assertNull(captured.poll(500, TimeUnit.MILLISECONDS))
+    }
+
+    // A hotkey's capture: Select held, then a button, sent together as SelectChord sends them (onKeys).
+    @Test
+    fun aChordCaptureTakesTheButtonNotSelect() {
+        NativeLibrary.startBindingCapture("pad-a", true)
+        NativeLibrary.onKeys(DEVICE_ID, intArrayOf(109, 99), booleanArrayOf(true, true)) // SELECT, then X
+
+        assertEquals("Button99", captured.poll(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun aChordCaptureSkipsStart() {
+        NativeLibrary.startBindingCapture("pad-a", true)
+        NativeLibrary.onKey(DEVICE_ID, 108, true) // KEYCODE_BUTTON_START
+        NativeLibrary.onKey(DEVICE_ID, 100, true) // KEYCODE_BUTTON_Y
+
+        assertEquals("Button100", captured.poll(2, TimeUnit.SECONDS))
     }
 
     @Test
@@ -97,15 +118,15 @@ class BindingCaptureTest {
     // A second capture replaces the first, and one for a controller never connected does nothing.
     @Test
     fun secondCaptureReplacesTheFirst() {
-        NativeLibrary.startBindingCapture("pad-a")
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.onKey(DEVICE_ID, 96, true) // KEYCODE_BUTTON_A
 
         assertEquals("Button96", captured.poll(2, TimeUnit.SECONDS))
         NativeLibrary.onKey(DEVICE_ID, 97, true)
         assertNull(captured.poll(500, TimeUnit.MILLISECONDS))
 
-        NativeLibrary.startBindingCapture("never-connected")
+        NativeLibrary.startBindingCapture("never-connected", false)
         NativeLibrary.onKey(DEVICE_ID, 98, true)
         assertNull(captured.poll(500, TimeUnit.MILLISECONDS))
     }
@@ -113,7 +134,7 @@ class BindingCaptureTest {
     // The trigger's key and two axes all follow it (PadState), and the first to cross wins.
     @Test
     fun capturesATrigger() {
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.onAxis(DEVICE_ID, 23, 0.0f) // AXIS_BRAKE
         NativeLibrary.onAxis(DEVICE_ID, 23, 1.0f)
 
@@ -126,7 +147,7 @@ class BindingCaptureTest {
     @Test
     fun stickAtRestBeforeTheCaptureIsTakenAtOnce() {
         NativeLibrary.onAxis(DEVICE_ID, 0, 0.1f) // AXIS_X
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.onAxis(DEVICE_ID, 0, 0.8f)
 
         assertEquals("+Axis0", captured.poll(2, TimeUnit.SECONDS))
@@ -141,7 +162,7 @@ class BindingCaptureTest {
         memory.record(DEVICE_ID) { 0f }
         val latest = memory.latest(DEVICE_ID)!!
         for ((index, value) in latest.withIndex()) NativeLibrary.onAxis(DEVICE_ID, axes[index], value)
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.onAxis(DEVICE_ID, 0, 0.8f)
 
         assertEquals("+Axis0", captured.poll(2, TimeUnit.SECONDS))
@@ -157,13 +178,13 @@ class BindingCaptureTest {
         onCaptured = { binding ->
             if (nested.compareAndSet(false, true)) {
                 NativeLibrary.onAxis(DEVICE_ID, 0, 0.0f) // AXIS_X at rest: a first 0, never passed on as an event
-                NativeLibrary.startBindingCapture("pad-a")
+                NativeLibrary.startBindingCapture("pad-a", false)
                 nestedStarted.countDown()
             } else {
                 captured.put(binding)
             }
         }
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.onKey(DEVICE_ID, 99, true)
         assertTrue(nestedStarted.await(2, TimeUnit.SECONDS))
 
@@ -174,7 +195,7 @@ class BindingCaptureTest {
 
     @Test
     fun stickNeverReportedMustReturnFirst() {
-        NativeLibrary.startBindingCapture("pad-a")
+        NativeLibrary.startBindingCapture("pad-a", false)
         NativeLibrary.onAxis(DEVICE_ID, 1, 0.7f) // AXIS_Y
 
         assertNull(captured.poll(500, TimeUnit.MILLISECONDS))

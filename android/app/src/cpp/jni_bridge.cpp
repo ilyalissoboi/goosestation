@@ -41,6 +41,10 @@ jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
 jmethodID s_on_binding_captured = nullptr;
+jmethodID s_on_osd_message = nullptr;
+jmethodID s_on_fast_forward_changed = nullptr;
+jclass s_argb_image_class = nullptr;
+jmethodID s_argb_image_constructor = nullptr;
 jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
@@ -94,6 +98,43 @@ void CallCallback(jmethodID method, std::optional<std::string_view> arg)
   env->DeleteLocalRef(callbacks);
 }
 
+// The registered NativeCallbacks as a local reference, or null with none.
+jobject GetCallbacks(JNIEnv* env)
+{
+  std::unique_lock lock(s_callbacks_mutex);
+  return s_callbacks ? env->NewLocalRef(s_callbacks) : nullptr;
+}
+
+// An ArgbImage of width x height RGBA8 pixels (0xAABBGGRR), or null (with no exception pending) if it can't be made.
+// Each becomes 0xAARRGGBB, as Bitmap.createBitmap() takes it; opaque forces alpha to 0xFF.
+jobject ToArgbImage(JNIEnv* env, const u32* rgba, u32 width, u32 height, bool opaque)
+{
+  const size_t count = static_cast<size_t>(width) * height;
+  std::vector<jint> argb(count);
+  for (size_t i = 0; i < count; i++)
+  {
+    const u32 p = rgba[i];
+    const u32 a = opaque ? 0xFF000000u : (p & 0xFF000000u);
+    argb[i] = static_cast<jint>(a | ((p & 0xFFu) << 16) | (p & 0xFF00u) | ((p >> 16) & 0xFFu));
+  }
+
+  jintArray pixels = env->NewIntArray(static_cast<jsize>(count));
+  if (!pixels)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  env->SetIntArrayRegion(pixels, 0, static_cast<jsize>(count), argb.data());
+  jobject image = env->NewObject(s_argb_image_class, s_argb_image_constructor, static_cast<jint>(width),
+                                 static_cast<jint>(height), pixels);
+  env->DeleteLocalRef(pixels);
+  if (ClearException(env))
+    return nullptr;
+
+  return image;
+}
+
 // A String[] of strings, or null (with no exception pending) if it can't be made.
 jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& strings)
 {
@@ -115,6 +156,53 @@ jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& strings
 
     env->SetObjectArrayElement(result, static_cast<jsize>(i), string);
     env->DeleteLocalRef(string);
+  }
+
+  return result;
+}
+// A PadBinding[] of bindings, or null (with no exception pending) for none or if it can't be made.
+jobjectArray ToPadBindingArray(JNIEnv* env, const std::optional<std::vector<AndroidHost::PadBinding>>& bindings)
+{
+  if (!bindings.has_value())
+    return nullptr;
+
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(bindings->size()), s_pad_binding_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < bindings->size(); i++)
+  {
+    const AndroidHost::PadBinding& binding = (*bindings)[i];
+    jstring name = ToJString(env, binding.name);
+    jstring display_name = ToJString(env, binding.display_name);
+    jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
+    jobject entry = nullptr;
+    if (name && display_name && (value || !binding.binding.has_value()))
+    {
+      entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
+                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      ERROR_LOG("Failed to pass Port 1's input '{}' to Java.", binding.name);
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
   }
 
   return result;
@@ -148,9 +236,29 @@ void AndroidHost::DetachCurrentThreadFromJVM()
   s_attached_env = nullptr;
 }
 
-void AndroidHost::NotifyGameStarted(std::string_view title)
+void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view serial)
 {
-  CallCallback(s_on_game_started, title);
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  jstring jtitle = ToJString(env.get(), title);
+  jstring jserial = ToJString(env.get(), serial);
+  if (jtitle && jserial)
+  {
+    env->CallVoidMethod(callbacks, s_on_game_started, jtitle, jserial);
+    ClearException(env.get());
+  }
+
+  if (jserial)
+    env->DeleteLocalRef(jserial);
+  if (jtitle)
+    env->DeleteLocalRef(jtitle);
+  env->DeleteLocalRef(callbacks);
 }
 
 void AndroidHost::NotifyGameStopped()
@@ -166,6 +274,50 @@ void AndroidHost::NotifyError(std::string_view message)
 void AndroidHost::NotifyBindingCaptured(std::string_view binding)
 {
   CallCallback(s_on_binding_captured, binding);
+}
+
+void AndroidHost::NotifyOsdMessage(std::string_view key, std::string_view text, float seconds, const u32* image_pixels,
+                                   u32 image_width, u32 image_height)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  jstring jkey = ToJString(env.get(), key);
+  jstring jtext = ToJString(env.get(), text);
+  jobject icon = image_pixels ? ToArgbImage(env.get(), image_pixels, image_width, image_height, false) : nullptr;
+  if (jkey && jtext)
+  {
+    env->CallVoidMethod(callbacks, s_on_osd_message, jkey, jtext, static_cast<jfloat>(seconds), icon);
+    ClearException(env.get());
+  }
+
+  if (icon)
+    env->DeleteLocalRef(icon);
+  if (jtext)
+    env->DeleteLocalRef(jtext);
+  if (jkey)
+    env->DeleteLocalRef(jkey);
+  env->DeleteLocalRef(callbacks);
+}
+
+void AndroidHost::NotifyFastForwardChanged(bool enabled)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  env->CallVoidMethod(callbacks, s_on_fast_forward_changed, static_cast<jboolean>(enabled));
+  ClearException(env.get());
+  env->DeleteLocalRef(callbacks);
 }
 
 extern "C" {
@@ -195,11 +347,33 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 
   s_callbacks_class = static_cast<jclass>(env->NewGlobalRef(callbacks_class));
   env->DeleteLocalRef(callbacks_class);
-  s_on_game_started = env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;)V");
+  s_on_game_started =
+    env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;Ljava/lang/String;)V");
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured)
+  s_on_osd_message =
+    env->GetMethodID(s_callbacks_class, "onOsdMessage",
+                     "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
+  s_on_fast_forward_changed = env->GetMethodID(s_callbacks_class, "onFastForwardChanged", "(Z)V");
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
+      !s_on_fast_forward_changed)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass argb_image_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/ArgbImage");
+  if (!argb_image_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_argb_image_class = static_cast<jclass>(env->NewGlobalRef(argb_image_class));
+  env->DeleteLocalRef(argb_image_class);
+  s_argb_image_constructor = env->GetMethodID(s_argb_image_class, "<init>", "(II[I)V");
+  if (!s_argb_image_constructor)
   {
     ClearException(env);
     return JNI_ERR;
@@ -654,14 +828,90 @@ NATIVE_LIBRARY_FUNCTION(void, setCallbacks)(JNIEnv* env, jobject, jobject callba
     env->DeleteGlobalRef(old_callbacks);
 }
 
-NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path)
+NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jstring resume_serial)
 {
-  AndroidHost::StartGame(FromJString(env, path));
+  AndroidHost::StartGame(FromJString(env, path), resume_serial ? FromJString(env, resume_serial) : std::string());
 }
 
 NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject)
 {
   AndroidHost::ShutdownGame();
+}
+
+NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jstring serial)
+{
+  const std::vector<s64> times = AndroidHost::GetSaveStateTimes(FromJString(env, serial));
+  jlongArray result = env->NewLongArray(static_cast<jsize>(times.size()));
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  std::vector<jlong> values(times.begin(), times.end());
+  env->SetLongArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getSaveStateScreenshot)(JNIEnv* env, jobject, jstring serial, jint slot)
+{
+  const std::optional<AndroidHost::Picture> picture =
+    AndroidHost::GetSaveStateScreenshot(FromJString(env, serial), static_cast<s32>(slot));
+  if (!picture.has_value())
+    return nullptr;
+
+  return ToArgbImage(env, picture->pixels.data(), picture->width, picture->height, true);
+}
+
+// The reason a save or load failed, or null when it worked.
+static jstring ToResult(JNIEnv* env, const std::optional<std::string>& error)
+{
+  return error.has_value() ? ToJString(env, error.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jint slot)
+{
+  return ToResult(env, AndroidHost::SaveState(static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jint slot)
+{
+  return ToResult(env, AndroidHost::LoadState(static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, saveResumeState)(JNIEnv* env, jobject)
+{
+  return ToResult(env, AndroidHost::SaveResumeState());
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, isSavingMemoryCards)(JNIEnv*, jobject)
+{
+  return AndroidHost::IsSavingMemoryCards();
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getAnalogMode)(JNIEnv*, jobject)
+{
+  return AndroidHost::GetAnalogMode();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, resetGame)(JNIEnv*, jobject)
+{
+  AndroidHost::ResetGame();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setFastForward)(JNIEnv*, jobject, jboolean enabled)
+{
+  AndroidHost::SetFastForward(enabled);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, toggleAnalogMode)(JNIEnv*, jobject)
+{
+  AndroidHost::ToggleAnalogMode();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, saveScreenshot)(JNIEnv*, jobject)
+{
+  AndroidHost::SaveScreenshot();
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setPaused)(JNIEnv*, jobject, jboolean paused)
@@ -689,6 +939,23 @@ NATIVE_LIBRARY_FUNCTION(jboolean, onKey)(JNIEnv*, jobject, jint device_id, jint 
   return AndroidHost::QueueKeyEvent(device_id, keycode, pressed == JNI_TRUE) ? JNI_TRUE : JNI_FALSE;
 }
 
+NATIVE_LIBRARY_FUNCTION(void, onKeys)(JNIEnv* env, jobject, jint device_id, jintArray keycodes, jbooleanArray pressed)
+{
+  const jsize count = std::min(env->GetArrayLength(keycodes), env->GetArrayLength(pressed));
+  std::vector<jint> codes(static_cast<size_t>(count));
+  std::vector<jboolean> downs(static_cast<size_t>(count));
+  env->GetIntArrayRegion(keycodes, 0, count, codes.data());
+  env->GetBooleanArrayRegion(pressed, 0, count, downs.data());
+  if (ClearException(env))
+    return;
+
+  std::vector<std::pair<s32, bool>> keys;
+  keys.reserve(codes.size());
+  for (size_t i = 0; i < codes.size(); i++)
+    keys.emplace_back(codes[i], downs[i] != JNI_FALSE);
+  AndroidHost::QueueKeyEvents(device_id, keys);
+}
+
 NATIVE_LIBRARY_FUNCTION(void, onAxis)(JNIEnv*, jobject, jint device_id, jint axis, jfloat value)
 {
   AndroidHost::QueueAxisEvent(device_id, axis, value);
@@ -712,51 +979,18 @@ NATIVE_LIBRARY_FUNCTION(void, releaseAllInputs)(JNIEnv*, jobject)
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstring descriptor)
 {
-  const std::optional<std::vector<AndroidHost::PadBinding>> bindings =
-    AndroidHost::GetPadBindings(FromJString(env, descriptor));
-  if (!bindings.has_value())
-    return nullptr;
+  return ToPadBindingArray(env, AndroidHost::GetPadBindings(FromJString(env, descriptor)));
+}
 
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(bindings->size()), s_pad_binding_class, nullptr);
-  if (!result)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getHotkeyBindings)(JNIEnv* env, jobject, jstring descriptor)
+{
+  return ToPadBindingArray(env, AndroidHost::GetHotkeyBindings(FromJString(env, descriptor)));
+}
 
-  for (size_t i = 0; i < bindings->size(); i++)
-  {
-    const AndroidHost::PadBinding& binding = (*bindings)[i];
-    jstring name = ToJString(env, binding.name);
-    jstring display_name = ToJString(env, binding.display_name);
-    jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
-    jobject entry = nullptr;
-    if (name && display_name && (value || !binding.binding.has_value()))
-    {
-      entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
-                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
-      if (ClearException(env))
-        entry = nullptr;
-    }
-
-    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
-    {
-      if (ref)
-        env->DeleteLocalRef(ref);
-    }
-
-    if (!entry)
-    {
-      ERROR_LOG("Failed to pass Port 1's input '{}' to Java.", binding.name);
-      env->DeleteLocalRef(result);
-      return nullptr;
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
-  }
-
-  return result;
+NATIVE_LIBRARY_FUNCTION(void, setHotkeyBinding)(JNIEnv* env, jobject, jstring descriptor, jstring name, jstring button)
+{
+  AndroidHost::SetHotkeyBinding(FromJString(env, descriptor), FromJString(env, name),
+                                button ? FromJString(env, button) : std::string());
 }
 
 NATIVE_LIBRARY_FUNCTION(jint, getControllerIndex)(JNIEnv* env, jobject, jstring descriptor)
@@ -776,9 +1010,9 @@ NATIVE_LIBRARY_FUNCTION(void, resetPadBindings)(JNIEnv* env, jobject, jstring de
   AndroidHost::ResetPadBindings(FromJString(env, descriptor));
 }
 
-NATIVE_LIBRARY_FUNCTION(void, startBindingCapture)(JNIEnv* env, jobject, jstring descriptor)
+NATIVE_LIBRARY_FUNCTION(void, startBindingCapture)(JNIEnv* env, jobject, jstring descriptor, jboolean select_chord)
 {
-  AndroidHost::StartBindingCapture(FromJString(env, descriptor));
+  AndroidHost::StartBindingCapture(FromJString(env, descriptor), select_chord);
 }
 
 NATIVE_LIBRARY_FUNCTION(void, cancelBindingCapture)(JNIEnv*, jobject)

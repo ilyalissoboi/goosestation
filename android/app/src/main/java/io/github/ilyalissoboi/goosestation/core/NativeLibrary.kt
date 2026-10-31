@@ -153,11 +153,58 @@ object NativeLibrary {
 
     /**
      * Boots a game once a surface exists; the result arrives through [NativeCallbacks], ending with onGameStopped().
-     * [path] is a [GameEntry.path], content path or not, as it is.
+     * [path] is a [GameEntry.path], content path or not, as it is. With a [resumeSerial], it boots from that serial's
+     * resume state.
      */
-    external fun startGame(path: String)
+    external fun startGame(
+        path: String,
+        resumeSerial: String?,
+    )
 
     external fun shutdownGame()
+
+    // The in-game menu's calls ([io.github.ilyalissoboi.goosestation.app.GameCoreApi]). They run on the core's thread:
+    // the first seven wait for it, so call them off the main thread; the last four queue and return.
+
+    /**
+     * When [serial]'s save states were saved, in Unix seconds, 0 for none: `[0]` the resume state, `[n]` slot n, for
+     * 10 slots. All 0 for a blank serial, or before [initialize].
+     */
+    external fun getSaveStateTimes(serial: String): LongArray
+
+    /** The screenshot in [serial]'s state in [slot] (-1: the resume state), opaque; null without one. */
+    external fun getSaveStateScreenshot(
+        serial: String,
+        slot: Int,
+    ): ArgbImage?
+
+    /** Saves the running game to [slot] (1 to 10). Null when it's saved, or else why not. */
+    external fun saveState(slot: Int): String?
+
+    /** Loads [slot] (-1: the resume state) into the running game. Null when it's loaded, or else why not. */
+    external fun loadState(slot: Int): String?
+
+    /**
+     * Saves the running game's resume state, as Exit game does before it stops the game, if `[Main] SaveStateOnExit` is
+     * on and the game has a serial. Null when it's saved or there's nothing to save, else why not.
+     */
+    external fun saveResumeState(): String?
+
+    /** Port 1's analog mode: -1 if it isn't a DualShock or no game runs, 0 digital, 1 analog. */
+    external fun getAnalogMode(): Int
+
+    /** The running game is writing to a memory card, part-way through a save of its own. */
+    external fun isSavingMemoryCards(): Boolean
+
+    external fun resetGame()
+
+    external fun setFastForward(enabled: Boolean)
+
+    /** Presses Port 1's Analog button, as the DualShock's own does. */
+    external fun toggleAnalogMode()
+
+    /** Saves a screenshot of the game to the screenshots folder. */
+    external fun saveScreenshot()
 
     external fun setPaused(paused: Boolean)
 
@@ -175,6 +222,13 @@ object NativeLibrary {
         keyCode: Int,
         pressed: Boolean,
     ): Boolean
+
+    /** Several controller keys on [deviceId], in order, taken by the core in one pass of its input. */
+    external fun onKeys(
+        deviceId: Int,
+        keyCodes: IntArray,
+        pressed: BooleanArray,
+    )
 
     external fun onAxis(
         deviceId: Int,
@@ -221,17 +275,41 @@ object NativeLibrary {
         binding: String?,
     )
 
-    /** Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. */
+    /**
+     * Gives the controller with [descriptor] its default bindings on Port 1 again, and applies them. Its hotkeys,
+     * unassigned by default, are cleared.
+     */
     external fun resetPadBindings(descriptor: String)
+
+    /**
+     * The hotkeys the controller with [descriptor] has, all in `[Hotkeys]`, in order: `ToggleFastForward`,
+     * `ToggleAnalogMode` (the DualShock's Analog button, only when Port 1 has it) and `Screenshot`. Each
+     * [PadBinding.binding] is a Select chord (`Button109 & Android-<n>/Button99`), or null. Null as [getPadBindings] is.
+     */
+    external fun getHotkeyBindings(descriptor: String): Array<PadBinding>?
+
+    /**
+     * Binds the hotkey [name] (a [getHotkeyBindings] name) on the controller with [descriptor] to Select held with
+     * [button] (a captured binding, such as `Button99`), or unbinds it if [button] is null or empty, and applies it.
+     * Other controllers keep theirs.
+     */
+    external fun setHotkeyBinding(
+        descriptor: String,
+        name: String,
+        button: String?,
+    )
 
     /**
      * Captures the next button pressed, or axis pushed half way, on the controller with [descriptor], and reports it
      * to [NativeCallbacks.onBindingCaptured]. An axis must be seen near its centre first, so one resting away from it
      * (or held as the capture starts) has to come back. Until then the capture takes every controller input: the game
      * and hotkeys see none. It replaces a capture already running, and does nothing for a controller [getPadBindings]
-     * gives null for.
+     * gives null for. With [selectChord], for a hotkey, only a button is taken, never Select or Start.
      */
-    external fun startBindingCapture(descriptor: String)
+    external fun startBindingCapture(
+        descriptor: String,
+        selectChord: Boolean,
+    )
 
     /** Ends the capture running, if any, with no report; none arrives once this returns. */
     external fun cancelBindingCapture()

@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.ui.theme
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -54,6 +57,9 @@ data class GsColors(
     val danger: Color = Color(0xFFFF6B81),
     val dangerSoft: Color = Color(0xFF3D1820),
     val scrim: Color = Color(0xB805070A),
+    // Over the game picture, whatever the theme: an on-screen message's ground, at 82%, and its text.
+    val osd: Color = Color(0xD10A0C10),
+    val osdInk: Color = Color(0xFFF3F1EC),
 )
 
 /** The design system's styles Material's type scale has no slot for. */
@@ -63,6 +69,7 @@ data class GsType(
     val eyebrow: TextStyle,
     val key: TextStyle,
     val mono: TextStyle,
+    val osd: TextStyle,
 )
 
 private val chakraPetch =
@@ -133,6 +140,7 @@ private val gsType =
         eyebrow = style(chakraPetch, 12, 16, FontWeight.SemiBold, 1f),
         key = style(chakraPetch, 12, 16, FontWeight.Bold),
         mono = style(atkinsonMono, 14, 20, FontWeight.Medium),
+        osd = style(atkinsonMono, 16, 20, FontWeight.SemiBold),
     )
 
 /** The design system's radii: no pills, no circles. */
@@ -209,9 +217,28 @@ object GooseStationTheme {
         get() = LocalGsType.current
 }
 
+// LocalBringIntoViewSpec is still experimental in Compose Foundation.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GooseStationTheme(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalGsColors provides gsColors, LocalGsType provides gsType) {
+    CompositionLocalProvider(
+        LocalGsColors provides gsColors,
+        LocalGsType provides gsType,
+        LocalBringIntoViewSpec provides CentredScrolling,
+    ) {
         MaterialTheme(colorScheme = colorScheme, typography = typography, shapes = shapes, content = content)
     }
+}
+
+/**
+ * How a scrolling list follows the focus: it keeps the focused element in the middle, as consoles do, and stops at its
+ * ends, which shows the title at the top and the padding below the last element. Something taller than the list
+ * shows its start.
+ */
+private object CentredScrolling : BringIntoViewSpec {
+    override fun calculateScrollDistance(
+        offset: Float,
+        size: Float,
+        containerSize: Float,
+    ): Float = if (size >= containerSize) offset else offset - (containerSize - size) / 2
 }

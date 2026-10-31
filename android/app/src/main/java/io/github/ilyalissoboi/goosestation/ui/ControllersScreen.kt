@@ -42,6 +42,10 @@ import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 
+/** The hotkeys' names, by the core's: they're the app's words, not the core's. */
+private val HOTKEY_LABELS =
+    mapOf("ToggleFastForward" to "Fast forward", "ToggleAnalogMode" to "Analog mode", "Screenshot" to "Screenshot")
+
 /** What the Back key, Mode, and Select + Start do in a game, whatever the mapping. */
 private const val MENU_TRIGGERS =
     "Back, the Mode (Home or Guide) button, or holding Select + Start for a second pauses the game and opens the " +
@@ -57,6 +61,8 @@ private const val MENU_TRIGGERS =
  * The focus starts on the Controller row, or the controller's name, never on a binding, so an A pressed as the page
  * opens captures nothing; it moves only when nothing in the page has it, never as a controller comes or goes. B or
  * Back go back ([onBack]); Back during a capture cancels it ([onCancelCapture]), as B is captured like any button.
+ * After the bindings, the Hotkeys section lists the controller's [hotkeys], each a Select chord; a row's A or Enter
+ * captures the button to hold Select with ([onCaptureHotkey]), and Clear and Undo work as on a binding.
  */
 @Composable
 fun ControllersScreen(
@@ -76,6 +82,8 @@ fun ControllersScreen(
     onDropUndo: () -> Unit,
     onReset: () -> Unit,
     onBack: () -> Unit,
+    hotkeys: List<PadBinding> = emptyList(),
+    onCaptureHotkey: (String) -> Unit = {},
 ) {
     val first = remember { FocusRequester() }
     var focusInPage by remember { mutableStateOf(false) }
@@ -142,6 +150,32 @@ fun ControllersScreen(
                     undo = undoFor == binding.name,
                     onCapture = { onCapture(binding.name) },
                     onClear = { onClear(binding.name) },
+                    onUndo = onUndo,
+                    onDropUndo = onDropUndo,
+                )
+            }
+            if (hotkeys.isNotEmpty()) {
+                Text(
+                    "Hotkeys",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, top = 16.dp),
+                )
+                Line("Hold Select and press the button you set. They work while a game runs.")
+            }
+            hotkeys.forEach { hotkey ->
+                val label = HOTKEY_LABELS[hotkey.name] ?: hotkey.displayName
+                BindingRow(
+                    binding = hotkey.copy(displayName = label),
+                    prompt =
+                        if (capturing == hotkey.name) {
+                            "Hold Select and press a button for $label… Back cancels ($secondsLeft)"
+                        } else {
+                            null
+                        },
+                    undo = undoFor == hotkey.name,
+                    onCapture = { onCaptureHotkey(hotkey.name) },
+                    onClear = { onClear(hotkey.name) },
                     onUndo = onUndo,
                     onDropUndo = onDropUndo,
                 )

@@ -985,6 +985,37 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
   if (range.first == s_binding_map.end())
     return false;
 
+#ifdef __ANDROID__
+  // Android: a button chord (a hotkey, Select + X) completed by this press takes its keys from the pad bindings too,
+  // which are axis handlers and so aren't cancelled below: they aren't fired for this press, and those of the chord's
+  // other keys are let go after it, in the same pass, so the game never sees them.
+  u32 chord_num_keys = 0;
+  std::vector<InputBinding*> completed_chords;
+  if (value > 0.0f && !skip_button_handlers)
+  {
+    for (auto it = range.first; it != range.second; ++it)
+    {
+      InputBinding* binding = it->second.get();
+      if (binding->num_keys < 2 || IsAxisHandler(binding->handler))
+        continue;
+
+      for (u32 i = 0; i < binding->num_keys; i++)
+      {
+        if (binding->keys[i].MaskDirection() != masked_key || binding->keys[i].modifier != InputModifier::None)
+          continue;
+
+        const u8 bit = static_cast<u8>(1) << i;
+        if (binding->current_mask != binding->full_mask && (binding->current_mask | bit) == binding->full_mask)
+        {
+          chord_num_keys = std::max<u32>(chord_num_keys, binding->num_keys);
+          completed_chords.push_back(binding);
+        }
+        break;
+      }
+    }
+  }
+#endif
+
   // Now we can actually fire/activate bindings.
   u32 min_num_keys = 0;
   for (auto it = range.first; it != range.second; ++it)
@@ -1026,6 +1057,10 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
       // and 0 on release (when the full state changes).
       if (IsAxisHandler(binding->handler))
       {
+#ifdef __ANDROID__
+        if (binding->num_keys < chord_num_keys)
+          break;
+#endif
         if (value_to_pass >= 0.0f && (!skip_button_handlers || value_to_pass == 0.0f))
           std::get<InputAxisEventHandler>(binding->handler)(value_to_pass);
       }
@@ -1086,6 +1121,22 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
       break;
     }
   }
+
+#ifdef __ANDROID__
+  for (const InputBinding* chord : completed_chords)
+  {
+    for (u32 i = 0; i < chord->num_keys; i++)
+    {
+      const auto range2 = s_binding_map.equal_range(chord->keys[i].MaskDirection());
+      for (auto it2 = range2.first; it2 != range2.second; ++it2)
+      {
+        InputBinding* other = it2->second.get();
+        if (IsAxisHandler(other->handler) && other->num_keys < chord->num_keys)
+          std::get<InputAxisEventHandler>(other->handler)(0.0f);
+      }
+    }
+  }
+#endif
 
   return true;
 }

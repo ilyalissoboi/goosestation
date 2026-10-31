@@ -245,7 +245,10 @@ class SettingsSetupTest {
         val stopped = CountDownLatch(1)
         NativeLibrary.setCallbacks(
             object : NativeCallbacks {
-                override fun onGameStarted(title: String) = started.countDown()
+                override fun onGameStarted(
+                    title: String,
+                    serial: String,
+                ) = started.countDown()
 
                 override fun onGameStopped() = stopped.countDown()
 
@@ -257,7 +260,7 @@ class SettingsSetupTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
-            NativeLibrary.startGame(exe.absolutePath)
+            NativeLibrary.startGame(exe.absolutePath, null)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             // The game has read it: from now on only the running game names the card.
             assertTrue(padtestSettings.delete())

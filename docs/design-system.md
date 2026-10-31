@@ -36,7 +36,8 @@ source for it. When a value changes, change `tokens.json` and the implementation
 
 The Android app's screens, in [`docs/design-system/screenshots/`](design-system/screenshots/): rendered from the
 Compose code, off a device, at a handheld's 960 x 540 dp in landscape (the AYN Thor's) and a phone's 411 x 891 dp in
-portrait. The orange outline is the focus, where a controller is.
+portrait. The pause menu and its slot panel are from the emulator, a phone in landscape (914 x 411 dp), over Ace
+Combat 3. The orange outline is the focus, where a controller is.
 
 | | |
 | --- | --- |
@@ -44,6 +45,7 @@ portrait. The orange outline is the focus, where a controller is.
 | ![The settings hub](design-system/screenshots/settings.png) | ![The Graphics page: cyclers and a toggle](design-system/screenshots/graphics.png) |
 | ![The BIOS page](design-system/screenshots/bios.png) | ![The Controllers page](design-system/screenshots/controllers.png) |
 | ![Setup's welcome](design-system/screenshots/setup.png) | ![The pause menu over a game](design-system/screenshots/pause.png) |
+| ![The Load state slot panel beside the pause menu](design-system/screenshots/save-slots.png) | |
 
 ![The library on a phone, in portrait](design-system/screenshots/library-phone.png)
 
@@ -123,7 +125,7 @@ the system's fonts.
 | `body` | text 16/24, 400 | Reading text. | `typography.bodyLarge` |
 | `body-sm` | text 14/20, 400 | Notes under a label, a game's details. | `typography.bodyMedium` |
 | `mono` | mono 14/20, 500 | Serials, times, versions. | `GooseStationTheme.type.mono` |
-| `osd` | mono 16/20, 600 | Messages over the game. | (the core's OSD; not yet) |
+| `osd` | mono 16/20, 600 | Messages over the game. | `GooseStationTheme.type.osd` |
 
 Write text in sentence case even where it shows in capitals: `Eyebrow("Paused")` shows "PAUSED".
 
@@ -153,7 +155,11 @@ Every screen must work with a D-pad alone. That's tested (see Checking a new scr
 - **The focus ring** is a 2 dp `focus` outline drawn 2 dp outside the element, at the element's radius. Rows also
   lift to `raised` under it. A game tile rings its cover, not the whole tile.
 - **Because the ring is outside the element, give it room:** a scrolling or lazy container that clips needs at least
-  4 dp of content padding around focusable items, or the ring is cut.
+  4 dp of content padding around focusable items, or the ring is cut. `focusRing` draws its element above its
+  siblings while focused, so a neighbour's fill doesn't cover the ring.
+- **Scrolling keeps the focus in the middle,** as on consoles: once a list scrolls, the focused element stays at its
+  centre, and the list stops at its ends, with the title showing at the top and the last element's ring at the
+  bottom. `GooseStationTheme` provides this for every scrolling and lazy container; don't override it.
 - **A, Enter, the D-pad centre or a tap activate.** Only an A *pressed* on the element counts, not the release of one
   held from the previous screen. `focusRing` does this.
 - **B and Back go back** (from the innermost thing that takes Back first, such as a dialog).
@@ -227,6 +233,19 @@ SettingsPage("Graphics", onBack = onBack) {
 - `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.
 - A row's `note` explains a consequence ("Higher is sharper and slower.") or a fallback. Never repeat the label.
 
+### `KeyHints` (`KeyHints.kt`)
+
+```kotlin
+KeyHints(listOf(KeyHint(PadGlyphs.confirm, "Select"), KeyHint(PadGlyphs.back, "Back")))
+```
+
+The button-hint footer: each button's glyph in a key chip (`key` type, a `line-strong` edge at `radius-sm`), then the
+action it takes, in a row that wraps on a narrow screen. It goes at the foot of a panel, such as the pause menu.
+
+- Name the buttons with `PadGlyphs`, which labels them as the Controllers page does ("A" for `BUTTON_A`).
+- Actions are short verbs, in sentence case: Select, Back, Save.
+- It takes no input: nothing in it is focusable, and each hint reads as "A: Select".
+
 ### `Eyebrow` (`Eyebrow.kt`)
 
 A small capitalised label over what it names: "Paused" over a game's title, "Step 1 of 3" over a setup step.
@@ -237,8 +256,30 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   the art loads; then the title (2 lines) and region · play time. Tiles are at least 152 dp wide, 16 dp apart across
   and 24 down.
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.
-- `GamePrompt`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, "Paused" over the game's
-  title and details, then menu rows (an icon and a label; focused, the icon turns `beak-ink`).
+- `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
+  edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end;
+  focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line` divider before Reset console, and `KeyHints`
+  at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
+  takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
+  Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),
+  since both exit.
+  B steps out one layer at a time, back to the row it came from.
+- `SaveSlotPanel`: the slot list, a second `surface` panel beside the menu, filling the rest of the screen (on a
+  screen under 720 dp wide, the menu narrows to 240 dp while it shows); on a narrow portrait screen, below it, the
+  menu keeping the top 40%. Each slot row shows its screenshot at 4:3 (112 x 84
+  dp, 64 x 48 dp in a row under 240 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
+  `label`; Saved or Empty; and the time in `mono`. Rows that can't be picked are disabled; Load lists only the slots that hold a save. Replacing a save asks in the
+  panel, as the menu does. The focus can't leave the panel.
+- `ResumePrompt`: "Resume where you left off?" over the library, a centred `surface` panel at `radius-lg`: the game's
+  title, the resume state's screenshot (224 x 168 dp) and time, then Resume (`Primary`, focused) and Start over. The
+  `scrim` takes every tap, and the focus can't leave the panel.
+- `OsdLayer`: the messages over the running game, the app's and the core's, at the top left, oldest first, at most
+  four. Each is `osd` type in `osd-ink` on the `osd` ground at `radius-sm`, with the core's icon (a memory card's,
+  say) when it has one, showing its first frame only. The app's messages last 3 s, and the core's keep their own time.
+  Each fades out over 160 ms, the only thing that moves during a game; with animations off, it just goes. While fast
+  forward is on, its marker (the `fastForward` icon on `osd`) shows at the top right. On Android the core's messages
+  are routed here, not to its own OSD: `CoreMessages` puts those for the in-game menu's actions in the app's words
+  and drops those the app says itself. The core's FPS and speed overlay is unchanged.
 
 ### `GooseMark` (`ui/theme/GooseMark.kt`)
 
@@ -321,7 +362,7 @@ See [docs/android.md](android.md) for running them.
 ## Not built yet
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
-Android; the button-hint footer (`KeyHints`) naming each controller button; badges for region and memory card sync;
-progress bars; save-state slots; on-screen messages over the game in the system's style; on-screen touch controls; the
+Android; badges for region and memory card sync;
+progress bars; on-screen touch controls; the
 desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

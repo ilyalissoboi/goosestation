@@ -273,7 +273,7 @@ ISO and the rest), M3U playlists, and PS-X EXE files. Disc images in the same fo
 a case-insensitive match when the case differs (`FILE "TRACK 01.BIN"` next to `Track 01.bin`), and names holding
 `#`, `%` or `?` work as they are.
 
-In a game, Back opens a prompt to resume or quit to the library (see "Leaving a game"). Home pauses the game, and
+In a game, Back opens its menu (see "The in-game menu"). Home pauses the game, and
 reopening the app resumes it. Pausing also writes any memory card changes to their files
 straight away (a paused game never reaches the card's usual save, 5 emulated seconds after the last write), so a save
 made just before Home survives the app being killed in the background. Going to the background, or losing focus to
@@ -548,32 +548,80 @@ across restarts, whatever order the controllers connect in.
   again.
 - **The menu's triggers can't be remapped.** Back and Mode can't be bound: Back never reaches the core, and the core
   refuses Mode, so a capture never sees either. Select and Start can be bound to anything, but the controller's own
-  Select and Start keys, held together, open the prompt whatever they're mapped to (see "Leaving a game").
+  Select and Start keys, held together, open the menu whatever they're mapped to (see "The in-game menu").
+- **Hotkeys**, after the bindings: **Fast forward**, **Analog mode** (the DualShock's Analog button, which was the
+  "Analog Toggle" row; only for a DualShock) and **Screenshot**, each Select held with a button. A on a row asks "Hold
+  Select and press a button for <hotkey>… Back cancels (5)" and takes the next button but Select and Start (Back and
+  Mode never reach it); its value then reads "Select + X". Clear and Undo work as on a binding, and Reset to defaults
+  clears them (they're unassigned by default). Each controller has its own: `[Hotkeys] ToggleFastForward` and
+  `Screenshot`, and `[Pad1] Analog`, as the core's chord bindings (`Android-0/Button109 & Android-0/Button99`). They
+  work while a game runs and the menu is closed.
+- **Select on a controller with a hotkey** is held back from the game until it's known not to start a chord: it goes
+  to the game when it's let go (held down 100 ms, as a tap), together with the next button pressed (in one batch, so
+  the core's chord fires and the game sees neither), or once held for 500 ms, for a game that wants Select held (a map,
+  say). A chord pressed after that still fires, but the game has seen Select by then. Select and Start held for the
+  menu never reach the game. A controller with no hotkey sends Select as it comes.
 
-### Leaving a game
+### The in-game menu
 
-In a game, three things pause it and open a prompt: "Paused" over the game's title, its region, serial and play
-time, then **Resume** (focused) and **Quit to library**:
+In a game, three things pause it and open its menu:
 
 - **Back**: the Back gesture, the system's Back key, or a controller's own Back key (the Thor's pad has one);
 - **Mode**: a controller's Home or Guide button (`KEYCODE_BUTTON_MODE`), on its key-down;
 - **Select and Start held together for a second**, on one controller.
 
-The game never sees the press that opens it. While the prompt shows, the controllers move its focus, as on any
-other screen; A presses the focused button, and B, Back or Mode resume. Everything held is let go as it opens and
-again on **Resume**, so nothing stays pressed in the game. The pause writes the memory cards, as Home's does, and
-**Quit to library** stops the game (`Game stopped.`). With the prompt open, Home and back keeps the game paused, with
-the prompt showing. Back while a game is still booting opens the prompt too: the game pauses once it has booted, and
-**Resume** starts it.
+The game never sees the press that opens it. The menu is a panel at the left, over the dimmed game: "Paused" over the
+game's title, its region, serial and play time, then its rows, **Resume** focused:
 
-A stick the game had (or a capture, on the Controllers page) stays the core's after the prompt opens or the capture
+- **Save state** and **Load state** open the slot panel beside the menu (below it on a phone held upright, with the
+  menu keeping the top 40% of the screen). It lists Slot 1 to Slot 10 (and, in Load, **Resume**, the resume state,
+  first), each with the screenshot saved in it, "Saved" or "Empty" and when, in the form "Today · 14:05". The slot
+  last saved to or loaded from in this game is focused, or else Slot 1 (Save) or the newest save (Load). In Load,
+  empty slots can't be picked; with no saves at all, "No saves yet for this game." Saving to an empty slot saves at
+  once; a filled one asks "Replace the save in slot 3?" in the panel, Cancel focused. A save or load that works goes
+  back to the game, saying "Saved to slot 3", "Loaded slot 3" or "Loaded your resume state"; one that fails stays in
+  the panel with the reason ("Couldn't save to slot 3: …"). States are the core's own, at
+  `savestates/<serial>_<n>.sav`, mirrored to the data folder like the rest. The last slot used is kept per game on
+  this device (`SharedPreferences("game")`).
+- **Fast forward**, with "On" or "Off": switches it and goes back to the game, at `[Main] FastForwardSpeed`. While
+  it's on, its marker shows at the top right. It's off again whenever a game starts.
+- **Analog mode**, with "On" or "Off", only for the DualShock (`AnalogController`): presses the controller's Analog
+  button, as the real one does, and says "Analog mode on" or "Analog mode off" (or that the game keeps the controller
+  in its mode).
+- **Screenshot**: saves the game's picture, without the menu, to the data folder's `screenshots`, and says
+  "Screenshot saved".
+- **Reset console** asks "Reset the console? Progress since your last save is lost." in the menu, Cancel focused,
+  then restarts the game: "Console reset".
+- **Exit game** saves the game's resume state (`savestates/<serial>_resume.sav`, when `[Main] SaveStateOnExit` is on,
+  as it is by default, and the game has a serial), then stops it. If that save fails, the game still stops, and the
+  library says "Couldn't save your place: <reason>".
+
+Until a game has booted, only Resume and Exit game work, and the details line says "Starting…". The foot of each panel
+names the buttons: **A** Select (or Save, or Load), **B** Back. While the menu shows, the controllers move its focus,
+as on any other screen. B and Back step out one layer at a time, each acting on a press that began on it: a question,
+then the slot panel (back to its row), then the menu, which resumes. Mode resumes from anywhere. Everything held is let
+go as it opens and again on resuming, so nothing stays pressed in the game. The pause writes the memory cards, as
+Home's does. With the menu open, Home and back keeps the game paused, with the menu showing.
+
+**Resume where you left off?** When a game with a resume state is started from the library, it asks first, over the
+library, with the state's screenshot and time: **Resume** (focused) boots it from there; **Start over** boots it afresh
+and keeps the resume state until the next Exit game replaces it; B cancels. A resume state that can't be loaded (damaged,
+or from an incompatible build through a shared data folder) takes the app back to the library with the reason, and
+the file is kept, so the next start asks again. A fatal error, the SD card removed, or the app killed saves none.
+
+**On-screen messages** over the game are drawn by the app, at the top left, in the design system's `osd` style (see
+`OsdLayer` in `docs/design-system.md`): its own for 3 s, and the core's (a memory card saved, a controller connected,
+an error) for the core's time, without their emoji. The core's own messages and status icons don't show on Android.
+
+A stick the game had (or a capture, on the Controllers page) stays the core's after the menu opens or the capture
 ends, until it's pushed less than 0.45 from rest, so it doesn't move the menus' focus while it's still held. That's
 just under the 0.5 at which Android turns a stick into D-pad presses; a controller that declares a larger dead zone
 for its stick or hat raises it to that, but never to 0.5. As the stick comes under it, the core is told it's at rest,
 so a game resumed with the stick let go doesn't see it pushed, and the menus take it from then on.
 
-Select and Start keep working in games. Pressed alone, each goes to the game as it comes. When one is held and the
-other goes down, that second press is held back: if both are still held 1 s later, the prompt opens and the held-back
+Select and Start keep working in games. Pressed alone, each goes to the game as it comes (but Select on a controller
+with a hotkey, see "Controllers"). When one is held and the
+other goes down, that second press is held back: if both are still held 1 s later, the menu opens and the held-back
 press is never sent. If either is let go first, the held-back press is sent then, late. A Start tapped while Select is
 held therefore reaches the game when it's let go, and lasts 100 ms (6 frames at 60 Hz), however short the tap, so the
 game's once-a-frame read of the pad sees it.
@@ -594,6 +642,12 @@ game's once-a-frame read of the pad sees it.
 - **The Vulkan fallback lasts until the app restarts.** Once Vulkan has failed, every game in that process uses
   OpenGL ES, even after `Renderer` is changed back to `Vulkan`. Each new process tries Vulkan once more, as
   `settings.ini` keeps the user's choice.
+- **A controller connected during a game** has its Select held back for its hotkeys from the next game on: they're
+  read as a game starts.
+- **The in-game menu has no Undo load, global save slots, or way to delete or rename a save.** The core keeps an undo
+  state, but the menu doesn't offer it yet.
+- **The core's screenshot message lasts 2 s,** not the 5 s it means: its duration is passed to the text's formatting
+  instead (`gpu.cpp`, desktop code, left as it is).
 - **The settings pages are reachable only from the library**, not from a game or its prompt. Leave the game to change
   them.
 - **Leaving during a boot freezes the UI until the boot is done.** Destroying the surface waits for the CPU thread,
@@ -741,13 +795,36 @@ with D-pad key events, the picker with taps, and the games with `uinput` gamepad
 | Portrait | Not possible full screen. With `wm set-ignore-orientation-request true` and the rotation at 0, the app was letterboxed in a landscape-shaped window (411x309 dp) in the middle of the portrait screen. Plan 3's layout check used freeform portrait windows instead (411x862 and 360x800 dp). The Thor checklist has it. |
 | Crashes | None: `adb logcat -b crash -d` was empty at the end, and logcat had no `FATAL EXCEPTION` or `Fatal signal`. Every new process came from a force-stop or an install. |
 
+### The in-game menu (2026-10-31)
+
+Checked on `goose-arm64` with the debug APK, by key events (`adb shell input keyevent`, and `input gamepad` for the
+hotkeys), with Ace Combat 3 (SLPS-02020) and padtest. The game screen is landscape, so the panels sat side by side.
+
+| Check | Result |
+| --- | --- |
+| Save to an empty slot | Pass. Slot 1 saved (`savestates/SLPS-02020_1.sav`, 1.4 MB), the game resumed, "Saved to slot 1" showed top left; the core's own save message didn't. |
+| Replace a save | Pass. "Replace the save in slot 1?" in the panel, Cancel focused; Replace saved again. |
+| Load | Pass. The panel showed the slot's screenshot and "Today · 16:48", the empty slots faint and skipped; loading resumed at the saved point with "Loaded slot 1". The slot last used was focused next time. |
+| Fast forward | Pass. The row read "On", the marker showed top right, and the game ran faster; again, off. |
+| Screenshot, reset | Pass. A PNG in `screenshots`, "Screenshot saved"; Reset asked first (Cancel focused), then "Console reset" (seen in a `screenrecord`: it shows about 2.5 s). |
+| Exit game and resume | Pass. Exit game wrote `SLPS-02020_resume.sav`; the next start asked "Resume where you left off?" with its picture and time; Resume booted `from 'SLPS-02020_resume.sav'`, Start over booted afresh, B cancelled. |
+| A resume that fails | Pass. With `savestates` read-only, Exit game still stopped the game and the library said "Couldn't save your place: …". A resume state cut to 100 bytes: Resume returned to the library with "Failed to start …: Failed to load save state file …", and the next start asked again. |
+| Mirror | Pass. The data folder's save states matched the working copy's (md5), with no `*.sav.XXXXXX`, and the screenshots were copied. |
+| Hotkey capture | Pass. Fast forward's row took Select + X (Select skipped) and showed "Select + X"; `settings.ini` has `ToggleFastForward = Android-0/Button109 & Android-0/Button99`. |
+| Hotkey in a game | Pass. Select + X in padtest turned fast forward on, and again off. Whether padtest saw Select or X couldn't be seen (its picture stayed black under the emulator's software Vulkan); `SelectChordTest` and `PadKeysTest` cover it, and the Thor checklist has it. |
+
+Found and fixed during the pass: the core's own status icons (pause, fast forward) drew beside the app's marker, so
+they're off on Android; the core's messages start with an emoji, which kept "Screenshot saved" from matching, so emoji
+are left out; slot pictures drew at their own size, not filling their box. The emulator's GPU emulation wedged twice
+during the instrumented runs (the app's render thread stuck in `eglSwapBuffers`), and the emulator was restarted.
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
 8 Gen 2 (QCS8550), Adreno 740, 4 KB pages. The built-in pad connects as `Odin Controller` (`Android-0`) and reports
 X/Y (left stick), Z/RZ (right stick), HAT_X/HAT_Y (D-pad) and BRAKE/GAS (L2/R2), all of which the app forwards. Its
 key layout has real BACK, HOME and BUTTON_MODE keys, so on the Thor the pad's Back key left a game (in that build;
-it now opens the prompt, see "Leaving a game"). No physical button on the Thor sends `BTN_MODE`, though: its only
+it now opens the prompt, see "The in-game menu"). No physical button on the Thor sends `BTN_MODE`, though: its only
 buttons besides the gamepad controls are Back and Home (found 2026-10-30).
 
 | Check | Result |
@@ -995,3 +1072,19 @@ adb logcat -v time > thor.log
    as keys (the built-in one sends a hat). The Vulkan crash from 2026-10-29 (an OpenGL ES loading-screen texture
    left cached by Android's `FullscreenUI::Shutdown()` stub, then used as a `VulkanTexture` on the next Vulkan
    device) is fixed in `652a4f808`: 0 crashes in 3 on the Thor afterwards, where it was 3 in 3 before.
+
+9. **The in-game menu and hotkeys.** With the build that has the in-game menu, after step 7's setup. The Thor's pad
+   has no Mode button and its D-pad is a hat: open the menu with Back or Select + Start, and move with the D-pad.
+   - [ ] Every row works with the pad alone: Save state (an empty slot, then the same slot again: "Replace the save
+     in slot 1?", Replace and Cancel), Load state, Fast forward (the marker), Analog mode, Screenshot, Reset console
+     (Reset and Cancel), Exit game.
+   - [ ] B steps out one layer at a time: the question, then the slot panel (back to its row), then the menu.
+   - [ ] Nothing pressed in the menu reaches the game, and a direction or button held as it opens doesn't stick after
+     Resume.
+   - [ ] Exit game, then start the game again: "Resume where you left off?", with its picture and time; Resume, Start
+     over and B each work.
+   - [ ] Set each hotkey on the Controllers page (Select + a face button). In padtest: Select + that button fires it,
+     and padtest lights neither Select nor the button; a Select tap lights Select briefly; Select held lights it from
+     about half a second; Select + Start held opens the menu without Select lighting.
+   - [ ] In a game with a map or menu on Select, holding Select still shows it.
+   - [ ] `adb logcat -b crash -d` is empty.

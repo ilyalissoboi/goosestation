@@ -36,7 +36,8 @@ source for it. When a value changes, change `tokens.json` and the implementation
 
 The Android app's screens, in [`docs/design-system/screenshots/`](design-system/screenshots/): rendered from the
 Compose code, off a device, at a handheld's 960 x 540 dp in landscape (the AYN Thor's) and a phone's 411 x 891 dp in
-portrait. The orange outline is the focus, where a controller is.
+portrait. The pause menu and its slot panel are from the emulator, a phone in landscape (914 x 411 dp), over Ace
+Combat 3. The orange outline is the focus, where a controller is.
 
 | | |
 | --- | --- |
@@ -44,6 +45,7 @@ portrait. The orange outline is the focus, where a controller is.
 | ![The settings hub](design-system/screenshots/settings.png) | ![The Graphics page: cyclers and a toggle](design-system/screenshots/graphics.png) |
 | ![The BIOS page](design-system/screenshots/bios.png) | ![The Controllers page](design-system/screenshots/controllers.png) |
 | ![Setup's welcome](design-system/screenshots/setup.png) | ![The pause menu over a game](design-system/screenshots/pause.png) |
+| ![The Load state slot panel beside the pause menu](design-system/screenshots/save-slots.png) | |
 
 ![The library on a phone, in portrait](design-system/screenshots/library-phone.png)
 
@@ -250,8 +252,20 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   the art loads; then the title (2 lines) and region · play time. Tiles are at least 152 dp wide, 16 dp apart across
   and 24 down.
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.
-- `GamePrompt`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, "Paused" over the game's
-  title and details, then menu rows (an icon and a label; focused, the icon turns `beak-ink`).
+- `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
+  edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end;
+  focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line` divider before Reset console, and `KeyHints`
+  at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
+  takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
+  B steps out one layer at a time, back to the row it came from.
+- `SaveSlotPanel`: the slot list, a second `surface` panel beside the menu, filling the rest of the screen; on a
+  narrow portrait screen, below it, the menu keeping the top 40%. Each slot row shows its screenshot at 4:3 (112 x 84
+  dp, 64 x 48 dp in a row under 320 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
+  `label`; Saved or Empty; and the time in `mono`. Rows that can't be picked are disabled. Replacing a save asks in the
+  panel, as the menu does. The focus can't leave the panel.
+- `ResumePrompt`: "Resume where you left off?" over the library, a centred `surface` panel at `radius-lg`: the game's
+  title, the resume state's screenshot (224 x 168 dp) and time, then Resume (`Primary`, focused) and Start over. The
+  `scrim` takes every tap, and the focus can't leave the panel.
 - `OsdLayer`: the messages over the running game, the app's and the core's, at the top left, oldest first, at most
   four. Each is `osd` type in `osd-ink` on the `osd` ground at `radius-sm`, with the core's icon (a memory card's,
   say) when it has one, showing its first frame only. The app's messages last 3 s, and the core's keep their own time.
@@ -342,6 +356,6 @@ See [docs/android.md](android.md) for running them.
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
 Android; badges for region and memory card sync;
-progress bars; save-state slots; on-screen touch controls; the
+progress bars; on-screen touch controls; the
 desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

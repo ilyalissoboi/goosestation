@@ -930,6 +930,17 @@ data kept. The user drove the checks with the built-in pad.
 | --- | --- |
 | Choice lists (checklist step 10) | User-reported: as expected. On Graphics, A opened each row's list on its current value, up and down moved and stopped at the ends, A picked a value, B closed a list unchanged, and left and right still stepped a closed row. |
 | PlayStation glyphs (checklist step 10) | User-reported: as expected. Every Port 1 row on Controllers showed its glyph, readable at the system's largest font size, and the hotkey rows kept their words. |
+| Hotkeys set (checklist step 9) | Pass. With Select held: `Captured Button105 for ToggleFastForward` (R2) at 01:56:54.694, `Captured Button102 for Screenshot` (L1) at 01:56:59.922, and `Captured Button99 for ToggleAnalogMode` (X) at 01:57:09.495, replacing R1 set 12 s earlier. On the Thor, X is `BTN_NORTH` (`getevent`). |
+| Hotkeys in padtest | User-reported: as expected (each chord fired, padtest lit neither Select nor the button; a Select tap lit it briefly, a held one from about half a second). Select + X four times gave four "locked to analog mode by the game" messages (padtest locks it), one each. Of 12 Select + Start presses, only the one held 1.57 s opened the menu (`AAudioStream_requestPause` at 01:58:15.700). |
+| Select held in a game | User-reported: as expected in Ace Combat 3. 13 Select presses alone, held up to 2 s, fired no hotkey. |
+| Analog mode hotkey in a game | Pass in Ace Combat 3: 12 Select + X chords gave 12 toggles, each about 130 ms after the press, four in a row at 02:00:52–54 included; X alone 11 times toggled nothing. The core's own log line names the mode before the toggle (`SetAnalogMode` logs the old value); its on-screen message, which the app shows, names the new one. |
+| Select + Square's button in a game | User-reported: as expected; the hotkey fired and Square didn't happen in Ace Combat 3. |
+| Screenshot hotkey | Pass. Select + L1 in Ace Combat 3 at 02:07:53 saved `… 2026-11-01-02-07-53.png` to `screenshots`, mirrored to the data folder. |
+| Exit over a resume state | Ace Combat 3 resumed from `SLPS-02020_resume.sav` (01:58:47); Exit game at 02:02:00 replaced it 4 s later (`State saved to 'SLPS-02020_resume.sav'`). Keep it and B: user-reported as expected; they leave nothing in the log, and the game wasn't started again after Keep it. |
+| Scrolling and focus rings | User-reported: as expected. |
+| Crash buffer | Pass: empty before (01:55) and after (02:08). |
+
+Found: padtest, which has no serial, saved a resume state on Exit (`HASH-9FDA0E1A56D8DF5B_resume.sav`, 01:58:34). The app takes the core's hash for a serial, where the design says a game without one exits without saving.
 
 ## Checks on the AYN Thor
 

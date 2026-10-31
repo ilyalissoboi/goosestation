@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -14,16 +15,24 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasStateDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
@@ -40,7 +49,7 @@ import org.junit.runner.RunWith
 class SettingsRowsTest {
     @get:Rule val rule = createComposeRule()
 
-    private val sizes = listOf(Choice("S", "Small"), Choice("M", "Medium"), Choice("L", "Large"))
+    private val sizes = mutableStateListOf(Choice("S", "Small"), Choice("M", "Medium"), Choice("L", "Large"))
     private val colours = listOf(Choice(1, "Red"), Choice(2, "Green", note = "The default"))
     private val sizesPicked = mutableListOf<String>()
     private val coloursPicked = mutableListOf<Int>()
@@ -144,23 +153,223 @@ class SettingsRowsTest {
         assertFocusedHas("Size", "Large")
     }
 
-    @Test
-    fun enterStepsForwardRoundToTheFirst() {
-        show()
+    private fun list() = rule.onNodeWithTag(CHOICE_LIST, useUnmergedTree = true)
 
-        repeat(3) { press(Key.Enter) }
+    private fun choice(text: String) = rule.onNode(hasText(text) and hasAnyAncestor(hasTestTag(CHOICE_LIST)))
 
-        assertEquals(listOf("M", "L", "S"), sizesPicked)
-        assertFocusedHas("Size", "Small")
+    private fun assertFocusedChoice(text: String) {
+        rule.onNode(isFocused()).assert(hasText(text)).assert(hasAnyAncestor(hasTestTag(CHOICE_LIST)))
+    }
+
+    private fun assertClosedOnTheRow(vararg texts: String) {
+        list().assertDoesNotExist()
+        assertFocusedHas(*texts)
     }
 
     @Test
-    fun buttonAStepsForwardToo() {
+    fun aOpensTheListOnTheCurrentChoice() {
         show()
 
         press(Key.ButtonA)
 
+        choice("Small").assertIsSelected()
+        choice("Medium").assertIsNotSelected()
+        choice("Large").assertExists()
+        assertFocusedChoice("Small")
+        rule.onNode(hasText("Size") and hasStateDescription("Expanded")).assertExists()
+        assertEquals(emptyList<String>(), sizesPicked)
+    }
+
+    @Test
+    fun enterOpensItToo() {
+        show()
+
+        press(Key.Enter)
+
+        assertFocusedChoice("Small")
+        assertEquals(emptyList<String>(), sizesPicked)
+    }
+
+    @Test
+    fun upAndDownMoveAndStopAtTheEnds() {
+        show()
+        press(Key.ButtonA)
+
+        repeat(5) { press(Key.DirectionDown) }
+        assertFocusedChoice("Large")
+        repeat(5) { press(Key.DirectionUp) }
+        assertFocusedChoice("Small")
+
+        assertEquals(emptyList<String>(), sizesPicked)
+    }
+
+    @Test
+    fun aPicksAndCloses() {
+        show()
+        press(Key.ButtonA)
+        press(Key.DirectionDown)
+
+        press(Key.ButtonA)
+
         assertEquals(listOf("M"), sizesPicked)
+        assertClosedOnTheRow("Size", "Medium")
+        rule.onNode(hasText("Size") and hasStateDescription("Collapsed")).assertExists()
+    }
+
+    @Test
+    fun aOnTheCurrentChoiceChangesNothing() {
+        show()
+        press(Key.ButtonA)
+
+        press(Key.ButtonA)
+
+        assertEquals(emptyList<String>(), sizesPicked)
+        assertClosedOnTheRow("Size", "Small")
+    }
+
+    @Test
+    fun bClosesWithoutAChange() {
+        show()
+        press(Key.ButtonA)
+        press(Key.DirectionDown)
+
+        press(Key.ButtonB)
+
+        assertEquals(emptyList<String>(), sizesPicked)
+        assertClosedOnTheRow("Size", "Small")
+        assertEquals(0, backs)
+    }
+
+    @Test
+    fun systemBackClosesTheListNotThePage() {
+        show()
+        press(Key.ButtonA)
+        press(Key.DirectionDown)
+
+        press(Key.Back)
+
+        assertEquals(emptyList<String>(), sizesPicked)
+        assertClosedOnTheRow("Size", "Small")
+        assertEquals(0, backs)
+    }
+
+    @Test
+    fun leftAndRightDoNothingWhileOpen() {
+        show()
+        press(Key.ButtonA)
+
+        press(Key.DirectionRight)
+        press(Key.DirectionLeft)
+
+        assertFocusedChoice("Small")
+        assertEquals(emptyList<String>(), sizesPicked)
+    }
+
+    @Test
+    fun theFocusCantLeaveTheList() {
+        show()
+        press(Key.ButtonA)
+        repeat(3) { press(Key.DirectionDown) }
+
+        press(Key.DirectionDown)
+
+        assertFocusedChoice("Large")
+    }
+
+    @Test
+    fun eachChoiceShowsItsNote() {
+        show()
+        press(Key.DirectionDown)
+
+        press(Key.ButtonA)
+
+        assertFocusedChoice("Green")
+        choice("Green").assertIsSelected()
+        rule.onNode(isFocused()).assert(hasText("The default"))
+    }
+
+    @Test
+    fun theAThatOpensDoesntPick() {
+        show()
+
+        rule.onRoot().performKeyInput {
+            keyDown(Key.ButtonA)
+            advanceEventTime(100)
+            keyUp(Key.ButtonA)
+        }
+        rule.waitForIdle()
+
+        assertFocusedChoice("Small")
+        assertEquals(emptyList<String>(), sizesPicked)
+    }
+
+    @Test
+    fun aValueNotAmongTheChoices() {
+        show(size = "XL")
+
+        press(Key.ButtonA)
+
+        choice("Small").assertIsNotSelected()
+        choice("Medium").assertIsNotSelected()
+        choice("Large").assertIsNotSelected()
+        assertFocusedChoice("Small")
+    }
+
+    @Test
+    fun choicesChangingWhileOpen() {
+        show(size = "S")
+        press(Key.ButtonA)
+        press(Key.DirectionDown)
+        assertFocusedChoice("Medium")
+
+        rule.runOnIdle { sizes.removeAt(1) }
+        rule.waitForIdle()
+        assertFocusedChoice("Small")
+
+        rule.runOnIdle { sizes.clear() }
+        rule.waitForIdle()
+        list().assertDoesNotExist()
+        assertFocusedHas("Size")
+    }
+
+    @Test
+    fun aTapOnTheLabelLineCloses() {
+        show()
+        press(Key.ButtonA)
+        list().assertExists()
+
+        rule.onNodeWithText("Size", useUnmergedTree = true).performClick()
+        rule.waitForIdle()
+
+        list().assertDoesNotExist()
+        assertEquals(emptyList<String>(), sizesPicked)
+    }
+
+    @Test
+    fun aTapElsewhereClosesAndActs() {
+        show()
+        press(Key.ButtonA)
+        list().assertExists()
+
+        rule.onNodeWithText("Honk").performClick()
+        rule.waitForIdle()
+
+        list().assertDoesNotExist()
+        assertEquals(listOf(true), toggles)
+    }
+
+    @Test
+    fun openingAnotherClosesTheFirst() {
+        show()
+        rule.onNodeWithText("Size", useUnmergedTree = true).performClick()
+        rule.waitForIdle()
+        choice("Large").assertExists()
+
+        rule.onNodeWithText("Colour", useUnmergedTree = true).performClick()
+        rule.waitForIdle()
+
+        choice("Large").assertDoesNotExist()
+        choice("Red").assertExists()
     }
 
     @Test

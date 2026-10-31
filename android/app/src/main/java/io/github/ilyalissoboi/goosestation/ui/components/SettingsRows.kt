@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,12 +46,17 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
@@ -67,7 +73,10 @@ data class Choice<T>(
     val note: String? = null,
 )
 
-/** A settings page: [title], then [content] in a scrolling column. B or Back go back ([onBack]). */
+/**
+ * A settings page: [title], then [content] in a scrolling column. B or Back go back ([onBack]). It has one
+ * [ChoiceListHost] for its rows: a tap outside an open list closes it, and still does what it would have.
+ */
 @Composable
 fun SettingsPage(
     title: String,
@@ -77,24 +86,40 @@ fun SettingsPage(
     // Before any handler a page adds itself, which takes Back first while it's enabled.
     BackHandler(onBack = onBack)
     val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    val lists = remember { ChoiceListHost() }
+    var pageCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .safeDrawingPadding()
-                // B, and a Back key reaching Compose, go to the back handlers, the innermost enabled one first.
-                .onPreviewKeyEvent { event ->
-                    if (event.key != Key.Back && event.key != Key.ButtonB) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp) dispatcher?.onBackPressed() ?: onBack()
-                    true
-                }.verticalScroll(rememberScrollState())
-                .padding(horizontal = 32.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
-        content()
+    CompositionLocalProvider(LocalChoiceListHost provides lists) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .safeDrawingPadding()
+                    .onGloballyPositioned { pageCoordinates = it }
+                    // Before the rows see it, and without taking it: a tap closes an open list it ends outside of.
+                    .pointerInput(lists) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.type != PointerEventType.Release) continue
+                                val page = pageCoordinates?.takeIf { it.isAttached } ?: continue
+                                event.changes.firstOrNull()?.let { lists.tappedAt(page.localToRoot(it.position)) }
+                            }
+                        }
+                    }
+                    // B, and a Back key reaching Compose, go to the back handlers, the innermost enabled one first.
+                    .onPreviewKeyEvent { event ->
+                        if (event.key != Key.Back && event.key != Key.ButtonB) return@onPreviewKeyEvent false
+                        if (event.type == KeyEventType.KeyUp) dispatcher?.onBackPressed() ?: onBack()
+                        true
+                    }.verticalScroll(rememberScrollState())
+                    .padding(horizontal = 32.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+            content()
+        }
     }
 }
 
@@ -121,9 +146,13 @@ fun SettingsLoadingPage(
 
 /**
  * A setting with a few [choices]: the [label], and the [selected] choice's label between two arrows. Left and right
- * step through the choices, stopping at the ends; A, Enter or a tap on the row step forward, round to the first after
- * the last; a tap on an arrow steps its way. Each step calls [onSelect]. Under the row: [note], then the selected
- * choice's own note. A value that isn't among the choices shows as itself, and either step goes to the first choice.
+ * step through the choices, stopping at the ends; a tap on an arrow steps its way. Each step calls [onSelect]. Under
+ * the row: [note], then the selected choice's own note. A value that isn't among the choices shows as itself, and
+ * either step goes to the first choice.
+ *
+ * A, Enter or a tap on the row open its [ChoiceList] under the label line, one per page ([LocalChoiceListHost]).
+ * Nothing changes until A on a choice, which selects it (if it isn't already) and closes the list. B, Back or a tap
+ * on the row close it without a change; the focus goes back to the row. With no choices left, it closes.
  */
 @Composable
 fun <T> CyclerRow(
@@ -139,18 +168,23 @@ fun <T> CyclerRow(
     val index = choices.indexOfFirst { it.value == selected }
     val current = choices.getOrNull(index)
     val select by rememberUpdatedState(onSelect)
+    val row = remember { FocusRequester() }
+    // The page's, or the row's own outside a page.
+    val host = LocalChoiceListHost.current ?: remember { ChoiceListHost() }
+    val key = remember { Any() }
+    val open = host.open === key
 
-    fun step(
-        by: Int,
-        wrap: Boolean,
-    ) {
-        if (choices.isEmpty()) return
-        val next =
-            when {
-                index < 0 -> 0
-                wrap -> (index + by).mod(choices.size)
-                else -> (index + by).coerceIn(0, choices.lastIndex)
-            }
+    fun close() {
+        host.close()
+        row.requestFocus()
+    }
+
+    BackHandler(enabled = open, onBack = ::close)
+    LaunchedEffect(open, choices.isEmpty()) { if (open && choices.isEmpty()) close() }
+
+    fun step(by: Int) {
+        if (choices.isEmpty() || open) return
+        val next = if (index < 0) 0 else (index + by).coerceIn(0, choices.lastIndex)
         if (next != index) select(choices[next].value)
     }
 
@@ -158,6 +192,8 @@ fun <T> CyclerRow(
         modifier =
             modifier
                 .fillMaxWidth()
+                .focusRequester(row)
+                .onGloballyPositioned { if (open) host.openCoordinates = it }
                 // Before the focus ring, so the keys bubble up to it from the focused row. Both halves of the press
                 // are taken, so neither moves the focus sideways.
                 .onKeyEvent { event ->
@@ -167,18 +203,24 @@ fun <T> CyclerRow(
                             Key.DirectionRight -> 1
                             else -> return@onKeyEvent false
                         }
-                    if (event.type == KeyEventType.KeyDown) step(by, wrap = false)
+                    if (event.type == KeyEventType.KeyDown) step(by)
                     true
-                }.focusRing(onFocusChange = { focused = it }, onClick = { step(1, wrap = true) })
+                }.focusRing(onFocusChange = { focused = it }, onClick = {
+                    when {
+                        open -> close()
+                        choices.isNotEmpty() -> host.open(key)
+                    }
+                })
                 .semantics {
+                    stateDescription = if (open) "Expanded" else "Collapsed"
                     customActions =
                         listOf(
                             CustomAccessibilityAction("Previous") {
-                                step(-1, wrap = false)
+                                step(-1)
                                 true
                             },
                             CustomAccessibilityAction("Next") {
-                                step(1, wrap = false)
+                                step(1)
                                 true
                             },
                         )
@@ -191,15 +233,27 @@ fun <T> CyclerRow(
                 Cycler(
                     value = current?.label ?: selected?.toString() ?: "",
                     active = focused,
-                    canGoBack = index != 0 && choices.isNotEmpty(),
-                    canGoForward = index != choices.lastIndex && choices.isNotEmpty(),
-                    onBack = { step(-1, wrap = false) },
-                    onForward = { step(1, wrap = false) },
+                    // Faint while the list is open: it doesn't step then.
+                    canGoBack = !open && index != 0 && choices.isNotEmpty(),
+                    canGoForward = !open && index != choices.lastIndex && choices.isNotEmpty(),
+                    onBack = { step(-1) },
+                    onForward = { step(1) },
                 )
             },
         )
         note?.let { RowNote(it) }
-        current?.note?.let { RowNote(it) }
+        if (open) {
+            ChoiceList(
+                choices,
+                selected,
+                onPick = {
+                    if (it.value != selected) select(it.value)
+                    close()
+                },
+            )
+        } else {
+            current?.note?.let { RowNote(it) }
+        }
     }
 }
 

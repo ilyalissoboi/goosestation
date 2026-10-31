@@ -223,11 +223,18 @@ SettingsPage("Graphics", onBack = onBack) {
 }
 ```
 
-- `SettingsPage`: the title in `title-1`, the rows in a scrolling column, B and Back going back.
-- `CyclerRow`: a setting with a few values, shown between two arrows. Left and right step and stop at the ends; A,
-  Enter or a tap step forward, round to the first; a tap on an arrow steps its way. Each step is the change. A
+- `SettingsPage`: the title in `title-1`, the rows in a scrolling column, B and Back going back. It keeps one choice
+  list open at a time; a tap outside an open list closes it and still does what it would have.
+- `CyclerRow`: a setting with a few values, shown between two arrows. Left and right step and stop at the ends; a tap
+  on an arrow steps its way. Each step is the change. A, Enter or a tap on the row open its choice list. A
   `Choice`'s `note` shows under the row while it's the current value. Values that aren't among the choices show as
   themselves. For more than about eight values, or values that need explaining, make a page of its own instead.
+- The choice list: a `CyclerRow`'s choices, open in the page under its label line (never a window), on `sunken` at
+  `radius-md` with a `line-strong` edge. Each choice is a 48 dp row with its label in `label` and its note in
+  `body-sm` `ink-muted`; the current one is on `beak-soft` with a `check` in `beak-ink`. The focus starts on the
+  current choice and stays in the list; up and down move it, left and right do nothing. Nothing changes until A on a
+  choice, which picks it and closes the list; B, Back or a tap on the row close it unchanged. The focus goes back to
+  the row, and the arrows are faint while it's open.
 - `SwitchRow`: on/off, a square toggle and no word. The state is in the row's semantics (`toggleableState`), so
   screen readers say it and tests check it with `assertIsOn()`.
 - `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.

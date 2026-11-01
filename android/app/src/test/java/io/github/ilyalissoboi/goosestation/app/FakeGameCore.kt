@@ -4,6 +4,8 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.PatchCode
+import io.github.ilyalissoboi.goosestation.core.PatchCodes
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
 
 /**
@@ -21,6 +23,9 @@ class FakeGameCore(
     val moveFails = HashSet<String>()
     var discInDrive = 1
     var discError: String? = null
+    var codes = listOf<PatchCode>()
+    var codesFile = "Crash Bandicoot.cht"
+    var codeError: String? = null
     var saveError: String? = null
     var loadError: String? = null
     var resumeError: String? = null
@@ -116,5 +121,23 @@ class FakeGameCore(
         calls += "changeDisc $number"
         if (discError == null) discInDrive = number
         return discError
+    }
+
+    override fun getPatchCodes(): PatchCodes {
+        calls += "getPatchCodes"
+        return PatchCodes(codesFile, codes.toTypedArray())
+    }
+
+    override fun setPatchCode(
+        index: Int,
+        on: Boolean,
+    ): String? {
+        calls += "setPatchCode $index $on"
+        return codeError
+    }
+
+    override fun applyPatchCode(index: Int): String? {
+        calls += "applyPatchCode $index"
+        return codeError
     }
 }

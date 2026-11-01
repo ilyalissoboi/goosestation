@@ -87,4 +87,16 @@ class CoreMessagesTest {
         assertNull(CoreMessages.translate("media_switch_subimage", "Switched to sub-image AC3 (Disc 2) (2) in 'AC3'."))
         assertNull(CoreMessages.translate("ReloadMemoryCardsFromGameChange", "Game changed, reloading memory cards."))
     }
+
+    @Test
+    fun theCodesWarningCountsThem() {
+        assertEquals(
+            "2 patch codes are on",
+            CoreMessages.translate("CheatsLoadWarning", "2 cheat(s) are enabled. This may crash games."),
+        )
+        assertEquals(
+            "1 patch code is on",
+            CoreMessages.translate("CheatsLoadWarning", "1 cheat(s) are enabled. This may crash games."),
+        )
+    }
 }

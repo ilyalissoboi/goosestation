@@ -130,6 +130,29 @@ u32 GetCurrentDisc();
 /// it's in (or was already), else why not.
 std::optional<std::string> ChangeDisc(u32 number);
 
+/// One of the running game's patch codes: its group (empty for none), name, whether it's applied by hand, and whether
+/// it's on.
+struct PatchCode
+{
+  std::string group;
+  std::string name;
+  bool manual;
+  bool on;
+};
+
+/// The running game's patch codes, and the player's file to add codes in (`<game title>.cht`). None without a game.
+struct PatchCodes
+{
+  std::string file_name;
+  std::vector<PatchCode> codes;
+};
+PatchCodes GetPatchCodes();
+
+/// Switches the running game's code index on or off, at once and for next time; or applies a manual code once.
+/// nullopt when it's done, else why not.
+std::optional<std::string> SetPatchCode(u32 index, bool on);
+std::optional<std::string> ApplyPatchCode(u32 index);
+
 /// Moves from_serial's state in from_slot to to_serial's to_slot, only onto nothing. False if it didn't move.
 bool MoveSaveState(std::string from_serial, s32 from_slot, std::string to_serial, s32 to_slot);
 

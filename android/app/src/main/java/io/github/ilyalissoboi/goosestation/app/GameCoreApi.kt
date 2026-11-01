@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.core.PatchCodes
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
 
 /** A game's save state slots, as the core numbers them. */
@@ -41,6 +42,18 @@ interface GameCoreApi {
         key: String,
         slot: Int,
     ): String?
+
+    /** The running game's patch codes. */
+    fun getPatchCodes(): PatchCodes
+
+    /** Switches code [index] on or off, for now and next time: null when it's done, or else why not. */
+    fun setPatchCode(
+        index: Int,
+        on: Boolean,
+    ): String?
+
+    /** Applies manual code [index] once: null when it's done, or else why not. */
+    fun applyPatchCode(index: Int): String?
 
     /** The number of the running game's disc in the drive, 0 if unknown. */
     fun getCurrentDisc(): Int
@@ -94,6 +107,15 @@ object NativeGameCoreApi : GameCoreApi {
         key: String,
         slot: Int,
     ): String? = NativeLibrary.loadState(key, slot)
+
+    override fun getPatchCodes(): PatchCodes = NativeLibrary.getPatchCodes() ?: PatchCodes("", emptyArray())
+
+    override fun setPatchCode(
+        index: Int,
+        on: Boolean,
+    ): String? = NativeLibrary.setPatchCode(index, on)
+
+    override fun applyPatchCode(index: Int): String? = NativeLibrary.applyPatchCode(index)
 
     override fun getCurrentDisc(): Int = NativeLibrary.getCurrentDisc()
 

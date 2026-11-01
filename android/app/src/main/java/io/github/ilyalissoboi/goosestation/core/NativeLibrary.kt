@@ -198,6 +198,21 @@ object NativeLibrary {
         slot: Int,
     ): String?
 
+    /** The running game's patch codes; none without a game. Null only if they couldn't be passed over. */
+    external fun getPatchCodes(): PatchCodes?
+
+    /**
+     * Switches the running game's code [index] on or off, at once, and keeps it in the app's file for next time (never
+     * in the player's). Null when it's done, or else why not.
+     */
+    external fun setPatchCode(
+        index: Int,
+        on: Boolean,
+    ): String?
+
+    /** Applies the running game's manual code [index] once. Null when it's done, or else why not. */
+    external fun applyPatchCode(index: Int): String?
+
     /** The [GameDisc.number] of the running game's disc in the drive, 0 without a game or one of its discs. */
     external fun getCurrentDisc(): Int
 

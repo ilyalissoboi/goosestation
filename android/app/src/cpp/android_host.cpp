@@ -4,6 +4,7 @@
 #include "android_host.h"
 #include "emu_thread.h"
 #include "foreign_settings.h"
+#include "game_codes.h"
 
 #include "core/achievements.h"
 #include "core/analog_controller.h"
@@ -730,6 +731,8 @@ void AndroidHost::BootPendingGame()
   s_pending_playlist_index = 0;
   s_running_game = std::move(s_pending_game);
   s_pending_game = {};
+  // Built before the boot, whose UpdateRunningGame() gives it to the core (Host::OnGameChanged()).
+  GameCodes::Load(s_running_game.value());
   if (parameters.save_state.empty())
     INFO_LOG("Starting '{}'.", s_boot_path);
   else
@@ -966,6 +969,53 @@ std::optional<std::string> AndroidHost::ChangeDisc(u32 number)
         result = fmt::format("Couldn't insert disc {}.", number);
       else
         INFO_LOG("Disc {} of '{}' is in.", number, game.title);
+    },
+    true);
+  return result;
+}
+
+AndroidHost::PatchCodes AndroidHost::GetPatchCodes()
+{
+  PatchCodes result;
+  if (!s_initialized)
+    return result;
+
+  EmuThread::RunOnThread(
+    [&result]() {
+      if (!System::IsValid() || !s_running_game.has_value())
+        return;
+
+      result.file_name = GameCodes::AddFileName();
+      for (const GameCodes::Code& code : GameCodes::List())
+        result.codes.push_back({code.group, code.name, code.manual, code.on});
+    },
+    true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::SetPatchCode(u32 index, bool on)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [index, on, &result]() {
+      result = System::IsValid() ? GameCodes::SetOn(index, on) : std::optional<std::string>(NO_GAME_RUNNING);
+    },
+    true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::ApplyPatchCode(u32 index)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [index, &result]() {
+      result = System::IsValid() ? GameCodes::ApplyOnce(index) : std::optional<std::string>(NO_GAME_RUNNING);
     },
     true);
   return result;
@@ -1814,6 +1864,11 @@ void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& loc
   // status icons would show the same things twice.
   g_settings.display_show_status_indicators = false;
 
+  // The host owns each game's patch code list and gives it to the core itself (GameCodes), and the core applies
+  // whatever list it's given. With this on, the core would also load each disc's own .cht file as it starts, and drop
+  // the list when the setting changes. It's never written back: desktop keeps its own setting in a shared settings.ini.
+  g_settings.enable_cheats = false;
+
   // The build's page size is a multiple of 4 KB pages, but fastmem can't map pages smaller than the system's.
   const long system_page_size = sysconf(_SC_PAGESIZE);
   if (system_page_size > static_cast<long>(HOST_PAGE_SIZE) && g_settings.cpu_fastmem_mode != CPUFastmemMode::Disabled)
@@ -1986,6 +2041,7 @@ void Host::OnSystemDestroyed()
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
   AndroidHost::s_running_game.reset();
+  GameCodes::Clear();
 
   // Fast forward ends with the game.
   if (AndroidHost::s_fast_forward_reported)
@@ -2023,6 +2079,9 @@ void Host::OnPerformanceCountersUpdated()
 void Host::OnGameChanged(const std::string& disc_path, const std::string& game_serial, const std::string& game_name)
 {
   INFO_LOG("Game changed: '{}' ({}), {}", game_name, game_serial, disc_path);
+
+  // The core drops its code list at every change of disc or game: it gets the game's one list again.
+  GameCodes::Apply();
 }
 
 std::optional<Host::SaveStateMedia> Host::ResolveSaveStateMedia(std::string_view serial, std::string_view media_path,

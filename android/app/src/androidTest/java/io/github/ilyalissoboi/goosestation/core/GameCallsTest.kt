@@ -101,6 +101,10 @@ class GameCallsTest {
         assertEquals("No game is running.", NativeLibrary.saveState(SERIAL, 1))
         assertEquals("No game is running.", NativeLibrary.loadState(SERIAL, 1))
         assertEquals("No game is running.", NativeLibrary.changeDisc(2))
+        val codes = NativeLibrary.getPatchCodes()!!
+        assertEquals(0, codes.codes.size)
+        assertEquals("No game is running.", NativeLibrary.setPatchCode(0, true))
+        assertEquals("No game is running.", NativeLibrary.applyPatchCode(0))
         assertEquals(0, NativeLibrary.getCurrentDisc())
         assertEquals(-1, NativeLibrary.getAnalogMode())
     }
@@ -185,6 +189,76 @@ class GameCallsTest {
         }
         // No resume state: the shutdown was told not to save one.
         assertEquals(0L, NativeLibrary.getSaveStateTimes(PADTEST_SERIAL)[0])
+    }
+
+    // A code the player's .cht marks on, which the app's file switched off, stays off at boot; a switch is written to
+    // the app's file, never to the player's.
+    @Test
+    fun codesFollowTheAppsFileNotThePlayers() {
+        val games = File(root, "games")
+        assumeTrue(
+            "No BIOS or padtest in /sdcard/GooseTest",
+            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", File(games, "padtest.psexe")),
+        )
+        val cheats = File(dataRoot, "cheats").apply { mkdirs() }
+        val playerFile =
+            File(
+                cheats,
+                "padtest.cht",
+            ).apply { writeText("[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n") }
+        val appFile = File(cheats, "$PADTEST_SERIAL.patchcodes").apply { writeText("off\t\tMarked\n") }
+        val started = CountDownLatch(1)
+        val stopped = CountDownLatch(1)
+        NativeLibrary.setCallbacks(
+            object : NativeCallbacks {
+                override fun onGameStarted(
+                    title: String,
+                    serial: String,
+                ) = started.countDown()
+
+                override fun onGameStopped() = stopped.countDown()
+
+                override fun onError(message: String) {}
+            },
+        )
+        initialize()
+        NativeLibrary.setGameFolders(arrayOf(games.absolutePath))
+        NativeLibrary.refreshGameList(true)
+        val padtest = NativeLibrary.getGameList().single()
+        val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
+        val surface = Surface(texture)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        try {
+            NativeLibrary.startGame(padtest.path, 1, false)
+            assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
+            NativeLibrary.setPaused(true)
+
+            val codes = NativeLibrary.getPatchCodes()!!
+            assertEquals("padtest.cht", codes.fileName)
+            assertEquals(listOf("Marked" to false, "Other" to false), codes.codes.map { it.name to it.on })
+
+            assertNull(NativeLibrary.setPatchCode(1, true))
+
+            assertEquals(
+                listOf(true),
+                NativeLibrary
+                    .getPatchCodes()!!
+                    .codes
+                    .drop(1)
+                    .map { it.on },
+            )
+            val written = appFile.readText()
+            assertTrue(written, "off\t\tMarked\n" in written && "on\t\tOther\n" in written)
+            assertEquals("[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n", playerFile.readText())
+        } finally {
+            NativeLibrary.shutdownGame()
+            assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.setCallbacks(null)
+            surface.release()
+            texture.release()
+        }
     }
 
     // The pad's Analog button on X alone, and fast forward on Select + X. padtest locks the controller in analog mode,

@@ -14,6 +14,8 @@ add_library(goosestation SHARED
   foreign_settings.cpp
   foreign_settings.h
   fullscreen_ui_stubs.cpp
+  game_codes.cpp
+  game_codes.h
   jni_bridge.cpp
   jni_util.cpp
   jni_util.h

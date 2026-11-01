@@ -25,6 +25,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -53,6 +54,10 @@ jclass s_game_disc_class = nullptr;
 jmethodID s_game_disc_constructor = nullptr;
 jclass s_save_state_preview_class = nullptr;
 jmethodID s_save_state_preview_constructor = nullptr;
+jclass s_patch_code_class = nullptr;
+jmethodID s_patch_code_constructor = nullptr;
+jclass s_patch_codes_class = nullptr;
+jmethodID s_patch_codes_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
 jmethodID s_bios_image_constructor = nullptr;
 jclass s_pad_binding_class = nullptr;
@@ -419,6 +424,30 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   {
     ClearException(env);
     return JNI_ERR;
+  }
+
+  for (const auto& [name, signature, cls, constructor] :
+       {std::tuple("io/github/ilyalissoboi/goosestation/core/PatchCode", "(ILjava/lang/String;Ljava/lang/String;ZZ)V",
+                   &s_patch_code_class, &s_patch_code_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/PatchCodes",
+                   "(Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/PatchCode;)V", &s_patch_codes_class,
+                   &s_patch_codes_constructor)})
+  {
+    jclass local = env->FindClass(name);
+    if (!local)
+    {
+      ClearException(env);
+      return JNI_ERR;
+    }
+
+    *cls = static_cast<jclass>(env->NewGlobalRef(local));
+    env->DeleteLocalRef(local);
+    *constructor = env->GetMethodID(*cls, "<init>", signature);
+    if (!*constructor)
+    {
+      ClearException(env);
+      return JNI_ERR;
+    }
   }
 
   jclass save_state_preview_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SaveStatePreview");
@@ -1065,6 +1094,66 @@ NATIVE_LIBRARY_FUNCTION(jint, getCurrentDisc)(JNIEnv*, jobject)
 NATIVE_LIBRARY_FUNCTION(jstring, changeDisc)(JNIEnv* env, jobject, jint number)
 {
   return ToResult(env, AndroidHost::ChangeDisc(static_cast<u32>(std::max(number, 0))));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getPatchCodes)(JNIEnv* env, jobject)
+{
+  const AndroidHost::PatchCodes codes = AndroidHost::GetPatchCodes();
+  jobjectArray array = env->NewObjectArray(static_cast<jsize>(codes.codes.size()), s_patch_code_class, nullptr);
+  if (!array)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < codes.codes.size(); i++)
+  {
+    const AndroidHost::PatchCode& code = codes.codes[i];
+    jstring group = ToJString(env, code.group);
+    jstring name = ToJString(env, code.name);
+    jobject entry = nullptr;
+    if (group && name)
+    {
+      entry = env->NewObject(s_patch_code_class, s_patch_code_constructor, static_cast<jint>(i), group, name,
+                             static_cast<jboolean>(code.manual), static_cast<jboolean>(code.on));
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(group), static_cast<jobject>(name)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      env->DeleteLocalRef(array);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(array, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  jstring file_name = ToJString(env, codes.file_name);
+  jobject result = file_name ? env->NewObject(s_patch_codes_class, s_patch_codes_constructor, file_name, array) : nullptr;
+  if (ClearException(env))
+    result = nullptr;
+  if (file_name)
+    env->DeleteLocalRef(file_name);
+  env->DeleteLocalRef(array);
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, setPatchCode)(JNIEnv* env, jobject, jint index, jboolean on)
+{
+  return ToResult(env, AndroidHost::SetPatchCode(static_cast<u32>(std::max(index, 0)), on == JNI_TRUE));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, applyPatchCode)(JNIEnv* env, jobject, jint index)
+{
+  return ToResult(env, AndroidHost::ApplyPatchCode(static_cast<u32>(std::max(index, 0))));
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, moveSaveState)(JNIEnv* env, jobject, jstring from_serial, jint from_slot,

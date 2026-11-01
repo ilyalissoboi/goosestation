@@ -3,6 +3,8 @@ add_executable(common-tests
   ../util/android_disc_groups.cpp
   android_input_keys_tests.cpp
   ../util/android_input_keys.cpp
+  android_patch_codes_tests.cpp
+  ../util/android_patch_codes.cpp
   bitutils_tests.cpp
   content_uri_tests.cpp
   fallback_fonts_tests.cpp

@@ -255,7 +255,7 @@ object AppController : NativeCallbacks {
             scope,
             gameDispatcher,
             NativeGameCoreApi,
-            LastSlots(gamePrefs),
+            lastSlots,
             onMessage = { osd.post(it) },
             onResume = ::resumeFromPrompt,
             onExit = ::exitGame,
@@ -265,9 +265,19 @@ object AppController : NativeCallbacks {
     /** What the app keeps per game on this device: its last slot, last disc, and so on. */
     private val gamePrefs by lazy { SharedPreferencesStore(context, "game") }
     private val gameRecords by lazy { GameRecords(gamePrefs) }
+    private val lastSlots by lazy { LastSlots(gamePrefs) }
 
     /** A game's start, which asks first whether to resume where it was left. */
-    val gameStarts by lazy { GameStarts(scope, gameDispatcher, NativeGameCoreApi, gameRecords, ::startGameNow) }
+    val gameStarts by lazy {
+        GameStarts(
+            scope,
+            gameDispatcher,
+            NativeGameCoreApi,
+            gameRecords,
+            lastSlots,
+            ::startGameNow,
+        )
+    }
 
     /** The game from the last start, until its onGameStopped(). */
     var runningGame: GameEntry? = null

@@ -14,9 +14,14 @@ interface GameRecordStore {
         key: String,
         disc: Int,
     )
+
+    /** Whether the game's discs' save states have been moved under its key ([StateMigration]). */
+    fun migrated(key: String): Boolean
+
+    fun setMigrated(key: String)
 }
 
-/** [GameRecordStore] in [store], as `lastDisc.<key>`. */
+/** [GameRecordStore] in [store], as `lastDisc.<key>` and `migrated.<key>`. */
 class GameRecords(
     private val store: KeyValueStore,
 ) : GameRecordStore {
@@ -27,5 +32,11 @@ class GameRecords(
         disc: Int,
     ) {
         store.putString("lastDisc.$key", disc.toString())
+    }
+
+    override fun migrated(key: String): Boolean = store.getString("migrated.$key") == "1"
+
+    override fun setMigrated(key: String) {
+        store.putString("migrated.$key", "1")
     }
 }

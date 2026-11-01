@@ -8,7 +8,7 @@ import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
 
 /**
  * A core for the in-game menu's tests: [times], [screenshots] and [stateDiscs] by slot ([SaveSlots.RESUME] for the
- * resume state), [moveFails] for the moves that fail,
+ * resume state), [serialTimes] for a serial whose times differ from [times], [moveFails] for the moves that fail,
  * [saveError], [loadError] and [analog] as the calls' results, and every call logged to [calls] as "saveState 3" and so on.
  */
 class FakeGameCore(
@@ -17,6 +17,8 @@ class FakeGameCore(
     val times = HashMap<Int, Long>()
     val screenshots = HashMap<Int, ArgbImage>()
     val stateDiscs = HashMap<Int, Int>()
+    val serialTimes = HashMap<String, Map<Int, Long>>()
+    val moveFails = HashSet<String>()
     var saveError: String? = null
     var loadError: String? = null
     var resumeError: String? = null
@@ -26,7 +28,8 @@ class FakeGameCore(
 
     override fun getSaveStateTimes(serial: String): LongArray {
         calls += "getSaveStateTimes $serial"
-        return LongArray(SaveSlots.COUNT + 1) { index -> times[if (index == 0) SaveSlots.RESUME else index] ?: 0L }
+        val saved = serialTimes[serial] ?: times
+        return LongArray(SaveSlots.COUNT + 1) { index -> saved[if (index == 0) SaveSlots.RESUME else index] ?: 0L }
     }
 
     override fun getSaveStatePreview(
@@ -61,8 +64,9 @@ class FakeGameCore(
         toSerial: String,
         toSlot: Int,
     ): Boolean {
-        calls += "moveSaveState $fromSerial $fromSlot $toSerial $toSlot"
-        return true
+        val move = "moveSaveState $fromSerial $fromSlot $toSerial $toSlot"
+        calls += move
+        return move !in moveFails
     }
 
     override fun savesResumeState(): Boolean {

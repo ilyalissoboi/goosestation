@@ -315,6 +315,20 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuLoadWithOtherSaves() {
+        val entries = listOf(SlotEntry(1, 1_700_000_000L, disc = 1))
+        val others = listOf(SlotEntry(3, 1_700_000_000L, owner = "SLPS-02021", disc = 2))
+        show {
+            GameMenu(
+                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1, others = others)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuLoadWithNoSaves() {
         show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
 
@@ -347,6 +361,11 @@ class FocusAuditTest {
 
     private object NoMenuActions : GameMenuActions {
         override fun resume() {}
+
+        override fun pickOther(
+            serial: String,
+            slot: Int,
+        ) {}
 
         override fun openSlots(mode: SlotMode) {}
 

@@ -18,18 +18,22 @@ enum class SlotMode { Save, Load }
 
 /**
  * One slot as the slot list shows it: its [slot] ([SaveSlots.RESUME] for the resume state), when it was saved (Unix
- * seconds; null for an empty slot), and its [picture], once it has been read.
+ * seconds; null for an empty slot), and its [picture], once it has been read. [owner] is null for the game's own slots,
+ * or the serial another disc's state is still filed under; [disc] is the disc it was made on, shown for a multi-disc
+ * game only.
  */
 data class SlotEntry(
     val slot: Int,
     val savedAt: Long?,
     val picture: ArgbImage? = null,
+    val owner: String? = null,
+    val disc: Int? = null,
 )
 
 /**
  * The slot panel: its [mode], its [entries] (null while they're read), the slot to [focus] as it opens (null for none),
  * the slot it asks to replace, if any ([replacing]), whether a save or load is under way ([busy]), and the last one's
- * failure, as shown ([error]).
+ * failure, as shown ([error]). In Load, [others] are the states still filed under the game's other discs.
  */
 data class SlotPanel(
     val mode: SlotMode,
@@ -38,6 +42,7 @@ data class SlotPanel(
     val replacing: Int? = null,
     val busy: Boolean = false,
     val error: String? = null,
+    val others: List<SlotEntry> = emptyList(),
 )
 
 /**
@@ -68,6 +73,12 @@ interface GameMenuActions {
     fun closeSlots()
 
     fun pickSlot(slot: Int)
+
+    /** Loads one of [SlotPanel.others]: [serial]'s [slot]. */
+    fun pickOther(
+        serial: String,
+        slot: Int,
+    )
 
     fun confirmReplace()
 
@@ -226,26 +237,52 @@ class InGameMenu(
         if (!canSave || serial == null) return
         val id = ++panelId
         state = state.copy(slots = SlotPanel(mode), confirmingReset = false)
+        val discs = running?.discs.orEmpty()
+        val multiDisc = discs.size > 1
+        // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
+        val otherSerials =
+            if (mode ==
+                SlotMode.Load
+            ) {
+                discs.map { it.serial }.filter { it.isNotBlank() && it != serial }.distinct()
+            } else {
+                emptyList()
+            }
         scope.launch {
-            val (times, last) = withContext(game) { api.getSaveStateTimes(serial) to lastSlots.get(serial) }
+            val (times, last, otherTimes) =
+                withContext(game) {
+                    Triple(
+                        api.getSaveStateTimes(serial),
+                        lastSlots.get(serial),
+                        otherSerials.associateWith { api.getSaveStateTimes(it) },
+                    )
+                }
             if (id != panelId) return@launch
             val entries = entries(mode, times)
-            updatePanel(id) { it.copy(entries = entries, focus = focus(mode, entries, last)) }
-            for (entry in entries.filter { it.savedAt != null }) {
-                val picture = withContext(game) { api.getSaveStatePreview(serial, entry.slot) }?.picture ?: continue
+            val others =
+                otherTimes.flatMap { (owner, ownerTimes) ->
+                    val disc = discs.firstOrNull { it.serial == owner }?.number
+                    entries(SlotMode.Load, ownerTimes).map { it.copy(owner = owner, disc = disc) }
+                }
+            updatePanel(id) { it.copy(entries = entries, focus = focus(mode, entries, last), others = others) }
+            for (entry in entries.filter { it.savedAt != null } + others) {
+                val preview =
+                    withContext(game) { api.getSaveStatePreview(entry.owner ?: serial, entry.slot) } ?: continue
                 if (id != panelId) return@launch
+                val disc = preview.disc.takeIf { multiDisc && it > 0 }
+
+                fun SlotEntry.withPreview() =
+                    if (slot == entry.slot &&
+                        owner == entry.owner
+                    ) {
+                        copy(picture = preview.picture, disc = disc ?: this.disc)
+                    } else {
+                        this
+                    }
                 updatePanel(id) { panel ->
                     panel.copy(
-                        entries =
-                            panel.entries?.map {
-                                if (it.slot ==
-                                    entry.slot
-                                ) {
-                                    it.copy(picture = picture)
-                                } else {
-                                    it
-                                }
-                            },
+                        entries = panel.entries?.map { it.withPreview() },
+                        others = panel.others.map { it.withPreview() },
                     )
                 }
             }
@@ -267,6 +304,22 @@ class InGameMenu(
             saved -> state = state.copy(slots = panel.copy(replacing = slot))
             else -> save(slot)
         }
+    }
+
+    override fun pickOther(
+        serial: String,
+        slot: Int,
+    ) {
+        val panel = state.slots ?: return
+        if (panel.busy || panel.others.none { it.owner == serial && it.slot == slot }) return
+        val disc = running?.discs?.firstOrNull { it.serial == serial }?.number
+        val what = if (slot == SaveSlots.RESUME) "resume state" else "slot $slot"
+        run(
+            slot,
+            { api.loadState(serial, slot) },
+            if (disc != null) "Loaded disc $disc's $what" else "Loaded that save",
+            remember = false,
+        ) { "Couldn't load that save: $it" }
     }
 
     override fun confirmReplace() {
@@ -336,13 +389,15 @@ class InGameMenu(
     }
 
     /**
-     * Runs [call] for [slot] on [game]. When it works, the slot is remembered as the last one, the panel closes, and
-     * the game goes on with [done] shown; when it fails, the panel stays, with [failed] of the reason.
+     * Runs [call] for [slot] on [game]. When it works, the slot is remembered as the last one (unless not [remember]),
+     * the panel closes, and the game goes on with [done] shown; when it fails, the panel stays, with [failed] of the
+     * reason.
      */
     private fun run(
         slot: Int,
         call: (key: String) -> String?,
         done: String,
+        remember: Boolean = true,
         failed: (String) -> String,
     ) {
         val serial = serial ?: return
@@ -351,7 +406,7 @@ class InGameMenu(
         scope.launch {
             val error =
                 withContext(game) {
-                    call(serial).also { if (it == null) lastSlots.set(serial, slot) }
+                    call(serial).also { if (it == null && remember) lastSlots.set(serial, slot) }
                 }
             if (error != null) {
                 updatePanel(id) { it.copy(busy = false, error = failed(error)) }

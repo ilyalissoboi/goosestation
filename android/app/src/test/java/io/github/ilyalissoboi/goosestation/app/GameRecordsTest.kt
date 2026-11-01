@@ -5,10 +5,12 @@ package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** What the app keeps per game, by its key: the disc last played. */
+/** What the app keeps per game, by its key: the disc last played, and whether its states were migrated. */
 class GameRecordsTest {
     private val values = HashMap<String, String>()
     private val store =
@@ -43,5 +45,16 @@ class GameRecordsTest {
         values["lastDisc.SLPS-02020"] = "two"
 
         assertNull(records.lastDisc("SLPS-02020"))
+    }
+
+    @Test
+    fun aMigrationIsRecorded() {
+        assertFalse(records.migrated("SLPS-02020"))
+
+        records.setMigrated("SLPS-02020")
+
+        assertTrue(records.migrated("SLPS-02020"))
+        assertFalse(records.migrated("SLUS-00001"))
+        assertEquals("1", values["migrated.SLPS-02020"])
     }
 }

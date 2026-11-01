@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -706,6 +707,133 @@ class InGameMenuTest {
             assertTrue(calls.toString(), "saveState SLPS-02020 2" in calls)
             assertTrue(calls.toString(), "loadState SLPS-02020 1" in calls)
             assertTrue(calls.toString(), calls.filter { it.startsWith("getSaveState") }.all { "SLPS-02020" in it })
+        }
+
+    private val ac3 =
+        GameEntry(
+            "content://games/ac3 (disc 1).chd",
+            "Ace Combat 3",
+            "SLPS-02020",
+            "NTSC-J",
+            0,
+            0,
+            null,
+            listOf(
+                GameDisc("content://games/ac3 (disc 1).chd", "SLPS-02020", "AC3 (Disc 1)", 1),
+                GameDisc("content://games/ac3 (disc 2).chd", "SLPS-02021", "AC3 (Disc 2)", 2),
+            ),
+        )
+
+    private fun TestScope.ac3Menu(): InGameMenu {
+        val menu = menu(booted = false)
+        menu.gameStarted(ac3)
+        runCurrent()
+        calls.clear()
+        return menu
+    }
+
+    @Test
+    fun loadListsOtherDiscsSavesAfterTheSlots() =
+        runTest {
+            api.serialTimes["SLPS-02020"] = mapOf(1 to 100L)
+            api.serialTimes["SLPS-02021"] = mapOf(SaveSlots.RESUME to 50L, 4 to 60L)
+            val menu = ac3Menu()
+
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertEquals(listOf(1), menu.entries().map { it.slot })
+            val others = menu.slots().others
+            assertEquals(listOf(SaveSlots.RESUME, 4), others.map { it.slot })
+            assertEquals(listOf("SLPS-02021", "SLPS-02021"), others.map { it.owner })
+            assertEquals(listOf(2, 2), others.map { it.disc })
+            assertEquals(listOf(50L, 60L), others.map { it.savedAt })
+        }
+
+    @Test
+    fun pickingAnOtherSaveLoadsIt() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(4 to 60L)
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            calls.clear()
+
+            menu.pickOther("SLPS-02021", 4)
+            runCurrent()
+
+            assertEquals(listOf("loadState SLPS-02021 4", "message Loaded disc 2's slot 4", "resume"), calls)
+            assertNull(lastSlots.get("SLPS-02020"))
+            assertNull(lastSlots.get("SLPS-02021"))
+        }
+
+    @Test
+    fun aFailedOtherLoadSaysWhy() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(SaveSlots.RESUME to 60L)
+            api.loadError = "Bad state."
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            menu.pickOther("SLPS-02021", SaveSlots.RESUME)
+            runCurrent()
+
+            assertEquals("Couldn't load that save: Bad state.", menu.slots().error)
+        }
+
+    @Test
+    fun loadingAnOtherResumeStateSaysSo() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(SaveSlots.RESUME to 60L)
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            calls.clear()
+
+            menu.pickOther("SLPS-02021", SaveSlots.RESUME)
+            runCurrent()
+
+            assertTrue(calls.toString(), "message Loaded disc 2's resume state" in calls)
+        }
+
+    @Test
+    fun saveNeverListsOtherSaves() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(4 to 60L)
+            val menu = ac3Menu()
+
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+
+            assertTrue(menu.slots().others.isEmpty())
+            assertTrue(calls.none { it == "getSaveStateTimes SLPS-02021" })
+        }
+
+    @Test
+    fun aMultiDiscGamesRowsTakeTheirDisc() =
+        runTest {
+            api.times[1] = 100
+            api.stateDiscs[1] = 2
+            val menu = ac3Menu()
+
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertEquals(2, menu.entries().single().disc)
+        }
+
+    @Test
+    fun aSingleDiscGamesRowsHaveNoDisc() =
+        runTest {
+            api.times[1] = 100
+            api.stateDiscs[1] = 1
+            val menu = menu()
+
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertNull(menu.entries().single().disc)
         }
 
     private class MemoryLastSlots : LastSlotStore {

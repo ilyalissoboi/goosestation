@@ -389,6 +389,18 @@ class OrientationLayoutTest {
             assertTrue("Slot 1 is focused, not ${focusedText()}", focusedHas("Slot 1"))
             pressUntilFocusedInView(Key.DirectionDown, "Slot 10")
             assertTextsLaidOut(inView = true)
+
+            // Load, with the disc on each row and another disc's saves after the slots.
+            val saved = entries.filter { it.savedAt != null }.map { it.copy(disc = 1) }
+            val others = listOf(3, 9).map { SlotEntry(it, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2) }
+            // Closed first, as the menu does between panels.
+            menu.value = menu.value.copy(slots = null)
+            rule.waitForIdle()
+            menu.value = menu.value.copy(slots = SlotPanel(SlotMode.Load, saved, focus = 1, others = others))
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            pressUntilFocusedInView(Key.DirectionDown, "Slot 9")
+            assertTextsLaidOut(inView = true)
             // As the next config's menu opens.
             menu.value = GameMenuState(booted = true, analogMode = true)
         }
@@ -440,6 +452,11 @@ class OrientationLayoutTest {
 
     private object NoMenuActions : GameMenuActions {
         override fun resume() {}
+
+        override fun pickOther(
+            serial: String,
+            slot: Int,
+        ) {}
 
         override fun openSlots(mode: SlotMode) {}
 

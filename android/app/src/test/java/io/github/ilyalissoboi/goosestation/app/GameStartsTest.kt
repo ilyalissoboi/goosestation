@@ -4,14 +4,17 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Starting a game: at once, or after asking whether to resume where it was left. */
@@ -23,10 +26,40 @@ class GameStartsTest {
     private val exe = GameEntry("content://games/padtest.psexe", "padtest", "", "", 0, 0, null)
 
     private val records = MemoryRecords()
+    private val lastSlots = HashMap<String, Int>()
+    private val lastSlotStore =
+        object : LastSlotStore {
+            override fun get(serial: String): Int? = lastSlots[serial]
+
+            override fun set(
+                serial: String,
+                slot: Int,
+            ) {
+                lastSlots[serial] = slot
+            }
+        }
+    private val ac3 =
+        GameEntry(
+            "content://games/ac3 (disc 1).chd",
+            "Ace Combat 3",
+            "SLPS-02020",
+            "NTSC-J",
+            0,
+            0,
+            null,
+            listOf(
+                GameDisc("content://games/ac3 (disc 1).chd", "SLPS-02020", "AC3 (Disc 1)", 1),
+                GameDisc("content://games/ac3 (disc 2).chd", "SLPS-02021", "AC3 (Disc 2)", 2),
+            ),
+        )
 
     private fun TestScope.starts(): GameStarts {
         val starts =
-            GameStarts(backgroundScope, StandardTestDispatcher(testScheduler), api, records) { game, disc, resume ->
+            GameStarts(backgroundScope, StandardTestDispatcher(testScheduler), api, records, lastSlotStore) {
+                game,
+                disc,
+                resume,
+                ->
                 calls += "start ${game.title} $disc $resume"
             }
         calls.clear()
@@ -180,5 +213,68 @@ class GameStartsTest {
             starts.cancel()
 
             assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun aMultiDiscGameMigratesOnceBeforeTheResumeCheck() =
+        runTest {
+            api.serialTimes["SLPS-02020"] = mapOf(3 to 100L)
+            api.serialTimes["SLPS-02021"] = mapOf(3 to 200L, SaveSlots.RESUME to 300L)
+            lastSlots["SLPS-02021"] = 3
+            val starts = starts()
+
+            starts.play(ac3)
+            runCurrent()
+
+            val moves = calls.filter { it.startsWith("moveSaveState") }
+            assertEquals(
+                listOf(
+                    "moveSaveState SLPS-02020 3 SLPS-02020 1",
+                    "moveSaveState SLPS-02021 -1 SLPS-02020 -1",
+                    "moveSaveState SLPS-02021 3 SLPS-02020 3",
+                ),
+                moves,
+            )
+            // The moves come before the resume check, which reads the key's times last.
+            assertTrue(calls.indexOf(moves.last()) < calls.lastIndexOf("getSaveStateTimes SLPS-02020"))
+            assertTrue(records.migrated("SLPS-02020"))
+            assertEquals(3, lastSlots["SLPS-02020"])
+
+            starts.cancel()
+            calls.clear()
+            starts.play(ac3)
+            runCurrent()
+            assertEquals(0, calls.count { it.startsWith("moveSaveState") })
+        }
+
+    @Test
+    fun aFailedMoveIsTriedAgainNextTime() =
+        runTest {
+            api.serialTimes["SLPS-02020"] = mapOf(3 to 100L)
+            api.serialTimes["SLPS-02021"] = mapOf(3 to 200L)
+            api.moveFails += "moveSaveState SLPS-02020 3 SLPS-02020 1"
+            val starts = starts()
+
+            starts.play(ac3)
+            runCurrent()
+
+            assertEquals(
+                listOf("moveSaveState SLPS-02020 3 SLPS-02020 1"),
+                calls.filter { it.startsWith("moveSaveState") },
+            )
+            assertFalse(records.migrated("SLPS-02020"))
+            assertEquals(1, calls.count { it.startsWith("start") })
+        }
+
+    @Test
+    fun aSingleDiscGameNeverMigrates() =
+        runTest {
+            val starts = starts()
+
+            starts.play(crash.copy(discs = listOf(GameDisc(crash.path, crash.serial, crash.title, 1))))
+            runCurrent()
+
+            assertEquals(listOf("getSaveStateTimes SCUS-94900", "start Crash Bandicoot 1 false"), calls)
+            assertFalse(records.migrated("SCUS-94900"))
         }
 }

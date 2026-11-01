@@ -23,13 +23,15 @@ data class ResumeOffer(
 /**
  * Starting a game: at once, or, when it has a resume state, once the player has answered [offer]. The game's state and
  * its last disc ([records]) are looked for on [game], with [api]; [start] boots the game on that disc, or from its
- * resume state. Main thread only.
+ * resume state. A multi-disc game's discs' states are first moved under its key, once ([StateMigration]), with their
+ * [lastSlots]. Main thread only.
  */
 class GameStarts(
     private val scope: CoroutineScope,
     private val game: CoroutineDispatcher,
     private val api: GameCoreApi,
     private val records: GameRecordStore,
+    private val lastSlots: LastSlotStore,
     private val start: (game: GameEntry, disc: Int, resume: Boolean) -> Unit,
 ) {
     /** The question being asked, or null. */
@@ -55,6 +57,7 @@ class GameStarts(
             try {
                 val (disc, found) =
                     withContext(game) {
+                        if (entry.discs.size > 1 && !records.migrated(serial)) migrate(entry)
                         val disc = records.lastDisc(serial) ?: 1
                         val savedAt = api.getSaveStateTimes(serial)[0]
                         disc to
@@ -70,6 +73,23 @@ class GameStarts(
                 checking = false
             }
         }
+    }
+
+    /**
+     * Moves [entry]'s discs' states under its key, losing none, and records that it's done. A move that fails stops it
+     * unrecorded, so the next play tries again. On [game].
+     */
+    private fun migrate(entry: GameEntry) {
+        val key = entry.serial
+        val serials = (listOf(key) + entry.discs.map { it.serial }).filter { it.isNotBlank() }.distinct()
+        val times = serials.associateWith { api.getSaveStateTimes(it) }
+        val moves = StateMigration.plan(key, times)
+        for (move in moves) {
+            if (!api.moveSaveState(move.serial, move.slot, key, move.toSlot)) return
+        }
+        val last = serials.mapNotNull { serial -> lastSlots.get(serial)?.let { serial to it } }.toMap()
+        StateMigration.lastSlot(key, last, times, moves)?.let { lastSlots.set(key, it) }
+        records.setMigrated(key)
     }
 
     /** Resume: the game boots from its resume state. */

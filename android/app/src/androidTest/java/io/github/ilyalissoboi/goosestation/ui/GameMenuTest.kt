@@ -84,6 +84,13 @@ class GameMenuTest {
                 calls += "pickSlot $slot"
             }
 
+            override fun pickOther(
+                serial: String,
+                slot: Int,
+            ) {
+                calls += "pickOther $serial $slot"
+            }
+
             override fun confirmReplace() {
                 calls += "confirmReplace"
             }
@@ -304,6 +311,40 @@ class GameMenuTest {
 
         rule.onNode(isFocused() and hasText("Slot 4", substring = true)).assertExists()
         rule.onNodeWithText("Slot 1").assertDoesNotExist()
+    }
+
+    @Test
+    fun otherSavesShowUnderTheirHeading() {
+        val others = listOf(SlotEntry(4, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
+        state =
+            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, saved(1).take(1), focus = 1, others = others))
+        show()
+
+        rule.onNodeWithText("OTHER SAVES").assertExists()
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Slot 4", substring = true)).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("pickOther SLPS-02021 4"), calls)
+    }
+
+    @Test
+    fun onlyOtherSavesAreStillSaves() {
+        val others = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
+        state =
+            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList(), focus = null, others = others))
+        show()
+
+        rule.onNodeWithText("No saves yet for this game.").assertDoesNotExist()
+        rule.onNode(isFocused() and hasText("Resume", substring = true)).assertExists()
+    }
+
+    @Test
+    fun aRowShowsItsDisc() {
+        val entries = listOf(SlotEntry(1, now.toEpochSecond() - 600, disc = 2))
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1))
+        show()
+
+        rule.onNodeWithText("Saved · Disc 2").assertExists()
     }
 
     @Test

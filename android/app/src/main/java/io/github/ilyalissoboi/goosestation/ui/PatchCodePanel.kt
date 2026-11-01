@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -67,8 +68,10 @@ fun PatchCodePanel(
     Column(
         modifier =
             modifier
-                .focusProperties { onExit = { cancelFocusChange() } }
-                .focusGroup()
+                .focusProperties {
+                    // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
+                    onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
+                }.focusGroup()
                 .background(colors.surface, GsShapes.large)
                 .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),

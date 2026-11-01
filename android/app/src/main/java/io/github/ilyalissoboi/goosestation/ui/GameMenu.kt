@@ -91,14 +91,27 @@ fun GameMenu(
     now: ZonedDateTime = ZonedDateTime.now(),
 ) {
     val current by rememberUpdatedState(state)
-    // Back from the system, and B and Back from the keys below, which go through the back handlers, this one first.
+    // Kept here, outside the menu panel, which is composed afresh when the layout changes.
+    val cameFrom = remember { CameFrom() }
+    // Back from the system, and B and Back from the keys below, which go through the back handlers, this one first. A
+    // side panel gives the focus back to its row before it goes: were its focused row to go first, the focus would
+    // land on another menu row, and its scroll would leave the panel's row out of view.
     BackHandler {
         val shown = current
         when {
             shown.slots?.replacing != null -> actions.cancelReplace()
-            shown.slots != null -> actions.closeSlots()
-            shown.discs != null -> actions.closeDiscs()
-            shown.codes != null -> actions.closeCodes()
+            shown.slots != null -> {
+                (if (shown.slots.mode == SlotMode.Save) cameFrom.saveRow else cameFrom.loadRow).requestFocus()
+                actions.closeSlots()
+            }
+            shown.discs != null -> {
+                cameFrom.discRow.requestFocus()
+                actions.closeDiscs()
+            }
+            shown.codes != null -> {
+                cameFrom.codesRow.requestFocus()
+                actions.closeCodes()
+            }
             shown.confirmingReset -> actions.cancelReset()
             shown.confirmingExit -> actions.cancelExit()
             shown.replacingResume != null -> actions.cancelReplaceResume()
@@ -118,8 +131,6 @@ fun GameMenu(
             state.replacingResume,
         )
     val down = remember(layer) { HashSet<Key>() }
-    // Kept here, outside the menu panel, which is composed afresh when the layout changes.
-    val cameFrom = remember { CameFrom() }
     SideEffect {
         state.slots?.let { cameFrom.slots = it.mode }
         if (state.discs != null) cameFrom.discs = true
@@ -188,6 +199,13 @@ fun GameMenu(
 
 /** The menu row a slot panel or the reset question came from, to focus again once it closes. */
 private class CameFrom {
+    val resume = FocusRequester()
+    val saveRow = FocusRequester()
+    val loadRow = FocusRequester()
+    val discRow = FocusRequester()
+    val codesRow = FocusRequester()
+    val resetRow = FocusRequester()
+    val exitRow = FocusRequester()
     var slots: SlotMode? = null
     var discs = false
     var codes = false
@@ -205,13 +223,13 @@ private fun MenuPanel(
     modifier: Modifier,
 ) {
     val colors = GooseStationTheme.colors
-    val resume = remember { FocusRequester() }
-    val saveRow = remember { FocusRequester() }
-    val loadRow = remember { FocusRequester() }
-    val discRow = remember { FocusRequester() }
-    val codesRow = remember { FocusRequester() }
-    val resetRow = remember { FocusRequester() }
-    val exitRow = remember { FocusRequester() }
+    val resume = cameFrom.resume
+    val saveRow = cameFrom.saveRow
+    val loadRow = cameFrom.loadRow
+    val discRow = cameFrom.discRow
+    val codesRow = cameFrom.codesRow
+    val resetRow = cameFrom.resetRow
+    val exitRow = cameFrom.exitRow
     val booted = state.booted
     val openMode = state.slots?.mode
     val discsOpen = state.discs != null

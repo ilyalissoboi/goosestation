@@ -17,7 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -569,6 +571,29 @@ class GameMenuTest {
         assertEquals(listOf("closeCodes"), calls)
         rule.onNodeWithText("Patch codes").assertIsFocused()
     }
+
+    // The Thor's screen: the menu narrows beside a side panel and widens again as it closes, and the row it came from,
+    // below the fold, must be scrolled back into view as it takes the focus.
+    @Test
+    fun aClosedPanelsRowIsShownAgainOnASmallScreen() {
+        val rows = listOf(PatchCodeRow(0, "Infinite HP", null, false, false))
+        state = GameMenuState(booted = true, analogMode = false, disc = 1, discCount = 2)
+        show(width = 640, height = 360)
+        for (step in 0 until 12) {
+            if (rule.onNodeWithText("Patch codes").isFocusedNow()) break
+            press(Key.DirectionDown)
+        }
+        rule.onNodeWithText("Patch codes").assertIsDisplayed()
+
+        state = state.copy(codes = codes(PatchCodeGroup(null, rows)))
+        rule.waitForIdle()
+        press(Key.ButtonB)
+
+        rule.onNodeWithText("Patch codes").assertIsFocused().assertIsDisplayed()
+    }
+
+    private fun SemanticsNodeInteraction.isFocusedNow() =
+        fetchSemanticsNode().config.getOrElse(SemanticsProperties.Focused) { false }
 
     @Test
     fun noSavesSaysSo() {

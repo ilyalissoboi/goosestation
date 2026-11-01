@@ -273,6 +273,24 @@ ISO and the rest), M3U playlists, and PS-X EXE files. Disc images in the same fo
 a case-insensitive match when the case differs (`FILE "TRACK 01.BIN"` next to `Track 01.bin`), and names holding
 `#`, `%` or `?` work as they are.
 
+**A multi-disc game is one tile** (and one list row). Its discs are found, in this order (`AndroidDiscGroups`):
+
+1. **An M3U playlist** takes the discs it lists: the playlist is the game, and its discs have no tile of their own,
+   even when they're also one of the database's disc sets (Ace Combat 3's two CHDs and their M3U are one tile, the
+   M3U).
+2. **The database's disc sets**, as the core makes them: disc 1 and at least one other disc. A second file for a disc
+   already in the set (a CUE beside a CHD) keeps a tile of its own.
+3. **File names**, for discs the database doesn't know: files in one folder whose names are the same, ignoring case,
+   once a disc marker is taken out. Markers are `(Disc N)`, `[Disc N]`, `Disc N`, the same with `of M`, and the same
+   with `CD`, in any case; "Discworld" and "Disc Jockey" aren't. Two files with the same name and disc number aren't
+   grouped at all: they're different dumps.
+
+The tile shows the game's title without its disc marker (the set's name, for a database set), disc 1's cover, and
+the play time of all its discs. It starts on the disc last played in it on this device (`lastDisc.<key>` in the
+app's `game` preferences), or disc 1. The game's **key** is the serial its save states and patch codes are kept under:
+the set's first serial, the playlist's first disc's, the lowest disc's for a name group (its content hash, `HASH-…`,
+without a serial), or a single disc's own; the list row shows it as the serial.
+
 In a game, Back opens its menu (see "The in-game menu"). Home pauses the game, and
 reopening the app resumes it. Pausing also writes any memory card changes to their files
 straight away (a paused game never reaches the card's usual save, 5 emulated seconds after the last write), so a save
@@ -589,10 +607,29 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   once; a filled one asks "Replace the save in slot 3?" in the panel, Cancel focused. A save or load that works goes
   back to the game, saying "Saved to slot 3", "Loaded slot 3" or "Loaded your resume state"; one that fails stays in
   the panel with the reason ("Couldn't save to slot 3: …"). States are the core's own, at
-  `savestates/<serial>_<n>.sav`, mirrored to the data folder like the rest. A PS-EXE, or a disc the core's database
+  `savestates/<key>_<n>.sav` (the game's key, whichever disc is in), mirrored to the data folder like the rest. A PS-EXE, or a disc the core's database
   doesn't know and with no serial of its own, has the core's content-hash ID (`HASH-…`) in the serial's place, so it
   has slots and a resume state like any game. The last slot used is kept per game on
   this device (`SharedPreferences("game")`).
+
+  For a multi-disc game, each row says the disc its state was made on ("Saved · Disc 2"). A state loads on that
+  disc, found by its identity (its sub-image for a playlist, else its serial, else its file name), not by the path it
+  recorded, which may be another folder's, another device's or desktop's: a state saved on disc 2 puts disc 2 in. A
+  state whose disc isn't in the library fails to load with "Couldn't load slot 3: The disc this state was saved on
+  isn't in your library: <file>.", and the game keeps its disc and place.
+
+  **One set of states per game.** States made before discs were grouped (part 1 kept them under each disc's serial)
+  are moved under the game's key the first time the game is played on this device, before it asks to resume: the
+  newest state keeps each place, the others take the lowest free slots, and nothing is overwritten. The move is
+  recorded as `migrated.<key>` in the `game` preferences, so it runs once per device. What doesn't fit, and anything
+  desktop saves per disc later, is listed in Load state after the slots, under **Other saves**; loading one says
+  "Loaded disc 2's slot 4".
+- **Change disc**, for a multi-disc game, with the disc in the drive ("Disc 1 of 2"): opens a panel beside the menu
+  with a row per disc, "Disc 1" to "Disc N", each with its own title (or its serial, when its title is the game's),
+  the disc in the drive marked Current. **A** Insert puts the disc in (a playlist's sub-image, or the disc's file),
+  closes the menu and resumes, saying "Disc 2 inserted"; the disc in the drive just closes the panel. A disc whose
+  file has gone keeps the panel open with "Disc 2 isn't in your library any more.". The disc in the drive when the
+  game boots, after a change and after a state load becomes the game's disc for its next start.
 - **Fast forward**, with "On" or "Off": switches it and goes back to the game, at `[Main] FastForwardSpeed`. While
   it's on, its marker shows at the top right. It's off again whenever a game starts.
 - **Analog mode**, with "On" or "Off", only for the DualShock (`AnalogController`): presses the controller's Analog
@@ -600,9 +637,26 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   in its mode).
 - **Screenshot**: saves the game's picture, without the menu, to the data folder's `screenshots`, and says
   "Screenshot saved".
+- **Patch codes**: opens a panel beside the menu with the game's codes, in their groups (codes without one last, under
+  "Other", or with no heading when none has a group). Each is a switch, with its note under it (the database writes
+  notes into names after a colon: "Infinite HP Slot 1:Turn Off When Out of Battle"); a code applied by hand (a
+  `#activation=Manual` code in a player's file) is an **Apply** row instead, which applies it once and says "Applied:
+  <name>". Switching a code changes it at once, and the menu stays open. A name and its note show two lines at most,
+  then an ellipsis. With no codes the panel says "No patch codes for this game." and names the file to add.
+
+  The codes are one list per game (`GameCodes`), built as it boots and given to the core again after every disc
+  change or cross-disc load: the player's `cheats/<game title>.cht` (the tile's title, as written or with `< > : " / \
+  | ? *` as `_`) and each disc's own `cheats/<disc title>.cht`, as desktop makes them, then the database's codes
+  (`chtdb.txt`) for every disc of the game, each code once by group and name, a player's file winning. The player's
+  files are only read, never written. Which codes are on is kept in the app's own file, `cheats/<key>.patchcodes`
+  (mirrored; one `on` or `off`, a tab, the group, a tab and the name per line, for the codes switched from their
+  default). A code a player's file marks `[*Name]` starts on; the database's start off. There's no separate on/off
+  switch: only the codes switched on apply, and `[Console] EnableCheats` is off in memory on Android (the host owns
+  the list) and never written, so desktop's own setting stays as it is. While codes are on, the game's start says "1
+  patch code is on".
 - **Reset console** asks "Reset the console? Progress since your last save is lost." in the menu, Cancel focused,
   then restarts the game: "Console reset".
-- **Exit game** saves the game's resume state (`savestates/<serial>_resume.sav`, when `[Main] SaveStateOnExit` is on,
+- **Exit game** saves the game's resume state (`savestates/<key>_resume.sav`, when `[Main] SaveStateOnExit` is on,
   as it is by default, and the game has an ID, its serial or that content hash), with "Saving your place…" in the menu
   meanwhile, then stops it. If that save fails, the game still stops, and the library says "Couldn't save your place:
   <reason>". A game still starting saves none, so a resume state from before isn't replaced. When the game already has a resume state, Exit
@@ -614,9 +668,9 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   then save again." A load that fails part-way puts the game back where it was (the core's undo state).
 
 Until a game has booted, only Resume and Exit game work, and the details line says "Starting…". The foot of each panel
-names the buttons: **A** Select (or Save, or Load), **B** Back. While the menu shows, the controllers move its focus,
+names the buttons: **A** Select (or Save, Load or Insert), **B** Back. While the menu shows, the controllers move its focus,
 as on any other screen. B and Back step out one layer at a time, each acting on a press that began on it: a question,
-then the slot panel (back to its row), then the menu, which resumes. Mode resumes from anywhere. Everything held is let
+then the side panel (slots, discs or codes: back to its row), then the menu, which resumes. Mode resumes from anywhere. Everything held is let
 go as it opens and again on resuming, so nothing stays pressed in the game. The pause writes the memory cards, as
 Home's does. With the menu open, Home and back keeps the game paused, with the menu showing.
 
@@ -681,7 +735,18 @@ game's once-a-frame read of the pad sees it.
   and the folder wins when both changed, with no merging, so two installs using one folder at once can lose each
   other's changes. Each install also adapts a `settings.ini` another one wrote (see "Changing settings"). Syncing
   memory cards between devices comes later, through emusync.
-- **An M3U's discs are listed on their own as well.** A set's playlist and each of its discs get a tile each.
+- **Desktop lists a multi-disc game's states under disc 1.** It keys states by the disc running, and Android keeps
+  them all under the game's key, which is disc 1's serial for a set; desktop's own states for disc 2 show under
+  "Other saves" on Android.
+- **A name-grouped game keeps a memory card per disc**, with the core's per-title cards (the default): the title of a
+  disc the database doesn't know is its file name, so "Foo (Disc 2)" has its own card. A database set's discs share
+  the set's card. A playlist's card is named after the playlist, so Ace Combat 3's M3U and its CHDs played on their
+  own use different cards. Both are the core's rules, as on desktop.
+- **The migration runs once per device**, recorded in the app's preferences: a second device using the same data
+  folder runs it once too, which moves only what's still under a disc's serial (desktop's later saves, say).
+- **A pull doesn't keep the data folder's file times**, so a fresh pull dates every save state at the pull: slot times,
+  the resume prompt's time and which state the migration finds newest follow that. Nothing is lost.
+- **No hotkey changes discs**; the menu's Change disc does.
 - **Play time is updated on the next refresh.** Coming back from a game doesn't rescan the library, so the list shows
   the time played before it until the next refresh or resume.
 - **A provider that keeps a folder "loading" stops the mirror quietly.** A listing that isn't complete is never acted
@@ -834,6 +899,30 @@ Found and fixed during the pass: the core's own status icons (pause, fast forwar
 they're off on Android; the core's messages start with an emoji, which kept "Screenshot saved" from matching, so emoji
 are left out; slot pictures drew at their own size, not filling their box. The emulator's GPU emulation wedged twice
 during the instrumented runs (the app's render thread stuck in `eglSwapBuffers`), and the emulator was restarted.
+
+### The in-game menu, part 2: discs and patch codes (2026-11-01)
+
+Checked on `goose-arm64` with the debug APK (software Vulkan, lavapipe, after a cold boot), by key events and taps,
+with both Ace Combat 3 CHDs (SLPS-02020 and SLPS-02021), their M3U, the Pad Test CUE and padtest.
+
+| Check | Result |
+| --- | --- |
+| One tile per game | Pass. The two CHDs alone: one tile, "Ace Combat 3 - Electrosphere (Japan)", booting `…(Disc 1).chd`. With the M3U: one tile, the playlist ("Loaded 2 paths from m3u"). The library went from five tiles to three. |
+| One set of states | Pass. A resume state made with the set was offered on the playlist's tile (both keyed `SLPS-02020`). |
+| A state finds its disc | Pass. With disc 1's CHD renamed, slot 1 loaded on the renamed file ("The state's disc '…(Disc 1).chd' is disc 1 here"). With it renamed again during the game, the load failed in the panel with "The disc this state was saved on isn't in your library: Ace Combat 3 Electrosphere (Disc 1).chd.", and the game went on. |
+| Migration | Pass. `SLPS-02021_3.sav` and `_5.sav`, put in the data folder before setup, moved to `SLPS-02020_2.sav` and `_5.sav` at the first play; no `SLPS-02021_*` was left, nothing was overwritten, and `migrated.SLPS-02020` was set. The pull had dated every state at the pull, so slot 3 went to the key's own (see "Known limits"). |
+| Change disc | Pass. On the playlist: Disc 2 → "Switched to sub-image … (Disc 2)", and the next start booted it (`SLPS-02021`). On the set: Disc 1 → `Inserted media from …(Disc 1).chd`. With disc 2's file renamed, picking it said "Disc 2 isn't in your library any more." in the panel. |
+| Grouping by name | Pass. Two ISOs the database doesn't know, `Test (Disc 1).iso` and `Test (Disc 2).iso`, showed as one tile, "Test". With `Test (Disc 1).cue` beside them, the group split: "Test (Disc 1)" tiles showed in its place (`GroupFilesNameRepeatsStayApart` checks the three). |
+| Patch codes | Pass. A player's `Ace Combat 3 Electrosphere.cht` with two codes, one `[*]`: the game's list had four (the player's two, then the database's two others; "Infinite Missiles" once), one on, built in about 0.15 s before the boot. `settings.ini` got no `EnableCheats`. `GameCallsTest.codesFollowTheAppsFileNotThePlayers` checks the app's file and that the player's is untouched. |
+| Patch codes panel | Pass. The panel listed the four, the player's `[*]` code on. Switching Rapid Missile Fire on and Infinite Missiles off kept the menu open and wrote `cheats/SLPS-02020.patchcodes` (`off … Infinite Missiles`, `on … Rapid Missile Fire`); the player's file was unchanged. The data folder had the file after Exit game, and the next start had Rapid Missile Fire on and Infinite Missiles off. |
+
+Found and fixed during the pass: the core's `LoadState` read no serial from a state, so a renamed disc couldn't be
+found by it (it reads it on Android now); listing the library opened every M3U each time (`LibraryScanTest`), so a
+playlist's entries are kept until its file changes; slot rows grew a line for the disc and didn't fit the 640 x 360
+panel at text 1.3x, so the disc joins the status ("Saved · Disc 2"); "Change disc" with "Disc 1 of 4" broke mid-word in
+the 240 dp menu beside a side panel, so a row's value goes under its label when they don't fit; a code with a long name
+and note was taller than the panel at 800 x 360 and text 1.3x, so names and notes show two lines at most. The emulator wedged once during an instrumented
+run (the render thread spinning in the kernel) and was cold-booted.
 
 ## Results on the AYN Thor
 

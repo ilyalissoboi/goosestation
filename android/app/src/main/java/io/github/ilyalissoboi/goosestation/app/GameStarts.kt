@@ -38,8 +38,9 @@ class GameStarts(
     private var checking = false
 
     /**
-     * Starts [entry], or asks first if it has a resume state. A game without a serial has none, and starts at once. A
-     * play while one is being looked at, or asked about, does nothing.
+     * Starts [entry], or asks first if it has a resume state. A game without an ID (a serial, or the core's content hash
+     * for a PS-EXE or a disc the database doesn't know) has none, and starts at once. A play while one is being looked
+     * at, or asked about, does nothing.
      */
     fun play(entry: GameEntry) {
         if (checking || offer != null) return

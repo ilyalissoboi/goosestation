@@ -163,9 +163,10 @@ class InGameMenu(
     }
 
     /**
-     * Exit game: a game that has booted, with a serial, saves its resume state first, on [game], then the game stops
-     * ([onExit], with the reason if the save failed: the game stops all the same). One that has a resume state already
-     * asks first ([replacingResume]). Before the boot, or with `SaveStateOnExit` off, nothing is saved.
+     * Exit game: a game that has booted, with an ID (its serial, or the core's content hash for a PS-EXE or a disc the
+     * database doesn't know), saves its resume state first, on [game], then the game stops ([onExit], with the reason
+     * if the save failed: the game stops all the same). One that has a resume state already asks first
+     * ([replacingResume]). Before the boot, or with `SaveStateOnExit` off, nothing is saved.
      */
     override fun exit() {
         val serial = serial

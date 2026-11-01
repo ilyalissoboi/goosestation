@@ -186,7 +186,8 @@ object NativeLibrary {
 
     /**
      * Saves the running game's resume state, as Exit game does before it stops the game, if `[Main] SaveStateOnExit` is
-     * on and the game has a serial. Null when it's saved or there's nothing to save, else why not.
+     * on and the game has an ID: its serial, or the core's content hash (`HASH-…`) for a PS-EXE or a disc the database
+     * doesn't know. Null when it's saved or there's nothing to save, else why not.
      */
     external fun saveResumeState(): String?
 

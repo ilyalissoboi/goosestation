@@ -113,6 +113,10 @@ per-game only)*.
 
 - **Exit game** saves a resume state (`System::ShutdownSystem(true)`, which writes `<serial>_resume.sav`), then
   returns to the library. Today Android always shuts down with `false`.
+- **"Serial" here is the core's game ID:** a disc's serial, or, for a PS-EXE or a disc the core's database doesn't
+  know and with no serial of its own, its content hash (`HASH-…`). Those games get slots, a resume state and the
+  resume prompt like any other; only a game with no ID at all (a PSF, the BIOS alone) has none *(settled on the
+  first Thor pass, 2026-11-01, when padtest saved one: keeping it was the user's call)*.
 - **When a resume state already exists**, Exit game asks first, in the menu: "Replace your saved place from <time>?",
   with Replace (`Danger`) and Keep it (`Secondary`, focused). Both exit; Keep it exits without saving, so the old
   resume state stays. B cancels and stays in the game *(added after the first device pass)*.

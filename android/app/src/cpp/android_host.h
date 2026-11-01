@@ -108,7 +108,8 @@ std::optional<std::string> SaveState(s32 slot);
 std::optional<std::string> LoadState(s32 slot);
 
 /// Saves the running game's resume state, as Exit game does before it stops it, if [Main] SaveStateOnExit is on and
-/// the game has a serial. nullopt when it's saved or there's nothing to save, else why not.
+/// the game has an ID: its serial, or the core's content hash (HASH-…) for a PS-EXE or a disc the database doesn't
+/// know. nullopt when it's saved or there's nothing to save, else why not.
 std::optional<std::string> SaveResumeState();
 
 /// Whether the running game is writing to a memory card (System::IsSavingMemoryCards()).

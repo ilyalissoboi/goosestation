@@ -83,6 +83,30 @@ class LocalTreeTest {
     }
 
     @Test
+    fun copyInGivesTheFileTheTimeAskedFor() {
+        val dest = File(temp.root, "data/memcards/a.mcd")
+
+        LocalTree.copyIn(byteArrayOf(1, 2).inputStream(), dest, lastModifiedMs = 1_700_000_000_123)
+
+        assertEquals(1_700_000_000_123, dest.lastModified())
+    }
+
+    // A provider gives 0 for a document with no time: dated 1970, the file would show that in the in-game menu.
+    @Test
+    fun copyInWithNoTimeKeepsTheTimeOfTheWrite() {
+        val before = System.currentTimeMillis()
+        val a = File(temp.root, "a.mcd")
+        val b = File(temp.root, "b.mcd")
+
+        LocalTree.copyIn(byteArrayOf(1, 2).inputStream(), a)
+        LocalTree.copyIn(byteArrayOf(1, 2).inputStream(), b, lastModifiedMs = 0)
+
+        // Less a second, for a file system that keeps whole seconds.
+        assertTrue(a.lastModified() >= before - 1000)
+        assertTrue(b.lastModified() >= before - 1000)
+    }
+
+    @Test
     fun failedCopyInKeepsTheOldFile() {
         val dest = File(temp.root, "a.mcd").apply { writeBytes(byteArrayOf(1, 2)) }
         val failing =

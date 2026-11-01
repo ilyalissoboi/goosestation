@@ -38,7 +38,10 @@ interface FolderStore {
      */
     fun listAll(layout: DataLayout): Map<String, FileState>
 
-    /** Copies the file at [path] over [dest], whole or not at all. */
+    /**
+     * Copies the file at [path] over [dest], whole or not at all, with the folder's time for the file, when it has one:
+     * the core shows a save state's time from its file.
+     */
     fun copyFrom(
         path: String,
         dest: File,
@@ -114,7 +117,7 @@ class SafFolderStore(
     ) = guard {
         val document = find(path) ?: throw FileNotFoundException("$path isn't in the data folder")
         val input = resolver.openInputStream(uriOf(document.documentId)) ?: throw IOException("Can't open $path")
-        input.use { LocalTree.copyIn(it, dest) }
+        input.use { LocalTree.copyIn(it, dest, document.lastModifiedMs) }
     }
 
     override fun replace(

@@ -364,7 +364,9 @@ The rules:
 - **The folder is the source of truth.** The app pulls (folder to working copy) at start, before the core reads
   `settings.ini`, and whenever it comes back to the foreground. A file that is new or changed in the folder is copied
   in, even over a change of the working copy's, and a file deleted from the folder is deleted from the working copy.
-  There is no conflict detection: when both sides changed, the folder wins.
+  There is no conflict detection: when both sides changed, the folder wins. A file copied in keeps the folder's time
+  for it, as the in-game menu shows a save state's time from its file; one the folder's provider gives no time gets
+  the time of the copy.
 - **Memory cards are never replaced under a running game.** The memory cards are the files in the core's memory
   card folder (`[MemoryCards] Directory`, `memcards/` by default) and the shared cards `[MemoryCards] Card1Path` and
   `Card2Path` name, wherever they are in the data folder: the app asks the core once it has started, and again after
@@ -746,8 +748,6 @@ game's once-a-frame read of the pad sees it.
   own use different cards. Both are the core's rules, as on desktop.
 - **The migration runs once per device**, recorded in the app's preferences: a second device using the same data
   folder runs it once too, which moves only what's still under a disc's serial (desktop's later saves, say).
-- **A pull doesn't keep the data folder's file times**, so a fresh pull dates every save state at the pull: slot times,
-  the resume prompt's time and which state the migration finds newest follow that. Nothing is lost.
 - **No hotkey changes discs**; the menu's Change disc does.
 - **Play time is updated on the next refresh.** Coming back from a game doesn't rescan the library, so the list shows
   the time played before it until the next refresh or resume.
@@ -912,7 +912,7 @@ with both Ace Combat 3 CHDs (SLPS-02020 and SLPS-02021), their M3U, the Pad Test
 | One tile per game | Pass. The two CHDs alone: one tile, "Ace Combat 3 - Electrosphere (Japan)", booting `…(Disc 1).chd`. With the M3U: one tile, the playlist ("Loaded 2 paths from m3u"). The library went from five tiles to three. |
 | One set of states | Pass. A resume state made with the set was offered on the playlist's tile (both keyed `SLPS-02020`). |
 | A state finds its disc | Pass. With disc 1's CHD renamed, slot 1 loaded on the renamed file ("The state's disc '…(Disc 1).chd' is disc 1 here"). With it renamed again during the game, the load failed in the panel with "The disc this state was saved on isn't in your library: Ace Combat 3 Electrosphere (Disc 1).chd.", and the game went on. |
-| Migration | Pass. `SLPS-02021_3.sav` and `_5.sav`, put in the data folder before setup, moved to `SLPS-02020_2.sav` and `_5.sav` at the first play; no `SLPS-02021_*` was left, nothing was overwritten, and `migrated.SLPS-02020` was set. The pull had dated every state at the pull, so slot 3 went to the key's own (see "Known limits"). |
+| Migration | Pass. `SLPS-02021_3.sav` and `_5.sav`, put in the data folder before setup, moved to `SLPS-02020_2.sav` and `_5.sav` at the first play; no `SLPS-02021_*` was left, nothing was overwritten, and `migrated.SLPS-02020` was set. The pull had dated every state at the pull (a pull keeps the folder's times only since the next section's fix), so slot 3 went to the key's own. |
 | Change disc | Pass. On the playlist: Disc 2 → "Switched to sub-image … (Disc 2)", and the next start booted it (`SLPS-02021`). On the set: Disc 1 → `Inserted media from …(Disc 1).chd`. With disc 2's file renamed, picking it said "Disc 2 isn't in your library any more." in the panel. |
 | Grouping by name | Pass. Two ISOs the database doesn't know, `Test (Disc 1).iso` and `Test (Disc 2).iso`, showed as one tile, "Test". With `Test (Disc 1).cue` beside them, the group split: "Test (Disc 1)" tiles showed in its place (`GroupFilesNameRepeatsStayApart` checks the three). |
 | Patch codes | Pass. A player's `Ace Combat 3 Electrosphere.cht` with two codes, one `[*]`: the game's list had four (the player's two, then the database's two others; "Infinite Missiles" once), one on, built in about 0.15 s before the boot. `settings.ini` got no `EnableCheats`. `GameCallsTest.codesFollowTheAppsFileNotThePlayers` checks the app's file and that the player's is untouched. |
@@ -923,8 +923,20 @@ found by it (it reads it on Android now); listing the library opened every M3U e
 playlist's entries are kept until its file changes; slot rows grew a line for the disc and didn't fit the 640 x 360
 panel at text 1.3x, so the disc joins the status ("Saved · Disc 2"); "Change disc" with "Disc 1 of 4" broke mid-word in
 the 240 dp menu beside a side panel, so a row's value goes under its label when they don't fit; a code with a long name
-and note was taller than the panel at 800 x 360 and text 1.3x, so names and notes show two lines at most. The emulator wedged once during an instrumented
-run (the render thread spinning in the kernel) and was cold-booted.
+and note was taller than the panel at 800 x 360 and text 1.3x, so names and notes show two lines at most. The
+emulator wedged once during an instrumented run (the render thread spinning in the kernel) and was cold-booted.
+
+### A pull keeps the folder's file times (2026-11-01)
+
+Checked on `goose-arm64` with the debug APK, after `adb uninstall` and a fresh setup (the picker driven with taps)
+whose data folder was `/sdcard/GooseTest/data`, with 14 files and save states in slots 1, 2, 3 and 5 of SLPS-02020.
+
+| Check | Result |
+| --- | --- |
+| The first pull | Pass. Every working-copy file pulled has its folder file's time, to the millisecond (`stat`: `12:35:47.057003798` in the folder, `12:35:47.057000000` in the working copy, for slot 1), and the manifest holds the same time for both sides. `settings.ini` alone had a new time, as setup wrote its `InstallID` and games folder into it, and that went out to the folder. |
+| Resume prompt | Pass. "Today · 12:21", the time of the folder's `SLPS-02020_resume.sav` (12:21:24). |
+| Load state slots | Pass. Slot 1 "Today · 12:35", slot 2 "Today · 14:09", slot 3 "Today · 10:00", slot 5 "Today · 14:09", the times of the folder's files. |
+| Nothing pushed back | Pass. After the game and Home (whose push doesn't wait), the folder's times and MD5s were as before setup, except `settings.ini`, and no `.goosetmp` or `.goosebak` was left. |
 
 ## Results on the AYN Thor
 

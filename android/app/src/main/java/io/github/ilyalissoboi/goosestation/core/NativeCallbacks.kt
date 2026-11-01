@@ -95,4 +95,11 @@ interface NativeCallbacks {
 
     /** One of the core's sounds (a WAV at [path]) to play now. */
     fun onPlaySound(path: String) {}
+
+    /** [NativeLibrary.fetchLeaderboard]'s answer to [request]: the leaderboard's [page], or why there's none ([error]). */
+    fun onLeaderboard(
+        request: Int,
+        page: LeaderboardPage?,
+        error: String?,
+    ) {}
 }

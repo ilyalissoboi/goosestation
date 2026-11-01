@@ -75,6 +75,35 @@ struct AchievementSection
 /// The running game's achievements in rcheevos's sections by progress, in its order; empty without a set.
 std::vector<AchievementSection> GetAchievementSections();
 
+struct LeaderboardItem
+{
+  u32 id;
+  std::string title;
+  std::string description;
+};
+
+/// The running game's leaderboards, in the set's order, without those the client can't track.
+std::vector<LeaderboardItem> GetLeaderboards();
+
+struct LeaderboardEntry
+{
+  u32 rank;
+  std::string user;
+  std::string score;
+};
+
+struct LeaderboardPage
+{
+  u32 total;
+  std::vector<LeaderboardEntry> top;
+  std::vector<LeaderboardEntry> around;
+  s32 you_index; // in around, -1 for no entry
+};
+
+/// Starts fetching leaderboard id's top 10 and the 9 entries around the player, and returns. The answer goes to
+/// AndroidHost::NotifyLeaderboard() once, with request: the page, or why there's none.
+void FetchLeaderboard(u32 id, s32 request);
+
 /// For the instrumented tests only: the server rcheevos talks to, or the real one with an empty host.
 void SetServerForTest(const std::string& host);
 

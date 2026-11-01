@@ -18,13 +18,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +37,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -39,18 +45,24 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
+import io.github.ilyalissoboi.goosestation.app.LeaderboardRow
+import io.github.ilyalissoboi.goosestation.app.LeaderboardRows
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
+import io.github.ilyalissoboi.goosestation.ui.components.Notice
+import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
@@ -79,9 +91,24 @@ fun AchievementsPanel(
     val holder = remember { FocusRequester() }
     val first = remember { FocusRequester() }
     val sections = panel.sections
-    val rows = panel.tab == CheevoTab.Achievements && !sections.isNullOrEmpty()
+    val page = panel.page
+    // Whether the tab shows rows to focus; without them the heading holds the focus, so B still reaches the panel.
+    val rows =
+        when {
+            panel.tab == CheevoTab.Achievements -> !sections.isNullOrEmpty()
+            panel.open == null -> !panel.leaderboards.isNullOrEmpty()
+            else -> page != null && (page.top.isNotEmpty() || page.around.isNotEmpty())
+        }
 
-    LaunchedEffect(panel.tab, sections == null) { if (rows) first.requestFocus() else holder.requestFocus() }
+    LaunchedEffect(panel.tab, sections == null) {
+        if (panel.tab == CheevoTab.Achievements) {
+            if (rows) {
+                first.requestFocus()
+            } else {
+                holder.requestFocus()
+            }
+        }
+    }
 
     Column(
         modifier =
@@ -140,8 +167,17 @@ fun AchievementsPanel(
                 }
             }
         }
+        if (panel.tab == CheevoTab.Leaderboards) {
+            LeaderboardsTab(panel, actions, holder, Modifier.weight(1f, fill = false))
+        }
         KeyHints(
-            if (twoTabs) {
+            if (panel.tab == CheevoTab.Leaderboards && panel.open == null && rows) {
+                listOfNotNull(
+                    KeyHint(PadGlyphs.confirm, "Open"),
+                    if (twoTabs) KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Switch") else null,
+                    KeyHint(PadGlyphs.back, "Back"),
+                )
+            } else if (twoTabs) {
                 listOf(
                     KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Switch"),
                     KeyHint(PadGlyphs.back, "Back"),
@@ -272,5 +308,156 @@ private fun AchievementRow(
             }
         }
         Text("${cheevo.points}", style = GooseStationTheme.type.mono, color = colors.ink)
+    }
+}
+
+/**
+ * The Leaderboards tab: the game's leaderboards, A opening one; or the one open, with its entries once they're in,
+ * the player's own on `beak-soft` and focused. [holder] (the panel's heading) keeps the focus while nothing here can.
+ * Back from a leaderboard focuses its row again.
+ */
+@Composable
+private fun LeaderboardsTab(
+    panel: AchievementsPanelState,
+    actions: GameMenuActions,
+    holder: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    val colors = GooseStationTheme.colors
+    val boards = panel.leaderboards
+    val open = panel.open
+    val page = panel.page
+    val first = remember { FocusRequester() }
+    val you = remember { FocusRequester() }
+    // The board last opened, whose row takes the focus back as it closes.
+    var lastOpened by remember { mutableStateOf<Int?>(null) }
+    SideEffect { if (open != null) lastOpened = open.id }
+    val lastRow = remember { FocusRequester() }
+    val rows = page?.let(LeaderboardRows::rows)
+
+    LaunchedEffect(open?.id, page != null, boards != null) {
+        when {
+            open == null && boards.isNullOrEmpty() -> holder.requestFocus()
+            open == null && boards!!.any { it.id == lastOpened } -> lastRow.requestFocus()
+            open == null -> first.requestFocus()
+            rows == null || rows.none { it is LeaderboardRow.Entry } -> holder.requestFocus()
+            rows.any { it is LeaderboardRow.Entry && it.isYou } -> you.requestFocus()
+            else -> first.requestFocus()
+        }
+    }
+
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (open == null) {
+            if (boards == null) Text("Loading…", style = MaterialTheme.typography.bodyLarge, color = colors.inkMuted)
+            boards.orEmpty().forEachIndexed { index, board ->
+                val focus =
+                    when {
+                        board.id == lastOpened -> Modifier.focusRequester(lastRow)
+                        index == 0 -> Modifier.focusRequester(first)
+                        else -> Modifier
+                    }
+                Column(
+                    modifier =
+                        focus
+                            .fillMaxWidth()
+                            .focusRing(
+                                role = Role.Button,
+                            ) { actions.openLeaderboard(board.id) }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(board.title, style = MaterialTheme.typography.titleMedium, color = colors.ink)
+                    if (board.description.isNotEmpty()) {
+                        Text(board.description, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
+                    }
+                }
+            }
+            return@Column
+        }
+
+        Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(open.title, style = MaterialTheme.typography.headlineSmall, color = colors.ink)
+            if (open.description.isNotEmpty()) {
+                Text(open.description, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
+            }
+            page?.let {
+                Text("%,d entries".format(it.total), style = GooseStationTheme.type.mono, color = colors.inkMuted)
+            }
+        }
+        val error = panel.pageError
+        when {
+            error != null ->
+                Notice(NoticeStatus.Danger) {
+                    Text(
+                        error.ifEmpty { "Couldn't reach RetroAchievements" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.ink,
+                    )
+                }
+            rows == null -> Text("Loading…", style = MaterialTheme.typography.bodyLarge, color = colors.inkMuted)
+        }
+        var firstEntry = true
+        rows.orEmpty().forEach { row ->
+            when (row) {
+                is LeaderboardRow.Heading -> Eyebrow(row.label, Modifier.padding(top = 8.dp, start = 16.dp))
+                LeaderboardRow.NoEntry ->
+                    Text(
+                        "You have no entry yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.inkMuted,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                is LeaderboardRow.Entry -> {
+                    val focus =
+                        when {
+                            row.isYou -> Modifier.focusRequester(you)
+                            firstEntry -> Modifier.focusRequester(first)
+                            else -> Modifier
+                        }
+                    firstEntry = false
+                    EntryRow(row, focus)
+                }
+            }
+        }
+    }
+}
+
+/** A leaderboard entry: its rank, the user and their score; the player's own on `beak-soft`. A does nothing. */
+@Composable
+private fun EntryRow(
+    row: LeaderboardRow.Entry,
+    modifier: Modifier = Modifier,
+) {
+    val colors = GooseStationTheme.colors
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(if (row.isYou) colors.beakSoft else Color.Transparent, GsShapes.medium)
+                .focusRing(onClick = {})
+                .semantics { if (row.isYou) stateDescription = "You" }
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "%,d".format(row.entry.rank),
+            style = GooseStationTheme.type.mono,
+            color = colors.inkMuted,
+            textAlign = TextAlign.End,
+            modifier = Modifier.widthIn(min = 40.dp),
+        )
+        Text(
+            row.entry.user,
+            style = MaterialTheme.typography.bodyLarge,
+            color = colors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(row.entry.score, style = GooseStationTheme.type.mono, color = colors.ink)
     }
 }

@@ -19,6 +19,10 @@ struct ANativeWindow;
 
 /// The Android host: the core's Host:: functions, the settings, the game's window and the input queue. The JNI bridge
 /// calls the functions below from the app's threads; the core itself only runs on the CPU thread (emu_thread.h).
+namespace AchievementsBridge {
+struct LeaderboardPage;
+}
+
 namespace AndroidHost {
 
 /// Sets the folders, loads settings.ini (defaults when it's missing or from another version, adapted when it's from
@@ -308,5 +312,6 @@ void NotifyAchievementToast(std::string_view title, std::string_view message, fl
 void NotifyAchievementIndicator(s32 kind, u32 id, bool shown, std::string_view text, std::string_view badge_path);
 void NotifyAchievementImage(std::string_view path);
 void NotifyPlaySound(const char* path);
+void NotifyLeaderboard(s32 request, const AchievementsBridge::LeaderboardPage* page, std::string_view error);
 
 } // namespace AndroidHost

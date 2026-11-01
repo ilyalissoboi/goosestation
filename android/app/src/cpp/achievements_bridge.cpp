@@ -150,6 +150,133 @@ std::vector<AchievementsBridge::AchievementSection> AchievementsBridge::GetAchie
   return sections;
 }
 
+std::vector<AchievementsBridge::LeaderboardItem> AchievementsBridge::GetLeaderboards()
+{
+  std::vector<LeaderboardItem> boards;
+  EmuThread::RunOnThread(
+    [&boards]() {
+      const auto lock = Achievements::GetLock();
+      rc_client_t* client = Achievements::GetClient();
+      if (!client || !Achievements::HasLeaderboards())
+        return;
+
+      rc_client_leaderboard_list_t* list =
+        rc_client_create_leaderboard_list(client, RC_CLIENT_LEADERBOARD_LIST_GROUPING_NONE);
+      if (!list)
+        return;
+
+      for (u32 i = 0; i < list->num_buckets; i++)
+      {
+        const rc_client_leaderboard_bucket_t& bucket = list->buckets[i];
+        if (bucket.bucket_type == RC_CLIENT_LEADERBOARD_BUCKET_UNSUPPORTED)
+          continue;
+        for (u32 j = 0; j < bucket.num_leaderboards; j++)
+        {
+          const rc_client_leaderboard_t* board = bucket.leaderboards[j];
+          boards.push_back({board->id, board->title ? board->title : "", board->description ? board->description : ""});
+        }
+      }
+
+      rc_client_destroy_leaderboard_list(list);
+    },
+    true);
+  return boards;
+}
+
+namespace {
+/// A leaderboard's two fetches, answered together once both are back. CPU thread.
+struct LeaderboardFetch
+{
+  s32 request;
+  u32 pending = 2;
+  AchievementsBridge::LeaderboardPage page = {0, {}, {}, -1};
+  bool top_ok = false;
+  std::string error;
+};
+
+std::string FetchError(int result, const char* error_message)
+{
+  if (result == RC_NO_RESPONSE || !error_message || !*error_message)
+    return "Couldn't reach RetroAchievements";
+  return error_message;
+}
+
+void CopyEntries(const rc_client_leaderboard_entry_list_t* list, std::vector<AchievementsBridge::LeaderboardEntry>* to)
+{
+  for (u32 i = 0; i < list->num_entries; i++)
+  {
+    const rc_client_leaderboard_entry_t& entry = list->entries[i];
+    to->push_back({entry.rank, entry.user ? entry.user : "", entry.display});
+  }
+}
+
+void FinishFetch(LeaderboardFetch* fetch)
+{
+  if (--fetch->pending > 0)
+    return;
+
+  if (fetch->top_ok)
+    AndroidHost::NotifyLeaderboard(fetch->request, &fetch->page, {});
+  else
+    AndroidHost::NotifyLeaderboard(fetch->request, nullptr, fetch->error);
+  delete fetch;
+}
+
+void TopFetched(int result, const char* error_message, rc_client_leaderboard_entry_list_t* list, rc_client_t*,
+                void* userdata)
+{
+  LeaderboardFetch* fetch = static_cast<LeaderboardFetch*>(userdata);
+  if (result == RC_OK && list)
+  {
+    fetch->top_ok = true;
+    fetch->page.total = list->total_entries;
+    CopyEntries(list, &fetch->page.top);
+  }
+  else
+  {
+    fetch->error = FetchError(result, error_message);
+  }
+  if (list)
+    rc_client_destroy_leaderboard_entry_list(list);
+  FinishFetch(fetch);
+}
+
+void AroundFetched(int result, const char* error_message, rc_client_leaderboard_entry_list_t* list, rc_client_t*,
+                   void* userdata)
+{
+  // No entry of the player's isn't an error: the page just has no "around you".
+  LeaderboardFetch* fetch = static_cast<LeaderboardFetch*>(userdata);
+  if (result == RC_OK && list)
+  {
+    CopyEntries(list, &fetch->page.around);
+    fetch->page.you_index = list->user_index;
+  }
+  if (list)
+    rc_client_destroy_leaderboard_entry_list(list);
+  FinishFetch(fetch);
+}
+} // namespace
+
+void AchievementsBridge::FetchLeaderboard(u32 id, s32 request)
+{
+  EmuThread::RunOnThread(
+    [id, request]() {
+      const auto lock = Achievements::GetLock();
+      rc_client_t* client = Achievements::GetClient();
+      if (!client || !Achievements::HasLeaderboards())
+      {
+        AndroidHost::NotifyLeaderboard(request, nullptr, "This game has no leaderboards.");
+        return;
+      }
+
+      // Each callback comes exactly once, even for a fetch that can't start (rcheevos calls it before returning).
+      LeaderboardFetch* fetch = new LeaderboardFetch{request};
+      rc_client_begin_fetch_leaderboard_entries(client, id, 1, 10, TopFetched, fetch);
+      rc_client_begin_fetch_leaderboard_entries_around_user(client, id, 9, AroundFetched, fetch);
+    },
+    false);
+}
+
 bool AchievementsBridge::HardcoreWouldStart()
 {
   return g_settings.achievements_enabled && g_settings.achievements_hardcore_mode &&

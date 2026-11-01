@@ -11,6 +11,8 @@ import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -62,10 +64,19 @@ data class DiscChoice(
 /** The Achievements panel's tabs. */
 enum class CheevoTab { Achievements, Leaderboards }
 
-/** The Achievements panel: its open [tab], and the Achievements tab's [sections] (null until read). */
+/**
+ * The Achievements panel: its open [tab]; the Achievements tab's [sections] and the Leaderboards tab's [leaderboards]
+ * (each null until read); and the leaderboard [open] in it, its [page] once fetched or why it wasn't ([pageError]),
+ * and the [request] it was fetched by.
+ */
 data class AchievementsPanelState(
     val tab: CheevoTab,
     val sections: List<AchievementSection>? = null,
+    val leaderboards: List<Leaderboard>? = null,
+    val open: Leaderboard? = null,
+    val page: LeaderboardPage? = null,
+    val pageError: String? = null,
+    val request: Int = 0,
 )
 
 /**
@@ -181,6 +192,12 @@ interface GameMenuActions {
 
     /** L1 or R1: the panel's other tab, when it has two. */
     fun switchTab() {}
+
+    /** Opens leaderboard [id] in the Leaderboards tab, fetching its entries. */
+    fun openLeaderboard(id: Int) {}
+
+    /** Back from an open leaderboard to the tab's list. */
+    fun closeLeaderboard() {}
 }
 
 /**
@@ -212,6 +229,9 @@ class InGameMenu(
 
     /** Changes as the slot panel opens and closes, so a read for an earlier panel is dropped. */
     private var panelId = 0
+
+    /** Changes as a leaderboard opens or closes, so the core's answer for an earlier one is dropped. */
+    private var leaderboardRequest = 0
 
     private val canSave get() = state.booted && !serial.isNullOrBlank()
 
@@ -274,7 +294,7 @@ class InGameMenu(
                 cheevos = AchievementsPanelState(tab),
                 confirmingReset = false,
             )
-        if (tab == CheevoTab.Achievements) readSections()
+        readTab(tab)
     }
 
     override fun closeAchievements() {
@@ -288,8 +308,49 @@ class InGameMenu(
         if (!game.hasAchievements || !game.hasLeaderboards) return
         panelId++
         val tab = if (panel.tab == CheevoTab.Achievements) CheevoTab.Leaderboards else CheevoTab.Achievements
-        state = state.copy(cheevos = AchievementsPanelState(tab, panel.sections))
-        if (tab == CheevoTab.Achievements) readSections()
+        // An open leaderboard closes; a reply for it that comes later is dropped.
+        state = state.copy(cheevos = AchievementsPanelState(tab, panel.sections, panel.leaderboards))
+        readTab(tab)
+    }
+
+    override fun openLeaderboard(id: Int) {
+        val panel = state.cheevos ?: return
+        val board = panel.leaderboards?.firstOrNull { it.id == id } ?: return
+        val request = ++leaderboardRequest
+        state = state.copy(cheevos = panel.copy(open = board, page = null, pageError = null, request = request))
+        scope.launch(game) { api.fetchLeaderboard(id, request) }
+    }
+
+    override fun closeLeaderboard() {
+        val panel = state.cheevos ?: return
+        leaderboardRequest++
+        state = state.copy(cheevos = panel.copy(open = null, page = null, pageError = null))
+    }
+
+    /** The core's answer to [request]: a leaderboard's [page], or why there's none. Dropped unless it's still open. */
+    fun leaderboardFetched(
+        request: Int,
+        page: LeaderboardPage?,
+        error: String?,
+    ) {
+        val panel = state.cheevos ?: return
+        if (panel.open == null || request != leaderboardRequest || panel.request != request) return
+        state = state.copy(cheevos = panel.copy(page = page, pageError = if (page == null) error.orEmpty() else null))
+    }
+
+    private fun readTab(tab: CheevoTab) {
+        if (tab == CheevoTab.Achievements) readSections() else readLeaderboards()
+    }
+
+    /** Reads the Leaderboards tab's list, for the panel open now. */
+    private fun readLeaderboards() {
+        val id = panelId
+        scope.launch {
+            val boards = withContext(game) { api.getLeaderboards() }
+            val panel = state.cheevos
+            if (id != panelId || panel == null) return@launch
+            state = state.copy(cheevos = panel.copy(leaderboards = boards))
+        }
     }
 
     /** Reads the Achievements tab's sections, for the panel open now. */

@@ -68,6 +68,9 @@ import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
@@ -500,6 +503,39 @@ class OrientationLayoutTest {
             assertTextsLaidOut(inView = true)
             assertTrue("the first achievement is focused, not ${focusedText()}", focusedHas(long))
             pressUntilFocusedInView(Key.DirectionDown, "Sparx Rescue")
+            assertTextsLaidOut(inView = true)
+        }
+    }
+
+    @Test
+    fun anOpenLeaderboard() {
+        val game = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false)
+        val board = Leaderboard(31, "Fastest lap on the longest track in the whole of the championship", "Fastest time")
+
+        fun entry(rank: Int) = LeaderboardEntry(rank, "a-player-with-a-long-name-$rank", "12:34.56")
+        val page =
+            LeaderboardPage(
+                128_400,
+                (1..10).map(::entry).toTypedArray(),
+                (12_208..12_216).map(::entry).toTypedArray(),
+                4,
+            )
+        val state =
+            GameMenuState(
+                booted = true,
+                achievements = game,
+                cheevos =
+                    AchievementsPanelState(
+                        CheevoTab.Leaderboards,
+                        leaderboards = listOf(board),
+                        open = board,
+                        page = page,
+                    ),
+            )
+        eachConfig({ GameMenu(state, NoMenuActions, LONG_GAME) }) {
+            assertTextsLaidOut(inView = true)
+            assertTrue("your entry is focused, not ${focusedText()}", focusedHas("12,212"))
+            pressUntilFocusedInView(Key.DirectionUp, "1")
             assertTextsLaidOut(inView = true)
         }
     }

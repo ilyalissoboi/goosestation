@@ -58,6 +58,9 @@ import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -213,6 +216,15 @@ class GameMenuTest {
 
             override fun switchTab() {
                 calls += "switchTab"
+            }
+
+            override fun openLeaderboard(id: Int) {
+                calls += "openLeaderboard $id"
+            }
+
+            override fun closeLeaderboard() {
+                calls += "closeLeaderboard"
+                state = state.copy(cheevos = state.cheevos?.copy(open = null, page = null, pageError = null))
             }
         }
 
@@ -376,6 +388,89 @@ class GameMenuTest {
         rule.onNode(hasText("Gem Collector") and hasText("312/500")).assertExists()
         rule.onNode(hasText("Flawless Flight") and hasStateDescription("Locked")).assertExists()
         rule.onNode(hasText("Sparx Rescue") and hasStateDescription("Unlocked")).assertExists()
+    }
+
+    private val boards =
+        listOf(Leaderboard(31, "Sunny Flight", "Fastest time"), Leaderboard(32, "Gem Rush", "Most gems"))
+
+    private fun entry(rank: Int) = LeaderboardEntry(rank, "user$rank", "1:0$rank")
+
+    private val sunnyPage =
+        LeaderboardPage(
+            1284,
+            (1..10).map(::entry).toTypedArray(),
+            (208..216).map(::entry).toTypedArray(),
+            4,
+        )
+
+    private fun showLeaderboards(
+        open: Leaderboard? = null,
+        page: LeaderboardPage? = null,
+        error: String? = null,
+    ) {
+        state =
+            GameMenuState(
+                booted = true,
+                achievements = ready,
+                cheevos =
+                    AchievementsPanelState(
+                        CheevoTab.Leaderboards,
+                        leaderboards = boards,
+                        open = open,
+                        page = page,
+                        pageError = error,
+                    ),
+            )
+        show()
+    }
+
+    @Test
+    fun aLeaderboardOpensWithA() {
+        showLeaderboards()
+
+        rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
+        press(Key.DirectionDown)
+        press(Key.ButtonA)
+
+        assertEquals(listOf("openLeaderboard 32"), calls)
+    }
+
+    @Test
+    fun anOpenLeaderboardFocusesYourRow() {
+        showLeaderboards(boards[0], sunnyPage)
+
+        rule.onNodeWithText("1,284 entries").assertExists()
+        rule.onNodeWithText("AROUND YOU").assertExists()
+        rule.onNode(isFocused()).assert(hasText("user212")).assert(hasStateDescription("You"))
+    }
+
+    @Test
+    fun bBackFromALeaderboardFocusesItsRow() {
+        showLeaderboards(boards[1], sunnyPage)
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeLeaderboard"), calls)
+        rule.onNode(isFocused()).assert(hasText("Gem Rush"))
+        press(Key.ButtonB)
+        assertEquals(listOf("closeLeaderboard", "closeAchievements"), calls)
+    }
+
+    @Test
+    fun aLeaderboardIsLoadingUntilItsPageArrives() {
+        showLeaderboards(boards[0])
+
+        rule.onNodeWithText("Loading…").assertExists()
+        state = state.copy(cheevos = state.cheevos!!.copy(page = sunnyPage))
+        rule.waitForIdle()
+        rule.onNodeWithText("user1").assertExists()
+    }
+
+    @Test
+    fun aLeaderboardThatCouldntLoadSaysWhy() {
+        showLeaderboards(boards[0], error = "Couldn't reach RetroAchievements")
+
+        rule.onNodeWithText("Couldn't reach RetroAchievements").assertExists()
     }
 
     @Test

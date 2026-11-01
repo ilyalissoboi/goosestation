@@ -40,6 +40,9 @@ import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
@@ -436,6 +439,47 @@ class FocusAuditTest {
                 NoMenuActions,
             )
         }
+
+        rule.assertControllerReady()
+    }
+
+    private fun showLeaderboards(open: Boolean) {
+        val boards = listOf(Leaderboard(31, "Sunny Flight", "Fastest time"), Leaderboard(32, "Gem Rush", ""))
+        val page =
+            LeaderboardPage(
+                40,
+                arrayOf(LeaderboardEntry(1, "speedgoose", "0:42.10"), LeaderboardEntry(2, "you", "0:50.00")),
+                arrayOf(LeaderboardEntry(2, "you", "0:50.00")),
+                0,
+            )
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
+                    cheevos =
+                        AchievementsPanelState(
+                            CheevoTab.Leaderboards,
+                            leaderboards = boards,
+                            open = boards[0].takeIf { open },
+                            page = page.takeIf { open },
+                        ),
+                ),
+                NoMenuActions,
+            )
+        }
+    }
+
+    @Test
+    fun gameMenuLeaderboards() {
+        showLeaderboards(open = false)
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuAnOpenLeaderboard() {
+        showLeaderboards(open = true)
 
         rule.assertControllerReady()
     }

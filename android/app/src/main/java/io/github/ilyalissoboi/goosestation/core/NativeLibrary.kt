@@ -421,4 +421,16 @@ object NativeLibrary {
 
     /** The running game's achievements, in rcheevos's sections by progress; empty without a set. Waits for the core. */
     external fun getAchievementSections(): Array<AchievementSection>
+
+    /** The running game's leaderboards, in the set's order; empty without a set. Waits for the core. */
+    external fun getLeaderboards(): Array<Leaderboard>
+
+    /**
+     * Starts fetching leaderboard [id]'s top entries and those around the signed-in player, and returns: the answer
+     * comes once, to [NativeCallbacks.onLeaderboard], with [request].
+     */
+    external fun fetchLeaderboard(
+        id: Int,
+        request: Int,
+    )
 }

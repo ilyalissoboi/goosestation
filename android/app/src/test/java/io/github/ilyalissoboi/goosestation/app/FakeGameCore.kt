@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.PatchCode
 import io.github.ilyalissoboi.goosestation.core.PatchCodes
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
@@ -48,6 +49,20 @@ class FakeGameCore(
     var sections = listOf<AchievementSection>()
 
     override fun getGameAchievements(): GameAchievements = achievementsOfGame
+
+    var boards = listOf<Leaderboard>()
+
+    override fun getLeaderboards(): List<Leaderboard> {
+        calls += "getLeaderboards"
+        return boards
+    }
+
+    override fun fetchLeaderboard(
+        id: Int,
+        request: Int,
+    ) {
+        calls += "fetchLeaderboard $id $request"
+    }
 
     override fun getAchievementSections(): List<AchievementSection> {
         calls += "getAchievementSections"

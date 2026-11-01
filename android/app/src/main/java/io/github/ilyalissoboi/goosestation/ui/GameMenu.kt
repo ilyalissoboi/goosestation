@@ -116,6 +116,7 @@ fun GameMenu(
                 cameFrom.codesRow.requestFocus()
                 actions.closeCodes()
             }
+            shown.cheevos?.open != null -> actions.closeLeaderboard()
             shown.cheevos != null -> {
                 cameFrom.cheevosRow.requestFocus()
                 actions.closeAchievements()
@@ -135,6 +136,7 @@ fun GameMenu(
             state.discs != null,
             state.codes != null,
             state.cheevos != null,
+            state.cheevos?.open,
             state.confirmingReset,
             state.confirmingExit,
             state.replacingResume,

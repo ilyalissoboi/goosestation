@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.Resources
@@ -1382,6 +1383,14 @@ object AppController : NativeCallbacks {
 
     override fun onAchievementsChanged() {
         mainHandler.post { gameMenu.achievementsChanged() }
+    }
+
+    override fun onLeaderboard(
+        request: Int,
+        page: LeaderboardPage?,
+        error: String?,
+    ) {
+        mainHandler.post { gameMenu.leaderboardFetched(request, page, error) }
     }
 
     override fun onAchievementImage(path: String) {

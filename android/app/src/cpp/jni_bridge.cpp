@@ -67,6 +67,13 @@ jclass s_achievement_class = nullptr;
 jmethodID s_achievement_constructor = nullptr;
 jclass s_achievement_section_class = nullptr;
 jmethodID s_achievement_section_constructor = nullptr;
+jclass s_leaderboard_class = nullptr;
+jmethodID s_leaderboard_constructor = nullptr;
+jclass s_leaderboard_entry_class = nullptr;
+jmethodID s_leaderboard_entry_constructor = nullptr;
+jclass s_leaderboard_page_class = nullptr;
+jmethodID s_leaderboard_page_constructor = nullptr;
+jmethodID s_on_leaderboard = nullptr;
 jclass s_argb_image_class = nullptr;
 jmethodID s_argb_image_constructor = nullptr;
 jclass s_game_entry_class = nullptr;
@@ -464,6 +471,67 @@ void AndroidHost::NotifyAchievementImage(std::string_view path)
   });
 }
 
+namespace {
+/// A LeaderboardEntry[] of entries, or nullptr (with no exception pending) if one can't be made.
+jobjectArray ToEntryArray(JNIEnv* env, const std::vector<AchievementsBridge::LeaderboardEntry>& entries)
+{
+  jobjectArray ret = env->NewObjectArray(static_cast<jsize>(entries.size()), s_leaderboard_entry_class, nullptr);
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < entries.size(); i++)
+  {
+    const LocalStrings strings(env, {entries[i].user, entries[i].score});
+    jobject entry = strings.ok() ? env->NewObject(s_leaderboard_entry_class, s_leaderboard_entry_constructor,
+                                                  static_cast<jint>(entries[i].rank), strings[0], strings[1]) :
+                                   nullptr;
+    if (!entry)
+    {
+      ClearException(env);
+      env->DeleteLocalRef(ret);
+      return nullptr;
+    }
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return ret;
+}
+} // namespace
+
+void AndroidHost::NotifyLeaderboard(s32 request, const AchievementsBridge::LeaderboardPage* page,
+                                    std::string_view error)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    jobject jpage = nullptr;
+    if (page)
+    {
+      jobjectArray top = ToEntryArray(env, page->top);
+      jobjectArray around = top ? ToEntryArray(env, page->around) : nullptr;
+      if (top && around)
+      {
+        jpage = env->NewObject(s_leaderboard_page_class, s_leaderboard_page_constructor,
+                               static_cast<jint>(page->total), top, around, static_cast<jint>(page->you_index));
+        if (!jpage)
+          ClearException(env);
+      }
+      if (around)
+        env->DeleteLocalRef(around);
+      if (top)
+        env->DeleteLocalRef(top);
+    }
+
+    const LocalStrings message(env, {page && jpage ? std::string_view() : error});
+    env->CallVoidMethod(callbacks, s_on_leaderboard, static_cast<jint>(request), jpage,
+                        (page && jpage) ? nullptr : message[0]);
+    if (jpage)
+      env->DeleteLocalRef(jpage);
+  });
+}
+
 void AndroidHost::NotifyPlaySound(const char* path)
 {
   WithCallbacks([&](JNIEnv* env, jobject callbacks) {
@@ -536,10 +604,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     env->GetMethodID(s_callbacks_class, "onAchievementIndicator", "(IIZLjava/lang/String;Ljava/lang/String;)V");
   s_on_achievement_image = env->GetMethodID(s_callbacks_class, "onAchievementImage", "(Ljava/lang/String;)V");
   s_on_play_sound = env->GetMethodID(s_callbacks_class, "onPlaySound", "(Ljava/lang/String;)V");
+  s_on_leaderboard =
+    env->GetMethodID(s_callbacks_class, "onLeaderboard",
+                     "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
   if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
       !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
       !s_on_achievements_login_expired || !s_on_achievement_notification || !s_on_achievement_toast ||
-      !s_on_achievement_indicator || !s_on_achievement_image || !s_on_play_sound)
+      !s_on_achievement_indicator || !s_on_achievement_image || !s_on_play_sound || !s_on_leaderboard)
   {
     ClearException(env);
     return JNI_ERR;
@@ -613,7 +684,16 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                    &s_achievement_class, &s_achievement_constructor),
         std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementSection",
                    "(ILjava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/Achievement;)V",
-                   &s_achievement_section_class, &s_achievement_section_constructor)})
+                   &s_achievement_section_class, &s_achievement_section_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/Leaderboard", "(ILjava/lang/String;Ljava/lang/String;)V",
+                   &s_leaderboard_class, &s_leaderboard_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/LeaderboardEntry",
+                   "(ILjava/lang/String;Ljava/lang/String;)V", &s_leaderboard_entry_class,
+                   &s_leaderboard_entry_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/LeaderboardPage",
+                   "(I[Lio/github/ilyalissoboi/goosestation/core/LeaderboardEntry;"
+                   "[Lio/github/ilyalissoboi/goosestation/core/LeaderboardEntry;I)V",
+                   &s_leaderboard_page_class, &s_leaderboard_page_constructor)})
   {
     jclass local = env->FindClass(name);
     if (!local)
@@ -982,6 +1062,39 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getAchievementSections)(JNIEnv* env, jobje
   }
 
   return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getLeaderboards)(JNIEnv* env, jobject)
+{
+  const std::vector<AchievementsBridge::LeaderboardItem> boards = AchievementsBridge::GetLeaderboards();
+  jobjectArray ret = env->NewObjectArray(static_cast<jsize>(boards.size()), s_leaderboard_class, nullptr);
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < boards.size(); i++)
+  {
+    const LocalStrings strings(env, {boards[i].title, boards[i].description});
+    jobject board = strings.ok() ? env->NewObject(s_leaderboard_class, s_leaderboard_constructor,
+                                                  static_cast<jint>(boards[i].id), strings[0], strings[1]) :
+                                   nullptr;
+    if (!board)
+    {
+      ClearException(env);
+      return nullptr;
+    }
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), board);
+    env->DeleteLocalRef(board);
+  }
+
+  return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, fetchLeaderboard)(JNIEnv*, jobject, jint id, jint request)
+{
+  AchievementsBridge::FetchLeaderboard(static_cast<u32>(id), static_cast<s32>(request));
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isHardcoreActive)(JNIEnv*, jobject)

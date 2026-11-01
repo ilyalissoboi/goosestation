@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PatchCodes
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
@@ -102,6 +103,15 @@ interface GameCoreApi {
 
     /** The running game's achievements, in rcheevos's sections by progress. */
     fun getAchievementSections(): List<AchievementSection>
+
+    /** The running game's leaderboards, in the set's order. */
+    fun getLeaderboards(): List<Leaderboard>
+
+    /** Starts fetching leaderboard [id]'s entries; the answer comes to [NativeCallbacks.onLeaderboard] as [request]. */
+    fun fetchLeaderboard(
+        id: Int,
+        request: Int,
+    )
 }
 
 object NativeGameCoreApi : GameCoreApi {
@@ -165,4 +175,11 @@ object NativeGameCoreApi : GameCoreApi {
     override fun getGameAchievements(): GameAchievements = NativeLibrary.getGameAchievements()
 
     override fun getAchievementSections(): List<AchievementSection> = NativeLibrary.getAchievementSections().toList()
+
+    override fun getLeaderboards(): List<Leaderboard> = NativeLibrary.getLeaderboards().toList()
+
+    override fun fetchLeaderboard(
+        id: Int,
+        request: Int,
+    ) = NativeLibrary.fetchLeaderboard(id, request)
 }

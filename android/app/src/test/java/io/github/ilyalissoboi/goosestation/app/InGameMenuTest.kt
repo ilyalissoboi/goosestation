@@ -9,6 +9,9 @@ import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PatchCode
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -1228,6 +1231,112 @@ class InGameMenuTest {
             runCurrent()
 
             assertNull(menu.state.cheevos)
+        }
+
+    private val board = Leaderboard(31, "Sunny Flight", "Fastest time")
+    private val sunnyPage =
+        LeaderboardPage(1284, arrayOf(LeaderboardEntry(1, "speedgoose", "0:42.10")), emptyArray(), -1)
+
+    private fun TestScope.leaderboardsOpen(): InGameMenu {
+        achievementsReady()
+        api.boards = listOf(board, Leaderboard(32, "Gem Rush", "Most gems"))
+        val menu = menu()
+        menu.openAchievements()
+        runCurrent()
+        menu.switchTab()
+        runCurrent()
+        calls.clear()
+        return menu
+    }
+
+    @Test
+    fun openingALeaderboardFetches() =
+        runTest {
+            val menu = leaderboardsOpen()
+            assertEquals(
+                2,
+                menu.state.cheevos!!
+                    .leaderboards!!
+                    .size,
+            )
+
+            menu.openLeaderboard(31)
+
+            val panel = menu.state.cheevos!!
+            assertEquals(31, panel.open!!.id)
+            assertNull(panel.page)
+            runCurrent()
+            assertEquals(listOf("fetchLeaderboard 31 ${panel.request}"), calls)
+        }
+
+    // Review Focus 5: a reply that comes after its board was closed, or another opened, is never shown.
+    @Test
+    fun aLateLeaderboardReplyIsDropped() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+            val first = menu.state.cheevos!!.request
+            menu.closeLeaderboard()
+            menu.openLeaderboard(32)
+            val second = menu.state.cheevos!!.request
+
+            menu.leaderboardFetched(first, sunnyPage, null)
+            assertNull(menu.state.cheevos!!.page)
+            menu.leaderboardFetched(second, sunnyPage, null)
+
+            assertEquals(
+                32,
+                menu.state.cheevos!!
+                    .open!!
+                    .id,
+            )
+            assertEquals(
+                1284,
+                menu.state.cheevos!!
+                    .page!!
+                    .total,
+            )
+        }
+
+    @Test
+    fun switchingTabsClosesTheLeaderboard() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+
+            menu.switchTab()
+            menu.switchTab()
+            runCurrent()
+
+            assertNull(menu.state.cheevos!!.open)
+        }
+
+    @Test
+    fun anErrorShowsInThePanel() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+
+            menu.leaderboardFetched(menu.state.cheevos!!.request, null, "Couldn't reach RetroAchievements")
+
+            assertEquals("Couldn't reach RetroAchievements", menu.state.cheevos!!.pageError)
+            assertNull(menu.state.cheevos!!.page)
+        }
+
+    @Test
+    fun openingAgainFetchesAgain() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+            runCurrent()
+            menu.leaderboardFetched(menu.state.cheevos!!.request, sunnyPage, null)
+            menu.closeLeaderboard()
+
+            menu.openLeaderboard(31)
+            runCurrent()
+
+            assertEquals(2, calls.count { it.startsWith("fetchLeaderboard 31") })
+            assertNull(menu.state.cheevos!!.page)
         }
 
     private class MemoryLastSlots : LastSlotStore {

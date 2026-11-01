@@ -133,6 +133,9 @@ static void SetHardcoreMode(bool enabled, bool force_display_message);
 static bool IsLoggedInOrLoggingIn();
 static std::string GetLoginToken();
 static bool CanEnableHardcoreMode();
+static bool CanNotify();
+static void Notify(std::string key, float duration, std::string title, std::string text, std::string image_path);
+static void Toast(std::string title, std::string message, float duration = 10.0f);
 static void ShowLoginSuccess(const rc_client_t* client);
 static void ShowLoginNotification();
 static void IdentifyGame(const std::string& path, CDImage* image);
@@ -231,6 +234,11 @@ static bool s_is_showing_all_leaderboard_entries = false;
 static std::vector<LeaderboardTrackerIndicator> s_active_leaderboard_trackers;
 static std::vector<AchievementChallengeIndicator> s_active_challenge_indicators;
 static std::optional<AchievementProgressIndicator> s_active_progress_indicator;
+
+#ifdef __ANDROID__
+// Why the running game's set, or the sign-in it waited for, didn't load: RC_OK while it hasn't failed.
+static int s_android_load_result = RC_OK;
+#endif
 } // namespace Achievements
 
 std::unique_lock<std::recursive_mutex> Achievements::GetLock()
@@ -246,6 +254,35 @@ rc_client_t* Achievements::GetClient()
 const rc_client_user_game_summary_t& Achievements::GetGameSummary()
 {
   return s_game_summary;
+}
+
+bool Achievements::CanNotify()
+{
+#ifdef __ANDROID__
+  // Big Picture isn't built on Android: the app draws the notices (Host::OnAchievementNotification()).
+  return true;
+#else
+  return FullscreenUI::Initialize();
+#endif
+}
+
+void Achievements::Notify(std::string key, float duration, std::string title, std::string text,
+                          std::string image_path)
+{
+#ifdef __ANDROID__
+  Host::OnAchievementNotification(key, duration, title, text, image_path);
+#else
+  ImGuiFullscreen::AddNotification(std::move(key), duration, std::move(title), std::move(text), std::move(image_path));
+#endif
+}
+
+void Achievements::Toast(std::string title, std::string message, float duration)
+{
+#ifdef __ANDROID__
+  Host::OnAchievementToast(title, message, duration);
+#else
+  ImGuiFullscreen::ShowToast(std::move(title), std::move(message), duration);
+#endif
 }
 
 void Achievements::ReportError(std::string_view sv)
@@ -363,6 +400,9 @@ void Achievements::DownloadImage(std::string url, std::string cache_filename)
     }
 
     ImGuiFullscreen::InvalidateCachedTexture(cache_filename);
+#ifdef __ANDROID__
+    Host::OnAchievementImageDownloaded(cache_filename);
+#endif
   };
 
   s_http_downloader->CreateRequest(std::move(url), std::move(callback));
@@ -1057,6 +1097,11 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
 
   s_load_game_request = nullptr;
   s_state_buffer.deallocate();
+#ifdef __ANDROID__
+  s_android_load_result = result;
+  if (result != RC_OK && result != RC_HARDCORE_DISABLED)
+    Host::OnAchievementsRefreshed();
+#endif
 
   if (result == RC_NO_GAME_LOADED)
   {
@@ -1170,6 +1215,17 @@ void Achievements::ClearGameInfo()
   }
   rc_client_unload_game(s_client);
 
+#ifdef __ANDROID__
+  for (const LeaderboardTrackerIndicator& it : s_active_leaderboard_trackers)
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Tracker, it.tracker_id, false, {}, {});
+  for (const AchievementChallengeIndicator& it : s_active_challenge_indicators)
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Challenge, it.achievement->id, false, {}, {});
+  if (s_active_progress_indicator.has_value())
+  {
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Progress, s_active_progress_indicator->achievement->id,
+                                 false, {}, {});
+  }
+#endif
   s_active_leaderboard_trackers = {};
   s_active_challenge_indicators = {};
   s_active_progress_indicator.reset();
@@ -1182,6 +1238,9 @@ void Achievements::ClearGameInfo()
   s_has_rich_presence = false;
   s_rich_presence_string = {};
   s_game_summary = {};
+#ifdef __ANDROID__
+  s_android_load_result = RC_OK;
+#endif
 
   Host::OnAchievementsRefreshed();
 }
@@ -1194,7 +1253,7 @@ void Achievements::ClearGameHash()
 
 void Achievements::DisplayAchievementSummary()
 {
-  if (g_settings.achievements_notifications && FullscreenUI::Initialize())
+  if (g_settings.achievements_notifications && CanNotify())
   {
     std::string title;
     if (IsHardcoreModeActive())
@@ -1219,7 +1278,7 @@ void Achievements::DisplayAchievementSummary()
       summary = TRANSLATE_STR("Achievements", "This game has no achievements.");
     }
 
-    ImGuiFullscreen::AddNotification("achievement_summary", ACHIEVEMENT_SUMMARY_NOTIFICATION_TIME, std::move(title),
+    Notify("achievement_summary", ACHIEVEMENT_SUMMARY_NOTIFICATION_TIME, std::move(title),
                                      std::move(summary), s_game_icon);
   }
 
@@ -1230,9 +1289,9 @@ void Achievements::DisplayAchievementSummary()
 
 void Achievements::DisplayHardcoreDeferredMessage()
 {
-  if (g_settings.achievements_hardcore_mode && !s_hardcore_mode && System::IsValid() && FullscreenUI::Initialize())
+  if (g_settings.achievements_hardcore_mode && !s_hardcore_mode && System::IsValid() && CanNotify())
   {
-    ImGuiFullscreen::ShowToast(std::string(),
+    Toast(std::string(),
                                TRANSLATE_STR("Achievements", "Hardcore mode will be enabled on system reset."),
                                Host::OSD_WARNING_DURATION);
   }
@@ -1256,7 +1315,7 @@ void Achievements::HandleUnlockEvent(const rc_client_event_t* event)
   INFO_LOG("Achievement {} ({}) for game {} unlocked", cheevo->title, cheevo->id, s_game_id);
   UpdateGameSummary();
 
-  if (g_settings.achievements_notifications && FullscreenUI::Initialize())
+  if (g_settings.achievements_notifications && CanNotify())
   {
     std::string title;
     if (cheevo->category == RC_CLIENT_ACHIEVEMENT_CATEGORY_UNOFFICIAL)
@@ -1266,7 +1325,7 @@ void Achievements::HandleUnlockEvent(const rc_client_event_t* event)
 
     std::string badge_path = GetAchievementBadgePath(cheevo, cheevo->state);
 
-    ImGuiFullscreen::AddNotification(fmt::format("achievement_unlock_{}", cheevo->id),
+    Notify(fmt::format("achievement_unlock_{}", cheevo->id),
                                      static_cast<float>(g_settings.achievements_notification_duration),
                                      std::move(title), cheevo->description, std::move(badge_path));
   }
@@ -1280,7 +1339,7 @@ void Achievements::HandleGameCompleteEvent(const rc_client_event_t* event)
   INFO_LOG("Game {} complete", s_game_id);
   UpdateGameSummary();
 
-  if (g_settings.achievements_notifications && FullscreenUI::Initialize())
+  if (g_settings.achievements_notifications && CanNotify())
   {
     std::string title = fmt::format(TRANSLATE_FS("Achievements", "Mastered {}"), s_game_title);
     std::string message = fmt::format(
@@ -1289,7 +1348,7 @@ void Achievements::HandleGameCompleteEvent(const rc_client_event_t* event)
                            s_game_summary.num_unlocked_achievements),
       TRANSLATE_PLURAL_STR("Achievements", "%n points", "Achievement points", s_game_summary.points_unlocked));
 
-    ImGuiFullscreen::AddNotification("achievement_mastery", GAME_COMPLETE_NOTIFICATION_TIME, std::move(title),
+    Notify("achievement_mastery", GAME_COMPLETE_NOTIFICATION_TIME, std::move(title),
                                      std::move(message), s_game_icon);
   }
 }
@@ -1298,12 +1357,12 @@ void Achievements::HandleLeaderboardStartedEvent(const rc_client_event_t* event)
 {
   DEV_LOG("Leaderboard {} ({}) started", event->leaderboard->id, event->leaderboard->title);
 
-  if (g_settings.achievements_leaderboard_notifications && FullscreenUI::Initialize())
+  if (g_settings.achievements_leaderboard_notifications && CanNotify())
   {
     std::string title = event->leaderboard->title;
     std::string message = TRANSLATE_STR("Achievements", "Leaderboard attempt started.");
 
-    ImGuiFullscreen::AddNotification(fmt::format("leaderboard_{}", event->leaderboard->id),
+    Notify(fmt::format("leaderboard_{}", event->leaderboard->id),
                                      LEADERBOARD_STARTED_NOTIFICATION_TIME, std::move(title), std::move(message),
                                      s_game_icon);
   }
@@ -1313,12 +1372,12 @@ void Achievements::HandleLeaderboardFailedEvent(const rc_client_event_t* event)
 {
   DEV_LOG("Leaderboard {} ({}) failed", event->leaderboard->id, event->leaderboard->title);
 
-  if (g_settings.achievements_leaderboard_notifications && FullscreenUI::Initialize())
+  if (g_settings.achievements_leaderboard_notifications && CanNotify())
   {
     std::string title = event->leaderboard->title;
     std::string message = TRANSLATE_STR("Achievements", "Leaderboard attempt failed.");
 
-    ImGuiFullscreen::AddNotification(fmt::format("leaderboard_{}", event->leaderboard->id),
+    Notify(fmt::format("leaderboard_{}", event->leaderboard->id),
                                      LEADERBOARD_FAILED_NOTIFICATION_TIME, std::move(title), std::move(message),
                                      s_game_icon);
   }
@@ -1328,7 +1387,7 @@ void Achievements::HandleLeaderboardSubmittedEvent(const rc_client_event_t* even
 {
   DEV_LOG("Leaderboard {} ({}) submitted", event->leaderboard->id, event->leaderboard->title);
 
-  if (g_settings.achievements_leaderboard_notifications && FullscreenUI::Initialize())
+  if (g_settings.achievements_leaderboard_notifications && CanNotify())
   {
     static const char* value_strings[NUM_RC_CLIENT_LEADERBOARD_FORMATS] = {
       TRANSLATE_NOOP("Achievements", "Your Time: {}{}"),
@@ -1344,7 +1403,7 @@ void Achievements::HandleLeaderboardSubmittedEvent(const rc_client_event_t* even
       event->leaderboard->tracker_value ? event->leaderboard->tracker_value : "Unknown",
       g_settings.achievements_spectator_mode ? std::string_view() : TRANSLATE_SV("Achievements", " (Submitting)"));
 
-    ImGuiFullscreen::AddNotification(fmt::format("leaderboard_{}", event->leaderboard->id),
+    Notify(fmt::format("leaderboard_{}", event->leaderboard->id),
                                      static_cast<float>(g_settings.achievements_leaderboard_duration), std::move(title),
                                      std::move(message), s_game_icon);
   }
@@ -1358,7 +1417,7 @@ void Achievements::HandleLeaderboardScoreboardEvent(const rc_client_event_t* eve
   DEV_LOG("Leaderboard {} scoreboard rank {} of {}", event->leaderboard_scoreboard->leaderboard_id,
           event->leaderboard_scoreboard->new_rank, event->leaderboard_scoreboard->num_entries);
 
-  if (g_settings.achievements_leaderboard_notifications && FullscreenUI::Initialize())
+  if (g_settings.achievements_leaderboard_notifications && CanNotify())
   {
     static const char* value_strings[NUM_RC_CLIENT_LEADERBOARD_FORMATS] = {
       TRANSLATE_NOOP("Achievements", "Your Time: {} (Best: {})"),
@@ -1375,7 +1434,7 @@ void Achievements::HandleLeaderboardScoreboardEvent(const rc_client_event_t* eve
                   event->leaderboard_scoreboard->submitted_score, event->leaderboard_scoreboard->best_score),
       event->leaderboard_scoreboard->new_rank, event->leaderboard_scoreboard->num_entries);
 
-    ImGuiFullscreen::AddNotification(fmt::format("leaderboard_{}", event->leaderboard->id),
+    Notify(fmt::format("leaderboard_{}", event->leaderboard->id),
                                      static_cast<float>(g_settings.achievements_leaderboard_duration), std::move(title),
                                      std::move(message), s_game_icon);
   }
@@ -1395,6 +1454,10 @@ void Achievements::HandleLeaderboardTrackerShowEvent(const rc_client_event_t* ev
   indicator.tracker_id = event->leaderboard_tracker->id;
   indicator.text = event->leaderboard_tracker->display;
   indicator.active = true;
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Tracker, indicator.tracker_id, true, indicator.text, {});
+#endif
   s_active_leaderboard_trackers.push_back(std::move(indicator));
 }
 
@@ -1409,6 +1472,10 @@ void Achievements::HandleLeaderboardTrackerHideEvent(const rc_client_event_t* ev
   DEV_LOG("Hiding leaderboard tracker: {}", id);
   it->active = false;
   it->show_hide_time.Reset();
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Tracker, id, false, {}, {});
+#endif
 }
 
 void Achievements::HandleLeaderboardTrackerUpdateEvent(const rc_client_event_t* event)
@@ -1423,6 +1490,10 @@ void Achievements::HandleLeaderboardTrackerUpdateEvent(const rc_client_event_t* 
 
   it->text = event->leaderboard_tracker->display;
   it->active = true;
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Tracker, id, true, it->text, {});
+#endif
 }
 
 void Achievements::HandleAchievementChallengeIndicatorShowEvent(const rc_client_event_t* event)
@@ -1434,6 +1505,13 @@ void Achievements::HandleAchievementChallengeIndicatorShowEvent(const rc_client_
   {
     it->show_hide_time.Reset();
     it->active = true;
+#ifdef __ANDROID__
+    if (g_settings.achievements_overlays)
+    {
+      Host::OnAchievementIndicator(Host::AchievementIndicator::Challenge, it->achievement->id, true, {},
+                                   it->badge_path);
+    }
+#endif
     return;
   }
 
@@ -1441,6 +1519,13 @@ void Achievements::HandleAchievementChallengeIndicatorShowEvent(const rc_client_
   indicator.achievement = event->achievement;
   indicator.badge_path = GetAchievementBadgePath(event->achievement, RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED);
   indicator.active = true;
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+  {
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Challenge, event->achievement->id, true, {},
+                                 indicator.badge_path);
+  }
+#endif
   s_active_challenge_indicators.push_back(std::move(indicator));
 
   DEV_LOG("Show challenge indicator for {} ({})", event->achievement->id, event->achievement->title);
@@ -1457,6 +1542,10 @@ void Achievements::HandleAchievementChallengeIndicatorHideEvent(const rc_client_
   DEV_LOG("Hide challenge indicator for {} ({})", event->achievement->id, event->achievement->title);
   it->show_hide_time.Reset();
   it->active = false;
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Challenge, event->achievement->id, false, {}, {});
+#endif
 }
 
 void Achievements::HandleAchievementProgressIndicatorShowEvent(const rc_client_event_t* event)
@@ -1473,6 +1562,13 @@ void Achievements::HandleAchievementProgressIndicatorShowEvent(const rc_client_e
   s_active_progress_indicator->badge_path =
     GetAchievementBadgePath(event->achievement, RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED);
   s_active_progress_indicator->active = true;
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+  {
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Progress, event->achievement->id, true,
+                                 event->achievement->measured_progress, s_active_progress_indicator->badge_path);
+  }
+#endif
 }
 
 void Achievements::HandleAchievementProgressIndicatorHideEvent(const rc_client_event_t* event)
@@ -1483,6 +1579,13 @@ void Achievements::HandleAchievementProgressIndicatorHideEvent(const rc_client_e
   DEV_LOG("Hiding progress indicator");
   s_active_progress_indicator->show_hide_time.Reset();
   s_active_progress_indicator->active = false;
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+  {
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Progress, s_active_progress_indicator->achievement->id,
+                                 false, {}, {});
+  }
+#endif
 }
 
 void Achievements::HandleAchievementProgressIndicatorUpdateEvent(const rc_client_event_t* event)
@@ -1491,6 +1594,13 @@ void Achievements::HandleAchievementProgressIndicatorUpdateEvent(const rc_client
           event->achievement->measured_progress);
   s_active_progress_indicator->achievement = event->achievement;
   s_active_progress_indicator->active = true;
+#ifdef __ANDROID__
+  if (g_settings.achievements_overlays)
+  {
+    Host::OnAchievementIndicator(Host::AchievementIndicator::Progress, event->achievement->id, true,
+                                 event->achievement->measured_progress, s_active_progress_indicator->badge_path);
+  }
+#endif
 }
 
 void Achievements::HandleServerErrorEvent(const rc_client_event_t* event)
@@ -1507,9 +1617,9 @@ void Achievements::HandleServerDisconnectedEvent(const rc_client_event_t* event)
 {
   WARNING_LOG("Server disconnected.");
 
-  if (FullscreenUI::Initialize())
+  if (CanNotify())
   {
-    ImGuiFullscreen::ShowToast(
+    Toast(
       TRANSLATE_STR("Achievements", "Achievements Disconnected"),
       TRANSLATE_STR("Achievements",
                     "An unlock request could not be completed. We will keep retrying to submit this request."),
@@ -1521,9 +1631,9 @@ void Achievements::HandleServerReconnectedEvent(const rc_client_event_t* event)
 {
   WARNING_LOG("Server reconnected.");
 
-  if (FullscreenUI::Initialize())
+  if (CanNotify())
   {
-    ImGuiFullscreen::ShowToast(TRANSLATE_STR("Achievements", "Achievements Reconnected"),
+    Toast(TRANSLATE_STR("Achievements", "Achievements Reconnected"),
                                TRANSLATE_STR("Achievements", "All pending unlock requests have completed."),
                                Host::OSD_INFO_DURATION);
   }
@@ -1604,9 +1714,9 @@ void Achievements::SetHardcoreMode(bool enabled, bool force_display_message)
   // new mode
   s_hardcore_mode = enabled;
 
-  if (System::IsValid() && (HasActiveGame() || force_display_message) && FullscreenUI::Initialize())
+  if (System::IsValid() && (HasActiveGame() || force_display_message) && CanNotify())
   {
-    ImGuiFullscreen::ShowToast(std::string(),
+    Toast(std::string(),
                                enabled ? TRANSLATE_STR("Achievements", "Hardcore mode is now enabled.") :
                                          TRANSLATE_STR("Achievements", "Hardcore mode is now disabled."),
                                Host::OSD_INFO_DURATION);
@@ -1853,8 +1963,16 @@ void Achievements::ClientLoginWithPasswordCallback(int result, const char* error
   if (result != RC_OK)
   {
     ERROR_LOG("Login failed: {}: {}", rc_error_str(result), error_message ? error_message : "Unknown");
+#ifdef __ANDROID__
+    // The server's own words for the Settings page, or plainly that it couldn't be reached.
+    if (result == RC_NO_RESPONSE || !error_message || !*error_message)
+      Error::SetStringView(params->error, "Couldn't reach RetroAchievements");
+    else
+      Error::SetString(params->error, error_message);
+#else
     Error::SetString(params->error,
                      fmt::format("{}: {}", rc_error_str(result), error_message ? error_message : "Unknown"));
+#endif
     params->result = false;
     return;
   }
@@ -1887,8 +2005,24 @@ void Achievements::ClientLoginWithTokenCallback(int result, const char* error_me
 
   if (result != RC_OK)
   {
+#ifdef __ANDROID__
+    // Only the server's rejection ends the sign-in. Anything else (no connection) keeps the token, and the next game
+    // start tries again (RetryAndroidSignIn()).
+    ERROR_LOG("Login failed: {}", error_message ? error_message : rc_error_str(result));
+    if (result == RC_INVALID_CREDENTIALS || result == RC_EXPIRED_TOKEN || result == RC_ACCESS_DENIED)
+    {
+      Host::OnAchievementsLoginRequested(LoginRequestReason::TokenInvalid);
+      Host::OnAchievementsLoginExpired();
+    }
+    else if (System::IsValid())
+    {
+      s_android_load_result = result;
+      Host::OnAchievementsRefreshed();
+    }
+#else
     ReportFmtError("Login failed: {}", error_message);
     Host::OnAchievementsLoginRequested(LoginRequestReason::TokenInvalid);
+#endif
     return;
   }
 
@@ -1929,7 +2063,7 @@ void Achievements::ShowLoginNotification()
     std::string summary = fmt::format(TRANSLATE_FS("Achievements", "Score: {} ({} softcore)\nUnread messages: {}"),
                                       user->score, user->score_softcore, user->num_unread_messages);
 
-    ImGuiFullscreen::AddNotification("achievements_login", LOGIN_NOTIFICATION_TIME, std::move(title),
+    Notify("achievements_login", LOGIN_NOTIFICATION_TIME, std::move(title),
                                      std::move(summary), std::move(badge_path));
   }
 }
@@ -2029,6 +2163,64 @@ bool Achievements::ConfirmSystemReset()
 
   return true;
 }
+
+#ifdef __ANDROID__
+
+Achievements::AndroidSignIn Achievements::GetAndroidSignIn()
+{
+  const auto lock = GetLock();
+  if (!IsActive() || !s_client)
+    return AndroidSignIn::SignedOut;
+  if (rc_client_get_user_info(s_client))
+    return AndroidSignIn::SignedIn;
+  if (s_login_request)
+    return AndroidSignIn::Connecting;
+  if (!Host::GetBaseStringSettingValue("Cheevos", "Username").empty() &&
+      !Host::GetSecretSettingValue("Cheevos", "Token").empty())
+  {
+    return AndroidSignIn::NotConnected;
+  }
+  return AndroidSignIn::SignedOut;
+}
+
+Achievements::AndroidGameStatus Achievements::GetAndroidGameStatus()
+{
+  const auto lock = GetLock();
+  if (!IsActive() || !s_client)
+    return AndroidGameStatus::Off;
+  const bool signed_in = (rc_client_get_user_info(s_client) != nullptr);
+  if (s_load_game_request || (s_login_request && System::IsValid()))
+    return AndroidGameStatus::Loading;
+  if (s_android_load_result == RC_NO_RESPONSE)
+    return AndroidGameStatus::Unreachable;
+  if (!signed_in)
+    return AndroidGameStatus::Off;
+  if (s_android_load_result == RC_NO_GAME_LOADED || (HasActiveGame() && !HasAchievementsOrLeaderboards()) ||
+      !HasActiveGame())
+  {
+    return AndroidGameStatus::NoSet;
+  }
+  return AndroidGameStatus::Ready;
+}
+
+void Achievements::RetryAndroidSignIn()
+{
+  const auto lock = GetLock();
+  if (!IsActive() || !s_client || rc_client_get_user_info(s_client) || s_login_request)
+    return;
+
+  const std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
+  const std::string api_token = GetLoginToken();
+  if (username.empty() || api_token.empty())
+    return;
+
+  INFO_LOG("Signing in again as '{}'...", username);
+  s_android_load_result = RC_OK;
+  s_login_request = rc_client_begin_login_with_token(s_client, username.c_str(), api_token.c_str(),
+                                                     ClientLoginWithTokenCallback, nullptr);
+}
+
+#endif // __ANDROID__
 
 bool Achievements::ConfirmHardcoreModeDisable(const char* trigger)
 {
@@ -3252,7 +3444,7 @@ void Achievements::LeaderboardFetchNearbyCallback(int result, const char* error_
 
   if (result != RC_OK)
   {
-    ImGuiFullscreen::ShowToast(TRANSLATE("Achievements", "Leaderboard download failed"), error_message);
+    Toast(TRANSLATE("Achievements", "Leaderboard download failed"), error_message);
     CloseLeaderboard();
     return;
   }
@@ -3272,7 +3464,7 @@ void Achievements::LeaderboardFetchAllCallback(int result, const char* error_mes
 
   if (result != RC_OK)
   {
-    ImGuiFullscreen::ShowToast(TRANSLATE("Achievements", "Leaderboard download failed"), error_message);
+    Toast(TRANSLATE("Achievements", "Leaderboard download failed"), error_message);
     CloseLeaderboard();
     return;
   }

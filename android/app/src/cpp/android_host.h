@@ -298,4 +298,15 @@ void NotifyFastForwardChanged(bool enabled);
 /// the core's settings lock held, on whichever thread saved it.
 void NotifyAchievementsToken(std::optional<std::string_view> token);
 
+/// RetroAchievements, for the app (achievements_bridge.cpp): the sign-in, the game's set or hardcore mode changed; the
+/// sign-in expired; a notice, toast or live indicator to show; a picture downloaded; a sound to play. Any thread.
+void NotifyAchievementsChanged();
+void NotifyAchievementsLoginExpired();
+void NotifyAchievementNotification(std::string_view key, std::string_view title, std::string_view text,
+                                   std::string_view image_path, float seconds, s32 points);
+void NotifyAchievementToast(std::string_view title, std::string_view message, float seconds);
+void NotifyAchievementIndicator(s32 kind, u32 id, bool shown, std::string_view text, std::string_view badge_path);
+void NotifyAchievementImage(std::string_view path);
+void NotifyPlaySound(const char* path);
+
 } // namespace AndroidHost

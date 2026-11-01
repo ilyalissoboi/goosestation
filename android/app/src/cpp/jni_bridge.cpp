@@ -3,6 +3,7 @@
 
 // The JNI side of io.github.ilyalissoboi.goosestation.core.NativeLibrary, and the calls back into NativeCallbacks.
 
+#include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
 #include "content_bridge.h"
@@ -12,6 +13,8 @@
 #include "core/game_database.h"
 #include "core/game_list.h"
 #include "core/settings.h"
+
+#include "util/platform_misc.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
@@ -48,6 +51,15 @@ jmethodID s_on_binding_captured = nullptr;
 jmethodID s_on_osd_message = nullptr;
 jmethodID s_on_fast_forward_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
+jmethodID s_on_achievements_changed = nullptr;
+jmethodID s_on_achievements_login_expired = nullptr;
+jmethodID s_on_achievement_notification = nullptr;
+jmethodID s_on_achievement_toast = nullptr;
+jmethodID s_on_achievement_indicator = nullptr;
+jmethodID s_on_achievement_image = nullptr;
+jmethodID s_on_play_sound = nullptr;
+jclass s_achievements_account_class = nullptr;
+jmethodID s_achievements_account_constructor = nullptr;
 jclass s_argb_image_class = nullptr;
 jmethodID s_argb_image_constructor = nullptr;
 jclass s_game_entry_class = nullptr;
@@ -340,6 +352,120 @@ void AndroidHost::NotifyAchievementsToken(std::optional<std::string_view> token)
   env->DeleteLocalRef(callbacks);
 }
 
+namespace {
+/// Java strings for a callback's arguments, deleted with this. ok() is false if one didn't convert.
+class LocalStrings
+{
+public:
+  LocalStrings(JNIEnv* env, std::initializer_list<std::string_view> strings) : m_env(env)
+  {
+    for (std::string_view str : strings)
+      m_strings.push_back(ToJString(env, str));
+  }
+
+  ~LocalStrings()
+  {
+    for (jstring str : m_strings)
+    {
+      if (str)
+        m_env->DeleteLocalRef(str);
+    }
+  }
+
+  bool ok() const
+  {
+    return std::all_of(m_strings.begin(), m_strings.end(), [](jstring str) { return str != nullptr; });
+  }
+
+  jstring operator[](size_t index) const { return m_strings[index]; }
+
+private:
+  JNIEnv* m_env;
+  std::vector<jstring> m_strings;
+};
+
+/// Runs call(env, callbacks) if the app has set its callbacks, on any thread.
+template<typename F>
+void WithCallbacks(F&& call)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  call(env.get(), callbacks);
+  ClearException(env.get());
+  env->DeleteLocalRef(callbacks);
+}
+} // namespace
+
+void AndroidHost::NotifyAchievementsChanged()
+{
+  WithCallbacks([](JNIEnv* env, jobject callbacks) { env->CallVoidMethod(callbacks, s_on_achievements_changed); });
+}
+
+void AndroidHost::NotifyAchievementsLoginExpired()
+{
+  WithCallbacks(
+    [](JNIEnv* env, jobject callbacks) { env->CallVoidMethod(callbacks, s_on_achievements_login_expired); });
+}
+
+void AndroidHost::NotifyAchievementNotification(std::string_view key, std::string_view title, std::string_view text,
+                                                std::string_view image_path, float seconds, s32 points)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {key, title, text, image_path});
+    if (strings.ok())
+    {
+      env->CallVoidMethod(callbacks, s_on_achievement_notification, strings[0], strings[1], strings[2], strings[3],
+                          static_cast<jfloat>(seconds), static_cast<jint>(points));
+    }
+  });
+}
+
+void AndroidHost::NotifyAchievementToast(std::string_view title, std::string_view message, float seconds)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {title, message});
+    if (strings.ok())
+      env->CallVoidMethod(callbacks, s_on_achievement_toast, strings[0], strings[1], static_cast<jfloat>(seconds));
+  });
+}
+
+void AndroidHost::NotifyAchievementIndicator(s32 kind, u32 id, bool shown, std::string_view text,
+                                             std::string_view badge_path)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {text, badge_path});
+    if (strings.ok())
+    {
+      env->CallVoidMethod(callbacks, s_on_achievement_indicator, static_cast<jint>(kind), static_cast<jint>(id),
+                          static_cast<jboolean>(shown), strings[0], strings[1]);
+    }
+  });
+}
+
+void AndroidHost::NotifyAchievementImage(std::string_view path)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {path});
+    if (strings.ok())
+      env->CallVoidMethod(callbacks, s_on_achievement_image, strings[0]);
+  });
+}
+
+void AndroidHost::NotifyPlaySound(const char* path)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {path});
+    if (strings.ok())
+      env->CallVoidMethod(callbacks, s_on_play_sound, strings[0]);
+  });
+}
+
 void AndroidHost::NotifyFastForwardChanged(bool enabled)
 {
   ScopedJNIEnv env;
@@ -392,8 +518,21 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                      "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
   s_on_fast_forward_changed = env->GetMethodID(s_callbacks_class, "onFastForwardChanged", "(Z)V");
   s_on_achievements_token = env->GetMethodID(s_callbacks_class, "onAchievementsToken", "(Ljava/lang/String;)V");
+  s_on_achievements_changed = env->GetMethodID(s_callbacks_class, "onAchievementsChanged", "()V");
+  s_on_achievements_login_expired = env->GetMethodID(s_callbacks_class, "onAchievementsLoginExpired", "()V");
+  s_on_achievement_notification =
+    env->GetMethodID(s_callbacks_class, "onAchievementNotification",
+                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FI)V");
+  s_on_achievement_toast =
+    env->GetMethodID(s_callbacks_class, "onAchievementToast", "(Ljava/lang/String;Ljava/lang/String;F)V");
+  s_on_achievement_indicator =
+    env->GetMethodID(s_callbacks_class, "onAchievementIndicator", "(IIZLjava/lang/String;Ljava/lang/String;)V");
+  s_on_achievement_image = env->GetMethodID(s_callbacks_class, "onAchievementImage", "(Ljava/lang/String;)V");
+  s_on_play_sound = env->GetMethodID(s_callbacks_class, "onPlaySound", "(Ljava/lang/String;)V");
   if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
-      !s_on_fast_forward_changed || !s_on_achievements_token)
+      !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
+      !s_on_achievements_login_expired || !s_on_achievement_notification || !s_on_achievement_toast ||
+      !s_on_achievement_indicator || !s_on_achievement_image || !s_on_play_sound)
   {
     ClearException(env);
     return JNI_ERR;
@@ -456,7 +595,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                    &s_patch_code_class, &s_patch_code_constructor),
         std::tuple("io/github/ilyalissoboi/goosestation/core/PatchCodes",
                    "(Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/PatchCode;)V", &s_patch_codes_class,
-                   &s_patch_codes_constructor)})
+                   &s_patch_codes_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementsAccount",
+                   "(ILjava/lang/String;Ljava/lang/String;II)V", &s_achievements_account_class,
+                   &s_achievements_account_constructor)})
   {
     jclass local = env->FindClass(name);
     if (!local)
@@ -561,6 +703,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 
   JNIUtil::SetJavaVM(vm);
   FileSystem::SetContentProvider(&s_content_provider);
+  PlatformMisc::SetSoundPlayer(&AndroidHost::NotifyPlaySound);
   return JNI_VERSION_1_6;
 }
 
@@ -725,6 +868,38 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, httpTestFetch)(JNIEnv* env, jobject, jstri
   }
 
   return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsAccount)(JNIEnv* env, jobject)
+{
+  const AchievementsBridge::Account account = AchievementsBridge::GetAccount();
+  const LocalStrings strings(env, {account.username, account.display_name});
+  if (!strings.ok())
+    return nullptr;
+
+  jobject ret = env->NewObject(s_achievements_account_class, s_achievements_account_constructor,
+                               static_cast<jint>(account.state), strings[0], strings[1],
+                               static_cast<jint>(account.score), static_cast<jint>(account.softcore_score));
+  if (!ret)
+    ClearException(env);
+  return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, signIn)(JNIEnv* env, jobject, jstring username, jstring password)
+{
+  const std::optional<std::string> error =
+    AchievementsBridge::SignIn(FromJString(env, username), FromJString(env, password));
+  return error.has_value() ? ToJString(env, error.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, signOut)(JNIEnv*, jobject)
+{
+  AchievementsBridge::SignOut();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setAchievementsServerForTest)(JNIEnv* env, jobject, jstring url)
+{
+  AchievementsBridge::SetServerForTest(url ? FromJString(env, url) : std::string());
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)

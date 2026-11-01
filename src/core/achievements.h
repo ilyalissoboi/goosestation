@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <mutex>
+#include <string_view>
 #include <string>
 #include <utility>
 #include <vector>
@@ -151,6 +152,35 @@ void DrawLeaderboardsWindow();
 
 #endif // __ANDROID__
 
+#ifdef __ANDROID__
+
+/// The Android app's view of the sign-in. Takes the lock.
+enum class AndroidSignIn : u8
+{
+  SignedOut,    // no token, or achievements are off
+  Connecting,   // a sign-in is under way
+  NotConnected, // a username and token are stored, but the sign-in hasn't succeeded (no connection)
+  SignedIn,
+};
+AndroidSignIn GetAndroidSignIn();
+
+/// The running game's achievements, as the Android menu shows them. Takes the lock.
+enum class AndroidGameStatus : u8
+{
+  Off,         // achievements are off, or nobody is signed in
+  Loading,     // the game's set, or the sign-in, is being loaded
+  Unreachable, // the server couldn't be reached for this game
+  NoSet,       // the game is unknown to RetroAchievements, or has nothing in its set
+  Ready,
+};
+AndroidGameStatus GetAndroidGameStatus();
+
+/// Signs in again with the stored token if a sign-in failed (no connection at startup). The host calls it before a
+/// game boots, so the game's set loads once the sign-in succeeds.
+void RetryAndroidSignIn();
+
+#endif // __ANDROID__
+
 #ifdef ENABLE_RAINTEGRATION
 /// Prevents the internal implementation from being used. Instead, RAIntegration will be
 /// called into when achievement-related events occur.
@@ -179,4 +209,29 @@ void OnAchievementsRefreshed();
 
 /// Called whenever hardcore mode is toggled.
 void OnAchievementsHardcoreModeChanged(bool enabled);
+
+#ifdef __ANDROID__
+/// Big Picture isn't built on Android, so the app draws achievement notices itself. A notification's key says what it
+/// is: achievement_unlock_<id>, achievement_mastery, achievement_summary or leaderboard_<id>.
+void OnAchievementNotification(std::string_view key, float seconds, std::string_view title, std::string_view text,
+                               std::string_view image_path);
+void OnAchievementToast(std::string_view title, std::string_view message, float seconds);
+
+/// The live indicators during play. For a tracker, id is the tracker's and text its value; for a challenge or the
+/// progress pop-up, id is the achievement's, and text its progress (progress only).
+enum class AchievementIndicator : u8
+{
+  Tracker,
+  Challenge,
+  Progress,
+};
+void OnAchievementIndicator(AchievementIndicator kind, u32 id, bool shown, std::string_view text,
+                            std::string_view badge_path);
+
+/// A badge or icon the core downloaded is now at path.
+void OnAchievementImageDownloaded(std::string_view path);
+
+/// The server rejected the stored token: the sign-in has expired.
+void OnAchievementsLoginExpired();
+#endif
 } // namespace Host

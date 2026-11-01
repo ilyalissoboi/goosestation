@@ -758,6 +758,9 @@ void AndroidHost::BootPendingGame()
   // Nothing held before the boot carries over into the game, nor stops its first press from counting.
   QueueReleaseAllInputs();
 
+  // A sign-in that failed for want of a connection is tried again, so this game's set can load.
+  Achievements::RetryAndroidSignIn();
+
   SystemBootParameters parameters(s_boot_path);
   parameters.save_state = std::move(s_pending_boot_state);
   parameters.media_playlist_index = s_pending_playlist_index;
@@ -2242,22 +2245,6 @@ void Host::OnTextInputEnded()
 }
 
 void Host::SetMouseMode(bool relative, bool hide_cursor)
-{
-}
-
-void Host::OnAchievementsLoginRequested(Achievements::LoginRequestReason reason)
-{
-}
-
-void Host::OnAchievementsLoginSuccess(const char* username, u32 points, u32 sc_points, u32 unread_messages)
-{
-}
-
-void Host::OnAchievementsRefreshed()
-{
-}
-
-void Host::OnAchievementsHardcoreModeChanged(bool enabled)
 {
 }
 

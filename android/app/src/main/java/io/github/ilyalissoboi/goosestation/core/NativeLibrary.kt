@@ -390,4 +390,23 @@ object NativeLibrary {
         post: String?,
         timeoutSeconds: Float,
     ): Array<String>
+
+    /** The RetroAchievements account and its sign-in. Waits for the core. */
+    external fun getAchievementsAccount(): AchievementsAccount
+
+    /**
+     * Turns achievements on and signs in to RetroAchievements as [username], waiting for the server: null once signed
+     * in, else why not, in the server's words or "Couldn't reach RetroAchievements". The password isn't kept; the
+     * token arrives through [NativeCallbacks.onAchievementsToken]. Call it off the main thread.
+     */
+    external fun signIn(
+        username: String,
+        password: String,
+    ): String?
+
+    /** Signs out of RetroAchievements, forgetting the username and token, and turns achievements off. */
+    external fun signOut()
+
+    /** For the instrumented tests only: the RetroAchievements server to talk to ([url]), or the real one with null. */
+    external fun setAchievementsServerForTest(url: String?)
 }

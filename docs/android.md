@@ -341,8 +341,9 @@ adb shell run-as io.github.ilyalissoboi.goosestation cat files/mirror-manifest.t
 
 The rules:
 
-- **Only GooseStation's own data is mirrored.** That is `settings.ini`, `secrets.ini`, `playtime.dat` and
-  `custom_properties.ini` at the top of the folder, and everything in the desktop data folder's folders: `bios`,
+- **Only GooseStation's own data is mirrored.** That is `settings.ini`, `playtime.dat` and
+  `custom_properties.ini` at the top of the folder (desktop's `secrets.ini` counts as GooseStation's, so it raises no
+  banner, but it's never copied either way: Android keeps its RetroAchievements token in the Keystore), and everything in the desktop data folder's folders: `bios`,
   `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `savestates`,
   `screenshots`, `shaders`, `textures`, `resources` and `videos`, and `emusync` (memory card sync, a later stage).
   Once the core has started, the folders its `settings.ini` names inside the data folder (a `[Folders]` entry, or
@@ -698,6 +699,50 @@ other goes down, that second press is held back: if both are still held 1 s late
 press is never sent. If either is let go first, the held-back press is sent then, late. A Start tapped while Select is
 held therefore reaches the game when it's let go, and lasts 100 ms (6 frames at 60 Hz), however short the tap, so the
 game's once-a-frame read of the pad sees it.
+
+### RetroAchievements
+
+**Signing in.** Settings → Achievements has the username and password fields, typed with Android's keyboard (focus
+doesn't open it, so a D-pad passes over the fields; A or a tap does), and **Sign in**. A wrong password shows the
+server's reason; no connection shows "Couldn't reach RetroAchievements". Signed in, the page says who and how many
+points, with **Sign out**. Signing in turns achievements on (`[Cheevos] Enabled`); signing out turns them off. The
+page can't be opened during a game, so its changes take effect from the next game start.
+
+**The token.** The password is never stored. The server's login token is sealed with an AES-GCM key the Android
+Keystore holds (alias `retroachievements-token`) and kept in the app's private `achievements` preferences; the host
+hands it to the core in memory at startup, and the core's secrets layer on Android is in memory only, so no
+`secrets.ini` is read or written. Keystore keys aren't backed up: after a restore or on a new phone the token won't
+open, so the app starts signed out. A `settings.ini` from another install comes in signed out too (`Enabled` off, its
+username and any old token removed). The token is never logged: `HttpBridge` logs only each request's method, host,
+path and status.
+
+**Offline.** A sign-in that fails for want of a connection keeps the token: the page says "Not connected.
+RetroAchievements is checked again when a game starts.", and the next game start tries again. A game started without
+a connection has no achievements, and says "Couldn't reach RetroAchievements; achievements are off for this game"
+once. Unlocks during a game whose connection drops are retried by rcheevos; any still pending when the app closes are
+lost, as on desktop. Only a rejected or expired token signs the player out, with "RetroAchievements sign-in expired:
+sign in again in Settings" at the next game start.
+
+**Hardcore mode** (Settings → Achievements, off by default) starts with the next game start. While it's active the
+menu's Load state, Patch codes and Fast forward are greyed out ("Off in hardcore mode"), no patch code applies, and
+fast forward and turbo are turned off every frame (which covers the hotkeys). Saving states still works. A game with a
+resume state that would start in hardcore offers only **Start**, keeping the resume state: a boot from it would turn
+hardcore off (the core's `ConfirmMessage` answers yes on Android). Hardcore drops by itself a few seconds after boot for
+a game RetroAchievements doesn't know, and the rows come back. GooseStation isn't registered with RetroAchievements
+yet (roadmap item 6), so hardcore unlocks may not count.
+
+**In the menu**, the **Achievements** row after Patch codes shows the progress ("14 of 40") or why it's off. Its panel
+has Achievements and Leaderboards tabs, which L1 and R1 switch. Achievements are in rcheevos's sections by progress
+(unlocked ones newest first); a leaderboard opens to its top 10 and the entries around you, fetched each time.
+
+**Over the game**, an unlock shows a card at the top centre for 5 s (a mastered set 10 s), one at a time, waiting while
+the menu is open; the game-start summary and leaderboard messages join the message stack; leaderboard timers,
+challenges and progress show at the bottom right. The page's switches turn the messages, sounds and live indicators
+off. The core's own sounds (`data/resources/sounds/achievements/`) play through a `SoundPool`.
+
+**Testing.** No test uses real credentials. `AchievementsSignInTest` points rcheevos at `FakeRetroAchievements`, a
+local server answering `login2` (`NativeLibrary.setAchievementsServerForTest`); debug builds allow cleartext to
+`127.0.0.1` for it (`src/debug/res/xml/network_security_config.xml`), release builds don't.
 
 ### Known limits
 

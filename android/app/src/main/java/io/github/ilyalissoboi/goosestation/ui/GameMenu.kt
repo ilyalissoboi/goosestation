@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -57,6 +58,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
+import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -73,7 +75,8 @@ private val SIDE_BY_SIDE = 720.dp
 /**
  * The paused game's menu, over the game in the same window: a panel at the left with "Paused" over the [game]'s title
  * and details, then its rows, Resume focused; Save state and Load state open the slot panel ([SaveSlotPanel]) beside it,
- * or below it on a narrow screen taller than it's wide. [state] says what shows, and [actions] does what each row says; until the game
+ * or below it on a narrow screen taller than it's wide; Change disc, for a multi-disc game, opens the disc panel
+ * ([DiscPanel]) there. [state] says what shows, and [actions] does what each row says; until the game
  * has booted, only Resume and Exit game work. Reset console asks first, in the panel.
  *
  * B and Back step out one layer at a time: a question, then the slot panel (back to its row), then the menu, which
@@ -94,6 +97,7 @@ fun GameMenu(
         when {
             shown.slots?.replacing != null -> actions.cancelReplace()
             shown.slots != null -> actions.closeSlots()
+            shown.discs != null -> actions.closeDiscs()
             shown.confirmingReset -> actions.cancelReset()
             shown.confirmingExit -> actions.cancelExit()
             shown.replacingResume != null -> actions.cancelReplaceResume()
@@ -106,6 +110,7 @@ fun GameMenu(
         listOf(
             state.slots?.mode,
             state.slots?.replacing,
+            state.discs != null,
             state.confirmingReset,
             state.confirmingExit,
             state.replacingResume,
@@ -115,6 +120,7 @@ fun GameMenu(
     val cameFrom = remember { CameFrom() }
     SideEffect {
         state.slots?.let { cameFrom.slots = it.mode }
+        if (state.discs != null) cameFrom.discs = true
         if (state.confirmingReset) cameFrom.reset = true
         if (state.confirmingExit || state.replacingResume != null) cameFrom.exit = true
     }
@@ -146,19 +152,30 @@ fun GameMenu(
         val screenHeight = maxHeight + 64.dp
         val height = maxHeight
         val slots = state.slots
+        val discs = state.discs
+        val sidePanel = slots != null || discs != null
+
+        // The one side panel open, if any: the slots or the discs.
+        @Composable
+        fun SidePanel(modifier: Modifier) {
+            when {
+                slots != null -> SaveSlotPanel(slots, actions, now, modifier)
+                discs != null -> DiscPanel(discs, game?.title.orEmpty(), actions, modifier)
+            }
+        }
         if (screenWidth >= SIDE_BY_SIDE || screenWidth >= screenHeight) {
             Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Narrower beside the slot panel on a small screen (the Thor's 640 dp), so its pictures stay full size.
-                val menuWidth = if (slots != null && screenWidth < SIDE_BY_SIDE) 240.dp else 300.dp
+                // Narrower beside a side panel on a small screen (the Thor's 640 dp), so slot pictures stay full size.
+                val menuWidth = if (sidePanel && screenWidth < SIDE_BY_SIDE) 240.dp else 300.dp
                 MenuPanel(state, actions, game, cameFrom, now, Modifier.width(menuWidth))
-                if (slots != null) SaveSlotPanel(slots, actions, now, Modifier.weight(1f).fillMaxHeight())
+                if (sidePanel) SidePanel(Modifier.weight(1f).fillMaxHeight())
             }
         } else {
-            // A phone in portrait: the slot panel under the menu, which keeps the top 40% and scrolls its rows.
+            // A phone in portrait: the side panel under the menu, which keeps the top 40% and scrolls its rows.
             Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                val menuMax = if (slots == null) height else screenHeight * 0.4f - 32.dp
+                val menuMax = if (!sidePanel) height else screenHeight * 0.4f - 32.dp
                 MenuPanel(state, actions, game, cameFrom, now, Modifier.fillMaxWidth().heightIn(max = menuMax))
-                if (slots != null) SaveSlotPanel(slots, actions, now, Modifier.weight(1f).fillMaxWidth())
+                if (sidePanel) SidePanel(Modifier.weight(1f).fillMaxWidth())
             }
         }
     }
@@ -167,6 +184,7 @@ fun GameMenu(
 /** The menu row a slot panel or the reset question came from, to focus again once it closes. */
 private class CameFrom {
     var slots: SlotMode? = null
+    var discs = false
     var reset = false
     var exit = false
 }
@@ -184,20 +202,26 @@ private fun MenuPanel(
     val resume = remember { FocusRequester() }
     val saveRow = remember { FocusRequester() }
     val loadRow = remember { FocusRequester() }
+    val discRow = remember { FocusRequester() }
     val resetRow = remember { FocusRequester() }
     val exitRow = remember { FocusRequester() }
     val booted = state.booted
     val openMode = state.slots?.mode
+    val discsOpen = state.discs != null
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
     val asking = state.confirmingReset || state.confirmingExit || state.replacingResume != null
-    LaunchedEffect(openMode, asking) {
+    LaunchedEffect(openMode, discsOpen, asking) {
         val from = cameFrom.slots
         when {
-            openMode != null || asking -> {}
+            openMode != null || discsOpen || asking -> {}
             from != null -> {
                 cameFrom.slots = null
                 (if (from == SlotMode.Save) saveRow else loadRow).requestFocus()
+            }
+            cameFrom.discs -> {
+                cameFrom.discs = false
+                discRow.requestFocus()
             }
             cameFrom.reset -> {
                 cameFrom.reset = false
@@ -284,6 +308,17 @@ private fun MenuPanel(
                     enabled = booted,
                     current = openMode == SlotMode.Load,
                 )
+                if (state.discCount > 1) {
+                    MenuItem(
+                        "Change disc",
+                        GsIcons.disc,
+                        actions::openDiscs,
+                        Modifier.focusRequester(discRow),
+                        enabled = booted,
+                        current = discsOpen,
+                        value = if (state.disc > 0) "Disc ${state.disc} of ${state.discCount}" else null,
+                    )
+                }
                 MenuItem(
                     "Fast forward",
                     GsIcons.fastForward,
@@ -331,9 +366,9 @@ private fun MenuPanel(
 private fun onOff(on: Boolean) = if (on) "On" else "Off"
 
 /**
- * One of the menu's items: [icon] and [label], and the row's [value] at its end, if any. Focused, the row lifts and the
- * icon takes the beak's ink; while its panel is open ([current]), the row is tinted and the icon keeps that ink.
- * Disabled, it can't take focus, and its label is faint.
+ * One of the menu's items: [icon] and [label], and the row's [value] at its end, if any, or under the label when they
+ * don't fit on one line. Focused, the row lifts and the icon takes the beak's ink; while its panel is open ([current]),
+ * the row is tinted and the icon keeps that ink. Disabled, it can't take focus, and its label is faint.
  */
 @Composable
 private fun MenuItem(
@@ -370,18 +405,30 @@ private fun MenuItem(
                 },
             modifier = Modifier.size(20.dp),
         )
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (enabled) colors.ink else colors.inkFaint,
-            modifier = Modifier.weight(1f),
-        )
-        value?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (enabled) colors.inkMuted else colors.inkFaint,
-            )
+        val name =
+            @Composable {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (enabled) colors.ink else colors.inkFaint,
+                )
+            }
+        // A value beside the label when both fit, else under it, so neither breaks mid-word on a narrow menu.
+        Box(Modifier.weight(1f)) {
+            if (value == null) {
+                name()
+            } else {
+                LabelValue(
+                    label = name,
+                    value = {
+                        Text(
+                            value,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (enabled) colors.inkMuted else colors.inkFaint,
+                        )
+                    },
+                )
+            }
         }
     }
 }

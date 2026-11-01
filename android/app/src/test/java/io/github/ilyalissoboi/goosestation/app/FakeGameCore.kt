@@ -19,6 +19,8 @@ class FakeGameCore(
     val stateDiscs = HashMap<Int, Int>()
     val serialTimes = HashMap<String, Map<Int, Long>>()
     val moveFails = HashSet<String>()
+    var discInDrive = 1
+    var discError: String? = null
     var saveError: String? = null
     var loadError: String? = null
     var resumeError: String? = null
@@ -103,5 +105,16 @@ class FakeGameCore(
 
     override fun saveScreenshot() {
         calls += "saveScreenshot"
+    }
+
+    override fun getCurrentDisc(): Int {
+        calls += "getCurrentDisc"
+        return discInDrive
+    }
+
+    override fun changeDisc(number: Int): String? {
+        calls += "changeDisc $number"
+        if (discError == null) discInDrive = number
+        return discError
     }
 }

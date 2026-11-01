@@ -22,6 +22,7 @@ class InGameMenuTest {
     private val calls = mutableListOf<String>()
     private val api = FakeGameCore(calls)
     private val lastSlots = MemoryLastSlots()
+    private val records = MemoryRecords()
     private val picture = ArgbImage(2, 1, intArrayOf(-1, -1))
 
     private fun TestScope.menu(booted: Boolean = true): InGameMenu {
@@ -31,6 +32,7 @@ class InGameMenuTest {
                 StandardTestDispatcher(testScheduler),
                 api,
                 lastSlots,
+                records,
                 onMessage = { calls += "message $it" },
                 onResume = { calls += "resume" },
                 onExit = { calls += "exit $it" },
@@ -762,7 +764,10 @@ class InGameMenuTest {
             menu.pickOther("SLPS-02021", 4)
             runCurrent()
 
-            assertEquals(listOf("loadState SLPS-02021 4", "message Loaded disc 2's slot 4", "resume"), calls)
+            assertEquals(
+                listOf("loadState SLPS-02021 4", "getCurrentDisc", "message Loaded disc 2's slot 4", "resume"),
+                calls,
+            )
             assertNull(lastSlots.get("SLPS-02020"))
             assertNull(lastSlots.get("SLPS-02021"))
         }
@@ -834,6 +839,126 @@ class InGameMenuTest {
             runCurrent()
 
             assertNull(menu.entries().single().disc)
+        }
+
+    @Test
+    fun changeDiscShowsOnlyForMultiDiscGames() =
+        runTest {
+            assertEquals(0, menu().state.discCount)
+            assertEquals(2, ac3Menu().state.discCount)
+        }
+
+    @Test
+    fun theCurrentDiscIsReadAsTheMenuOpens() =
+        runTest {
+            val menu = ac3Menu()
+            api.discInDrive = 2
+
+            menu.opened()
+            runCurrent()
+
+            assertEquals(2, menu.state.disc)
+            assertEquals(2, records.lastDisc("SLPS-02020"))
+        }
+
+    @Test
+    fun aSingleDiscGameDoesntAskForItsDisc() =
+        runTest {
+            val menu = menu()
+
+            menu.opened()
+            runCurrent()
+
+            assertTrue(calls.none { it == "getCurrentDisc" })
+        }
+
+    @Test
+    fun pickingAnotherDiscInsertsItAndResumes() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openDiscs()
+            assertEquals(
+                listOf(1, 2),
+                menu.state.discs!!
+                    .discs
+                    .map { it.number },
+            )
+            assertEquals(1, menu.state.discs!!.current)
+
+            menu.pickDisc(2)
+            runCurrent()
+
+            assertEquals(listOf("changeDisc 2", "message Disc 2 inserted", "resume"), calls)
+            assertNull(menu.state.discs)
+            assertEquals(2, menu.state.disc)
+            assertEquals(2, records.lastDisc("SLPS-02020"))
+        }
+
+    @Test
+    fun pickingTheCurrentDiscOnlyCloses() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openDiscs()
+
+            menu.pickDisc(1)
+            runCurrent()
+
+            assertEquals(emptyList<String>(), calls)
+            assertNull(menu.state.discs)
+        }
+
+    @Test
+    fun aMissingDiscKeepsTheMenuOpen() =
+        runTest {
+            api.discError = "Disc 2 isn't in your library any more."
+            val menu = ac3Menu()
+            menu.openDiscs()
+
+            menu.pickDisc(2)
+            runCurrent()
+
+            assertEquals(listOf("changeDisc 2"), calls)
+            assertEquals("Disc 2 isn't in your library any more.", menu.state.discs!!.error)
+            assertFalse(menu.state.discs!!.busy)
+            assertEquals(1, menu.state.disc)
+        }
+
+    @Test
+    fun aLoadRecordsItsDisc() =
+        runTest {
+            api.times[1] = 100
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            api.discInDrive = 2
+
+            menu.pickSlot(1)
+            runCurrent()
+
+            assertEquals(2, menu.state.disc)
+            assertEquals(2, records.lastDisc("SLPS-02020"))
+        }
+
+    @Test
+    fun onePanelAtATime() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Save)
+            menu.openDiscs()
+            assertNull(menu.state.slots)
+
+            menu.openSlots(SlotMode.Load)
+            assertNull(menu.state.discs)
+        }
+
+    @Test
+    fun aSingleDiscGameHasNoDiscPanel() =
+        runTest {
+            val menu = menu()
+
+            menu.openDiscs()
+
+            assertNull(menu.state.discs)
         }
 
     private class MemoryLastSlots : LastSlotStore {

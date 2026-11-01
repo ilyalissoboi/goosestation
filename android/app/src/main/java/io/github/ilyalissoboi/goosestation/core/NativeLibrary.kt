@@ -198,6 +198,12 @@ object NativeLibrary {
         slot: Int,
     ): String?
 
+    /** The [GameDisc.number] of the running game's disc in the drive, 0 without a game or one of its discs. */
+    external fun getCurrentDisc(): Int
+
+    /** Puts the running game's disc [number] in the drive. Null when it's in, or else why not. */
+    external fun changeDisc(number: Int): String?
+
     /**
      * Moves [fromSerial]'s state in [fromSlot] to [toSerial]'s [toSlot]: only onto nothing. False if there's no state to
      * move, the place is taken, or the rename failed.

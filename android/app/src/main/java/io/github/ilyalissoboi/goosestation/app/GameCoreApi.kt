@@ -42,6 +42,12 @@ interface GameCoreApi {
         slot: Int,
     ): String?
 
+    /** The number of the running game's disc in the drive, 0 if unknown. */
+    fun getCurrentDisc(): Int
+
+    /** Puts the running game's disc [number] in the drive: null when it's in, or else why not. */
+    fun changeDisc(number: Int): String?
+
     /** Moves a state to another serial's slot, onto nothing only: false if it didn't move. */
     fun moveSaveState(
         fromSerial: String,
@@ -88,6 +94,10 @@ object NativeGameCoreApi : GameCoreApi {
         key: String,
         slot: Int,
     ): String? = NativeLibrary.loadState(key, slot)
+
+    override fun getCurrentDisc(): Int = NativeLibrary.getCurrentDisc()
+
+    override fun changeDisc(number: Int): String? = NativeLibrary.changeDisc(number)
 
     override fun moveSaveState(
         fromSerial: String,

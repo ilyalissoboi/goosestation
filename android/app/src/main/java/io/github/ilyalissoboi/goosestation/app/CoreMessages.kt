@@ -26,6 +26,8 @@ object CoreMessages {
         val text = message.replace(symbols, "").replace(spaces, " ").trim()
         return when {
             key == "save_state" || key == "load_state" -> null
+            // The app says which disc went in.
+            key == "DiscInserted" || key == "media_switch_subimage" || key == "ReloadMemoryCardsFromGameChange" -> null
             key == "system_reset" -> "Console reset"
             key == "analog_mode_toggle_0" || key == "Controller0AnalogMode" -> analogMode(text)
             key.startsWith("ScreenshotSaver_") ->

@@ -902,6 +902,75 @@ std::optional<std::string> AndroidHost::LoadState(std::string key, s32 slot)
   });
 }
 
+// The running game's disc in the drive, by number, 0 if none. CPU thread.
+static u32 CurrentDiscNumber()
+{
+  if (!System::IsValid() || !AndroidHost::s_running_game.has_value())
+    return 0;
+
+  const AndroidDiscGroups::Game& game = AndroidHost::s_running_game.value();
+  if (game.playlist)
+    return System::HasMediaSubImages() ? (System::GetMediaSubImageIndex() + 1) : 0;
+
+  const std::string media = System::GetMediaFileName();
+  const auto disc = std::find_if(game.discs.begin(), game.discs.end(),
+                                 [&media](const AndroidDiscGroups::Disc& d) { return d.path == media; });
+  return (disc != game.discs.end()) ? disc->number : 0;
+}
+
+u32 AndroidHost::GetCurrentDisc()
+{
+  if (!s_initialized)
+    return 0;
+
+  u32 number = 0;
+  EmuThread::RunOnThread([&number]() { number = CurrentDiscNumber(); }, true);
+  return number;
+}
+
+std::optional<std::string> AndroidHost::ChangeDisc(u32 number)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [number, &result]() {
+      if (!System::IsValid() || !s_running_game.has_value())
+      {
+        result = NO_GAME_RUNNING;
+        return;
+      }
+
+      const AndroidDiscGroups::Game& game = s_running_game.value();
+      const auto disc = std::find_if(game.discs.begin(), game.discs.end(),
+                                     [number](const AndroidDiscGroups::Disc& d) { return d.number == number; });
+      if (game.discs.size() < 2 || disc == game.discs.end())
+      {
+        result = "This game has one disc.";
+        return;
+      }
+
+      if (CurrentDiscNumber() == number)
+        return;
+
+      if (!FileSystem::FileExists(disc->path.c_str()))
+      {
+        result = fmt::format("Disc {} isn't in your library any more.", number);
+        return;
+      }
+
+      const bool inserted =
+        game.playlist ? System::SwitchMediaSubImage(number - 1) : System::InsertMedia(disc->path.c_str());
+      if (!inserted)
+        result = fmt::format("Couldn't insert disc {}.", number);
+      else
+        INFO_LOG("Disc {} of '{}' is in.", number, game.title);
+    },
+    true);
+  return result;
+}
+
 bool AndroidHost::MoveSaveState(std::string from_serial, s32 from_slot, std::string to_serial, s32 to_slot)
 {
   if (!s_initialized || from_serial.empty() || to_serial.empty())

@@ -100,6 +100,8 @@ class GameCallsTest {
 
         assertEquals("No game is running.", NativeLibrary.saveState(SERIAL, 1))
         assertEquals("No game is running.", NativeLibrary.loadState(SERIAL, 1))
+        assertEquals("No game is running.", NativeLibrary.changeDisc(2))
+        assertEquals(0, NativeLibrary.getCurrentDisc())
         assertEquals(-1, NativeLibrary.getAnalogMode())
     }
 

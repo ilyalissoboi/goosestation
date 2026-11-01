@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
@@ -56,6 +57,7 @@ import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -401,6 +403,21 @@ class OrientationLayoutTest {
             assertTextsLaidOut(inView = true)
             pressUntilFocusedInView(Key.DirectionDown, "Slot 9")
             assertTextsLaidOut(inView = true)
+
+            // Change disc, with long disc titles.
+            val discs =
+                (1..4).map {
+                    GameDisc("content://g/$it.chd", "SLPS-0202$it", "${LONG_GAME.title} (Disc $it)", it)
+                }
+            menu.value = menu.value.copy(slots = null)
+            rule.waitForIdle()
+            menu.value = menu.value.copy(disc = 1, discCount = 4, discs = DiscChoice(discs, current = 1))
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            assertTrue("Disc 1 is focused, not ${focusedText()}", focusedHas("Disc 1"))
+            pressUntilFocusedInView(Key.DirectionDown, "Disc 4")
+            assertTextsLaidOut(inView = true)
+            menu.value = menu.value.copy(discs = null)
             // As the next config's menu opens.
             menu.value = GameMenuState(booted = true, analogMode = true)
         }
@@ -457,6 +474,12 @@ class OrientationLayoutTest {
             serial: String,
             slot: Int,
         ) {}
+
+        override fun openDiscs() {}
+
+        override fun closeDiscs() {}
+
+        override fun pickDisc(number: Int) {}
 
         override fun openSlots(mode: SlotMode) {}
 

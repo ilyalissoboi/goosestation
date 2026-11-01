@@ -256,6 +256,7 @@ object AppController : NativeCallbacks {
             gameDispatcher,
             NativeGameCoreApi,
             lastSlots,
+            gameRecords,
             onMessage = { osd.post(it) },
             onResume = ::resumeFromPrompt,
             onExit = ::exitGame,

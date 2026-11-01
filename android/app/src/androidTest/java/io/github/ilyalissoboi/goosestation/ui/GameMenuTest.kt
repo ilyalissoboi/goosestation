@@ -35,12 +35,14 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -89,6 +91,19 @@ class GameMenuTest {
                 slot: Int,
             ) {
                 calls += "pickOther $serial $slot"
+            }
+
+            override fun openDiscs() {
+                calls += "openDiscs"
+            }
+
+            override fun closeDiscs() {
+                calls += "closeDiscs"
+                state = state.copy(discs = null)
+            }
+
+            override fun pickDisc(number: Int) {
+                calls += "pickDisc $number"
             }
 
             override fun confirmReplace() {
@@ -345,6 +360,86 @@ class GameMenuTest {
         show()
 
         rule.onNodeWithText("Saved · Disc 2").assertExists()
+    }
+
+    private val ac3Discs =
+        listOf(
+            GameDisc("content://g/ac3 1.chd", "SLPS-02020", "Ace Combat 3 (Disc 1)", 1),
+            GameDisc("content://g/ac3 2.chd", "SLPS-02021", "Ace Combat 3 (Disc 2)", 2),
+        )
+
+    @Test
+    fun changeDiscSitsAfterLoadState() {
+        state = GameMenuState(booted = true, disc = 1, discCount = 2)
+        show()
+
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Change disc", substring = true)).assertExists()
+        rule.onNodeWithText("Disc 1 of 2").assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("openDiscs"), calls)
+    }
+
+    @Test
+    fun aSingleDiscGameHasNoChangeDisc() {
+        show()
+
+        rule.onNodeWithText("Change disc").assertDoesNotExist()
+    }
+
+    @Test
+    fun theDiscPanelFocusesTheCurrentDisc() {
+        state = GameMenuState(booted = true, disc = 2, discCount = 2, discs = DiscChoice(ac3Discs, current = 2))
+        show()
+
+        rule.onNode(isFocused() and hasText("Disc 2", substring = true)).assertExists()
+        rule.onNodeWithText("Current").assertExists()
+        rule.onNode(hasText("Change disc") and hasClickAction()).assertIsSelected()
+        rule.onNodeWithText("SLPS-02021").assertDoesNotExist()
+        rule.onNodeWithText("Ace Combat 3 (Disc 2)").assertExists()
+
+        press(Key.DirectionUp)
+        press(Key.Enter)
+        assertEquals(listOf("pickDisc 1"), calls)
+    }
+
+    @Test
+    fun aDiscWithTheGamesTitleShowsItsSerial() {
+        val discs = ac3Discs.map { it.copy(title = "Ace Combat 3") }
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(discs, current = 1))
+        show(game = GameEntry("content://g/ac3 1.chd", "Ace Combat 3", "SLPS-02020", "NTSC-J", 0, 0, null, discs))
+
+        rule.onNodeWithText("SLPS-02021").assertExists()
+    }
+
+    @Test
+    fun bLeavesTheDiscPanelForItsRow() {
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(ac3Discs, current = 1))
+        show()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeDiscs"), calls)
+        rule.onNodeWithText("Change disc").assertIsFocused()
+    }
+
+    @Test
+    fun theDiscPanelsHintsSayInsert() {
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(ac3Discs, current = 1))
+        show()
+
+        rule.onNodeWithContentDescription("A: Insert").assertExists()
+    }
+
+    @Test
+    fun aFailedSwapShowsInThePanel() {
+        val choice = DiscChoice(ac3Discs, current = 1, error = "Disc 2 isn't in your library any more.")
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = choice)
+        show()
+
+        rule.onNodeWithText("Disc 2 isn't in your library any more.").assertExists()
     }
 
     @Test

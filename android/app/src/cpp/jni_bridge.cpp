@@ -1057,6 +1057,16 @@ NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jstring key, j
   return ToResult(env, AndroidHost::LoadState(FromJString(env, key), static_cast<s32>(slot)));
 }
 
+NATIVE_LIBRARY_FUNCTION(jint, getCurrentDisc)(JNIEnv*, jobject)
+{
+  return static_cast<jint>(AndroidHost::GetCurrentDisc());
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, changeDisc)(JNIEnv* env, jobject, jint number)
+{
+  return ToResult(env, AndroidHost::ChangeDisc(static_cast<u32>(std::max(number, 0))));
+}
+
 NATIVE_LIBRARY_FUNCTION(jboolean, moveSaveState)(JNIEnv* env, jobject, jstring from_serial, jint from_slot,
                                                  jstring to_serial, jint to_slot)
 {

@@ -122,6 +122,14 @@ std::optional<SaveStatePreview> GetSaveStatePreview(std::string serial, s32 slot
 std::optional<std::string> SaveState(std::string key, s32 slot);
 std::optional<std::string> LoadState(std::string key, s32 slot);
 
+/// The number of the running game's disc in the drive: for a playlist its sub-image's, else the disc whose path is the
+/// media's. 0 without a game, or when the disc in the drive isn't one of the game's.
+u32 GetCurrentDisc();
+
+/// Puts the running game's disc numbered number in the drive: a playlist's sub-image, or that disc's file. nullopt when
+/// it's in (or was already), else why not.
+std::optional<std::string> ChangeDisc(u32 number);
+
 /// Moves from_serial's state in from_slot to to_serial's to_slot, only onto nothing. False if it didn't move.
 bool MoveSaveState(std::string from_serial, s32 from_slot, std::string to_serial, s32 to_slot);
 

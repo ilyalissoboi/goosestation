@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -46,11 +47,23 @@ data class SlotPanel(
 )
 
 /**
+ * The Change disc panel: the game's [discs], the [current] one's number, whether a disc is going in ([busy]), and why
+ * the last one didn't ([error]).
+ */
+data class DiscChoice(
+    val discs: List<GameDisc>,
+    val current: Int,
+    val busy: Boolean = false,
+    val error: String? = null,
+)
+
+/**
  * The in-game menu: whether the game has [booted] (until then only Resume and Exit game work), whether fast forward is
  * on, Port 1's analog mode (null when it isn't a DualShock: the row is hidden), the slot panel, if it's open,
  * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, whether Exit game
  * asks before it replaces the resume state saved at [replacingResume] (Unix seconds), and whether it's saving the
- * resume state ([exiting]).
+ * resume state ([exiting]). A multi-disc game ([discCount] over 1) has its [disc] in the drive, and the Change disc
+ * panel ([discs]) when it's open.
  */
 data class GameMenuState(
     val booted: Boolean = false,
@@ -62,6 +75,9 @@ data class GameMenuState(
     val cardBusy: Boolean = false,
     val confirmingExit: Boolean = false,
     val replacingResume: Long? = null,
+    val disc: Int = 0,
+    val discCount: Int = 0,
+    val discs: DiscChoice? = null,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -73,6 +89,13 @@ interface GameMenuActions {
     fun closeSlots()
 
     fun pickSlot(slot: Int)
+
+    fun openDiscs()
+
+    fun closeDiscs()
+
+    /** Puts disc [number] in, or just closes the panel for the disc already in. */
+    fun pickDisc(number: Int)
 
     /** Loads one of [SlotPanel.others]: [serial]'s [slot]. */
     fun pickOther(
@@ -119,6 +142,7 @@ class InGameMenu(
     private val game: CoroutineDispatcher,
     private val api: GameCoreApi,
     private val lastSlots: LastSlotStore,
+    private val records: GameRecordStore,
     private val onMessage: (String) -> Unit,
     private val onResume: () -> Unit,
     private val onExit: (resumeError: String?) -> Unit,
@@ -148,7 +172,7 @@ class InGameMenu(
         gameId++
         panelId++
         running = game
-        state = GameMenuState(booted = true)
+        state = GameMenuState(booted = true, discCount = game.discs.size)
         readGameState()
     }
 
@@ -166,7 +190,14 @@ class InGameMenu(
      */
     fun opened() {
         panelId++
-        state = state.copy(slots = null, confirmingReset = false, confirmingExit = false, replacingResume = null)
+        state =
+            state.copy(
+                slots = null,
+                discs = null,
+                confirmingReset = false,
+                confirmingExit = false,
+                replacingResume = null,
+            )
         if (state.booted) readGameState()
     }
 
@@ -236,7 +267,7 @@ class InGameMenu(
         val serial = serial
         if (!canSave || serial == null) return
         val id = ++panelId
-        state = state.copy(slots = SlotPanel(mode), confirmingReset = false)
+        state = state.copy(slots = SlotPanel(mode), discs = null, confirmingReset = false)
         val discs = running?.discs.orEmpty()
         val multiDisc = discs.size > 1
         // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
@@ -319,7 +350,41 @@ class InGameMenu(
             { api.loadState(serial, slot) },
             if (disc != null) "Loaded disc $disc's $what" else "Loaded that save",
             remember = false,
+            loads = true,
         ) { "Couldn't load that save: $it" }
+    }
+
+    override fun openDiscs() {
+        val discs = running?.discs.orEmpty()
+        if (!state.booted || discs.size < 2) return
+        panelId++
+        state = state.copy(slots = null, discs = DiscChoice(discs, state.disc), confirmingReset = false)
+    }
+
+    override fun closeDiscs() {
+        state = state.copy(discs = null)
+    }
+
+    override fun pickDisc(number: Int) {
+        val choice = state.discs ?: return
+        val key = serial ?: return
+        if (choice.busy) return
+        if (number == choice.current) return closeDiscs()
+        state = state.copy(discs = choice.copy(busy = true, error = null))
+        scope.launch {
+            val error =
+                withContext(game) {
+                    api.changeDisc(number).also { if (it == null && key.isNotBlank()) records.setLastDisc(key, number) }
+                }
+            val open = state.discs ?: return@launch
+            if (error != null) {
+                state = state.copy(discs = open.copy(busy = false, error = error))
+                return@launch
+            }
+            state = state.copy(disc = number, discs = null)
+            onMessage("Disc $number inserted")
+            onResume()
+        }
     }
 
     override fun confirmReplace() {
@@ -385,29 +450,39 @@ class InGameMenu(
             slot,
             { api.loadState(it, slot) },
             if (resume) "Loaded your resume state" else "Loaded slot $slot",
+            loads = true,
         ) { if (resume) "Couldn't load your resume state: $it" else "Couldn't load slot $slot: $it" }
     }
 
     /**
      * Runs [call] for [slot] on [game]. When it works, the slot is remembered as the last one (unless not [remember]),
      * the panel closes, and the game goes on with [done] shown; when it fails, the panel stays, with [failed] of the
-     * reason.
+     * reason. A load also reads which disc is in now.
      */
     private fun run(
         slot: Int,
         call: (key: String) -> String?,
         done: String,
         remember: Boolean = true,
+        loads: Boolean = false,
         failed: (String) -> String,
     ) {
         val serial = serial ?: return
         val id = panelId
+        val multiDisc = state.discCount > 1
+        var disc = 0
         updatePanel(id) { it.copy(busy = true, error = null) }
         scope.launch {
             val error =
                 withContext(game) {
-                    call(serial).also { if (it == null && remember) lastSlots.set(serial, slot) }
+                    call(serial).also {
+                        if (it != null) return@also
+                        if (remember) lastSlots.set(serial, slot)
+                        // A load can put another disc in: it's the one played now.
+                        if (loads && multiDisc) disc = readDisc(serial)
+                    }
                 }
+            if (disc > 0) state = state.copy(disc = disc)
             if (error != null) {
                 updatePanel(id) { it.copy(busy = false, error = failed(error)) }
                 return@launch
@@ -428,10 +503,22 @@ class InGameMenu(
 
     private fun readGameState() {
         val id = gameId
+        val key = serial.orEmpty()
+        val multiDisc = state.discCount > 1
         scope.launch {
             val (mode, cardBusy) = withContext(game) { api.getAnalogMode() to api.isSavingMemoryCards() }
             if (id == gameId) state = state.copy(analogMode = if (mode < 0) null else mode == 1, cardBusy = cardBusy)
+            if (!multiDisc) return@launch
+            val disc = withContext(game) { readDisc(key) }
+            if (id == gameId && disc > 0) state = state.copy(disc = disc)
         }
+    }
+
+    /** The disc in the drive (0 if unknown), kept as the game's last disc. Blocks: on [game]. */
+    private fun readDisc(key: String): Int {
+        val disc = api.getCurrentDisc()
+        if (disc > 0 && key.isNotBlank()) records.setLastDisc(key, disc)
+        return disc
     }
 
     // Changes the slot panel if it's still panel [id].

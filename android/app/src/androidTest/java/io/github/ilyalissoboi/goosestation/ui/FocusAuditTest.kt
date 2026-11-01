@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
@@ -28,6 +29,7 @@ import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -329,6 +331,23 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuDiscs() {
+        val discs =
+            listOf(
+                GameDisc("content://g/1.chd", "SLPS-02020", "Disc one", 1),
+                GameDisc("content://g/2.chd", "SLPS-02021", "Disc two", 2),
+            )
+        show {
+            GameMenu(
+                GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(discs, current = 1)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuLoadWithNoSaves() {
         show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
 
@@ -366,6 +385,12 @@ class FocusAuditTest {
             serial: String,
             slot: Int,
         ) {}
+
+        override fun openDiscs() {}
+
+        override fun closeDiscs() {}
+
+        override fun pickDisc(number: Int) {}
 
         override fun openSlots(mode: SlotMode) {}
 

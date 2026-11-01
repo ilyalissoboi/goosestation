@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "util/android_disc_groups.h"
+
 #include "common/types.h"
 
 #include <optional>
@@ -76,11 +78,15 @@ std::optional<std::string> GetBIOSDirectory();
 /// runs at a time. Does nothing before Initialize() succeeded.
 void RefreshGameList(bool invalidate_cache);
 
-/// Boots a game, once the app has given a surface, from resume_serial's resume state if that isn't empty.
+/// The games the library lists, as the last getGameList() grouped them. From any thread.
+void SetListedGames(std::vector<AndroidDiscGroups::Game> games);
+
+/// Boots the listed game whose path is path, once the app has given a surface: on its disc numbered disc (its first if
+/// it has none such), or with resume, from its resume state. A path the list doesn't have boots as a game of its own.
 /// NotifyGameStarted() reports that it booted. Every call ends with one NotifyGameStopped(): when the game stops, or
 /// straight away if it fails to boot (after NotifyError()), is refused, or is cancelled by ShutdownGame() or another
 /// StartGame() before it boots.
-void StartGame(std::string path, std::string resume_serial);
+void StartGame(std::string path, u32 disc, bool resume);
 
 /// Shuts the running game down, or cancels a boot still waiting for a surface.
 void ShutdownGame();

@@ -157,6 +157,11 @@ static u32 s_window_width = 0;
 static u32 s_window_height = 0;
 static float s_window_scale = 1.0f;
 static std::optional<std::string> s_pending_boot_path;
+static AndroidDiscGroups::Game s_pending_game;     // the game the pending boot is for
+static u32 s_pending_playlist_index = 0;          // the pending boot's sub-image, for a playlist
+static std::optional<AndroidDiscGroups::Game> s_running_game; // from its boot to its end, CPU thread
+static std::mutex s_listed_games_mutex;
+static std::vector<AndroidDiscGroups::Game> s_listed_games; // guarded by s_listed_games_mutex
 static std::string s_pending_boot_state; // the save state the pending boot starts from, if any
 static std::string s_boot_path;
 static bool s_game_started = false;
@@ -608,7 +613,13 @@ std::optional<std::string> AndroidHost::GetCacheFolder()
   return *relative + '/';
 }
 
-void AndroidHost::StartGame(std::string path, std::string resume_serial)
+void AndroidHost::SetListedGames(std::vector<AndroidDiscGroups::Game> games)
+{
+  std::unique_lock lock(s_listed_games_mutex);
+  s_listed_games = std::move(games);
+}
+
+void AndroidHost::StartGame(std::string path, u32 disc, bool resume)
 {
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to
   // boot, is refused or is cancelled before it boots. The app can't tell which game a late callback was for otherwise.
@@ -619,14 +630,27 @@ void AndroidHost::StartGame(std::string path, std::string resume_serial)
     return;
   }
 
+  // The game as the library listed it, copied: a rescan during the game doesn't change it. A file the list doesn't
+  // have is a game of its own, keyed by the core's serial once it boots.
+  AndroidDiscGroups::Game game;
+  {
+    std::unique_lock lock(s_listed_games_mutex);
+    const auto it = std::find_if(s_listed_games.begin(), s_listed_games.end(),
+                                 [&path](const AndroidDiscGroups::Game& listed) { return listed.path == path; });
+    if (it != s_listed_games.end())
+      game = *it;
+  }
+  if (game.path.empty())
+    game.path = path;
+
   EmuThread::RunOnThread(
-    [path = std::move(path), resume_serial = std::move(resume_serial)]() mutable {
+    [game = std::move(game), disc, resume]() mutable {
       // A running game isn't replaced: the app shuts it down first. One that's stopping (shut down from inside a
       // frame, and only destroyed once System::Execute() returns) is waited for.
       const System::State state = System::GetState();
       if (state != System::State::Shutdown && state != System::State::Stopping)
       {
-        WARNING_LOG("A game is already running, not starting '{}'.", Path::GetFileName(path));
+        WARNING_LOG("A game is already running, not starting '{}'.", Path::GetFileName(game.path));
         NotifyError("A game is already running.");
         NotifyGameStopped();
         return;
@@ -638,9 +662,16 @@ void AndroidHost::StartGame(std::string path, std::string resume_serial)
         NotifyGameStopped();
       }
 
-      s_pending_boot_path = std::move(path);
+      // The disc to boot: a playlist's sub-image, or that disc's own file.
+      const auto chosen = std::find_if(game.discs.begin(), game.discs.end(),
+                                       [disc](const AndroidDiscGroups::Disc& d) { return d.number == disc; });
+      const AndroidDiscGroups::Disc* boot_disc =
+        (chosen != game.discs.end()) ? &*chosen : (game.discs.empty() ? nullptr : &game.discs.front());
+      s_pending_playlist_index = (game.playlist && boot_disc) ? (boot_disc->number - 1) : 0;
+      s_pending_boot_path = (game.playlist || !boot_disc) ? game.path : boot_disc->path;
       s_pending_boot_state =
-        resume_serial.empty() ? std::string() : System::GetGameSaveStateFileName(resume_serial, -1);
+        (resume && !game.key.empty()) ? System::GetGameSaveStateFileName(game.key, -1) : std::string();
+      s_pending_game = std::move(game);
       if (state == System::State::Stopping)
         INFO_LOG("Waiting for the last game to stop to start '{}'.", Path::GetFileName(s_pending_boot_path.value()));
       else if (!s_window)
@@ -667,7 +698,11 @@ void AndroidHost::BootPendingGame()
 
   SystemBootParameters parameters(s_boot_path);
   parameters.save_state = std::move(s_pending_boot_state);
+  parameters.media_playlist_index = s_pending_playlist_index;
   s_pending_boot_state.clear();
+  s_pending_playlist_index = 0;
+  s_running_game = std::move(s_pending_game);
+  s_pending_game = {};
   if (parameters.save_state.empty())
     INFO_LOG("Starting '{}'.", s_boot_path);
   else
@@ -678,6 +713,7 @@ void AndroidHost::BootPendingGame()
   {
     ERROR_LOG("Failed to start '{}': {}", s_boot_path, error.GetDescription());
     NotifyError(fmt::format("Failed to start {}: {}", Path::GetFileName(s_boot_path), error.GetDescription()));
+    s_running_game.reset();
     NotifyGameStopped();
   }
 }
@@ -691,6 +727,7 @@ void AndroidHost::ShutdownGame()
         INFO_LOG("Cancelling the boot of '{}'.", Path::GetFileName(s_pending_boot_path.value()));
         s_pending_boot_path.reset();
         s_pending_boot_state.clear();
+        s_pending_game = {};
         NotifyGameStopped();
       }
 
@@ -1802,6 +1839,9 @@ void Host::OnSystemStarted()
   const std::string& title = System::GetGameTitle();
   INFO_LOG("Game started: {}", title);
   AndroidHost::s_game_started = true;
+  // A file the library didn't list is keyed by the core's ID for it.
+  if (AndroidHost::s_running_game.has_value() && AndroidHost::s_running_game->key.empty())
+    AndroidHost::s_running_game->key = System::GetGameSerial();
   AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
                                  System::GetGameSerial());
 }
@@ -1810,6 +1850,7 @@ void Host::OnSystemDestroyed()
 {
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
+  AndroidHost::s_running_game.reset();
 
   // Fast forward ends with the game.
   if (AndroidHost::s_fast_forward_reported)

@@ -153,12 +153,14 @@ object NativeLibrary {
 
     /**
      * Boots a game once a surface exists; the result arrives through [NativeCallbacks], ending with onGameStopped().
-     * [path] is a [GameEntry.path], content path or not, as it is. With a [resumeSerial], it boots from that serial's
-     * resume state.
+     * [path] is the [GameEntry.path] of a game in the last [getGameList], and [disc] the [GameDisc.number] to boot (its
+     * first disc if it has no such disc). With [resume], it boots from the game's resume state instead, on the disc that
+     * state was saved on.
      */
     external fun startGame(
         path: String,
-        resumeSerial: String?,
+        disc: Int,
+        resume: Boolean,
     )
 
     external fun shutdownGame()

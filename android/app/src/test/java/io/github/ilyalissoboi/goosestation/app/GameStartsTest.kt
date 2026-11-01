@@ -22,10 +22,12 @@ class GameStartsTest {
     private val crash = GameEntry("content://games/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
     private val exe = GameEntry("content://games/padtest.psexe", "padtest", "", "", 0, 0, null)
 
+    private val records = MemoryRecords()
+
     private fun TestScope.starts(): GameStarts {
         val starts =
-            GameStarts(backgroundScope, StandardTestDispatcher(testScheduler), api) { game, resume ->
-                calls += "start ${game.title} $resume"
+            GameStarts(backgroundScope, StandardTestDispatcher(testScheduler), api, records) { game, disc, resume ->
+                calls += "start ${game.title} $disc $resume"
             }
         calls.clear()
         return starts
@@ -39,7 +41,7 @@ class GameStartsTest {
             starts.play(crash)
             runCurrent()
 
-            assertEquals(listOf("getSaveStateTimes SCUS-94900", "start Crash Bandicoot null"), calls)
+            assertEquals(listOf("getSaveStateTimes SCUS-94900", "start Crash Bandicoot 1 false"), calls)
             assertNull(starts.offer)
         }
 
@@ -71,7 +73,7 @@ class GameStartsTest {
 
             starts.resume()
 
-            assertEquals(listOf("start Crash Bandicoot SCUS-94900"), calls)
+            assertEquals(listOf("start Crash Bandicoot 1 true"), calls)
             assertNull(starts.offer)
         }
 
@@ -86,7 +88,7 @@ class GameStartsTest {
 
             starts.startOver()
 
-            assertEquals(listOf("start Crash Bandicoot null"), calls)
+            assertEquals(listOf("start Crash Bandicoot 1 false"), calls)
             assertNull(starts.offer)
         }
 
@@ -112,7 +114,34 @@ class GameStartsTest {
 
             starts.play(exe)
 
-            assertEquals(listOf("start padtest null"), calls)
+            assertEquals(listOf("start padtest 1 false"), calls)
+        }
+
+    @Test
+    fun aGameStartsOnItsLastDisc() =
+        runTest {
+            records.setLastDisc("SCUS-94900", 2)
+            val starts = starts()
+
+            starts.play(crash)
+            runCurrent()
+
+            assertEquals("start Crash Bandicoot 2 false", calls.last())
+        }
+
+    @Test
+    fun aResumeKeepsTheLastDisc() =
+        runTest {
+            records.setLastDisc("SCUS-94900", 2)
+            api.times[SaveSlots.RESUME] = 1_700_000_000
+            val starts = starts()
+            starts.play(crash)
+            runCurrent()
+            calls.clear()
+
+            starts.resume()
+
+            assertEquals(listOf("start Crash Bandicoot 2 true"), calls)
         }
 
     @Test

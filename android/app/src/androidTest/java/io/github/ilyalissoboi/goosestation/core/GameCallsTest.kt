@@ -82,6 +82,26 @@ class GameCallsTest {
         assertEquals(-1, NativeLibrary.getAnalogMode())
     }
 
+    // Needs the emulator's /sdcard/GooseTest games/padtest.psexe (docs/android.md).
+    @Test
+    fun aGroupedListHasOneEntryPerGame() {
+        val games = File(root, "games")
+        assumeTrue(
+            "No padtest in /sdcard/GooseTest",
+            copyAsShell("$SDCARD_TESTS/games/padtest.psexe", File(games, "padtest.psexe")),
+        )
+        initialize()
+        NativeLibrary.setGameFolders(arrayOf(games.absolutePath))
+        NativeLibrary.refreshGameList(true)
+
+        val list = NativeLibrary.getGameList()
+
+        assertEquals(1, list.size)
+        assertEquals(File(games, "padtest.psexe").absolutePath, list[0].path)
+        assertEquals(PADTEST_SERIAL, list[0].serial)
+        assertTrue(list[0].discs.isEmpty())
+    }
+
     // Needs the emulator's /sdcard/GooseTest bios/ps-30j.bin and games/padtest.psexe (docs/android.md).
     @Test
     fun aSaveRoundTripsWhileAGameRuns() {
@@ -113,7 +133,7 @@ class GameCallsTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
-            NativeLibrary.startGame(exe.absolutePath, null)
+            NativeLibrary.startGame(exe.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             assertEquals(PADTEST_SERIAL, lastSerial)
             // Let it draw a frame or two, so the state has a picture.
@@ -259,7 +279,7 @@ class GameCallsTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
-            NativeLibrary.startGame(exe.absolutePath, null)
+            NativeLibrary.startGame(exe.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             Thread.sleep(1_000)
             body()

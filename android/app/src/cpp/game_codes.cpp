@@ -84,37 +84,50 @@ static std::vector<CheatCode> ReadPlayerFiles(const AndroidDiscGroups::Game& gam
   return codes;
 }
 
-// Each disc's codes from the database, in disc order.
-static std::vector<CheatCode> ReadDatabase(const AndroidDiscGroups::Game& game)
+// Each disc's codes from the database, in disc order, with the disc each came from.
+static std::vector<std::pair<CheatCode, u32>> ReadDatabase(const AndroidDiscGroups::Game& game)
 {
-  std::vector<std::string> serials = {game.key};
+  std::vector<std::pair<std::string, u32>> serials;
+  const auto add = [&serials](const std::string& serial, u32 number) {
+    const bool listed = std::any_of(serials.begin(), serials.end(), [&serial](const auto& s) { return s.first == serial; });
+    if (!serial.empty() && !listed)
+      serials.emplace_back(serial, number);
+  };
   for (const AndroidDiscGroups::Disc& disc : game.discs)
-  {
-    if (std::find(serials.begin(), serials.end(), disc.serial) == serials.end())
-      serials.push_back(disc.serial);
-  }
+    add(disc.serial, disc.number);
+  add(game.key, 1);
 
-  std::vector<CheatCode> codes;
-  for (const std::string& serial : serials)
+  std::vector<std::pair<CheatCode, u32>> codes;
+  for (const auto& [serial, number] : serials)
   {
     CheatList package;
-    if (serial.empty() || !package.LoadFromPackage(serial))
+    if (!package.LoadFromPackage(serial))
       continue;
 
     for (u32 i = 0; i < package.GetCodeCount(); i++)
-      codes.push_back(package.GetCode(i));
+      codes.emplace_back(package.GetCode(i), number);
   }
 
   return codes;
 }
 
-static std::vector<AndroidPatchCodes::Listed> ToListed(const std::vector<CheatCode>& codes)
+// A code's instructions as text, to tell codes apart, without the ones that do nothing: where the database files one
+// block under several serials, the core reads the next serial's line into the first code as a no-op instruction for
+// all but the last serial, which would make that code look different on each disc.
+static std::string InstructionsOf(const CheatCode& code)
 {
-  std::vector<AndroidPatchCodes::Listed> listed;
-  listed.reserve(codes.size());
-  for (const CheatCode& code : codes)
-    listed.push_back({GroupOf(code), code.description, code.enabled, code.IsManuallyActivated()});
-  return listed;
+  std::string text;
+  for (const CheatCode::Instruction& inst : code.instructions)
+  {
+    if (inst.code != CheatCode::InstructionCode::Nop)
+      text += fmt::format("{:08X} {:08X}\n", inst.first, inst.second);
+  }
+  return text;
+}
+
+static AndroidPatchCodes::Listed ToListed(const CheatCode& code, u32 disc)
+{
+  return {GroupOf(code), code.description, code.enabled, code.IsManuallyActivated(), InstructionsOf(code), disc};
 }
 
 void Load(const AndroidDiscGroups::Game& game)
@@ -124,20 +137,26 @@ void Load(const AndroidDiscGroups::Game& game)
   s_title = game.title;
 
   const std::vector<CheatCode> player = ReadPlayerFiles(game);
-  const std::vector<CheatCode> database = ReadDatabase(game);
+  const std::vector<std::pair<CheatCode, u32>> database = ReadDatabase(game);
   if (!s_key.empty())
   {
     if (const std::optional<std::string> text = FileSystem::ReadFileToString(SwitchesPath().c_str()))
       s_switches = AndroidPatchCodes::Parse(text.value());
   }
 
-  const std::vector<AndroidPatchCodes::Listed> player_listed = ToListed(player);
-  const std::vector<AndroidPatchCodes::Listed> database_listed = ToListed(database);
+  std::vector<AndroidPatchCodes::Listed> player_listed;
+  for (const CheatCode& code : player)
+    player_listed.push_back(ToListed(code, 0));
+  std::vector<AndroidPatchCodes::Listed> database_listed;
+  for (const auto& [code, disc] : database)
+    database_listed.push_back(ToListed(code, disc));
   for (const AndroidPatchCodes::Entry& entry : AndroidPatchCodes::Combine(player_listed, database_listed, s_switches))
   {
-    CheatCode code = entry.from_player ? player[entry.index] : database[entry.index];
+    CheatCode code = entry.from_player ? player[entry.index] : database[entry.index].first;
     const AndroidPatchCodes::Listed& listed =
       entry.from_player ? player_listed[entry.index] : database_listed[entry.index];
+    // A database code that differs between discs is shown and switched by its disc's name for it.
+    code.description = entry.name;
     code.enabled = entry.on;
     s_codes.AddCode(std::move(code));
     s_default.push_back(entry.from_player && listed.marked_on && !listed.manual);
@@ -182,35 +201,38 @@ std::optional<std::string> SetOn(u32 index, bool on)
   if (code.enabled == on)
     return std::nullopt;
 
+  // Kept in the app's file first, so a switch that can't be kept doesn't happen: the panel shows it as it is.
+  if (!s_key.empty())
+  {
+    std::vector<AndroidPatchCodes::State> states;
+    for (u32 i = 0; i < s_codes.GetCodeCount(); i++)
+    {
+      const CheatCode& each = s_codes.GetCode(i);
+      states.push_back({GroupOf(each), each.description, s_default[i], (i == index) ? on : each.enabled});
+    }
+    std::vector<AndroidPatchCodes::Switch> switches = AndroidPatchCodes::Remember(s_switches, states);
+
+    // Written whole, then renamed over the old one: the mirror never copies a .goosetmp file.
+    Error error;
+    const std::string path = SwitchesPath();
+    const std::string temp = path + ".goosetmp";
+    if (!FileSystem::EnsureDirectoryExists(EmuFolders::Cheats.c_str(), false, &error) ||
+        !FileSystem::WriteStringToFile(temp.c_str(), AndroidPatchCodes::Format(switches), &error) ||
+        !FileSystem::RenamePath(temp.c_str(), path.c_str(), &error))
+    {
+      ERROR_LOG("Failed to save '{}': {}", Path::GetFileName(path), error.GetDescription());
+      FileSystem::DeleteFile(temp.c_str());
+      return fmt::format("It couldn't be saved: {}", error.GetDescription());
+    }
+    s_switches = std::move(switches);
+  }
+
   code.enabled = on;
   // The core's copy undoes a code switched off, once.
   if (CheatList* live = System::GetCheatList(); live && index < live->GetCodeCount())
     live->SetCodeEnabled(index, on);
   else if (on)
     Apply();
-
-  if (s_key.empty())
-    return std::nullopt;
-
-  std::vector<AndroidPatchCodes::State> states;
-  for (u32 i = 0; i < s_codes.GetCodeCount(); i++)
-  {
-    const CheatCode& each = s_codes.GetCode(i);
-    states.push_back({GroupOf(each), each.description, s_default[i], each.enabled});
-  }
-  s_switches = AndroidPatchCodes::Remember(s_switches, states);
-
-  // Written whole, then renamed over the old one: the mirror never copies a .goosetmp file.
-  Error error;
-  const std::string path = SwitchesPath();
-  const std::string temp = path + ".goosetmp";
-  if (!FileSystem::EnsureDirectoryExists(EmuFolders::Cheats.c_str(), false, &error) ||
-      !FileSystem::WriteStringToFile(temp.c_str(), AndroidPatchCodes::Format(s_switches), &error) ||
-      !FileSystem::RenamePath(temp.c_str(), path.c_str(), &error))
-  {
-    ERROR_LOG("Failed to save '{}': {}", Path::GetFileName(path), error.GetDescription());
-    return fmt::format("Couldn't keep it for next time: {}", error.GetDescription());
-  }
 
   return std::nullopt;
 }

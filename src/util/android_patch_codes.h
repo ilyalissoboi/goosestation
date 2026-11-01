@@ -36,27 +36,34 @@ std::string SafeFileName(std::string_view name);
 /// The app's file for the game keyed key, in the cheats folder: `<key>.patchcodes`.
 std::string FileName(std::string_view key);
 
-/// A code as a list has it: its group (empty for none) and name, whether its file marks it on (`[*Name]`), and
-/// whether it's applied by hand rather than every frame.
+/// A code as a list has it: its group (empty for none) and name, whether its file marks it on (`[*Name]`), whether
+/// it's applied by hand rather than every frame, its instructions (as text, to tell codes apart), and the disc whose
+/// database block it came from (0 for a player's file).
 struct Listed
 {
   std::string group;
   std::string name;
   bool marked_on;
   bool manual;
+  std::string instructions = {};
+  unsigned disc = 0;
 };
 
-/// One code of the combined list: from the player's codes or the database's, its index there, and whether it's on.
+/// One code of the combined list: from the player's codes or the database's, its index there, whether it's on, and the
+/// name it's shown and switched by.
 struct Entry
 {
   bool from_player;
   size_t index;
   bool on;
+  std::string name;
 };
 
 /// The game's list: player (each player file's codes, in reading order), then database (every disc's), each code once
-/// by group and name, the first one kept, so a player's file wins over the database. A code is on if the app's
-/// switches say so, else if a player's file marks it on; the database's start off, and a manual code is never on.
+/// by group and name, the first one kept, so a player's file wins over the database. A database code whose discs give
+/// it different instructions is kept once for each, named with its disc ("Infinite Lives (Disc 2)"); a player's code
+/// of its name replaces them all. A code is on if the app's switches say so (by the name it's shown by), else if a
+/// player's file marks it on; the database's start off, and a manual code is never on.
 std::vector<Entry> Combine(std::span<const Listed> player, std::span<const Listed> database,
                            std::span<const Switch> switches);
 

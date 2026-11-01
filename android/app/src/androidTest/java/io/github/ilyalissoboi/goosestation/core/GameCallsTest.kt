@@ -195,19 +195,53 @@ class GameCallsTest {
     // the app's file, never to the player's.
     @Test
     fun codesFollowTheAppsFileNotThePlayers() {
+        val cheats = File(dataRoot, "cheats").apply { mkdirs() }
+        val playerFile = File(cheats, "padtest.cht").apply { writeText(PLAYER_CODES) }
+        val appFile = File(cheats, "$PADTEST_SERIAL.patchcodes").apply { writeText("off\t\tMarked\n") }
+        withListedPadtest {
+            val codes = NativeLibrary.getPatchCodes()!!
+            assertEquals("padtest.cht", codes.fileName)
+            assertEquals(listOf("Marked" to false, "Other" to false), codes.codes.map { it.name to it.on })
+
+            assertNull(NativeLibrary.setPatchCode(1, true))
+
+            assertEquals(
+                listOf(true),
+                NativeLibrary
+                    .getPatchCodes()!!
+                    .codes
+                    .drop(1)
+                    .map { it.on },
+            )
+            val written = appFile.readText()
+            assertTrue(written, "off\t\tMarked\n" in written && "on\t\tOther\n" in written)
+            assertEquals(PLAYER_CODES, playerFile.readText())
+        }
+    }
+
+    // A switch the app's file can't keep is undone, so the code is as the panel shows it.
+    @Test
+    fun aSwitchThatCantBeKeptIsUndone() {
+        val cheats = File(dataRoot, "cheats").apply { mkdirs() }
+        File(cheats, "padtest.cht").writeText(PLAYER_CODES)
+        // A folder where the app's file goes: it can't be written.
+        File(cheats, "$PADTEST_SERIAL.patchcodes").mkdirs()
+        withListedPadtest {
+            val error = NativeLibrary.setPatchCode(1, true)
+
+            assertTrue("a reason", !error.isNullOrBlank())
+            assertEquals(listOf(true, false), NativeLibrary.getPatchCodes()!!.codes.map { it.on })
+        }
+    }
+
+    /** Boots padtest from a games folder, so it's a game the library lists, paused; skipped without the files. */
+    private fun withListedPadtest(body: () -> Unit) {
         val games = File(root, "games")
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
             copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
                 copyAsShell("$SDCARD_TESTS/games/padtest.psexe", File(games, "padtest.psexe")),
         )
-        val cheats = File(dataRoot, "cheats").apply { mkdirs() }
-        val playerFile =
-            File(
-                cheats,
-                "padtest.cht",
-            ).apply { writeText("[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n") }
-        val appFile = File(cheats, "$PADTEST_SERIAL.patchcodes").apply { writeText("off\t\tMarked\n") }
         val started = CountDownLatch(1)
         val stopped = CountDownLatch(1)
         NativeLibrary.setCallbacks(
@@ -233,24 +267,7 @@ class GameCallsTest {
             NativeLibrary.startGame(padtest.path, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             NativeLibrary.setPaused(true)
-
-            val codes = NativeLibrary.getPatchCodes()!!
-            assertEquals("padtest.cht", codes.fileName)
-            assertEquals(listOf("Marked" to false, "Other" to false), codes.codes.map { it.name to it.on })
-
-            assertNull(NativeLibrary.setPatchCode(1, true))
-
-            assertEquals(
-                listOf(true),
-                NativeLibrary
-                    .getPatchCodes()!!
-                    .codes
-                    .drop(1)
-                    .map { it.on },
-            )
-            val written = appFile.readText()
-            assertTrue(written, "off\t\tMarked\n" in written && "on\t\tOther\n" in written)
-            assertEquals("[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n", playerFile.readText())
+            body()
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
@@ -415,6 +432,7 @@ class GameCallsTest {
     private companion object {
         const val INSTALL_ID = "test-install"
         const val SERIAL = "SLUS-00000"
+        const val PLAYER_CODES = "[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n"
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val PADTEST_SERIAL = "HASH-9FDA0E1A56D8DF5B"
         const val PAD = "pad-a"

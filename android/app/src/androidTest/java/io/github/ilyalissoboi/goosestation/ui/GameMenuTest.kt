@@ -110,6 +110,8 @@ class GameMenuTest {
 
             override fun pickDisc(number: Int) {
                 calls += "pickDisc $number"
+                // The disc already in just closes the panel, as InGameMenu does.
+                if (number == state.discs?.current) state = state.copy(discs = null)
             }
 
             override fun openCodes() {
@@ -590,6 +592,25 @@ class GameMenuTest {
         press(Key.ButtonB)
 
         rule.onNodeWithText("Patch codes").assertIsFocused().assertIsDisplayed()
+    }
+
+    // As above, closing the disc panel by picking the disc already in.
+    @Test
+    fun pickingTheCurrentDiscShowsItsRowAgainOnASmallScreen() {
+        state = GameMenuState(booted = true, analogMode = false, disc = 1, discCount = 2)
+        show(width = 640, height = 360)
+        for (step in 0 until 12) {
+            if (rule.onNodeWithText("Change disc").isFocusedNow()) break
+            press(Key.DirectionDown)
+        }
+
+        state = state.copy(discs = DiscChoice(ac3Discs, current = 1))
+        rule.waitForIdle()
+        rule.onNode(isFocused() and hasText("Disc 1", substring = true)).assertExists()
+        press(Key.Enter)
+
+        assertEquals(listOf("pickDisc 1"), calls)
+        rule.onNodeWithText("Change disc").assertIsFocused().assertIsDisplayed()
     }
 
     private fun SemanticsNodeInteraction.isFocusedNow() =

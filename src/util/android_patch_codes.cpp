@@ -3,7 +3,10 @@
 
 #include "android_patch_codes.h"
 
+#include "fmt/format.h"
+
 #include <algorithm>
+#include <map>
 #include <set>
 #include <utility>
 
@@ -78,23 +81,48 @@ std::string FileName(std::string_view key)
 std::vector<Entry> Combine(std::span<const Listed> player, std::span<const Listed> database,
                            std::span<const Switch> switches)
 {
+  using Key = std::pair<std::string, std::string>;
+
+  // A player's code replaces the database's of its group and name, on every disc.
+  std::set<Key> named_by_player;
+  for (const Listed& code : player)
+    named_by_player.emplace(code.group, code.name);
+
+  // The database's different instructions for each group and name, in the order the discs give them.
+  std::map<Key, std::vector<std::string>> variants;
+  for (const Listed& code : database)
+  {
+    std::vector<std::string>& seen = variants[{code.group, code.name}];
+    if (std::find(seen.begin(), seen.end(), code.instructions) == seen.end())
+      seen.push_back(code.instructions);
+  }
+
   std::vector<Entry> entries;
-  std::set<std::pair<std::string, std::string>> seen;
+  std::set<Key> seen;
   const auto add = [&](std::span<const Listed> codes, bool from_player) {
     for (size_t i = 0; i < codes.size(); i++)
     {
       const Listed& code = codes[i];
-      if (!seen.emplace(code.group, code.name).second)
+      std::string name = code.name;
+      if (!from_player)
+      {
+        if (named_by_player.contains({code.group, code.name}))
+          continue;
+        if (variants[{code.group, code.name}].size() > 1)
+          name = fmt::format("{} (Disc {})", code.name, code.disc);
+      }
+
+      if (!seen.emplace(code.group, name).second)
         continue;
 
       // Only a player's file can mark a code on; the database's start off.
       bool on = from_player && code.marked_on;
-      const auto sw = std::find_if(switches.begin(), switches.end(), [&code](const Switch& s) {
-        return s.group == code.group && s.name == code.name;
+      const auto sw = std::find_if(switches.begin(), switches.end(), [&code, &name](const Switch& s) {
+        return s.group == code.group && s.name == name;
       });
       if (sw != switches.end())
         on = sw->on;
-      entries.push_back(Entry{from_player, i, on && !code.manual});
+      entries.push_back(Entry{from_player, i, on && !code.manual, std::move(name)});
     }
   };
 

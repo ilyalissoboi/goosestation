@@ -112,8 +112,9 @@ Part 3 (RetroAchievements) stays as outlined in part 1's design.
   default.
 - **A game with no codes** still shows the row; the panel says "No patch codes for this game." and names the exact
   file to add: "Add `<game title>.cht` to the cheats folder in your data folder." *(writer's call)*.
-- Long code names and notes wrap (the design system's 1.3× text rule); the panel scrolls, keeping 4 dp around the
-  focus ring.
+- Long code names and notes wrap (the design system's 1.3× text rule), two lines each at most, then an ellipsis; the
+  panel scrolls, keeping 4 dp around the focus ring *(changed during the build: some of the database's notes run to
+  hundreds of characters, and a fully wrapped one was taller than the panel at 640 × 360 with text at 1.3×)*.
 
 ## Non-goals
 

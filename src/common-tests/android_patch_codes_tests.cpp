@@ -113,6 +113,48 @@ TEST(AndroidPatchCodes, CombineDedupesAcrossDiscs)
   EXPECT_EQ(entries[1].index, 1u);
 }
 
+TEST(AndroidPatchCodes, CombineKeepsPerDiscVariants)
+{
+  // Grand Theft Auto's discs give "Infinite Lives" different addresses; Max Money is the same on both.
+  const std::vector<Listed> database = {{"", "Infinite Lives", false, false, "800A 01", 1},
+                                        {"", "Max Money", false, false, "800B 02", 1},
+                                        {"", "Infinite Lives", false, false, "800C 03", 2},
+                                        {"", "Max Money", false, false, "800B 02", 2}};
+
+  const std::vector<Entry> entries = Combine({}, database, {});
+
+  ASSERT_EQ(entries.size(), 3u);
+  EXPECT_EQ(entries[0].name, "Infinite Lives (Disc 1)");
+  EXPECT_EQ(entries[1].name, "Max Money");
+  EXPECT_EQ(entries[2].name, "Infinite Lives (Disc 2)");
+  EXPECT_EQ(entries[2].index, 2u);
+}
+
+TEST(AndroidPatchCodes, CombinePlayerCodeReplacesEveryVariant)
+{
+  const std::vector<Listed> player = {{"", "Infinite Lives", false, false, "800D 04", 0}};
+  const std::vector<Listed> database = {{"", "Infinite Lives", false, false, "800A 01", 1},
+                                        {"", "Infinite Lives", false, false, "800C 03", 2}};
+
+  const std::vector<Entry> entries = Combine(player, database, {});
+
+  ASSERT_EQ(entries.size(), 1u);
+  EXPECT_TRUE(entries[0].from_player);
+  EXPECT_EQ(entries[0].name, "Infinite Lives");
+}
+
+TEST(AndroidPatchCodes, CombineSwitchesAVariantByItsName)
+{
+  const std::vector<Listed> database = {{"", "Infinite Lives", false, false, "800A 01", 1},
+                                        {"", "Infinite Lives", false, false, "800C 03", 2}};
+  const std::vector<Switch> switches = {{"", "Infinite Lives (Disc 2)", true}};
+
+  const std::vector<Entry> entries = Combine({}, database, switches);
+
+  EXPECT_FALSE(entries[0].on);
+  EXPECT_TRUE(entries[1].on);
+}
+
 TEST(AndroidPatchCodes, CombineDatabaseStartsOff)
 {
   const std::vector<Listed> database = {{"", "Infinite Missiles", true, false}};

@@ -37,8 +37,8 @@ std::vector<Code> List();
 /// The player's file the panel names for adding codes: `<game title>.cht`, in a form file systems take.
 std::string AddFileName();
 
-/// Switches code index on or off, at once, and keeps that in the app's file: nullopt, or why the file couldn't be
-/// written (the code stays switched for this session) or the code can't be switched.
+/// Switches code index on or off, at once, and keeps that in the app's file: nullopt, or why not. When the file can't
+/// be written, the code isn't switched either.
 std::optional<std::string> SetOn(u32 index, bool on);
 
 /// Applies manual code index once: nullopt, or why not.

@@ -737,7 +737,9 @@ game's once-a-frame read of the pad sees it.
   memory cards between devices comes later, through emusync.
 - **Desktop lists a multi-disc game's states under disc 1.** It keys states by the disc running, and Android keeps
   them all under the game's key, which is disc 1's serial for a set; desktop's own states for disc 2 show under
-  "Other saves" on Android.
+  "Other saves" on Android. Desktop opens a state by the path it recorded, which is Android's and won't open there,
+  so it keeps the disc in its drive: **on desktop, put in the disc a state was made on before loading it** (Android's
+  slot rows say which: "Saved · Disc 2"), or desktop runs it on the wrong disc.
 - **A name-grouped game keeps a memory card per disc**, with the core's per-title cards (the default): the title of a
   disc the database doesn't know is its file name, so "Foo (Disc 2)" has its own card. A database set's discs share
   the set's card. A playlist's card is named after the playlist, so Ace Combat 3's M3U and its CHDs played on their

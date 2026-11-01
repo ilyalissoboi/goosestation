@@ -74,7 +74,8 @@ data class CodePanel(
  * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, whether Exit game
  * asks before it replaces the resume state saved at [replacingResume] (Unix seconds), and whether it's saving the
  * resume state ([exiting]). A multi-disc game ([discCount] over 1) has its [disc] in the drive, and the Change disc
- * panel ([discs]) when it's open. The Patch codes panel is [codes].
+ * panel ([discs]) when it's open. The Patch codes panel is [codes]. In [hardcore] mode, Load state, Patch codes and
+ * Fast forward are off.
  */
 data class GameMenuState(
     val booted: Boolean = false,
@@ -90,6 +91,8 @@ data class GameMenuState(
     val discCount: Int = 0,
     val discs: DiscChoice? = null,
     val codes: CodePanel? = null,
+    /** Hardcore mode is active: no state loads, patch codes or fast forward. */
+    val hardcore: Boolean = false,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -227,6 +230,11 @@ class InGameMenu(
         if (state.booted) readGameState()
     }
 
+    /** The sign-in, the game's achievements or hardcore mode changed: read them again. */
+    fun achievementsChanged() {
+        if (state.booted) readGameState()
+    }
+
     /** Fast forward was turned on or off, by the menu or a hotkey. */
     fun fastForwardChanged(enabled: Boolean) {
         state = state.copy(fastForward = enabled)
@@ -291,7 +299,7 @@ class InGameMenu(
 
     override fun openSlots(mode: SlotMode) {
         val serial = serial
-        if (!canSave || serial == null) return
+        if (!canSave || serial == null || (mode == SlotMode.Load && state.hardcore)) return
         val id = ++panelId
         state = state.copy(slots = SlotPanel(mode), discs = null, codes = null, confirmingReset = false)
         val discs = running?.discs.orEmpty()
@@ -414,7 +422,7 @@ class InGameMenu(
     }
 
     override fun openCodes() {
-        if (!state.booted) return
+        if (!state.booted || state.hardcore) return
         val id = ++panelId
         state = state.copy(slots = null, discs = null, codes = CodePanel(), confirmingReset = false)
         scope.launch {
@@ -499,7 +507,7 @@ class InGameMenu(
     }
 
     override fun toggleFastForward() {
-        if (!state.booted) return
+        if (!state.booted || state.hardcore) return
         val enabled = !state.fastForward
         // At once: the core's report comes once the game runs again.
         state = state.copy(fastForward = enabled)
@@ -606,7 +614,11 @@ class InGameMenu(
         val multiDisc = state.discCount > 1
         scope.launch {
             val (mode, cardBusy) = withContext(game) { api.getAnalogMode() to api.isSavingMemoryCards() }
-            if (id == gameId) state = state.copy(analogMode = if (mode < 0) null else mode == 1, cardBusy = cardBusy)
+            val hardcore = withContext(game) { api.isHardcoreActive() }
+            if (id == gameId) {
+                state =
+                    state.copy(analogMode = if (mode < 0) null else mode == 1, cardBusy = cardBusy, hardcore = hardcore)
+            }
             if (!multiDisc) return@launch
             val disc = withContext(game) { readDisc(key) }
             if (id == gameId && disc > 0) state = state.copy(disc = disc)

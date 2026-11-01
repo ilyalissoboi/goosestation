@@ -409,4 +409,10 @@ object NativeLibrary {
 
     /** For the instrumented tests only: the RetroAchievements server to talk to ([url]), or the real one with null. */
     external fun setAchievementsServerForTest(url: String?)
+
+    /** Hardcore mode is active in the running game. */
+    external fun isHardcoreActive(): Boolean
+
+    /** A game started now would start in hardcore mode: achievements and hardcore are on, and a sign-in is stored. */
+    external fun hardcoreWouldStart(): Boolean
 }

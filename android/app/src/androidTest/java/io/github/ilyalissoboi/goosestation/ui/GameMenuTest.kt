@@ -20,6 +20,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -238,6 +239,21 @@ class GameMenuTest {
             press(Key.DirectionDown)
             rule.onNode(isFocused() and hasText(label, substring = true)).assertExists()
         }
+    }
+
+    @Test
+    fun hardcoreRowsAreDisabledWithTheReason() {
+        state = GameMenuState(booted = true, analogMode = false, hardcore = true)
+        show()
+
+        for (row in listOf("Load state", "Fast forward", "Patch codes")) {
+            rule.onNode(hasText(row) and hasText("Off in hardcore mode")).assertIsNotEnabled()
+        }
+        // The D-pad passes over them: from Save state, Down reaches Analog mode.
+        press(Key.DirectionDown)
+        rule.onNode(isFocused()).assert(hasText("Save state"))
+        press(Key.DirectionDown)
+        rule.onNode(isFocused()).assert(hasText("Analog mode"))
     }
 
     @Test

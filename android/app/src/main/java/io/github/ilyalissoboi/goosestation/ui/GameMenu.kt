@@ -335,8 +335,9 @@ private fun MenuPanel(
                     GsIcons.loadState,
                     { actions.openSlots(SlotMode.Load) },
                     Modifier.focusRequester(loadRow),
-                    enabled = booted,
+                    enabled = booted && !state.hardcore,
                     current = openMode == SlotMode.Load,
+                    value = if (state.hardcore) HARDCORE_OFF else null,
                 )
                 if (state.discCount > 1) {
                     MenuItem(
@@ -353,8 +354,8 @@ private fun MenuPanel(
                     "Fast forward",
                     GsIcons.fastForward,
                     actions::toggleFastForward,
-                    enabled = booted,
-                    value = onOff(state.fastForward),
+                    enabled = booted && !state.hardcore,
+                    value = if (state.hardcore) HARDCORE_OFF else onOff(state.fastForward),
                 )
                 state.analogMode?.let {
                     MenuItem(
@@ -371,8 +372,9 @@ private fun MenuPanel(
                     GsIcons.code,
                     actions::openCodes,
                     Modifier.focusRequester(codesRow),
-                    enabled = booted,
+                    enabled = booted && !state.hardcore,
                     current = codesOpen,
+                    value = if (state.hardcore) HARDCORE_OFF else null,
                 )
                 Spacer(
                     Modifier
@@ -402,6 +404,9 @@ private fun MenuPanel(
 }
 
 private fun onOff(on: Boolean) = if (on) "On" else "Off"
+
+/** Said on the rows hardcore mode turns off. */
+const val HARDCORE_OFF = "Off in hardcore mode"
 
 /**
  * One of the menu's items: [icon] and [label], and the row's [value] at its end, if any, or under the label when they

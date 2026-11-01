@@ -1377,6 +1377,10 @@ object AppController : NativeCallbacks {
         mainHandler.post { achievementsPage.loginExpired() }
     }
 
+    override fun onAchievementsChanged() {
+        mainHandler.post { gameMenu.achievementsChanged() }
+    }
+
     override fun onFastForwardChanged(enabled: Boolean) {
         mainHandler.post { gameMenu.fastForwardChanged(enabled) }
     }

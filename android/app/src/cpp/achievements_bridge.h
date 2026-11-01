@@ -31,6 +31,13 @@ std::optional<std::string> SignIn(std::string username, std::string password);
 /// Signs out, forgetting the username and token, and turns achievements off.
 void SignOut();
 
+/// Whether a game booted now would start in hardcore mode: achievements and hardcore are on, and a sign-in is stored.
+/// On the CPU thread.
+bool HardcoreWouldStart();
+
+/// Hardcore mode is active in the running game. On the CPU thread.
+bool IsHardcoreActive();
+
 /// For the instrumented tests only: the server rcheevos talks to, or the real one with an empty host.
 void SetServerForTest(const std::string& host);
 

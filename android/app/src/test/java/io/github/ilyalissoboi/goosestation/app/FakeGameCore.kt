@@ -33,6 +33,14 @@ class FakeGameCore(
     var resumeOn = true
     var analog = -1
 
+    /** [isHardcoreActive] and [hardcoreWouldStart]: queries, so not logged. */
+    var hardcore = false
+    var hardcoreWouldStart = false
+
+    override fun isHardcoreActive(): Boolean = hardcore
+
+    override fun hardcoreWouldStart(): Boolean = hardcoreWouldStart
+
     override fun getSaveStateTimes(serial: String): LongArray {
         calls += "getSaveStateTimes $serial"
         val saved = serialTimes[serial] ?: times

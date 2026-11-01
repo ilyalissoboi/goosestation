@@ -88,6 +88,12 @@ interface GameCoreApi {
     fun toggleAnalogMode()
 
     fun saveScreenshot()
+
+    /** Hardcore mode is active now: no state loads, patch codes or fast forward. */
+    fun isHardcoreActive(): Boolean
+
+    /** A game started now would start in hardcore mode: it's switched on, and a sign-in is stored. */
+    fun hardcoreWouldStart(): Boolean
 }
 
 object NativeGameCoreApi : GameCoreApi {
@@ -143,4 +149,8 @@ object NativeGameCoreApi : GameCoreApi {
     override fun toggleAnalogMode() = NativeLibrary.toggleAnalogMode()
 
     override fun saveScreenshot() = NativeLibrary.saveScreenshot()
+
+    override fun isHardcoreActive(): Boolean = NativeLibrary.isHardcoreActive()
+
+    override fun hardcoreWouldStart(): Boolean = NativeLibrary.hardcoreWouldStart()
 }

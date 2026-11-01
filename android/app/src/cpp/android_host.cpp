@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0
 
 #include "android_host.h"
+#include "achievements_bridge.h"
 #include "emu_thread.h"
 #include "foreign_settings.h"
 #include "game_codes.h"
@@ -763,6 +764,13 @@ void AndroidHost::BootPendingGame()
 
   SystemBootParameters parameters(s_boot_path);
   parameters.save_state = std::move(s_pending_boot_state);
+  // A boot from a state while hardcore mode would start asks Host::ConfirmMessage(), which says yes here: hardcore would
+  // be turned off without the player's say. The app doesn't offer it (GameStarts); this makes sure.
+  if (!parameters.save_state.empty() && AchievementsBridge::HardcoreWouldStart())
+  {
+    WARNING_LOG("Not resuming: hardcore mode would start.");
+    parameters.save_state.clear();
+  }
   parameters.media_playlist_index = s_pending_playlist_index;
   s_pending_boot_state.clear();
   s_pending_playlist_index = 0;
@@ -929,6 +937,13 @@ std::optional<std::string> AndroidHost::SaveState(std::string key, s32 slot)
 std::optional<std::string> AndroidHost::LoadState(std::string key, s32 slot)
 {
   return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
+    // The core refuses too, but reports success: the app would take the load as done.
+    if (Achievements::IsHardcoreModeActive())
+    {
+      Error::SetStringView(error, "Loading states is off in hardcore mode.");
+      return false;
+    }
+
     // LoadState() doesn't say when the file is missing in so many words.
     if (!FileSystem::FileExists(path.c_str()))
     {
@@ -1147,7 +1162,13 @@ void AndroidHost::ResetGame()
 
 void AndroidHost::SetFastForward(bool enabled)
 {
-  EmuThread::RunOnThread([enabled]() { System::SetFastForwardEnabled(enabled); }, false);
+  EmuThread::RunOnThread(
+    [enabled]() {
+      // Hardcore mode allows no fast forward; the core doesn't refuse it.
+      if (!enabled || !Achievements::IsHardcoreModeActive())
+        System::SetFastForwardEnabled(enabled);
+    },
+    false);
 }
 
 void AndroidHost::ToggleAnalogMode()
@@ -2156,6 +2177,16 @@ void Host::RequestResizeHostDisplay(s32 width, s32 height)
 
 void Host::FrameDone()
 {
+  // Hardcore mode allows no fast forward or turbo, which the core doesn't refuse: a hotkey's, or one already on when a
+  // reset started hardcore, is turned off here.
+  if (Achievements::IsHardcoreModeActive())
+  {
+    if (System::IsFastForwardEnabled())
+      System::SetFastForwardEnabled(false);
+    if (System::IsTurboEnabled())
+      System::SetTurboEnabled(false);
+  }
+
   // The app shows a marker while fast forward is on, whether the menu or a hotkey turned it on.
   const bool fast_forward = System::IsFastForwardEnabled();
   if (fast_forward != AndroidHost::s_fast_forward_reported)

@@ -7,6 +7,7 @@
 #include "android_host.h"
 #include "bios_import.h"
 #include "content_bridge.h"
+#include "emu_thread.h"
 #include "http_downloader_android.h"
 #include "jni_util.h"
 
@@ -895,6 +896,20 @@ NATIVE_LIBRARY_FUNCTION(jstring, signIn)(JNIEnv* env, jobject, jstring username,
 NATIVE_LIBRARY_FUNCTION(void, signOut)(JNIEnv*, jobject)
 {
   AchievementsBridge::SignOut();
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, isHardcoreActive)(JNIEnv*, jobject)
+{
+  bool active = false;
+  EmuThread::RunOnThread([&active]() { active = AchievementsBridge::IsHardcoreActive(); }, true);
+  return active ? JNI_TRUE : JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, hardcoreWouldStart)(JNIEnv*, jobject)
+{
+  bool would = false;
+  EmuThread::RunOnThread([&would]() { would = AchievementsBridge::HardcoreWouldStart(); }, true);
+  return would ? JNI_TRUE : JNI_FALSE;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setAchievementsServerForTest)(JNIEnv* env, jobject, jstring url)

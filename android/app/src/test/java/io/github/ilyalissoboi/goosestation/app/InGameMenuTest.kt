@@ -1077,6 +1077,63 @@ class InGameMenuTest {
             assertNull(menu.state.codes)
         }
 
+    @Test
+    fun hardcoreBlocksLoadCodesAndFastForward() =
+        runTest {
+            api.hardcore = true
+            api.times[SaveSlots.RESUME] = 100
+            val menu = menu()
+            assertTrue(menu.state.hardcore)
+
+            menu.openSlots(SlotMode.Load)
+            menu.openCodes()
+            menu.toggleFastForward()
+            runCurrent()
+
+            assertNull(menu.state.slots)
+            assertNull(menu.state.codes)
+            assertFalse(menu.state.fastForward)
+            assertFalse(
+                calls.any {
+                    it.startsWith("loadState") || it == "getPatchCodes" ||
+                        it.startsWith("setFastForward")
+                },
+            )
+        }
+
+    @Test
+    fun saveStillWorksInHardcore() =
+        runTest {
+            api.hardcore = true
+            val menu = menu()
+
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.pickSlot(1)
+            runCurrent()
+
+            assertTrue(calls.contains("saveState $SERIAL 1"))
+        }
+
+    // Review Focus 2: hardcore drops a few seconds after boot for a game RetroAchievements doesn't know.
+    @Test
+    fun loadComesBackWhenHardcoreDrops() =
+        runTest {
+            api.hardcore = true
+            api.times[SaveSlots.RESUME] = 100
+            val menu = menu()
+            assertTrue(menu.state.hardcore)
+
+            api.hardcore = false
+            menu.achievementsChanged()
+            runCurrent()
+            assertFalse(menu.state.hardcore)
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertEquals(SaveSlots.RESUME, menu.entries().first().slot)
+        }
+
     private class MemoryLastSlots : LastSlotStore {
         private val slots = HashMap<String, Int>()
 

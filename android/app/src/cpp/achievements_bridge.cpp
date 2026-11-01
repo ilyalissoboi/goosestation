@@ -4,9 +4,12 @@
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "emu_thread.h"
+#include "game_codes.h"
 
 #include "core/achievements_private.h"
+#include "core/cheats.h"
 #include "core/host.h"
+#include "core/settings.h"
 #include "core/system.h"
 
 #include "common/error.h"
@@ -86,6 +89,17 @@ void AchievementsBridge::SignOut()
     true);
 }
 
+bool AchievementsBridge::HardcoreWouldStart()
+{
+  return g_settings.achievements_enabled && g_settings.achievements_hardcore_mode &&
+         Achievements::GetAndroidSignIn() != Achievements::AndroidSignIn::SignedOut;
+}
+
+bool AchievementsBridge::IsHardcoreActive()
+{
+  return Achievements::IsHardcoreModeActive();
+}
+
 void AchievementsBridge::SetServerForTest(const std::string& host)
 {
   rc_client_set_host(nullptr, host.empty() ? nullptr : host.c_str());
@@ -113,6 +127,17 @@ void Host::OnAchievementsRefreshed()
 
 void Host::OnAchievementsHardcoreModeChanged(bool enabled)
 {
+  // No patch code applies in hardcore mode; the player's switches come back with it off.
+  if (enabled)
+  {
+    if (!System::IsShutdown())
+      System::SetCheatList(nullptr);
+  }
+  else
+  {
+    GameCodes::Apply();
+  }
+
   AndroidHost::NotifyAchievementsChanged();
 }
 

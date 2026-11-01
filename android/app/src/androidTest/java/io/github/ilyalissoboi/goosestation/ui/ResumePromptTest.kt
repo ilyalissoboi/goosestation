@@ -40,7 +40,7 @@ class ResumePromptTest {
     private val crash = GameEntry("content://games/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
     private val calls = mutableListOf<String>()
 
-    private fun show() {
+    private fun show(hardcore: Boolean = false) {
         rule.setContent {
             GooseStationTheme {
                 Box(Modifier.fillMaxSize()) {
@@ -51,7 +51,7 @@ class ResumePromptTest {
                         modifier = Modifier.align(Alignment.TopEnd),
                     )
                     ResumePrompt(
-                        ResumeOffer(crash, now.toEpochSecond() - 3_600, null),
+                        ResumeOffer(crash, now.toEpochSecond() - 3_600, null, hardcore),
                         onResume = { calls += "resume" },
                         onStartOver = { calls += "startOver" },
                         onCancel = { calls += "cancel" },
@@ -66,6 +66,22 @@ class ResumePromptTest {
     private fun press(key: Key) {
         rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
+    }
+
+    // A boot from the resume state would end hardcore mode: the prompt only starts from the beginning.
+    @Test
+    fun hardcoreOffersOnlyStart() {
+        show(hardcore = true)
+
+        rule
+            .onNodeWithText(
+                "Hardcore mode is on, so the game starts from the beginning. Your resume state is kept for later.",
+            ).assertExists()
+        rule.onNodeWithText("Resume").assertDoesNotExist()
+        rule.onNodeWithText("Start").assertIsFocused()
+        press(Key.Enter)
+
+        assertEquals(listOf("startOver"), calls)
     }
 
     @Test

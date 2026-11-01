@@ -346,7 +346,9 @@ The rules:
 - **The folder is the source of truth.** The app pulls (folder to working copy) at start, before the core reads
   `settings.ini`, and whenever it comes back to the foreground. A file that is new or changed in the folder is copied
   in, even over a change of the working copy's, and a file deleted from the folder is deleted from the working copy.
-  There is no conflict detection: when both sides changed, the folder wins.
+  There is no conflict detection: when both sides changed, the folder wins. A file copied in keeps the folder's time
+  for it, as the in-game menu shows a save state's time from its file; one the folder's provider gives no time gets
+  the time of the copy.
 - **Memory cards are never replaced under a running game.** The memory cards are the files in the core's memory
   card folder (`[MemoryCards] Directory`, `memcards/` by default) and the shared cards `[MemoryCards] Card1Path` and
   `Card2Path` name, wherever they are in the data folder: the app asks the core once it has started, and again after
@@ -834,6 +836,18 @@ Found and fixed during the pass: the core's own status icons (pause, fast forwar
 they're off on Android; the core's messages start with an emoji, which kept "Screenshot saved" from matching, so emoji
 are left out; slot pictures drew at their own size, not filling their box. The emulator's GPU emulation wedged twice
 during the instrumented runs (the app's render thread stuck in `eglSwapBuffers`), and the emulator was restarted.
+
+### A pull keeps the folder's file times (2026-11-01)
+
+Checked on `goose-arm64` with the debug APK, after `adb uninstall` and a fresh setup (the picker driven with taps)
+whose data folder was `/sdcard/GooseTest/data`, with 14 files and save states in slots 1, 2, 3 and 5 of SLPS-02020.
+
+| Check | Result |
+| --- | --- |
+| The first pull | Pass. Every working-copy file pulled has its folder file's time, to the millisecond (`stat`: `12:35:47.057003798` in the folder, `12:35:47.057000000` in the working copy, for slot 1), and the manifest holds the same time for both sides. `settings.ini` alone had a new time, as setup wrote its `InstallID` and games folder into it, and that went out to the folder. |
+| Resume prompt | Pass. "Today · 12:21", the time of the folder's `SLPS-02020_resume.sav` (12:21:24). |
+| Load state slots | Pass. Slot 1 "Today · 12:35", slot 2 "Today · 14:09", slot 3 "Today · 10:00", slot 5 "Today · 14:09", the times of the folder's files. |
+| Nothing pushed back | Pass. After the game and Home (whose push doesn't wait), the folder's times and MD5s were as before setup, except `settings.ini`, and no `.goosetmp` or `.goosebak` was left. |
 
 ## Results on the AYN Thor
 

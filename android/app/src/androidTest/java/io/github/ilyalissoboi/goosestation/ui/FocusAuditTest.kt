@@ -20,9 +20,12 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
+import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
@@ -348,6 +351,30 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuCodes() {
+        val rows =
+            listOf(
+                PatchCodeRow(0, "Infinite HP", "In battle", false, true),
+                PatchCodeRow(1, "Max Money", null, true, false),
+            )
+        show {
+            GameMenu(
+                GameMenuState(booted = true, codes = CodePanel(listOf(PatchCodeGroup("Player", rows)), "Game.cht")),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuNoCodes() {
+        show { GameMenu(GameMenuState(booted = true, codes = CodePanel(emptyList(), "Game.cht")), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuLoadWithNoSaves() {
         show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
 
@@ -391,6 +418,17 @@ class FocusAuditTest {
         override fun closeDiscs() {}
 
         override fun pickDisc(number: Int) {}
+
+        override fun openCodes() {}
+
+        override fun closeCodes() {}
+
+        override fun setCode(
+            index: Int,
+            on: Boolean,
+        ) {}
+
+        override fun applyCode(index: Int) {}
 
         override fun openSlots(mode: SlotMode) {}
 

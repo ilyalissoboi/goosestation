@@ -98,6 +98,7 @@ fun GameMenu(
             shown.slots?.replacing != null -> actions.cancelReplace()
             shown.slots != null -> actions.closeSlots()
             shown.discs != null -> actions.closeDiscs()
+            shown.codes != null -> actions.closeCodes()
             shown.confirmingReset -> actions.cancelReset()
             shown.confirmingExit -> actions.cancelExit()
             shown.replacingResume != null -> actions.cancelReplaceResume()
@@ -111,6 +112,7 @@ fun GameMenu(
             state.slots?.mode,
             state.slots?.replacing,
             state.discs != null,
+            state.codes != null,
             state.confirmingReset,
             state.confirmingExit,
             state.replacingResume,
@@ -121,6 +123,7 @@ fun GameMenu(
     SideEffect {
         state.slots?.let { cameFrom.slots = it.mode }
         if (state.discs != null) cameFrom.discs = true
+        if (state.codes != null) cameFrom.codes = true
         if (state.confirmingReset) cameFrom.reset = true
         if (state.confirmingExit || state.replacingResume != null) cameFrom.exit = true
     }
@@ -153,14 +156,16 @@ fun GameMenu(
         val height = maxHeight
         val slots = state.slots
         val discs = state.discs
-        val sidePanel = slots != null || discs != null
+        val codes = state.codes
+        val sidePanel = slots != null || discs != null || codes != null
 
-        // The one side panel open, if any: the slots or the discs.
+        // The one side panel open, if any: the slots, the discs or the codes.
         @Composable
         fun SidePanel(modifier: Modifier) {
             when {
                 slots != null -> SaveSlotPanel(slots, actions, now, modifier)
                 discs != null -> DiscPanel(discs, game?.title.orEmpty(), actions, modifier)
+                codes != null -> PatchCodePanel(codes, actions, modifier)
             }
         }
         if (screenWidth >= SIDE_BY_SIDE || screenWidth >= screenHeight) {
@@ -185,6 +190,7 @@ fun GameMenu(
 private class CameFrom {
     var slots: SlotMode? = null
     var discs = false
+    var codes = false
     var reset = false
     var exit = false
 }
@@ -203,18 +209,20 @@ private fun MenuPanel(
     val saveRow = remember { FocusRequester() }
     val loadRow = remember { FocusRequester() }
     val discRow = remember { FocusRequester() }
+    val codesRow = remember { FocusRequester() }
     val resetRow = remember { FocusRequester() }
     val exitRow = remember { FocusRequester() }
     val booted = state.booted
     val openMode = state.slots?.mode
     val discsOpen = state.discs != null
+    val codesOpen = state.codes != null
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
     val asking = state.confirmingReset || state.confirmingExit || state.replacingResume != null
-    LaunchedEffect(openMode, discsOpen, asking) {
+    LaunchedEffect(openMode, discsOpen, codesOpen, asking) {
         val from = cameFrom.slots
         when {
-            openMode != null || discsOpen || asking -> {}
+            openMode != null || discsOpen || codesOpen || asking -> {}
             from != null -> {
                 cameFrom.slots = null
                 (if (from == SlotMode.Save) saveRow else loadRow).requestFocus()
@@ -222,6 +230,10 @@ private fun MenuPanel(
             cameFrom.discs -> {
                 cameFrom.discs = false
                 discRow.requestFocus()
+            }
+            cameFrom.codes -> {
+                cameFrom.codes = false
+                codesRow.requestFocus()
             }
             cameFrom.reset -> {
                 cameFrom.reset = false
@@ -336,6 +348,14 @@ private fun MenuPanel(
                     )
                 }
                 MenuItem("Screenshot", GsIcons.camera, actions::screenshot, enabled = booted)
+                MenuItem(
+                    "Patch codes",
+                    GsIcons.code,
+                    actions::openCodes,
+                    Modifier.focusRequester(codesRow),
+                    enabled = booted,
+                    current = codesOpen,
+                )
                 Spacer(
                     Modifier
                         .padding(vertical = 4.dp)

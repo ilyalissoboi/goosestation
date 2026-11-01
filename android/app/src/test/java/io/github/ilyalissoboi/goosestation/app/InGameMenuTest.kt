@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.PatchCode
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -959,6 +960,121 @@ class InGameMenuTest {
             menu.openDiscs()
 
             assertNull(menu.state.discs)
+        }
+
+    @Test
+    fun codesOpenBesideTheMenu() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "Player", "Infinite HP:In battle", false, true))
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+
+            menu.openCodes()
+            assertNull(menu.state.slots)
+            runCurrent()
+
+            val panel = menu.state.codes!!
+            assertEquals("Crash Bandicoot.cht", panel.fileName)
+            val row =
+                panel.groups!!
+                    .single()
+                    .codes
+                    .single()
+            assertEquals("Infinite HP" to "In battle", row.name to row.note)
+            assertTrue(row.on)
+        }
+
+    @Test
+    fun switchingACodeKeepsTheMenuOpen() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "", "A", false, false), PatchCode(1, "", "B", false, false))
+            val menu = menu()
+            menu.openCodes()
+            runCurrent()
+            calls.clear()
+
+            menu.setCode(1, true)
+            assertTrue(
+                menu.state.codes!!
+                    .groups!!
+                    .single()
+                    .codes[1]
+                    .on,
+            )
+            runCurrent()
+
+            assertEquals(listOf("setPatchCode 1 true"), calls)
+            assertTrue(
+                menu.state.codes!!
+                    .groups!!
+                    .single()
+                    .codes[1]
+                    .on,
+            )
+        }
+
+    @Test
+    fun aFailedSwitchPutsTheRowBack() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "", "Infinite HP", false, false))
+            api.codeError = "Disk full."
+            val menu = menu()
+            menu.openCodes()
+            runCurrent()
+
+            menu.setCode(0, true)
+            runCurrent()
+
+            val panel = menu.state.codes!!
+            assertFalse(
+                panel.groups!!
+                    .single()
+                    .codes
+                    .single()
+                    .on,
+            )
+            assertEquals("Couldn't switch Infinite HP: Disk full.", panel.error)
+        }
+
+    @Test
+    fun applyingSaysSo() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "", "Max Money Now:Once", true, false))
+            val menu = menu()
+            menu.openCodes()
+            runCurrent()
+            calls.clear()
+
+            menu.applyCode(0)
+            runCurrent()
+
+            assertEquals(listOf("applyPatchCode 0"), calls)
+            assertEquals("Applied: Max Money Now", menu.state.codes!!.applied)
+            assertTrue(calls.none { it == "resume" })
+        }
+
+    @Test
+    fun aGameWithNoCodesNamesTheFile() =
+        runTest {
+            val menu = menu()
+
+            menu.openCodes()
+            runCurrent()
+
+            assertEquals(emptyList<PatchCodeGroup>(), menu.state.codes!!.groups)
+            assertEquals("Crash Bandicoot.cht", menu.state.codes!!.fileName)
+        }
+
+    @Test
+    fun closingTheCodesDropsALateRead() =
+        runTest {
+            val menu = menu()
+
+            menu.openCodes()
+            menu.closeCodes()
+            runCurrent()
+
+            assertNull(menu.state.codes)
         }
 
     private class MemoryLastSlots : LastSlotStore {

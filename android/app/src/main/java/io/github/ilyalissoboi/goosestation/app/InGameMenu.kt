@@ -58,12 +58,23 @@ data class DiscChoice(
 )
 
 /**
+ * The Patch codes panel: the game's codes in their [groups] (null while they're read), the player's file to add codes
+ * in ([fileName]), the manual code last applied ([applied], as said), and why the last change didn't work ([error]).
+ */
+data class CodePanel(
+    val groups: List<PatchCodeGroup>? = null,
+    val fileName: String = "",
+    val applied: String? = null,
+    val error: String? = null,
+)
+
+/**
  * The in-game menu: whether the game has [booted] (until then only Resume and Exit game work), whether fast forward is
  * on, Port 1's analog mode (null when it isn't a DualShock: the row is hidden), the slot panel, if it's open,
  * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, whether Exit game
  * asks before it replaces the resume state saved at [replacingResume] (Unix seconds), and whether it's saving the
  * resume state ([exiting]). A multi-disc game ([discCount] over 1) has its [disc] in the drive, and the Change disc
- * panel ([discs]) when it's open.
+ * panel ([discs]) when it's open. The Patch codes panel is [codes].
  */
 data class GameMenuState(
     val booted: Boolean = false,
@@ -78,6 +89,7 @@ data class GameMenuState(
     val disc: Int = 0,
     val discCount: Int = 0,
     val discs: DiscChoice? = null,
+    val codes: CodePanel? = null,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -96,6 +108,19 @@ interface GameMenuActions {
 
     /** Puts disc [number] in, or just closes the panel for the disc already in. */
     fun pickDisc(number: Int)
+
+    fun openCodes()
+
+    fun closeCodes()
+
+    /** Switches code [index] on or off, at once; the menu stays open. */
+    fun setCode(
+        index: Int,
+        on: Boolean,
+    )
+
+    /** Applies manual code [index] once; the menu stays open. */
+    fun applyCode(index: Int)
 
     /** Loads one of [SlotPanel.others]: [serial]'s [slot]. */
     fun pickOther(
@@ -194,6 +219,7 @@ class InGameMenu(
             state.copy(
                 slots = null,
                 discs = null,
+                codes = null,
                 confirmingReset = false,
                 confirmingExit = false,
                 replacingResume = null,
@@ -267,7 +293,7 @@ class InGameMenu(
         val serial = serial
         if (!canSave || serial == null) return
         val id = ++panelId
-        state = state.copy(slots = SlotPanel(mode), discs = null, confirmingReset = false)
+        state = state.copy(slots = SlotPanel(mode), discs = null, codes = null, confirmingReset = false)
         val discs = running?.discs.orEmpty()
         val multiDisc = discs.size > 1
         // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
@@ -358,7 +384,7 @@ class InGameMenu(
         val discs = running?.discs.orEmpty()
         if (!state.booted || discs.size < 2) return
         panelId++
-        state = state.copy(slots = null, discs = DiscChoice(discs, state.disc), confirmingReset = false)
+        state = state.copy(slots = null, codes = null, discs = DiscChoice(discs, state.disc), confirmingReset = false)
     }
 
     override fun closeDiscs() {
@@ -385,6 +411,79 @@ class InGameMenu(
             onMessage("Disc $number inserted")
             onResume()
         }
+    }
+
+    override fun openCodes() {
+        if (!state.booted) return
+        val id = ++panelId
+        state = state.copy(slots = null, discs = null, codes = CodePanel(), confirmingReset = false)
+        scope.launch {
+            val codes = withContext(game) { api.getPatchCodes() }
+            if (id != panelId) return@launch
+            val panel = state.codes ?: return@launch
+            state =
+                state.copy(
+                    codes = panel.copy(groups = PatchCodeList.groups(codes.codes.toList()), fileName = codes.fileName),
+                )
+        }
+    }
+
+    override fun closeCodes() {
+        panelId++
+        state = state.copy(codes = null)
+    }
+
+    override fun setCode(
+        index: Int,
+        on: Boolean,
+    ) {
+        val name = codeRow(index)?.name ?: return
+        changeCode(index, on)
+        val id = panelId
+        scope.launch {
+            val error = withContext(game) { api.setPatchCode(index, on) } ?: return@launch
+            if (id != panelId) return@launch
+            changeCode(index, !on)
+            state = state.copy(codes = state.codes?.copy(error = "Couldn't switch $name: $error", applied = null))
+        }
+    }
+
+    override fun applyCode(index: Int) {
+        val name = codeRow(index)?.name ?: return
+        val id = panelId
+        scope.launch {
+            val error = withContext(game) { api.applyPatchCode(index) }
+            if (id != panelId) return@launch
+            val panel = state.codes ?: return@launch
+            state =
+                state.copy(
+                    codes =
+                        if (error == null) {
+                            panel.copy(applied = "Applied: $name", error = null)
+                        } else {
+                            panel.copy(error = "Couldn't apply $name: $error", applied = null)
+                        },
+                )
+        }
+    }
+
+    private fun codeRow(index: Int) =
+        state.codes
+            ?.groups
+            ?.flatMap { it.codes }
+            ?.firstOrNull { it.index == index }
+
+    // Shows code [index] as [on], at once.
+    private fun changeCode(
+        index: Int,
+        on: Boolean,
+    ) {
+        val panel = state.codes ?: return
+        val groups =
+            panel.groups?.map { group ->
+                group.copy(codes = group.codes.map { if (it.index == index) it.copy(on = on) else it })
+            }
+        state = state.copy(codes = panel.copy(groups = groups, error = null))
     }
 
     override fun confirmReplace() {

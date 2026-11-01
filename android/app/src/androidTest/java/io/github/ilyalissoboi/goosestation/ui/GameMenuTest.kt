@@ -21,6 +21,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
@@ -35,9 +36,12 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
+import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -104,6 +108,26 @@ class GameMenuTest {
 
             override fun pickDisc(number: Int) {
                 calls += "pickDisc $number"
+            }
+
+            override fun openCodes() {
+                calls += "openCodes"
+            }
+
+            override fun closeCodes() {
+                calls += "closeCodes"
+                state = state.copy(codes = null)
+            }
+
+            override fun setCode(
+                index: Int,
+                on: Boolean,
+            ) {
+                calls += "setCode $index $on"
+            }
+
+            override fun applyCode(index: Int) {
+                calls += "applyCode $index"
             }
 
             override fun confirmReplace() {
@@ -202,6 +226,7 @@ class GameMenuTest {
                 "Fast forward",
                 "Analog mode",
                 "Screenshot",
+                "Patch codes",
                 "Reset console",
                 "Exit game",
             )
@@ -276,6 +301,8 @@ class GameMenuTest {
         press(Key.Enter)
         press(Key.DirectionDown)
         press(Key.Enter)
+        press(Key.DirectionDown)
+        press(Key.Enter)
 
         assertEquals(
             listOf(
@@ -284,6 +311,7 @@ class GameMenuTest {
                 "toggleFastForward",
                 "toggleAnalogMode",
                 "screenshot",
+                "openCodes",
                 "askReset",
                 "exit",
             ),
@@ -440,6 +468,106 @@ class GameMenuTest {
         show()
 
         rule.onNodeWithText("Disc 2 isn't in your library any more.").assertExists()
+    }
+
+    private fun codes(vararg groups: PatchCodeGroup) = CodePanel(groups.toList(), "Crash Bandicoot.cht")
+
+    @Test
+    fun patchCodesSitsAfterScreenshot() {
+        show()
+
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Patch codes", substring = true)).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("openCodes"), calls)
+    }
+
+    @Test
+    fun aCodeIsASwitchRow() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(4, "Infinite HP", "In battle", false, false)))),
+            )
+        show()
+
+        rule.onNode(isFocused() and hasText("Infinite HP", substring = true)).assertIsOff()
+        rule.onNodeWithText("In battle").assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("setCode 4 true"), calls)
+    }
+
+    @Test
+    fun aManualCodeHasApply() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(2, "Max Money Now", null, true, false)))),
+            )
+        show()
+
+        rule.onNodeWithText("Apply").assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("applyCode 2"), calls)
+    }
+
+    @Test
+    fun groupsShowTheirHeadings() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes =
+                    codes(
+                        PatchCodeGroup("Player", listOf(PatchCodeRow(0, "Infinite HP", null, false, true))),
+                        PatchCodeGroup("Other", listOf(PatchCodeRow(1, "Max Money", null, false, false))),
+                    ),
+            )
+        show()
+
+        rule.onNodeWithText("PLAYER").assertExists()
+        rule.onNodeWithText("OTHER").assertExists()
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Max Money", substring = true)).assertExists()
+    }
+
+    @Test
+    fun noCodesSaysWhichFileToAdd() {
+        state = GameMenuState(booted = true, codes = codes())
+        show()
+
+        rule.onNodeWithText("No patch codes for this game.").assertExists()
+        rule.onNodeWithText("Add Crash Bandicoot.cht to the cheats folder in your data folder.").assertExists()
+    }
+
+    @Test
+    fun appliedAndErrorsShowInThePanel() {
+        val rows = listOf(PatchCodeRow(0, "Max Money Now", null, true, false))
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, rows)).copy(applied = "Applied: Max Money Now"),
+            )
+        show()
+        rule.onNodeWithText("Applied: Max Money Now").assertExists()
+    }
+
+    @Test
+    fun bLeavesTheCodePanelForItsRow() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(0, "Infinite HP", null, false, false)))),
+            )
+        show()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeCodes"), calls)
+        rule.onNodeWithText("Patch codes").assertIsFocused()
     }
 
     @Test

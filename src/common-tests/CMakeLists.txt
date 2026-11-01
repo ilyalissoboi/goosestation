@@ -1,4 +1,6 @@
 add_executable(common-tests
+  android_disc_groups_tests.cpp
+  ../util/android_disc_groups.cpp
   android_input_keys_tests.cpp
   ../util/android_input_keys.cpp
   bitutils_tests.cpp

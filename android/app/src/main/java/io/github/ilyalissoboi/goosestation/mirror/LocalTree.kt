@@ -34,10 +34,14 @@ object LocalTree {
     /**
      * Writes [source] to [dest] whole or not at all: to `.<name>.goosetmp` in the same folder, synced, then renamed
      * over [dest]. Creates the missing folders. Doesn't close [source].
+     *
+     * A positive [lastModifiedMs] is given to the file before the rename, so [dest] never has another time; otherwise
+     * (0: a document with no time), and if the time can't be set, the file keeps the time of the write.
      */
     fun copyIn(
         source: InputStream,
         dest: File,
+        lastModifiedMs: Long = 0,
     ) {
         val parent = dest.absoluteFile.parentFile ?: throw IOException("$dest has no folder")
         if (!parent.mkdirs() && !parent.isDirectory) throw IOException("Can't create $parent")
@@ -47,6 +51,8 @@ object LocalTree {
                 source.copyTo(out)
                 out.fd.sync()
             }
+            // Only the time shown is wrong if this fails: the mirror records the time the file ends up with.
+            if (lastModifiedMs > 0) temp.setLastModified(lastModifiedMs)
             if (!temp.renameTo(dest)) throw IOException("Can't rename $temp to $dest")
         } catch (e: Throwable) {
             temp.delete()

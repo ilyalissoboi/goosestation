@@ -198,6 +198,20 @@ class MirrorPlannerTest {
     }
 
     @Test
+    fun filePulledWithTheFoldersOldTimeIsPushedOnlyOnceWrittenAndSettled() {
+        // A pull gives the file the folder's time, however old: it's unchanged until written, and the first write
+        // dates it now, so the settle time runs from the write.
+        val pulled = FileState(2, 1_000)
+        val manifest = Manifest(mapOf("memcards/a.mcd" to ManifestEntry(pulled, pulled)))
+        val folder = mapOf("memcards/a.mcd" to pulled)
+        val written = mapOf("memcards/a.mcd" to FileState(2, 50_000))
+
+        assertEquals(emptyList<MirrorAction>(), push(folder, mapOf("memcards/a.mcd" to pulled), manifest))
+        assertEquals(emptyList<MirrorAction>(), push(folder, written, manifest, nowMs = 50_500))
+        assertEquals(listOf(CopyToFolder("memcards/a.mcd")), push(folder, written, manifest, nowMs = 52_000))
+    }
+
+    @Test
     fun memcardsArePushedWhileRunning() {
         val manifest = Manifest(mapOf("memcards/a.mcd" to entry(1, 1)))
 

@@ -19,6 +19,7 @@ import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
+import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
@@ -90,6 +91,27 @@ class MainActivity : ComponentActivity() {
                                 aspectNames = AppController.settingsPages.aspectRatioNames,
                                 vulkanFailed = AppController.settingsPages.vulkanFailed,
                                 onChange = AppController.settingsPages::changeGraphics,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
+                    Screen.Achievements -> {
+                        val page = AppController.achievementsPage
+                        val account = page.account
+                        val settings = page.settings
+                        if (account == null || settings == null) {
+                            SettingsLoadingPage("Achievements", onBack = AppController::closeSettingsPage)
+                        } else {
+                            AchievementsScreen(
+                                account = account,
+                                settings = settings,
+                                signingIn = page.signingIn,
+                                error = page.error,
+                                expired = page.expired,
+                                passwordCleared = page.passwordCleared,
+                                onSignIn = page::signIn,
+                                onSignOut = page::signOut,
+                                onChange = page::change,
                                 onBack = AppController::closeSettingsPage,
                             )
                         }

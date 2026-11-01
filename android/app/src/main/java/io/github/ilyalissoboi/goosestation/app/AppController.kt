@@ -71,6 +71,7 @@ enum class Screen(
     Settings,
     Controllers(SettingsEntry.Controllers),
     Graphics(SettingsEntry.Graphics),
+    Achievements(SettingsEntry.Achievements),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
     Game,
@@ -155,6 +156,9 @@ object AppController : NativeCallbacks {
 
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+
+    /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
+    val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
 
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
@@ -514,6 +518,7 @@ object AppController : NativeCallbacks {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
         when (entry) {
             SettingsEntry.Graphics -> settingsPages.loadGraphics()
+            SettingsEntry.Achievements -> achievementsPage.load()
             SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.Folders -> {}
@@ -1367,6 +1372,10 @@ object AppController : NativeCallbacks {
 
     // On the core's thread, before the core goes on: the token lives only in its memory until it's stored here.
     override fun onAchievementsToken(token: String?) = achievementsToken.store(token)
+
+    override fun onAchievementsLoginExpired() {
+        mainHandler.post { achievementsPage.loginExpired() }
+    }
 
     override fun onFastForwardChanged(enabled: Boolean) {
         mainHandler.post { gameMenu.fastForwardChanged(enabled) }

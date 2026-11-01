@@ -59,12 +59,14 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
@@ -226,8 +228,13 @@ class OrientationLayoutTest {
 
     private fun screen() = bounds(rule.onNodeWithTag(SCREEN))
 
-    /** The settings page's scrolling column, which the page's content shows through. */
-    private fun viewport() = bounds(rule.onNode(hasScrollAction()))
+    /** The settings page's scrolling column, which the page's content shows through (not a text field's scroll). */
+    private fun viewport() =
+        bounds(
+            rule.onNode(
+                hasScrollAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange),
+            ),
+        )
 
     private fun DpRect.describe() = "[$left, $top, $right, $bottom]"
 
@@ -573,7 +580,55 @@ class OrientationLayoutTest {
             assertTextsLaidOut()
             assertTrue(focusedHas("Folders"))
             assertFocusedInView()
-            for (i in 0 until 3) assertShows(NEEDS_CORE, i)
+            for (i in 0 until 4) assertShows(NEEDS_CORE, i)
+        }
+    }
+
+    @Test
+    fun achievementsSignedOut() {
+        eachConfig({
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0),
+                settings = AchievementsSettings(hardcore = true, messages = true, sounds = true, indicators = true),
+                signingIn = false,
+                error = "Invalid username/password.",
+                expired = false,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            assertShows("Invalid username/password.")
+            pressUntilFocused(Key.DirectionDown, "Live indicators")
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun achievementsSignedIn() {
+        eachConfig({
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.NOT_CONNECTED, "a-rather-long-goose-name", "", 0, 0),
+                settings = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true),
+                signingIn = false,
+                error = null,
+                expired = false,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("Sign out"))
+            assertShows("Not connected")
+            pressUntilFocused(Key.DirectionDown, "Live indicators")
+            assertFocusedInView()
         }
     }
 

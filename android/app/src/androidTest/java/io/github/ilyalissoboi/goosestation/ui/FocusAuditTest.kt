@@ -31,12 +31,14 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
@@ -265,6 +267,44 @@ class FocusAuditTest {
             )
         }
 
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun achievementsSignedOut() {
+        show {
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0),
+                settings = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true),
+                signingIn = false,
+                error = null,
+                expired = true,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun achievementsSignedIn() {
+        show {
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.SIGNED_IN, "goose", "Goose", 300, 940),
+                settings = AchievementsSettings(hardcore = true, messages = false, sounds = true, indicators = true),
+                signingIn = false,
+                error = null,
+                expired = false,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }
         rule.assertControllerReady()
     }
 

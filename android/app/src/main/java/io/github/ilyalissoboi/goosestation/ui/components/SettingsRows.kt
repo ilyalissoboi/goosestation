@@ -23,6 +23,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicSecureTextField
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.KeyboardActionHandler
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,9 +43,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -53,13 +62,17 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -403,6 +416,88 @@ fun NavRow(
         }
         if (enabled) {
             Icon(GsIcons.forward, contentDescription = null, tint = colors.inkMuted, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+/**
+ * A text setting: the [label] over a well holding [state]'s text, typed with Android's keyboard. Focus doesn't open
+ * the keyboard, so a D-pad passes through; A, the D-pad centre or a tap do. Up and down leave it, as on any row. A
+ * [password] is a secure field: masked, never offered to keyboards to learn, and read by TalkBack as a password. The
+ * keyboard's action is [imeAction]; Done calls [onDone]. Its content description is [label], as TalkBack reads it.
+ */
+@Composable
+fun TextFieldRow(
+    label: String,
+    state: TextFieldState,
+    modifier: Modifier = Modifier,
+    password: Boolean = false,
+    enabled: Boolean = true,
+    imeAction: ImeAction = ImeAction.Next,
+    onDone: (() -> Unit)? = null,
+) {
+    val colors = GooseStationTheme.colors
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    val field =
+        Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                // A single-line field would move its cursor instead.
+                val direction =
+                    when (event.key) {
+                        Key.DirectionUp -> FocusDirection.Up
+                        Key.DirectionDown -> FocusDirection.Down
+                        else -> null
+                    }
+                if (direction != null) {
+                    if (event.type == KeyEventType.KeyDown) focus.moveFocus(direction)
+                    return@onPreviewKeyEvent true
+                }
+                val opens = event.key == Key.ButtonA || event.key == Key.DirectionCenter
+                if (opens && event.type == KeyEventType.KeyUp) keyboard?.show()
+                opens
+            }.semantics { contentDescription = label }
+            .focusIndicator(focused, colors.focus, GsShapes.small)
+            .heightIn(min = 48.dp)
+            .background(colors.sunken, GsShapes.small)
+            .border(1.dp, colors.lineStrong, GsShapes.small)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
+    val textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.ink)
+    val cursor = SolidColor(colors.beak)
+    val action =
+        KeyboardActionHandler { performDefault ->
+            if (imeAction == ImeAction.Done && onDone != null) onDone() else performDefault()
+        }
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.titleSmall, color = if (enabled) colors.ink else colors.inkFaint)
+        if (password) {
+            BasicSecureTextField(
+                state = state,
+                modifier = field,
+                enabled = enabled,
+                textStyle = textStyle,
+                keyboardOptions = KeyboardOptions(imeAction = imeAction, showKeyboardOnFocus = false),
+                onKeyboardAction = action,
+                cursorBrush = cursor,
+            )
+        } else {
+            BasicTextField(
+                state = state,
+                modifier = field,
+                enabled = enabled,
+                textStyle = textStyle,
+                keyboardOptions =
+                    KeyboardOptions(imeAction = imeAction, autoCorrectEnabled = false, showKeyboardOnFocus = false),
+                onKeyboardAction = action,
+                lineLimits = TextFieldLineLimits.SingleLine,
+                cursorBrush = cursor,
+            )
         }
     }
 }

@@ -268,6 +268,11 @@ object AppController : NativeCallbacks {
     private val gameRecords by lazy { GameRecords(gamePrefs) }
     private val lastSlots by lazy { LastSlots(gamePrefs) }
 
+    // The RetroAchievements login token, sealed with a Keystore key: never in secrets.ini or the data folder.
+    private val achievementsToken by lazy {
+        AchievementsToken(KeystoreCipher(), SharedPreferencesStore(context, "achievements"))
+    }
+
     /** A game's start, which asks first whether to resume where it was left. */
     val gameStarts by lazy {
         GameStarts(
@@ -1143,6 +1148,7 @@ object AppController : NativeCallbacks {
                             resources.absolutePath,
                             biosDir.absolutePath,
                             prefs.installId(),
+                            achievementsToken.load(),
                         ).also {
                             if (it) {
                                 readGridView()
@@ -1358,6 +1364,9 @@ object AppController : NativeCallbacks {
             }
         }
     }
+
+    // On the core's thread, before the core goes on: the token lives only in its memory until it's stored here.
+    override fun onAchievementsToken(token: String?) = achievementsToken.store(token)
 
     override fun onFastForwardChanged(enabled: Boolean) {
         mainHandler.post { gameMenu.fastForwardChanged(enabled) }

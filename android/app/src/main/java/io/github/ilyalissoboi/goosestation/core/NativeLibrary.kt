@@ -18,13 +18,15 @@ object NativeLibrary {
     /**
      * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
-     * settings reset.
+     * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
+     * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken].
      */
     external fun initialize(
         dataRoot: String,
         resourcesRoot: String,
         biosDir: String,
         installId: String,
+        achievementsToken: String?,
     ): Boolean
 
     // The settings calls work on settings.ini, which they save, and can be made from any thread.

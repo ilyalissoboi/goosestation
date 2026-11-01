@@ -100,6 +100,13 @@ bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view i
   Settings::SetDefaultControllerConfig(si);
   Settings::SetDefaultHotkeyConfig(si);
 
+  // Signing in to RetroAchievements belongs to the install, whose token stays with it: this one starts signed out. An
+  // old desktop file may still have the token itself here.
+  si.SetBoolValue("Cheevos", "Enabled", false);
+  si.DeleteValue("Cheevos", "Username");
+  si.DeleteValue("Cheevos", "LoginTimestamp");
+  si.DeleteValue("Cheevos", "Token");
+
   // Its controller indices are another install's: here every controller is new.
   si.DeleteValue(AndroidInputKeys::SETTINGS_SECTION, AndroidInputKeys::DESCRIPTORS_KEY);
 

@@ -27,6 +27,8 @@
 #include "util/input_manager.h"
 #include "util/window_info.h"
 
+#include "common/memory_settings_interface.h"
+
 #include "common/error.h"
 #include "common/file_system.h"
 #include "common/log.h"
@@ -128,7 +130,41 @@ static std::mutex s_initialize_mutex;
 static std::atomic_bool s_initialized{false};
 static bool s_startup_attempted = false; // guarded by s_initialize_mutex
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
-static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
+
+/// The secrets layer, in memory only: the RetroAchievements login token comes from the app's Keystore-sealed store
+/// at startup, and each change the core saves goes back to the app to store (NotifyAchievementsToken). No secrets.ini
+/// is read or written, so the token never reaches the data folder.
+class AndroidSecrets final : public MemorySettingsInterface
+{
+public:
+  explicit AndroidSecrets(std::string token) : m_reported(std::move(token))
+  {
+    if (!m_reported.empty())
+      SetStringValue(SECTION, KEY, m_reported.c_str());
+  }
+
+  bool Save(Error* error = nullptr) override
+  {
+    std::string token;
+    GetStringValue(SECTION, KEY, &token);
+    if (token != m_reported)
+    {
+      m_reported = token;
+      NotifyAchievementsToken(token.empty() ? std::nullopt : std::optional<std::string_view>(token));
+    }
+
+    return true;
+  }
+
+private:
+  static constexpr const char* SECTION = "Cheevos";
+  static constexpr const char* KEY = "Token";
+
+  std::string m_reported;
+};
+
+static std::string s_initial_achievements_token; // until InitializeConfig() makes the secrets layer
+static std::unique_ptr<AndroidSecrets> s_secrets_settings_interface;
 
 // GameList::Refresh() isn't safe to run twice at once.
 static std::mutex s_game_list_refresh_mutex;
@@ -175,7 +211,7 @@ static std::atomic_bool s_vulkan_failed{false};
 } // namespace AndroidHost
 
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
-                             std::string install_id, Error* error)
+                             std::string install_id, std::string achievements_token, Error* error)
 {
   std::unique_lock lock(s_initialize_mutex);
   if (s_initialized)
@@ -189,6 +225,7 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   EmuFolders::DataRoot = Path::Canonicalize(data_root);
   s_bios_dir = Path::Canonicalize(bios_dir);
   s_install_id = std::move(install_id);
+  s_initial_achievements_token = std::move(achievements_token);
   INFO_LOG("DataRoot Directory: {}", EmuFolders::DataRoot);
   INFO_LOG("Resources Directory: {}", EmuFolders::Resources);
   INFO_LOG("BIOS Directory: {}", s_bios_dir);
@@ -280,12 +317,9 @@ bool AndroidHost::InitializeConfig(Error* error)
     return false;
   }
 
-  // Secrets go to secrets.ini next to it, so settings.ini can be shared without them.
-  std::string secrets_filename = Path::Combine(Path::GetDirectory(si.GetFileName()), "secrets.ini");
-  const bool secrets_exist = FileSystem::FileExists(secrets_filename.c_str());
-  s_secrets_settings_interface = std::make_unique<INISettingsInterface>(std::move(secrets_filename));
-  if (secrets_exist && !s_secrets_settings_interface->Load())
-    ERROR_LOG("Failed to load secrets from {}.", s_secrets_settings_interface->GetFileName());
+  // Secrets stay in memory (AndroidSecrets): the app keeps the token, sealed, outside the data folder.
+  s_secrets_settings_interface = std::make_unique<AndroidSecrets>(std::move(s_initial_achievements_token));
+  s_initial_achievements_token = {};
   Host::Internal::SetSecretsSettingsLayer(s_secrets_settings_interface.get());
 
   LoadFolders(si);

@@ -55,7 +55,13 @@ class BindingCaptureTest {
         )
         val resources = Resources.extract(context)
         assertTrue(
-            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+            NativeLibrary.initialize(
+                dataRoot.absolutePath,
+                resources.absolutePath,
+                biosDir.absolutePath,
+                INSTALL_ID,
+                null,
+            ),
         )
         NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", "pad-a")
 

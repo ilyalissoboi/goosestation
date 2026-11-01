@@ -47,6 +47,7 @@ jmethodID s_on_error = nullptr;
 jmethodID s_on_binding_captured = nullptr;
 jmethodID s_on_osd_message = nullptr;
 jmethodID s_on_fast_forward_changed = nullptr;
+jmethodID s_on_achievements_token = nullptr;
 jclass s_argb_image_class = nullptr;
 jmethodID s_argb_image_constructor = nullptr;
 jclass s_game_entry_class = nullptr;
@@ -317,6 +318,28 @@ void AndroidHost::NotifyOsdMessage(std::string_view key, std::string_view text, 
   env->DeleteLocalRef(callbacks);
 }
 
+void AndroidHost::NotifyAchievementsToken(std::optional<std::string_view> token)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  jstring jtoken = token.has_value() ? ToJString(env.get(), token.value()) : nullptr;
+  if (!token.has_value() || jtoken)
+  {
+    env->CallVoidMethod(callbacks, s_on_achievements_token, jtoken);
+    ClearException(env.get());
+  }
+
+  if (jtoken)
+    env->DeleteLocalRef(jtoken);
+  env->DeleteLocalRef(callbacks);
+}
+
 void AndroidHost::NotifyFastForwardChanged(bool enabled)
 {
   ScopedJNIEnv env;
@@ -368,8 +391,9 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     env->GetMethodID(s_callbacks_class, "onOsdMessage",
                      "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
   s_on_fast_forward_changed = env->GetMethodID(s_callbacks_class, "onFastForwardChanged", "(Z)V");
+  s_on_achievements_token = env->GetMethodID(s_callbacks_class, "onAchievementsToken", "(Ljava/lang/String;)V");
   if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
-      !s_on_fast_forward_changed)
+      !s_on_fast_forward_changed || !s_on_achievements_token)
   {
     ClearException(env);
     return JNI_ERR;
@@ -544,11 +568,12 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   JNIEXPORT ret JNICALL Java_io_github_ilyalissoboi_goosestation_core_NativeLibrary_##name
 
 NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
-                                               jstring bios_dir, jstring install_id)
+                                               jstring bios_dir, jstring install_id, jstring achievements_token)
 {
   Error error;
   if (!AndroidHost::Initialize(FromJString(env, data_root), FromJString(env, resources_root),
-                               FromJString(env, bios_dir), FromJString(env, install_id), &error))
+                               FromJString(env, bios_dir), FromJString(env, install_id),
+                               achievements_token ? FromJString(env, achievements_token) : std::string(), &error))
   {
     ERROR_LOG("Initialization failed: {}", error.GetDescription());
     AndroidHost::NotifyError(error.GetDescription());

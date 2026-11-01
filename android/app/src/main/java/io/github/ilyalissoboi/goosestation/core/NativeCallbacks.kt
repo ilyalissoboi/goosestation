@@ -43,4 +43,10 @@ interface NativeCallbacks {
 
     /** Fast forward was turned on or off, by the menu or a hotkey. */
     fun onFastForwardChanged(enabled: Boolean) {}
+
+    /**
+     * The RetroAchievements login token changed: a sign-in's new [token], or null when it's gone (signed out, or
+     * rejected). Keep it before returning: the core keeps it in memory only.
+     */
+    fun onAchievementsToken(token: String?) {}
 }

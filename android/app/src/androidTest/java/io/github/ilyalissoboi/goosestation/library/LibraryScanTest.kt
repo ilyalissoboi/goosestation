@@ -48,6 +48,7 @@ class LibraryScanTest {
                 resources.absolutePath,
                 File(root, "bios").absolutePath,
                 "test-install",
+                null,
             ),
         )
         NativeLibrary.setGameFolders(arrayOf(tree))

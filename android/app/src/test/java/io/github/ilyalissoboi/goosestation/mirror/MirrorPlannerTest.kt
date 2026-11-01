@@ -130,10 +130,10 @@ class MirrorPlannerTest {
 
     @Test
     fun pullIsSortedByPath() {
-        val folder = mapOf("settings.ini" to s(1), "secrets.ini" to s(1), "covers/d" to s(1))
+        val folder = mapOf("settings.ini" to s(1), "playtime.dat" to s(1), "covers/d" to s(1))
 
         assertEquals(
-            listOf(CopyToLocal("covers/d"), CopyToLocal("secrets.ini"), CopyToLocal("settings.ini")),
+            listOf(CopyToLocal("covers/d"), CopyToLocal("playtime.dat"), CopyToLocal("settings.ini")),
             pull(folder, emptyMap(), none),
         )
     }
@@ -328,6 +328,9 @@ class MirrorPlannerTest {
         assertEquals(listOf(CopyToLocal("mycheats/a.cht")), MirrorPlanner.pull(folder, emptyMap(), none, layout, never))
         assertEquals(emptyList<MirrorAction>(), pull(folder, emptyMap(), none))
     }
+
+    @Test
+    fun secretsIniIsNeverCopied() = assertNothingPlanned(listOf("secrets.ini"))
 
     /** No action, in either direction, for [paths] on any side, changed or not, known to the manifest or not. */
     private fun assertNothingPlanned(paths: List<String>) {

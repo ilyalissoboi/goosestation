@@ -6,7 +6,7 @@
 #include "settings_interface.h"
 #include <string>
 
-class MemorySettingsInterface final : public SettingsInterface
+class MemorySettingsInterface : public SettingsInterface
 {
 public:
   MemorySettingsInterface();

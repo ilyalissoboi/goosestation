@@ -74,6 +74,10 @@ class MainActivity : ComponentActivity() {
                             osdExpiry = AppController.osd.nextExpiry(),
                             onOsdExpire = AppController.osd::expire,
                             badge = AppController.badges::image,
+                            card = AppController.achievementOverlay.card,
+                            indicators = AppController.achievementOverlay.indicators,
+                            overlayExpiry = AppController.achievementOverlay.nextExpiry(),
+                            onOverlayExpire = AppController.achievementOverlay::expire,
                         )
                     Screen.Settings ->
                         SettingsScreen(

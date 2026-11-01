@@ -4,13 +4,21 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import android.os.SystemClock
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isFocusable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.AchievementNotice
+import io.github.ilyalissoboi.goosestation.app.AchievementOverlay
+import io.github.ilyalissoboi.goosestation.app.CardKind
 import io.github.ilyalissoboi.goosestation.app.OsdMessage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -86,5 +94,89 @@ class OsdLayerTest {
         rule.waitUntil(2_000) { expired > 0 }
 
         assertEquals(1, expired)
+    }
+
+    private val unlock =
+        AchievementNotice.Card(CardKind.Unlock, "Sparx Rescue", "Free the first dragon", "", 5)
+
+    private fun showOverlay(
+        card: AchievementNotice.Card? = unlock,
+        indicators: List<AchievementOverlay.Indicator> = emptyList(),
+        width: Int = 960,
+    ) {
+        rule.setContent {
+            GooseStationTheme {
+                Box(Modifier.requiredSize(width.dp, 540.dp).testTag("screen")) {
+                    OsdLayer(emptyList(), false, null, {}, card = card, indicators = indicators)
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun anUnlockCardShowsAtTheTopCentre() {
+        showOverlay()
+
+        val screen = rule.onNodeWithTag("screen").getUnclippedBoundsInRoot()
+        val card = rule.onNodeWithText("Sparx Rescue").getUnclippedBoundsInRoot()
+        assertTrue("near the top", card.top - screen.top < 120.dp)
+        val middle = (card.left + card.right) / 2 - screen.left
+        assertTrue("centred: $middle", middle > 330.dp && middle < 630.dp)
+    }
+
+    @Test
+    fun anUnlockCardSaysWhatItIs() {
+        showOverlay()
+
+        rule.onNodeWithText("ACHIEVEMENT UNLOCKED").assertExists()
+        rule.onNodeWithText("Free the first dragon").assertExists()
+        rule.onNodeWithText("5").assertExists()
+    }
+
+    @Test
+    fun aMasteryCardSaysSo() {
+        showOverlay(AchievementNotice.Card(CardKind.Mastery, "Mastered Spyro", "40 achievements", "", null))
+
+        rule.onNodeWithText("SET MASTERED").assertExists()
+        rule.onNodeWithText("Mastered Spyro").assertExists()
+    }
+
+    @Test
+    fun indicatorsShowAtTheBottomRight() {
+        showOverlay(
+            card = null,
+            indicators = listOf(AchievementOverlay.Indicator(AchievementOverlay.TRACKER, 1, "0:12.3", "")),
+        )
+
+        val screen = rule.onNodeWithTag("screen").getUnclippedBoundsInRoot()
+        val tracker = rule.onNodeWithText("0:12.3").getUnclippedBoundsInRoot()
+        assertTrue("at the bottom", screen.bottom - tracker.bottom < 100.dp)
+        assertTrue("at the right", screen.right - tracker.right < 100.dp)
+    }
+
+    @Test
+    fun aLongCardWrapsOnANarrowScreen() {
+        showOverlay(
+            AchievementNotice.Card(
+                CardKind.Unlock,
+                "Collect every gem in every world without losing a single life",
+                "In one sitting, from a new game, on the hardest difficulty the game has",
+                "",
+                25,
+            ),
+            width = 360,
+        )
+
+        val screen = rule.onNodeWithTag("screen").getUnclippedBoundsInRoot()
+        val text = rule.onNodeWithText("In one sitting", substring = true).getUnclippedBoundsInRoot()
+        assertTrue("inside the screen", text.right <= screen.right && text.left >= screen.left)
+    }
+
+    @Test
+    fun theOverlayIsntFocusable() {
+        showOverlay(indicators = listOf(AchievementOverlay.Indicator(AchievementOverlay.CHALLENGE, 1, "", "")))
+
+        assertEquals(0, rule.onAllNodes(isFocusable()).fetchSemanticsNodes().size)
     }
 }

@@ -22,6 +22,7 @@ import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
+import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
@@ -128,6 +129,7 @@ class MainActivity : ComponentActivity() {
                                 onCapture = AppController::captureBinding,
                                 hotkeys = state.hotkeys.orEmpty(),
                                 onCaptureHotkey = AppController::captureHotkey,
+                                glyphs = state.port1Type in GLYPH_TYPES,
                                 onCancelCapture = AppController::cancelCapture,
                                 onClear = AppController::clearBinding,
                                 onUndo = AppController.controllersPage::undo,

@@ -416,8 +416,11 @@ by the ones setup picked. That happens once; other settings are kept.
 when a page opens, A or Enter activates, and B or Back goes back. Back from a page focuses its entry in the hub, and
 Back from the hub focuses **Settings** in the library. A setting with several values shows its current one between
 two arrows: left and right step through the values, stopping at the first and the last, and each step is the change;
-A, Enter or a tap on the row step forward, round to the first after the last, and a tap on an arrow steps its way. A
-value's own note, such as "made for NTSC-J", shows under the row while it's the current one. An on/off setting is a
+a tap on an arrow steps its way. A, Enter or a tap on the row open its choices as a list under it, in the page: each
+value with its note, the current one marked and focused. Up and down move through the list (the focus stays in it),
+A picks a value and closes the list, and B, Back or a tap on the row close it with nothing changed; a tap elsewhere
+closes it and does what it would have. One list is open at a time. A value's own note, such as "made for NTSC-J",
+shows under the row while it's the current one. An on/off setting is a
 square toggle, which A, Enter or a tap flip. Touch works too.
 
 - **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
@@ -528,8 +531,10 @@ across restarts, whatever order the controllers connect in.
   so an A pressed as the page opens captures nothing, and Down reaches the first binding. A controller connecting or
   going doesn't move a focus already in the page, nor a capture's row. Then "Every connected controller drives Port 1.
   Each one keeps its own mapping."
-- Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on), with the binding's
-  name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
+- Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on). On a digital pad
+  or DualShock (`[Pad1] Type`), each input shows as its PlayStation button: the face buttons as their symbols in their
+  colours, the D-pad, the sticks with their direction, the shoulder buttons, Select and Start; screen readers say its
+  name. Other controller types keep the names. Each row has the binding's name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
   <n>` for any other key, or `Not set`. Picking another controller shows "Reading <name>'s bindings…" in their place
   until its own are read.
 - A on a row asks for the input: "Press the new button for <input>… Back cancels (5)", counting down. The controller's
@@ -918,6 +923,27 @@ pad connects as `Odin Controller` (descriptor `8e1073ea…`); its key layout (`V
 | Vulkan during the user's steps | The user's Ace Combat 3 ran on Vulkan at 4x (12:13:03 to 12:14:33) with no crash; at 12:16 the crash buffer still held only the 01:30 crash. |
 | Crash buffer | **Not empty**: it holds the Vulkan crash above (saved as `thor/crash-1.txt`; the buffer was cleared afterwards). No other crash. That crash is fixed in `652a4f808` (see the Vulkan row): 0 crashes in 4 on the emulator after it, where it was 4 in 4 before, and a native test covers it. Checked again on 2026-10-30 with the fix: empty after the recheck and the user's steps. |
 
+Checked on 2026-11-01 with the debug APK built from `fdce23d5f` (PR #34), installed over the previous build with its
+data kept. The user drove the checks with the built-in pad.
+
+| Check | Result |
+| --- | --- |
+| Choice lists (checklist step 10) | User-reported: as expected. On Graphics, A opened each row's list on its current value, up and down moved and stopped at the ends, A picked a value, B closed a list unchanged, and left and right still stepped a closed row. |
+| PlayStation glyphs (checklist step 10) | User-reported: as expected. Every Port 1 row on Controllers showed its glyph, readable at the system's largest font size, and the hotkey rows kept their words. |
+| Hotkeys set (checklist step 9) | Pass. With Select held: `Captured Button105 for ToggleFastForward` (R2) at 01:56:54.694, `Captured Button102 for Screenshot` (L1) at 01:56:59.922, and `Captured Button99 for ToggleAnalogMode` (X) at 01:57:09.495, replacing R1 set 12 s earlier. On the Thor, X is `BTN_NORTH` (`getevent`). |
+| Hotkeys in padtest | User-reported: as expected (each chord fired, padtest lit neither Select nor the button; a Select tap lit it briefly, a held one from about half a second). Select + X four times gave four "locked to analog mode by the game" messages (padtest locks it), one each. Of 12 Select + Start presses, only the one held 1.57 s opened the menu (`AAudioStream_requestPause` at 01:58:15.700). |
+| Select held in a game | User-reported: as expected in Ace Combat 3. 13 Select presses alone, held up to 2 s, fired no hotkey. |
+| Analog mode hotkey in a game | Pass in Ace Combat 3: 12 Select + X chords gave 12 toggles, each about 130 ms after the press, four in a row at 02:00:52–54 included; X alone 11 times toggled nothing. The core's own log line names the mode before the toggle (`SetAnalogMode` logs the old value); its on-screen message, which the app shows, names the new one. |
+| Select + Square's button in a game | User-reported: as expected; the hotkey fired and Square didn't happen in Ace Combat 3. |
+| Screenshot hotkey | Pass. Select + L1 in Ace Combat 3 at 02:07:53 saved `… 2026-11-01-02-07-53.png` to `screenshots`, mirrored to the data folder. |
+| Exit over a resume state | Ace Combat 3 resumed from `SLPS-02020_resume.sav` (01:58:47); Exit game at 02:02:00 replaced it 4 s later (`State saved to 'SLPS-02020_resume.sav'`). Keep it and B: user-reported as expected; they leave nothing in the log, and the game wasn't started again after Keep it. |
+| Scrolling and focus rings | User-reported: as expected. |
+| Crash buffer | Pass: empty before (01:55) and after (02:08). |
+
+padtest saved a resume state on Exit (`HASH-9FDA0E1A56D8DF5B_resume.sav`, 01:58:34): the core gives a PS-EXE its
+content-hash ID in the serial's place, and its slots, resume state and resume prompt key on it as on a serial. That's
+by design (#35 corrects the design's wording, which said such a game had no serial and saved none).
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
@@ -1109,3 +1135,10 @@ adb logcat -v time > thor.log
    - Exiting a game that's still starting (it saves no resume state) is too quick to try by hand on the Thor; it's
      covered by `InGameMenuTest.exitBeforeTheBootSavesNothing` and `GameMenuTest.gameRowsWaitForTheBoot`.
    - [ ] `adb logcat -b crash -d` is empty.
+
+10. **Choice lists and PlayStation glyphs.** With the build that has them.
+   - [ ] On Graphics, A on each row opens its list, with the current value focused and marked. Up and down move and
+     stop at the ends; A on another value picks it, and the row shows it; B closes a list with nothing changed. Left
+     and right on a closed row still step.
+   - [ ] On Controllers, every Port 1 row shows its PlayStation glyph (△ ○ × □ in their colours, the D-pad, sticks,
+     L1–R3, Select, Start), readable with the system's largest font size; the hotkey rows keep their words.

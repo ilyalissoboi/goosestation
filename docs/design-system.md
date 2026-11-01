@@ -16,6 +16,7 @@ with an orange beak, on the dark water of a night pond.
 | --- | --- |
 | The values (colours in both themes, type, spacing, radii, sizes), machine-readable | [`docs/design-system/tokens.json`](design-system/tokens.json) |
 | The UI icons, as SVG | [`docs/design-system/icons/`](design-system/icons/) |
+| The PlayStation button glyphs, as SVG, one per core input name | [`docs/design-system/pad-glyphs/`](design-system/pad-glyphs/) |
 | The goose mark, app icon and one-colour mark, as SVG | [`docs/design-system/logos/`](design-system/logos/) |
 | The full goose illustration | [`data/resources/images/goosestation.png`](../data/resources/images/goosestation.png) |
 | The Android theme, icons, mark | `android/app/src/main/java/io/github/ilyalissoboi/goosestation/ui/theme/` |
@@ -87,6 +88,7 @@ has) and **Light** (for the desktop app, later). Values are in `tokens.json`; th
 | `success` / `success-soft` | `#3cc9b4` / `#12302d` | `#0b6e64` / `#d5efeb` | Done and safe. Teal, so it never relies on hue to differ from danger. |
 | `warning` / `warning-soft` | `#f5c542` / `#3a3014` | `#7a5800` / `#f7ecc8` | Needs a look, nothing lost. |
 | `danger` / `danger-soft` | `#ff6b81` / `#3d1820` | `#b01e3a` / `#f9dde2` | Failed, or destroys something. |
+| `ps-triangle`, `ps-circle`, `ps-cross`, `ps-square` | `#3fd6a6`, `#ff6b6b`, `#7aa7ff`, `#f28ad6` | `#0b7a5a`, `#c42b2b`, `#2b57c4`, `#a8338e` | The PlayStation face symbols in pad glyphs only, 3:1 or more on `sunken`. |
 | `scrim` | 72% black | 48% ink | Dims what's under a dialog or the pause menu. |
 | `viewport`, `osd`, `osd-ink`, `touch*` | | | Over the game picture: the same in both themes. |
 
@@ -223,11 +225,18 @@ SettingsPage("Graphics", onBack = onBack) {
 }
 ```
 
-- `SettingsPage`: the title in `title-1`, the rows in a scrolling column, B and Back going back.
-- `CyclerRow`: a setting with a few values, shown between two arrows. Left and right step and stop at the ends; A,
-  Enter or a tap step forward, round to the first; a tap on an arrow steps its way. Each step is the change. A
+- `SettingsPage`: the title in `title-1`, the rows in a scrolling column, B and Back going back. It keeps one choice
+  list open at a time; a tap outside an open list closes it and still does what it would have.
+- `CyclerRow`: a setting with a few values, shown between two arrows. Left and right step and stop at the ends; a tap
+  on an arrow steps its way. Each step is the change. A, Enter or a tap on the row open its choice list. A
   `Choice`'s `note` shows under the row while it's the current value. Values that aren't among the choices show as
   themselves. For more than about eight values, or values that need explaining, make a page of its own instead.
+- The choice list: a `CyclerRow`'s choices, open in the page under its label line (never a window), on `sunken` at
+  `radius-md` with a `line-strong` edge. Each choice is a 48 dp row with its label in `label` and its note in
+  `body-sm` `ink-muted`; the current one is on `beak-soft` with a `check` in `beak-ink`. The focus starts on the
+  current choice and stays in the list; up and down move it, left and right do nothing. Nothing changes until A on a
+  choice, which picks it and closes the list; B, Back or a tap on the row close it unchanged. The focus goes back to
+  the row, and the arrows are faint while it's open.
 - `SwitchRow`: on/off, a square toggle and no word. The state is in the row's semantics (`toggleableState`), so
   screen readers say it and tests check it with `assertIsOn()`.
 - `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.
@@ -285,6 +294,24 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
 
 The goose mark, drawn in code from `logos/goose-mark.svg`'s polygons. Full colour, for dark grounds only. It sits
 beside a screen's title on the library and setup screens.
+
+## Pad glyphs
+
+Port 1's inputs on the Controllers page are shown as the PlayStation controller's buttons, not their names: `PsGlyph(name,
+contentDescription)` in `PsGlyph.kt`, drawn as in [`docs/design-system/pad-glyphs/`](design-system/pad-glyphs/), one
+SVG per core input name (`Triangle`, `LLeft`, …).
+
+- **The icon style, 24 units tall:** 2-unit strokes, square caps, mitred corners, the octagon for a round button.
+- **Face buttons:** an octagon on `sunken` with a `line-strong` edge, the symbol inside in its `ps-*` colour (the
+  circle is a true circle: it's the symbol, not a housing). **D-pad:** the plus in `ink`, the pressed arm filled.
+  **Sticks:** the octagon, L or R in the middle and an arrowhead for the direction; **L3 and R3** add a pressed-in
+  inner octagon. **Shoulder buttons:** a tab on `sunken` with the label inside. **Select and Start:** a bar and a
+  right-pointing triangle, with their word in capitals.
+- Labels are the `text` family, bold. Glyphs show 32 dp tall and grow with the font scale; widths follow the
+  drawings (24, 30, 54 for Start, 60 for Select).
+- Screen readers hear the input's name ("Left Stick Left"), never the labels.
+- Only on Port 1's rows, and only for a digital pad or DualShock; any other type, or a name without a glyph, keeps
+  its words. The player's own controller's buttons are always words.
 
 ## Icons
 

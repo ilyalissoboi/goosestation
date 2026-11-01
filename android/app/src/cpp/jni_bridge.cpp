@@ -982,6 +982,12 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstr
   return ToPadBindingArray(env, AndroidHost::GetPadBindings(FromJString(env, descriptor)));
 }
 
+NATIVE_LIBRARY_FUNCTION(jstring, getPort1ControllerType)(JNIEnv* env, jobject)
+{
+  const std::optional<std::string> type = AndroidHost::GetPort1ControllerType();
+  return type.has_value() ? ToJString(env, type.value()) : nullptr;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getHotkeyBindings)(JNIEnv* env, jobject, jstring descriptor)
 {
   return ToPadBindingArray(env, AndroidHost::GetHotkeyBindings(FromJString(env, descriptor)));

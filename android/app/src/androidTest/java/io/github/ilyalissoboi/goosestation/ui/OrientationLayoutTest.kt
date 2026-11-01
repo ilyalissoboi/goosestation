@@ -29,6 +29,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -123,6 +124,15 @@ class OrientationLayoutTest {
                 "landscape 640x360" to DpSize(640.dp, 360.dp),
                 "landscape 960x540" to DpSize(960.dp, 540.dp),
             )
+
+        /** The first choice of each Graphics row, the end the list's focus can go up to. */
+        val CHOICE_FIRST =
+            mapOf(
+                "Renderer" to "Automatic",
+                "Internal resolution" to "Match the screen",
+                "Aspect ratio" to "The game's own",
+            )
+
         val CONFIGS = SIZES.flatMap { (name, size) -> listOf(1f, 1.3f).map { Config(name, size, it) } }
 
         val PAD = ConnectedController(deviceId = 5, name = "Goose Virtual Pad", descriptor = "pad-a")
@@ -528,6 +538,72 @@ class OrientationLayoutTest {
     }
 
     @Test
+    fun graphicsWithEachListOpen() {
+        eachConfig({
+            var settings by remember { mutableStateOf(GraphicsSettings("Software", 12, "21:9", showFps = true)) }
+            GraphicsScreen(settings, ASPECT_NAMES, vulkanFailed = true, onChange = { settings = it }, onBack = {})
+        }) {
+            // Each row's list, from its first choice to its last (the value from settings.ini), every one in view.
+            for (
+            (row, last) in
+            listOf(
+                "Renderer" to "Software (from settings.ini)",
+                "Internal resolution" to "12x (from settings.ini)",
+                "Aspect ratio" to "21:9 (from settings.ini)",
+            )
+            ) {
+                pressUntilFocused(Key.DirectionDown, row)
+                press(Key.ButtonA)
+                assertTextsLaidOut()
+                assertFocusedInView()
+                pressUntilFocused(Key.DirectionUp, CHOICE_FIRST[row]!!)
+                pressUntilFocused(Key.DirectionDown, last)
+                assertTextsLaidOut()
+                press(Key.ButtonB)
+                assertTrue("B didn't close $row's list: the focus is on ${focusedText()}", focusedHas(row))
+            }
+        }
+    }
+
+    @Test
+    fun biosWithItsListOpen() {
+        val images =
+            listOf(
+                BiosImage("ps-30j.bin", SCPH5500, "NTSC-J"),
+                BiosImage("scph1001.bin", "SCPH-1001, DTLH-3000 (v2.2 12-04-95 A)", "NTSC-U"),
+                BiosImage("scph7502.bin", "SCPH-7502 (v4.1 12-16-97 E)", "PAL"),
+            )
+        val auto = mapOf(BiosRegion.NtscU to SCPH5500, BiosRegion.NtscJ to SCPH5500, BiosRegion.Pal to null)
+        eachConfig({
+            BiosScreen(
+                images = images,
+                auto = auto,
+                overrides = mapOf(BiosRegion.Pal to "scph5552.bin"),
+                fastBoot = true,
+                onSetOverride = { _, _ -> },
+                onFastBoot = {},
+                onBack = {},
+            )
+        }) {
+            assertTrue(focusedHas("NTSC-U (Americas)"))
+            press(Key.ButtonA)
+            assertTextsLaidOut()
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "SCPH-7502")
+            assertTextsLaidOut()
+            press(Key.ButtonB)
+
+            // The PAL row's list, from the settings.ini name (its last choice, current) up to Automatic.
+            pressUntilFocused(Key.DirectionDown, "PAL (Europe)")
+            press(Key.ButtonA)
+            assertTrue(focusedHas("scph5552.bin (from settings.ini)"))
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionUp, "Automatic")
+            assertTextsLaidOut()
+        }
+    }
+
+    @Test
     fun biosWithLongNames() {
         val images =
             listOf(
@@ -620,6 +696,46 @@ class OrientationLayoutTest {
             assertShows("Every connected controller drives Port 1")
         }
     }
+
+    @Test
+    fun controllersWithGlyphsAtLargeText() {
+        eachConfig({
+            ControllersScreen(
+                controllers = listOf(PAD),
+                labels = emptyMap(),
+                selected = PAD.descriptor,
+                bindings = BINDINGS,
+                hotkeys = HOTKEYS,
+                bindingsFor = PAD.descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                glyphs = true,
+            )
+        }) {
+            assertTextsLaidOut()
+            // Every row, its glyph and binding, reached with the D-pad and all in view, to the last input.
+            var steps = 0
+            while (!focusedDescribedAs("Right Stick Right")) {
+                assertTrue("the D-pad never reached Right Stick Right", steps++ < 60)
+                press(Key.DirectionDown)
+                assertFocusedInView()
+            }
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "Reset to defaults")
+        }
+    }
+
+    private fun focusedDescribedAs(name: String) =
+        rule.onAllNodes(isFocused() and hasContentDescription(name)).fetchSemanticsNodes().isNotEmpty()
 
     @Test
     fun controllersWithOnePadAndNone() {

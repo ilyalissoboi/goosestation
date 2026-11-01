@@ -26,6 +26,9 @@ class FakeCoreApi(
     /** Each pad's place in the descriptor table, by descriptor; a pad not in it has none. */
     var indices = emptyMap<String, Int>()
 
+    /** Port 1's controller type, as the core names it. */
+    var port1Type: String? = "AnalogController"
+
     /** Runs once, as the next read of the Graphics or the BIOS page reaches the core, as if the user acted meanwhile. */
     var duringRead: () -> Unit = {}
 
@@ -40,6 +43,8 @@ class FakeCoreApi(
         calls += "setPadBinding $descriptor $name $binding"
         bindings[name] = binding
     }
+
+    override fun getPort1ControllerType(): String? = port1Type
 
     override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
         hotkeys.map { (name, binding) -> PadBinding(name, name, PadBindingKind.Button, binding) }

@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 interface CoreApi {
     fun getPadBindings(descriptor: String): List<PadBinding>?
 
+    fun getPort1ControllerType(): String?
+
     fun setPadBinding(
         descriptor: String,
         name: String,
@@ -56,6 +58,8 @@ interface CoreApi {
 object NativeCoreApi : CoreApi {
     override fun getPadBindings(descriptor: String): List<PadBinding>? =
         NativeLibrary.getPadBindings(descriptor)?.toList()
+
+    override fun getPort1ControllerType(): String? = NativeLibrary.getPort1ControllerType()
 
     override fun setPadBinding(
         descriptor: String,

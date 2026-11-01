@@ -38,9 +38,17 @@ import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
+import io.github.ilyalissoboi.goosestation.ui.components.PsGlyph
+import io.github.ilyalissoboi.goosestation.ui.components.PsGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
+
+/**
+ * The Port 1 controller types whose inputs show as PlayStation glyphs (`[Pad1] Type`, as the core names it). Other
+ * types reuse the names for other things, such as the PlayStation Mouse's Left and Right buttons.
+ */
+val GLYPH_TYPES = setOf("DigitalController", "AnalogController")
 
 /** The hotkeys' names, by the core's: they're the app's words, not the core's. */
 private val HOTKEY_LABELS =
@@ -84,6 +92,7 @@ fun ControllersScreen(
     onBack: () -> Unit,
     hotkeys: List<PadBinding> = emptyList(),
     onCaptureHotkey: (String) -> Unit = {},
+    glyphs: Boolean = false,
 ) {
     val first = remember { FocusRequester() }
     var focusInPage by remember { mutableStateOf(false) }
@@ -141,6 +150,7 @@ fun ControllersScreen(
             bindings.forEach { binding ->
                 BindingRow(
                     binding = binding,
+                    glyph = glyphs,
                     prompt =
                         if (capturing == binding.name) {
                             "Press the new button for ${binding.displayName}… Back cancels ($secondsLeft)"
@@ -186,7 +196,8 @@ fun ControllersScreen(
 }
 
 /**
- * One of Port 1's inputs: its name and what it's bound to, or the [prompt] while it's captured; then its Clear, or
+ * One of Port 1's inputs: its name (its PlayStation glyph, with [glyph], if it has one) and what it's bound to, or the
+ * [prompt] while it's captured; then its Clear, or
  * its Undo while [undo] is set, which goes ([onDropUndo]) once the focus leaves the row. Once Undo is pressed, the
  * button is "Undone" and does nothing until the focus leaves the row, so a second press doesn't clear what it put
  * back. The prompt is longer than a binding's name, so the row grows: it's kept in view, as when it was focused.
@@ -200,6 +211,7 @@ private fun BindingRow(
     onClear: () -> Unit,
     onUndo: () -> Unit,
     onDropUndo: () -> Unit,
+    glyph: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     val inView = remember { BringIntoViewRequester() }
@@ -231,7 +243,11 @@ private fun BindingRow(
                     .focusRing(role = Role.Button, onClick = onCapture)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             label = {
-                Text(binding.displayName, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+                if (glyph && PsGlyphs.has(binding.name)) {
+                    PsGlyph(binding.name, binding.displayName)
+                } else {
+                    Text(binding.displayName, style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+                }
             },
             value = {
                 Text(

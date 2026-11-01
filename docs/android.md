@@ -1035,6 +1035,21 @@ padtest saved a resume state on Exit (`HASH-9FDA0E1A56D8DF5B_resume.sav`, 01:58:
 content-hash ID in the serial's place, and its slots, resume state and resume prompt key on it as on a serial. That's
 by design (#35 corrects the design's wording, which said such a game had no serial and saved none).
 
+Checked on 2026-11-01 with the debug APK built from `79b977125` (part 2), installed over the previous build with its
+data kept, then again with `1ffdb2763` for the fix below. The user drove the checks (checklist step 11) with the
+built-in pad. The games folder held both Ace Combat 3 CHDs, their M3U and a CUE copy of disc 1, and the data folder a
+test `Ace Combat 3 Electrosphere.cht` of eight copies of real Ace Combat 3 codes, in three groups, one `[*]`.
+
+| Check | Result |
+| --- | --- |
+| One tile per game | User-reported: as expected. The M3U was one tile; the CUE copy, a tile of its own. |
+| Change disc | Pass. Disc 2, then 1, then 2 went in (`Disc 2 of 'Ace Combat 3 Electrosphere' is in.` at 17:41:49, 17:42:23), with "Disc 2 inserted"; B went back to the row. |
+| A state finds its disc | Pass. Slot 1, saved while playing the CUE copy, loaded from the M3U on disc 1 (`The state's disc 'AC3 Disc 1 (CUE).cue' is disc 1 here: …m3u`, 17:42:44 and 17:43:17), found by its serial. |
+| Patch codes | User-reported: as expected. 11 codes (the player's eight, then the database's three: its ungrouped Infinite Missiles is a code of its own beside the player's in Weapons, as codes are told apart by group and name), the `[*]` one on, long names cut at two lines, the list scrolling. The switches held across disc changes and a restart (`cheats/SLPS-02020.patchcodes`: `on … Copy 1 of Infinite Missiles`), and the player's file was unchanged. |
+| B out of the Patch codes panel | **Failed, then fixed.** The row had the focus but the menu showed its top: the panel's focused row went first, and the focus landed for a moment on another row, whose scroll outlasted the Patch codes row's. Fixed in `1ffdb2763` (the menu gives the focus back before a side panel goes); user-reported: as expected with the fix. |
+| Input | User-reported: nothing pressed in the menu or its panels reached the game, and nothing stayed held. |
+| Crash buffer | Pass: empty before (17:35) and after (18:42). |
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
@@ -1233,3 +1248,13 @@ adb logcat -v time > thor.log
      and right on a closed row still step.
    - [ ] On Controllers, every Port 1 row shows its PlayStation glyph (△ ○ × □ in their colours, the D-pad, sticks,
      L1–R3, Select, Start), readable with the system's largest font size; the hotkey rows keep their words.
+11. **Discs and patch codes.** With the build that has them, an M3U set with its discs in the games folder, and a
+    player's `cheats/<game title>.cht` in the data folder with a few codes in groups, one marked `[*]`.
+   - [ ] The set is one tile (the M3U); a separate CUE copy of a disc is a tile of its own.
+   - [ ] Change disc comes after Load state with "Disc 1 of 2"; its panel focuses the disc in the drive, marked
+     Current; another disc goes in with "Disc 2 inserted"; B goes back to the row.
+   - [ ] With disc 2 in, a slot saved on disc 1 reads "Saved · Disc 1" and loads on disc 1.
+   - [ ] Patch codes comes after Screenshot; its groups, the `[*]` code on, long names wrapping at two lines, every
+     row reached with the D-pad and seen whole; switching codes keeps the menu open; B goes back to the row, in view.
+   - [ ] The switches hold across a disc change and an Exit and restart; the player's file is unchanged.
+   - [ ] Nothing pressed in the panels reaches the game.

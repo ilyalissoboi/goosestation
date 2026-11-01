@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameEntry
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -34,7 +35,7 @@ class InGameMenuTest {
                 onExit = { calls += "exit $it" },
             )
         if (booted) {
-            menu.gameStarted(SERIAL)
+            menu.gameStarted(game(SERIAL))
             runCurrent()
         }
         calls.clear()
@@ -128,8 +129,8 @@ class InGameMenuTest {
             assertEquals(
                 listOf(
                     "getSaveStateTimes $SERIAL",
-                    "getSaveStateScreenshot $SERIAL 1",
-                    "getSaveStateScreenshot $SERIAL 2",
+                    "getSaveStatePreview $SERIAL 1",
+                    "getSaveStatePreview $SERIAL 2",
                 ),
                 calls,
             )
@@ -189,7 +190,7 @@ class InGameMenuTest {
             menu.pickSlot(2)
             runCurrent()
 
-            assertEquals(listOf("saveState 2", "message Saved to slot 2", "resume"), calls)
+            assertEquals(listOf("saveState $SERIAL 2", "message Saved to slot 2", "resume"), calls)
             assertNull(menu.state.slots)
             assertEquals(2, lastSlots.get(SERIAL))
         }
@@ -214,7 +215,7 @@ class InGameMenuTest {
             menu.pickSlot(3)
             menu.confirmReplace()
             runCurrent()
-            assertEquals(listOf("saveState 3", "message Saved to slot 3", "resume"), calls)
+            assertEquals(listOf("saveState $SERIAL 3", "message Saved to slot 3", "resume"), calls)
         }
 
     @Test
@@ -230,7 +231,7 @@ class InGameMenuTest {
             menu.pickSlot(2)
             runCurrent()
 
-            assertEquals(listOf("saveState 2"), calls)
+            assertEquals(listOf("saveState $SERIAL 2"), calls)
             assertEquals(
                 "Couldn't save to slot 2: No space left on device.",
                 menu.slots().error,
@@ -251,7 +252,7 @@ class InGameMenuTest {
             menu.pickSlot(1)
             runCurrent()
 
-            assertEquals(listOf("loadState 1", "message Loaded slot 1", "resume"), calls)
+            assertEquals(listOf("loadState $SERIAL 1", "message Loaded slot 1", "resume"), calls)
             assertEquals(1, lastSlots.get(SERIAL))
         }
 
@@ -268,7 +269,7 @@ class InGameMenuTest {
             menu.pickSlot(1)
             runCurrent()
 
-            assertEquals(listOf("loadState 1"), calls)
+            assertEquals(listOf("loadState $SERIAL 1"), calls)
             assertEquals("Couldn't load slot 1: The save state is from another version.", menu.slots().error)
             assertNull(lastSlots.get(SERIAL))
         }
@@ -285,7 +286,7 @@ class InGameMenuTest {
             menu.pickSlot(SaveSlots.RESUME)
             runCurrent()
 
-            assertEquals(listOf("loadState -1", "message Loaded your resume state", "resume"), calls)
+            assertEquals(listOf("loadState $SERIAL -1", "message Loaded your resume state", "resume"), calls)
         }
 
     @Test
@@ -339,7 +340,7 @@ class InGameMenuTest {
     fun aGameWithoutASerialHasNoSlots() =
         runTest {
             val menu = menu(booted = false)
-            menu.gameStarted("")
+            menu.gameStarted(game(""))
             runCurrent()
 
             menu.openSlots(SlotMode.Save)
@@ -456,7 +457,10 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
 
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -474,7 +478,7 @@ class InGameMenuTest {
     fun aGameWithoutASerialExitsWithoutSaving() =
         runTest {
             val menu = menu(booted = false)
-            menu.gameStarted("")
+            menu.gameStarted(game(""))
             runCurrent()
             calls.clear()
 
@@ -497,7 +501,7 @@ class InGameMenuTest {
                 listOf(
                     "savesResumeState",
                     "getSaveStateTimes $SERIAL",
-                    "saveResumeState",
+                    "saveResumeState $SERIAL",
                     "exit No space left on device.",
                 ),
                 calls,
@@ -514,7 +518,10 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
 
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -526,7 +533,10 @@ class InGameMenuTest {
             menu.resume()
             runCurrent()
 
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -571,7 +581,10 @@ class InGameMenuTest {
             menu.confirmExit()
             runCurrent()
             assertFalse(menu.state.confirmingExit)
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -617,13 +630,13 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
             assertEquals(500L, menu.state.replacingResume)
-            assertTrue(calls.none { it == "saveResumeState" || it.startsWith("exit") })
+            assertTrue(calls.none { it.startsWith("saveResumeState") || it.startsWith("exit") })
 
             calls.clear()
             menu.replaceResume()
             runCurrent()
             assertNull(menu.state.replacingResume)
-            assertEquals(listOf("saveResumeState", "exit null"), calls)
+            assertEquals(listOf("saveResumeState $SERIAL", "exit null"), calls)
         }
 
     @Test
@@ -668,6 +681,31 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals(listOf("savesResumeState", "exit null"), calls)
+        }
+
+    private fun game(key: String) = GameEntry("content://games/crash.cue", "Crash Bandicoot", key, "NTSC-U", 0, 0, null)
+
+    @Test
+    fun slotsUseTheGamesKeyNotTheDisc() =
+        runTest {
+            api.times[1] = 100
+            val menu = menu(booted = false)
+            menu.gameStarted(game("SLPS-02020"))
+            runCurrent()
+            calls.clear()
+
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.pickSlot(2)
+            runCurrent()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.pickSlot(1)
+            runCurrent()
+
+            assertTrue(calls.toString(), "saveState SLPS-02020 2" in calls)
+            assertTrue(calls.toString(), "loadState SLPS-02020 1" in calls)
+            assertTrue(calls.toString(), calls.filter { it.startsWith("getSaveState") }.all { "SLPS-02020" in it })
         }
 
     private class MemoryLastSlots : LastSlotStore {

@@ -61,7 +61,7 @@ class GameStarts(
                             if (savedAt == 0L) {
                                 null
                             } else {
-                                ResumeOffer(entry, savedAt, api.getSaveStateScreenshot(serial, SaveSlots.RESUME))
+                                ResumeOffer(entry, savedAt, api.getSaveStatePreview(serial, SaveSlots.RESUME)?.picture)
                             }
                     }
                 offerDisc = disc

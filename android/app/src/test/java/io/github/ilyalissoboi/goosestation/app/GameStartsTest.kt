@@ -59,7 +59,7 @@ class GameStartsTest {
             assertSame(crash, offer.game)
             assertEquals(1_700_000_000L, offer.savedAt)
             assertSame(picture, offer.picture)
-            assertEquals(listOf("getSaveStateTimes SCUS-94900", "getSaveStateScreenshot SCUS-94900 -1"), calls)
+            assertEquals(listOf("getSaveStateTimes SCUS-94900", "getSaveStatePreview SCUS-94900 -1"), calls)
         }
 
     @Test

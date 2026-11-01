@@ -69,16 +69,37 @@ class GameCallsTest {
         states.mkdirs()
         File(states, "${SERIAL}_3.sav").writeBytes(ByteArray(64) { 7 })
 
-        assertNull(NativeLibrary.getSaveStateScreenshot(SERIAL, 3))
-        assertNull(NativeLibrary.getSaveStateScreenshot(SERIAL, 4))
+        // Without a running game no disc is known either, so there's nothing to preview.
+        assertNull(NativeLibrary.getSaveStatePreview(SERIAL, 3))
+        assertNull(NativeLibrary.getSaveStatePreview(SERIAL, 4))
+    }
+
+    @Test
+    fun aStateMovesOnlyOntoNothing() {
+        initialize()
+        states.mkdirs()
+        val bytes = ByteArray(64) { it.toByte() }
+        val from = File(states, "SLUS-00001_3.sav").apply { writeBytes(bytes) }
+        from.setLastModified(1_600_000_000_000L)
+        File(states, "SLUS-00002_5.sav").writeBytes(ByteArray(8))
+
+        assertEquals(false, NativeLibrary.moveSaveState("SLUS-00001", 3, "SLUS-00002", 5))
+        assertEquals(false, NativeLibrary.moveSaveState("SLUS-00001", 4, "SLUS-00002", 6))
+        assertEquals(true, NativeLibrary.moveSaveState("SLUS-00001", 3, "SLUS-00002", 6))
+
+        val moved = File(states, "SLUS-00002_6.sav")
+        assertTrue(!from.exists())
+        assertTrue(bytes.contentEquals(moved.readBytes()))
+        assertEquals(1_600_000_000L, NativeLibrary.getSaveStateTimes("SLUS-00002")[6])
+        assertEquals(8L, File(states, "SLUS-00002_5.sav").length())
     }
 
     @Test
     fun withoutAGameTheCallsSaySo() {
         initialize()
 
-        assertEquals("No game is running.", NativeLibrary.saveState(1))
-        assertEquals("No game is running.", NativeLibrary.loadState(1))
+        assertEquals("No game is running.", NativeLibrary.saveState(SERIAL, 1))
+        assertEquals("No game is running.", NativeLibrary.loadState(SERIAL, 1))
         assertEquals(-1, NativeLibrary.getAnalogMode())
     }
 
@@ -140,17 +161,17 @@ class GameCallsTest {
             Thread.sleep(1_000)
             NativeLibrary.setPaused(true)
 
-            assertNull(NativeLibrary.saveState(2))
+            assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 2))
 
             assertTrue(File(states, "${PADTEST_SERIAL}_2.sav").length() > 0)
             assertTrue(NativeLibrary.getSaveStateTimes(PADTEST_SERIAL)[2] > 0)
-            val picture = NativeLibrary.getSaveStateScreenshot(PADTEST_SERIAL, 2)
+            val picture = NativeLibrary.getSaveStatePreview(PADTEST_SERIAL, 2)?.picture
             assertNotNull("a picture", picture)
             picture!!
             assertEquals(picture.width * picture.height, picture.pixels.size)
             assertTrue("opaque", picture.pixels.all { it ushr 24 == 0xFF })
-            assertNull(NativeLibrary.loadState(2))
-            assertTrue(NativeLibrary.loadState(5)!!.isNotEmpty())
+            assertNull(NativeLibrary.loadState(PADTEST_SERIAL, 2))
+            assertTrue(NativeLibrary.loadState(PADTEST_SERIAL, 5)!!.isNotEmpty())
             assertTrue(NativeLibrary.getAnalogMode() >= 0)
         } finally {
             NativeLibrary.shutdownGame()

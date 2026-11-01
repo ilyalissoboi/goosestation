@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -114,8 +115,11 @@ class InGameMenu(
     var state by mutableStateOf(GameMenuState())
         private set
 
-    /** The running game's serial, once it has booted; blank for a game without one, which has no save states. */
-    private var serial: String? = null
+    /** The running game, once it has booted. */
+    private var running: GameEntry? = null
+
+    /** The running game's key, once it has booted; blank for a game without one, which has no save states. */
+    private val serial: String? get() = running?.serial
 
     /** Changes as each game starts and stops, so a read for an earlier one is dropped. */
     private var gameId = 0
@@ -125,11 +129,14 @@ class InGameMenu(
 
     private val canSave get() = state.booted && !serial.isNullOrBlank()
 
-    /** The game booted, with [serial] (blank for none). Fast forward is off, and the analog mode is read. */
-    fun gameStarted(serial: String) {
+    /**
+     * [game] booted: its key ([GameEntry.serial], blank for none) keeps its save states. Fast forward is off, and the
+     * analog mode is read.
+     */
+    fun gameStarted(game: GameEntry) {
         gameId++
         panelId++
-        this.serial = serial
+        running = game
         state = GameMenuState(booted = true)
         readGameState()
     }
@@ -138,7 +145,7 @@ class InGameMenu(
     fun gameStopped() {
         gameId++
         panelId++
-        serial = null
+        running = null
         state = GameMenuState()
     }
 
@@ -209,7 +216,8 @@ class InGameMenu(
     }
 
     private suspend fun saveAndExit() {
-        val error = withContext(game) { api.saveResumeState() }
+        val key = serial.orEmpty()
+        val error = withContext(game) { api.saveResumeState(key) }
         onExit(error)
     }
 
@@ -224,7 +232,7 @@ class InGameMenu(
             val entries = entries(mode, times)
             updatePanel(id) { it.copy(entries = entries, focus = focus(mode, entries, last)) }
             for (entry in entries.filter { it.savedAt != null }) {
-                val picture = withContext(game) { api.getSaveStateScreenshot(serial, entry.slot) } ?: continue
+                val picture = withContext(game) { api.getSaveStatePreview(serial, entry.slot) }?.picture ?: continue
                 if (id != panelId) return@launch
                 updatePanel(id) { panel ->
                     panel.copy(
@@ -313,7 +321,7 @@ class InGameMenu(
     }
 
     private fun save(slot: Int) =
-        run(slot, { api.saveState(slot) }, "Saved to slot $slot") {
+        run(slot, { api.saveState(it, slot) }, "Saved to slot $slot") {
             // The paused game can't finish its card write: it has to run for a moment first.
             if (it == CARD_BUSY) CARD_BUSY_SAVE else "Couldn't save to slot $slot: $it"
         }
@@ -322,7 +330,7 @@ class InGameMenu(
         val resume = slot == SaveSlots.RESUME
         run(
             slot,
-            { api.loadState(slot) },
+            { api.loadState(it, slot) },
             if (resume) "Loaded your resume state" else "Loaded slot $slot",
         ) { if (resume) "Couldn't load your resume state: $it" else "Couldn't load slot $slot: $it" }
     }
@@ -333,7 +341,7 @@ class InGameMenu(
      */
     private fun run(
         slot: Int,
-        call: () -> String?,
+        call: (key: String) -> String?,
         done: String,
         failed: (String) -> String,
     ) {
@@ -343,7 +351,7 @@ class InGameMenu(
         scope.launch {
             val error =
                 withContext(game) {
-                    call().also { if (it == null) lastSlots.set(serial, slot) }
+                    call(serial).also { if (it == null) lastSlots.set(serial, slot) }
                 }
             if (error != null) {
                 updatePanel(id) { it.copy(busy = false, error = failed(error)) }

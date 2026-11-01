@@ -51,6 +51,8 @@ jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
 jclass s_game_disc_class = nullptr;
 jmethodID s_game_disc_constructor = nullptr;
+jclass s_save_state_preview_class = nullptr;
+jmethodID s_save_state_preview_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
 jmethodID s_bios_image_constructor = nullptr;
 jclass s_pad_binding_class = nullptr;
@@ -414,6 +416,23 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_game_disc_constructor =
     env->GetMethodID(s_game_disc_class, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
   if (!s_game_disc_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass save_state_preview_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SaveStatePreview");
+  if (!save_state_preview_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_save_state_preview_class = static_cast<jclass>(env->NewGlobalRef(save_state_preview_class));
+  env->DeleteLocalRef(save_state_preview_class);
+  s_save_state_preview_constructor = env->GetMethodID(s_save_state_preview_class, "<init>",
+                                                      "(Lio/github/ilyalissoboi/goosestation/core/ArgbImage;I)V");
+  if (!s_save_state_preview_constructor)
   {
     ClearException(env);
     return JNI_ERR;
@@ -997,14 +1016,29 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jst
   return result;
 }
 
-NATIVE_LIBRARY_FUNCTION(jobject, getSaveStateScreenshot)(JNIEnv* env, jobject, jstring serial, jint slot)
+NATIVE_LIBRARY_FUNCTION(jobject, getSaveStatePreview)(JNIEnv* env, jobject, jstring serial, jint slot)
 {
-  const std::optional<AndroidHost::Picture> picture =
-    AndroidHost::GetSaveStateScreenshot(FromJString(env, serial), static_cast<s32>(slot));
-  if (!picture.has_value())
+  const std::optional<AndroidHost::SaveStatePreview> preview =
+    AndroidHost::GetSaveStatePreview(FromJString(env, serial), static_cast<s32>(slot));
+  if (!preview.has_value())
     return nullptr;
 
-  return ToArgbImage(env, picture->pixels.data(), picture->width, picture->height, true);
+  jobject picture = nullptr;
+  if (preview->picture.has_value())
+  {
+    const AndroidHost::Picture& image = preview->picture.value();
+    picture = ToArgbImage(env, image.pixels.data(), image.width, image.height, true);
+    if (!picture)
+      return nullptr;
+  }
+
+  jobject result = env->NewObject(s_save_state_preview_class, s_save_state_preview_constructor, picture,
+                                  static_cast<jint>(preview->disc));
+  if (ClearException(env))
+    result = nullptr;
+  if (picture)
+    env->DeleteLocalRef(picture);
+  return result;
 }
 
 // The reason a save or load failed, or null when it worked.
@@ -1013,19 +1047,26 @@ static jstring ToResult(JNIEnv* env, const std::optional<std::string>& error)
   return error.has_value() ? ToJString(env, error.value()) : nullptr;
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jint slot)
+NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jstring key, jint slot)
 {
-  return ToResult(env, AndroidHost::SaveState(static_cast<s32>(slot)));
+  return ToResult(env, AndroidHost::SaveState(FromJString(env, key), static_cast<s32>(slot)));
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jint slot)
+NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jstring key, jint slot)
 {
-  return ToResult(env, AndroidHost::LoadState(static_cast<s32>(slot)));
+  return ToResult(env, AndroidHost::LoadState(FromJString(env, key), static_cast<s32>(slot)));
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, saveResumeState)(JNIEnv* env, jobject)
+NATIVE_LIBRARY_FUNCTION(jboolean, moveSaveState)(JNIEnv* env, jobject, jstring from_serial, jint from_slot,
+                                                 jstring to_serial, jint to_slot)
 {
-  return ToResult(env, AndroidHost::SaveResumeState());
+  return AndroidHost::MoveSaveState(FromJString(env, from_serial), static_cast<s32>(from_slot),
+                                    FromJString(env, to_serial), static_cast<s32>(to_slot));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, saveResumeState)(JNIEnv* env, jobject, jstring key)
+{
+  return ToResult(env, AndroidHost::SaveResumeState(FromJString(env, key)));
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isSavingMemoryCards)(JNIEnv*, jobject)

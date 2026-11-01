@@ -105,18 +105,30 @@ struct Picture
 /// System::PER_GAME_SAVE_STATE_SLOTS slots. All 0 for an empty serial, or before Initialize() succeeded.
 std::vector<s64> GetSaveStateTimes(std::string serial);
 
-/// The screenshot inside serial's state in slot (-1 for the resume state); nullopt if there's none or it can't be read.
-std::optional<Picture> GetSaveStateScreenshot(std::string serial, s32 slot);
+/// What serial's state in slot (-1 for the resume state) shows of itself: its screenshot, if it has one, and the
+/// number of the running game's disc it was made on, 0 if that isn't known.
+struct SaveStatePreview
+{
+  std::optional<Picture> picture;
+  u32 disc;
+};
 
-/// Saves the running game to slot, or loads slot (-1 for the resume state) into it. nullopt when it worked, else why
-/// not: no game, no serial, or the core's error.
-std::optional<std::string> SaveState(s32 slot);
-std::optional<std::string> LoadState(s32 slot);
+/// serial's state in slot's preview; nullopt if there's no state, or it has neither a picture nor a known disc.
+std::optional<SaveStatePreview> GetSaveStatePreview(std::string serial, s32 slot);
 
-/// Saves the running game's resume state, as Exit game does before it stops it, if [Main] SaveStateOnExit is on and
-/// the game has an ID: its serial, or the core's content hash (HASH-…) for a PS-EXE or a disc the database doesn't
-/// know. nullopt when it's saved or there's nothing to save, else why not.
-std::optional<std::string> SaveResumeState();
+/// Saves the running game to key's slot, or loads key's slot (-1 for the resume state) into it, on the disc the state
+/// was made on, found by its identity (key may be another disc's serial). nullopt when it worked, else why not: no
+/// game, no key, or the core's error.
+std::optional<std::string> SaveState(std::string key, s32 slot);
+std::optional<std::string> LoadState(std::string key, s32 slot);
+
+/// Moves from_serial's state in from_slot to to_serial's to_slot, only onto nothing. False if it didn't move.
+bool MoveSaveState(std::string from_serial, s32 from_slot, std::string to_serial, s32 to_slot);
+
+/// Saves the running game's resume state under key, as Exit game does before it stops it, if [Main] SaveStateOnExit
+/// is on and key isn't empty: a serial, or the core's content hash (HASH-…) for a PS-EXE or a disc the database
+/// doesn't know. nullopt when it's saved or there's nothing to save, else why not.
+std::optional<std::string> SaveResumeState(std::string key);
 
 /// Whether the running game is writing to a memory card (System::IsSavingMemoryCards()).
 bool IsSavingMemoryCards();

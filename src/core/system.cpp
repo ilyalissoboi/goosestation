@@ -2647,8 +2647,15 @@ bool System::LoadState(const char* path, Error* error, bool save_undo_state)
   if (save_undo_state)
     SaveUndoLoadState();
 
+#ifdef __ANDROID__
+  // Android finds the state's disc by its serial as well as its path (Host::ResolveSaveStateMedia()), and the serial
+  // is read with the title.
+  constexpr bool read_title = true;
+#else
+  constexpr bool read_title = false;
+#endif
   SaveStateBuffer buffer;
-  if (!LoadStateBufferFromFile(&buffer, fp.get(), error, false, true, false, true) ||
+  if (!LoadStateBufferFromFile(&buffer, fp.get(), error, read_title, true, false, true) ||
       !LoadStateFromBuffer(buffer, error, true))
   {
     if (save_undo_state)
@@ -2672,20 +2679,51 @@ bool System::LoadStateFromBuffer(const SaveStateBuffer& buffer, Error* error, bo
   Assert(IsValid());
 
   std::unique_ptr<CDImage> media;
-  std::unique_ptr<CDImage> old_media = CDROM::RemoveMedia(false);
-  std::string_view media_path = buffer.media_path;
+#ifdef __ANDROID__
+  // The state's path may be from another folder or device: the host finds its disc by identity, or says it's missing,
+  // and the current disc stays in.
+  std::string resolved_media_path = buffer.media_path;
   u32 media_subimage_index = buffer.media_subimage_index;
-  if (old_media && old_media->GetFileName() == buffer.media_path)
+  if (!buffer.media_path.empty())
   {
-    INFO_LOG("Re-using same media '{}'", buffer.media_path);
+    const std::optional<Host::SaveStateMedia> resolved =
+      Host::ResolveSaveStateMedia(buffer.serial, buffer.media_path, buffer.media_subimage_index, error);
+    if (!resolved.has_value())
+      return false;
+
+    resolved_media_path = resolved->path;
+    media_subimage_index = resolved->subimage_index;
+  }
+  const std::string& state_media_path = resolved_media_path;
+#else
+  const std::string& state_media_path = buffer.media_path;
+  u32 media_subimage_index = buffer.media_subimage_index;
+#endif
+  std::unique_ptr<CDImage> old_media = CDROM::RemoveMedia(false);
+  std::string_view media_path = state_media_path;
+  if (old_media && old_media->GetFileName() == state_media_path)
+  {
+    INFO_LOG("Re-using same media '{}'", state_media_path);
     media = std::move(old_media);
   }
-  else if (!buffer.media_path.empty())
+  else if (!state_media_path.empty())
   {
     Error local_error;
-    media = CDImage::Open(buffer.media_path.c_str(), g_settings.cdrom_load_image_patches, error ? error : &local_error);
+    media = CDImage::Open(state_media_path.c_str(), g_settings.cdrom_load_image_patches, error ? error : &local_error);
     if (!media)
     {
+#ifdef __ANDROID__
+      // Never quietly another disc than the state's: the load fails, and the current disc goes back in.
+      if (old_media)
+      {
+        const DiscRegion region =
+          GameList::GetCustomRegionForPath(old_media->GetFileName()).value_or(GetRegionForImage(old_media.get()));
+        CDROM::InsertMedia(std::move(old_media), region);
+      }
+      Error::AddPrefixFmt(error, TRANSLATE_FS("System", "Failed to open CD image '{}' used by save state:\n"),
+                          Path::GetFileName(state_media_path));
+      return false;
+#else
       if (old_media)
       {
         Host::AddOSDMessage(
@@ -2704,6 +2742,7 @@ bool System::LoadStateFromBuffer(const SaveStateBuffer& buffer, Error* error, bo
                             Path::GetFileName(buffer.media_path));
         return false;
       }
+#endif
     }
   }
 
@@ -5300,6 +5339,7 @@ std::optional<ExtendedSaveStateInfo> System::GetExtendedSaveStateInfo(const char
       ssi->title = std::move(buffer.title);
       ssi->serial = std::move(buffer.serial);
       ssi->media_path = std::move(buffer.media_path);
+      ssi->media_subimage_index = buffer.media_subimage_index;
       ssi->screenshot = std::move(buffer.screenshot);
 
       FILESYSTEM_STAT_DATA sd;

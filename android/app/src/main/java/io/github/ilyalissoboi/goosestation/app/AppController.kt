@@ -1267,7 +1267,10 @@ object AppController : NativeCallbacks {
         mainHandler.post {
             Log.i(TAG, "Game started: $title")
             gameRunning = true
-            gameMenu.gameStarted(serial)
+            // The game as the library listed it; one without a key (not in the list) is keyed by the core's ID, as the
+            // host keys it.
+            val started = runningGame ?: GameEntry("", title, serial, "", 0, 0, null)
+            gameMenu.gameStarted(if (started.serial.isBlank()) started.copy(serial = serial) else started)
             readSelectChords()
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.

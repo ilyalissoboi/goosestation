@@ -26,7 +26,10 @@ object CoreMessages {
         val text = message.replace(symbols, "").replace(spaces, " ").trim()
         return when {
             key == "save_state" || key == "load_state" -> null
+            // The app says which disc went in.
+            key == "DiscInserted" || key == "media_switch_subimage" || key == "ReloadMemoryCardsFromGameChange" -> null
             key == "system_reset" -> "Console reset"
+            key == "CheatsLoadWarning" -> codesOn(text)
             key == "analog_mode_toggle_0" || key == "Controller0AnalogMode" -> analogMode(text)
             key.startsWith("ScreenshotSaver_") ->
                 when {
@@ -36,6 +39,12 @@ object CoreMessages {
                 }
             else -> text
         }
+    }
+
+    // "2 cheat(s) are enabled. This may crash games." The count is the core's.
+    private fun codesOn(text: String): String {
+        val count = text.takeWhile { it.isDigit() }.toIntOrNull() ?: return text
+        return if (count == 1) "1 patch code is on" else "$count patch codes are on"
     }
 
     private fun analogMode(text: String): String {

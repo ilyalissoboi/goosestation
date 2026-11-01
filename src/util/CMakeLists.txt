@@ -278,10 +278,14 @@ endif()
 if(ANDROID)
   target_sources(util PRIVATE
     aaudio_audio_stream.cpp
+    android_disc_groups.cpp
+    android_disc_groups.h
     android_input_keys.cpp
     android_input_keys.h
     android_input_source.cpp
     android_input_source.h
+    android_patch_codes.cpp
+    android_patch_codes.h
     http_downloader_android.cpp
     platform_misc_android.cpp
   )

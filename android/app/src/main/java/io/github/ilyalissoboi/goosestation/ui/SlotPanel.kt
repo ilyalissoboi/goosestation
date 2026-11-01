@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -42,6 +43,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
@@ -56,7 +58,8 @@ import java.time.ZonedDateTime
 /**
  * The slot panel of the in-game menu: the [panel]'s slots, each with its screenshot (once read), its name, Saved or
  * Empty, and when it was saved, as seen from [now]. A slot row's A, Enter or tap picks it ([GameMenuActions.pickSlot]).
- * In Load, an empty slot can't be focused. As it opens, the panel's focus slot takes the focus; a question to replace a
+ * In Load, an empty slot can't be focused, and the states still filed under the game's other discs follow the slots,
+ * under "Other saves". As it opens, the panel's focus slot takes the focus; a question to replace a
  * slot shows in place of the list, with Cancel focused, and the slot is focused again after it. The focus can't leave
  * the panel: B and Back close it ([GameMenu] handles them).
  */
@@ -71,11 +74,12 @@ fun SaveSlotPanel(
     val saving = panel.mode == SlotMode.Save
     val entries = panel.entries
     val title = remember { FocusRequester() }
-    val rows = remember { HashMap<Int, FocusRequester>() }
+    val rows = remember { HashMap<Pair<String?, Int>, FocusRequester>() }
 
-    fun row(slot: Int) = rows.getOrPut(slot) { FocusRequester() }
+    fun row(entry: SlotEntry) = rows.getOrPut(entry.owner to entry.slot) { FocusRequester() }
 
     fun pickable(entry: SlotEntry) = saving || entry.savedAt != null
+    val others = panel.others
 
     // The slot to focus once the question about replacing it is answered.
     var returnTo by remember { mutableStateOf<Int?>(null) }
@@ -90,7 +94,8 @@ fun SaveSlotPanel(
                 returnTo = null
                 val target =
                     entries.firstOrNull { it.slot == wanted && pickable(it) } ?: entries.firstOrNull(::pickable)
-                (target?.let { row(it.slot) } ?: title).requestFocus()
+                        ?: others.firstOrNull()
+                (target?.let { row(it) } ?: title).requestFocus()
             }
         }
     }
@@ -98,14 +103,17 @@ fun SaveSlotPanel(
     Column(
         modifier =
             modifier
-                .focusProperties { onExit = { cancelFocusChange() } }
-                .focusGroup()
+                .focusProperties {
+                    // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
+                    onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
+                }.focusGroup()
                 .background(colors.surface, GsShapes.large)
                 .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Focusable while nothing else in the panel can take the focus, so it stays in the panel and B reaches it.
-        val nothingToFocus = panel.replacing == null && (entries == null || entries.none(::pickable))
+        val nothingToFocus =
+            panel.replacing == null && (entries == null || entries.none(::pickable)) && others.isEmpty()
         Text(
             if (saving) "Save state" else "Load state",
             style = MaterialTheme.typography.headlineSmall,
@@ -118,7 +126,9 @@ fun SaveSlotPanel(
             }
         }
         if (panel.busy) Line(if (saving) "Saving…" else "Loading…")
-        if (entries != null && !saving && entries.none { it.savedAt != null }) Line("No saves yet for this game.")
+        if (entries != null && !saving && entries.none { it.savedAt != null } && others.isEmpty()) {
+            Line("No saves yet for this game.")
+        }
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -138,8 +148,20 @@ fun SaveSlotPanel(
                         now,
                         enabled = pickable(entry),
                         onClick = { actions.pickSlot(entry.slot) },
-                        modifier = Modifier.focusRequester(row(entry.slot)),
+                        modifier = Modifier.focusRequester(row(entry)),
                     )
+                }
+                if (others.isNotEmpty()) {
+                    Eyebrow("Other saves", Modifier.padding(top = 12.dp, start = 8.dp))
+                    others.forEach { entry ->
+                        SlotRow(
+                            entry,
+                            now,
+                            enabled = true,
+                            onClick = { actions.pickOther(entry.owner.orEmpty(), entry.slot) },
+                            modifier = Modifier.focusRequester(row(entry)),
+                        )
+                    }
                 }
             }
         }
@@ -211,8 +233,10 @@ private fun SlotRow(
                     style = MaterialTheme.typography.titleMedium,
                     color = if (enabled) colors.ink else colors.inkFaint,
                 )
+                // A multi-disc game's state says its disc on this line, so the row is no taller.
                 Text(
-                    if (savedAt != null) "Saved" else "Empty",
+                    listOfNotNull(if (savedAt != null) "Saved" else "Empty", entry.disc?.let { "Disc $it" })
+                        .joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkMuted,
                 )

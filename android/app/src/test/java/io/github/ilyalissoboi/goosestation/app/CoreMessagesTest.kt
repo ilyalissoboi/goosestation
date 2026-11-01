@@ -80,4 +80,23 @@ class CoreMessagesTest {
         )
         assertEquals("Paused \u00B7 2 of 3", CoreMessages.translate("", "\u23F8\uFE0F Paused \u00B7 2 of 3"))
     }
+
+    @Test
+    fun theAppSaysWhichDiscWentIn() {
+        assertNull(CoreMessages.translate("DiscInserted", "Inserted disc 'Ace Combat 3' (SLPS-02021)."))
+        assertNull(CoreMessages.translate("media_switch_subimage", "Switched to sub-image AC3 (Disc 2) (2) in 'AC3'."))
+        assertNull(CoreMessages.translate("ReloadMemoryCardsFromGameChange", "Game changed, reloading memory cards."))
+    }
+
+    @Test
+    fun theCodesWarningCountsThem() {
+        assertEquals(
+            "2 patch codes are on",
+            CoreMessages.translate("CheatsLoadWarning", "2 cheat(s) are enabled. This may crash games."),
+        )
+        assertEquals(
+            "1 patch code is on",
+            CoreMessages.translate("CheatsLoadWarning", "1 cheat(s) are enabled. This may crash games."),
+        )
+    }
 }

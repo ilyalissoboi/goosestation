@@ -153,12 +153,14 @@ object NativeLibrary {
 
     /**
      * Boots a game once a surface exists; the result arrives through [NativeCallbacks], ending with onGameStopped().
-     * [path] is a [GameEntry.path], content path or not, as it is. With a [resumeSerial], it boots from that serial's
-     * resume state.
+     * [path] is the [GameEntry.path] of a game in the last [getGameList], and [disc] the [GameDisc.number] to boot (its
+     * first disc if it has no such disc). With [resume], it boots from the game's resume state instead, on the disc that
+     * state was saved on.
      */
     external fun startGame(
         path: String,
-        resumeSerial: String?,
+        disc: Int,
+        resume: Boolean,
     )
 
     external fun shutdownGame()
@@ -172,24 +174,68 @@ object NativeLibrary {
      */
     external fun getSaveStateTimes(serial: String): LongArray
 
-    /** The screenshot in [serial]'s state in [slot] (-1: the resume state), opaque; null without one. */
-    external fun getSaveStateScreenshot(
+    /**
+     * The screenshot in [serial]'s state in [slot] (-1: the resume state), opaque, and the running game's disc it was
+     * made on; null without a state that has either.
+     */
+    external fun getSaveStatePreview(
         serial: String,
         slot: Int,
-    ): ArgbImage?
+    ): SaveStatePreview?
 
-    /** Saves the running game to [slot] (1 to 10). Null when it's saved, or else why not. */
-    external fun saveState(slot: Int): String?
-
-    /** Loads [slot] (-1: the resume state) into the running game. Null when it's loaded, or else why not. */
-    external fun loadState(slot: Int): String?
+    /** Saves the running game to [key]'s [slot] (1 to 10). Null when it's saved, or else why not. */
+    external fun saveState(
+        key: String,
+        slot: Int,
+    ): String?
 
     /**
-     * Saves the running game's resume state, as Exit game does before it stops the game, if `[Main] SaveStateOnExit` is
-     * on and the game has an ID: its serial, or the core's content hash (`HASH-…`) for a PS-EXE or a disc the database
-     * doesn't know. Null when it's saved or there's nothing to save, else why not.
+     * Loads [key]'s [slot] (-1: the resume state) into the running game, on the disc it was made on, found by its
+     * identity. [key] may be another disc's serial. Null when it's loaded, or else why not.
      */
-    external fun saveResumeState(): String?
+    external fun loadState(
+        key: String,
+        slot: Int,
+    ): String?
+
+    /** The running game's patch codes; none without a game. Null only if they couldn't be passed over. */
+    external fun getPatchCodes(): PatchCodes?
+
+    /**
+     * Switches the running game's code [index] on or off, at once, and keeps it in the app's file for next time (never
+     * in the player's). Null when it's done, or else why not.
+     */
+    external fun setPatchCode(
+        index: Int,
+        on: Boolean,
+    ): String?
+
+    /** Applies the running game's manual code [index] once. Null when it's done, or else why not. */
+    external fun applyPatchCode(index: Int): String?
+
+    /** The [GameDisc.number] of the running game's disc in the drive, 0 without a game or one of its discs. */
+    external fun getCurrentDisc(): Int
+
+    /** Puts the running game's disc [number] in the drive. Null when it's in, or else why not. */
+    external fun changeDisc(number: Int): String?
+
+    /**
+     * Moves [fromSerial]'s state in [fromSlot] to [toSerial]'s [toSlot]: only onto nothing. False if there's no state to
+     * move, the place is taken, or the rename failed.
+     */
+    external fun moveSaveState(
+        fromSerial: String,
+        fromSlot: Int,
+        toSerial: String,
+        toSlot: Int,
+    ): Boolean
+
+    /**
+     * Saves the running game's resume state under [key], as Exit game does before it stops the game, if `[Main]
+     * SaveStateOnExit` is on and [key] isn't blank (a serial, or the core's content hash, `HASH-…`, for a PS-EXE or a
+     * disc the database doesn't know). Null when it's saved or there's nothing to save, else why not.
+     */
+    external fun saveResumeState(key: String): String?
 
     /** Port 1's analog mode: -1 if it isn't a DualShock or no game runs, 0 digital, 1 analog. */
     external fun getAnalogMode(): Int

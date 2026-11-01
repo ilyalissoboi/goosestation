@@ -255,15 +255,34 @@ object AppController : NativeCallbacks {
             scope,
             gameDispatcher,
             NativeGameCoreApi,
-            LastSlots(SharedPreferencesStore(context, "game")),
+            lastSlots,
+            gameRecords,
             onMessage = { osd.post(it) },
             onResume = ::resumeFromPrompt,
             onExit = ::exitGame,
         )
     }
 
+    /** What the app keeps per game on this device: its last slot, last disc, and so on. */
+    private val gamePrefs by lazy { SharedPreferencesStore(context, "game") }
+    private val gameRecords by lazy { GameRecords(gamePrefs) }
+    private val lastSlots by lazy { LastSlots(gamePrefs) }
+
     /** A game's start, which asks first whether to resume where it was left. */
-    val gameStarts = GameStarts(scope, gameDispatcher, NativeGameCoreApi, ::startGameNow)
+    val gameStarts by lazy {
+        GameStarts(
+            scope,
+            gameDispatcher,
+            NativeGameCoreApi,
+            gameRecords,
+            lastSlots,
+            ::startGameNow,
+        )
+    }
+
+    /** The game from the last start, until its onGameStopped(). */
+    var runningGame: GameEntry? = null
+        private set
 
     /** Fast forward is on in the running game: its marker shows over the game. */
     val fastForward get() = gameMenu.state.fastForward
@@ -749,11 +768,12 @@ object AppController : NativeCallbacks {
         gameStarts.play(game)
     }
 
-    // The start itself, from its resume state with a resumeSerial. Checked again: things may have changed while the
-    // player answered.
+    // The start itself, on its disc or from its resume state. Checked again: things may have changed while the player
+    // answered.
     private fun startGameNow(
         game: GameEntry,
-        resumeSerial: String?,
+        disc: Int,
+        resume: Boolean,
     ) {
         if (!ready || gameActive) return
         if (!catchUps.startsAllowed) {
@@ -761,6 +781,7 @@ object AppController : NativeCallbacks {
             return
         }
         lastGamePath = game.path
+        runningGame = game
         focusSettings = false
         message = null
         messageIsError = false
@@ -768,7 +789,7 @@ object AppController : NativeCallbacks {
         holdMemcards = true
         screen = Screen.Game
         // It boots once the game screen's surface exists.
-        NativeLibrary.startGame(game.path, resumeSerial)
+        NativeLibrary.startGame(game.path, disc, resume)
     }
 
     // Back to the library, which waits for the game's onGameStopped() before it starts another.
@@ -1257,7 +1278,10 @@ object AppController : NativeCallbacks {
         mainHandler.post {
             Log.i(TAG, "Game started: $title")
             gameRunning = true
-            gameMenu.gameStarted(serial)
+            // The game as the library listed it; one without a key (not in the list) is keyed by the core's ID, as the
+            // host keys it.
+            val started = runningGame ?: GameEntry("", title, serial, "", 0, 0, null)
+            gameMenu.gameStarted(if (started.serial.isBlank()) started.copy(serial = serial) else started)
             readSelectChords()
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
@@ -1282,6 +1306,7 @@ object AppController : NativeCallbacks {
             controllers?.releaseAll()
             promptOpen = false
             gameActive = false
+            runningGame = null
             holdMemcards = false
             osd.clear()
             gameMenu.gameStopped()

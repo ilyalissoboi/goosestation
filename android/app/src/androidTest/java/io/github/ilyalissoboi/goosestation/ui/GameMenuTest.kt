@@ -17,10 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
@@ -35,12 +38,17 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
+import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -82,6 +90,48 @@ class GameMenuTest {
 
             override fun pickSlot(slot: Int) {
                 calls += "pickSlot $slot"
+            }
+
+            override fun pickOther(
+                serial: String,
+                slot: Int,
+            ) {
+                calls += "pickOther $serial $slot"
+            }
+
+            override fun openDiscs() {
+                calls += "openDiscs"
+            }
+
+            override fun closeDiscs() {
+                calls += "closeDiscs"
+                state = state.copy(discs = null)
+            }
+
+            override fun pickDisc(number: Int) {
+                calls += "pickDisc $number"
+                // The disc already in just closes the panel, as InGameMenu does.
+                if (number == state.discs?.current) state = state.copy(discs = null)
+            }
+
+            override fun openCodes() {
+                calls += "openCodes"
+            }
+
+            override fun closeCodes() {
+                calls += "closeCodes"
+                state = state.copy(codes = null)
+            }
+
+            override fun setCode(
+                index: Int,
+                on: Boolean,
+            ) {
+                calls += "setCode $index $on"
+            }
+
+            override fun applyCode(index: Int) {
+                calls += "applyCode $index"
             }
 
             override fun confirmReplace() {
@@ -180,6 +230,7 @@ class GameMenuTest {
                 "Fast forward",
                 "Analog mode",
                 "Screenshot",
+                "Patch codes",
                 "Reset console",
                 "Exit game",
             )
@@ -254,6 +305,8 @@ class GameMenuTest {
         press(Key.Enter)
         press(Key.DirectionDown)
         press(Key.Enter)
+        press(Key.DirectionDown)
+        press(Key.Enter)
 
         assertEquals(
             listOf(
@@ -262,6 +315,7 @@ class GameMenuTest {
                 "toggleFastForward",
                 "toggleAnalogMode",
                 "screenshot",
+                "openCodes",
                 "askReset",
                 "exit",
             ),
@@ -305,6 +359,262 @@ class GameMenuTest {
         rule.onNode(isFocused() and hasText("Slot 4", substring = true)).assertExists()
         rule.onNodeWithText("Slot 1").assertDoesNotExist()
     }
+
+    @Test
+    fun otherSavesShowUnderTheirHeading() {
+        val others = listOf(SlotEntry(4, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
+        state =
+            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, saved(1).take(1), focus = 1, others = others))
+        show()
+
+        rule.onNodeWithText("OTHER SAVES").assertExists()
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Slot 4", substring = true)).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("pickOther SLPS-02021 4"), calls)
+    }
+
+    @Test
+    fun onlyOtherSavesAreStillSaves() {
+        val others = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
+        state =
+            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList(), focus = null, others = others))
+        show()
+
+        rule.onNodeWithText("No saves yet for this game.").assertDoesNotExist()
+        rule.onNode(isFocused() and hasText("Resume", substring = true)).assertExists()
+    }
+
+    @Test
+    fun aRowShowsItsDisc() {
+        val entries = listOf(SlotEntry(1, now.toEpochSecond() - 600, disc = 2))
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1))
+        show()
+
+        rule.onNodeWithText("Saved · Disc 2").assertExists()
+    }
+
+    private val ac3Discs =
+        listOf(
+            GameDisc("content://g/ac3 1.chd", "SLPS-02020", "Ace Combat 3 (Disc 1)", 1),
+            GameDisc("content://g/ac3 2.chd", "SLPS-02021", "Ace Combat 3 (Disc 2)", 2),
+        )
+
+    @Test
+    fun changeDiscSitsAfterLoadState() {
+        state = GameMenuState(booted = true, disc = 1, discCount = 2)
+        show()
+
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Change disc", substring = true)).assertExists()
+        rule.onNodeWithText("Disc 1 of 2").assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("openDiscs"), calls)
+    }
+
+    @Test
+    fun aSingleDiscGameHasNoChangeDisc() {
+        show()
+
+        rule.onNodeWithText("Change disc").assertDoesNotExist()
+    }
+
+    @Test
+    fun theDiscPanelFocusesTheCurrentDisc() {
+        state = GameMenuState(booted = true, disc = 2, discCount = 2, discs = DiscChoice(ac3Discs, current = 2))
+        show()
+
+        rule.onNode(isFocused() and hasText("Disc 2", substring = true)).assertExists()
+        rule.onNodeWithText("Current").assertExists()
+        rule.onNode(hasText("Change disc") and hasClickAction()).assertIsSelected()
+        rule.onNodeWithText("SLPS-02021").assertDoesNotExist()
+        rule.onNodeWithText("Ace Combat 3 (Disc 2)").assertExists()
+
+        press(Key.DirectionUp)
+        press(Key.Enter)
+        assertEquals(listOf("pickDisc 1"), calls)
+    }
+
+    @Test
+    fun aDiscWithTheGamesTitleShowsItsSerial() {
+        val discs = ac3Discs.map { it.copy(title = "Ace Combat 3") }
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(discs, current = 1))
+        show(game = GameEntry("content://g/ac3 1.chd", "Ace Combat 3", "SLPS-02020", "NTSC-J", 0, 0, null, discs))
+
+        rule.onNodeWithText("SLPS-02021").assertExists()
+    }
+
+    @Test
+    fun bLeavesTheDiscPanelForItsRow() {
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(ac3Discs, current = 1))
+        show()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeDiscs"), calls)
+        rule.onNodeWithText("Change disc").assertIsFocused()
+    }
+
+    @Test
+    fun theDiscPanelsHintsSayInsert() {
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(ac3Discs, current = 1))
+        show()
+
+        rule.onNodeWithContentDescription("A: Insert").assertExists()
+    }
+
+    @Test
+    fun aFailedSwapShowsInThePanel() {
+        val choice = DiscChoice(ac3Discs, current = 1, error = "Disc 2 isn't in your library any more.")
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = choice)
+        show()
+
+        rule.onNodeWithText("Disc 2 isn't in your library any more.").assertExists()
+    }
+
+    private fun codes(vararg groups: PatchCodeGroup) = CodePanel(groups.toList(), "Crash Bandicoot.cht")
+
+    @Test
+    fun patchCodesSitsAfterScreenshot() {
+        show()
+
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Patch codes", substring = true)).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("openCodes"), calls)
+    }
+
+    @Test
+    fun aCodeIsASwitchRow() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(4, "Infinite HP", "In battle", false, false)))),
+            )
+        show()
+
+        rule.onNode(isFocused() and hasText("Infinite HP", substring = true)).assertIsOff()
+        rule.onNodeWithText("In battle").assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("setCode 4 true"), calls)
+    }
+
+    @Test
+    fun aManualCodeHasApply() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(2, "Max Money Now", null, true, false)))),
+            )
+        show()
+
+        rule.onNodeWithText("Apply").assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("applyCode 2"), calls)
+    }
+
+    @Test
+    fun groupsShowTheirHeadings() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes =
+                    codes(
+                        PatchCodeGroup("Player", listOf(PatchCodeRow(0, "Infinite HP", null, false, true))),
+                        PatchCodeGroup("Other", listOf(PatchCodeRow(1, "Max Money", null, false, false))),
+                    ),
+            )
+        show()
+
+        rule.onNodeWithText("PLAYER").assertExists()
+        rule.onNodeWithText("OTHER").assertExists()
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Max Money", substring = true)).assertExists()
+    }
+
+    @Test
+    fun noCodesSaysWhichFileToAdd() {
+        state = GameMenuState(booted = true, codes = codes())
+        show()
+
+        rule.onNodeWithText("No patch codes for this game.").assertExists()
+        rule.onNodeWithText("Add Crash Bandicoot.cht to the cheats folder in your data folder.").assertExists()
+    }
+
+    @Test
+    fun appliedAndErrorsShowInThePanel() {
+        val rows = listOf(PatchCodeRow(0, "Max Money Now", null, true, false))
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, rows)).copy(applied = "Applied: Max Money Now"),
+            )
+        show()
+        rule.onNodeWithText("Applied: Max Money Now").assertExists()
+    }
+
+    @Test
+    fun bLeavesTheCodePanelForItsRow() {
+        state =
+            GameMenuState(
+                booted = true,
+                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(0, "Infinite HP", null, false, false)))),
+            )
+        show()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeCodes"), calls)
+        rule.onNodeWithText("Patch codes").assertIsFocused()
+    }
+
+    // The Thor's screen: the menu narrows beside a side panel and widens again as it closes, and the row it came from,
+    // below the fold, must be scrolled back into view as it takes the focus.
+    @Test
+    fun aClosedPanelsRowIsShownAgainOnASmallScreen() {
+        val rows = listOf(PatchCodeRow(0, "Infinite HP", null, false, false))
+        state = GameMenuState(booted = true, analogMode = false, disc = 1, discCount = 2)
+        show(width = 640, height = 360)
+        for (step in 0 until 12) {
+            if (rule.onNodeWithText("Patch codes").isFocusedNow()) break
+            press(Key.DirectionDown)
+        }
+        rule.onNodeWithText("Patch codes").assertIsDisplayed()
+
+        state = state.copy(codes = codes(PatchCodeGroup(null, rows)))
+        rule.waitForIdle()
+        press(Key.ButtonB)
+
+        rule.onNodeWithText("Patch codes").assertIsFocused().assertIsDisplayed()
+    }
+
+    // As above, closing the disc panel by picking the disc already in.
+    @Test
+    fun pickingTheCurrentDiscShowsItsRowAgainOnASmallScreen() {
+        state = GameMenuState(booted = true, analogMode = false, disc = 1, discCount = 2)
+        show(width = 640, height = 360)
+        for (step in 0 until 12) {
+            if (rule.onNodeWithText("Change disc").isFocusedNow()) break
+            press(Key.DirectionDown)
+        }
+
+        state = state.copy(discs = DiscChoice(ac3Discs, current = 1))
+        rule.waitForIdle()
+        rule.onNode(isFocused() and hasText("Disc 1", substring = true)).assertExists()
+        press(Key.Enter)
+
+        assertEquals(listOf("pickDisc 1"), calls)
+        rule.onNodeWithText("Change disc").assertIsFocused().assertIsDisplayed()
+    }
+
+    private fun SemanticsNodeInteraction.isFocusedNow() =
+        fetchSemanticsNode().config.getOrElse(SemanticsProperties.Focused) { false }
 
     @Test
     fun noSavesSaysSo() {

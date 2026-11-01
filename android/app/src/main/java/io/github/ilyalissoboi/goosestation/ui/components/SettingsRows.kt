@@ -61,6 +61,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -332,7 +333,10 @@ private fun CyclerArrow(
     }
 }
 
-/** An on/off setting: the [label], and a square toggle showing [checked]. A, Enter or a tap call [onToggle]. */
+/**
+ * An on/off setting: the [label], and a square toggle showing [checked]. A, Enter or a tap call [onToggle]. The label
+ * and its [note] wrap, each up to [maxLines] lines, then end in an ellipsis.
+ */
 @Composable
 fun SwitchRow(
     label: String,
@@ -340,6 +344,7 @@ fun SwitchRow(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     note: String? = null,
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     Column(
         modifier =
@@ -352,11 +357,17 @@ fun SwitchRow(
     ) {
         LabelValue(
             label = {
-                Text(label, style = MaterialTheme.typography.titleMedium, color = GooseStationTheme.colors.ink)
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = GooseStationTheme.colors.ink,
+                    maxLines = maxLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
             },
             value = { Toggle(checked) },
         )
-        note?.let { RowNote(it) }
+        note?.let { RowNote(it, maxLines) }
     }
 }
 
@@ -472,6 +483,15 @@ private const val SHORT_VALUE_SHARE = 3
 
 /** A line under a row's label and value, in the row, so it's read with them. */
 @Composable
-private fun RowNote(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = GooseStationTheme.colors.inkMuted)
+private fun RowNote(
+    text: String,
+    maxLines: Int = Int.MAX_VALUE,
+) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = GooseStationTheme.colors.inkMuted,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
 }

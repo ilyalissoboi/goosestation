@@ -6,15 +6,36 @@
 -keep class io.github.ilyalissoboi.goosestation.core.NativeLibrary { *; }
 -keep interface io.github.ilyalissoboi.goosestation.core.NativeCallbacks { *; }
 -keepclassmembers class * implements io.github.ilyalissoboi.goosestation.core.NativeCallbacks {
-    public void onGameStarted(java.lang.String);
+    public void onGameStarted(java.lang.String, java.lang.String);
     public void onGameStopped();
     public void onError(java.lang.String);
     public void onBindingCaptured(java.lang.String);
+    public void onOsdMessage(java.lang.String, java.lang.String, float, io.github.ilyalissoboi.goosestation.core.ArgbImage);
+    public void onFastForwardChanged(boolean);
 }
 
-# jni_bridge.cpp finds GameEntry and its constructor by name in JNI_OnLoad, for getGameList().
+# jni_bridge.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().
 -keep class io.github.ilyalissoboi.goosestation.core.GameEntry {
-    <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, long, long, java.lang.String);
+    <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, long, long, java.lang.String,
+        io.github.ilyalissoboi.goosestation.core.GameDisc[], boolean);
+}
+-keep class io.github.ilyalissoboi.goosestation.core.GameDisc {
+    <init>(java.lang.String, java.lang.String, java.lang.String, int);
+}
+
+# jni_bridge.cpp finds these and their constructors by name in JNI_OnLoad: pictures (OSD icons, save state
+# screenshots), save state previews, and the running game's patch codes.
+-keep class io.github.ilyalissoboi.goosestation.core.ArgbImage {
+    <init>(int, int, int[]);
+}
+-keep class io.github.ilyalissoboi.goosestation.core.SaveStatePreview {
+    <init>(io.github.ilyalissoboi.goosestation.core.ArgbImage, int);
+}
+-keep class io.github.ilyalissoboi.goosestation.core.PatchCode {
+    <init>(int, java.lang.String, java.lang.String, boolean, boolean);
+}
+-keep class io.github.ilyalissoboi.goosestation.core.PatchCodes {
+    <init>(java.lang.String, io.github.ilyalissoboi.goosestation.core.PatchCode[]);
 }
 
 # jni_bridge.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().

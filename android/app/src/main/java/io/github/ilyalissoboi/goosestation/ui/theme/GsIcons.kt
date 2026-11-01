@@ -116,6 +116,17 @@ object GsIcons {
         }
     }
 
+    val code: ImageVector by lazy {
+        icon("code") {
+            moveTo(8f, 6f)
+            lineTo(2f, 12f)
+            lineTo(8f, 18f)
+            moveTo(16f, 6f)
+            lineTo(22f, 12f)
+            lineTo(16f, 18f)
+        }
+    }
+
     val disc: ImageVector by lazy {
         icon("disc") {
             moveTo(20.31f, 15.44f)

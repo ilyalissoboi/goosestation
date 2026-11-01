@@ -4,9 +4,13 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.PatchCode
+import io.github.ilyalissoboi.goosestation.core.PatchCodes
+import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
 
 /**
- * A core for the in-game menu's tests: [times] and [screenshots] by slot ([SaveSlots.RESUME] for the resume state),
+ * A core for the in-game menu's tests: [times], [screenshots] and [stateDiscs] by slot ([SaveSlots.RESUME] for the
+ * resume state), [serialTimes] for a serial whose times differ from [times], [moveFails] for the moves that fail,
  * [saveError], [loadError] and [analog] as the calls' results, and every call logged to [calls] as "saveState 3" and so on.
  */
 class FakeGameCore(
@@ -14,6 +18,14 @@ class FakeGameCore(
 ) : GameCoreApi {
     val times = HashMap<Int, Long>()
     val screenshots = HashMap<Int, ArgbImage>()
+    val stateDiscs = HashMap<Int, Int>()
+    val serialTimes = HashMap<String, Map<Int, Long>>()
+    val moveFails = HashSet<String>()
+    var discInDrive = 1
+    var discError: String? = null
+    var codes = listOf<PatchCode>()
+    var codesFile = "Crash Bandicoot.cht"
+    var codeError: String? = null
     var saveError: String? = null
     var loadError: String? = null
     var resumeError: String? = null
@@ -23,25 +35,45 @@ class FakeGameCore(
 
     override fun getSaveStateTimes(serial: String): LongArray {
         calls += "getSaveStateTimes $serial"
-        return LongArray(SaveSlots.COUNT + 1) { index -> times[if (index == 0) SaveSlots.RESUME else index] ?: 0L }
+        val saved = serialTimes[serial] ?: times
+        return LongArray(SaveSlots.COUNT + 1) { index -> saved[if (index == 0) SaveSlots.RESUME else index] ?: 0L }
     }
 
-    override fun getSaveStateScreenshot(
+    override fun getSaveStatePreview(
         serial: String,
         slot: Int,
-    ): ArgbImage? {
-        calls += "getSaveStateScreenshot $serial $slot"
-        return screenshots[slot]
+    ): SaveStatePreview? {
+        calls += "getSaveStatePreview $serial $slot"
+        val picture = screenshots[slot]
+        val disc = stateDiscs[slot] ?: 0
+        return if (picture == null && disc == 0) null else SaveStatePreview(picture, disc)
     }
 
-    override fun saveState(slot: Int): String? {
-        calls += "saveState $slot"
+    override fun saveState(
+        key: String,
+        slot: Int,
+    ): String? {
+        calls += "saveState $key $slot"
         return saveError
     }
 
-    override fun loadState(slot: Int): String? {
-        calls += "loadState $slot"
+    override fun loadState(
+        key: String,
+        slot: Int,
+    ): String? {
+        calls += "loadState $key $slot"
         return loadError
+    }
+
+    override fun moveSaveState(
+        fromSerial: String,
+        fromSlot: Int,
+        toSerial: String,
+        toSlot: Int,
+    ): Boolean {
+        val move = "moveSaveState $fromSerial $fromSlot $toSerial $toSlot"
+        calls += move
+        return move !in moveFails
     }
 
     override fun savesResumeState(): Boolean {
@@ -49,8 +81,8 @@ class FakeGameCore(
         return resumeOn
     }
 
-    override fun saveResumeState(): String? {
-        calls += "saveResumeState"
+    override fun saveResumeState(key: String): String? {
+        calls += "saveResumeState $key"
         return resumeError
     }
 
@@ -78,5 +110,34 @@ class FakeGameCore(
 
     override fun saveScreenshot() {
         calls += "saveScreenshot"
+    }
+
+    override fun getCurrentDisc(): Int {
+        calls += "getCurrentDisc"
+        return discInDrive
+    }
+
+    override fun changeDisc(number: Int): String? {
+        calls += "changeDisc $number"
+        if (discError == null) discInDrive = number
+        return discError
+    }
+
+    override fun getPatchCodes(): PatchCodes {
+        calls += "getPatchCodes"
+        return PatchCodes(codesFile, codes.toTypedArray())
+    }
+
+    override fun setPatchCode(
+        index: Int,
+        on: Boolean,
+    ): String? {
+        calls += "setPatchCode $index $on"
+        return codeError
+    }
+
+    override fun applyPatchCode(index: Int): String? {
+        calls += "applyPatchCode $index"
+        return codeError
     }
 }

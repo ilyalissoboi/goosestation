@@ -4,6 +4,7 @@
 #include "android_host.h"
 #include "emu_thread.h"
 #include "foreign_settings.h"
+#include "game_codes.h"
 
 #include "core/achievements.h"
 #include "core/analog_controller.h"
@@ -157,6 +158,11 @@ static u32 s_window_width = 0;
 static u32 s_window_height = 0;
 static float s_window_scale = 1.0f;
 static std::optional<std::string> s_pending_boot_path;
+static AndroidDiscGroups::Game s_pending_game;     // the game the pending boot is for
+static u32 s_pending_playlist_index = 0;          // the pending boot's sub-image, for a playlist
+static std::optional<AndroidDiscGroups::Game> s_running_game; // from its boot to its end, CPU thread
+static std::mutex s_listed_games_mutex;
+static std::vector<AndroidDiscGroups::Game> s_listed_games; // guarded by s_listed_games_mutex
 static std::string s_pending_boot_state; // the save state the pending boot starts from, if any
 static std::string s_boot_path;
 static bool s_game_started = false;
@@ -608,7 +614,21 @@ std::optional<std::string> AndroidHost::GetCacheFolder()
   return *relative + '/';
 }
 
-void AndroidHost::StartGame(std::string path, std::string resume_serial)
+// What a load or resume says when the disc a state was saved on isn't in the library.
+static std::string MissingDiscMessage(std::string_view media_path)
+{
+  const size_t separator = media_path.find_last_of("/\\");
+  const std::string_view name = (separator == std::string_view::npos) ? media_path : media_path.substr(separator + 1);
+  return fmt::format("The disc this state was saved on isn't in your library: {}.", name);
+}
+
+void AndroidHost::SetListedGames(std::vector<AndroidDiscGroups::Game> games)
+{
+  std::unique_lock lock(s_listed_games_mutex);
+  s_listed_games = std::move(games);
+}
+
+void AndroidHost::StartGame(std::string path, u32 disc, bool resume)
 {
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to
   // boot, is refused or is cancelled before it boots. The app can't tell which game a late callback was for otherwise.
@@ -619,14 +639,27 @@ void AndroidHost::StartGame(std::string path, std::string resume_serial)
     return;
   }
 
+  // The game as the library listed it, copied: a rescan during the game doesn't change it. A file the list doesn't
+  // have is a game of its own, keyed by the core's serial once it boots.
+  AndroidDiscGroups::Game game;
+  {
+    std::unique_lock lock(s_listed_games_mutex);
+    const auto it = std::find_if(s_listed_games.begin(), s_listed_games.end(),
+                                 [&path](const AndroidDiscGroups::Game& listed) { return listed.path == path; });
+    if (it != s_listed_games.end())
+      game = *it;
+  }
+  if (game.path.empty())
+    game.path = path;
+
   EmuThread::RunOnThread(
-    [path = std::move(path), resume_serial = std::move(resume_serial)]() mutable {
+    [game = std::move(game), disc, resume]() mutable {
       // A running game isn't replaced: the app shuts it down first. One that's stopping (shut down from inside a
       // frame, and only destroyed once System::Execute() returns) is waited for.
       const System::State state = System::GetState();
       if (state != System::State::Shutdown && state != System::State::Stopping)
       {
-        WARNING_LOG("A game is already running, not starting '{}'.", Path::GetFileName(path));
+        WARNING_LOG("A game is already running, not starting '{}'.", Path::GetFileName(game.path));
         NotifyError("A game is already running.");
         NotifyGameStopped();
         return;
@@ -638,9 +671,35 @@ void AndroidHost::StartGame(std::string path, std::string resume_serial)
         NotifyGameStopped();
       }
 
-      s_pending_boot_path = std::move(path);
-      s_pending_boot_state =
-        resume_serial.empty() ? std::string() : System::GetGameSaveStateFileName(resume_serial, -1);
+      // A resume state boots on the disc it was saved on, found by its identity.
+      const std::string resume_state =
+        (resume && !game.key.empty()) ? System::GetGameSaveStateFileName(game.key, -1) : std::string();
+      if (!resume_state.empty() && !game.discs.empty())
+      {
+        const std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(resume_state.c_str());
+        if (info.has_value() && !info->media_path.empty())
+        {
+          const std::optional<u32> number =
+            AndroidDiscGroups::FindStateDisc(game, info->serial, info->media_path, info->media_subimage_index);
+          if (!number.has_value())
+          {
+            NotifyError(fmt::format("Couldn't resume: {}", MissingDiscMessage(info->media_path)));
+            NotifyGameStopped();
+            return;
+          }
+          disc = number.value();
+        }
+      }
+
+      // The disc to boot: a playlist's sub-image, or that disc's own file.
+      const auto chosen = std::find_if(game.discs.begin(), game.discs.end(),
+                                       [disc](const AndroidDiscGroups::Disc& d) { return d.number == disc; });
+      const AndroidDiscGroups::Disc* boot_disc =
+        (chosen != game.discs.end()) ? &*chosen : (game.discs.empty() ? nullptr : &game.discs.front());
+      s_pending_playlist_index = (game.playlist && boot_disc) ? (boot_disc->number - 1) : 0;
+      s_pending_boot_path = (game.playlist || !boot_disc) ? game.path : boot_disc->path;
+      s_pending_boot_state = resume_state;
+      s_pending_game = std::move(game);
       if (state == System::State::Stopping)
         INFO_LOG("Waiting for the last game to stop to start '{}'.", Path::GetFileName(s_pending_boot_path.value()));
       else if (!s_window)
@@ -667,7 +726,13 @@ void AndroidHost::BootPendingGame()
 
   SystemBootParameters parameters(s_boot_path);
   parameters.save_state = std::move(s_pending_boot_state);
+  parameters.media_playlist_index = s_pending_playlist_index;
   s_pending_boot_state.clear();
+  s_pending_playlist_index = 0;
+  s_running_game = std::move(s_pending_game);
+  s_pending_game = {};
+  // Built before the boot, whose UpdateRunningGame() gives it to the core (Host::OnGameChanged()).
+  GameCodes::Load(s_running_game.value());
   if (parameters.save_state.empty())
     INFO_LOG("Starting '{}'.", s_boot_path);
   else
@@ -678,6 +743,7 @@ void AndroidHost::BootPendingGame()
   {
     ERROR_LOG("Failed to start '{}': {}", s_boot_path, error.GetDescription());
     NotifyError(fmt::format("Failed to start {}: {}", Path::GetFileName(s_boot_path), error.GetDescription()));
+    s_running_game.reset();
     NotifyGameStopped();
   }
 }
@@ -691,6 +757,7 @@ void AndroidHost::ShutdownGame()
         INFO_LOG("Cancelling the boot of '{}'.", Path::GetFileName(s_pending_boot_path.value()));
         s_pending_boot_path.reset();
         s_pending_boot_state.clear();
+        s_pending_game = {};
         NotifyGameStopped();
       }
 
@@ -746,12 +813,12 @@ std::vector<s64> AndroidHost::GetSaveStateTimes(std::string serial)
   return times;
 }
 
-std::optional<AndroidHost::Picture> AndroidHost::GetSaveStateScreenshot(std::string serial, s32 slot)
+std::optional<AndroidHost::SaveStatePreview> AndroidHost::GetSaveStatePreview(std::string serial, s32 slot)
 {
   if (!s_initialized || serial.empty())
     return std::nullopt;
 
-  std::optional<Picture> result;
+  std::optional<SaveStatePreview> result;
   EmuThread::RunOnThread(
     [&serial, slot, &result]() {
       const std::string path = System::GetGameSaveStateFileName(serial, slot);
@@ -759,43 +826,55 @@ std::optional<AndroidHost::Picture> AndroidHost::GetSaveStateScreenshot(std::str
         return;
 
       const std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(path.c_str());
-      if (!info.has_value() || !info->screenshot.IsValid())
+      if (!info.has_value())
         return;
 
-      const RGBA8Image& image = info->screenshot;
-      const u32* pixels = image.GetPixels();
-      result.emplace(Picture{image.GetWidth(), image.GetHeight(),
-                             std::vector<u32>(pixels, pixels + image.GetWidth() * image.GetHeight())});
+      SaveStatePreview preview{std::nullopt, 0};
+      if (info->screenshot.IsValid())
+      {
+        const RGBA8Image& image = info->screenshot;
+        const u32* pixels = image.GetPixels();
+        preview.picture = Picture{image.GetWidth(), image.GetHeight(),
+                                  std::vector<u32>(pixels, pixels + image.GetWidth() * image.GetHeight())};
+      }
+      if (s_running_game.has_value() && !info->media_path.empty())
+      {
+        preview.disc = AndroidDiscGroups::FindStateDisc(*s_running_game, info->serial, info->media_path,
+                                                        info->media_subimage_index)
+                         .value_or(0);
+      }
+      if (preview.picture.has_value() || preview.disc != 0)
+        result = std::move(preview);
     },
     true);
   return result;
 }
 
-/// Runs action(path, error) on the CPU thread for the running game's slot file: the reason it couldn't, or nullopt.
+/// Runs action(path, error) on the CPU thread for key's slot file in the running game: the reason it couldn't, or
+/// nullopt.
 template<typename Action>
-static std::optional<std::string> RunOnSlot(s32 slot, const Action& action)
+static std::optional<std::string> RunOnSlot(const std::string& key, s32 slot, const Action& action)
 {
   if (!AndroidHost::s_initialized)
     return std::string(NO_GAME_RUNNING);
 
   std::optional<std::string> result;
   EmuThread::RunOnThread(
-    [slot, &action, &result]() {
+    [&key, slot, &action, &result]() {
       if (!System::IsValid())
       {
         result = NO_GAME_RUNNING;
         return;
       }
 
-      const std::string& serial = System::GetGameSerial();
-      if (serial.empty())
+      if (key.empty())
       {
         result = NO_SERIAL;
         return;
       }
 
       Error error;
-      const std::string path = System::GetGameSaveStateFileName(serial, slot);
+      const std::string path = System::GetGameSaveStateFileName(key, slot);
       if (!action(path, &error))
         result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
     },
@@ -803,16 +882,16 @@ static std::optional<std::string> RunOnSlot(s32 slot, const Action& action)
   return result;
 }
 
-std::optional<std::string> AndroidHost::SaveState(s32 slot)
+std::optional<std::string> AndroidHost::SaveState(std::string key, s32 slot)
 {
-  return RunOnSlot(slot, [](const std::string& path, Error* error) {
+  return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
     return System::SaveState(path.c_str(), error, false);
   });
 }
 
-std::optional<std::string> AndroidHost::LoadState(s32 slot)
+std::optional<std::string> AndroidHost::LoadState(std::string key, s32 slot)
 {
-  return RunOnSlot(slot, [](const std::string& path, Error* error) {
+  return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
     // LoadState() doesn't say when the file is missing in so many words.
     if (!FileSystem::FileExists(path.c_str()))
     {
@@ -820,27 +899,170 @@ std::optional<std::string> AndroidHost::LoadState(s32 slot)
       return false;
     }
 
-    // With the core's undo state: a load that fails part-way puts the game back where it was.
+    // With the core's undo state: a load that fails part-way puts the game back where it was. Its disc is found by
+    // Host::ResolveSaveStateMedia().
     return System::LoadState(path.c_str(), error, true);
   });
 }
 
-std::optional<std::string> AndroidHost::SaveResumeState()
+// The running game's disc in the drive, by number, 0 if none. CPU thread.
+static u32 CurrentDiscNumber()
+{
+  if (!System::IsValid() || !AndroidHost::s_running_game.has_value())
+    return 0;
+
+  const AndroidDiscGroups::Game& game = AndroidHost::s_running_game.value();
+  if (game.playlist)
+    return System::HasMediaSubImages() ? (System::GetMediaSubImageIndex() + 1) : 0;
+
+  const std::string media = System::GetMediaFileName();
+  const auto disc = std::find_if(game.discs.begin(), game.discs.end(),
+                                 [&media](const AndroidDiscGroups::Disc& d) { return d.path == media; });
+  return (disc != game.discs.end()) ? disc->number : 0;
+}
+
+u32 AndroidHost::GetCurrentDisc()
+{
+  if (!s_initialized)
+    return 0;
+
+  u32 number = 0;
+  EmuThread::RunOnThread([&number]() { number = CurrentDiscNumber(); }, true);
+  return number;
+}
+
+std::optional<std::string> AndroidHost::ChangeDisc(u32 number)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [number, &result]() {
+      if (!System::IsValid() || !s_running_game.has_value())
+      {
+        result = NO_GAME_RUNNING;
+        return;
+      }
+
+      const AndroidDiscGroups::Game& game = s_running_game.value();
+      const auto disc = std::find_if(game.discs.begin(), game.discs.end(),
+                                     [number](const AndroidDiscGroups::Disc& d) { return d.number == number; });
+      if (game.discs.size() < 2 || disc == game.discs.end())
+      {
+        result = "This game has one disc.";
+        return;
+      }
+
+      if (CurrentDiscNumber() == number)
+        return;
+
+      if (!FileSystem::FileExists(disc->path.c_str()))
+      {
+        result = fmt::format("Disc {} isn't in your library any more.", number);
+        return;
+      }
+
+      const bool inserted =
+        game.playlist ? System::SwitchMediaSubImage(number - 1) : System::InsertMedia(disc->path.c_str());
+      if (!inserted)
+        result = fmt::format("Couldn't insert disc {}.", number);
+      else
+        INFO_LOG("Disc {} of '{}' is in.", number, game.title);
+    },
+    true);
+  return result;
+}
+
+AndroidHost::PatchCodes AndroidHost::GetPatchCodes()
+{
+  PatchCodes result;
+  if (!s_initialized)
+    return result;
+
+  EmuThread::RunOnThread(
+    [&result]() {
+      if (!System::IsValid() || !s_running_game.has_value())
+        return;
+
+      result.file_name = GameCodes::AddFileName();
+      for (const GameCodes::Code& code : GameCodes::List())
+        result.codes.push_back({code.group, code.name, code.manual, code.on});
+    },
+    true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::SetPatchCode(u32 index, bool on)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [index, on, &result]() {
+      result = System::IsValid() ? GameCodes::SetOn(index, on) : std::optional<std::string>(NO_GAME_RUNNING);
+    },
+    true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::ApplyPatchCode(u32 index)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [index, &result]() {
+      result = System::IsValid() ? GameCodes::ApplyOnce(index) : std::optional<std::string>(NO_GAME_RUNNING);
+    },
+    true);
+  return result;
+}
+
+bool AndroidHost::MoveSaveState(std::string from_serial, s32 from_slot, std::string to_serial, s32 to_slot)
+{
+  if (!s_initialized || from_serial.empty() || to_serial.empty())
+    return false;
+
+  bool moved = false;
+  EmuThread::RunOnThread(
+    [&]() {
+      const std::string from = System::GetGameSaveStateFileName(from_serial, from_slot);
+      const std::string to = System::GetGameSaveStateFileName(to_serial, to_slot);
+      if (!FileSystem::FileExists(from.c_str()) || FileSystem::FileExists(to.c_str()))
+        return;
+
+      Error error;
+      moved = FileSystem::RenamePath(from.c_str(), to.c_str(), &error);
+      if (moved)
+        INFO_LOG("Moved '{}' to '{}'.", Path::GetFileName(from), Path::GetFileName(to));
+      else
+        ERROR_LOG("Failed to move '{}' to '{}': {}", Path::GetFileName(from), Path::GetFileName(to),
+                  error.GetDescription());
+    },
+    true);
+  return moved;
+}
+
+std::optional<std::string> AndroidHost::SaveResumeState(std::string key)
 {
   if (!s_initialized)
     return std::nullopt;
 
   std::optional<std::string> result;
   EmuThread::RunOnThread(
-    [&result]() {
+    [&key, &result]() {
       // A game with no ID (a PSF, the BIOS alone) has nowhere to keep one, and none could be offered. A PS-EXE, or a
       // disc the database doesn't know and with no serial of its own, has the core's content-hash ID (HASH-…), which
       // keys its states as a serial does.
-      if (!System::IsValid() || !g_settings.save_state_on_exit || System::GetGameSerial().empty())
+      if (!System::IsValid() || !g_settings.save_state_on_exit || key.empty())
         return;
 
       Error error;
-      if (!System::SaveResumeState(&error))
+      const std::string path = System::GetGameSaveStateFileName(key, -1);
+      if (!System::SaveState(path.c_str(), &error, false))
       {
         ERROR_LOG("Failed to save the resume state: {}", error.GetDescription());
         result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
@@ -1642,6 +1864,11 @@ void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& loc
   // status icons would show the same things twice.
   g_settings.display_show_status_indicators = false;
 
+  // The host owns each game's patch code list and gives it to the core itself (GameCodes), and the core applies
+  // whatever list it's given. With this on, the core would also load each disc's own .cht file as it starts, and drop
+  // the list when the setting changes. It's never written back: desktop keeps its own setting in a shared settings.ini.
+  g_settings.enable_cheats = false;
+
   // The build's page size is a multiple of 4 KB pages, but fastmem can't map pages smaller than the system's.
   const long system_page_size = sysconf(_SC_PAGESIZE);
   if (system_page_size > static_cast<long>(HOST_PAGE_SIZE) && g_settings.cpu_fastmem_mode != CPUFastmemMode::Disabled)
@@ -1802,6 +2029,9 @@ void Host::OnSystemStarted()
   const std::string& title = System::GetGameTitle();
   INFO_LOG("Game started: {}", title);
   AndroidHost::s_game_started = true;
+  // A file the library didn't list is keyed by the core's ID for it.
+  if (AndroidHost::s_running_game.has_value() && AndroidHost::s_running_game->key.empty())
+    AndroidHost::s_running_game->key = System::GetGameSerial();
   AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
                                  System::GetGameSerial());
 }
@@ -1810,6 +2040,8 @@ void Host::OnSystemDestroyed()
 {
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
+  AndroidHost::s_running_game.reset();
+  GameCodes::Clear();
 
   // Fast forward ends with the game.
   if (AndroidHost::s_fast_forward_reported)
@@ -1847,6 +2079,37 @@ void Host::OnPerformanceCountersUpdated()
 void Host::OnGameChanged(const std::string& disc_path, const std::string& game_serial, const std::string& game_name)
 {
   INFO_LOG("Game changed: '{}' ({}), {}", game_name, game_serial, disc_path);
+
+  // The core drops its code list at every change of disc or game: it gets the game's one list again.
+  GameCodes::Apply();
+}
+
+std::optional<Host::SaveStateMedia> Host::ResolveSaveStateMedia(std::string_view serial, std::string_view media_path,
+                                                                u32 subimage_index, Error* error)
+{
+  // The disc in the drive now (the undo state, or a state of this disc), or a game without listed discs: as it is.
+  if (!AndroidHost::s_running_game.has_value() || AndroidHost::s_running_game->discs.empty() ||
+      media_path == System::GetMediaFileName())
+  {
+    return SaveStateMedia{std::string(media_path), subimage_index};
+  }
+
+  const AndroidDiscGroups::Game& game = AndroidHost::s_running_game.value();
+  if (const std::optional<u32> number = AndroidDiscGroups::FindStateDisc(game, serial, media_path, subimage_index))
+  {
+    const auto disc = std::find_if(game.discs.begin(), game.discs.end(),
+                                   [&number](const AndroidDiscGroups::Disc& d) { return d.number == *number; });
+    const std::string& path = game.playlist ? game.path : disc->path;
+    if (FileSystem::FileExists(path.c_str()))
+    {
+      INFO_LOG("The state's disc '{}' is disc {} here: '{}'.", Path::GetFileName(media_path), *number, path);
+      return SaveStateMedia{path, game.playlist ? (*number - 1) : 0};
+    }
+  }
+
+  WARNING_LOG("No disc here for the state's '{}' ({}, sub-image {}).", media_path, serial, subimage_index);
+  Error::SetString(error, MissingDiscMessage(media_path));
+  return std::nullopt;
 }
 
 void Host::RequestResizeHostDisplay(s32 width, s32 height)

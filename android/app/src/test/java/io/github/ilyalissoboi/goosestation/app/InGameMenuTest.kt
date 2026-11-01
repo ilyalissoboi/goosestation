@@ -4,6 +4,9 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
+import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.PatchCode
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -20,6 +23,7 @@ class InGameMenuTest {
     private val calls = mutableListOf<String>()
     private val api = FakeGameCore(calls)
     private val lastSlots = MemoryLastSlots()
+    private val records = MemoryRecords()
     private val picture = ArgbImage(2, 1, intArrayOf(-1, -1))
 
     private fun TestScope.menu(booted: Boolean = true): InGameMenu {
@@ -29,12 +33,13 @@ class InGameMenuTest {
                 StandardTestDispatcher(testScheduler),
                 api,
                 lastSlots,
+                records,
                 onMessage = { calls += "message $it" },
                 onResume = { calls += "resume" },
                 onExit = { calls += "exit $it" },
             )
         if (booted) {
-            menu.gameStarted(SERIAL)
+            menu.gameStarted(game(SERIAL))
             runCurrent()
         }
         calls.clear()
@@ -128,8 +133,8 @@ class InGameMenuTest {
             assertEquals(
                 listOf(
                     "getSaveStateTimes $SERIAL",
-                    "getSaveStateScreenshot $SERIAL 1",
-                    "getSaveStateScreenshot $SERIAL 2",
+                    "getSaveStatePreview $SERIAL 1",
+                    "getSaveStatePreview $SERIAL 2",
                 ),
                 calls,
             )
@@ -189,7 +194,7 @@ class InGameMenuTest {
             menu.pickSlot(2)
             runCurrent()
 
-            assertEquals(listOf("saveState 2", "message Saved to slot 2", "resume"), calls)
+            assertEquals(listOf("saveState $SERIAL 2", "message Saved to slot 2", "resume"), calls)
             assertNull(menu.state.slots)
             assertEquals(2, lastSlots.get(SERIAL))
         }
@@ -214,7 +219,7 @@ class InGameMenuTest {
             menu.pickSlot(3)
             menu.confirmReplace()
             runCurrent()
-            assertEquals(listOf("saveState 3", "message Saved to slot 3", "resume"), calls)
+            assertEquals(listOf("saveState $SERIAL 3", "message Saved to slot 3", "resume"), calls)
         }
 
     @Test
@@ -230,7 +235,7 @@ class InGameMenuTest {
             menu.pickSlot(2)
             runCurrent()
 
-            assertEquals(listOf("saveState 2"), calls)
+            assertEquals(listOf("saveState $SERIAL 2"), calls)
             assertEquals(
                 "Couldn't save to slot 2: No space left on device.",
                 menu.slots().error,
@@ -251,7 +256,7 @@ class InGameMenuTest {
             menu.pickSlot(1)
             runCurrent()
 
-            assertEquals(listOf("loadState 1", "message Loaded slot 1", "resume"), calls)
+            assertEquals(listOf("loadState $SERIAL 1", "message Loaded slot 1", "resume"), calls)
             assertEquals(1, lastSlots.get(SERIAL))
         }
 
@@ -268,7 +273,7 @@ class InGameMenuTest {
             menu.pickSlot(1)
             runCurrent()
 
-            assertEquals(listOf("loadState 1"), calls)
+            assertEquals(listOf("loadState $SERIAL 1"), calls)
             assertEquals("Couldn't load slot 1: The save state is from another version.", menu.slots().error)
             assertNull(lastSlots.get(SERIAL))
         }
@@ -285,7 +290,7 @@ class InGameMenuTest {
             menu.pickSlot(SaveSlots.RESUME)
             runCurrent()
 
-            assertEquals(listOf("loadState -1", "message Loaded your resume state", "resume"), calls)
+            assertEquals(listOf("loadState $SERIAL -1", "message Loaded your resume state", "resume"), calls)
         }
 
     @Test
@@ -339,7 +344,7 @@ class InGameMenuTest {
     fun aGameWithoutASerialHasNoSlots() =
         runTest {
             val menu = menu(booted = false)
-            menu.gameStarted("")
+            menu.gameStarted(game(""))
             runCurrent()
 
             menu.openSlots(SlotMode.Save)
@@ -456,7 +461,10 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
 
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -474,7 +482,7 @@ class InGameMenuTest {
     fun aGameWithoutASerialExitsWithoutSaving() =
         runTest {
             val menu = menu(booted = false)
-            menu.gameStarted("")
+            menu.gameStarted(game(""))
             runCurrent()
             calls.clear()
 
@@ -497,7 +505,7 @@ class InGameMenuTest {
                 listOf(
                     "savesResumeState",
                     "getSaveStateTimes $SERIAL",
-                    "saveResumeState",
+                    "saveResumeState $SERIAL",
                     "exit No space left on device.",
                 ),
                 calls,
@@ -514,7 +522,10 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
 
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -526,7 +537,10 @@ class InGameMenuTest {
             menu.resume()
             runCurrent()
 
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -571,7 +585,10 @@ class InGameMenuTest {
             menu.confirmExit()
             runCurrent()
             assertFalse(menu.state.confirmingExit)
-            assertEquals(listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState", "exit null"), calls)
+            assertEquals(
+                listOf("savesResumeState", "getSaveStateTimes $SERIAL", "saveResumeState $SERIAL", "exit null"),
+                calls,
+            )
         }
 
     @Test
@@ -617,13 +634,13 @@ class InGameMenuTest {
             menu.exit()
             runCurrent()
             assertEquals(500L, menu.state.replacingResume)
-            assertTrue(calls.none { it == "saveResumeState" || it.startsWith("exit") })
+            assertTrue(calls.none { it.startsWith("saveResumeState") || it.startsWith("exit") })
 
             calls.clear()
             menu.replaceResume()
             runCurrent()
             assertNull(menu.state.replacingResume)
-            assertEquals(listOf("saveResumeState", "exit null"), calls)
+            assertEquals(listOf("saveResumeState $SERIAL", "exit null"), calls)
         }
 
     @Test
@@ -668,6 +685,396 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals(listOf("savesResumeState", "exit null"), calls)
+        }
+
+    private fun game(key: String) = GameEntry("content://games/crash.cue", "Crash Bandicoot", key, "NTSC-U", 0, 0, null)
+
+    @Test
+    fun slotsUseTheGamesKeyNotTheDisc() =
+        runTest {
+            api.times[1] = 100
+            val menu = menu(booted = false)
+            menu.gameStarted(game("SLPS-02020"))
+            runCurrent()
+            calls.clear()
+
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.pickSlot(2)
+            runCurrent()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.pickSlot(1)
+            runCurrent()
+
+            assertTrue(calls.toString(), "saveState SLPS-02020 2" in calls)
+            assertTrue(calls.toString(), "loadState SLPS-02020 1" in calls)
+            assertTrue(calls.toString(), calls.filter { it.startsWith("getSaveState") }.all { "SLPS-02020" in it })
+        }
+
+    private val ac3 =
+        GameEntry(
+            "content://games/ac3 (disc 1).chd",
+            "Ace Combat 3",
+            "SLPS-02020",
+            "NTSC-J",
+            0,
+            0,
+            null,
+            listOf(
+                GameDisc("content://games/ac3 (disc 1).chd", "SLPS-02020", "AC3 (Disc 1)", 1),
+                GameDisc("content://games/ac3 (disc 2).chd", "SLPS-02021", "AC3 (Disc 2)", 2),
+            ),
+        )
+
+    private fun TestScope.ac3Menu(): InGameMenu {
+        val menu = menu(booted = false)
+        menu.gameStarted(ac3)
+        runCurrent()
+        calls.clear()
+        return menu
+    }
+
+    @Test
+    fun loadListsOtherDiscsSavesAfterTheSlots() =
+        runTest {
+            api.serialTimes["SLPS-02020"] = mapOf(1 to 100L)
+            api.serialTimes["SLPS-02021"] = mapOf(SaveSlots.RESUME to 50L, 4 to 60L)
+            val menu = ac3Menu()
+
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertEquals(listOf(1), menu.entries().map { it.slot })
+            val others = menu.slots().others
+            assertEquals(listOf(SaveSlots.RESUME, 4), others.map { it.slot })
+            assertEquals(listOf("SLPS-02021", "SLPS-02021"), others.map { it.owner })
+            assertEquals(listOf(2, 2), others.map { it.disc })
+            assertEquals(listOf(50L, 60L), others.map { it.savedAt })
+        }
+
+    @Test
+    fun pickingAnOtherSaveLoadsIt() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(4 to 60L)
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            calls.clear()
+
+            menu.pickOther("SLPS-02021", 4)
+            runCurrent()
+
+            assertEquals(
+                listOf("loadState SLPS-02021 4", "getCurrentDisc", "message Loaded disc 2's slot 4", "resume"),
+                calls,
+            )
+            assertNull(lastSlots.get("SLPS-02020"))
+            assertNull(lastSlots.get("SLPS-02021"))
+        }
+
+    @Test
+    fun aFailedOtherLoadSaysWhy() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(SaveSlots.RESUME to 60L)
+            api.loadError = "Bad state."
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            menu.pickOther("SLPS-02021", SaveSlots.RESUME)
+            runCurrent()
+
+            assertEquals("Couldn't load that save: Bad state.", menu.slots().error)
+        }
+
+    @Test
+    fun loadingAnOtherResumeStateSaysSo() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(SaveSlots.RESUME to 60L)
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            calls.clear()
+
+            menu.pickOther("SLPS-02021", SaveSlots.RESUME)
+            runCurrent()
+
+            assertTrue(calls.toString(), "message Loaded disc 2's resume state" in calls)
+        }
+
+    @Test
+    fun saveNeverListsOtherSaves() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(4 to 60L)
+            val menu = ac3Menu()
+
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+
+            assertTrue(menu.slots().others.isEmpty())
+            assertTrue(calls.none { it == "getSaveStateTimes SLPS-02021" })
+        }
+
+    @Test
+    fun aMultiDiscGamesRowsTakeTheirDisc() =
+        runTest {
+            api.times[1] = 100
+            api.stateDiscs[1] = 2
+            val menu = ac3Menu()
+
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertEquals(2, menu.entries().single().disc)
+        }
+
+    @Test
+    fun aSingleDiscGamesRowsHaveNoDisc() =
+        runTest {
+            api.times[1] = 100
+            api.stateDiscs[1] = 1
+            val menu = menu()
+
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertNull(menu.entries().single().disc)
+        }
+
+    @Test
+    fun changeDiscShowsOnlyForMultiDiscGames() =
+        runTest {
+            assertEquals(0, menu().state.discCount)
+            assertEquals(2, ac3Menu().state.discCount)
+        }
+
+    @Test
+    fun theCurrentDiscIsReadAsTheMenuOpens() =
+        runTest {
+            val menu = ac3Menu()
+            api.discInDrive = 2
+
+            menu.opened()
+            runCurrent()
+
+            assertEquals(2, menu.state.disc)
+            assertEquals(2, records.lastDisc("SLPS-02020"))
+        }
+
+    @Test
+    fun aSingleDiscGameDoesntAskForItsDisc() =
+        runTest {
+            val menu = menu()
+
+            menu.opened()
+            runCurrent()
+
+            assertTrue(calls.none { it == "getCurrentDisc" })
+        }
+
+    @Test
+    fun pickingAnotherDiscInsertsItAndResumes() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openDiscs()
+            assertEquals(
+                listOf(1, 2),
+                menu.state.discs!!
+                    .discs
+                    .map { it.number },
+            )
+            assertEquals(1, menu.state.discs!!.current)
+
+            menu.pickDisc(2)
+            runCurrent()
+
+            assertEquals(listOf("changeDisc 2", "message Disc 2 inserted", "resume"), calls)
+            assertNull(menu.state.discs)
+            assertEquals(2, menu.state.disc)
+            assertEquals(2, records.lastDisc("SLPS-02020"))
+        }
+
+    @Test
+    fun pickingTheCurrentDiscOnlyCloses() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openDiscs()
+
+            menu.pickDisc(1)
+            runCurrent()
+
+            assertEquals(emptyList<String>(), calls)
+            assertNull(menu.state.discs)
+        }
+
+    @Test
+    fun aMissingDiscKeepsTheMenuOpen() =
+        runTest {
+            api.discError = "Disc 2 isn't in your library any more."
+            val menu = ac3Menu()
+            menu.openDiscs()
+
+            menu.pickDisc(2)
+            runCurrent()
+
+            assertEquals(listOf("changeDisc 2"), calls)
+            assertEquals("Disc 2 isn't in your library any more.", menu.state.discs!!.error)
+            assertFalse(menu.state.discs!!.busy)
+            assertEquals(1, menu.state.disc)
+        }
+
+    @Test
+    fun aLoadRecordsItsDisc() =
+        runTest {
+            api.times[1] = 100
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            api.discInDrive = 2
+
+            menu.pickSlot(1)
+            runCurrent()
+
+            assertEquals(2, menu.state.disc)
+            assertEquals(2, records.lastDisc("SLPS-02020"))
+        }
+
+    @Test
+    fun onePanelAtATime() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Save)
+            menu.openDiscs()
+            assertNull(menu.state.slots)
+
+            menu.openSlots(SlotMode.Load)
+            assertNull(menu.state.discs)
+        }
+
+    @Test
+    fun aSingleDiscGameHasNoDiscPanel() =
+        runTest {
+            val menu = menu()
+
+            menu.openDiscs()
+
+            assertNull(menu.state.discs)
+        }
+
+    @Test
+    fun codesOpenBesideTheMenu() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "Player", "Infinite HP:In battle", false, true))
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+
+            menu.openCodes()
+            assertNull(menu.state.slots)
+            runCurrent()
+
+            val panel = menu.state.codes!!
+            assertEquals("Crash Bandicoot.cht", panel.fileName)
+            val row =
+                panel.groups!!
+                    .single()
+                    .codes
+                    .single()
+            assertEquals("Infinite HP" to "In battle", row.name to row.note)
+            assertTrue(row.on)
+        }
+
+    @Test
+    fun switchingACodeKeepsTheMenuOpen() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "", "A", false, false), PatchCode(1, "", "B", false, false))
+            val menu = menu()
+            menu.openCodes()
+            runCurrent()
+            calls.clear()
+
+            menu.setCode(1, true)
+            assertTrue(
+                menu.state.codes!!
+                    .groups!!
+                    .single()
+                    .codes[1]
+                    .on,
+            )
+            runCurrent()
+
+            assertEquals(listOf("setPatchCode 1 true"), calls)
+            assertTrue(
+                menu.state.codes!!
+                    .groups!!
+                    .single()
+                    .codes[1]
+                    .on,
+            )
+        }
+
+    @Test
+    fun aFailedSwitchPutsTheRowBack() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "", "Infinite HP", false, false))
+            api.codeError = "Disk full."
+            val menu = menu()
+            menu.openCodes()
+            runCurrent()
+
+            menu.setCode(0, true)
+            runCurrent()
+
+            val panel = menu.state.codes!!
+            assertFalse(
+                panel.groups!!
+                    .single()
+                    .codes
+                    .single()
+                    .on,
+            )
+            assertEquals("Couldn't switch Infinite HP: Disk full.", panel.error)
+        }
+
+    @Test
+    fun applyingSaysSo() =
+        runTest {
+            api.codes = listOf(PatchCode(0, "", "Max Money Now:Once", true, false))
+            val menu = menu()
+            menu.openCodes()
+            runCurrent()
+            calls.clear()
+
+            menu.applyCode(0)
+            runCurrent()
+
+            assertEquals(listOf("applyPatchCode 0"), calls)
+            assertEquals("Applied: Max Money Now", menu.state.codes!!.applied)
+            assertTrue(calls.none { it == "resume" })
+        }
+
+    @Test
+    fun aGameWithNoCodesNamesTheFile() =
+        runTest {
+            val menu = menu()
+
+            menu.openCodes()
+            runCurrent()
+
+            assertEquals(emptyList<PatchCodeGroup>(), menu.state.codes!!.groups)
+            assertEquals("Crash Bandicoot.cht", menu.state.codes!!.fileName)
+        }
+
+    @Test
+    fun closingTheCodesDropsALateRead() =
+        runTest {
+            val menu = menu()
+
+            menu.openCodes()
+            menu.closeCodes()
+            runCurrent()
+
+            assertNull(menu.state.codes)
         }
 
     private class MemoryLastSlots : LastSlotStore {

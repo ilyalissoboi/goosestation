@@ -266,10 +266,12 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   and 24 down.
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.
 - `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
-  edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end;
-  focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line` divider before Reset console, and `KeyHints`
-  at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
+  edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end, or
+  under the label when they don't fit; focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line`
+  divider before Reset console, and `KeyHints` at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
+  A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Load state; Patch codes (`code`) follows
+  Screenshot. One side panel shows at a time.
   Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),
   since both exit.
   B steps out one layer at a time, back to the row it came from.
@@ -277,8 +279,18 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   screen under 720 dp wide, the menu narrows to 240 dp while it shows); on a narrow portrait screen, below it, the
   menu keeping the top 40%. Each slot row shows its screenshot at 4:3 (112 x 84
   dp, 64 x 48 dp in a row under 240 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
-  `label`; Saved or Empty; and the time in `mono`. Rows that can't be picked are disabled; Load lists only the slots that hold a save. Replacing a save asks in the
+  `label`; Saved or Empty, with the disc for a multi-disc game ("Saved · Disc 2"); and the time in `mono`. Rows
+  that can't be picked are disabled; Load lists only the slots that hold a save, then the states still under the
+  game's other discs, under an `Eyebrow("Other saves")`. Replacing a save asks in the
   panel, as the menu does. The focus can't leave the panel.
+- `DiscPanel`: Change disc, a side panel framed as `SaveSlotPanel`: a 48 dp row per disc, "Disc N" in `label` with the
+  disc's title (or its serial) under it in `body-sm` `ink-muted`; the disc in the drive on `beak-soft` with "Current"
+  at its end, and focused as it opens. A `Danger` notice says why a disc didn't go in. `KeyHints`: A Insert, B Back.
+- `PatchCodePanel`: Patch codes, a side panel framed the same way: each group's `Eyebrow`, then its codes as
+  `SwitchRow`s with their notes (each two lines at most, then an ellipsis, so no row outgrows the panel), or, for a
+  code applied by hand, a row with Apply at its end. "Applied: <name>" shows
+  as a `Success` notice and a failure as `Danger`, in the panel, which stays open. With no codes it says so and names
+  the file to add, in `mono`.
 - `ResumePrompt`: "Resume where you left off?" over the library, a centred `surface` panel at `radius-lg`: the game's
   title, the resume state's screenshot (224 x 168 dp) and time, then Resume (`Primary`, focused) and Start over. The
   `scrim` takes every tap, and the focus can't leave the panel.

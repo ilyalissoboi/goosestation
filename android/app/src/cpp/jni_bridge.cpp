@@ -8,6 +8,7 @@
 #include "content_bridge.h"
 #include "jni_util.h"
 
+#include "core/game_database.h"
 #include "core/game_list.h"
 #include "core/settings.h"
 
@@ -24,6 +25,8 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -47,6 +50,14 @@ jclass s_argb_image_class = nullptr;
 jmethodID s_argb_image_constructor = nullptr;
 jclass s_game_entry_class = nullptr;
 jmethodID s_game_entry_constructor = nullptr;
+jclass s_game_disc_class = nullptr;
+jmethodID s_game_disc_constructor = nullptr;
+jclass s_save_state_preview_class = nullptr;
+jmethodID s_save_state_preview_constructor = nullptr;
+jclass s_patch_code_class = nullptr;
+jmethodID s_patch_code_constructor = nullptr;
+jclass s_patch_codes_class = nullptr;
+jmethodID s_patch_codes_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
 jmethodID s_bios_image_constructor = nullptr;
 jclass s_pad_binding_class = nullptr;
@@ -390,8 +401,67 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   env->DeleteLocalRef(game_entry_class);
   s_game_entry_constructor =
     env->GetMethodID(s_game_entry_class, "<init>",
-                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;)V");
+                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;"
+                     "[Lio/github/ilyalissoboi/goosestation/core/GameDisc;Z)V");
   if (!s_game_entry_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass game_disc_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/GameDisc");
+  if (!game_disc_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_game_disc_class = static_cast<jclass>(env->NewGlobalRef(game_disc_class));
+  env->DeleteLocalRef(game_disc_class);
+  s_game_disc_constructor =
+    env->GetMethodID(s_game_disc_class, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
+  if (!s_game_disc_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  for (const auto& [name, signature, cls, constructor] :
+       {std::tuple("io/github/ilyalissoboi/goosestation/core/PatchCode", "(ILjava/lang/String;Ljava/lang/String;ZZ)V",
+                   &s_patch_code_class, &s_patch_code_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/PatchCodes",
+                   "(Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/PatchCode;)V", &s_patch_codes_class,
+                   &s_patch_codes_constructor)})
+  {
+    jclass local = env->FindClass(name);
+    if (!local)
+    {
+      ClearException(env);
+      return JNI_ERR;
+    }
+
+    *cls = static_cast<jclass>(env->NewGlobalRef(local));
+    env->DeleteLocalRef(local);
+    *constructor = env->GetMethodID(*cls, "<init>", signature);
+    if (!*constructor)
+    {
+      ClearException(env);
+      return JNI_ERR;
+    }
+  }
+
+  jclass save_state_preview_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SaveStatePreview");
+  if (!save_state_preview_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_save_state_preview_class = static_cast<jclass>(env->NewGlobalRef(save_state_preview_class));
+  env->DeleteLocalRef(save_state_preview_class);
+  s_save_state_preview_constructor = env->GetMethodID(s_save_state_preview_class, "<init>",
+                                                      "(Lio/github/ilyalissoboi/goosestation/core/ArgbImage;I)V");
+  if (!s_save_state_preview_constructor)
   {
     ClearException(env);
     return JNI_ERR;
@@ -722,42 +792,163 @@ NATIVE_LIBRARY_FUNCTION(void, refreshGameList)(JNIEnv*, jobject, jboolean invali
   AndroidHost::RefreshGameList(invalidate_cache == JNI_TRUE);
 }
 
+// Each playlist's entries, by path, with the modified time of the file they were read from.
+static std::mutex s_playlist_cache_mutex;
+static std::unordered_map<std::string, std::pair<std::time_t, std::vector<std::string>>> s_playlist_cache;
+
+// The discs of a game, as Java GameDisc objects: null if one couldn't be made (the exception cleared).
+static jobjectArray ToGameDiscs(JNIEnv* env, const std::vector<AndroidDiscGroups::Disc>& discs)
+{
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(discs.size()), s_game_disc_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < discs.size(); i++)
+  {
+    const AndroidDiscGroups::Disc& disc = discs[i];
+    jstring path = ToJString(env, disc.path);
+    jstring serial = ToJString(env, disc.serial);
+    jstring title = ToJString(env, disc.title);
+    jobject entry = nullptr;
+    if (path && serial && title)
+    {
+      entry = env->NewObject(s_game_disc_class, s_game_disc_constructor, path, serial, title,
+                             static_cast<jint>(disc.number));
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(path), static_cast<jobject>(serial), static_cast<jobject>(title)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      env->DeleteLocalRef(result);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  return result;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
 {
+  struct File
+  {
+    const char* region;
+    s64 total_played_time;
+    s64 last_played_time;
+    std::time_t modified_time;
+  };
+
   struct Game
   {
-    std::string path;
-    std::string title;
-    std::string serial;
+    AndroidDiscGroups::Game game;
     const char* region;
     s64 total_played_time;
     s64 last_played_time;
     std::string cover_path;
   };
 
-  // Copied out under the lock; the covers are looked up, and the Java objects made, without holding it.
-  std::vector<Game> games;
+  // Copied out under the lock; the playlists are read, the covers looked up, and the Java objects made, without it.
+  std::vector<AndroidDiscGroups::ListedFile> listed;
+  std::vector<File> files;
   {
     const auto lock = GameList::GetLock();
     const u32 count = GameList::GetEntryCount();
-    games.reserve(count);
+    listed.reserve(count);
+    files.reserve(count);
     for (u32 i = 0; i < count; i++)
     {
       const GameList::Entry* entry = GameList::GetEntryByIndex(i);
       if (entry->IsDiscSet())
         continue;
 
-      games.push_back({entry->path, entry->title, entry->serial, Settings::GetDiscRegionName(entry->region),
-                       static_cast<s64>(entry->total_played_time), static_cast<s64>(entry->last_played_time),
-                       std::string()});
+      AndroidDiscGroups::ListedFile file;
+      file.type = (entry->type == GameList::EntryType::Disc)     ? AndroidDiscGroups::FileType::Disc :
+                  (entry->type == GameList::EntryType::Playlist) ? AndroidDiscGroups::FileType::Playlist :
+                                                                   AndroidDiscGroups::FileType::Other;
+      file.path = entry->path;
+      file.serial = entry->serial;
+      file.title = entry->title;
+      file.disc_set_name = entry->disc_set_name;
+      file.disc_set_index = entry->disc_set_index;
+      file.known = !entry->serial.empty() && GameDatabase::GetEntryForSerial(entry->serial) != nullptr;
+      listed.push_back(std::move(file));
+      files.push_back({Settings::GetDiscRegionName(entry->region), static_cast<s64>(entry->total_played_time),
+                       static_cast<s64>(entry->last_played_time), entry->last_modified_time});
     }
   }
 
+  // A playlist's entries, read once per version of the file, as the game list's own cache keeps what it scanned.
+  {
+    std::unique_lock lock(s_playlist_cache_mutex);
+    for (size_t i = 0; i < listed.size(); i++)
+    {
+      AndroidDiscGroups::ListedFile& file = listed[i];
+      if (file.type != AndroidDiscGroups::FileType::Playlist)
+        continue;
+
+      const auto cached = s_playlist_cache.find(file.path);
+      if (cached != s_playlist_cache.end() && cached->second.first == files[i].modified_time)
+      {
+        file.playlist_paths = cached->second.second;
+        continue;
+      }
+
+      if (const std::optional<std::string> text = FileSystem::ReadFileToString(file.path.c_str()); text.has_value())
+      {
+        file.playlist_paths = AndroidDiscGroups::ParsePlaylist(file.path, text.value());
+        s_playlist_cache[file.path] = {files[i].modified_time, file.playlist_paths};
+      }
+    }
+  }
+
+  std::vector<AndroidDiscGroups::Game> grouped = AndroidDiscGroups::GroupFiles(listed);
+  AndroidHost::SetListedGames(grouped);
+
+  std::vector<Game> games;
+  games.reserve(grouped.size());
+  for (AndroidDiscGroups::Game& game : grouped)
+  {
+    // Play time is kept per serial, so a playlist and its first disc, which share one, count once.
+    const char* region = files[game.files.front()].region;
+    Game shown{std::move(game), region, 0, 0, std::string()};
+    std::vector<std::string_view> counted;
+    for (const size_t index : shown.game.files)
+    {
+      const std::string_view serial = listed[index].serial;
+      if (std::find(counted.begin(), counted.end(), serial) != counted.end())
+        continue;
+
+      counted.push_back(serial);
+      shown.total_played_time += files[index].total_played_time;
+      shown.last_played_time = std::max(shown.last_played_time, files[index].last_played_time);
+    }
+    games.push_back(std::move(shown));
+  }
+
   for (Game& game : games)
-    game.cover_path = GameList::GetCoverImagePath(game.path, game.serial, game.title);
+  {
+    game.cover_path = GameList::GetCoverImagePath(game.game.path, game.game.key, game.game.title);
+    if (game.cover_path.empty() && !game.game.discs.empty())
+    {
+      const AndroidDiscGroups::Disc& first = game.game.discs.front();
+      game.cover_path = GameList::GetCoverImagePath(first.path, first.serial, first.title);
+    }
+  }
 
   std::stable_sort(games.begin(), games.end(), [](const Game& a, const Game& b) {
-    return StringUtil::Strcasecmp(a.title.c_str(), b.title.c_str()) < 0;
+    return StringUtil::Strcasecmp(a.game.title.c_str(), b.game.title.c_str()) < 0;
   });
 
   // Kotlin takes the array as never null: a failure gives an empty one.
@@ -778,23 +969,24 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
   for (size_t i = 0; i < games.size(); i++)
   {
     const Game& game = games[i];
-    jstring path = ToJString(env, game.path);
-    jstring title = ToJString(env, game.title);
-    jstring serial = ToJString(env, game.serial);
+    jstring path = ToJString(env, game.game.path);
+    jstring title = ToJString(env, game.game.title);
+    jstring serial = ToJString(env, game.game.key);
     jstring region = ToJString(env, game.region);
     jstring cover_path = game.cover_path.empty() ? nullptr : ToJString(env, game.cover_path);
+    jobjectArray discs = ToGameDiscs(env, game.game.discs);
     jobject entry = nullptr;
-    if (path && title && serial && region && (cover_path || game.cover_path.empty()))
+    if (path && title && serial && region && discs && (cover_path || game.cover_path.empty()))
     {
       entry = env->NewObject(s_game_entry_class, s_game_entry_constructor, path, title, serial, region,
                              static_cast<jlong>(game.total_played_time), static_cast<jlong>(game.last_played_time),
-                             cover_path);
+                             cover_path, discs, static_cast<jboolean>(game.game.playlist));
       if (ClearException(env))
         entry = nullptr;
     }
 
     for (jobject ref : {static_cast<jobject>(path), static_cast<jobject>(title), static_cast<jobject>(serial),
-                        static_cast<jobject>(region), static_cast<jobject>(cover_path)})
+                        static_cast<jobject>(region), static_cast<jobject>(cover_path), static_cast<jobject>(discs)})
     {
       if (ref)
         env->DeleteLocalRef(ref);
@@ -802,7 +994,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
 
     if (!entry)
     {
-      ERROR_LOG("Failed to pass the game list entry '{}' to Java.", game.path);
+      ERROR_LOG("Failed to pass the game list entry '{}' to Java.", game.game.path);
       env->DeleteLocalRef(result);
       return empty_result();
     }
@@ -828,9 +1020,9 @@ NATIVE_LIBRARY_FUNCTION(void, setCallbacks)(JNIEnv* env, jobject, jobject callba
     env->DeleteGlobalRef(old_callbacks);
 }
 
-NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jstring resume_serial)
+NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jint disc, jboolean resume)
 {
-  AndroidHost::StartGame(FromJString(env, path), resume_serial ? FromJString(env, resume_serial) : std::string());
+  AndroidHost::StartGame(FromJString(env, path), static_cast<u32>(std::max(disc, 0)), resume == JNI_TRUE);
 }
 
 NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject)
@@ -853,14 +1045,29 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jst
   return result;
 }
 
-NATIVE_LIBRARY_FUNCTION(jobject, getSaveStateScreenshot)(JNIEnv* env, jobject, jstring serial, jint slot)
+NATIVE_LIBRARY_FUNCTION(jobject, getSaveStatePreview)(JNIEnv* env, jobject, jstring serial, jint slot)
 {
-  const std::optional<AndroidHost::Picture> picture =
-    AndroidHost::GetSaveStateScreenshot(FromJString(env, serial), static_cast<s32>(slot));
-  if (!picture.has_value())
+  const std::optional<AndroidHost::SaveStatePreview> preview =
+    AndroidHost::GetSaveStatePreview(FromJString(env, serial), static_cast<s32>(slot));
+  if (!preview.has_value())
     return nullptr;
 
-  return ToArgbImage(env, picture->pixels.data(), picture->width, picture->height, true);
+  jobject picture = nullptr;
+  if (preview->picture.has_value())
+  {
+    const AndroidHost::Picture& image = preview->picture.value();
+    picture = ToArgbImage(env, image.pixels.data(), image.width, image.height, true);
+    if (!picture)
+      return nullptr;
+  }
+
+  jobject result = env->NewObject(s_save_state_preview_class, s_save_state_preview_constructor, picture,
+                                  static_cast<jint>(preview->disc));
+  if (ClearException(env))
+    result = nullptr;
+  if (picture)
+    env->DeleteLocalRef(picture);
+  return result;
 }
 
 // The reason a save or load failed, or null when it worked.
@@ -869,19 +1076,96 @@ static jstring ToResult(JNIEnv* env, const std::optional<std::string>& error)
   return error.has_value() ? ToJString(env, error.value()) : nullptr;
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jint slot)
+NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jstring key, jint slot)
 {
-  return ToResult(env, AndroidHost::SaveState(static_cast<s32>(slot)));
+  return ToResult(env, AndroidHost::SaveState(FromJString(env, key), static_cast<s32>(slot)));
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jint slot)
+NATIVE_LIBRARY_FUNCTION(jstring, loadState)(JNIEnv* env, jobject, jstring key, jint slot)
 {
-  return ToResult(env, AndroidHost::LoadState(static_cast<s32>(slot)));
+  return ToResult(env, AndroidHost::LoadState(FromJString(env, key), static_cast<s32>(slot)));
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, saveResumeState)(JNIEnv* env, jobject)
+NATIVE_LIBRARY_FUNCTION(jint, getCurrentDisc)(JNIEnv*, jobject)
 {
-  return ToResult(env, AndroidHost::SaveResumeState());
+  return static_cast<jint>(AndroidHost::GetCurrentDisc());
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, changeDisc)(JNIEnv* env, jobject, jint number)
+{
+  return ToResult(env, AndroidHost::ChangeDisc(static_cast<u32>(std::max(number, 0))));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getPatchCodes)(JNIEnv* env, jobject)
+{
+  const AndroidHost::PatchCodes codes = AndroidHost::GetPatchCodes();
+  jobjectArray array = env->NewObjectArray(static_cast<jsize>(codes.codes.size()), s_patch_code_class, nullptr);
+  if (!array)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < codes.codes.size(); i++)
+  {
+    const AndroidHost::PatchCode& code = codes.codes[i];
+    jstring group = ToJString(env, code.group);
+    jstring name = ToJString(env, code.name);
+    jobject entry = nullptr;
+    if (group && name)
+    {
+      entry = env->NewObject(s_patch_code_class, s_patch_code_constructor, static_cast<jint>(i), group, name,
+                             static_cast<jboolean>(code.manual), static_cast<jboolean>(code.on));
+      if (ClearException(env))
+        entry = nullptr;
+    }
+
+    for (jobject ref : {static_cast<jobject>(group), static_cast<jobject>(name)})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+
+    if (!entry)
+    {
+      env->DeleteLocalRef(array);
+      return nullptr;
+    }
+
+    env->SetObjectArrayElement(array, static_cast<jsize>(i), entry);
+    env->DeleteLocalRef(entry);
+  }
+
+  jstring file_name = ToJString(env, codes.file_name);
+  jobject result = file_name ? env->NewObject(s_patch_codes_class, s_patch_codes_constructor, file_name, array) : nullptr;
+  if (ClearException(env))
+    result = nullptr;
+  if (file_name)
+    env->DeleteLocalRef(file_name);
+  env->DeleteLocalRef(array);
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, setPatchCode)(JNIEnv* env, jobject, jint index, jboolean on)
+{
+  return ToResult(env, AndroidHost::SetPatchCode(static_cast<u32>(std::max(index, 0)), on == JNI_TRUE));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, applyPatchCode)(JNIEnv* env, jobject, jint index)
+{
+  return ToResult(env, AndroidHost::ApplyPatchCode(static_cast<u32>(std::max(index, 0))));
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, moveSaveState)(JNIEnv* env, jobject, jstring from_serial, jint from_slot,
+                                                 jstring to_serial, jint to_slot)
+{
+  return AndroidHost::MoveSaveState(FromJString(env, from_serial), static_cast<s32>(from_slot),
+                                    FromJString(env, to_serial), static_cast<s32>(to_slot));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, saveResumeState)(JNIEnv* env, jobject, jstring key)
+{
+  return ToResult(env, AndroidHost::SaveResumeState(FromJString(env, key)));
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isSavingMemoryCards)(JNIEnv*, jobject)

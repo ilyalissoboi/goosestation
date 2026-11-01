@@ -71,6 +71,7 @@ struct ExtendedSaveStateInfo
   std::string title;
   std::string serial;
   std::string media_path;
+  u32 media_subimage_index = 0;
   std::time_t timestamp;
 
   RGBA8Image screenshot;
@@ -533,4 +534,19 @@ void RequestResizeHostDisplay(s32 width, s32 height);
 
 /// Requests shut down of the current virtual machine.
 void RequestSystemShutdown(bool allow_confirm, bool save_state);
+
+#ifdef __ANDROID__
+/// Where to find a save state's disc now: its path, and the sub-image to switch to.
+struct SaveStateMedia
+{
+  std::string path;
+  u32 subimage_index;
+};
+
+/// Android: the disc a save state was made on, found by its identity rather than its path, which may be from another
+/// folder or device: the path to open now and the sub-image to switch to. Nullopt, with error set, when that disc isn't
+/// in the library.
+std::optional<SaveStateMedia> ResolveSaveStateMedia(std::string_view serial, std::string_view media_path,
+                                                    u32 subimage_index, Error* error);
+#endif
 } // namespace Host

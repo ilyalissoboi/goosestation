@@ -20,14 +20,19 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
+import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -315,6 +320,61 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuLoadWithOtherSaves() {
+        val entries = listOf(SlotEntry(1, 1_700_000_000L, disc = 1))
+        val others = listOf(SlotEntry(3, 1_700_000_000L, owner = "SLPS-02021", disc = 2))
+        show {
+            GameMenu(
+                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1, others = others)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuDiscs() {
+        val discs =
+            listOf(
+                GameDisc("content://g/1.chd", "SLPS-02020", "Disc one", 1),
+                GameDisc("content://g/2.chd", "SLPS-02021", "Disc two", 2),
+            )
+        show {
+            GameMenu(
+                GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(discs, current = 1)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuCodes() {
+        val rows =
+            listOf(
+                PatchCodeRow(0, "Infinite HP", "In battle", false, true),
+                PatchCodeRow(1, "Max Money", null, true, false),
+            )
+        show {
+            GameMenu(
+                GameMenuState(booted = true, codes = CodePanel(listOf(PatchCodeGroup("Player", rows)), "Game.cht")),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuNoCodes() {
+        show { GameMenu(GameMenuState(booted = true, codes = CodePanel(emptyList(), "Game.cht")), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuLoadWithNoSaves() {
         show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
 
@@ -347,6 +407,28 @@ class FocusAuditTest {
 
     private object NoMenuActions : GameMenuActions {
         override fun resume() {}
+
+        override fun pickOther(
+            serial: String,
+            slot: Int,
+        ) {}
+
+        override fun openDiscs() {}
+
+        override fun closeDiscs() {}
+
+        override fun pickDisc(number: Int) {}
+
+        override fun openCodes() {}
+
+        override fun closeCodes() {}
+
+        override fun setCode(
+            index: Int,
+            on: Boolean,
+        ) {}
+
+        override fun applyCode(index: Int) {}
 
         override fun openSlots(mode: SlotMode) {}
 

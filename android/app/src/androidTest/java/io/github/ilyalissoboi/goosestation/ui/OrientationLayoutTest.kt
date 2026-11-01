@@ -48,14 +48,19 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
+import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -389,6 +394,60 @@ class OrientationLayoutTest {
             assertTrue("Slot 1 is focused, not ${focusedText()}", focusedHas("Slot 1"))
             pressUntilFocusedInView(Key.DirectionDown, "Slot 10")
             assertTextsLaidOut(inView = true)
+
+            // Load, with the disc on each row and another disc's saves after the slots.
+            val saved = entries.filter { it.savedAt != null }.map { it.copy(disc = 1) }
+            val others = listOf(3, 9).map { SlotEntry(it, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2) }
+            // Closed first, as the menu does between panels.
+            menu.value = menu.value.copy(slots = null)
+            rule.waitForIdle()
+            menu.value = menu.value.copy(slots = SlotPanel(SlotMode.Load, saved, focus = 1, others = others))
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            pressUntilFocusedInView(Key.DirectionDown, "Slot 9")
+            assertTextsLaidOut(inView = true)
+
+            // Change disc, with long disc titles.
+            val discs =
+                (1..4).map {
+                    GameDisc("content://g/$it.chd", "SLPS-0202$it", "${LONG_GAME.title} (Disc $it)", it)
+                }
+            menu.value = menu.value.copy(slots = null)
+            rule.waitForIdle()
+            menu.value = menu.value.copy(disc = 1, discCount = 4, discs = DiscChoice(discs, current = 1))
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            assertTrue("Disc 1 is focused, not ${focusedText()}", focusedHas("Disc 1"))
+            pressUntilFocusedInView(Key.DirectionDown, "Disc 4")
+            assertTextsLaidOut(inView = true)
+            menu.value = menu.value.copy(discs = null)
+            rule.waitForIdle()
+
+            // Patch codes in groups, with names and notes as long as the database's longest (the 99th percentile of
+            // its names, 80 characters; a note of 215, cut at two lines).
+            val rows =
+                (0..7).map {
+                    PatchCodeRow(
+                        it,
+                        "Infinite health for every party member in battle and in the field, slot $it of 8",
+                        if (it % 2 == 0) {
+                            "Turn it off when you're out of battle, or the game may lock up. Don't use it with the " +
+                                "maximum money code either: activate one, save the game, then the other, and save " +
+                                "again before you go on."
+                        } else {
+                            null
+                        },
+                        manual = it == 7,
+                        on = it % 2 == 0,
+                    )
+                }
+            val groups = listOf(PatchCodeGroup("Player", rows.take(4)), PatchCodeGroup("Other", rows.drop(4)))
+            menu.value = menu.value.copy(codes = CodePanel(groups, "${LONG_GAME.title}.cht"))
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            pressUntilFocusedInView(Key.DirectionDown, "slot 7 of 8")
+            assertTextsLaidOut(inView = true)
+            menu.value = menu.value.copy(codes = null)
             // As the next config's menu opens.
             menu.value = GameMenuState(booted = true, analogMode = true)
         }
@@ -440,6 +499,28 @@ class OrientationLayoutTest {
 
     private object NoMenuActions : GameMenuActions {
         override fun resume() {}
+
+        override fun pickOther(
+            serial: String,
+            slot: Int,
+        ) {}
+
+        override fun openDiscs() {}
+
+        override fun closeDiscs() {}
+
+        override fun pickDisc(number: Int) {}
+
+        override fun openCodes() {}
+
+        override fun closeCodes() {}
+
+        override fun setCode(
+            index: Int,
+            on: Boolean,
+        ) {}
+
+        override fun applyCode(index: Int) {}
 
         override fun openSlots(mode: SlotMode) {}
 

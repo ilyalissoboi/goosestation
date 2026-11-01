@@ -1548,6 +1548,7 @@ bool System::SaveResumeState(Error* error)
 
 bool System::BootSystem(SystemBootParameters parameters, Error* error)
 {
+#ifndef __ANDROID__
   if (!parameters.save_state.empty())
   {
     // loading a state, so pull the media path from the save state to avoid a double change
@@ -1555,6 +1556,10 @@ bool System::BootSystem(SystemBootParameters parameters, Error* error)
     if (FileSystem::FileExists(state_media.c_str()))
       parameters.filename = std::move(state_media);
   }
+#else
+  // Android's host boots the disc it found for the state by identity (a playlist's, with its sub-image), which the
+  // state's own path, from another folder, device or tile, may not be.
+#endif
 
   if (parameters.filename.empty())
     INFO_LOG("Boot Filename: <BIOS/Shell>");

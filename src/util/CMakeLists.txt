@@ -286,7 +286,6 @@ if(ANDROID)
     android_input_source.h
     android_patch_codes.cpp
     android_patch_codes.h
-    http_downloader_android.cpp
     platform_misc_android.cpp
   )
   target_link_libraries(util PRIVATE aaudio android)

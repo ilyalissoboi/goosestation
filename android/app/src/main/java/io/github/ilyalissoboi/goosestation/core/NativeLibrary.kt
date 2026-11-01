@@ -366,4 +366,26 @@ object NativeLibrary {
 
     /** Ends the capture running, if any, with no report; none arrives once this returns. */
     external fun cancelBindingCapture()
+
+    /**
+     * [HttpBridge]'s answer to [downloader]'s [request]: its [status] (or [HttpBridge.STATUS_TIMEOUT],
+     * [HttpBridge.STATUS_ERROR]), [contentType] and [body]. Any thread.
+     */
+    external fun httpDone(
+        downloader: Long,
+        request: Long,
+        status: Int,
+        contentType: String,
+        body: ByteArray,
+    )
+
+    /**
+     * For HttpDownloaderTest only: fetches [url] (a POST of [post], or a GET without) through the core's
+     * HTTPDownloader, waiting up to [timeoutSeconds], and returns the status, content type and body (as UTF-8).
+     */
+    external fun httpTestFetch(
+        url: String,
+        post: String?,
+        timeoutSeconds: Float,
+    ): Array<String>
 }

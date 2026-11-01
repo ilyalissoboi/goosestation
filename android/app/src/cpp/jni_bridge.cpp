@@ -6,6 +6,7 @@
 #include "android_host.h"
 #include "bios_import.h"
 #include "content_bridge.h"
+#include "http_downloader_android.h"
 #include "jni_util.h"
 
 #include "core/game_database.h"
@@ -531,7 +532,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 
   env->DeleteLocalRef(pad_binding_kind_class);
 
-  if (!AndroidContentProvider::LoadJNIReferences(env))
+  if (!AndroidContentProvider::LoadJNIReferences(env) || !HTTPDownloaderAndroid::LoadJNIReferences(env))
     return JNI_ERR;
 
   JNIUtil::SetJavaVM(vm);
@@ -643,6 +644,62 @@ NATIVE_LIBRARY_FUNCTION(void, setIntSetting)(JNIEnv* env, jobject, jstring secti
 NATIVE_LIBRARY_FUNCTION(void, applySettings)(JNIEnv*, jobject)
 {
   AndroidHost::ApplySettings();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, httpDone)(JNIEnv* env, jobject, jlong downloader, jlong request, jint status,
+                                        jstring content_type, jbyteArray body)
+{
+  HTTPDownloader::Request::Data data;
+  if (body)
+  {
+    data.resize(static_cast<size_t>(env->GetArrayLength(body)));
+    if (!data.empty())
+      env->GetByteArrayRegion(body, 0, static_cast<jsize>(data.size()), reinterpret_cast<jbyte*>(data.data()));
+  }
+
+  HTTPDownloaderAndroid::Complete(downloader, request, static_cast<s32>(status), FromJString(env, content_type),
+                                  std::move(data));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, httpTestFetch)(JNIEnv* env, jobject, jstring url, jstring post,
+                                                     jfloat timeout_seconds)
+{
+  // For HttpDownloaderTest only: one request through the core's downloader, waited for here.
+  s32 status = HTTPDownloader::HTTP_STATUS_ERROR;
+  std::string type;
+  std::string text;
+  if (std::unique_ptr<HTTPDownloader> downloader = HTTPDownloader::Create("GooseStation test"))
+  {
+    downloader->SetTimeout(timeout_seconds);
+    auto callback = [&](s32 code, const std::string& content_type, HTTPDownloader::Request::Data data) {
+      status = code;
+      type = content_type;
+      text.assign(data.begin(), data.end());
+    };
+    if (post)
+      downloader->CreatePostRequest(FromJString(env, url), FromJString(env, post), std::move(callback));
+    else
+      downloader->CreateRequest(FromJString(env, url), std::move(callback));
+    downloader->WaitForAllRequests();
+  }
+
+  const std::string values[] = {std::to_string(status), type, text};
+  jobjectArray ret = env->NewObjectArray(static_cast<jsize>(std::size(values)), s_string_class, nullptr);
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < std::size(values); i++)
+  {
+    jstring value = ToJString(env, values[i]);
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), value);
+    if (value)
+      env->DeleteLocalRef(value);
+  }
+
+  return ret;
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)

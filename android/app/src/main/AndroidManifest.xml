@@ -3,6 +3,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- RetroAchievements. A normal permission: granted at install, without asking. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Controllers work without a touch screen. -->
     <uses-feature
         android:name="android.hardware.touchscreen"

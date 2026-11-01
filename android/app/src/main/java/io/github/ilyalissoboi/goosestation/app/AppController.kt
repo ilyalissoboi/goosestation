@@ -253,6 +253,9 @@ object AppController : NativeCallbacks {
     /** The messages shown over the game, the app's and the core's ([CoreMessages]). */
     val osd = OsdMessages(SystemClock::uptimeMillis)
 
+    /** Achievement badges and game icons from the core's cache, as the menu and the game screen show them. */
+    val badges = BadgeImages(scope, Dispatchers.IO)
+
     /** The in-game menu: its rows, its slot panel, and what they do. */
     val gameMenu by lazy {
         InGameMenu(
@@ -1379,6 +1382,10 @@ object AppController : NativeCallbacks {
 
     override fun onAchievementsChanged() {
         mainHandler.post { gameMenu.achievementsChanged() }
+    }
+
+    override fun onAchievementImage(path: String) {
+        mainHandler.post { badges.downloaded(path) }
     }
 
     override fun onFastForwardChanged(enabled: Boolean) {

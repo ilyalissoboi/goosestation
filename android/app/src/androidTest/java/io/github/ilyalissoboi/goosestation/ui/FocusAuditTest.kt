@@ -20,6 +20,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -31,8 +33,11 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -383,6 +388,51 @@ class FocusAuditTest {
         show {
             GameMenu(
                 GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(discs, current = 1)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuAchievements() {
+        val sections =
+            listOf(
+                AchievementSection(
+                    1,
+                    "Locked",
+                    arrayOf(Achievement(1, "Flawless Flight", "No misses", 25, "", 0, "", 0f)),
+                ),
+                AchievementSection(
+                    2,
+                    "Unlocked",
+                    arrayOf(Achievement(2, "Sparx Rescue", "", 5, "", 1_700_000_000, "", 0f)),
+                ),
+            )
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
+                    cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuAchievementsLoading() {
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
+                    cheevos = AchievementsPanelState(CheevoTab.Achievements),
+                ),
                 NoMenuActions,
             )
         }

@@ -61,6 +61,12 @@ jmethodID s_on_achievement_image = nullptr;
 jmethodID s_on_play_sound = nullptr;
 jclass s_achievements_account_class = nullptr;
 jmethodID s_achievements_account_constructor = nullptr;
+jclass s_game_achievements_class = nullptr;
+jmethodID s_game_achievements_constructor = nullptr;
+jclass s_achievement_class = nullptr;
+jmethodID s_achievement_constructor = nullptr;
+jclass s_achievement_section_class = nullptr;
+jmethodID s_achievement_section_constructor = nullptr;
 jclass s_argb_image_class = nullptr;
 jmethodID s_argb_image_constructor = nullptr;
 jclass s_game_entry_class = nullptr;
@@ -599,7 +605,15 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                    &s_patch_codes_constructor),
         std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementsAccount",
                    "(ILjava/lang/String;Ljava/lang/String;II)V", &s_achievements_account_class,
-                   &s_achievements_account_constructor)})
+                   &s_achievements_account_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/GameAchievements", "(IIIIIZZZ)V",
+                   &s_game_achievements_class, &s_game_achievements_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/Achievement",
+                   "(ILjava/lang/String;Ljava/lang/String;ILjava/lang/String;JLjava/lang/String;F)V",
+                   &s_achievement_class, &s_achievement_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementSection",
+                   "(ILjava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/Achievement;)V",
+                   &s_achievement_section_class, &s_achievement_section_constructor)})
   {
     jclass local = env->FindClass(name);
     if (!local)
@@ -896,6 +910,78 @@ NATIVE_LIBRARY_FUNCTION(jstring, signIn)(JNIEnv* env, jobject, jstring username,
 NATIVE_LIBRARY_FUNCTION(void, signOut)(JNIEnv*, jobject)
 {
   AchievementsBridge::SignOut();
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getGameAchievements)(JNIEnv* env, jobject)
+{
+  const AchievementsBridge::GameSummary game = AchievementsBridge::GetGameSummary();
+  jobject ret = env->NewObject(s_game_achievements_class, s_game_achievements_constructor,
+                               static_cast<jint>(game.status), static_cast<jint>(game.unlocked),
+                               static_cast<jint>(game.total), static_cast<jint>(game.points),
+                               static_cast<jint>(game.total_points), static_cast<jboolean>(game.has_achievements),
+                               static_cast<jboolean>(game.has_leaderboards), static_cast<jboolean>(game.hardcore));
+  if (!ret)
+    ClearException(env);
+  return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getAchievementSections)(JNIEnv* env, jobject)
+{
+  const std::vector<AchievementsBridge::AchievementSection> sections = AchievementsBridge::GetAchievementSections();
+  jobjectArray ret = env->NewObjectArray(static_cast<jsize>(sections.size()), s_achievement_section_class, nullptr);
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < sections.size(); i++)
+  {
+    const AchievementsBridge::AchievementSection& section = sections[i];
+    jobjectArray items = env->NewObjectArray(static_cast<jsize>(section.items.size()), s_achievement_class, nullptr);
+    if (!items)
+    {
+      ClearException(env);
+      return nullptr;
+    }
+
+    for (size_t j = 0; j < section.items.size(); j++)
+    {
+      const AchievementsBridge::AchievementItem& item = section.items[j];
+      const LocalStrings strings(env, {item.title, item.description, item.badge_path, item.progress});
+      if (!strings.ok())
+        continue;
+
+      jobject cheevo = env->NewObject(s_achievement_class, s_achievement_constructor, static_cast<jint>(item.id),
+                                      strings[0], strings[1], static_cast<jint>(item.points), strings[2],
+                                      static_cast<jlong>(item.unlocked_at), strings[3],
+                                      static_cast<jfloat>(item.percent));
+      if (!cheevo)
+      {
+        ClearException(env);
+        continue;
+      }
+      env->SetObjectArrayElement(items, static_cast<jsize>(j), cheevo);
+      env->DeleteLocalRef(cheevo);
+    }
+
+    const LocalStrings label(env, {section.label});
+    jobject jsection = label.ok() ? env->NewObject(s_achievement_section_class, s_achievement_section_constructor,
+                                                    static_cast<jint>(section.bucket), label[0], items) :
+                                    nullptr;
+    if (jsection)
+    {
+      env->SetObjectArrayElement(ret, static_cast<jsize>(i), jsection);
+      env->DeleteLocalRef(jsection);
+    }
+    else
+    {
+      ClearException(env);
+    }
+    env->DeleteLocalRef(items);
+  }
+
+  return ret;
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isHardcoreActive)(JNIEnv*, jobject)

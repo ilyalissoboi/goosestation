@@ -3,7 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.PatchCode
 import io.github.ilyalissoboi.goosestation.core.PatchCodes
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
@@ -40,6 +42,17 @@ class FakeGameCore(
     override fun isHardcoreActive(): Boolean = hardcore
 
     override fun hardcoreWouldStart(): Boolean = hardcoreWouldStart
+
+    /** [getGameAchievements]'s answer (a query, so not logged), and [getAchievementSections]'s. */
+    var achievementsOfGame = GameAchievements(GameAchievements.OFF, 0, 0, 0, 0, false, false, false)
+    var sections = listOf<AchievementSection>()
+
+    override fun getGameAchievements(): GameAchievements = achievementsOfGame
+
+    override fun getAchievementSections(): List<AchievementSection> {
+        calls += "getAchievementSections"
+        return sections
+    }
 
     override fun getSaveStateTimes(serial: String): LongArray {
         calls += "getSaveStateTimes $serial"

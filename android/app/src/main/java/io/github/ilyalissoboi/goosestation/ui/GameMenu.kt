@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -49,9 +50,11 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.ilyalissoboi.goosestation.app.AchievementLists
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.SlotMode
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
@@ -89,6 +92,7 @@ fun GameMenu(
     actions: GameMenuActions,
     game: GameEntry? = null,
     now: ZonedDateTime = ZonedDateTime.now(),
+    badge: (String) -> ImageBitmap? = { null },
 ) {
     val current by rememberUpdatedState(state)
     // Kept here, outside the menu panel, which is composed afresh when the layout changes.
@@ -112,6 +116,10 @@ fun GameMenu(
                 cameFrom.codesRow.requestFocus()
                 actions.closeCodes()
             }
+            shown.cheevos != null -> {
+                cameFrom.cheevosRow.requestFocus()
+                actions.closeAchievements()
+            }
             shown.confirmingReset -> actions.cancelReset()
             shown.confirmingExit -> actions.cancelExit()
             shown.replacingResume != null -> actions.cancelReplaceResume()
@@ -126,6 +134,7 @@ fun GameMenu(
             state.slots?.replacing,
             state.discs != null,
             state.codes != null,
+            state.cheevos != null,
             state.confirmingReset,
             state.confirmingExit,
             state.replacingResume,
@@ -135,6 +144,7 @@ fun GameMenu(
         state.slots?.let { cameFrom.slots = it.mode }
         if (state.discs != null) cameFrom.discs = true
         if (state.codes != null) cameFrom.codes = true
+        if (state.cheevos != null) cameFrom.cheevos = true
         if (state.confirmingReset) cameFrom.reset = true
         if (state.confirmingExit || state.replacingResume != null) cameFrom.exit = true
     }
@@ -168,15 +178,19 @@ fun GameMenu(
         val slots = state.slots
         val discs = state.discs
         val codes = state.codes
-        val sidePanel = slots != null || discs != null || codes != null
+        val cheevos = state.cheevos
+        val achievements = state.achievements
+        val sidePanel = slots != null || discs != null || codes != null || (cheevos != null && achievements != null)
 
-        // The one side panel open, if any: the slots, the discs or the codes.
+        // The one side panel open, if any: the slots, the discs, the codes or the achievements.
         @Composable
         fun SidePanel(modifier: Modifier) {
             when {
                 slots != null -> SaveSlotPanel(slots, actions, now, modifier)
                 discs != null -> DiscPanel(discs, game?.title.orEmpty(), actions, modifier)
                 codes != null -> PatchCodePanel(codes, actions, modifier)
+                cheevos != null && achievements != null ->
+                    AchievementsPanel(cheevos, achievements, actions, badge, now, modifier)
             }
         }
         if (screenWidth >= SIDE_BY_SIDE || screenWidth >= screenHeight) {
@@ -204,11 +218,13 @@ private class CameFrom {
     val loadRow = FocusRequester()
     val discRow = FocusRequester()
     val codesRow = FocusRequester()
+    val cheevosRow = FocusRequester()
     val resetRow = FocusRequester()
     val exitRow = FocusRequester()
     var slots: SlotMode? = null
     var discs = false
     var codes = false
+    var cheevos = false
     var reset = false
     var exit = false
 }
@@ -228,19 +244,21 @@ private fun MenuPanel(
     val loadRow = cameFrom.loadRow
     val discRow = cameFrom.discRow
     val codesRow = cameFrom.codesRow
+    val cheevosRow = cameFrom.cheevosRow
     val resetRow = cameFrom.resetRow
     val exitRow = cameFrom.exitRow
     val booted = state.booted
     val openMode = state.slots?.mode
     val discsOpen = state.discs != null
     val codesOpen = state.codes != null
+    val cheevosOpen = state.cheevos != null
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
     val asking = state.confirmingReset || state.confirmingExit || state.replacingResume != null
-    LaunchedEffect(openMode, discsOpen, codesOpen, asking) {
+    LaunchedEffect(openMode, discsOpen, codesOpen, cheevosOpen, asking) {
         val from = cameFrom.slots
         when {
-            openMode != null || discsOpen || codesOpen || asking -> {}
+            openMode != null || discsOpen || codesOpen || cheevosOpen || asking -> {}
             from != null -> {
                 cameFrom.slots = null
                 (if (from == SlotMode.Save) saveRow else loadRow).requestFocus()
@@ -252,6 +270,10 @@ private fun MenuPanel(
             cameFrom.codes -> {
                 cameFrom.codes = false
                 codesRow.requestFocus()
+            }
+            cameFrom.cheevos -> {
+                cameFrom.cheevos = false
+                cheevosRow.requestFocus()
             }
             cameFrom.reset -> {
                 cameFrom.reset = false
@@ -376,6 +398,17 @@ private fun MenuPanel(
                     current = codesOpen,
                     value = if (state.hardcore) HARDCORE_OFF else null,
                 )
+                state.achievements?.let { achievements ->
+                    MenuItem(
+                        "Achievements",
+                        GsIcons.trophy,
+                        actions::openAchievements,
+                        Modifier.focusRequester(cheevosRow),
+                        enabled = booted && achievements.status == GameAchievements.READY,
+                        current = cheevosOpen,
+                        value = AchievementLists.rowStatus(achievements),
+                    )
+                }
                 Spacer(
                     Modifier
                         .padding(vertical = 4.dp)

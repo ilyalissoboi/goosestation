@@ -22,12 +22,14 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -39,6 +41,8 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -49,6 +53,9 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -194,6 +201,19 @@ class GameMenuTest {
                 calls += "cancelReplaceResume"
                 state = state.copy(replacingResume = null)
             }
+
+            override fun openAchievements() {
+                calls += "openAchievements"
+            }
+
+            override fun closeAchievements() {
+                calls += "closeAchievements"
+                state = state.copy(cheevos = null)
+            }
+
+            override fun switchTab() {
+                calls += "switchTab"
+            }
         }
 
     private fun saved(vararg slots: Int): List<SlotEntry> =
@@ -254,6 +274,108 @@ class GameMenuTest {
         rule.onNode(isFocused()).assert(hasText("Save state"))
         press(Key.DirectionDown)
         rule.onNode(isFocused()).assert(hasText("Analog mode"))
+    }
+
+    private val ready = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false)
+
+    private fun cheevo(
+        id: Int,
+        title: String,
+        unlockedAt: Long = 0,
+        progress: String = "",
+    ) = Achievement(id, title, "Do the thing $id", 5, "", unlockedAt, progress, if (progress.isEmpty()) 0f else 62f)
+
+    private val sections =
+        listOf(
+            AchievementSection(7, "Almost there", arrayOf(cheevo(1, "Gem Collector", progress = "312/500"))),
+            AchievementSection(1, "Locked", arrayOf(cheevo(2, "Flawless Flight"), cheevo(3, "Dragon Master"))),
+            AchievementSection(2, "Unlocked", arrayOf(cheevo(4, "Sparx Rescue", now.toEpochSecond() - 600))),
+        )
+
+    private fun showAchievements(game: GameAchievements = ready) {
+        state =
+            GameMenuState(
+                booted = true,
+                achievements = game,
+                cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+            )
+        show()
+    }
+
+    @Test
+    fun theAchievementsRowShowsTheProgress() {
+        state = GameMenuState(booted = true, achievements = ready)
+        show()
+
+        rule.onNode(hasText("Achievements") and hasText("14 of 40")).assertIsEnabled()
+    }
+
+    @Test
+    fun theAchievementsRowSaysWhyItsOff() {
+        state =
+            GameMenuState(
+                booted = true,
+                achievements = GameAchievements(GameAchievements.OFF, 0, 0, 0, 0, false, false, false),
+            )
+        show()
+
+        rule.onNode(hasText("Achievements") and hasText("Sign in from Settings")).assertIsNotEnabled()
+    }
+
+    @Test
+    fun achievementsOpenFocusedOnTheFirstRow() {
+        showAchievements()
+
+        rule.onNodeWithText("14 of 40 unlocked").assertExists()
+        rule.onNodeWithText("85 of 400 points").assertExists()
+        rule.onNode(isFocused()).assert(hasText("Gem Collector"))
+    }
+
+    @Test
+    fun theDpadScrollsThroughTheSections() {
+        showAchievements()
+
+        for (title in listOf("Flawless Flight", "Dragon Master", "Sparx Rescue")) {
+            press(Key.DirectionDown)
+            rule.onNode(isFocused()).assert(hasText(title)).assertIsDisplayed()
+        }
+        rule.onNodeWithText("ALMOST THERE").assertExists()
+    }
+
+    @Test
+    fun l1AndR1SwitchTabs() {
+        showAchievements()
+
+        press(Key.ButtonL1)
+        press(Key.ButtonR1)
+
+        assertEquals(listOf("switchTab", "switchTab"), calls)
+    }
+
+    @Test
+    fun bClosesTheAchievementsToTheirRow() {
+        showAchievements()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeAchievements"), calls)
+        rule.onNode(isFocused()).assert(hasText("Achievements"))
+    }
+
+    @Test
+    fun oneTabShowsNoTabs() {
+        showAchievements(ready.let { GameAchievements(it.status, 14, 40, 85, 400, true, false, false) })
+
+        rule.onNodeWithText("Leaderboards").assertDoesNotExist()
+    }
+
+    @Test
+    fun progressShowsItsCountAndLockedRowsSaySo() {
+        showAchievements()
+
+        rule.onNode(hasText("Gem Collector") and hasText("312/500")).assertExists()
+        rule.onNode(hasText("Flawless Flight") and hasStateDescription("Locked")).assertExists()
+        rule.onNode(hasText("Sparx Rescue") and hasStateDescription("Unlocked")).assertExists()
     }
 
     @Test

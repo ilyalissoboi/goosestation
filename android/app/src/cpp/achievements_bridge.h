@@ -9,6 +9,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 /// RetroAchievements for the app: the account, signing in and out. Each call runs on the CPU thread and waits for it.
 namespace AchievementsBridge {
@@ -37,6 +38,42 @@ bool HardcoreWouldStart();
 
 /// Hardcore mode is active in the running game. On the CPU thread.
 bool IsHardcoreActive();
+
+/// The running game's achievements, for the menu's row and panel. In hardcore, the counts are the hardcore ones.
+struct GameSummary
+{
+  Achievements::AndroidGameStatus status;
+  u32 unlocked;
+  u32 total;
+  u32 points;
+  u32 total_points;
+  bool has_achievements;
+  bool has_leaderboards;
+  bool hardcore;
+};
+GameSummary GetGameSummary();
+
+struct AchievementItem
+{
+  u32 id;
+  std::string title;
+  std::string description;
+  std::string badge_path; // in the core's cache; downloaded in the background if it isn't there yet
+  u32 points;
+  s64 unlocked_at; // Unix seconds, 0 while locked
+  std::string progress;
+  float percent;
+};
+
+struct AchievementSection
+{
+  u8 bucket; // rcheevos's RC_CLIENT_ACHIEVEMENT_BUCKET_*
+  std::string label;
+  std::vector<AchievementItem> items;
+};
+
+/// The running game's achievements in rcheevos's sections by progress, in its order; empty without a set.
+std::vector<AchievementSection> GetAchievementSections();
 
 /// For the instrumented tests only: the server rcheevos talks to, or the real one with an empty host.
 void SetServerForTest(const std::string& host);

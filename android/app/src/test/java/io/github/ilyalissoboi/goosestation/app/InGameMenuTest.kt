@@ -3,7 +3,10 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PatchCode
@@ -1132,6 +1135,99 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals(SaveSlots.RESUME, menu.entries().first().slot)
+        }
+
+    private fun achievementsReady(
+        achievements: Boolean = true,
+        leaderboards: Boolean = true,
+    ) {
+        api.achievementsOfGame =
+            GameAchievements(GameAchievements.READY, 1, 2, 5, 10, achievements, leaderboards, false)
+        api.sections =
+            listOf(AchievementSection(2, "Unlocked", arrayOf(Achievement(7, "First", "", 5, "", 100, "", 0f))))
+    }
+
+    @Test
+    fun achievementsOpenOnTheirTab() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+
+            menu.openAchievements()
+            runCurrent()
+
+            val panel = menu.state.cheevos!!
+            assertEquals(CheevoTab.Achievements, panel.tab)
+            assertEquals(
+                listOf(7),
+                panel.sections!!
+                    .single()
+                    .achievements
+                    .map { it.id },
+            )
+            assertTrue(calls.contains("getAchievementSections"))
+        }
+
+    @Test
+    fun onlyLeaderboardsOpensThatTab() =
+        runTest {
+            achievementsReady(achievements = false)
+            val menu = menu()
+
+            menu.openAchievements()
+            runCurrent()
+
+            assertEquals(CheevoTab.Leaderboards, menu.state.cheevos!!.tab)
+        }
+
+    @Test
+    fun switchTabWithOneTabDoesNothing() =
+        runTest {
+            achievementsReady(leaderboards = false)
+            val menu = menu()
+            menu.openAchievements()
+            runCurrent()
+
+            menu.switchTab()
+
+            assertEquals(CheevoTab.Achievements, menu.state.cheevos!!.tab)
+        }
+
+    @Test
+    fun aRefreshWhileOpenReadsAgain() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+            menu.openAchievements()
+            runCurrent()
+            calls.clear()
+            api.sections =
+                listOf(AchievementSection(2, "Unlocked", arrayOf(Achievement(8, "Second", "", 5, "", 200, "", 0f))))
+
+            menu.achievementsChanged()
+            runCurrent()
+
+            assertEquals(listOf("getAchievementSections"), calls.filter { it == "getAchievementSections" })
+            assertEquals(
+                listOf(8),
+                menu.state.cheevos!!
+                    .sections!!
+                    .single()
+                    .achievements
+                    .map { it.id },
+            )
+        }
+
+    @Test
+    fun notReadyDoesNotOpen() =
+        runTest {
+            api.achievementsOfGame = GameAchievements(GameAchievements.LOADING, 0, 0, 0, 0, false, false, false)
+            val menu = menu()
+
+            menu.openAchievements()
+            runCurrent()
+
+            assertNull(menu.state.cheevos)
         }
 
     private class MemoryLastSlots : LastSlotStore {

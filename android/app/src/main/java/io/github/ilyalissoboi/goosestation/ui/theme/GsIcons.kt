@@ -463,6 +463,33 @@ object GsIcons {
         }
     }
 
+    val trophy: ImageVector by lazy {
+        icon("trophy") {
+            moveTo(7f, 3f)
+            lineTo(17f, 3f)
+            lineTo(17f, 9f)
+            lineTo(14f, 13f)
+            lineTo(10f, 13f)
+            lineTo(7f, 9f)
+            close()
+            moveTo(7f, 5f)
+            lineTo(4f, 5f)
+            lineTo(4f, 8f)
+            lineTo(7f, 10f)
+            moveTo(17f, 5f)
+            lineTo(20f, 5f)
+            lineTo(20f, 8f)
+            lineTo(17f, 10f)
+            moveTo(12f, 13f)
+            lineTo(12f, 17f)
+            moveTo(8f, 17f)
+            lineTo(16f, 17f)
+            lineTo(16f, 21f)
+            lineTo(8f, 21f)
+            close()
+        }
+    }
+
     val warning: ImageVector by lazy {
         icon("warning") {
             moveTo(12f, 3f)

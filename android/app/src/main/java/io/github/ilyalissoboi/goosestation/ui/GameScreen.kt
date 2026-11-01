@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -41,6 +42,7 @@ fun GameScreen(
     fastForward: Boolean = false,
     osdExpiry: Long? = null,
     onOsdExpire: () -> Unit = {},
+    badge: (String) -> ImageBitmap? = { null },
 ) {
     BackHandler(enabled = !menuOpen, onBack = onOpenMenu)
 
@@ -64,7 +66,7 @@ fun GameScreen(
             },
         )
         OsdLayer(osd, fastForward, osdExpiry, onOsdExpire)
-        if (menuOpen) GameMenu(menu, actions, game)
+        if (menuOpen) GameMenu(menu, actions, game, badge = badge)
     }
 }
 

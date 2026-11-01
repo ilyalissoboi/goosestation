@@ -35,6 +35,10 @@ object PadGlyphs {
 
     /** The button that goes back: KEYCODE_BUTTON_B. */
     val back: String = BindingLabels.label("Button97")
+
+    /** The shoulder buttons that switch a panel's tabs: KEYCODE_BUTTON_L1 and KEYCODE_BUTTON_R1. */
+    val previousTab: String = BindingLabels.label("Button102")
+    val nextTab: String = BindingLabels.label("Button103")
 }
 
 /**
@@ -60,18 +64,28 @@ fun KeyHints(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
-                            .border(1.dp, colors.lineStrong, GsShapes.small)
-                            .padding(horizontal = 4.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(hint.glyph, style = GooseStationTheme.type.key, color = colors.ink)
-                }
+                KeyChip(hint.glyph)
                 Text(hint.action, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
             }
         }
+    }
+}
+
+/** A button's [glyph] in a key chip, as the hints and a panel's tabs show it. */
+@Composable
+fun KeyChip(
+    glyph: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = GooseStationTheme.colors
+    Box(
+        modifier =
+            modifier
+                .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
+                .border(1.dp, colors.lineStrong, GsShapes.small)
+                .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(glyph, style = GooseStationTheme.type.key, color = colors.ink)
     }
 }

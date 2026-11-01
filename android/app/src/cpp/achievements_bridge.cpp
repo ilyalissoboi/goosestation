@@ -89,6 +89,67 @@ void AchievementsBridge::SignOut()
     true);
 }
 
+AchievementsBridge::GameSummary AchievementsBridge::GetGameSummary()
+{
+  GameSummary summary = {Achievements::AndroidGameStatus::Off, 0, 0, 0, 0, false, false, false};
+  EmuThread::RunOnThread(
+    [&summary]() {
+      summary.status = Achievements::GetAndroidGameStatus();
+      summary.hardcore = Achievements::IsHardcoreModeActive();
+      const auto lock = Achievements::GetLock();
+      if (!Achievements::HasActiveGame())
+        return;
+
+      const rc_client_user_game_summary_t& counts = Achievements::GetGameSummary();
+      summary.unlocked = counts.num_unlocked_achievements;
+      summary.total = counts.num_core_achievements;
+      summary.points = counts.points_unlocked;
+      summary.total_points = counts.points_core;
+      summary.has_achievements = Achievements::HasAchievements();
+      summary.has_leaderboards = Achievements::HasLeaderboards();
+    },
+    true);
+  return summary;
+}
+
+std::vector<AchievementsBridge::AchievementSection> AchievementsBridge::GetAchievementSections()
+{
+  std::vector<AchievementSection> sections;
+  EmuThread::RunOnThread(
+    [&sections]() {
+      const auto lock = Achievements::GetLock();
+      rc_client_t* client = Achievements::GetClient();
+      if (!client || !Achievements::HasActiveGame())
+        return;
+
+      rc_client_achievement_list_t* list = rc_client_create_achievement_list(
+        client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE_AND_UNOFFICIAL, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS);
+      if (!list)
+        return;
+
+      for (u32 i = 0; i < list->num_buckets; i++)
+      {
+        const rc_client_achievement_bucket_t& bucket = list->buckets[i];
+        AchievementSection& section = sections.emplace_back();
+        section.bucket = static_cast<u8>(bucket.bucket_type);
+        section.label = bucket.label ? bucket.label : "";
+        for (u32 j = 0; j < bucket.num_achievements; j++)
+        {
+          const rc_client_achievement_t* cheevo = bucket.achievements[j];
+          const bool unlocked = (cheevo->state == RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED);
+          section.items.push_back(AchievementItem{
+            cheevo->id, cheevo->title ? cheevo->title : "", cheevo->description ? cheevo->description : "",
+            Achievements::GetAchievementBadgePath(cheevo, cheevo->state), cheevo->points,
+            unlocked ? static_cast<s64>(cheevo->unlock_time) : 0, cheevo->measured_progress, cheevo->measured_percent});
+        }
+      }
+
+      rc_client_destroy_achievement_list(list);
+    },
+    true);
+  return sections;
+}
+
 bool AchievementsBridge::HardcoreWouldStart()
 {
   return g_settings.achievements_enabled && g_settings.achievements_hardcore_mode &&

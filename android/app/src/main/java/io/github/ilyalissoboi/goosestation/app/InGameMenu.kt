@@ -6,7 +6,9 @@ package io.github.ilyalissoboi.goosestation.app
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import kotlinx.coroutines.CoroutineDispatcher
@@ -57,6 +59,15 @@ data class DiscChoice(
     val error: String? = null,
 )
 
+/** The Achievements panel's tabs. */
+enum class CheevoTab { Achievements, Leaderboards }
+
+/** The Achievements panel: its open [tab], and the Achievements tab's [sections] (null until read). */
+data class AchievementsPanelState(
+    val tab: CheevoTab,
+    val sections: List<AchievementSection>? = null,
+)
+
 /**
  * The Patch codes panel: the game's codes in their [groups] (null while they're read), the player's file to add codes
  * in ([fileName]), the manual code last applied ([applied], as said), and why the last change didn't work ([error]).
@@ -93,6 +104,10 @@ data class GameMenuState(
     val codes: CodePanel? = null,
     /** Hardcore mode is active: no state loads, patch codes or fast forward. */
     val hardcore: Boolean = false,
+    /** The game's RetroAchievements, once read. */
+    val achievements: GameAchievements? = null,
+    /** The Achievements panel, while it's open. */
+    val cheevos: AchievementsPanelState? = null,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -158,6 +173,14 @@ interface GameMenuActions {
     fun keepResume()
 
     fun cancelReplaceResume()
+
+    /** Opens the Achievements panel, if the game's set is ready. */
+    fun openAchievements() {}
+
+    fun closeAchievements() {}
+
+    /** L1 or R1: the panel's other tab, when it has two. */
+    fun switchTab() {}
 }
 
 /**
@@ -223,6 +246,7 @@ class InGameMenu(
                 slots = null,
                 discs = null,
                 codes = null,
+                cheevos = null,
                 confirmingReset = false,
                 confirmingExit = false,
                 replacingResume = null,
@@ -230,9 +254,53 @@ class InGameMenu(
         if (state.booted) readGameState()
     }
 
-    /** The sign-in, the game's achievements or hardcore mode changed: read them again. */
+    /** The sign-in, the game's achievements or hardcore mode changed: read them again, and the open tab's list. */
     fun achievementsChanged() {
-        if (state.booted) readGameState()
+        if (!state.booted) return
+        readGameState()
+        if (state.cheevos?.tab == CheevoTab.Achievements) readSections()
+    }
+
+    override fun openAchievements() {
+        val game = state.achievements
+        if (!state.booted || game == null || game.status != GameAchievements.READY) return
+        panelId++
+        val tab = if (game.hasAchievements) CheevoTab.Achievements else CheevoTab.Leaderboards
+        state =
+            state.copy(
+                slots = null,
+                discs = null,
+                codes = null,
+                cheevos = AchievementsPanelState(tab),
+                confirmingReset = false,
+            )
+        if (tab == CheevoTab.Achievements) readSections()
+    }
+
+    override fun closeAchievements() {
+        panelId++
+        state = state.copy(cheevos = null)
+    }
+
+    override fun switchTab() {
+        val panel = state.cheevos ?: return
+        val game = state.achievements ?: return
+        if (!game.hasAchievements || !game.hasLeaderboards) return
+        panelId++
+        val tab = if (panel.tab == CheevoTab.Achievements) CheevoTab.Leaderboards else CheevoTab.Achievements
+        state = state.copy(cheevos = AchievementsPanelState(tab, panel.sections))
+        if (tab == CheevoTab.Achievements) readSections()
+    }
+
+    /** Reads the Achievements tab's sections, for the panel open now. */
+    private fun readSections() {
+        val id = panelId
+        scope.launch {
+            val sections = withContext(game) { AchievementLists.sections(api.getAchievementSections()) }
+            val panel = state.cheevos
+            if (id != panelId || panel == null) return@launch
+            state = state.copy(cheevos = panel.copy(sections = sections))
+        }
     }
 
     /** Fast forward was turned on or off, by the menu or a hotkey. */
@@ -614,10 +682,15 @@ class InGameMenu(
         val multiDisc = state.discCount > 1
         scope.launch {
             val (mode, cardBusy) = withContext(game) { api.getAnalogMode() to api.isSavingMemoryCards() }
-            val hardcore = withContext(game) { api.isHardcoreActive() }
+            val (hardcore, achievements) = withContext(game) { api.isHardcoreActive() to api.getGameAchievements() }
             if (id == gameId) {
                 state =
-                    state.copy(analogMode = if (mode < 0) null else mode == 1, cardBusy = cardBusy, hardcore = hardcore)
+                    state.copy(
+                        analogMode = if (mode < 0) null else mode == 1,
+                        cardBusy = cardBusy,
+                        hardcore = hardcore,
+                        achievements = achievements,
+                    )
             }
             if (!multiDisc) return@launch
             val disc = withContext(game) { readDisc(key) }

@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -59,8 +61,11 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -457,6 +462,45 @@ class OrientationLayoutTest {
             menu.value = menu.value.copy(codes = null)
             // As the next config's menu opens.
             menu.value = GameMenuState(booted = true, analogMode = true)
+        }
+    }
+
+    @Test
+    fun theAchievementsPanel() {
+        val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+        val game = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false)
+        val long = "Collect every gem in every world without losing a life, in one sitting"
+        val sections =
+            listOf(
+                AchievementSection(
+                    7,
+                    "Almost there",
+                    arrayOf(Achievement(1, long, long, 25, "", 0, "312/500", 62f)),
+                ),
+                AchievementSection(
+                    1,
+                    "Locked",
+                    (2..6).map { Achievement(it, "スパイロ $it", long, 10, "", 0, "", 0f) }.toTypedArray(),
+                ),
+                AchievementSection(
+                    2,
+                    "Unlocked",
+                    arrayOf(
+                        Achievement(7, "Sparx Rescue", "Free the first dragon", 5, "", now.toEpochSecond(), "", 0f),
+                    ),
+                ),
+            )
+        val state =
+            GameMenuState(
+                booted = true,
+                achievements = game,
+                cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+            )
+        eachConfig({ GameMenu(state, NoMenuActions, LONG_GAME, now) }) {
+            assertTextsLaidOut(inView = true)
+            assertTrue("the first achievement is focused, not ${focusedText()}", focusedHas(long))
+            pressUntilFocusedInView(Key.DirectionDown, "Sparx Rescue")
+            assertTextsLaidOut(inView = true)
         }
     }
 

@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
                             fastForward = AppController.fastForward,
                             osdExpiry = AppController.osd.nextExpiry(),
                             onOsdExpire = AppController.osd::expire,
+                            badge = AppController.badges::image,
                         )
                     Screen.Settings ->
                         SettingsScreen(

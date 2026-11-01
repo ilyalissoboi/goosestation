@@ -415,4 +415,10 @@ object NativeLibrary {
 
     /** A game started now would start in hardcore mode: achievements and hardcore are on, and a sign-in is stored. */
     external fun hardcoreWouldStart(): Boolean
+
+    /** The running game's RetroAchievements: status and counts. Waits for the core. */
+    external fun getGameAchievements(): GameAchievements
+
+    /** The running game's achievements, in rcheevos's sections by progress; empty without a set. Waits for the core. */
+    external fun getAchievementSections(): Array<AchievementSection>
 }

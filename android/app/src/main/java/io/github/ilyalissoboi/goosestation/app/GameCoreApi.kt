@@ -3,6 +3,8 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PatchCodes
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
@@ -94,6 +96,12 @@ interface GameCoreApi {
 
     /** A game started now would start in hardcore mode: it's switched on, and a sign-in is stored. */
     fun hardcoreWouldStart(): Boolean
+
+    /** The running game's RetroAchievements: its status and counts. */
+    fun getGameAchievements(): GameAchievements
+
+    /** The running game's achievements, in rcheevos's sections by progress. */
+    fun getAchievementSections(): List<AchievementSection>
 }
 
 object NativeGameCoreApi : GameCoreApi {
@@ -153,4 +161,8 @@ object NativeGameCoreApi : GameCoreApi {
     override fun isHardcoreActive(): Boolean = NativeLibrary.isHardcoreActive()
 
     override fun hardcoreWouldStart(): Boolean = NativeLibrary.hardcoreWouldStart()
+
+    override fun getGameAchievements(): GameAchievements = NativeLibrary.getGameAchievements()
+
+    override fun getAchievementSections(): List<AchievementSection> = NativeLibrary.getAchievementSections().toList()
 }

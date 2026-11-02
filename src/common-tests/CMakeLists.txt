@@ -1,4 +1,6 @@
 add_executable(common-tests
+  achievements_offline_store_tests.cpp
+  ../core/achievements_offline_store.cpp
   android_disc_groups_tests.cpp
   ../util/android_disc_groups.cpp
   android_input_keys_tests.cpp
@@ -42,4 +44,4 @@ if(ANDROID)
   target_link_libraries(common-tests PRIVATE imgui)
 endif()
 
-target_link_libraries(common-tests PRIVATE common gtest gtest_main)
+target_link_libraries(common-tests PRIVATE common rcheevos gtest gtest_main)

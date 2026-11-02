@@ -2,6 +2,8 @@ add_library(core
   achievements.cpp
   achievements.h
   achievements_private.h
+  achievements_offline_store.cpp
+  achievements_offline_store.h
   analog_controller.cpp
   analog_controller.h
   analog_joystick.cpp

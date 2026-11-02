@@ -83,6 +83,9 @@ class GameMenuTest {
     private val calls = mutableListOf<String>()
     private var state by mutableStateOf(GameMenuState(booted = true))
 
+    // Whether the fake opens the Achievements panel and switches its tab, as InGameMenu does.
+    private var switchingTabs = false
+
     // Records each call; closing a layer closes it in the state too, as InGameMenu does.
     private val actions =
         object : GameMenuActions {
@@ -207,6 +210,10 @@ class GameMenuTest {
 
             override fun openAchievements() {
                 calls += "openAchievements"
+                if (switchingTabs) {
+                    state =
+                        state.copy(cheevos = AchievementsPanelState(CheevoTab.Achievements, sections))
+                }
             }
 
             override fun closeAchievements() {
@@ -216,6 +223,9 @@ class GameMenuTest {
 
             override fun switchTab() {
                 calls += "switchTab"
+                if (switchingTabs) {
+                    state = state.copy(cheevos = AchievementsPanelState(CheevoTab.Leaderboards, leaderboards = boards))
+                }
             }
 
             override fun openLeaderboard(id: Int) {
@@ -422,6 +432,28 @@ class GameMenuTest {
                     ),
             )
         show()
+    }
+
+    // Switching tabs takes away the focused row: the menu keeps its Achievements row in view, current.
+    @Test
+    fun switchingTabsKeepsTheMenusRowInView() {
+        switchingTabs = true
+        state = GameMenuState(booted = true, analogMode = true, achievements = ready)
+        // A phone in landscape, the emulator's screen: the menu scrolls.
+        show(width = 914, height = 411)
+        repeat(12) {
+            if (rule.onAllNodes(isFocused() and hasText("Achievements")).fetchSemanticsNodes().isEmpty()) {
+                press(Key.DirectionDown)
+            }
+        }
+        rule.onNode(isFocused()).assert(hasText("Achievements"))
+        press(Key.ButtonA)
+        rule.onNode(isFocused()).assert(hasText("Gem Collector"))
+
+        press(Key.ButtonR1)
+
+        rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
+        rule.onNode(hasText("Achievements") and hasText("14 of 40")).assertIsDisplayed()
     }
 
     @Test

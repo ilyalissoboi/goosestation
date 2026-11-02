@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,7 +76,8 @@ import java.time.ZonedDateTime
  * leaderboards, Achievements and Leaderboards tabs, which L1 and R1 switch from anywhere in the panel (or a tap); with
  * one of them, just that. The Achievements tab: the progress, then the sections by progress, each achievement a row
  * the D-pad scrolls through, with nothing to activate. Pictures come from [badge], as they're read. The focus can't
- * leave the panel: B and Back close it ([GameMenu] handles them).
+ * leave the panel: B and Back close it ([GameMenu] handles them). Before what's focused goes (a tab switched, a
+ * leaderboard opened), [keepFocus] puts the focus on the menu's row, so the menu stays where it is.
  */
 @Composable
 fun AchievementsPanel(
@@ -85,8 +87,17 @@ fun AchievementsPanel(
     badge: (String) -> ImageBitmap?,
     now: ZonedDateTime,
     modifier: Modifier = Modifier,
+    keepFocus: () -> Unit = {},
 ) {
     val colors = GooseStationTheme.colors
+    // Away from a row that's about to go: left to itself, the focus would land at the menu's top, scrolling it. Each
+    // switch then brings the focus back into the panel, whether the tab changed or not.
+    var switches by remember { mutableIntStateOf(0) }
+    val switchTab = {
+        keepFocus()
+        actions.switchTab()
+        switches++
+    }
     val twoTabs = game.hasAchievements && game.hasLeaderboards
     val holder = remember { FocusRequester() }
     val first = remember { FocusRequester() }
@@ -100,7 +111,7 @@ fun AchievementsPanel(
             else -> page != null && (page.top.isNotEmpty() || page.around.isNotEmpty())
         }
 
-    LaunchedEffect(panel.tab, sections == null) {
+    LaunchedEffect(panel.tab, sections == null, switches) {
         if (panel.tab == CheevoTab.Achievements) {
             if (rows) {
                 first.requestFocus()
@@ -115,7 +126,7 @@ fun AchievementsPanel(
             modifier
                 .onPreviewKeyEvent { event ->
                     if (event.key != Key.ButtonL1 && event.key != Key.ButtonR1) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp && twoTabs) actions.switchTab()
+                    if (event.type == KeyEventType.KeyUp && twoTabs) switchTab()
                     true
                 }.focusProperties {
                     // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
@@ -132,7 +143,7 @@ fun AchievementsPanel(
                 PanelTabs(
                     listOf("Achievements", "Leaderboards"),
                     current = if (panel.tab == CheevoTab.Achievements) 0 else 1,
-                    onSelect = { if (it != panel.tab.ordinal) actions.switchTab() },
+                    onSelect = { if (it != panel.tab.ordinal) switchTab() },
                 )
             }
         } else {
@@ -168,7 +179,7 @@ fun AchievementsPanel(
             }
         }
         if (panel.tab == CheevoTab.Leaderboards) {
-            LeaderboardsTab(panel, actions, holder, Modifier.weight(1f, fill = false))
+            LeaderboardsTab(panel, actions, holder, keepFocus, switches, Modifier.weight(1f, fill = false))
         }
         KeyHints(
             if (panel.tab == CheevoTab.Leaderboards && panel.open == null && rows) {
@@ -321,6 +332,8 @@ private fun LeaderboardsTab(
     panel: AchievementsPanelState,
     actions: GameMenuActions,
     holder: FocusRequester,
+    keepFocus: () -> Unit,
+    switches: Int,
     modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
@@ -335,7 +348,7 @@ private fun LeaderboardsTab(
     val lastRow = remember { FocusRequester() }
     val rows = page?.let(LeaderboardRows::rows)
 
-    LaunchedEffect(open?.id, page != null, boards != null) {
+    LaunchedEffect(open?.id, page != null, boards != null, switches) {
         when {
             open == null && boards.isNullOrEmpty() -> holder.requestFocus()
             open == null && boards!!.any { it.id == lastOpened } -> lastRow.requestFocus()
@@ -363,10 +376,10 @@ private fun LeaderboardsTab(
                     modifier =
                         focus
                             .fillMaxWidth()
-                            .focusRing(
-                                role = Role.Button,
-                            ) { actions.openLeaderboard(board.id) }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .focusRing(role = Role.Button) {
+                                keepFocus()
+                                actions.openLeaderboard(board.id)
+                            }.padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(board.title, style = MaterialTheme.typography.titleMedium, color = colors.ink)

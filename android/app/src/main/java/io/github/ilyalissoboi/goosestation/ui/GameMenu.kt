@@ -116,7 +116,11 @@ fun GameMenu(
                 cameFrom.codesRow.requestFocus()
                 actions.closeCodes()
             }
-            shown.cheevos?.open != null -> actions.closeLeaderboard()
+            shown.cheevos?.open != null -> {
+                // As the board's rows go; the panel gives the focus back to the board's row.
+                cameFrom.cheevosRow.requestFocus()
+                actions.closeLeaderboard()
+            }
             shown.cheevos != null -> {
                 cameFrom.cheevosRow.requestFocus()
                 actions.closeAchievements()
@@ -192,7 +196,15 @@ fun GameMenu(
                 discs != null -> DiscPanel(discs, game?.title.orEmpty(), actions, modifier)
                 codes != null -> PatchCodePanel(codes, actions, modifier)
                 cheevos != null && achievements != null ->
-                    AchievementsPanel(cheevos, achievements, actions, badge, now, modifier)
+                    AchievementsPanel(
+                        cheevos,
+                        achievements,
+                        actions,
+                        badge,
+                        now,
+                        modifier,
+                        keepFocus = { cameFrom.cheevosRow.requestFocus() },
+                    )
             }
         }
         if (screenWidth >= SIDE_BY_SIDE || screenWidth >= screenHeight) {

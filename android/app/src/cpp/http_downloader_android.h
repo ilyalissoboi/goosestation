@@ -22,8 +22,8 @@ public:
   /// Caches HttpBridge's class and methods. Called by JNI_OnLoad.
   static bool LoadJNIReferences(JNIEnv* env);
 
-  /// HttpBridge's answer for request [request] of downloader [downloader], from any thread. A downloader that's
-  /// gone, or a request it no longer has, is ignored.
+  /// HttpBridge's answer for request [request] of downloader [downloader] (their ids, never reused), from any thread.
+  /// A downloader that's gone, or a request it no longer has, is ignored.
   static void Complete(jlong downloader, jlong request, s32 status, std::string content_type, Request::Data body);
 
 protected:
@@ -33,6 +33,11 @@ protected:
   void CloseRequest(HTTPDownloader::Request* request) override;
 
 private:
+  struct AndroidRequest : HTTPDownloader::Request
+  {
+    jlong id;
+  };
+
   struct Result
   {
     jlong request;
@@ -42,6 +47,7 @@ private:
   };
 
   std::string m_user_agent;
+  jlong m_id;
 
   std::mutex m_results_mutex;
   std::vector<Result> m_results;

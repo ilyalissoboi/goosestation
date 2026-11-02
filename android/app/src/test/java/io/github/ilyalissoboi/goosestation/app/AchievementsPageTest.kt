@@ -138,4 +138,28 @@ class AchievementsPageTest {
             runCurrent()
             assertFalse(page.expired)
         }
+
+    // The core's sign-in finished (or failed) while the page was open: it shows the account as it is now.
+    @Test
+    fun refreshReadsTheAccountAgain() =
+        runTest {
+            val page = page()
+            api.account = AchievementsAccount(AchievementsAccount.SIGNED_IN, "goose", "Goose", 300, 940)
+
+            page.refresh()
+            runCurrent()
+
+            assertEquals(AchievementsAccount.SIGNED_IN, page.account!!.state)
+        }
+
+    @Test
+    fun refreshDoesNothingUntilLoaded() =
+        runTest {
+            val page = AchievementsPage(backgroundScope, StandardTestDispatcher(testScheduler), api, settings)
+
+            page.refresh()
+            runCurrent()
+
+            assertEquals(emptyList<String>(), calls)
+        }
 }

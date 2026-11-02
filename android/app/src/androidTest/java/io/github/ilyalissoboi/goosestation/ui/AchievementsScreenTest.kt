@@ -148,6 +148,16 @@ class AchievementsScreenTest {
         rule.onNodeWithText("Not connected. RetroAchievements is checked again when a game starts.").assertExists()
     }
 
+    // Still checking the stored sign-in (the app's first minute, a slow network): no points to show yet.
+    @Test
+    fun connectingShowsTheNote() {
+        show(AchievementsAccount(AchievementsAccount.CONNECTING, "goose", "", 0, 0))
+
+        rule.onNodeWithText("Signed in as goose").assertExists()
+        rule.onNodeWithText("Not connected. RetroAchievements is checked again when a game starts.").assertExists()
+        rule.onNodeWithText("0 points").assertDoesNotExist()
+    }
+
     @Test
     fun switchesToggleWithA() {
         show(SIGNED_IN)

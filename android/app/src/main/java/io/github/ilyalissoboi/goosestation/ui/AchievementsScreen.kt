@@ -104,7 +104,10 @@ fun AchievementsScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = colors.ink,
                 )
-                if (account.state == AchievementsAccount.NOT_CONNECTED) {
+                // Not signed in yet, whether still checking or with no connection: no points to show.
+                if (account.state == AchievementsAccount.NOT_CONNECTED ||
+                    account.state == AchievementsAccount.CONNECTING
+                ) {
                     Text(NOT_CONNECTED_NOTE, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
                 } else {
                     Text(points(account), style = GooseStationTheme.type.mono, color = colors.inkMuted)

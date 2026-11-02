@@ -1098,7 +1098,9 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
   s_load_game_request = nullptr;
   s_state_buffer.deallocate();
 #ifdef __ANDROID__
-  s_android_load_result = result;
+  // RC_LOGIN_REQUIRED only says the sign-in this load waited for failed: the sign-in's own reason stays.
+  if (result != RC_LOGIN_REQUIRED || s_android_load_result == RC_OK)
+    s_android_load_result = result;
   if (result != RC_OK && result != RC_HARDCORE_DISABLED)
     Host::OnAchievementsRefreshed();
 #endif
@@ -1118,13 +1120,25 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
   }
   else if (result == RC_LOGIN_REQUIRED)
   {
+#ifdef __ANDROID__
+    // Nothing asks again mid-game on Android: with the sign-in over and failed, the game runs without achievements,
+    // and so without hardcore.
+    if (!s_login_request)
+      DisableHardcoreMode();
+#endif
     // We would've asked to re-authenticate, so leave HC on for now.
     // Once we've done so, we'll reload the game.
     return;
   }
   else if (result != RC_OK)
   {
+#ifdef __ANDROID__
+    // The app says it couldn't reach the server, once; anything else is still worth the core's own words.
+    if (result != RC_NO_RESPONSE)
+      ReportFmtError("Loading game failed: {}", error_message);
+#else
     ReportFmtError("Loading game failed: {}", error_message);
+#endif
     if (was_disc_change)
     {
       ClearGameInfo();
@@ -1215,17 +1229,6 @@ void Achievements::ClearGameInfo()
   }
   rc_client_unload_game(s_client);
 
-#ifdef __ANDROID__
-  for (const LeaderboardTrackerIndicator& it : s_active_leaderboard_trackers)
-    Host::OnAchievementIndicator(Host::AchievementIndicator::Tracker, it.tracker_id, false, {}, {});
-  for (const AchievementChallengeIndicator& it : s_active_challenge_indicators)
-    Host::OnAchievementIndicator(Host::AchievementIndicator::Challenge, it.achievement->id, false, {}, {});
-  if (s_active_progress_indicator.has_value())
-  {
-    Host::OnAchievementIndicator(Host::AchievementIndicator::Progress, s_active_progress_indicator->achievement->id,
-                                 false, {}, {});
-  }
-#endif
   s_active_leaderboard_trackers = {};
   s_active_challenge_indicators = {};
   s_active_progress_indicator.reset();
@@ -2014,9 +2017,10 @@ void Achievements::ClientLoginWithTokenCallback(int result, const char* error_me
       Host::OnAchievementsLoginRequested(LoginRequestReason::TokenInvalid);
       Host::OnAchievementsLoginExpired();
     }
-    else if (System::IsValid())
+    else
     {
-      s_android_load_result = result;
+      if (System::IsValid())
+        s_android_load_result = result;
       Host::OnAchievementsRefreshed();
     }
 #else
@@ -2191,8 +2195,12 @@ Achievements::AndroidGameStatus Achievements::GetAndroidGameStatus()
   const bool signed_in = (rc_client_get_user_info(s_client) != nullptr);
   if (s_load_game_request || (s_login_request && System::IsValid()))
     return AndroidGameStatus::Loading;
-  if (s_android_load_result == RC_NO_RESPONSE)
+  // Any failure but an unknown game, or a sign-in the server refused (signed out by now), is the server's.
+  if (s_android_load_result != RC_OK && s_android_load_result != RC_NO_GAME_LOADED &&
+      s_android_load_result != RC_HARDCORE_DISABLED && s_android_load_result != RC_LOGIN_REQUIRED)
+  {
     return AndroidGameStatus::Unreachable;
+  }
   if (!signed_in)
     return AndroidGameStatus::Off;
   if (s_android_load_result == RC_NO_GAME_LOADED || (HasActiveGame() && !HasAchievementsOrLeaderboards()) ||

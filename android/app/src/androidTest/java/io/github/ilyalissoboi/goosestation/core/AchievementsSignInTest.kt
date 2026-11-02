@@ -39,6 +39,7 @@ class AchievementsSignInTest {
     // What the core reported, through NativeCallbacks.
     private val tokens = CopyOnWriteArrayList<String?>()
     private val expired = AtomicInteger()
+    private val changes = AtomicInteger()
     private val started = CountDownLatch(1)
     private val stopped = CountDownLatch(1)
 
@@ -65,6 +66,10 @@ class AchievementsSignInTest {
 
                 override fun onAchievementsLoginExpired() {
                     expired.incrementAndGet()
+                }
+
+                override fun onAchievementsChanged() {
+                    changes.incrementAndGet()
                 }
             },
         )
@@ -140,6 +145,16 @@ class AchievementsSignInTest {
         assertEquals(USER, account.username)
         assertEquals(emptyList<String?>(), tokens.toList())
         assertEquals(0, expired.get())
+    }
+
+    // The Settings page reads the account again on a change: an offline sign-in at startup must say it's done.
+    @Test
+    fun anOfflineSignInAtStartupReportsTheChange() {
+        server.unreachable = true
+        initialize(SIGNED_IN_SETTINGS, TOKEN)
+
+        settledAccount()
+        waitFor("a change report") { changes.get() > 0 }
     }
 
     @Test

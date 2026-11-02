@@ -109,6 +109,12 @@ class AchievementsPage(
         }
     }
 
+    /** The core's sign-in changed (it finished, or failed): reads the account again, once the page has read it. */
+    fun refresh() {
+        if (account == null || signingIn) return
+        scope.launch { account = withContext(core) { api.getAchievementsAccount() } }
+    }
+
     /** The server rejected the stored token: the page says so until a sign-in works. */
     fun loginExpired() {
         expired = true

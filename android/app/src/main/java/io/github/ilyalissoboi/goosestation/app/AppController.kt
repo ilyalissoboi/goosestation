@@ -1418,6 +1418,7 @@ object AppController : NativeCallbacks {
     override fun onAchievementsChanged() {
         mainHandler.post {
             gameMenu.achievementsChanged()
+            if (screen == Screen.Achievements) achievementsPage.refresh()
             if (gameRunning && !unreachableSaid) {
                 scope.launch {
                     val status = withContext(gameDispatcher) { NativeGameCoreApi.getGameAchievements().status }

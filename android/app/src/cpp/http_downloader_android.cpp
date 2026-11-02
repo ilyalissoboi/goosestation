@@ -7,8 +7,9 @@
 #include "common/log.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
-#include <unordered_set>
+#include <unordered_map>
 
 Log_SetChannel(HTTPDownloader);
 
@@ -20,14 +21,12 @@ jmethodID s_cancel = nullptr;
 
 constexpr const char* BRIDGE_CLASS = "io/github/ilyalissoboi/goosestation/core/HttpBridge";
 
-// The downloaders alive, so an answer for one that's gone is dropped rather than used after it's freed.
+// The downloaders alive, by id, so an answer for one that's gone is dropped rather than used after it's freed.
 std::mutex s_live_mutex;
-std::unordered_set<HTTPDownloaderAndroid*> s_live;
+std::unordered_map<jlong, HTTPDownloaderAndroid*> s_live;
 
-jlong ToHandle(const void* ptr)
-{
-  return static_cast<jlong>(reinterpret_cast<intptr_t>(ptr));
-}
+// Downloaders' and requests' ids. Never reused, unlike addresses: an answer that comes late can't reach another.
+std::atomic<jlong> s_next_id{1};
 } // namespace
 
 std::unique_ptr<HTTPDownloader> HTTPDownloader::Create(std::string user_agent)
@@ -62,17 +61,18 @@ bool HTTPDownloaderAndroid::LoadJNIReferences(JNIEnv* env)
   return found;
 }
 
-HTTPDownloaderAndroid::HTTPDownloaderAndroid(std::string user_agent) : m_user_agent(std::move(user_agent))
+HTTPDownloaderAndroid::HTTPDownloaderAndroid(std::string user_agent)
+  : m_user_agent(std::move(user_agent)), m_id(s_next_id.fetch_add(1))
 {
   std::unique_lock lock(s_live_mutex);
-  s_live.insert(this);
+  s_live.emplace(m_id, this);
 }
 
 HTTPDownloaderAndroid::~HTTPDownloaderAndroid()
 {
   {
     std::unique_lock lock(s_live_mutex);
-    s_live.erase(this);
+    s_live.erase(m_id);
   }
 
   // Anything still out is cancelled; its answer, if one comes, finds this downloader gone.
@@ -86,17 +86,20 @@ void HTTPDownloaderAndroid::Complete(jlong downloader, jlong request, s32 status
                                      Request::Data body)
 {
   std::unique_lock lock(s_live_mutex);
-  auto* self = reinterpret_cast<HTTPDownloaderAndroid*>(static_cast<intptr_t>(downloader));
-  if (!s_live.contains(self))
+  const auto it = s_live.find(downloader);
+  if (it == s_live.end())
     return;
 
+  HTTPDownloaderAndroid* self = it->second;
   std::unique_lock results_lock(self->m_results_mutex);
   self->m_results.push_back(Result{request, status, std::move(content_type), std::move(body)});
 }
 
 HTTPDownloader::Request* HTTPDownloaderAndroid::InternalCreateRequest()
 {
-  return new Request();
+  AndroidRequest* req = new AndroidRequest();
+  req->id = s_next_id.fetch_add(1);
+  return req;
 }
 
 void HTTPDownloaderAndroid::InternalPollRequests()
@@ -111,7 +114,9 @@ void HTTPDownloaderAndroid::InternalPollRequests()
   for (Result& result : results)
   {
     const auto it = std::find_if(m_pending_http_requests.begin(), m_pending_http_requests.end(),
-                                 [&result](const Request* req) { return ToHandle(req) == result.request; });
+                                 [&result](const Request* req) {
+                                   return static_cast<const AndroidRequest*>(req)->id == result.request;
+                                 });
     if (it == m_pending_http_requests.end())
       continue;
 
@@ -149,8 +154,8 @@ bool HTTPDownloaderAndroid::StartRequest(HTTPDownloader::Request* req)
     {
       const jint timeout_ms = static_cast<jint>(std::max(1.0f, std::ceil(m_timeout * 1000.0f)));
       req->state.store(Request::State::Started);
-      env->CallStaticVoidMethod(s_bridge_class, s_start, ToHandle(this), ToHandle(req), jurl, jpost, jagent,
-                                timeout_ms);
+      env->CallStaticVoidMethod(s_bridge_class, s_start, m_id, static_cast<AndroidRequest*>(req)->id, jurl, jpost,
+                                jagent, timeout_ms);
       started = !JNIUtil::ClearException(env.get());
     }
 
@@ -166,7 +171,7 @@ bool HTTPDownloaderAndroid::StartRequest(HTTPDownloader::Request* req)
   {
     ERROR_LOG("Failed to start an HTTP request.");
     req->callback(HTTP_STATUS_ERROR, std::string(), Request::Data());
-    delete req;
+    delete static_cast<AndroidRequest*>(req);
     return false;
   }
 
@@ -182,10 +187,17 @@ void HTTPDownloaderAndroid::CloseRequest(HTTPDownloader::Request* req)
     ScopedJNIEnv env;
     if (env)
     {
-      env->CallStaticVoidMethod(s_bridge_class, s_cancel, ToHandle(this), ToHandle(req));
+      env->CallStaticVoidMethod(s_bridge_class, s_cancel, m_id, static_cast<AndroidRequest*>(req)->id);
       JNIUtil::ClearException(env.get());
     }
   }
 
-  delete req;
+  // An answer already in for it is no one's now.
+  {
+    const jlong id = static_cast<AndroidRequest*>(req)->id;
+    std::unique_lock lock(m_results_mutex);
+    std::erase_if(m_results, [id](const Result& result) { return result.request == id; });
+  }
+
+  delete static_cast<AndroidRequest*>(req);
 }

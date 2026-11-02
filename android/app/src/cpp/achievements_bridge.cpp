@@ -290,7 +290,7 @@ bool AchievementsBridge::IsHardcoreActive()
 
 void AchievementsBridge::SetServerForTest(const std::string& host)
 {
-  rc_client_set_host(nullptr, host.empty() ? nullptr : host.c_str());
+  Achievements::SetServerForTest(host);
 }
 
 // The core's achievement events, which Big Picture draws on the other platforms.

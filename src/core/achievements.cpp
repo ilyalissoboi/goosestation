@@ -235,6 +235,10 @@ static std::vector<LeaderboardTrackerIndicator> s_active_leaderboard_trackers;
 static std::vector<AchievementChallengeIndicator> s_active_challenge_indicators;
 static std::optional<AchievementProgressIndicator> s_active_progress_indicator;
 
+// The server the clients talk to, when a test has set one (SetServerForTest()); empty for RetroAchievements.
+static std::string s_server_host;
+static rc_api_host_t s_server_api_host = {};
+
 #ifdef __ANDROID__
 // Why the running game's set, or the sign-in it waited for, didn't load: RC_OK while it hasn't failed.
 static int s_android_load_result = RC_OK;
@@ -249,6 +253,15 @@ std::unique_lock<std::recursive_mutex> Achievements::GetLock()
 rc_client_t* Achievements::GetClient()
 {
   return s_client;
+}
+
+const rc_api_host_t* Achievements::GetServerHost()
+{
+  if (s_server_host.empty())
+    return nullptr;
+
+  s_server_api_host.host = s_server_host.c_str();
+  return &s_server_api_host;
 }
 
 const rc_client_user_game_summary_t& Achievements::GetGameSummary()
@@ -636,6 +649,8 @@ bool Achievements::CreateClient(rc_client_t** client, std::unique_ptr<HTTPDownlo
 #endif
 
   rc_client_set_userdata(new_client, http->get());
+  if (!s_server_host.empty())
+    rc_client_set_host(new_client, s_server_host.c_str());
 
   *client = new_client;
   return true;
@@ -1087,8 +1102,8 @@ void Achievements::BeginChangeDisc()
     return;
   }
 
-  s_load_game_request = rc_client_begin_change_media_from_hash(s_client, s_game_hash.c_str(), ClientLoadGameCallback,
-                                                               reinterpret_cast<void*>(static_cast<uintptr_t>(1)));
+  s_load_game_request = rc_client_begin_change_media(s_client, s_game_hash.c_str(), ClientLoadGameCallback,
+                                                     reinterpret_cast<void*>(static_cast<uintptr_t>(1)));
 }
 
 void Achievements::ClientLoadGameCallback(int result, const char* error_message, rc_client_t* client, void* userdata)
@@ -2209,6 +2224,14 @@ Achievements::AndroidGameStatus Achievements::GetAndroidGameStatus()
     return AndroidGameStatus::NoSet;
   }
   return AndroidGameStatus::Ready;
+}
+
+void Achievements::SetServerForTest(std::string host)
+{
+  const auto lock = GetLock();
+  s_server_host = std::move(host);
+  if (s_client)
+    rc_client_set_host(s_client, s_server_host.empty() ? nullptr : s_server_host.c_str());
 }
 
 void Achievements::RetryAndroidSignIn()

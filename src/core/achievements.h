@@ -179,6 +179,10 @@ AndroidGameStatus GetAndroidGameStatus();
 /// game boots, so the game's set loads once the sign-in succeeds.
 void RetryAndroidSignIn();
 
+/// For the instrumented tests only: the server the clients talk to (as "http://127.0.0.1:port"), or RetroAchievements
+/// with an empty host. Applies to the current client and every one created after.
+void SetServerForTest(std::string host);
+
 #endif // __ANDROID__
 
 #ifdef ENABLE_RAINTEGRATION

@@ -1178,6 +1178,11 @@ NATIVE_LIBRARY_FUNCTION(void, setAchievementsGameHashForTest)(JNIEnv* env, jobje
   Achievements::SetGameHashForTest(hash ? FromJString(env, hash) : std::string());
 }
 
+NATIVE_LIBRARY_FUNCTION(void, achievementsNetworkBack)(JNIEnv*, jobject)
+{
+  EmuThread::RunOnThread([]() { Achievements::OnAndroidNetworkBack(); }, false);
+}
+
 NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)
 {
   return AndroidHost::IsVulkanFailed() ? JNI_TRUE : JNI_FALSE;

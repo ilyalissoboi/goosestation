@@ -276,6 +276,13 @@ object AppController : NativeCallbacks {
 
     private val achievementSounds by lazy { AchievementSounds() }
 
+    // A network coming back sends the achievements waiting, in the library or in a game.
+    private val networkWatch by lazy {
+        NetworkWatch(context) {
+            if (coreStarted) scope.launch(coreDispatcher) { NativeLibrary.achievementsNetworkBack() }
+        }
+    }
+
     // Said once, at the next game start, after the server rejected the stored sign-in.
     private var signInExpired = false
 
@@ -396,6 +403,7 @@ object AppController : NativeCallbacks {
                 }
             }
         if (coreStarted) scope.launch { resume() }
+        networkWatch.start()
     }
 
     /**
@@ -407,6 +415,7 @@ object AppController : NativeCallbacks {
         pushTicker?.cancel()
         pushTicker = null
         scope.launch { push(force = true) }
+        networkWatch.stop()
     }
 
     // --- Setup ---

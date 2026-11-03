@@ -2346,6 +2346,23 @@ void Achievements::SetServerForTest(std::string host)
     rc_client_set_host(s_client, s_server_host.c_str());
 }
 
+void Achievements::OnAndroidNetworkBack()
+{
+  const auto lock = GetLock();
+  if (!IsActive() || !s_client)
+    return;
+
+  // Signed in, for real or with a game started offline: rcheevos's own retries go on their timer; the rest go now.
+  if (rc_client_get_user_info(s_client))
+  {
+    SendWaitingRecords();
+    return;
+  }
+
+  // Not connected: a sign-in now sends what's waiting once it succeeds (ClientLoginWithTokenCallback()).
+  RetryAndroidSignIn();
+}
+
 void Achievements::SetGameHashForTest(std::string hash)
 {
   const auto lock = GetLock();

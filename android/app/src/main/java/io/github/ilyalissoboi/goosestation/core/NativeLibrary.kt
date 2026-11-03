@@ -422,6 +422,12 @@ object NativeLibrary {
     /** For the instrumented tests only: the RetroAchievements server to talk to ([url]), or the real one with null. */
     external fun setAchievementsServerForTest(url: String?)
 
+    /**
+     * A validated network arrived: the core sends the unlocks and entries waiting, signing in again first if the
+     * sign-in hadn't reached the server. Queued for the core's thread; returns at once.
+     */
+    external fun achievementsNetworkBack()
+
     /** For the instrumented tests only: the hash a game the core can't hash (a PS-EXE) gets, or none with null. */
     external fun setAchievementsGameHashForTest(hash: String?)
 

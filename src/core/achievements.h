@@ -183,6 +183,10 @@ void RetryAndroidSignIn();
 /// with an empty host. Applies to the current client and every one created after.
 void SetServerForTest(std::string host);
 
+/// A validated network arrived: what's waiting is sent, signing in again first if the sign-in hadn't reached the
+/// server. On the CPU thread.
+void OnAndroidNetworkBack();
+
 /// For the instrumented tests only: the hash a game whose disc can't be hashed (a PS-EXE) gets, or none when empty.
 void SetGameHashForTest(std::string hash);
 

@@ -326,6 +326,24 @@ class AchievementsOfflineTest {
         }
     }
 
+    // Started offline, then the network comes back with no game running: the sign-in and the queue go.
+    @Test
+    fun aNetworkBackSendsTheQueue() {
+        seed(unlockRecord())
+        server.unreachable = true
+        initialize(SIGNED_IN_SETTINGS, signedIn = false)
+        waitFor("the sign-in to fail") {
+            NativeLibrary.getAchievementsAccount().state == AchievementsAccount.NOT_CONNECTED
+        }
+
+        server.unreachable = false
+        NativeLibrary.achievementsNetworkBack()
+
+        waitFor("the award") { server.awards().isNotEmpty() }
+        waitFor("the queue to empty") { queued().isEmpty() }
+        assertEquals(AchievementsAccount.SIGNED_IN, NativeLibrary.getAchievementsAccount().state)
+    }
+
     /** Writes what an online start of game [hash] would have saved: the account, the hash's game, and its set. */
     private fun seedSavedGame(hash: String) {
         File(folder, "users").mkdirs()

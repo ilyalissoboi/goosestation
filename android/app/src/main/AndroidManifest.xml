@@ -5,6 +5,7 @@
 
     <!-- RetroAchievements. A normal permission: granted at install, without asking. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Controllers work without a touch screen. -->
     <uses-feature

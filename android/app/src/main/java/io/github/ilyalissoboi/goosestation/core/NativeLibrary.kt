@@ -391,6 +391,15 @@ object NativeLibrary {
         timeoutSeconds: Float,
     ): Array<String>
 
+    /**
+     * For HttpDownloaderTest only: GETs [urls] through the core's HTTPDownloader one at a time (each after the first
+     * waits in its queue), each with up to [timeoutSeconds], and returns their statuses.
+     */
+    external fun httpTestFetchQueued(
+        urls: Array<String>,
+        timeoutSeconds: Float,
+    ): IntArray
+
     /** The RetroAchievements account and its sign-in. Waits for the core. */
     external fun getAchievementsAccount(): AchievementsAccount
 

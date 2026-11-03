@@ -78,6 +78,33 @@ class HttpDownloaderTest {
         assert(Regex("(?i)content-type: application/x-www-form-urlencoded").containsMatchIn(request)) { request }
     }
 
+    // From review: a request that waited in the queue was timed from when it was made, not from when it started.
+    @Test
+    fun aQueuedRequestGetsItsWholeTimeout() {
+        thread(isDaemon = true) {
+            repeat(2) {
+                val socket = runCatching { server.accept() }.getOrNull() ?: return@thread
+                socket.use {
+                    val input = BufferedInputStream(it.getInputStream())
+                    val head = StringBuilder()
+                    while (!head.endsWith("\r\n\r\n")) {
+                        val b = input.read()
+                        if (b < 0) break
+                        head.append(b.toChar())
+                    }
+                    Thread.sleep(2000)
+                    it.getOutputStream().write(ok("text/plain", "ok").encodeToByteArray())
+                    it.getOutputStream().flush()
+                }
+            }
+        }
+
+        // Each takes 2 s of its 3: the second, queued for the first's 2 s, would time out a second into its own.
+        val statuses = NativeLibrary.httpTestFetchQueued(arrayOf("$base/first", "$base/second"), 3f)
+
+        assertEquals(listOf(200, 200), statuses.toList())
+    }
+
     @Test
     fun timeoutThroughTheCore() {
         answerOnce(null)

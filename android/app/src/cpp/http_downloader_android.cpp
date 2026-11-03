@@ -5,6 +5,7 @@
 #include "jni_util.h"
 
 #include "common/log.h"
+#include "common/timer.h"
 
 #include <algorithm>
 #include <atomic>
@@ -153,7 +154,9 @@ bool HTTPDownloaderAndroid::StartRequest(HTTPDownloader::Request* req)
     if (jurl && jagent && (req->type != Request::Type::Post || jpost))
     {
       const jint timeout_ms = static_cast<jint>(std::max(1.0f, std::ceil(m_timeout * 1000.0f)));
+      // Timed from now, not from when it was made: it may have waited behind the active requests.
       req->state.store(Request::State::Started);
+      req->start_time = Common::Timer::GetCurrentValue();
       env->CallStaticVoidMethod(s_bridge_class, s_start, m_id, static_cast<AndroidRequest*>(req)->id, jurl, jpost,
                                 jagent, timeout_ms);
       started = !JNIUtil::ClearException(env.get());

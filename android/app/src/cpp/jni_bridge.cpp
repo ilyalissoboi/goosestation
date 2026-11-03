@@ -965,6 +965,39 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, httpTestFetch)(JNIEnv* env, jobject, jstri
   return ret;
 }
 
+NATIVE_LIBRARY_FUNCTION(jintArray, httpTestFetchQueued)(JNIEnv* env, jobject, jobjectArray urls,
+                                                         jfloat timeout_seconds)
+{
+  // For HttpDownloaderTest only: GETs [urls] through the core's downloader one at a time, so each after the first
+  // waits in its queue, and returns their statuses.
+  const jsize count = env->GetArrayLength(urls);
+  std::vector<jint> statuses(static_cast<size_t>(count), HTTPDownloader::HTTP_STATUS_ERROR);
+  if (std::unique_ptr<HTTPDownloader> downloader = HTTPDownloader::Create("GooseStation test"))
+  {
+    downloader->SetTimeout(timeout_seconds);
+    downloader->SetMaxActiveRequests(1);
+    for (jsize i = 0; i < count; i++)
+    {
+      jstring url = static_cast<jstring>(env->GetObjectArrayElement(urls, i));
+      downloader->CreateRequest(FromJString(env, url),
+                                [&statuses, i](s32 code, const std::string&, HTTPDownloader::Request::Data) {
+                                  statuses[static_cast<size_t>(i)] = code;
+                                });
+      env->DeleteLocalRef(url);
+    }
+    downloader->WaitForAllRequests();
+  }
+
+  jintArray ret = env->NewIntArray(count);
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  env->SetIntArrayRegion(ret, 0, count, statuses.data());
+  return ret;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsAccount)(JNIEnv* env, jobject)
 {
   const AchievementsBridge::Account account = AchievementsBridge::GetAccount();

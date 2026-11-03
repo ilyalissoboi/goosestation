@@ -54,6 +54,8 @@ jmethodID s_on_fast_forward_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
 jmethodID s_on_achievements_changed = nullptr;
 jmethodID s_on_achievements_login_expired = nullptr;
+jmethodID s_on_achievements_sent = nullptr;
+jmethodID s_on_achievement_refused = nullptr;
 jmethodID s_on_achievement_notification = nullptr;
 jmethodID s_on_achievement_toast = nullptr;
 jmethodID s_on_achievement_indicator = nullptr;
@@ -61,6 +63,8 @@ jmethodID s_on_achievement_image = nullptr;
 jmethodID s_on_play_sound = nullptr;
 jclass s_achievements_account_class = nullptr;
 jmethodID s_achievements_account_constructor = nullptr;
+jclass s_achievements_queue_class = nullptr;
+jmethodID s_achievements_queue_constructor = nullptr;
 jclass s_game_achievements_class = nullptr;
 jmethodID s_game_achievements_constructor = nullptr;
 jclass s_achievement_class = nullptr;
@@ -427,15 +431,31 @@ void AndroidHost::NotifyAchievementsLoginExpired()
     [](JNIEnv* env, jobject callbacks) { env->CallVoidMethod(callbacks, s_on_achievements_login_expired); });
 }
 
+void AndroidHost::NotifyAchievementsSent(u32 count)
+{
+  WithCallbacks([count](JNIEnv* env, jobject callbacks) {
+    env->CallVoidMethod(callbacks, s_on_achievements_sent, static_cast<jint>(count));
+  });
+}
+
+void AndroidHost::NotifyAchievementRefused(std::string_view title)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {title});
+    if (strings.ok())
+      env->CallVoidMethod(callbacks, s_on_achievement_refused, strings[0]);
+  });
+}
+
 void AndroidHost::NotifyAchievementNotification(std::string_view key, std::string_view title, std::string_view text,
-                                                std::string_view image_path, float seconds, s32 points)
+                                                std::string_view image_path, float seconds, s32 points, bool offline)
 {
   WithCallbacks([&](JNIEnv* env, jobject callbacks) {
     const LocalStrings strings(env, {key, title, text, image_path});
     if (strings.ok())
     {
       env->CallVoidMethod(callbacks, s_on_achievement_notification, strings[0], strings[1], strings[2], strings[3],
-                          static_cast<jfloat>(seconds), static_cast<jint>(points));
+                          static_cast<jfloat>(seconds), static_cast<jint>(points), static_cast<jboolean>(offline));
     }
   });
 }
@@ -595,9 +615,11 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_achievements_token = env->GetMethodID(s_callbacks_class, "onAchievementsToken", "(Ljava/lang/String;)V");
   s_on_achievements_changed = env->GetMethodID(s_callbacks_class, "onAchievementsChanged", "()V");
   s_on_achievements_login_expired = env->GetMethodID(s_callbacks_class, "onAchievementsLoginExpired", "()V");
+  s_on_achievements_sent = env->GetMethodID(s_callbacks_class, "onAchievementsSent", "(I)V");
+  s_on_achievement_refused = env->GetMethodID(s_callbacks_class, "onAchievementRefused", "(Ljava/lang/String;)V");
   s_on_achievement_notification =
     env->GetMethodID(s_callbacks_class, "onAchievementNotification",
-                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FI)V");
+                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FIZ)V");
   s_on_achievement_toast =
     env->GetMethodID(s_callbacks_class, "onAchievementToast", "(Ljava/lang/String;Ljava/lang/String;F)V");
   s_on_achievement_indicator =
@@ -609,7 +631,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                      "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
   if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
       !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
-      !s_on_achievements_login_expired || !s_on_achievement_notification || !s_on_achievement_toast ||
+      !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
+      !s_on_achievement_notification || !s_on_achievement_toast ||
       !s_on_achievement_indicator || !s_on_achievement_image || !s_on_play_sound || !s_on_leaderboard)
   {
     ClearException(env);
@@ -677,7 +700,9 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
         std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementsAccount",
                    "(ILjava/lang/String;Ljava/lang/String;II)V", &s_achievements_account_class,
                    &s_achievements_account_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/GameAchievements", "(IIIIIZZZ)V",
+        std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementsQueue", "(I[Ljava/lang/String;[I)V",
+                   &s_achievements_queue_class, &s_achievements_queue_constructor),
+        std::tuple("io/github/ilyalissoboi/goosestation/core/GameAchievements", "(IIIIIZZZZI)V",
                    &s_game_achievements_class, &s_game_achievements_constructor),
         std::tuple("io/github/ilyalissoboi/goosestation/core/Achievement",
                    "(ILjava/lang/String;Ljava/lang/String;ILjava/lang/String;JLjava/lang/String;F)V",
@@ -806,12 +831,14 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   JNIEXPORT ret JNICALL Java_io_github_ilyalissoboi_goosestation_core_NativeLibrary_##name
 
 NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
-                                               jstring bios_dir, jstring install_id, jstring achievements_token)
+                                               jstring bios_dir, jstring install_id, jstring achievements_token,
+                                               jstring achievements_folder)
 {
   Error error;
   if (!AndroidHost::Initialize(FromJString(env, data_root), FromJString(env, resources_root),
                                FromJString(env, bios_dir), FromJString(env, install_id),
-                               achievements_token ? FromJString(env, achievements_token) : std::string(), &error))
+                               achievements_token ? FromJString(env, achievements_token) : std::string(),
+                               FromJString(env, achievements_folder), &error))
   {
     ERROR_LOG("Initialization failed: {}", error.GetDescription());
     AndroidHost::NotifyError(error.GetDescription());
@@ -1013,6 +1040,35 @@ NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsAccount)(JNIEnv* env, jobject)
   return ret;
 }
 
+NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsQueue)(JNIEnv* env, jobject)
+{
+  const AchievementsBridge::Queue queue = AchievementsBridge::GetQueue();
+  std::vector<std::string> users;
+  std::vector<jint> counts;
+  for (const auto& [user, count] : queue.others)
+  {
+    users.push_back(user);
+    counts.push_back(static_cast<jint>(count));
+  }
+
+  jobjectArray user_array = ToJStringArray(env, users);
+  jintArray count_array = env->NewIntArray(static_cast<jsize>(counts.size()));
+  if (!user_array || !count_array)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  env->SetIntArrayRegion(count_array, 0, static_cast<jsize>(counts.size()), counts.data());
+
+  jobject ret = env->NewObject(s_achievements_queue_class, s_achievements_queue_constructor,
+                               static_cast<jint>(queue.own), user_array, count_array);
+  if (!ret)
+    ClearException(env);
+  env->DeleteLocalRef(user_array);
+  env->DeleteLocalRef(count_array);
+  return ret;
+}
+
 NATIVE_LIBRARY_FUNCTION(jstring, signIn)(JNIEnv* env, jobject, jstring username, jstring password)
 {
   const std::optional<std::string> error =
@@ -1032,7 +1088,8 @@ NATIVE_LIBRARY_FUNCTION(jobject, getGameAchievements)(JNIEnv* env, jobject)
                                static_cast<jint>(game.status), static_cast<jint>(game.unlocked),
                                static_cast<jint>(game.total), static_cast<jint>(game.points),
                                static_cast<jint>(game.total_points), static_cast<jboolean>(game.has_achievements),
-                               static_cast<jboolean>(game.has_leaderboards), static_cast<jboolean>(game.hardcore));
+                               static_cast<jboolean>(game.has_leaderboards), static_cast<jboolean>(game.hardcore),
+                               static_cast<jboolean>(game.offline), static_cast<jint>(game.waiting));
   if (!ret)
     ClearException(env);
   return ret;
@@ -1147,6 +1204,16 @@ NATIVE_LIBRARY_FUNCTION(jboolean, hardcoreWouldStart)(JNIEnv*, jobject)
 NATIVE_LIBRARY_FUNCTION(void, setAchievementsServerForTest)(JNIEnv* env, jobject, jstring url)
 {
   AchievementsBridge::SetServerForTest(url ? FromJString(env, url) : std::string());
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setAchievementsGameHashForTest)(JNIEnv* env, jobject, jstring hash)
+{
+  Achievements::SetGameHashForTest(hash ? FromJString(env, hash) : std::string());
+}
+
+NATIVE_LIBRARY_FUNCTION(void, achievementsNetworkBack)(JNIEnv*, jobject)
+{
+  EmuThread::RunOnThread([]() { Achievements::OnAndroidNetworkBack(); }, false);
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)

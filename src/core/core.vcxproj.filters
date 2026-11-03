@@ -59,6 +59,8 @@
     <ClCompile Include="imgui_overlays.cpp" />
     <ClCompile Include="fullscreen_ui.cpp" />
     <ClCompile Include="achievements.cpp" />
+    <ClCompile Include="achievements_offline.cpp" />
+    <ClCompile Include="achievements_offline_store.cpp" />
     <ClCompile Include="hotkeys.cpp" />
     <ClCompile Include="gpu_shadergen.cpp" />
     <ClCompile Include="pch.cpp" />
@@ -143,6 +145,8 @@
     <ClInclude Include="cpu_newrec_compiler_riscv64.h" />
     <ClInclude Include="cpu_newrec_compiler_aarch32.h" />
     <ClInclude Include="achievements_private.h" />
+    <ClInclude Include="achievements_offline.h" />
+    <ClInclude Include="achievements_offline_store.h" />
     <ClInclude Include="justifier.h" />
     <ClInclude Include="pine_server.h" />
     <ClInclude Include="gdb_server.h" />

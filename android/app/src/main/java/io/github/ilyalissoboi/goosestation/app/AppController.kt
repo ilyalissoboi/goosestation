@@ -91,7 +91,6 @@ object AppController : NativeCallbacks {
     private const val TAG = "GooseStation"
 
     // RetroAchievements' messages over the game, from the design.
-    private const val SIGN_IN_EXPIRED = "RetroAchievements sign-in expired: sign in again in Settings"
     private const val UNREACHABLE = "Couldn't reach RetroAchievements; achievements are off for this game"
 
     /** An achievement message's picture, as big as the message's line shows it. */
@@ -276,10 +275,17 @@ object AppController : NativeCallbacks {
 
     private val achievementSounds by lazy { AchievementSounds() }
 
+    // A network coming back sends the achievements waiting, in the library or in a game.
+    private val networkWatch by lazy {
+        NetworkWatch(context) {
+            if (coreStarted) scope.launch(coreDispatcher) { NativeLibrary.achievementsNetworkBack() }
+        }
+    }
+
     // Said once, at the next game start, after the server rejected the stored sign-in.
     private var signInExpired = false
 
-    // The "couldn't reach" message has been shown for the running game.
+    // The "couldn't reach" or the offline message has been shown for the running game.
     private var unreachableSaid = false
 
     /** The in-game menu: its rows, its slot panel, and what they do. */
@@ -396,6 +402,7 @@ object AppController : NativeCallbacks {
                 }
             }
         if (coreStarted) scope.launch { resume() }
+        networkWatch.start()
     }
 
     /**
@@ -407,6 +414,7 @@ object AppController : NativeCallbacks {
         pushTicker?.cancel()
         pushTicker = null
         scope.launch { push(force = true) }
+        networkWatch.stop()
     }
 
     // --- Setup ---
@@ -1183,6 +1191,7 @@ object AppController : NativeCallbacks {
                             biosDir.absolutePath,
                             prefs.installId(),
                             achievementsToken.load(),
+                            File(context.filesDir, "achievements").absolutePath,
                         ).also {
                             if (it) {
                                 readGridView()
@@ -1325,7 +1334,11 @@ object AppController : NativeCallbacks {
             unreachableSaid = false
             if (signInExpired) {
                 signInExpired = false
-                osd.post(SIGN_IN_EXPIRED)
+                // With what it keeps for when the player signs in again.
+                scope.launch {
+                    val kept = withContext(coreDispatcher) { NativeLibrary.getAchievementsQueue().own }
+                    osd.post(AchievementQueueWords.expiry(kept))
+                }
             }
             readSelectChords()
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
@@ -1415,16 +1428,31 @@ object AppController : NativeCallbacks {
         }
     }
 
+    override fun onAchievementsSent(count: Int) {
+        mainHandler.post { osd.post(AchievementQueueWords.sent(count)) }
+    }
+
+    override fun onAchievementRefused(title: String) {
+        mainHandler.post { osd.post(AchievementQueueWords.refused(title)) }
+    }
+
     override fun onAchievementsChanged() {
         mainHandler.post {
             gameMenu.achievementsChanged()
             if (screen == Screen.Achievements) achievementsPage.refresh()
             if (gameRunning && !unreachableSaid) {
                 scope.launch {
-                    val status = withContext(gameDispatcher) { NativeGameCoreApi.getGameAchievements().status }
-                    if (status == GameAchievements.UNREACHABLE && gameRunning && !unreachableSaid) {
-                        unreachableSaid = true
-                        osd.post(UNREACHABLE)
+                    val game = withContext(gameDispatcher) { NativeGameCoreApi.getGameAchievements() }
+                    if (!gameRunning || unreachableSaid) return@launch
+                    when {
+                        game.status == GameAchievements.UNREACHABLE -> {
+                            unreachableSaid = true
+                            osd.post(UNREACHABLE)
+                        }
+                        game.status == GameAchievements.READY && game.offline -> {
+                            unreachableSaid = true
+                            osd.post(AchievementQueueWords.OFFLINE_START)
+                        }
                     }
                 }
             }
@@ -1438,9 +1466,10 @@ object AppController : NativeCallbacks {
         imagePath: String,
         seconds: Float,
         points: Int,
+        offline: Boolean,
     ) {
         mainHandler.post {
-            when (val notice = AchievementNotices.from(key, title, text, imagePath, points)) {
+            when (val notice = AchievementNotices.from(key, title, text, imagePath, points, offline)) {
                 is AchievementNotice.Card -> achievementOverlay.post(notice)
                 is AchievementNotice.Message ->
                     scope.launch {

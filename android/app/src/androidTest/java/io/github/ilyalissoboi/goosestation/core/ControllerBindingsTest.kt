@@ -374,6 +374,7 @@ class ControllerBindingsTest {
                 biosDir.absolutePath,
                 INSTALL_ID,
                 null,
+                File(dataRoot.parentFile, "offline").absolutePath,
             ),
         )
     }

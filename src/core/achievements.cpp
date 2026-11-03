@@ -4,6 +4,8 @@
 // TODO: Don't poll when booting the game, e.g. Crash Warped freaks out.
 
 #include "achievements.h"
+#include "achievements_offline.h"
+#include "achievements_offline_store.h"
 #include "achievements_private.h"
 #include "bios.h"
 #include "bus.h"
@@ -174,6 +176,7 @@ static void HandleServerDisconnectedEvent(const rc_client_event_t* event);
 static void HandleServerReconnectedEvent(const rc_client_event_t* event);
 
 static void ClientLoginWithTokenCallback(int result, const char* error_message, rc_client_t* client, void* userdata);
+static void SendWaitingRecords();
 static void ClientLoginWithPasswordCallback(int result, const char* error_message, rc_client_t* client, void* userdata);
 static void ClientLoadGameCallback(int result, const char* error_message, rc_client_t* client, void* userdata);
 
@@ -235,7 +238,17 @@ static std::vector<LeaderboardTrackerIndicator> s_active_leaderboard_trackers;
 static std::vector<AchievementChallengeIndicator> s_active_challenge_indicators;
 static std::optional<AchievementProgressIndicator> s_active_progress_indicator;
 
+// The server the clients talk to, when a test has set one (SetServerForTest()); empty for RetroAchievements.
+static std::string s_server_host;
+static rc_api_host_t s_server_api_host = {};
+
 #ifdef __ANDROID__
+// The hash a test gives a game the core can't hash (SetGameHashForTest()).
+static std::string s_game_hash_for_test;
+
+// rcheevos has an unlock or entry it hasn't got through (RC_CLIENT_EVENT_DISCONNECTED, and no RECONNECTED since).
+static bool s_android_disconnected = false;
+
 // Why the running game's set, or the sign-in it waited for, didn't load: RC_OK while it hasn't failed.
 static int s_android_load_result = RC_OK;
 #endif
@@ -249,6 +262,15 @@ std::unique_lock<std::recursive_mutex> Achievements::GetLock()
 rc_client_t* Achievements::GetClient()
 {
   return s_client;
+}
+
+const rc_api_host_t* Achievements::GetServerHost()
+{
+  if (s_server_host.empty())
+    return nullptr;
+
+  s_server_api_host.host = s_server_host.c_str();
+  return &s_server_api_host;
 }
 
 const rc_client_user_game_summary_t& Achievements::GetGameSummary()
@@ -636,6 +658,8 @@ bool Achievements::CreateClient(rc_client_t** client, std::unique_ptr<HTTPDownlo
 #endif
 
   rc_client_set_userdata(new_client, http->get());
+  if (!s_server_host.empty())
+    rc_client_set_host(new_client, s_server_host.c_str());
 
   *client = new_client;
   return true;
@@ -745,6 +769,8 @@ bool Achievements::Shutdown(bool allow_cancel)
 
   s_hardcore_mode = false;
   DestroyClient(&s_client, &s_http_downloader);
+  // The client's retries went with it: what they held is the module's to send with the next client.
+  AchievementsOffline::ForgetInFlight();
 
   Host::OnAchievementsRefreshed();
   return true;
@@ -785,8 +811,58 @@ uint32_t Achievements::ClientReadMemory(uint32_t address, uint8_t* buffer, uint3
 void Achievements::ClientServerCall(const rc_api_request_t* request, rc_client_server_callback_t callback,
                                     void* callback_data, rc_client_t* client)
 {
+  // An unlock or leaderboard entry is kept on disk before it goes, until the server has it.
+  std::map<std::string, std::string> form;
+  if (AchievementsOffline::IsEnabled() && request->post_data)
+  {
+    form = AchievementsOffline::ParseForm(request->post_data);
+    const char* title = nullptr;
+    if (const auto it = form.find("a"); it != form.end())
+    {
+      const rc_client_achievement_t* cheevo =
+        rc_client_get_achievement_info(client, StringUtil::FromChars<u32>(it->second).value_or(0));
+      title = cheevo ? cheevo->title : nullptr;
+    }
+    else if (const auto lb = form.find("i"); lb != form.end())
+    {
+      const rc_client_leaderboard_t* lboard =
+        rc_client_get_leaderboard_info(client, StringUtil::FromChars<u32>(lb->second).value_or(0));
+      title = lboard ? lboard->title : nullptr;
+    }
+    AchievementsOffline::OnRequest(form, title ? title : "", static_cast<s64>(std::time(nullptr)));
+  }
+
   HTTPDownloader::Request::Callback hd_callback =
-    [callback, callback_data](s32 status_code, const std::string& content_type, HTTPDownloader::Request::Data data) {
+    [callback, callback_data, form = std::move(form)](s32 status_code, const std::string& content_type,
+                                                      HTTPDownloader::Request::Data data) {
+      std::optional<std::string> offline_answer;
+      if (!form.empty())
+      {
+        AchievementsOffline::OnAnswer(
+          form, status_code, std::string_view(reinterpret_cast<const char*>(data.data()), data.size()));
+
+        // Without a connection, a game whose set was saved online starts from it, in casual: the sign-in is built
+        // from the saved account and the token in memory, the set and session from what was saved.
+        if (status_code <= 0 && status_code != HTTPDownloader::HTTP_STATUS_CANCELLED)
+        {
+          offline_answer = AchievementsOffline::AnswerOffline(form, s_game_hash, static_cast<s64>(std::time(nullptr)));
+          const auto request = form.find("r");
+          if (offline_answer.has_value() && !AchievementsOffline::InSession() && request != form.end() &&
+              (request->second == "login2" || request->second == "achievementsets" ||
+               request->second == "startsession"))
+          {
+            INFO_LOG("Starting offline, from the set saved for '{}'.", s_game_hash);
+            AchievementsOffline::BeginSession();
+            SetHardcoreMode(false, false);
+          }
+        }
+      }
+      if (offline_answer.has_value())
+      {
+        status_code = HTTPDownloader::HTTP_STATUS_OK;
+        data.assign(offline_answer->begin(), offline_answer->end());
+      }
+
       rc_api_server_response_t rr;
       rr.http_status_code = (status_code <= 0) ? (status_code == HTTPDownloader::HTTP_STATUS_CANCELLED ?
                                                     RC_API_SERVER_RESPONSE_CLIENT_ERROR :
@@ -976,6 +1052,17 @@ void Achievements::GameChanged(const std::string& path, CDImage* image)
     return;
 
   IdentifyGame(path, image);
+
+  // A game started offline takes its built sign-in with it: the next game start, or a network coming back, signs in
+  // for real. The stored username and token stay.
+  if (path.empty() && AchievementsOffline::InSession())
+  {
+    INFO_LOG("The offline game stopped; signing out of its offline sign-in.");
+    AchievementsOffline::EndSession();
+    rc_client_logout(s_client);
+    AchievementsOffline::ForgetInFlight();
+    Host::OnAchievementsRefreshed();
+  }
 }
 
 void Achievements::IdentifyGame(const std::string& path, CDImage* image)
@@ -999,6 +1086,10 @@ void Achievements::IdentifyGame(const std::string& path, CDImage* image)
   std::string game_hash;
   if (image)
     game_hash = GetGameHash(image);
+#ifdef __ANDROID__
+  if (game_hash.empty() && !path.empty())
+    game_hash = s_game_hash_for_test;
+#endif
 
   if (s_game_hash == game_hash)
   {
@@ -1041,6 +1132,10 @@ void Achievements::IdentifyGame(const std::string& path, CDImage* image)
 void Achievements::BeginLoadGame()
 {
   ClearGameInfo();
+#ifdef __ANDROID__
+  // A new game's unlocks start out as sent; one that can't get through says so (HandleServerDisconnectedEvent()).
+  s_android_disconnected = false;
+#endif
 
   if (s_game_hash.empty())
   {
@@ -1087,8 +1182,8 @@ void Achievements::BeginChangeDisc()
     return;
   }
 
-  s_load_game_request = rc_client_begin_change_media_from_hash(s_client, s_game_hash.c_str(), ClientLoadGameCallback,
-                                                               reinterpret_cast<void*>(static_cast<uintptr_t>(1)));
+  s_load_game_request = rc_client_begin_change_media(s_client, s_game_hash.c_str(), ClientLoadGameCallback,
+                                                     reinterpret_cast<void*>(static_cast<uintptr_t>(1)));
 }
 
 void Achievements::ClientLoadGameCallback(int result, const char* error_message, rc_client_t* client, void* userdata)
@@ -1620,6 +1715,10 @@ void Achievements::HandleServerDisconnectedEvent(const rc_client_event_t* event)
 {
   WARNING_LOG("Server disconnected.");
 
+#ifdef __ANDROID__
+  // The app says it quietly: the unlock card's note and the count of what's waiting.
+  s_android_disconnected = true;
+#else
   if (CanNotify())
   {
     Toast(
@@ -1628,18 +1727,24 @@ void Achievements::HandleServerDisconnectedEvent(const rc_client_event_t* event)
                     "An unlock request could not be completed. We will keep retrying to submit this request."),
       Host::OSD_ERROR_DURATION);
   }
+#endif
 }
 
 void Achievements::HandleServerReconnectedEvent(const rc_client_event_t* event)
 {
   WARNING_LOG("Server reconnected.");
 
+#ifdef __ANDROID__
+  // The app says what was sent (AchievementsOffline's sent callback).
+  s_android_disconnected = false;
+#else
   if (CanNotify())
   {
     Toast(TRANSLATE_STR("Achievements", "Achievements Reconnected"),
                                TRANSLATE_STR("Achievements", "All pending unlock requests have completed."),
                                Host::OSD_INFO_DURATION);
   }
+#endif
 }
 
 void Achievements::ResetClient()
@@ -1697,8 +1802,9 @@ bool Achievements::ResetHardcoreMode(bool is_booting)
 
   // If we're not logged in, don't apply hardcore mode restrictions.
   // If we later log in, we'll start with it off anyway.
-  const bool wanted_hardcore_mode =
-    (IsLoggedInOrLoggingIn() || s_load_game_request) && g_settings.achievements_hardcore_mode;
+  // A game started offline stays casual until it stops, reset or not.
+  const bool wanted_hardcore_mode = (IsLoggedInOrLoggingIn() || s_load_game_request) &&
+                                    g_settings.achievements_hardcore_mode && !AchievementsOffline::InSession();
   if (s_hardcore_mode == wanted_hardcore_mode)
     return false;
 
@@ -1948,6 +2054,9 @@ bool Achievements::Login(const char* username, const char* password, Error* erro
   if (!params.result)
     return false;
 
+  if (!is_temporary_client)
+    SendWaitingRecords();
+
   // If we were't a temporary client, get the game loaded.
   if (System::IsValid() && !is_temporary_client)
     BeginLoadGame();
@@ -2031,9 +2140,22 @@ void Achievements::ClientLoginWithTokenCallback(int result, const char* error_me
   }
 
   ShowLoginSuccess(client);
+  if (!AchievementsOffline::InSession())
+    SendWaitingRecords();
 
   if (System::IsValid())
     BeginLoadGame();
+}
+
+void Achievements::SendWaitingRecords()
+{
+  // What an earlier run couldn't send goes once its user is signed in.
+  const rc_client_user_t* user = s_client ? rc_client_get_user_info(s_client) : nullptr;
+  if (!AchievementsOffline::IsEnabled() || !user || !user->token || !s_http_downloader)
+    return;
+
+  AchievementsOffline::SendWaiting(*s_http_downloader, GetServerHost(), user->username, user->token,
+                                   static_cast<s64>(std::time(nullptr)));
 }
 
 void Achievements::ShowLoginSuccess(const rc_client_t* client)
@@ -2041,6 +2163,13 @@ void Achievements::ShowLoginSuccess(const rc_client_t* client)
   const rc_client_user_t* user = rc_client_get_user_info(client);
   if (!user)
     return;
+
+  // A real sign-in's account is kept, for one built when a game starts offline (not that one's: it's the saved one).
+  if (!AchievementsOffline::InSession())
+  {
+    AchievementsOffline::RememberUser(user->username, user->display_name ? user->display_name : user->username,
+                                      user->avatar_url ? user->avatar_url : "", user->score, user->score_softcore);
+  }
 
   Host::OnAchievementsLoginSuccess(user->username, user->score, user->score_softcore, user->num_unread_messages);
 
@@ -2117,6 +2246,7 @@ void Achievements::Logout()
 
     INFO_LOG("Logging out...");
     rc_client_logout(s_client);
+    AchievementsOffline::ForgetInFlight();
   }
 
   INFO_LOG("Clearing credentials...");
@@ -2175,6 +2305,9 @@ Achievements::AndroidSignIn Achievements::GetAndroidSignIn()
   const auto lock = GetLock();
   if (!IsActive() || !s_client)
     return AndroidSignIn::SignedOut;
+  // A game started offline is signed in from what was saved: the player isn't connected.
+  if (AchievementsOffline::InSession())
+    return AndroidSignIn::NotConnected;
   if (rc_client_get_user_info(s_client))
     return AndroidSignIn::SignedIn;
   if (s_login_request)
@@ -2211,11 +2344,56 @@ Achievements::AndroidGameStatus Achievements::GetAndroidGameStatus()
   return AndroidGameStatus::Ready;
 }
 
+void Achievements::SetServerForTest(std::string host)
+{
+  const auto lock = GetLock();
+  s_server_host = std::move(host);
+  // An empty host is RetroAchievements'. Not null: v12's rc_client_set_host() copies a null host's name.
+  if (s_client)
+    rc_client_set_host(s_client, s_server_host.c_str());
+}
+
+bool Achievements::IsAndroidOffline()
+{
+  const auto lock = GetLock();
+  return AchievementsOffline::InSession() || s_android_disconnected;
+}
+
+void Achievements::OnAndroidNetworkBack()
+{
+  const auto lock = GetLock();
+  if (!IsActive() || !s_client)
+    return;
+
+  // Signed in, for real or with a game started offline: rcheevos's own retries go on their timer; the rest go now.
+  if (rc_client_get_user_info(s_client))
+  {
+    SendWaitingRecords();
+    return;
+  }
+
+  // Not connected: a sign-in now sends what's waiting once it succeeds (ClientLoginWithTokenCallback()).
+  RetryAndroidSignIn();
+}
+
+void Achievements::SetGameHashForTest(std::string hash)
+{
+  const auto lock = GetLock();
+  s_game_hash_for_test = std::move(hash);
+}
+
 void Achievements::RetryAndroidSignIn()
 {
   const auto lock = GetLock();
-  if (!IsActive() || !s_client || rc_client_get_user_info(s_client) || s_login_request)
+  if (!IsActive() || !s_client || s_login_request)
     return;
+
+  // Signed in already: what's still waiting (a send the server turned away) goes again.
+  if (rc_client_get_user_info(s_client))
+  {
+    SendWaitingRecords();
+    return;
+  }
 
   const std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
   const std::string api_token = GetLoginToken();

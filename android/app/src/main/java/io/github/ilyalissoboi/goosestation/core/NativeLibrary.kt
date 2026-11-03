@@ -19,7 +19,9 @@ object NativeLibrary {
      * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
      * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
-     * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken].
+     * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken]. [achievementsFolder] is
+     * where unlocks waiting to be sent, and what a game needs to start offline, are kept: the app's private storage,
+     * outside the data root, so they're never mirrored.
      */
     external fun initialize(
         dataRoot: String,
@@ -27,6 +29,7 @@ object NativeLibrary {
         biosDir: String,
         installId: String,
         achievementsToken: String?,
+        achievementsFolder: String,
     ): Boolean
 
     // The settings calls work on settings.ini, which they save, and can be made from any thread.
@@ -403,6 +406,9 @@ object NativeLibrary {
     /** The RetroAchievements account and its sign-in. Waits for the core. */
     external fun getAchievementsAccount(): AchievementsAccount
 
+    /** The unlocks and leaderboard entries waiting to be sent, by account. Waits for the core. */
+    external fun getAchievementsQueue(): AchievementsQueue
+
     /**
      * Turns achievements on and signs in to RetroAchievements as [username], waiting for the server: null once signed
      * in, else why not, in the server's words or "Couldn't reach RetroAchievements". The password isn't kept; the
@@ -418,6 +424,15 @@ object NativeLibrary {
 
     /** For the instrumented tests only: the RetroAchievements server to talk to ([url]), or the real one with null. */
     external fun setAchievementsServerForTest(url: String?)
+
+    /**
+     * A validated network arrived: the core sends the unlocks and entries waiting, signing in again first if the
+     * sign-in hadn't reached the server. Queued for the core's thread; returns at once.
+     */
+    external fun achievementsNetworkBack()
+
+    /** For the instrumented tests only: the hash a game the core can't hash (a PS-EXE) gets, or none with null. */
+    external fun setAchievementsGameHashForTest(hash: String?)
 
     /** Hardcore mode is active in the running game. */
     external fun isHardcoreActive(): Boolean

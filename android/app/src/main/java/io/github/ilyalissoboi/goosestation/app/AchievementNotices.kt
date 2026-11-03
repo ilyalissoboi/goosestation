@@ -8,13 +8,17 @@ enum class CardKind { Unlock, Mastery }
 
 /** One of the core's achievement notices, as the game screen shows it. */
 sealed interface AchievementNotice {
-    /** A card at the top centre: its [title], [text], picture ([imagePath], may be empty) and an unlock's [points]. */
+    /**
+     * A card at the top centre: its [title], [text], picture ([imagePath], may be empty), an unlock's [points], and a
+     * [note] under the text (an unlock earned without a connection).
+     */
     data class Card(
         val kind: CardKind,
         val title: String,
         val text: String,
         val imagePath: String,
         val points: Int?,
+        val note: String? = null,
     ) : AchievementNotice
 
     /** A line in the message stack, with its picture ([imagePath], or null for none). */
@@ -26,17 +30,28 @@ sealed interface AchievementNotice {
 
 /** The core's achievement notices, sorted by their keys. */
 object AchievementNotices {
-    /** The notice for the core's notification [key], with its [title], [text], picture and an unlock's [points] (-1). */
+    /**
+     * The notice for the core's notification [key], with its [title], [text], picture and an unlock's [points] (-1); an
+     * unlock [offline] (with no connection) says it's sent later.
+     */
     fun from(
         key: String,
         title: String,
         text: String,
         imagePath: String,
         points: Int,
+        offline: Boolean = false,
     ): AchievementNotice =
         when {
             key.startsWith("achievement_unlock_") ->
-                AchievementNotice.Card(CardKind.Unlock, title, text, imagePath, points.takeIf { it >= 0 })
+                AchievementNotice.Card(
+                    CardKind.Unlock,
+                    title,
+                    text,
+                    imagePath,
+                    points.takeIf { it >= 0 },
+                    AchievementQueueWords.CARD_NOTE.takeIf { offline },
+                )
             key == "achievement_mastery" -> AchievementNotice.Card(CardKind.Mastery, title, text, imagePath, null)
             key == "achievement_summary" -> AchievementNotice.Message(text, imagePath.ifEmpty { null })
             key.startsWith("leaderboard_") -> AchievementNotice.Message("$title: $text", imagePath.ifEmpty { null })

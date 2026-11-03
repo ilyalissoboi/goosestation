@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
+import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -56,6 +57,9 @@ interface CoreApi {
     fun getAutoBios(region: String): String?
 
     fun getAchievementsAccount(): AchievementsAccount
+
+    /** [NativeLibrary.getAchievementsQueue]: the unlocks and entries waiting to be sent, by account. */
+    fun getAchievementsQueue(): AchievementsQueue
 
     /** [NativeLibrary.signIn]: null once signed in, else why not. */
     fun signIn(
@@ -110,6 +114,8 @@ object NativeCoreApi : CoreApi {
     override fun getAutoBios(region: String): String? = NativeLibrary.getAutoBios(region)
 
     override fun getAchievementsAccount(): AchievementsAccount = NativeLibrary.getAchievementsAccount()
+
+    override fun getAchievementsQueue(): AchievementsQueue = NativeLibrary.getAchievementsQueue()
 
     override fun signIn(
         username: String,

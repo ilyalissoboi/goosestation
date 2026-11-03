@@ -114,7 +114,16 @@ class BiosImporterTest {
         val bytes = realBios()
         val dataRoot = File(context.cacheDir, "bios-listing").apply { deleteRecursively() }.apply { mkdirs() }
         val resources = Resources.extract(context)
-        assertTrue(NativeLibrary.initialize(dataRoot.path, resources.path, biosDir.path, "test-install", null))
+        assertTrue(
+            NativeLibrary.initialize(
+                dataRoot.path,
+                resources.path,
+                biosDir.path,
+                "test-install",
+                null,
+                File(dataRoot.parentFile, "offline").path,
+            ),
+        )
         val tree = TestTrees.create(context, mapOf("ps-30j.bin" to bytes, "readme.txt" to "hi".toByteArray()))
         assertEquals(1, runBlocking { BiosImporter(context).import(tree) }.images.size)
 

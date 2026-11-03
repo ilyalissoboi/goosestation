@@ -6,6 +6,7 @@
 #include "emu_thread.h"
 #include "game_codes.h"
 
+#include "core/achievements_offline.h"
 #include "core/achievements_private.h"
 #include "core/cheats.h"
 #include "core/host.h"
@@ -89,14 +90,40 @@ void AchievementsBridge::SignOut()
     true);
 }
 
+AchievementsBridge::Queue AchievementsBridge::GetQueue()
+{
+  Queue queue = {0, {}};
+  EmuThread::RunOnThread(
+    [&queue]() {
+      const std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
+      const auto lock = Achievements::GetLock();
+      for (auto& [user, count] : AchievementsOffline::CountsByUser())
+      {
+        if (!username.empty() && StringUtil::EqualNoCase(user, username))
+          queue.own += count;
+        else
+          queue.others.emplace_back(std::move(user), count);
+      }
+    },
+    true);
+  return queue;
+}
+
 AchievementsBridge::GameSummary AchievementsBridge::GetGameSummary()
 {
-  GameSummary summary = {Achievements::AndroidGameStatus::Off, 0, 0, 0, 0, false, false, false};
+  GameSummary summary = {Achievements::AndroidGameStatus::Off, 0, 0, 0, 0, false, false, false, false, 0};
   EmuThread::RunOnThread(
     [&summary]() {
       summary.status = Achievements::GetAndroidGameStatus();
       summary.hardcore = Achievements::IsHardcoreModeActive();
       const auto lock = Achievements::GetLock();
+      summary.offline = AchievementsOffline::InSession();
+      if (const rc_client_user_t* user = rc_client_get_user_info(Achievements::GetClient()); user && user->username)
+      {
+        const rc_client_game_t* game = rc_client_get_game_info(Achievements::GetClient());
+        if (game && game->hash)
+          summary.waiting = AchievementsOffline::CountForGame(user->username, game->hash);
+      }
       if (!Achievements::HasActiveGame())
         return;
 
@@ -290,7 +317,7 @@ bool AchievementsBridge::IsHardcoreActive()
 
 void AchievementsBridge::SetServerForTest(const std::string& host)
 {
-  rc_client_set_host(nullptr, host.empty() ? nullptr : host.c_str());
+  Achievements::SetServerForTest(host);
 }
 
 // The core's achievement events, which Big Picture draws on the other platforms.
@@ -352,7 +379,9 @@ void Host::OnAchievementNotification(std::string_view key, float seconds, std::s
     }
   }
 
-  AndroidHost::NotifyAchievementNotification(key, title, text, image_path, seconds, points);
+  // An unlock without a connection is sent later, and its card says so.
+  const bool offline = key.starts_with(UNLOCK_PREFIX) && Achievements::IsAndroidOffline();
+  AndroidHost::NotifyAchievementNotification(key, title, text, image_path, seconds, points, offline);
 }
 
 void Host::OnAchievementToast(std::string_view title, std::string_view message, float seconds)

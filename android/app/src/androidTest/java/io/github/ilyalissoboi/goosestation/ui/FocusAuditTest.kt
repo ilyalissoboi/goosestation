@@ -36,6 +36,7 @@ import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
+import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
@@ -288,6 +289,7 @@ class FocusAuditTest {
                 error = null,
                 expired = true,
                 passwordCleared = 0,
+                queue = AchievementsQueue(2, arrayOf("swan"), intArrayOf(1)),
                 onSignIn = { _, _ -> },
                 onSignOut = {},
                 onChange = {},
@@ -307,6 +309,7 @@ class FocusAuditTest {
                 error = null,
                 expired = false,
                 passwordCleared = 0,
+                queue = AchievementsQueue(2, arrayOf("swan"), intArrayOf(1)),
                 onSignIn = { _, _ -> },
                 onSignOut = {},
                 onChange = {},

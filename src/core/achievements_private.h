@@ -12,6 +12,10 @@ namespace Achievements {
 /// Returns the rc_client instance. Should have the lock held.
 rc_client_t* GetClient();
 
+/// The server a test set (SetServerForTest()), for requests made outside rc_client; nullptr for RetroAchievements.
+/// Should have the lock held.
+const rc_api_host_t* GetServerHost();
+
 const rc_client_user_game_summary_t& GetGameSummary();
 const std::string& GetGameIconPath();
 

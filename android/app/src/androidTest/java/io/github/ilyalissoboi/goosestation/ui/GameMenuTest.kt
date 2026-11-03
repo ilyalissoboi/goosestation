@@ -426,11 +426,12 @@ class GameMenuTest {
         open: Leaderboard? = null,
         page: LeaderboardPage? = null,
         error: String? = null,
+        game: GameAchievements = ready,
     ) {
         state =
             GameMenuState(
                 booted = true,
-                achievements = ready,
+                achievements = game,
                 cheevos =
                     AchievementsPanelState(
                         CheevoTab.Leaderboards,
@@ -569,6 +570,16 @@ class GameMenuTest {
         state = state.copy(cheevos = state.cheevos!!.copy(page = sunnyPage))
         rule.waitForIdle()
         rule.onNodeWithText("user1").assertExists()
+    }
+
+    @Test
+    fun leaderboardsSayOfflineInAnOfflineGame() {
+        showLeaderboards(game = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false, true))
+
+        rule.onNodeWithText("Not available offline").assertExists()
+        rule.onNodeWithText("Sunny Flight").assertDoesNotExist()
+        press(Key.ButtonA)
+        assertTrue(calls.none { it.startsWith("openLeaderboard") })
     }
 
     @Test

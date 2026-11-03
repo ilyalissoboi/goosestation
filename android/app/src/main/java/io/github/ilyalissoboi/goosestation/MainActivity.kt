@@ -114,6 +114,7 @@ class MainActivity : ComponentActivity() {
                                 error = page.error,
                                 expired = page.expired,
                                 passwordCleared = page.passwordCleared,
+                                queue = page.queue,
                                 onSignIn = page::signIn,
                                 onSignOut = page::signOut,
                                 onChange = page::change,

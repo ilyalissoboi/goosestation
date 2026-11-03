@@ -198,6 +198,7 @@ private fun UnlockCard(
             if (card.text.isNotEmpty()) {
                 Text(card.text, style = MaterialTheme.typography.bodyMedium, color = colors.osdInk)
             }
+            card.note?.let { Text(it, style = MaterialTheme.typography.titleSmall, color = colors.inkMuted) }
         }
         card.points?.let { Text("$it", style = GooseStationTheme.type.mono, color = colors.osdInk) }
     }

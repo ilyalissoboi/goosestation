@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
+import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -161,5 +162,15 @@ class AchievementsPageTest {
             runCurrent()
 
             assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun readsTheQueueWithTheAccount() =
+        runTest {
+            api.queue = AchievementsQueue(2, arrayOf("swan"), intArrayOf(1))
+            val page = page()
+
+            assertEquals(2, page.queue.own)
+            assertEquals(listOf("swan" to 1), page.queue.others())
         }
 }

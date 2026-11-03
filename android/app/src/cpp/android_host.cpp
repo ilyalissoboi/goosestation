@@ -8,6 +8,7 @@
 #include "game_codes.h"
 
 #include "core/achievements.h"
+#include "core/achievements_offline.h"
 #include "core/analog_controller.h"
 #include "core/controller.h"
 #include "core/fullscreen_ui.h"
@@ -212,7 +213,8 @@ static std::atomic_bool s_vulkan_failed{false};
 } // namespace AndroidHost
 
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
-                             std::string install_id, std::string achievements_token, Error* error)
+                             std::string install_id, std::string achievements_token, std::string achievements_folder,
+                             Error* error)
 {
   std::unique_lock lock(s_initialize_mutex);
   if (s_initialized)
@@ -242,6 +244,15 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
     Error::AddPrefixFmt(error, "Failed to create the data directory '{}': ", EmuFolders::DataRoot);
     return false;
   }
+
+  // Unlocks and entries waiting for the server, and what a game needs to start offline: in the app's own storage,
+  // never in the data root, which is mirrored.
+  AchievementsOffline::Enable(Path::Canonicalize(achievements_folder),
+                              AchievementsOffline::Callbacks{
+                                .changed = []() { Host::OnAchievementsRefreshed(); },
+                                .refused = [](std::string_view title) { NotifyAchievementRefused(title); },
+                                .sent = [](u32 count) { NotifyAchievementsSent(count); },
+                              });
 
   // The settings layers can only be set once, and the core's startup only run once: after a failure from here on, a
   // later call can't retry.

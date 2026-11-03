@@ -31,7 +31,7 @@ namespace AndroidHost {
 /// kept in memory only (no secrets.ini), and NotifyAchievementsToken() reports each change the core saves. Calling it
 /// again once it succeeded does nothing and returns true.
 bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
-                std::string achievements_token, Error* error);
+                std::string achievements_token, std::string achievements_folder, Error* error);
 
 /// The settings below are the base layer's, settings.ini, and are saved straight away. From any thread; they do
 /// nothing (or return the default) before Initialize() succeeded.
@@ -306,8 +306,10 @@ void NotifyAchievementsToken(std::optional<std::string_view> token);
 /// sign-in expired; a notice, toast or live indicator to show; a picture downloaded; a sound to play. Any thread.
 void NotifyAchievementsChanged();
 void NotifyAchievementsLoginExpired();
+void NotifyAchievementsSent(u32 count);
+void NotifyAchievementRefused(std::string_view title);
 void NotifyAchievementNotification(std::string_view key, std::string_view title, std::string_view text,
-                                   std::string_view image_path, float seconds, s32 points);
+                                   std::string_view image_path, float seconds, s32 points, bool offline);
 void NotifyAchievementToast(std::string_view title, std::string_view message, float seconds);
 void NotifyAchievementIndicator(s32 kind, u32 id, bool shown, std::string_view text, std::string_view badge_path);
 void NotifyAchievementImage(std::string_view path);

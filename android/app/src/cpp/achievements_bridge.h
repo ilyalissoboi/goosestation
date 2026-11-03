@@ -25,6 +25,15 @@ struct Account
 
 Account GetAccount();
 
+/// The unlocks and leaderboard entries waiting to be sent: the stored account's ([Cheevos] Username), and each other
+/// account's, with how many.
+struct Queue
+{
+  u32 own;
+  std::vector<std::pair<std::string, u32>> others;
+};
+Queue GetQueue();
+
 /// Turns achievements on and signs in, waiting for the server: nullopt when signed in, else why not (the server's
 /// words, or "Couldn't reach RetroAchievements"). A failed sign-in leaves achievements as they were.
 std::optional<std::string> SignIn(std::string username, std::string password);
@@ -50,6 +59,8 @@ struct GameSummary
   bool has_achievements;
   bool has_leaderboards;
   bool hardcore;
+  bool offline; // started without a connection, from the set saved at an online start
+  u32 waiting;  // the signed-in account's unlocks and entries for this game, waiting to be sent
 };
 GameSummary GetGameSummary();
 

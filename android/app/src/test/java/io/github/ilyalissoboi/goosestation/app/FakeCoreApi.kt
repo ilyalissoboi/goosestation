@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
+import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -111,6 +112,10 @@ class FakeCoreApi(
         calls += "getAchievementsAccount"
         return account
     }
+
+    var queue = AchievementsQueue.NONE
+
+    override fun getAchievementsQueue(): AchievementsQueue = queue
 
     override fun signIn(
         username: String,

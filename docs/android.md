@@ -717,11 +717,37 @@ username and any old token removed). The token is never logged: `HttpBridge` log
 path and status.
 
 **Offline.** A sign-in that fails for want of a connection keeps the token: the page says "Not connected.
-RetroAchievements is checked again when a game starts.", and the next game start tries again. A game started without
-a connection has no achievements, and says "Couldn't reach RetroAchievements; achievements are off for this game"
-once. Unlocks during a game whose connection drops are retried by rcheevos; any still pending when the app closes are
-lost, as on desktop. Only a rejected or expired token signs the player out, with "RetroAchievements sign-in expired:
-sign in again in Settings" at the next game start.
+RetroAchievements is checked again when a game starts.", and the next game start tries again, as does a network
+coming back (the app listens for a validated network while it's in front). Only a rejected or expired token signs the
+player out, with "RetroAchievements sign-in expired: sign in again in Settings" at the next game start (". 2 unlocks
+are kept and sent once you sign in again" when some are waiting).
+
+- **Nothing earned is lost for want of a connection.** Every unlock and leaderboard entry rcheevos sends is written
+  to the app's own storage (`files/achievements/queue.json`, never in the data folder, so never mirrored, and not
+  backed up) before it goes, and taken out once the server has it, already had it, or refused it. One the app
+  closed on is sent at the next sign-in, a network coming back, or a game start, dated with its age: the server
+  backdates by up to two weeks (rcheevos v12.5.0's `o`), and an older one counts from when it arrives. No file holds
+  the token: a record names its user, and is signed again when it's sent.
+- **Per account.** Records are sent only while their own user is signed in. A sign-out, an expired token or another
+  account's sign-in keeps them, and Settings → Achievements says so ("2 unlocks for goose are kept until goose signs
+  in again").
+- **A game started offline** runs from the set saved at its last online start (the set, each disc hash seen online,
+  the session and the account, in `files/achievements/`), in casual even with Hardcore on, through a Reset too, and
+  says "Offline: achievements are saved and sent later (casual mode)" once. Its sign-in is built from the saved
+  account and the token in memory, and goes when the game stops. A disc never started online, or a game never
+  started online, has no achievements offline, and says "Couldn't reach RetroAchievements; achievements are off for
+  this game" once. A saved set is used however old it is: an achievement removed since is refused when it's sent.
+- **What the player sees.** An unlock made without a connection shows "Sent when you're online" under its card (from
+  the first one rcheevos couldn't send, or for every unlock in a game started offline); the menu's row reads
+  "14 of 40 · 2 to send"; Settings → Achievements, "2 unlocks waiting to be sent". Once they've gone: "3 unlocks sent
+  to RetroAchievements"; one refused is dropped with "Couldn't send 'Ace Pilot': RetroAchievements refused it". The
+  Leaderboards tab says "Not available offline" in a game started offline. The core's own "Achievements
+  Disconnected" and "Reconnected" toasts aren't shown.
+
+RetroAchievements' FAQ says sessions should start online ("We don't currently support a fully offline mode"), which is
+why a game started offline is casual only; its hardcore compliance requirements ask for exactly this queue ("Unlocks
+created while offline must be securely cached and sync to RetroAchievements when connectivity returns"). Desktop
+doesn't keep a queue yet (roadmap, Later).
 
 **Hardcore mode** (Settings → Achievements, off by default) starts with the next game start. While it's active the
 menu's Load state, Patch codes and Fast forward are greyed out ("Off in hardcore mode"), no patch code applies, and
@@ -740,9 +766,14 @@ the menu is open; the game-start summary and leaderboard messages join the messa
 challenges and progress show at the bottom right. The page's switches turn the messages, sounds and live indicators
 off. The core's own sounds (`data/resources/sounds/achievements/`) play through a `SoundPool`.
 
-**Testing.** No test uses real credentials. `AchievementsSignInTest` points rcheevos at `FakeRetroAchievements`, a
-local server answering `login2` (`NativeLibrary.setAchievementsServerForTest`); debug builds allow cleartext to
-`127.0.0.1` for it (`src/debug/res/xml/network_security_config.xml`), release builds don't.
+**Testing.** No test uses real credentials. `AchievementsSignInTest` and `AchievementsOfflineTest` point rcheevos at
+`FakeRetroAchievements`, a local server (`NativeLibrary.setAchievementsServerForTest`) answering `login2`, a game with
+one achievement and one leaderboard for any hash (`achievementsets`, `gameid`, `startsession`), and its unlocks and
+entries, with switches for an unreachable server, an outage page, a refused unlock and one already had; debug builds
+allow cleartext to `127.0.0.1` for it (`src/debug/res/xml/network_security_config.xml`), release builds don't. A
+PS-EXE can't be hashed, so `NativeLibrary.setAchievementsGameHashForTest` gives padtest the fake's hash; the hardcore tests boot
+padtest's disc image (`/sdcard/GooseTest/games/Pad Test #1 (100%).cue` and `.bin`), as a PS-EXE boot turns hardcore
+off. The store's own tests are in `common-tests` (`AchievementsOfflineStore.*`).
 
 ### Known limits
 
@@ -1002,6 +1033,28 @@ Achievements row, where the menu scrolls, as the panel's focused row went with t
 the menu's top (fixed in `74a90b39d`: the row holds the focus for the change). Not checked by hand: an unlock's card and chime, which need a
 real unlock in play (`AchievementOverlayTest` and `OsdLayerTest` cover the card).
 
+### RetroAchievements without a connection (2026-11-03)
+
+Checked on `goose-arm64-offline`, a second AVD made from `goose-arm64`'s config (with `/sdcard/GooseTest`'s BIOS and
+games copied over), as `goose-arm64` was busy with part 3's tests. Debug APK, driven by taps and key events, signed in
+with the user's own account (they typed the password), with Ace Combat 3 (SLPS-02020) against the real server. The
+network was turned off and on with `svc wifi` and `svc data`.
+
+| Check | Result |
+| --- | --- |
+| An online start saves the set | Pass. `files/achievements/` held `hashes.json` (disc 1's hash as game 11308), `sets/11308.json`, the session and the account. |
+| A playlist's Change disc | Pass. The M3U switched sub-image ("Disc 2 of 'Ace Combat 3 Electrosphere' is in."), and the hash stayed disc 1's, as the playlist's first disc counts. |
+| A disc set's Change disc, online | Pass. With the M3U moved aside, the library showed the disc set; Disc 2 went in (`Inserted media from …(Disc 2).`), hashed `34c17c45…`, and `hashes.json` gained it as game 11308. |
+| An offline start with Hardcore on | Pass. Network off, Hardcore on: "Offline: achievements are saved and sent later (casual mode)" over the game (`Starting offline, from the set saved for '34c17c45…'`, disc 2's, the disc last in the drive). Load state stayed available (casual), the row read "1 of 141", and the Leaderboards tab "Not available offline". |
+| Reset console offline | Pass. "System reset."; no "Hardcore mode is now enabled", and Load state stayed available. |
+| The offline game stops | Pass. `The offline game stopped; signing out of its offline sign-in.`; Settings → Achievements: "Not connected. RetroAchievements is checked again when a game starts." |
+| The network comes back in the library | Pass. Wi-Fi and data on: `Signing in again as …` within a second, `POST retroachievements.org/dorequest.php -> 200`, and the page showed the account's points. |
+| No token on disk | Pass. `grep -rl -e Token -e '"t"' files/achievements` found nothing. |
+
+Not checked by hand: an unlock earned offline, its card's note, and its send on reopening, which need a real
+achievement earned in play; `AchievementsOfflineTest` covers them against the fake server (17 tests), and the full
+instrumented suite passed (437 tests) on the same AVD.
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -1143,6 +1196,22 @@ in with their own account, with Ace Combat 3 (SLPS-02020).
 
 Not checked on the Thor: an unlock's card and chime (no unlock came in play), and portrait, which the Thor doesn't
 reach (`OrientationLayoutTest` covers it).
+
+### RetroAchievements without a connection (2026-11-03)
+
+The debug APK of `ec769a1f3` installed over the existing one (data kept), signed in already with the user's account,
+Hardcore off (left as the user had it), driven by key events. Ace Combat 3's M3U tile with **Start over**, each exit
+answered **Keep it**, so the resume state of 1 Nov 02:02 stayed as it was. Wi-Fi off and on with `svc wifi`.
+
+| Check | Result |
+| --- | --- |
+| An online start saves the set | Pass. `files/achievements/` held `hashes.json`, `sets/11308.json`, the session and the account. |
+| An offline start | Pass. Wi-Fi off: `Starting offline, from the set saved for '63e54a7f…'`; the menu's row read "1 of 141" and the Leaderboards tab "Not available offline". |
+| The offline game stops | Pass. `The offline game stopped; signing out of its offline sign-in.` |
+| Wi-Fi comes back in the library | Pass. `Signing in again as …` 5 s later, and `POST retroachievements.org/dorequest.php -> 200`. |
+| The resume state | Pass. `SLPS-02020_resume.sav` still 2026-11-01 02:02. |
+
+Not checked: the game's own picture (the screen capture can't read its surface), and an unlock earned offline.
 
 ## Checks on the AYN Thor
 

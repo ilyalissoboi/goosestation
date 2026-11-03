@@ -76,4 +76,28 @@ class AchievementNoticesTest {
         )
         assertEquals("Hardcore mode is now enabled.", AchievementNotices.toast("", "Hardcore mode is now enabled."))
     }
+
+    @Test
+    fun offlineUnlockHasTheNote() {
+        assertEquals(
+            AchievementNotice.Card(CardKind.Unlock, "Sparx Rescue", "", "", 5, note = "Sent when you're online"),
+            AchievementNotices.from("achievement_unlock_42", "Sparx Rescue", "", "", 5, offline = true),
+        )
+    }
+
+    @Test
+    fun onlineUnlockHasNone() {
+        assertEquals(
+            null,
+            (
+                AchievementNotices.from(
+                    "achievement_unlock_42",
+                    "Sparx Rescue",
+                    "",
+                    "",
+                    5,
+                ) as AchievementNotice.Card
+            ).note,
+        )
+    }
 }

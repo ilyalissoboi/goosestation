@@ -54,6 +54,8 @@ jmethodID s_on_fast_forward_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
 jmethodID s_on_achievements_changed = nullptr;
 jmethodID s_on_achievements_login_expired = nullptr;
+jmethodID s_on_achievements_sent = nullptr;
+jmethodID s_on_achievement_refused = nullptr;
 jmethodID s_on_achievement_notification = nullptr;
 jmethodID s_on_achievement_toast = nullptr;
 jmethodID s_on_achievement_indicator = nullptr;
@@ -427,6 +429,22 @@ void AndroidHost::NotifyAchievementsLoginExpired()
     [](JNIEnv* env, jobject callbacks) { env->CallVoidMethod(callbacks, s_on_achievements_login_expired); });
 }
 
+void AndroidHost::NotifyAchievementsSent(u32 count)
+{
+  WithCallbacks([count](JNIEnv* env, jobject callbacks) {
+    env->CallVoidMethod(callbacks, s_on_achievements_sent, static_cast<jint>(count));
+  });
+}
+
+void AndroidHost::NotifyAchievementRefused(std::string_view title)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {title});
+    if (strings.ok())
+      env->CallVoidMethod(callbacks, s_on_achievement_refused, strings[0]);
+  });
+}
+
 void AndroidHost::NotifyAchievementNotification(std::string_view key, std::string_view title, std::string_view text,
                                                 std::string_view image_path, float seconds, s32 points)
 {
@@ -595,6 +613,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_achievements_token = env->GetMethodID(s_callbacks_class, "onAchievementsToken", "(Ljava/lang/String;)V");
   s_on_achievements_changed = env->GetMethodID(s_callbacks_class, "onAchievementsChanged", "()V");
   s_on_achievements_login_expired = env->GetMethodID(s_callbacks_class, "onAchievementsLoginExpired", "()V");
+  s_on_achievements_sent = env->GetMethodID(s_callbacks_class, "onAchievementsSent", "(I)V");
+  s_on_achievement_refused = env->GetMethodID(s_callbacks_class, "onAchievementRefused", "(Ljava/lang/String;)V");
   s_on_achievement_notification =
     env->GetMethodID(s_callbacks_class, "onAchievementNotification",
                      "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FI)V");
@@ -609,7 +629,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                      "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
   if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
       !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
-      !s_on_achievements_login_expired || !s_on_achievement_notification || !s_on_achievement_toast ||
+      !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
+      !s_on_achievement_notification || !s_on_achievement_toast ||
       !s_on_achievement_indicator || !s_on_achievement_image || !s_on_play_sound || !s_on_leaderboard)
   {
     ClearException(env);

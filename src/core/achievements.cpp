@@ -176,6 +176,7 @@ static void HandleServerDisconnectedEvent(const rc_client_event_t* event);
 static void HandleServerReconnectedEvent(const rc_client_event_t* event);
 
 static void ClientLoginWithTokenCallback(int result, const char* error_message, rc_client_t* client, void* userdata);
+static void SendWaitingRecords();
 static void ClientLoginWithPasswordCallback(int result, const char* error_message, rc_client_t* client, void* userdata);
 static void ClientLoadGameCallback(int result, const char* error_message, rc_client_t* client, void* userdata);
 
@@ -244,6 +245,9 @@ static rc_api_host_t s_server_api_host = {};
 #ifdef __ANDROID__
 // The hash a test gives a game the core can't hash (SetGameHashForTest()).
 static std::string s_game_hash_for_test;
+
+// rcheevos has an unlock or entry it hasn't got through (RC_CLIENT_EVENT_DISCONNECTED, and no RECONNECTED since).
+static bool s_android_disconnected = false;
 
 // Why the running game's set, or the sign-in it waited for, didn't load: RC_OK while it hasn't failed.
 static int s_android_load_result = RC_OK;
@@ -1672,6 +1676,10 @@ void Achievements::HandleServerDisconnectedEvent(const rc_client_event_t* event)
 {
   WARNING_LOG("Server disconnected.");
 
+#ifdef __ANDROID__
+  // The app says it quietly: the unlock card's note and the count of what's waiting.
+  s_android_disconnected = true;
+#else
   if (CanNotify())
   {
     Toast(
@@ -1680,18 +1688,24 @@ void Achievements::HandleServerDisconnectedEvent(const rc_client_event_t* event)
                     "An unlock request could not be completed. We will keep retrying to submit this request."),
       Host::OSD_ERROR_DURATION);
   }
+#endif
 }
 
 void Achievements::HandleServerReconnectedEvent(const rc_client_event_t* event)
 {
   WARNING_LOG("Server reconnected.");
 
+#ifdef __ANDROID__
+  // The app says what was sent (AchievementsOffline's sent callback).
+  s_android_disconnected = false;
+#else
   if (CanNotify())
   {
     Toast(TRANSLATE_STR("Achievements", "Achievements Reconnected"),
                                TRANSLATE_STR("Achievements", "All pending unlock requests have completed."),
                                Host::OSD_INFO_DURATION);
   }
+#endif
 }
 
 void Achievements::ResetClient()
@@ -2000,6 +2014,9 @@ bool Achievements::Login(const char* username, const char* password, Error* erro
   if (!params.result)
     return false;
 
+  if (!is_temporary_client)
+    SendWaitingRecords();
+
   // If we were't a temporary client, get the game loaded.
   if (System::IsValid() && !is_temporary_client)
     BeginLoadGame();
@@ -2083,9 +2100,21 @@ void Achievements::ClientLoginWithTokenCallback(int result, const char* error_me
   }
 
   ShowLoginSuccess(client);
+  SendWaitingRecords();
 
   if (System::IsValid())
     BeginLoadGame();
+}
+
+void Achievements::SendWaitingRecords()
+{
+  // What an earlier run couldn't send goes once its user is signed in.
+  const rc_client_user_t* user = s_client ? rc_client_get_user_info(s_client) : nullptr;
+  if (!AchievementsOffline::IsEnabled() || !user || !user->token || !s_http_downloader)
+    return;
+
+  AchievementsOffline::SendWaiting(*s_http_downloader, GetServerHost(), user->username, user->token,
+                                   static_cast<s64>(std::time(nullptr)));
 }
 
 void Achievements::ShowLoginSuccess(const rc_client_t* client)
@@ -2169,6 +2198,7 @@ void Achievements::Logout()
 
     INFO_LOG("Logging out...");
     rc_client_logout(s_client);
+    AchievementsOffline::ForgetInFlight();
   }
 
   INFO_LOG("Clearing credentials...");

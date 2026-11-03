@@ -250,8 +250,8 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   AchievementsOffline::Enable(Path::Canonicalize(achievements_folder),
                               AchievementsOffline::Callbacks{
                                 .changed = []() { Host::OnAchievementsRefreshed(); },
-                                .refused = [](std::string_view title) { INFO_LOG("Refused: '{}'", title); },
-                                .sent = [](u32 count) { INFO_LOG("Sent {} waiting.", count); },
+                                .refused = [](std::string_view title) { NotifyAchievementRefused(title); },
+                                .sent = [](u32 count) { NotifyAchievementsSent(count); },
                               });
 
   // The settings layers can only be set once, and the core's startup only run once: after a failure from here on, a

@@ -25,8 +25,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * RetroAchievements without a connection, against [FakeRetroAchievements]: what's kept on disk, sent and answered.
@@ -48,6 +50,11 @@ class AchievementsOfflineTest {
     private val started = CountDownLatch(1)
     private val stopped = CountDownLatch(1)
 
+    // What the core reported, through NativeCallbacks.
+    private val sent = CopyOnWriteArrayList<Int>()
+    private val refusals = CopyOnWriteArrayList<String>()
+    private val expired = AtomicInteger()
+
     @Before
     fun setUp() {
         root.deleteRecursively()
@@ -65,6 +72,18 @@ class AchievementsOfflineTest {
                 override fun onGameStopped() = stopped.countDown()
 
                 override fun onError(message: String) {}
+
+                override fun onAchievementsSent(count: Int) {
+                    sent += count
+                }
+
+                override fun onAchievementRefused(title: String) {
+                    refusals += title
+                }
+
+                override fun onAchievementsLoginExpired() {
+                    expired.incrementAndGet()
+                }
             },
         )
         assumeTrue(
@@ -131,6 +150,115 @@ class AchievementsOfflineTest {
         assertNoToken()
     }
 
+    // Review Focus 1: what an earlier run couldn't send goes once its user is signed in, dated when it happened.
+    @Test
+    fun anEarlierRunsUnlockIsSentBackdated() {
+        seed(unlockRecord())
+        initialize(SIGNED_IN_SETTINGS)
+
+        waitFor("the award") { server.awards().isNotEmpty() }
+        val award = server.awards().single()
+        assertEquals(ACHIEVEMENT_ID.toString(), award["a"])
+        assertEquals(GAME_HASH, award["m"])
+        assertEquals("0", award["h"])
+        val offset = award["o"]!!.toLong()
+        assertTrue("o = $offset", offset in 115..200)
+        waitFor("the queue to empty") { queued().isEmpty() }
+        waitFor("the sent report") { sent.isNotEmpty() }
+        assertEquals(listOf(1), sent.toList())
+    }
+
+    @Test
+    fun anEarlierRunsEntryIsSentBackdated() {
+        seed(entryRecord())
+        initialize(SIGNED_IN_SETTINGS)
+
+        waitFor("the entry") { server.entries().isNotEmpty() }
+        val entry = server.entries().single()
+        assertEquals(LEADERBOARD_ID.toString(), entry["i"])
+        assertEquals("4321", entry["s"])
+        assertEquals(GAME_HASH, entry["m"])
+        val offset = entry["o"]!!.toLong()
+        assertTrue("o = $offset", offset in 115..200)
+        waitFor("the queue to empty") { queued().isEmpty() }
+    }
+
+    // Review Focus 3: records are only ever sent as their own user.
+    @Test
+    fun anotherAccountsRecordsWait() {
+        seed(unlockRecord(user = "swan"))
+        initialize(SIGNED_IN_SETTINGS)
+
+        Thread.sleep(5000)
+        assertTrue(server.awards().isEmpty())
+        assertEquals("swan", queued().single().getString("user"))
+    }
+
+    @Test
+    fun aRefusedRecordIsDroppedAndReported() {
+        server.refused += ACHIEVEMENT_ID
+        seed(unlockRecord())
+        initialize(SIGNED_IN_SETTINGS)
+
+        waitFor("the refusal") { refusals.isNotEmpty() }
+        assertEquals(listOf(ACHIEVEMENT_TITLE), refusals.toList())
+        waitFor("the queue to empty") { queued().isEmpty() }
+        assertTrue(sent.isEmpty())
+    }
+
+    // Review Focus 2: an unlock the server already has is delivered, never refused.
+    @Test
+    fun anAlreadyUnlockedRecordIsCleared() {
+        server.alreadyUnlocked += ACHIEVEMENT_ID
+        seed(unlockRecord())
+        initialize(SIGNED_IN_SETTINGS)
+
+        waitFor("the queue to empty") { server.awards().isNotEmpty() && queued().isEmpty() }
+        waitFor("the sent report") { sent.isNotEmpty() }
+        assertEquals(listOf(1), sent.toList())
+        assertTrue(refusals.isEmpty())
+    }
+
+    @Test
+    fun anExpiredTokenKeepsTheRecords() {
+        server.rejectTokens = true
+        seed(unlockRecord())
+        initialize(SIGNED_IN_SETTINGS, signedIn = false)
+
+        waitFor("the expiry") { expired.get() == 1 }
+        assertTrue(server.awards().isEmpty())
+        assertEquals(ACHIEVEMENT_ID, queued().single().getInt("id"))
+    }
+
+    @Test
+    fun aSignOutKeepsTheRecords() {
+        seed(unlockRecord(user = "swan"))
+        initialize(SIGNED_IN_SETTINGS)
+
+        NativeLibrary.signOut()
+
+        assertEquals(AchievementsAccount.SIGNED_OUT, NativeLibrary.getAchievementsAccount().state)
+        assertEquals("swan", queued().single().getString("user"))
+    }
+
+    /** Writes the queue an earlier run would have left. */
+    private fun seed(vararg records: String) {
+        folder.mkdirs()
+        File(folder, "queue.json").writeText("""{"version":1,"records":[${records.joinToString(",")}]}""")
+    }
+
+    private fun unlockRecord(
+        user: String = USER,
+        ageSeconds: Long = 120,
+    ) = """{"kind":"unlock","user":"$user","hash":"$GAME_HASH","id":$ACHIEVEMENT_ID,"hardcore":false,""" +
+        """"score":0,"time":${now() - ageSeconds},"title":"$ACHIEVEMENT_TITLE"}"""
+
+    private fun entryRecord(ageSeconds: Long = 120) =
+        """{"kind":"entry","user":"$USER","hash":"$GAME_HASH","id":$LEADERBOARD_ID,"hardcore":true,""" +
+            """"score":4321,"time":${now() - ageSeconds},"title":"Fastest lap"}"""
+
+    private fun now() = System.currentTimeMillis() / 1000
+
     /** Boots [game], waits for its set, runs [body], and shuts it down. */
     private fun playing(
         game: File = exe,
@@ -180,7 +308,10 @@ class AchievementsOfflineTest {
         }
     }
 
-    private fun initialize(settings: String) {
+    private fun initialize(
+        settings: String,
+        signedIn: Boolean = true,
+    ) {
         File(dataRoot, "settings.ini").writeText(settings)
         val resources = Resources.extract(context)
         assertTrue(
@@ -193,8 +324,10 @@ class AchievementsOfflineTest {
                 folder.absolutePath,
             ),
         )
-        waitFor("the sign-in") {
-            NativeLibrary.getAchievementsAccount().state == AchievementsAccount.SIGNED_IN
+        if (signedIn) {
+            waitFor("the sign-in") {
+                NativeLibrary.getAchievementsAccount().state == AchievementsAccount.SIGNED_IN
+            }
         }
     }
 

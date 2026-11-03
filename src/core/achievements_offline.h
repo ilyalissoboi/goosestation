@@ -10,6 +10,9 @@
 #include <string>
 #include <string_view>
 
+class HTTPDownloader;
+struct rc_api_host_t;
+
 /// RetroAchievements without a connection: the unlocks and leaderboard entries rcheevos sends are kept on disk until
 /// the server has them (achievements_offline_store.h). On only once the host gives it a folder (Enable()); only
 /// Android does. Every call but Enable() is made with the achievements lock held, on the CPU thread.
@@ -34,5 +37,13 @@ void OnRequest(const std::map<std::string, std::string>& form, std::string_view 
 
 /// The answer to a request: an unlock or entry the server has, or refuses, is cleared; one it hasn't got stays.
 void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::string_view body);
+
+/// Sends each of user's records that no request is out for (rcheevos's retries, which last the run, or an earlier
+/// SendWaiting()'s), dated with how long ago it happened, through http to host (nullptr for RetroAchievements).
+void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_view user, std::string_view token,
+                 s64 now);
+
+/// Forgets which records have a request out: rcheevos's retries ended (a sign-out).
+void ForgetInFlight();
 
 } // namespace AchievementsOffline

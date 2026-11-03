@@ -1416,6 +1416,14 @@ object AppController : NativeCallbacks {
         }
     }
 
+    override fun onAchievementsSent(count: Int) {
+        Log.i(TAG, "Waiting achievements sent: $count")
+    }
+
+    override fun onAchievementRefused(title: String) {
+        Log.i(TAG, "RetroAchievements refused a waiting unlock: $title")
+    }
+
     override fun onAchievementsChanged() {
         mainHandler.post {
             gameMenu.achievementsChanged()

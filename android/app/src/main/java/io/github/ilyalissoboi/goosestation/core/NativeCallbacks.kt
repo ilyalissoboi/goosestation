@@ -56,6 +56,12 @@ interface NativeCallbacks {
     /** The server rejected the stored token: the player is signed out and must sign in again. */
     fun onAchievementsLoginExpired() {}
 
+    /** Every unlock and leaderboard entry the player had waiting has been sent: [count] of them. */
+    fun onAchievementsSent(count: Int) {}
+
+    /** The server refused a waiting unlock or entry, called [title], which is dropped. */
+    fun onAchievementRefused(title: String) {}
+
     /**
      * An achievement notice to show: its [key] says what it is (`achievement_unlock_<id>`, `achievement_mastery`,
      * `achievement_summary`, `leaderboard_<id>`), with its [title], [text], picture ([imagePath], a PNG, or empty),

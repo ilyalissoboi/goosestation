@@ -61,6 +61,7 @@ class BindingCaptureTest {
                 biosDir.absolutePath,
                 INSTALL_ID,
                 null,
+                File(dataRoot.parentFile, "offline").absolutePath,
             ),
         )
         NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", "pad-a")

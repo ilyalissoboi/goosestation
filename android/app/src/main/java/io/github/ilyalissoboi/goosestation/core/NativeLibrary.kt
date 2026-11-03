@@ -19,7 +19,9 @@ object NativeLibrary {
      * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
      * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
-     * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken].
+     * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken]. [achievementsFolder] is
+     * where unlocks waiting to be sent, and what a game needs to start offline, are kept: the app's private storage,
+     * outside the data root, so they're never mirrored.
      */
     external fun initialize(
         dataRoot: String,
@@ -27,6 +29,7 @@ object NativeLibrary {
         biosDir: String,
         installId: String,
         achievementsToken: String?,
+        achievementsFolder: String,
     ): Boolean
 
     // The settings calls work on settings.ini, which they save, and can be made from any thread.
@@ -418,6 +421,9 @@ object NativeLibrary {
 
     /** For the instrumented tests only: the RetroAchievements server to talk to ([url]), or the real one with null. */
     external fun setAchievementsServerForTest(url: String?)
+
+    /** For the instrumented tests only: the hash a game the core can't hash (a PS-EXE) gets, or none with null. */
+    external fun setAchievementsGameHashForTest(hash: String?)
 
     /** Hardcore mode is active in the running game. */
     external fun isHardcoreActive(): Boolean

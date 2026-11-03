@@ -4,6 +4,8 @@
 // TODO: Don't poll when booting the game, e.g. Crash Warped freaks out.
 
 #include "achievements.h"
+#include "achievements_offline.h"
+#include "achievements_offline_store.h"
 #include "achievements_private.h"
 #include "bios.h"
 #include "bus.h"
@@ -240,6 +242,9 @@ static std::string s_server_host;
 static rc_api_host_t s_server_api_host = {};
 
 #ifdef __ANDROID__
+// The hash a test gives a game the core can't hash (SetGameHashForTest()).
+static std::string s_game_hash_for_test;
+
 // Why the running game's set, or the sign-in it waited for, didn't load: RC_OK while it hasn't failed.
 static int s_android_load_result = RC_OK;
 #endif
@@ -800,8 +805,36 @@ uint32_t Achievements::ClientReadMemory(uint32_t address, uint8_t* buffer, uint3
 void Achievements::ClientServerCall(const rc_api_request_t* request, rc_client_server_callback_t callback,
                                     void* callback_data, rc_client_t* client)
 {
+  // An unlock or leaderboard entry is kept on disk before it goes, until the server has it.
+  std::map<std::string, std::string> form;
+  if (AchievementsOffline::IsEnabled() && request->post_data)
+  {
+    form = AchievementsOffline::ParseForm(request->post_data);
+    const char* title = nullptr;
+    if (const auto it = form.find("a"); it != form.end())
+    {
+      const rc_client_achievement_t* cheevo =
+        rc_client_get_achievement_info(client, StringUtil::FromChars<u32>(it->second).value_or(0));
+      title = cheevo ? cheevo->title : nullptr;
+    }
+    else if (const auto lb = form.find("i"); lb != form.end())
+    {
+      const rc_client_leaderboard_t* lboard =
+        rc_client_get_leaderboard_info(client, StringUtil::FromChars<u32>(lb->second).value_or(0));
+      title = lboard ? lboard->title : nullptr;
+    }
+    AchievementsOffline::OnRequest(form, title ? title : "", static_cast<s64>(std::time(nullptr)));
+  }
+
   HTTPDownloader::Request::Callback hd_callback =
-    [callback, callback_data](s32 status_code, const std::string& content_type, HTTPDownloader::Request::Data data) {
+    [callback, callback_data, form = std::move(form)](s32 status_code, const std::string& content_type,
+                                                      HTTPDownloader::Request::Data data) {
+      if (!form.empty())
+      {
+        AchievementsOffline::OnAnswer(
+          form, status_code, std::string_view(reinterpret_cast<const char*>(data.data()), data.size()));
+      }
+
       rc_api_server_response_t rr;
       rr.http_status_code = (status_code <= 0) ? (status_code == HTTPDownloader::HTTP_STATUS_CANCELLED ?
                                                     RC_API_SERVER_RESPONSE_CLIENT_ERROR :
@@ -1014,6 +1047,10 @@ void Achievements::IdentifyGame(const std::string& path, CDImage* image)
   std::string game_hash;
   if (image)
     game_hash = GetGameHash(image);
+#ifdef __ANDROID__
+  if (game_hash.empty() && !path.empty())
+    game_hash = s_game_hash_for_test;
+#endif
 
   if (s_game_hash == game_hash)
   {
@@ -2233,6 +2270,12 @@ void Achievements::SetServerForTest(std::string host)
   // An empty host is RetroAchievements'. Not null: v12's rc_client_set_host() copies a null host's name.
   if (s_client)
     rc_client_set_host(s_client, s_server_host.c_str());
+}
+
+void Achievements::SetGameHashForTest(std::string hash)
+{
+  const auto lock = GetLock();
+  s_game_hash_for_test = std::move(hash);
 }
 
 void Achievements::RetryAndroidSignIn()

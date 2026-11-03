@@ -183,6 +183,9 @@ void RetryAndroidSignIn();
 /// with an empty host. Applies to the current client and every one created after.
 void SetServerForTest(std::string host);
 
+/// For the instrumented tests only: the hash a game whose disc can't be hashed (a PS-EXE) gets, or none when empty.
+void SetGameHashForTest(std::string hash);
+
 #endif // __ANDROID__
 
 #ifdef ENABLE_RAINTEGRATION

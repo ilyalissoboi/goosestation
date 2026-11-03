@@ -3,6 +3,7 @@
   <Import Project="..\..\dep\msvc\vsprops\Configurations.props" />
   <ItemGroup>
     <ClCompile Include="achievements.cpp" />
+    <ClCompile Include="achievements_offline.cpp" />
     <ClCompile Include="achievements_offline_store.cpp" />
     <ClCompile Include="analog_controller.cpp" />
     <ClCompile Include="analog_joystick.cpp" />
@@ -91,6 +92,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="achievements_private.h" />
+    <ClInclude Include="achievements_offline.h" />
     <ClInclude Include="achievements_offline_store.h" />
     <ClInclude Include="analog_controller.h" />
     <ClInclude Include="analog_joystick.h" />

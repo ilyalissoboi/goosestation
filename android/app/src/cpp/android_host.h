@@ -31,7 +31,7 @@ namespace AndroidHost {
 /// kept in memory only (no secrets.ini), and NotifyAchievementsToken() reports each change the core saves. Calling it
 /// again once it succeeded does nothing and returns true.
 bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
-                std::string achievements_token, Error* error);
+                std::string achievements_token, std::string achievements_folder, Error* error);
 
 /// The settings below are the base layer's, settings.ini, and are saved straight away. From any thread; they do
 /// nothing (or return the default) before Initialize() succeeded.

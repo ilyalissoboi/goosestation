@@ -244,6 +244,7 @@ class AchievementsSignInTest {
                 biosDir.absolutePath,
                 INSTALL_ID,
                 token,
+                File(dataRoot.parentFile, "offline").absolutePath,
             ),
         )
     }

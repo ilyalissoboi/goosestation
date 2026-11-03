@@ -806,12 +806,14 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   JNIEXPORT ret JNICALL Java_io_github_ilyalissoboi_goosestation_core_NativeLibrary_##name
 
 NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
-                                               jstring bios_dir, jstring install_id, jstring achievements_token)
+                                               jstring bios_dir, jstring install_id, jstring achievements_token,
+                                               jstring achievements_folder)
 {
   Error error;
   if (!AndroidHost::Initialize(FromJString(env, data_root), FromJString(env, resources_root),
                                FromJString(env, bios_dir), FromJString(env, install_id),
-                               achievements_token ? FromJString(env, achievements_token) : std::string(), &error))
+                               achievements_token ? FromJString(env, achievements_token) : std::string(),
+                               FromJString(env, achievements_folder), &error))
   {
     ERROR_LOG("Initialization failed: {}", error.GetDescription());
     AndroidHost::NotifyError(error.GetDescription());
@@ -1147,6 +1149,11 @@ NATIVE_LIBRARY_FUNCTION(jboolean, hardcoreWouldStart)(JNIEnv*, jobject)
 NATIVE_LIBRARY_FUNCTION(void, setAchievementsServerForTest)(JNIEnv* env, jobject, jstring url)
 {
   AchievementsBridge::SetServerForTest(url ? FromJString(env, url) : std::string());
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setAchievementsGameHashForTest)(JNIEnv* env, jobject, jstring hash)
+{
+  Achievements::SetGameHashForTest(hash ? FromJString(env, hash) : std::string());
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)

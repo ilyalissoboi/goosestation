@@ -1183,6 +1183,7 @@ object AppController : NativeCallbacks {
                             biosDir.absolutePath,
                             prefs.installId(),
                             achievementsToken.load(),
+                            File(context.filesDir, "achievements").absolutePath,
                         ).also {
                             if (it) {
                                 readGridView()

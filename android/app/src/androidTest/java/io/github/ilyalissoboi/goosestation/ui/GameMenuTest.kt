@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.LaunchedEffect
@@ -16,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -27,6 +30,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasStateDescription
@@ -39,6 +43,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
@@ -63,6 +68,7 @@ import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -83,8 +89,10 @@ class GameMenuTest {
     private val calls = mutableListOf<String>()
     private var state by mutableStateOf(GameMenuState(booted = true))
 
-    // Whether the fake opens the Achievements panel and switches its tab, as InGameMenu does.
+    // Whether the fake opens the Achievements panel and switches its tab, as InGameMenu does; with [listsLoad], the
+    // Leaderboards tab opens without its list, which the test then gives it, as the core's read does.
     private var switchingTabs = false
+    private var listsLoad = false
 
     // Records each call; closing a layer closes it in the state too, as InGameMenu does.
     private val actions =
@@ -224,7 +232,8 @@ class GameMenuTest {
             override fun switchTab() {
                 calls += "switchTab"
                 if (switchingTabs) {
-                    state = state.copy(cheevos = AchievementsPanelState(CheevoTab.Leaderboards, leaderboards = boards))
+                    val list = if (listsLoad) null else boards
+                    state = state.copy(cheevos = AchievementsPanelState(CheevoTab.Leaderboards, leaderboards = list))
                 }
             }
 
@@ -440,7 +449,7 @@ class GameMenuTest {
         switchingTabs = true
         state = GameMenuState(booted = true, analogMode = true, achievements = ready)
         // A phone in landscape, the emulator's screen: the menu scrolls.
-        show(width = 914, height = 411)
+        show(width = 640, height = 360)
         repeat(12) {
             if (rule.onAllNodes(isFocused() and hasText("Achievements")).fetchSemanticsNodes().isEmpty()) {
                 press(Key.DirectionDown)
@@ -454,6 +463,70 @@ class GameMenuTest {
 
         rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
         rule.onNode(hasText("Achievements") and hasText("14 of 40")).assertIsDisplayed()
+    }
+
+    // Found on the Thor: the heading held the focus while the list loaded, then stopped being focusable, and the focus
+    // fell to the menu's top.
+    @Test
+    fun aListThatLoadsKeepsTheMenusRowInView() {
+        switchingTabs = true
+        listsLoad = true
+        state = GameMenuState(booted = true, analogMode = true, achievements = ready)
+        show(width = 640, height = 360)
+        repeat(12) {
+            if (rule.onAllNodes(isFocused() and hasText("Achievements")).fetchSemanticsNodes().isEmpty()) {
+                press(Key.DirectionDown)
+            }
+        }
+        press(Key.ButtonA)
+        press(Key.ButtonR1)
+        rule.onNodeWithText("Loading…").assertExists()
+
+        state = state.copy(cheevos = state.cheevos!!.copy(leaderboards = boards))
+        rule.waitForIdle()
+
+        rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
+        rule.onNode(hasText("Achievements") and hasText("14 of 40")).assertIsDisplayed()
+    }
+
+    // Found on the Thor: switching tabs passes the focus through the menu's row for a frame, and its ring flashed there.
+    // While a side panel is open the menu's rows draw none.
+    @Test
+    fun aMenuRowShowsNoRingWhileAPanelIsOpen() {
+        switchingTabs = true
+        state = GameMenuState(booted = true, achievements = ready)
+        var focus = Color.Unspecified
+        rule.setContent {
+            GooseStationTheme {
+                focus = GooseStationTheme.colors.focus
+                // The window's own size: the pixels are read from it.
+                Box(Modifier.fillMaxSize()) { GameMenu(state, actions, null, now) }
+            }
+        }
+        rule.waitForIdle()
+        repeat(12) {
+            if (rule.onAllNodes(isFocused() and hasText("Achievements")).fetchSemanticsNodes().isEmpty()) {
+                press(Key.DirectionDown)
+            }
+        }
+        val row = rule.onNode(hasText("Achievements") and hasText("14 of 40"))
+
+        // 3 dp above the row, halfway across: the middle of a ring around it.
+        fun ring(): Boolean {
+            val bounds = row.getUnclippedBoundsInRoot()
+            val x = with(rule.density) { ((bounds.left + bounds.right) / 2).roundToPx() }
+            val y = with(rule.density) { (bounds.top - 3.dp).roundToPx() }
+            return rule.onRoot().captureToImage().toPixelMap()[x, y] == focus
+        }
+        assertTrue(ring())
+
+        press(Key.ButtonA)
+        rule.onNode(isFocused()).assert(hasText("Gem Collector"))
+        row.requestFocus()
+        rule.waitForIdle()
+
+        row.assertIsFocused()
+        assertFalse(ring())
     }
 
     @Test

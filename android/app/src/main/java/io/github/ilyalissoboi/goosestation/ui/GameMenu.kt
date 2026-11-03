@@ -266,6 +266,9 @@ private fun MenuPanel(
     val discsOpen = state.discs != null
     val codesOpen = state.codes != null
     val cheevosOpen = state.cheevos != null
+    // While a side panel is open the focus only passes through the menu (as the panel swaps its rows): no ring shows
+    // there, and the row the panel came from shows as current.
+    val quiet = openMode != null || discsOpen || codesOpen || cheevosOpen
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
     val asking = state.confirmingReset || state.confirmingExit || state.replacingResume != null
@@ -357,7 +360,7 @@ private fun MenuPanel(
                     cancelKind = ButtonKind.Secondary,
                 )
             } else {
-                MenuItem("Resume", GsIcons.play, actions::resume, Modifier.focusRequester(resume))
+                MenuItem("Resume", GsIcons.play, actions::resume, Modifier.focusRequester(resume), quiet = quiet)
                 MenuItem(
                     "Save state",
                     GsIcons.saveState,
@@ -365,6 +368,7 @@ private fun MenuPanel(
                     Modifier.focusRequester(saveRow),
                     enabled = booted,
                     current = openMode == SlotMode.Save,
+                    quiet = quiet,
                 )
                 MenuItem(
                     "Load state",
@@ -374,6 +378,7 @@ private fun MenuPanel(
                     enabled = booted && !state.hardcore,
                     current = openMode == SlotMode.Load,
                     value = if (state.hardcore) HARDCORE_OFF else null,
+                    quiet = quiet,
                 )
                 if (state.discCount > 1) {
                     MenuItem(
@@ -384,6 +389,7 @@ private fun MenuPanel(
                         enabled = booted,
                         current = discsOpen,
                         value = if (state.disc > 0) "Disc ${state.disc} of ${state.discCount}" else null,
+                        quiet = quiet,
                     )
                 }
                 MenuItem(
@@ -392,6 +398,7 @@ private fun MenuPanel(
                     actions::toggleFastForward,
                     enabled = booted && !state.hardcore,
                     value = if (state.hardcore) HARDCORE_OFF else onOff(state.fastForward),
+                    quiet = quiet,
                 )
                 state.analogMode?.let {
                     MenuItem(
@@ -400,9 +407,10 @@ private fun MenuPanel(
                         actions::toggleAnalogMode,
                         enabled = booted,
                         value = onOff(it),
+                        quiet = quiet,
                     )
                 }
-                MenuItem("Screenshot", GsIcons.camera, actions::screenshot, enabled = booted)
+                MenuItem("Screenshot", GsIcons.camera, actions::screenshot, enabled = booted, quiet = quiet)
                 MenuItem(
                     "Patch codes",
                     GsIcons.code,
@@ -411,6 +419,7 @@ private fun MenuPanel(
                     enabled = booted && !state.hardcore,
                     current = codesOpen,
                     value = if (state.hardcore) HARDCORE_OFF else null,
+                    quiet = quiet,
                 )
                 state.achievements?.let { achievements ->
                     MenuItem(
@@ -421,6 +430,7 @@ private fun MenuPanel(
                         enabled = booted && achievements.status == GameAchievements.READY,
                         current = cheevosOpen,
                         value = AchievementLists.rowStatus(achievements),
+                        quiet = quiet,
                     )
                 }
                 Spacer(
@@ -436,6 +446,7 @@ private fun MenuPanel(
                     actions::askReset,
                     Modifier.focusRequester(resetRow),
                     enabled = booted,
+                    quiet = quiet,
                 )
                 MenuItem(
                     "Exit game",
@@ -443,6 +454,7 @@ private fun MenuPanel(
                     actions::exit,
                     Modifier.focusRequester(exitRow),
                     enabled = !state.exiting,
+                    quiet = quiet,
                 )
             }
         }
@@ -469,6 +481,7 @@ private fun MenuItem(
     enabled: Boolean = true,
     current: Boolean = false,
     value: String? = null,
+    quiet: Boolean = false,
 ) {
     val colors = GooseStationTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -478,8 +491,14 @@ private fun MenuItem(
                 .fillMaxWidth()
                 .semantics { selected = current }
                 .background(if (current) colors.beakSoft else colors.surface, GsShapes.medium)
-                .focusRing(enabled = enabled, role = Role.Button, onFocusChange = { focused = it }, onClick = onClick)
-                .heightIn(min = 48.dp)
+                .focusRing(
+                    enabled = enabled,
+                    role = Role.Button,
+                    focusedFill = if (quiet) null else colors.raised,
+                    ring = !quiet,
+                    onFocusChange = { focused = it },
+                    onClick = onClick,
+                ).heightIn(min = 48.dp)
                 .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -490,7 +509,7 @@ private fun MenuItem(
             tint =
                 when {
                     !enabled -> colors.inkFaint
-                    focused || current -> colors.beakInk
+                    (focused && !quiet) || current -> colors.beakInk
                     else -> colors.inkMuted
                 },
             modifier = Modifier.size(20.dp),

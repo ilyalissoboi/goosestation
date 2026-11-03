@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
@@ -100,6 +101,7 @@ fun AchievementsPanel(
     }
     val twoTabs = game.hasAchievements && game.hasLeaderboards
     val holder = remember { FocusRequester() }
+    var holderFocused by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
     val sections = panel.sections
     val page = panel.page
@@ -137,7 +139,13 @@ fun AchievementsPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Focusable while there's no row to focus, so the focus stays in the panel and B reaches it.
-        val heading = Modifier.focusRequester(holder).focusable(enabled = !rows)
+        // It stays focusable while it has the focus, as rows arrive (a list loaded) until they take it: were it to stop
+        // first, Android would put the focus on the window's first focusable, the menu's top, scrolling the menu.
+        val heading =
+            Modifier
+                .focusRequester(holder)
+                .onFocusChanged { holderFocused = it.isFocused }
+                .focusable(enabled = !rows || holderFocused)
         if (twoTabs) {
             Box(heading) {
                 PanelTabs(

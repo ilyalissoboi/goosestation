@@ -110,6 +110,10 @@ enum class Outcome : u8
 };
 Outcome Classify(Record::Kind kind, s32 status, std::string_view body);
 
+/// Whether rcheevos tries its own request again after this answer: not after the server's own error on a status it
+/// doesn't retry (a token it no longer takes, say). A record kept then is no longer rcheevos's to send.
+bool WillRcheevosRetry(Record::Kind kind, s32 status, std::string_view body);
+
 /// A login2 answer for the saved account, with the token the core holds in memory. Never stored.
 std::string BuildLoginAnswer(const UserInfo& info, std::string_view token);
 

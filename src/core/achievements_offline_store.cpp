@@ -44,16 +44,18 @@ struct Json
   s64 number = 0;
   std::string string;
   std::vector<Json> items;
-  std::vector<std::pair<std::string, Json>> members;
+  // An object's members, as two lists: libstdc++ won't hold a pair of a type still being defined.
+  std::vector<std::string> names;
+  std::vector<Json> values;
 
   const Json* Find(std::string_view key) const
   {
     if (type != Type::Object)
       return nullptr;
-    for (const auto& [name, value] : members)
+    for (size_t i = 0; i < names.size(); i++)
     {
-      if (name == key)
-        return &value;
+      if (names[i] == key)
+        return &values[i];
     }
     return nullptr;
   }
@@ -175,7 +177,8 @@ private:
       Json member;
       if (!ParseValue(&member, depth + 1))
         return false;
-      value->members.emplace_back(std::move(key), std::move(member));
+      value->names.push_back(std::move(key));
+      value->values.push_back(std::move(member));
     } while (Consume(','));
 
     return Consume('}');
@@ -587,10 +590,11 @@ void Store::LoadHashes()
   if (!hashes || hashes->type != Json::Type::Object)
     return;
 
-  for (const auto& [hash, id] : hashes->members)
+  for (size_t i = 0; i < hashes->names.size(); i++)
   {
+    const Json& id = hashes->values[i];
     if (id.type == Json::Type::Number && id.number > 0 && id.number <= UINT32_MAX)
-      m_hashes[hash] = static_cast<u32>(id.number);
+      m_hashes[hashes->names[i]] = static_cast<u32>(id.number);
   }
 }
 
@@ -736,6 +740,37 @@ Outcome Classify(Record::Kind kind, s32 status, std::string_view body)
     return Outcome::Keep;
   }
   return Outcome::Refused;
+}
+
+bool WillRcheevosRetry(Record::Kind kind, s32 status, std::string_view body)
+{
+  // ClientServerCall() hands rcheevos no answer as one to try again.
+  if (status <= 0)
+    return true;
+
+  rc_api_server_response_t server_response = {};
+  server_response.body = body.data();
+  server_response.body_length = body.size();
+  server_response.http_status_code = status;
+
+  bool has_error;
+  if (kind == Record::Kind::Unlock)
+  {
+    rc_api_award_achievement_response_t response = {};
+    rc_api_process_award_achievement_server_response(&response, &server_response);
+    has_error = (response.response.error_message != nullptr);
+    rc_api_destroy_award_achievement_response(&response);
+  }
+  else
+  {
+    rc_api_submit_lboard_entry_response_t response = {};
+    rc_api_process_submit_lboard_entry_server_response(&response, &server_response);
+    has_error = (response.response.error_message != nullptr);
+    rc_api_destroy_submit_lboard_entry_response(&response);
+  }
+
+  // As rc_client's award and entry callbacks: the server's own error on a status it doesn't retry ends the retries.
+  return !(has_error && !IsRetryableStatus(status));
 }
 
 std::string BuildLoginAnswer(const UserInfo& info, std::string_view token)

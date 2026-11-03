@@ -476,3 +476,19 @@ TEST(AchievementsOfflineStore, PageThatIsntAnAnswerIsKept)
               Outcome::Keep);
   }
 }
+
+// PR review: rcheevos stops retrying a request the server answered with its own failure on a status it doesn't retry;
+// the record is then the module's to send.
+TEST(AchievementsOfflineStore, RcheevosRetriesOnlyWhatItCan)
+{
+  for (const Record::Kind kind : {Record::Kind::Unlock, Record::Kind::Entry})
+  {
+    EXPECT_FALSE(AchievementsOffline::WillRcheevosRetry(
+      kind, 401, R"({"Success":false,"Error":"Credentials invalid.","Code":"invalid_credentials"})"));
+    EXPECT_FALSE(AchievementsOffline::WillRcheevosRetry(
+      kind, 404, R"({"Success":false,"Error":"Achievement not found","Code":"not_found"})"));
+    EXPECT_TRUE(AchievementsOffline::WillRcheevosRetry(kind, 503, "<html><body>Service Unavailable</body></html>"));
+    EXPECT_TRUE(AchievementsOffline::WillRcheevosRetry(kind, 503, R"({"Success":false,"Error":"Maintenance"})"));
+    EXPECT_TRUE(AchievementsOffline::WillRcheevosRetry(kind, -1, ""));
+  }
+}

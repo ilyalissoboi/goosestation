@@ -769,6 +769,8 @@ bool Achievements::Shutdown(bool allow_cancel)
 
   s_hardcore_mode = false;
   DestroyClient(&s_client, &s_http_downloader);
+  // The client's retries went with it: what they held is the module's to send with the next client.
+  AchievementsOffline::ForgetInFlight();
 
   Host::OnAchievementsRefreshed();
   return true;
@@ -846,7 +848,8 @@ void Achievements::ClientServerCall(const rc_api_request_t* request, rc_client_s
           offline_answer = AchievementsOffline::AnswerOffline(form, s_game_hash, static_cast<s64>(std::time(nullptr)));
           const auto request = form.find("r");
           if (offline_answer.has_value() && !AchievementsOffline::InSession() && request != form.end() &&
-              (request->second == "login2" || request->second == "achievementsets"))
+              (request->second == "login2" || request->second == "achievementsets" ||
+               request->second == "startsession"))
           {
             INFO_LOG("Starting offline, from the set saved for '{}'.", s_game_hash);
             AchievementsOffline::BeginSession();

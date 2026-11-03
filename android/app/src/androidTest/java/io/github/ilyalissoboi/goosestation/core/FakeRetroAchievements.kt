@@ -37,6 +37,12 @@ class FakeRetroAchievements : AutoCloseable {
     /** Achievements the player already has: their unlocks are answered as the server answers a repeat. */
     val alreadyUnlocked = CopyOnWriteArrayList<Int>()
 
+    /** Answers unlocks with a token failure (401), as the server does for a token it no longer takes. */
+    @Volatile var rejectAwards = false
+
+    /** Closes `startsession` without an answer, as a connection dropping mid-load does. */
+    @Volatile var failSessions = false
+
     /** Answers unlocks with an outage page (503), as a server down for maintenance does. */
     @Volatile var busy = false
 
@@ -89,7 +95,7 @@ class FakeRetroAchievements : AutoCloseable {
                 .orEmpty()
         val fields = form(query) + form(body.decodeToString())
         requests += fields
-        if (unreachable) return
+        if (unreachable || (failSessions && fields["r"] == "startsession")) return
 
         val (status, json) = reply(fields)
         val bytes = json.encodeToByteArray()
@@ -121,7 +127,9 @@ class FakeRetroAchievements : AutoCloseable {
             "startsession" -> 200 to """{"Success":true,"HardcoreUnlocks":[],"Unlocks":[],"ServerNow":${now()}}"""
             "ping" -> 200 to """{"Success":true}"""
             "awardachievement" ->
-                if (busy) {
+                if (rejectAwards) {
+                    rejected(fields)
+                } else if (busy) {
                     503 to "<html><body>Down for maintenance</body></html>"
                 } else {
                     award(fields["a"]?.toIntOrNull() ?: 0)

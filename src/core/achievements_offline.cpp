@@ -265,7 +265,11 @@ void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::s
     return;
 
   const Record record = *found;
-  Settle(record, Classify(record.kind, status, body));
+  const Outcome outcome = Classify(record.kind, status, body);
+  // Kept, but rcheevos won't try again: it's the module's to send, at the next sign-in, game start or network return.
+  if (outcome == Outcome::Keep && !WillRcheevosRetry(record.kind, status, body))
+    SetInFlight(record, false);
+  Settle(record, outcome);
 }
 
 void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_view user, std::string_view token,

@@ -363,6 +363,57 @@ class AchievementsOfflineTest {
         }
     }
 
+    // PR review: a set that loaded online, with a session that couldn't, starts offline too: casual.
+    @Test
+    fun aSessionThatCantStartRunsCasual() {
+        server.failSessions = true
+        initialize(HARDCORE_SETTINGS)
+
+        playing(disc) {
+            assertTrue("offline", NativeLibrary.getGameAchievements().offline)
+            assertFalse("casual", NativeLibrary.isHardcoreActive())
+        }
+    }
+
+    // PR review: an unlock rcheevos gave up on (the server refused its token) goes at the next game start.
+    @Test
+    fun anUnlockRcheevosGaveUpOnIsSentAtTheNextGameStart() {
+        initialize(SIGNED_IN_SETTINGS)
+        playing {
+            server.rejectAwards = true
+            waitFor("the refused award", 30) { server.awards().isNotEmpty() }
+            Thread.sleep(2000)
+        }
+        assertEquals(1, queued().size)
+
+        server.rejectAwards = false
+        NativeLibrary.setAchievementsGameHashForTest(null)
+        playing(ready = false) {
+            waitFor("the award at the game start") { server.awards().any { it.containsKey("o") } }
+            waitFor("the queue to empty") { queued().isEmpty() }
+        }
+    }
+
+    // PR review: turning achievements off and on drops rcheevos's retries, so what they held is sent again.
+    @Test
+    fun anUnlockIsSentAfterAchievementsAreTurnedOffAndOn() {
+        initialize(SIGNED_IN_SETTINGS)
+        playing {
+            server.unreachable = true
+            waitFor("the unlock on disk", 30) { queued().isNotEmpty() }
+        }
+
+        NativeLibrary.setBoolSetting("Cheevos", "Enabled", false)
+        NativeLibrary.applySettings()
+        server.unreachable = false
+        NativeLibrary.setBoolSetting("Cheevos", "Enabled", true)
+        NativeLibrary.applySettings()
+
+        waitFor("the sign-in") { NativeLibrary.getAchievementsAccount().state == AchievementsAccount.SIGNED_IN }
+        waitFor("the award with its age") { server.awards().any { it.containsKey("o") } }
+        waitFor("the queue to empty") { queued().isEmpty() }
+    }
+
     /** Writes what an online start of game [hash] would have saved: the account, the hash's game, and its set. */
     private fun seedSavedGame(hash: String) {
         File(folder, "users").mkdirs()

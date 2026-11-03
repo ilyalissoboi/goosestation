@@ -2230,8 +2230,9 @@ void Achievements::SetServerForTest(std::string host)
 {
   const auto lock = GetLock();
   s_server_host = std::move(host);
+  // An empty host is RetroAchievements'. Not null: v12's rc_client_set_host() copies a null host's name.
   if (s_client)
-    rc_client_set_host(s_client, s_server_host.empty() ? nullptr : s_server_host.c_str());
+    rc_client_set_host(s_client, s_server_host.c_str());
 }
 
 void Achievements::RetryAndroidSignIn()

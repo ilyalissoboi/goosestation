@@ -90,7 +90,8 @@ class AchievementsSignInTest {
 
         val account = NativeLibrary.getAchievementsAccount()
         assertEquals(AchievementsAccount.SIGNED_IN, account.state)
-        assertEquals("Goose", account.displayName)
+        // rcheevos (v12) shows the server's User, its "case-corrected username", and ignores DisplayName.
+        assertEquals(USER, account.displayName)
         assertEquals(300, account.score)
         assertEquals(940, account.softcoreScore)
         assertEquals(USER, NativeLibrary.getStringSetting("Cheevos", "Username", ""))

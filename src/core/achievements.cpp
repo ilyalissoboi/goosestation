@@ -2382,8 +2382,15 @@ void Achievements::SetGameHashForTest(std::string hash)
 void Achievements::RetryAndroidSignIn()
 {
   const auto lock = GetLock();
-  if (!IsActive() || !s_client || rc_client_get_user_info(s_client) || s_login_request)
+  if (!IsActive() || !s_client || s_login_request)
     return;
+
+  // Signed in already: what's still waiting (a send the server turned away) goes again.
+  if (rc_client_get_user_info(s_client))
+  {
+    SendWaitingRecords();
+    return;
+  }
 
   const std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
   const std::string api_token = GetLoginToken();

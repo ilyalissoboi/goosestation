@@ -37,6 +37,9 @@ class FakeRetroAchievements : AutoCloseable {
     /** Achievements the player already has: their unlocks are answered as the server answers a repeat. */
     val alreadyUnlocked = CopyOnWriteArrayList<Int>()
 
+    /** Answers unlocks with an outage page (503), as a server down for maintenance does. */
+    @Volatile var busy = false
+
     /** Achievements the server refuses, as it does one that no longer exists. */
     val refused = CopyOnWriteArrayList<Int>()
 
@@ -117,7 +120,12 @@ class FakeRetroAchievements : AutoCloseable {
             "gameid" -> 200 to """{"Success":true,"GameID":${if (fields["m"] in hashes) GAME_ID else 0}}"""
             "startsession" -> 200 to """{"Success":true,"HardcoreUnlocks":[],"Unlocks":[],"ServerNow":${now()}}"""
             "ping" -> 200 to """{"Success":true}"""
-            "awardachievement" -> award(fields["a"]?.toIntOrNull() ?: 0)
+            "awardachievement" ->
+                if (busy) {
+                    503 to "<html><body>Down for maintenance</body></html>"
+                } else {
+                    award(fields["a"]?.toIntOrNull() ?: 0)
+                }
             "submitlbentry" ->
                 200 to
                     """{"Success":true,"Response":{"Score":${fields["s"]},"BestScore":${fields["s"]},""" +

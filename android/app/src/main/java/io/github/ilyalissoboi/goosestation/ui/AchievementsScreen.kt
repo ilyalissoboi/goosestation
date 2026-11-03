@@ -85,6 +85,15 @@ fun AchievementsScreen(
                 imeAction = ImeAction.Done,
                 onDone = signIn,
             )
+            // An expired sign-in keeps the username: what it had waiting is kept for it.
+            if (queue.own > 0 && account.username.isNotEmpty()) {
+                Text(
+                    AchievementQueueWords.othersKept(account.username, queue.own),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.inkMuted,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
             val notice = error ?: if (expired) EXPIRED_NOTE else null
             notice?.let {
                 Notice(NoticeStatus.Danger, Modifier.padding(horizontal = 16.dp)) {

@@ -445,3 +445,34 @@ TEST(AchievementsOfflineStore, OfflineSessionHasTheWaitingUnlocks)
   ASSERT_TRUE(fresh.has_value());
   EXPECT_NE(fresh->find(R"("ID":102)"), std::string::npos);
 }
+
+// Final review: a token the server won't take keeps every record, for the next sign-in.
+TEST(AchievementsOfflineStore, RejectedTokenIsKept)
+{
+  for (const Record::Kind kind : {Record::Kind::Unlock, Record::Kind::Entry})
+  {
+    EXPECT_EQ(AchievementsOffline::Classify(
+                kind, 401, R"({"Success":false,"Error":"Credentials invalid.","Code":"invalid_credentials"})"),
+              Outcome::Keep);
+    EXPECT_EQ(AchievementsOffline::Classify(
+                kind, 401, R"({"Success":false,"Error":"The access token has expired.","Code":"expired_token"})"),
+              Outcome::Keep);
+    EXPECT_EQ(AchievementsOffline::Classify(
+                kind, 403, R"({"Success":false,"Error":"Access denied.","Code":"access_denied"})"),
+              Outcome::Keep);
+  }
+}
+
+// Final review: a page that isn't the server's answer (an outage, a proxy, a portal) keeps the record.
+TEST(AchievementsOfflineStore, PageThatIsntAnAnswerIsKept)
+{
+  for (const Record::Kind kind : {Record::Kind::Unlock, Record::Kind::Entry})
+  {
+    EXPECT_EQ(AchievementsOffline::Classify(kind, 500, "<html><body>Internal Server Error</body></html>"),
+              Outcome::Keep);
+    EXPECT_EQ(AchievementsOffline::Classify(kind, 520, "<html><body>Web server returned an unknown error</body></html>"),
+              Outcome::Keep);
+    EXPECT_EQ(AchievementsOffline::Classify(kind, 200, "<html><body>Sign in to the Wi-Fi</body></html>"),
+              Outcome::Keep);
+  }
+}

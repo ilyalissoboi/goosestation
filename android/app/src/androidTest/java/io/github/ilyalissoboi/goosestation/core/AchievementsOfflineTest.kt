@@ -344,6 +344,25 @@ class AchievementsOfflineTest {
         assertEquals(AchievementsAccount.SIGNED_IN, NativeLibrary.getAchievementsAccount().state)
     }
 
+    // Final review: a record whose send was turned away goes again at the next game start.
+    @Test
+    fun aKeptRecordIsSentAtTheNextGameStart() {
+        server.busy = true
+        seed(unlockRecord())
+        initialize(SIGNED_IN_SETTINGS)
+        waitFor("the turned-away award") { server.awards().isNotEmpty() }
+        Thread.sleep(1000)
+        assertEquals(1, queued().size)
+
+        server.busy = false
+        // No hash, so no set: the game can't earn it again, and only the start's send can clear it.
+        NativeLibrary.setAchievementsGameHashForTest(null)
+        playing(ready = false) {
+            waitFor("the award at the game start") { server.awards().size >= 2 }
+            waitFor("the queue to empty") { queued().isEmpty() }
+        }
+    }
+
     /** Writes what an online start of game [hash] would have saved: the account, the hash's game, and its set. */
     private fun seedSavedGame(hash: String) {
         File(folder, "users").mkdirs()

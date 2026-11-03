@@ -175,8 +175,8 @@ enum class AndroidGameStatus : u8
 };
 AndroidGameStatus GetAndroidGameStatus();
 
-/// Signs in again with the stored token if a sign-in failed (no connection at startup). The host calls it before a
-/// game boots, so the game's set loads once the sign-in succeeds.
+/// Signs in again with the stored token if a sign-in failed (no connection at startup); signed in, sends what's still
+/// waiting. The host calls it before a game boots, so the game's set loads once the sign-in succeeds.
 void RetryAndroidSignIn();
 
 /// For the instrumented tests only: the server the clients talk to (as "http://127.0.0.1:port"), or RetroAchievements

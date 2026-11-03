@@ -704,13 +704,11 @@ Outcome Classify(Record::Kind kind, s32 status, std::string_view body)
 
   int result;
   bool succeeded;
-  bool has_error;
   if (kind == Record::Kind::Unlock)
   {
     rc_api_award_achievement_response_t response = {};
     result = rc_api_process_award_achievement_server_response(&response, &server_response);
     succeeded = (response.response.succeeded != 0);
-    has_error = (response.response.error_message != nullptr);
     rc_api_destroy_award_achievement_response(&response);
   }
   else
@@ -718,17 +716,26 @@ Outcome Classify(Record::Kind kind, s32 status, std::string_view body)
     rc_api_submit_lboard_entry_response_t response = {};
     result = rc_api_process_submit_lboard_entry_server_response(&response, &server_response);
     succeeded = (response.response.succeeded != 0);
-    has_error = (response.response.error_message != nullptr);
     rc_api_destroy_submit_lboard_entry_response(&response);
   }
 
-  // As rcheevos decides: success is delivered (an unlock it already had comes back as success with a message); the
-  // server's own failure is refused, unless it's a status rcheevos tries again; anything else is kept.
+  // Success is delivered: an unlock the server already had comes back as success with a message.
   if (result == RC_OK && succeeded)
     return Outcome::Delivered;
-  if (has_error && !IsRetryableStatus(status))
-    return Outcome::Refused;
-  return Outcome::Keep;
+
+  // Refused only when the server itself answers that it won't take this record: a JSON failure, not about the token
+  // (a sign-in again sends it), and not a status rcheevos tries again. A page that isn't its answer (an outage, a
+  // proxy, a portal) is kept: the queue is there for exactly what rcheevos gives up on.
+  const std::optional<Json> json = JsonParser(body).Parse();
+  if (!json.has_value() || json->type != Json::Type::Object || json->BoolAt("Success") != false)
+    return Outcome::Keep;
+  const std::string code = json->StringAt("Code").value_or(std::string());
+  if (status == 401 || status == 403 || code == "invalid_credentials" || code == "expired_token" ||
+      code == "access_denied" || IsRetryableStatus(status))
+  {
+    return Outcome::Keep;
+  }
+  return Outcome::Refused;
 }
 
 std::string BuildLoginAnswer(const UserInfo& info, std::string_view token)

@@ -204,4 +204,15 @@ class AchievementsScreenTest {
         rule.onNodeWithText("1 unlock for swan is kept until swan signs in again").assertExists()
         rule.onNodeWithText("waiting to be sent", substring = true).assertDoesNotExist()
     }
+
+    // Final review: an expired sign-in keeps the username, and its records are shown as kept for it.
+    @Test
+    fun anExpiredAccountsRecordsAreShown() {
+        show(
+            AchievementsAccount(AchievementsAccount.SIGNED_OUT, "goose", "", 0, 0),
+            AchievementsQueue(2, emptyArray(), IntArray(0)),
+        )
+
+        rule.onNodeWithText("2 unlocks for goose are kept until goose signs in again").assertExists()
+    }
 }

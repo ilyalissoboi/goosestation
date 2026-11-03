@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.ACHIEVEMENT_ID
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.ACHIEVEMENT_TITLE
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.GAME_HASH
+import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.GAME_ID
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.LEADERBOARD_ID
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.TOKEN
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.USER
@@ -47,8 +48,10 @@ class AchievementsOfflineTest {
     private val disc = File(root, "$PAD_TEST_DISC.cue")
     private val server = FakeRetroAchievements()
 
-    private val started = CountDownLatch(1)
-    private val stopped = CountDownLatch(1)
+    // Fresh for each play (playing()).
+    @Volatile private var started = CountDownLatch(1)
+
+    @Volatile private var stopped = CountDownLatch(1)
 
     // What the core reported, through NativeCallbacks.
     private val sent = CopyOnWriteArrayList<Int>()
@@ -136,7 +139,7 @@ class AchievementsOfflineTest {
 
     @Test
     fun anEntryWhileUnreachableIsOnDisk() {
-        initialize(SIGNED_IN_SETTINGS.replace("Enabled = true", "Enabled = true\nChallengeMode = true"))
+        initialize(HARDCORE_SETTINGS)
         playing(disc) {
             assertTrue("hardcore is active", NativeLibrary.isHardcoreActive())
             server.unreachable = true
@@ -241,6 +244,101 @@ class AchievementsOfflineTest {
         assertEquals("swan", queued().single().getString("user"))
     }
 
+    // An app started offline, with the disc's set saved at an online start: casual, and its unlock waits.
+    @Test
+    fun aGameStartedOfflineRunsFromItsSavedSet() {
+        seedSavedGame(DISC_HASH)
+        server.unreachable = true
+        initialize(HARDCORE_SETTINGS, signedIn = false)
+        waitFor("the sign-in to fail") {
+            NativeLibrary.getAchievementsAccount().state == AchievementsAccount.NOT_CONNECTED
+        }
+
+        playing(disc) {
+            val game = NativeLibrary.getGameAchievements()
+            assertTrue("offline", game.offline)
+            assertFalse("casual", NativeLibrary.isHardcoreActive())
+            waitFor("the unlock on disk", 30) { queued().any { it.getInt("id") == ACHIEVEMENT_ID } }
+        }
+
+        assertFalse(queued().single { it.getInt("id") == ACHIEVEMENT_ID }.getBoolean("hardcore"))
+        // The sign-in built for the game goes with it.
+        assertEquals(AchievementsAccount.NOT_CONNECTED, NativeLibrary.getAchievementsAccount().state)
+        assertNoToken()
+    }
+
+    // Signed in, then the connection drops before a game starts: its set comes from the store too.
+    @Test
+    fun aSignedInGameWhoseSetCantLoadRunsFromItsSavedSet() {
+        initialize(HARDCORE_SETTINGS)
+        playing(disc) { assertTrue("hardcore online", NativeLibrary.isHardcoreActive()) }
+
+        server.unreachable = true
+        playing(disc) {
+            assertTrue("offline", NativeLibrary.getGameAchievements().offline)
+            assertFalse("casual", NativeLibrary.isHardcoreActive())
+        }
+    }
+
+    // Review Focus 4: a reset can't bring hardcore back in a game started offline.
+    @Test
+    fun aResetKeepsAnOfflineGameCasual() {
+        seedSavedGame(DISC_HASH)
+        server.unreachable = true
+        initialize(HARDCORE_SETTINGS, signedIn = false)
+
+        playing(disc) {
+            NativeLibrary.resetGame()
+            Thread.sleep(2000)
+            assertFalse("casual after the reset", NativeLibrary.isHardcoreActive())
+            assertTrue("still offline", NativeLibrary.getGameAchievements().offline)
+        }
+    }
+
+    @Test
+    fun aGameNeverStartedOnlineHasNoAchievements() {
+        server.unreachable = true
+        initialize(SIGNED_IN_SETTINGS, signedIn = false)
+
+        playing(ready = false) {
+            waitFor("the failure") {
+                NativeLibrary.getGameAchievements().status == GameAchievements.UNREACHABLE
+            }
+            assertFalse(NativeLibrary.getGameAchievements().offline)
+        }
+    }
+
+    @Test
+    fun anOfflineSessionCountsWhatWaits() {
+        // Earned offline yesterday: unlocked today (rcheevos lists one under ten minutes old as recently unlocked).
+        seedSavedGame(GAME_HASH)
+        seed(unlockRecord(ageSeconds = 86_400))
+        server.unreachable = true
+        initialize(SIGNED_IN_SETTINGS, signedIn = false)
+
+        playing {
+            val unlocked =
+                NativeLibrary
+                    .getAchievementSections()
+                    .filter { it.bucket == UNLOCKED_BUCKET }
+                    .flatMap { it.achievements.toList() }
+            assertTrue(unlocked.any { it.id == ACHIEVEMENT_ID })
+        }
+    }
+
+    /** Writes what an online start of game [hash] would have saved: the account, the hash's game, and its set. */
+    private fun seedSavedGame(hash: String) {
+        File(folder, "users").mkdirs()
+        File(folder, "sets").mkdirs()
+        File(folder, "users/$USER.json").writeText(
+            """{"version":1,"user":"$USER","display_name":"$USER","avatar_url":"","score":300,"softcore_score":940}""",
+        )
+        File(folder, "hashes.json").writeText("""{"version":1,"hashes":{"$hash":$GAME_ID}}""")
+        File(folder, "sets/$GAME_ID.json").writeText(
+            """{"version":1,"body":${JSONObject.quote(FakeRetroAchievements.GAME_SETS)}}""",
+        )
+    }
+
     /** Writes the queue an earlier run would have left. */
     private fun seed(vararg records: String) {
         folder.mkdirs()
@@ -259,18 +357,21 @@ class AchievementsOfflineTest {
 
     private fun now() = System.currentTimeMillis() / 1000
 
-    /** Boots [game], waits for its set, runs [body], and shuts it down. */
+    /** Boots [game], waits for its set (unless not [ready]), runs [body], and shuts it down. */
     private fun playing(
         game: File = exe,
+        ready: Boolean = true,
         body: () -> Unit,
     ) {
+        started = CountDownLatch(1)
+        stopped = CountDownLatch(1)
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
             NativeLibrary.startGame(game.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
-            waitFor("the set") { NativeLibrary.getGameAchievements().status == GameAchievements.READY }
+            if (ready) waitFor("the set") { NativeLibrary.getGameAchievements().status == GameAchievements.READY }
             body()
         } finally {
             NativeLibrary.shutdownGame()
@@ -355,6 +456,12 @@ class AchievementsOfflineTest {
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val PAD_TEST_DISC = "Pad Test #1 (100%)"
 
+        /** The hash the core gives padtest's disc image (its PADTEST.EXE's). */
+        const val DISC_HASH = "240326b8b35768674e822844d32da2bf"
+
+        /** rcheevos's bucket of unlocked achievements (RC_CLIENT_ACHIEVEMENT_BUCKET_UNLOCKED). */
+        const val UNLOCKED_BUCKET = 2
+
         // This install's file, signed in as the fake server's user.
         val SIGNED_IN_SETTINGS =
             """
@@ -368,5 +475,8 @@ class AchievementsOfflineTest {
             [Android]
             InstallID = $INSTALL_ID
             """.trimIndent()
+
+        // The same, with Hardcore on.
+        val HARDCORE_SETTINGS = SIGNED_IN_SETTINGS.replace("Enabled = true", "Enabled = true\nChallengeMode = true")
     }
 }

@@ -117,4 +117,11 @@ std::string BuildLoginAnswer(const UserInfo& info, std::string_view token);
 /// and the server's time set to now. Without a saved answer (empty), one with only the waiting unlocks.
 std::string BuildSessionAnswer(std::string_view saved, const std::vector<Record>& waiting, s64 now);
 
+/// The answer for a request (its form fields) that couldn't reach the server, from what was saved online; nullopt for
+/// one that has none. A token sign-in is answered only outside a session (in_session false) and when the game booting
+/// (booting_hash) has a saved set. A game's set (by hash or id), a hash's game id, and a session (with the user's
+/// waiting unlocks for every hash of the game) are answered whenever they were saved.
+std::optional<std::string> OfflineAnswer(const Store& store, const std::map<std::string, std::string>& form,
+                                         std::string_view booting_hash, bool in_session, s64 now);
+
 } // namespace AchievementsOffline

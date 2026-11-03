@@ -6,6 +6,7 @@
 #include "emu_thread.h"
 #include "game_codes.h"
 
+#include "core/achievements_offline.h"
 #include "core/achievements_private.h"
 #include "core/cheats.h"
 #include "core/host.h"
@@ -91,12 +92,13 @@ void AchievementsBridge::SignOut()
 
 AchievementsBridge::GameSummary AchievementsBridge::GetGameSummary()
 {
-  GameSummary summary = {Achievements::AndroidGameStatus::Off, 0, 0, 0, 0, false, false, false};
+  GameSummary summary = {Achievements::AndroidGameStatus::Off, 0, 0, 0, 0, false, false, false, false};
   EmuThread::RunOnThread(
     [&summary]() {
       summary.status = Achievements::GetAndroidGameStatus();
       summary.hardcore = Achievements::IsHardcoreModeActive();
       const auto lock = Achievements::GetLock();
+      summary.offline = AchievementsOffline::InSession();
       if (!Achievements::HasActiveGame())
         return;
 

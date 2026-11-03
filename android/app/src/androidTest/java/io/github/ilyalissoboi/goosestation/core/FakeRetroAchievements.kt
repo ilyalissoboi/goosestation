@@ -166,9 +166,12 @@ class FakeRetroAchievements : AutoCloseable {
 
         private val REASONS = mapOf(200 to "OK", 401 to "Unauthorized", 404 to "Not Found")
 
-        // One core set. The achievement is true after 300 frames, so it isn't already true (waiting) when the set
-        // loads; the leaderboard starts after 60 frames and is submitted 120 frames later (in hardcore only).
-        private val GAME_SETS =
+        /**
+         * The game's achievementsets answer: one core set. The achievement is true after 300 frames, so it isn't
+         * already true (waiting) when the set loads; the leaderboard starts after 60 frames and is submitted 120
+         * frames later (in hardcore only).
+         */
+        val GAME_SETS =
             """{"Success":true,"GameId":$GAME_ID,"Title":"Pad Test","ConsoleId":12,"ImageIconUrl":"",""" +
                 """"RichPresenceGameId":$GAME_ID,"RichPresencePatch":"","Sets":[{"AchievementSetId":4001,""" +
                 """"GameId":$GAME_ID,"Title":"Pad Test","Type":"core","ImageIconUrl":"","Achievements":[{""" +

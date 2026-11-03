@@ -698,7 +698,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
         std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementsAccount",
                    "(ILjava/lang/String;Ljava/lang/String;II)V", &s_achievements_account_class,
                    &s_achievements_account_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/GameAchievements", "(IIIIIZZZ)V",
+        std::tuple("io/github/ilyalissoboi/goosestation/core/GameAchievements", "(IIIIIZZZZ)V",
                    &s_game_achievements_class, &s_game_achievements_constructor),
         std::tuple("io/github/ilyalissoboi/goosestation/core/Achievement",
                    "(ILjava/lang/String;Ljava/lang/String;ILjava/lang/String;JLjava/lang/String;F)V",
@@ -1055,7 +1055,8 @@ NATIVE_LIBRARY_FUNCTION(jobject, getGameAchievements)(JNIEnv* env, jobject)
                                static_cast<jint>(game.status), static_cast<jint>(game.unlocked),
                                static_cast<jint>(game.total), static_cast<jint>(game.points),
                                static_cast<jint>(game.total_points), static_cast<jboolean>(game.has_achievements),
-                               static_cast<jboolean>(game.has_leaderboards), static_cast<jboolean>(game.hardcore));
+                               static_cast<jboolean>(game.has_leaderboards), static_cast<jboolean>(game.hardcore),
+                               static_cast<jboolean>(game.offline));
   if (!ret)
     ClearException(env);
   return ret;

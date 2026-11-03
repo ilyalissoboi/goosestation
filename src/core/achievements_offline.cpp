@@ -11,6 +11,7 @@
 
 #include "rc_api_request.h"
 #include "rc_api_runtime.h"
+#include "rc_api_user.h"
 #include "rc_error.h"
 
 #include <algorithm>
@@ -31,6 +32,9 @@ std::vector<Record> s_in_flight;
 
 // For each user (lower case), how many records that waited have been delivered since the user last had none.
 std::map<std::string, u32> s_sent;
+
+// The running game started offline (InSession()).
+bool s_in_session = false;
 
 std::string_view Field(const std::map<std::string, std::string>& form, const char* name)
 {
@@ -196,10 +200,61 @@ void OnRequest(const std::map<std::string, std::string>& form, std::string_view 
   Changed();
 }
 
+/// Saves what a game's load got from the server, for a start without a connection: the set (under every disc hash seen
+/// online, as the hash's game id), each hash's game, and the user's session.
+void SaveForOffline(const std::map<std::string, std::string>& form, s32 status, std::string_view body)
+{
+  if (status != 200)
+    return;
+
+  rc_api_server_response_t server_response = {};
+  server_response.body = body.data();
+  server_response.body_length = body.size();
+  server_response.http_status_code = status;
+
+  const std::string_view request = Field(form, "r");
+  const std::string_view hash = Field(form, "m");
+  if (request == "achievementsets")
+  {
+    rc_api_fetch_game_sets_response_t response = {};
+    if (rc_api_process_fetch_game_sets_server_response(&response, &server_response) == RC_OK &&
+        response.response.succeeded && response.id != 0)
+    {
+      s_store->SaveSet(response.id, body);
+      if (!hash.empty())
+        s_store->SaveHash(hash, response.id);
+    }
+    rc_api_destroy_fetch_game_sets_response(&response);
+  }
+  else if (request == "gameid")
+  {
+    rc_api_resolve_hash_response_t response = {};
+    if (rc_api_process_resolve_hash_server_response(&response, &server_response) == RC_OK &&
+        response.response.succeeded && response.game_id != 0 && !hash.empty())
+    {
+      s_store->SaveHash(hash, response.game_id);
+    }
+    rc_api_destroy_resolve_hash_response(&response);
+  }
+  else if (request == "startsession")
+  {
+    rc_api_start_session_response_t response = {};
+    const u32 game_id = Number<u32>(form, "g");
+    if (rc_api_process_start_session_server_response(&response, &server_response) == RC_OK &&
+        response.response.succeeded && game_id != 0 && !Field(form, "u").empty())
+    {
+      s_store->SaveSession(Field(form, "u"), game_id, body);
+    }
+    rc_api_destroy_start_session_response(&response);
+  }
+}
+
 void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::string_view body)
 {
   if (!s_store)
     return;
+
+  SaveForOffline(form, status, body);
 
   const std::optional<Record> request = RecordFor(form);
   if (!request.has_value())
@@ -290,6 +345,37 @@ void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_vi
 void ForgetInFlight()
 {
   s_in_flight.clear();
+}
+
+bool InSession()
+{
+  return s_in_session;
+}
+
+void BeginSession()
+{
+  s_in_session = true;
+}
+
+void EndSession()
+{
+  s_in_session = false;
+}
+
+std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,
+                                         s64 now)
+{
+  return s_store ? OfflineAnswer(*s_store, form, booting_hash, s_in_session, now) : std::nullopt;
+}
+
+void RememberUser(std::string_view user, std::string_view display_name, std::string_view avatar_url, u32 score,
+                  u32 softcore_score)
+{
+  if (s_store && !user.empty())
+  {
+    s_store->SaveUser(UserInfo{std::string(user), std::string(display_name), std::string(avatar_url), score,
+                               softcore_score});
+  }
 }
 
 } // namespace AchievementsOffline

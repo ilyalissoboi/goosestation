@@ -311,3 +311,137 @@ TEST(AchievementsOfflineStore, SessionAnswerAddsHardcoreUnlocksToBoth)
   ASSERT_NE(first, std::string::npos);
   EXPECT_NE(answer.find(R"({"ID":101,"When":1700000000})", first + 1), std::string::npos);
 }
+
+namespace {
+
+constexpr const char* OTHER_DISC = "fedcba98fedcba98fedcba98fedcba98";
+constexpr const char* SET = R"({"Success":true,"GameId":3001,"Title":"Pad Test"})";
+
+std::map<std::string, std::string> Form(std::initializer_list<std::pair<const std::string, std::string>> fields)
+{
+  return std::map<std::string, std::string>(fields);
+}
+
+// A store with goose's account, and game 3001's set saved for HASH.
+void SaveGame(Store* store)
+{
+  ASSERT_TRUE(store->SaveUser(Goose()));
+  ASSERT_TRUE(store->SaveHash(HASH, 3001));
+  ASSERT_TRUE(store->SaveSet(3001, SET));
+}
+
+} // namespace
+
+TEST(AchievementsOfflineStore, OfflineLoginNeedsASavedSet)
+{
+  const TempDirectory tmp;
+  Store store(tmp.GetPath());
+  ASSERT_TRUE(store.SaveUser(Goose()));
+  const auto login = Form({{"r", "login2"}, {"u", "goose"}, {"t", TOKEN}});
+
+  EXPECT_FALSE(AchievementsOffline::OfflineAnswer(store, login, HASH, false, 5).has_value());
+  EXPECT_FALSE(AchievementsOffline::OfflineAnswer(store, login, "", false, 5).has_value());
+}
+
+TEST(AchievementsOfflineStore, OfflineLoginIsBuilt)
+{
+  const TempDirectory tmp;
+  Store store(tmp.GetPath());
+  SaveGame(&store);
+
+  const auto answer =
+    AchievementsOffline::OfflineAnswer(store, Form({{"r", "login2"}, {"u", "goose"}, {"t", TOKEN}}), HASH, false, 5);
+  ASSERT_TRUE(answer.has_value());
+  EXPECT_NE(answer->find(R"("Token":"fake-token-1")"), std::string::npos);
+  EXPECT_NE(answer->find(R"("DisplayName":"Goose")"), std::string::npos);
+
+  // A password sign-in, or another account's, isn't answered.
+  EXPECT_FALSE(AchievementsOffline::OfflineAnswer(store, Form({{"r", "login2"}, {"u", "goose"}, {"p", "x"}}), HASH,
+                                                  false, 5)
+                 .has_value());
+  EXPECT_FALSE(
+    AchievementsOffline::OfflineAnswer(store, Form({{"r", "login2"}, {"u", "swan"}, {"t", TOKEN}}), HASH, false, 5)
+      .has_value());
+}
+
+TEST(AchievementsOfflineStore, NoLoginAnswerInASession)
+{
+  const TempDirectory tmp;
+  Store store(tmp.GetPath());
+  SaveGame(&store);
+
+  EXPECT_FALSE(
+    AchievementsOffline::OfflineAnswer(store, Form({{"r", "login2"}, {"u", "goose"}, {"t", TOKEN}}), HASH, true, 5)
+      .has_value());
+}
+
+TEST(AchievementsOfflineStore, OfflineSetForEitherDisc)
+{
+  const TempDirectory tmp;
+  Store store(tmp.GetPath());
+  SaveGame(&store);
+  ASSERT_TRUE(store.SaveHash(OTHER_DISC, 3001));
+
+  for (const char* hash : {HASH, OTHER_DISC})
+  {
+    EXPECT_EQ(AchievementsOffline::OfflineAnswer(store, Form({{"r", "achievementsets"}, {"m", hash}}), HASH, true, 5),
+              SET)
+      << hash;
+  }
+  EXPECT_EQ(AchievementsOffline::OfflineAnswer(store, Form({{"r", "achievementsets"}, {"g", "3001"}}), HASH, true, 5),
+            SET);
+
+  // A signed-in game whose set can't load is answered too: it starts the offline session.
+  EXPECT_EQ(AchievementsOffline::OfflineAnswer(store, Form({{"r", "achievementsets"}, {"m", HASH}}), HASH, false, 5),
+            SET);
+}
+
+TEST(AchievementsOfflineStore, UnknownDiscHasNoAnswer)
+{
+  const TempDirectory tmp;
+  Store store(tmp.GetPath());
+  SaveGame(&store);
+
+  EXPECT_FALSE(
+    AchievementsOffline::OfflineAnswer(store, Form({{"r", "achievementsets"}, {"m", OTHER_DISC}}), HASH, true, 5)
+      .has_value());
+  EXPECT_FALSE(
+    AchievementsOffline::OfflineAnswer(store, Form({{"r", "gameid"}, {"m", OTHER_DISC}}), HASH, true, 5).has_value());
+  EXPECT_FALSE(AchievementsOffline::OfflineAnswer(store, Form({{"r", "ping"}, {"g", "3001"}}), HASH, true, 5)
+                 .has_value());
+}
+
+TEST(AchievementsOfflineStore, OfflineGameIdAnswer)
+{
+  const TempDirectory tmp;
+  Store store(tmp.GetPath());
+  SaveGame(&store);
+
+  EXPECT_EQ(AchievementsOffline::OfflineAnswer(store, Form({{"r", "gameid"}, {"m", HASH}}), HASH, true, 5),
+            R"({"Success":true,"GameID":3001})");
+}
+
+TEST(AchievementsOfflineStore, OfflineSessionHasTheWaitingUnlocks)
+{
+  const TempDirectory tmp;
+  Store store(tmp.GetPath());
+  SaveGame(&store);
+  ASSERT_TRUE(store.SaveSession("goose", 3001, R"({"Success":true,"Unlocks":[{"ID":5,"When":1}],)"
+                                               R"("HardcoreUnlocks":[],"ServerNow":1})"));
+  ASSERT_TRUE(store.Add(Unlock()));
+  ASSERT_TRUE(store.Add(Unlock("swan", 102)));
+
+  const auto answer = AchievementsOffline::OfflineAnswer(
+    store, Form({{"r", "startsession"}, {"u", "goose"}, {"g", "3001"}}), HASH, true, 1800000000);
+  ASSERT_TRUE(answer.has_value());
+  EXPECT_NE(answer->find(R"({"ID":5,"When":1})"), std::string::npos);
+  EXPECT_NE(answer->find(R"({"ID":101,"When":1700000000})"), std::string::npos);
+  EXPECT_EQ(answer->find(R"("ID":102)"), std::string::npos);
+  EXPECT_NE(answer->find(R"("ServerNow":1800000000)"), std::string::npos);
+
+  // Without a saved session, one with only what's waiting.
+  const auto fresh = AchievementsOffline::OfflineAnswer(
+    store, Form({{"r", "startsession"}, {"u", "swan"}, {"g", "3001"}}), HASH, true, 7);
+  ASSERT_TRUE(fresh.has_value());
+  EXPECT_NE(fresh->find(R"("ID":102)"), std::string::npos);
+}

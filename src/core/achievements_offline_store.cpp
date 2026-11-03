@@ -746,6 +746,65 @@ std::string BuildLoginAnswer(const UserInfo& info, std::string_view token)
   return out;
 }
 
+std::optional<std::string> OfflineAnswer(const Store& store, const std::map<std::string, std::string>& form,
+                                         std::string_view booting_hash, bool in_session, s64 now)
+{
+  const auto field = [&form](const char* name) {
+    const auto it = form.find(name);
+    return (it != form.end()) ? std::string_view(it->second) : std::string_view();
+  };
+  const std::string_view request = field("r");
+
+  if (request == "login2")
+  {
+    // Only a sign-in with the token, for a game starting with its set saved.
+    if (in_session || field("t").empty() || booting_hash.empty())
+      return std::nullopt;
+    const std::optional<u32> game_id = store.GameIdFor(booting_hash);
+    if (!game_id.has_value() || !store.LoadSet(game_id.value()).has_value())
+      return std::nullopt;
+    const std::optional<UserInfo> user = store.LoadUser(field("u"));
+    if (!user.has_value())
+      return std::nullopt;
+    return BuildLoginAnswer(user.value(), field("t"));
+  }
+
+  if (request == "achievementsets")
+  {
+    const std::optional<u32> game_id =
+      field("m").empty() ? StringUtil::FromChars<u32>(field("g")) : store.GameIdFor(field("m"));
+    return game_id.has_value() ? store.LoadSet(game_id.value()) : std::nullopt;
+  }
+
+  if (request == "gameid")
+  {
+    const std::optional<u32> game_id = store.GameIdFor(field("m"));
+    return game_id.has_value() ? std::optional<std::string>(fmt::format(R"({{"Success":true,"GameID":{}}})",
+                                                                        game_id.value())) :
+                                 std::nullopt;
+  }
+
+  if (request == "startsession")
+  {
+    const std::optional<u32> game_id = StringUtil::FromChars<u32>(field("g"));
+    if (!game_id.has_value())
+      return std::nullopt;
+
+    std::vector<Record> waiting;
+    for (const Record& record : store.Records())
+    {
+      if (record.kind == Record::Kind::Unlock && StringUtil::EqualNoCase(record.user, field("u")) &&
+          store.GameIdFor(record.game_hash) == game_id)
+      {
+        waiting.push_back(record);
+      }
+    }
+    return BuildSessionAnswer(store.LoadSession(field("u"), game_id.value()).value_or(std::string()), waiting, now);
+  }
+
+  return std::nullopt;
+}
+
 std::string BuildSessionAnswer(std::string_view saved, const std::vector<Record>& waiting, s64 now)
 {
   std::vector<std::pair<u32, s64>> hardcore;

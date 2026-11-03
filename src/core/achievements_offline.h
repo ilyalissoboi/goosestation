@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -45,5 +46,19 @@ void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_vi
 
 /// Forgets which records have a request out: rcheevos's retries ended (a sign-out).
 void ForgetInFlight();
+
+/// The running game started offline, from what was saved online: its sign-in or its set was answered from the store.
+bool InSession();
+void BeginSession();
+void EndSession();
+
+/// The answer for a request that couldn't reach the server, from what was saved online (OfflineAnswer()), for the
+/// game booting (booting_hash); nullopt when there's none.
+std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,
+                                         s64 now);
+
+/// Saves a real sign-in's account, for a later one built offline: its name, display name, avatar and points.
+void RememberUser(std::string_view user, std::string_view display_name, std::string_view avatar_url, u32 score,
+                  u32 softcore_score);
 
 } // namespace AchievementsOffline

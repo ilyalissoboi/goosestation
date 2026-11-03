@@ -50,6 +50,7 @@ struct GameSummary
   bool has_achievements;
   bool has_leaderboards;
   bool hardcore;
+  bool offline; // started without a connection, from the set saved at an online start
 };
 GameSummary GetGameSummary();
 

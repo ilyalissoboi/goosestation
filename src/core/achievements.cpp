@@ -833,10 +833,31 @@ void Achievements::ClientServerCall(const rc_api_request_t* request, rc_client_s
   HTTPDownloader::Request::Callback hd_callback =
     [callback, callback_data, form = std::move(form)](s32 status_code, const std::string& content_type,
                                                       HTTPDownloader::Request::Data data) {
+      std::optional<std::string> offline_answer;
       if (!form.empty())
       {
         AchievementsOffline::OnAnswer(
           form, status_code, std::string_view(reinterpret_cast<const char*>(data.data()), data.size()));
+
+        // Without a connection, a game whose set was saved online starts from it, in casual: the sign-in is built
+        // from the saved account and the token in memory, the set and session from what was saved.
+        if (status_code <= 0 && status_code != HTTPDownloader::HTTP_STATUS_CANCELLED)
+        {
+          offline_answer = AchievementsOffline::AnswerOffline(form, s_game_hash, static_cast<s64>(std::time(nullptr)));
+          const auto request = form.find("r");
+          if (offline_answer.has_value() && !AchievementsOffline::InSession() && request != form.end() &&
+              (request->second == "login2" || request->second == "achievementsets"))
+          {
+            INFO_LOG("Starting offline, from the set saved for '{}'.", s_game_hash);
+            AchievementsOffline::BeginSession();
+            SetHardcoreMode(false, false);
+          }
+        }
+      }
+      if (offline_answer.has_value())
+      {
+        status_code = HTTPDownloader::HTTP_STATUS_OK;
+        data.assign(offline_answer->begin(), offline_answer->end());
       }
 
       rc_api_server_response_t rr;
@@ -1028,6 +1049,17 @@ void Achievements::GameChanged(const std::string& path, CDImage* image)
     return;
 
   IdentifyGame(path, image);
+
+  // A game started offline takes its built sign-in with it: the next game start, or a network coming back, signs in
+  // for real. The stored username and token stay.
+  if (path.empty() && AchievementsOffline::InSession())
+  {
+    INFO_LOG("The offline game stopped; signing out of its offline sign-in.");
+    AchievementsOffline::EndSession();
+    rc_client_logout(s_client);
+    AchievementsOffline::ForgetInFlight();
+    Host::OnAchievementsRefreshed();
+  }
 }
 
 void Achievements::IdentifyGame(const std::string& path, CDImage* image)
@@ -1763,8 +1795,9 @@ bool Achievements::ResetHardcoreMode(bool is_booting)
 
   // If we're not logged in, don't apply hardcore mode restrictions.
   // If we later log in, we'll start with it off anyway.
-  const bool wanted_hardcore_mode =
-    (IsLoggedInOrLoggingIn() || s_load_game_request) && g_settings.achievements_hardcore_mode;
+  // A game started offline stays casual until it stops, reset or not.
+  const bool wanted_hardcore_mode = (IsLoggedInOrLoggingIn() || s_load_game_request) &&
+                                    g_settings.achievements_hardcore_mode && !AchievementsOffline::InSession();
   if (s_hardcore_mode == wanted_hardcore_mode)
     return false;
 
@@ -2100,7 +2133,8 @@ void Achievements::ClientLoginWithTokenCallback(int result, const char* error_me
   }
 
   ShowLoginSuccess(client);
-  SendWaitingRecords();
+  if (!AchievementsOffline::InSession())
+    SendWaitingRecords();
 
   if (System::IsValid())
     BeginLoadGame();
@@ -2122,6 +2156,13 @@ void Achievements::ShowLoginSuccess(const rc_client_t* client)
   const rc_client_user_t* user = rc_client_get_user_info(client);
   if (!user)
     return;
+
+  // A real sign-in's account is kept, for one built when a game starts offline (not that one's: it's the saved one).
+  if (!AchievementsOffline::InSession())
+  {
+    AchievementsOffline::RememberUser(user->username, user->display_name ? user->display_name : user->username,
+                                      user->avatar_url ? user->avatar_url : "", user->score, user->score_softcore);
+  }
 
   Host::OnAchievementsLoginSuccess(user->username, user->score, user->score_softcore, user->num_unread_messages);
 
@@ -2257,6 +2298,9 @@ Achievements::AndroidSignIn Achievements::GetAndroidSignIn()
   const auto lock = GetLock();
   if (!IsActive() || !s_client)
     return AndroidSignIn::SignedOut;
+  // A game started offline is signed in from what was saved: the player isn't connected.
+  if (AchievementsOffline::InSession())
+    return AndroidSignIn::NotConnected;
   if (rc_client_get_user_info(s_client))
     return AndroidSignIn::SignedIn;
   if (s_login_request)

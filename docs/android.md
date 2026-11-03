@@ -1197,6 +1197,22 @@ in with their own account, with Ace Combat 3 (SLPS-02020).
 Not checked on the Thor: an unlock's card and chime (no unlock came in play), and portrait, which the Thor doesn't
 reach (`OrientationLayoutTest` covers it).
 
+### RetroAchievements without a connection (2026-11-03)
+
+The debug APK of `ec769a1f3` installed over the existing one (data kept), signed in already with the user's account,
+Hardcore off (left as the user had it), driven by key events. Ace Combat 3's M3U tile with **Start over**, each exit
+answered **Keep it**, so the resume state of 1 Nov 02:02 stayed as it was. Wi-Fi off and on with `svc wifi`.
+
+| Check | Result |
+| --- | --- |
+| An online start saves the set | Pass. `files/achievements/` held `hashes.json`, `sets/11308.json`, the session and the account. |
+| An offline start | Pass. Wi-Fi off: `Starting offline, from the set saved for '63e54a7f…'`; the menu's row read "1 of 141" and the Leaderboards tab "Not available offline". |
+| The offline game stops | Pass. `The offline game stopped; signing out of its offline sign-in.` |
+| Wi-Fi comes back in the library | Pass. `Signing in again as …` 5 s later, and `POST retroachievements.org/dorequest.php -> 200`. |
+| The resume state | Pass. `SLPS-02020_resume.sav` still 2026-11-01 02:02. |
+
+Not checked: the game's own picture (the screen capture can't read its surface), and an unlock earned offline.
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with

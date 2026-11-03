@@ -6,8 +6,8 @@ package io.github.ilyalissoboi.goosestation.core
 /**
  * The running game's RetroAchievements, as [NativeLibrary.getGameAchievements] reads them: its [status] (one of the
  * constants below), how many achievements and points are [unlocked] of the [total] (in hardcore, the hardcore ones),
- * whether it has achievements or leaderboards, whether hardcore mode is active, and whether it started [offline], from
- * the set saved at an online start (casual only).
+ * whether it has achievements or leaderboards, whether hardcore mode is active, whether it started [offline], from
+ * the set saved at an online start (casual only), and how many of its unlocks and entries are [waiting] to be sent.
  */
 class GameAchievements(
     val status: Int,
@@ -19,6 +19,7 @@ class GameAchievements(
     val hasLeaderboards: Boolean,
     val hardcore: Boolean,
     val offline: Boolean = false,
+    val waiting: Int = 0,
 ) {
     companion object {
         /** Achievements are off, or nobody is signed in. */

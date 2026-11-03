@@ -10,6 +10,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 class HTTPDownloader;
 struct rc_api_host_t;
@@ -56,6 +58,12 @@ void EndSession();
 /// game booting (booting_hash); nullopt when there's none.
 std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,
                                          s64 now);
+
+/// How many records are waiting, for each user with any (as first written).
+std::vector<std::pair<std::string, u32>> CountsByUser();
+
+/// How many of user's records are for the game of hash: that disc's, or any disc of the same game seen online.
+u32 CountForGame(std::string_view user, std::string_view hash);
 
 /// Saves a real sign-in's account, for a later one built offline: its name, display name, avatar and points.
 void RememberUser(std::string_view user, std::string_view display_name, std::string_view avatar_url, u32 score,

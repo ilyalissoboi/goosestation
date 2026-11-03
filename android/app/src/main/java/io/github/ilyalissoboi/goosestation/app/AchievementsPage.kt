@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
+import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -28,6 +29,10 @@ class AchievementsPage(
 ) {
     /** The account, as last read; null until it is. */
     var account by mutableStateOf<AchievementsAccount?>(null)
+        private set
+
+    /** What's waiting to be sent, read with the account. */
+    var queue by mutableStateOf(AchievementsQueue.NONE)
         private set
 
     /** The switches, as last read or changed; null until read. */
@@ -56,8 +61,8 @@ class AchievementsPage(
         settings = null
         scope.launch {
             val (read, switches) =
-                withContext(core) { api.getAchievementsAccount() to AchievementsSettings.load(coreSettings) }
-            account = read
+                withContext(core) { readAccount() to AchievementsSettings.load(coreSettings) }
+            show(read)
             settings = switches
         }
     }
@@ -74,10 +79,10 @@ class AchievementsPage(
             val (failure, read) =
                 withContext(core) {
                     val failure = api.signIn(username.trim(), password)
-                    failure to api.getAchievementsAccount()
+                    failure to readAccount()
                 }
             signingIn = false
-            account = read
+            show(read)
             if (failure == null) {
                 expired = false
             } else {
@@ -90,11 +95,12 @@ class AchievementsPage(
     fun signOut() {
         error = null
         scope.launch {
-            account =
+            show(
                 withContext(core) {
                     api.signOut()
-                    api.getAchievementsAccount()
-                }
+                    readAccount()
+                },
+            )
         }
     }
 
@@ -112,12 +118,20 @@ class AchievementsPage(
     /** The core's sign-in changed (it finished, or failed): reads the account again, once the page has read it. */
     fun refresh() {
         if (account == null || signingIn) return
-        scope.launch { account = withContext(core) { api.getAchievementsAccount() } }
+        scope.launch { show(withContext(core) { readAccount() }) }
     }
 
     /** The server rejected the stored token: the page says so until a sign-in works. */
     fun loginExpired() {
         expired = true
-        scope.launch { account = withContext(core) { api.getAchievementsAccount() } }
+        scope.launch { show(withContext(core) { readAccount() }) }
+    }
+
+    /** On [core]. */
+    private fun readAccount() = api.getAchievementsAccount() to api.getAchievementsQueue()
+
+    private fun show(read: Pair<AchievementsAccount, AchievementsQueue>) {
+        account = read.first
+        queue = read.second
     }
 }

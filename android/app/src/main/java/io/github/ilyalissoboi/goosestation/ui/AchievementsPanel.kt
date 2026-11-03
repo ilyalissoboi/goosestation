@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.ilyalissoboi.goosestation.app.AchievementQueueWords
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -187,7 +188,15 @@ fun AchievementsPanel(
             }
         }
         if (panel.tab == CheevoTab.Leaderboards) {
-            LeaderboardsTab(panel, actions, holder, keepFocus, switches, Modifier.weight(1f, fill = false))
+            LeaderboardsTab(
+                panel,
+                actions,
+                holder,
+                keepFocus,
+                switches,
+                game.offline,
+                Modifier.weight(1f, fill = false),
+            )
         }
         KeyHints(
             if (panel.tab == CheevoTab.Leaderboards && panel.open == null && rows) {
@@ -333,7 +342,7 @@ private fun AchievementRow(
 /**
  * The Leaderboards tab: the game's leaderboards, A opening one; or the one open, with its entries once they're in,
  * the player's own on `beak-soft` and focused. [holder] (the panel's heading) keeps the focus while nothing here can.
- * Back from a leaderboard focuses its row again.
+ * Back from a leaderboard focuses its row again. In a game started [offline], none can be fetched: the tab says so.
  */
 @Composable
 private fun LeaderboardsTab(
@@ -342,6 +351,7 @@ private fun LeaderboardsTab(
     holder: FocusRequester,
     keepFocus: () -> Unit,
     switches: Int,
+    offline: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
@@ -356,9 +366,9 @@ private fun LeaderboardsTab(
     val lastRow = remember { FocusRequester() }
     val rows = page?.let(LeaderboardRows::rows)
 
-    LaunchedEffect(open?.id, page != null, boards != null, switches) {
+    LaunchedEffect(open?.id, page != null, boards != null, switches, offline) {
         when {
-            open == null && boards.isNullOrEmpty() -> holder.requestFocus()
+            offline || (open == null && boards.isNullOrEmpty()) -> holder.requestFocus()
             open == null && boards!!.any { it.id == lastOpened } -> lastRow.requestFocus()
             open == null -> first.requestFocus()
             rows == null || rows.none { it is LeaderboardRow.Entry } -> holder.requestFocus()
@@ -371,6 +381,15 @@ private fun LeaderboardsTab(
         modifier = modifier.verticalScroll(rememberScrollState()).padding(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (offline) {
+            Text(
+                AchievementQueueWords.LEADERBOARDS_OFFLINE,
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.inkMuted,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+            return@Column
+        }
         if (open == null) {
             if (boards == null) Text("Loading…", style = MaterialTheme.typography.bodyLarge, color = colors.inkMuted)
             boards.orEmpty().forEachIndexed { index, board ->

@@ -187,6 +187,10 @@ void SetServerForTest(std::string host);
 /// server. On the CPU thread.
 void OnAndroidNetworkBack();
 
+/// An unlock now is earned without a connection: the game started offline, or rcheevos has one it hasn't got through.
+/// Takes the lock.
+bool IsAndroidOffline();
+
 /// For the instrumented tests only: the hash a game whose disc can't be hashed (a PS-EXE) gets, or none when empty.
 void SetGameHashForTest(std::string hash);
 

@@ -20,7 +20,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import io.github.ilyalissoboi.goosestation.app.AchievementQueueWords
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
+import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
@@ -43,7 +45,8 @@ const val EXPIRED_NOTE = "Your RetroAchievements sign-in has expired. Sign in ag
 /**
  * The Achievements page. Signed out ([account]'s state), the username and password fields and **Sign in**
  * ([onSignIn]), with [error] or the [expired] notice under them; [passwordCleared] changing clears the password.
- * Otherwise, who is signed in and **Sign out** ([onSignOut]). Then the [settings] switches, each change as the whole
+ * Otherwise, who is signed in and **Sign out** ([onSignOut]). Then what's waiting to be sent ([queue]): the account's
+ * own count, and each other account's, kept for it. Then the [settings] switches, each change as the whole
  * settings with that field changed ([onChange]). The username, or Sign out, is focused on opening; B or Back go back
  * ([onBack]).
  */
@@ -55,6 +58,7 @@ fun AchievementsScreen(
     error: String?,
     expired: Boolean,
     passwordCleared: Int,
+    queue: AchievementsQueue = AchievementsQueue.NONE,
     onSignIn: (username: String, password: String) -> Unit,
     onSignOut: () -> Unit,
     onChange: (AchievementsSettings) -> Unit,
@@ -112,12 +116,28 @@ fun AchievementsScreen(
                 } else {
                     Text(points(account), style = GooseStationTheme.type.mono, color = colors.inkMuted)
                 }
+                if (queue.own > 0) {
+                    Text(
+                        AchievementQueueWords.ownWaiting(queue.own),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.ink,
+                    )
+                }
             }
             ActionButton(
                 "Sign out",
                 onClick = onSignOut,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).focusRequester(first),
                 kind = ButtonKind.Ghost,
+            )
+        }
+        // Another account's records are sent only once it signs in again.
+        for ((user, count) in queue.others()) {
+            Text(
+                AchievementQueueWords.othersKept(user, count),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.inkMuted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
         SwitchRow(

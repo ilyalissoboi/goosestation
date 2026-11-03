@@ -406,6 +406,9 @@ object NativeLibrary {
     /** The RetroAchievements account and its sign-in. Waits for the core. */
     external fun getAchievementsAccount(): AchievementsAccount
 
+    /** The unlocks and leaderboard entries waiting to be sent, by account. Waits for the core. */
+    external fun getAchievementsQueue(): AchievementsQueue
+
     /**
      * Turns achievements on and signs in to RetroAchievements as [username], waiting for the server: null once signed
      * in, else why not, in the server's words or "Couldn't reach RetroAchievements". The password isn't kept; the

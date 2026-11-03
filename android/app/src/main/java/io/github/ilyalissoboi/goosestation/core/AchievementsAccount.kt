@@ -24,3 +24,20 @@ class AchievementsAccount(
         const val SIGNED_IN = 3
     }
 }
+
+/**
+ * The unlocks and leaderboard entries waiting to be sent, as [NativeLibrary.getAchievementsQueue] reads them: [own], the
+ * signed-in (or stored) account's, and each other account's ([otherUsers], with [otherCounts]), sent only once that
+ * account signs in again.
+ */
+class AchievementsQueue(
+    val own: Int,
+    val otherUsers: Array<String>,
+    val otherCounts: IntArray,
+) {
+    fun others(): List<Pair<String, Int>> = otherUsers.zip(otherCounts.toList())
+
+    companion object {
+        val NONE = AchievementsQueue(0, emptyArray(), IntArray(0))
+    }
+}

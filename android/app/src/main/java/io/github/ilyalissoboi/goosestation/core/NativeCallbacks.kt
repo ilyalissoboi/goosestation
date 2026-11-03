@@ -65,7 +65,8 @@ interface NativeCallbacks {
     /**
      * An achievement notice to show: its [key] says what it is (`achievement_unlock_<id>`, `achievement_mastery`,
      * `achievement_summary`, `leaderboard_<id>`), with its [title], [text], picture ([imagePath], a PNG, or empty),
-     * how long it shows, and an unlock's [points] (-1 otherwise).
+     * how long it shows, an unlock's [points] (-1 otherwise), and whether an unlock is [offline]: earned without a
+     * connection, so sent later.
      */
     fun onAchievementNotification(
         key: String,
@@ -74,6 +75,7 @@ interface NativeCallbacks {
         imagePath: String,
         seconds: Float,
         points: Int,
+        offline: Boolean,
     ) {}
 
     /** A short achievements message, such as losing the connection: [title], or [message] if it has none. */

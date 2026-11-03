@@ -309,7 +309,7 @@ void NotifyAchievementsLoginExpired();
 void NotifyAchievementsSent(u32 count);
 void NotifyAchievementRefused(std::string_view title);
 void NotifyAchievementNotification(std::string_view key, std::string_view title, std::string_view text,
-                                   std::string_view image_path, float seconds, s32 points);
+                                   std::string_view image_path, float seconds, s32 points, bool offline);
 void NotifyAchievementToast(std::string_view title, std::string_view message, float seconds);
 void NotifyAchievementIndicator(s32 kind, u32 id, bool shown, std::string_view text, std::string_view badge_path);
 void NotifyAchievementImage(std::string_view path);

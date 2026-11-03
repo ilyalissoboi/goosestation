@@ -77,4 +77,11 @@ class AchievementListsTest {
         assertEquals(listOf(3, 2), sections[1].achievements.map { it.id })
         assertEquals("Bucket 7", sections[1].label)
     }
+
+    @Test
+    fun rowCountsWhatsWaiting() {
+        val waiting = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false, waiting = 2)
+        assertEquals("14 of 40 · 2 to send", AchievementLists.rowStatus(waiting))
+        assertEquals("14 of 40", AchievementLists.rowStatus(game(GameAchievements.READY)))
+    }
 }

@@ -179,4 +179,11 @@ class OsdLayerTest {
 
         assertEquals(0, rule.onAllNodes(isFocusable()).fetchSemanticsNodes().size)
     }
+
+    @Test
+    fun cardShowsTheNote() {
+        showOverlay(unlock.copy(note = "Sent when you're online"))
+
+        rule.onNodeWithText("Sent when you're online").assertExists()
+    }
 }

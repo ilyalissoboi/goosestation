@@ -19,7 +19,9 @@ object AchievementLists {
             GameAchievements.LOADING -> "Loading…"
             GameAchievements.UNREACHABLE -> "Couldn't reach RetroAchievements"
             GameAchievements.NO_SET -> "No achievements for this game"
-            else -> if (game.hasAchievements) "${game.unlocked} of ${game.total}" else "Leaderboards"
+            else ->
+                (if (game.hasAchievements) "${game.unlocked} of ${game.total}" else "Leaderboards") +
+                    AchievementQueueWords.rowSuffix(game.waiting)
         }
 
     /**

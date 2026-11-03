@@ -368,6 +368,24 @@ std::optional<std::string> AnswerOffline(const std::map<std::string, std::string
   return s_store ? OfflineAnswer(*s_store, form, booting_hash, s_in_session, now) : std::nullopt;
 }
 
+std::vector<std::pair<std::string, u32>> CountsByUser()
+{
+  return s_store ? s_store->CountsByUser() : std::vector<std::pair<std::string, u32>>();
+}
+
+u32 CountForGame(std::string_view user, std::string_view hash)
+{
+  if (!s_store || user.empty() || hash.empty())
+    return 0;
+
+  const std::optional<u32> game_id = s_store->GameIdFor(hash);
+  return static_cast<u32>(
+    std::count_if(s_store->Records().begin(), s_store->Records().end(), [&](const Record& record) {
+      return StringUtil::EqualNoCase(record.user, user) &&
+             (record.game_hash == hash || (game_id.has_value() && s_store->GameIdFor(record.game_hash) == game_id));
+    }));
+}
+
 void RememberUser(std::string_view user, std::string_view display_name, std::string_view avatar_url, u32 score,
                   u32 softcore_score)
 {

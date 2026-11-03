@@ -1129,6 +1129,10 @@ void Achievements::IdentifyGame(const std::string& path, CDImage* image)
 void Achievements::BeginLoadGame()
 {
   ClearGameInfo();
+#ifdef __ANDROID__
+  // A new game's unlocks start out as sent; one that can't get through says so (HandleServerDisconnectedEvent()).
+  s_android_disconnected = false;
+#endif
 
   if (s_game_hash.empty())
   {
@@ -2344,6 +2348,12 @@ void Achievements::SetServerForTest(std::string host)
   // An empty host is RetroAchievements'. Not null: v12's rc_client_set_host() copies a null host's name.
   if (s_client)
     rc_client_set_host(s_client, s_server_host.c_str());
+}
+
+bool Achievements::IsAndroidOffline()
+{
+  const auto lock = GetLock();
+  return AchievementsOffline::InSession() || s_android_disconnected;
 }
 
 void Achievements::OnAndroidNetworkBack()

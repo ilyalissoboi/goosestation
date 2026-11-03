@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
+import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -51,7 +52,10 @@ class AchievementsScreenTest {
     private val changes = mutableListOf<AchievementsSettings>()
     private var backs = 0
 
-    private fun show(account: AchievementsAccount) {
+    private fun show(
+        account: AchievementsAccount,
+        queue: AchievementsQueue = AchievementsQueue.NONE,
+    ) {
         rule.setContent {
             var settings by remember { mutableStateOf(SWITCHES) }
             GooseStationTheme {
@@ -62,6 +66,7 @@ class AchievementsScreenTest {
                     error = null,
                     expired = false,
                     passwordCleared = 0,
+                    queue = queue,
                     onSignIn = { user, password -> signIns += user to password },
                     onSignOut = { signOuts++ },
                     onChange = {
@@ -182,5 +187,21 @@ class AchievementsScreenTest {
 
         assertEquals(1, backs)
         assertFalse(signOuts > 0)
+    }
+
+    @Test
+    fun ownRecordsAreCounted() {
+        show(NOT_CONNECTED, AchievementsQueue(2, emptyArray(), IntArray(0)))
+
+        rule.onNodeWithText("2 unlocks waiting to be sent").assertExists()
+    }
+
+    // Review Focus 3: another account's records stay, and the page says whose they are.
+    @Test
+    fun otherUsersRecordsAreShown() {
+        show(SIGNED_OUT, AchievementsQueue(0, arrayOf("swan"), intArrayOf(1)))
+
+        rule.onNodeWithText("1 unlock for swan is kept until swan signs in again").assertExists()
+        rule.onNodeWithText("waiting to be sent", substring = true).assertDoesNotExist()
     }
 }

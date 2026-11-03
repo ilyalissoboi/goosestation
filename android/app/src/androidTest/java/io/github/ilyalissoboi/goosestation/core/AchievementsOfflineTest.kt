@@ -434,12 +434,14 @@ class AchievementsOfflineTest {
         initialize(SIGNED_IN_SETTINGS)
         playing {
             server.unreachable = true
-            waitFor("the unlock on disk", 30) { queued().isNotEmpty() }
+            // The first send and rcheevos's immediate retry both fail: the next retry is scheduled, after the stop.
+            waitFor("two failed sends", 30) { server.awards().size >= 2 }
         }
 
         val before = server.awards().size
         server.unreachable = false
-        waitFor("rcheevos's retry", 60) { server.awards().drop(before).any { it.containsKey("o") } }
+        // rcheevos waits up to 120 s between retries.
+        waitFor("rcheevos's retry", 150) { server.awards().drop(before).any { it.containsKey("o") } }
         waitFor("the queue to empty") { queued().isEmpty() }
         Thread.sleep(2000)
         assertEquals(AchievementsAccount.SIGNED_IN, NativeLibrary.getAchievementsAccount().state)
@@ -470,6 +472,20 @@ class AchievementsOfflineTest {
             Thread.sleep(1000)
         }
         assertTrue(osdMessages.toString(), osdMessages.none { it.contains("Server error") })
+    }
+
+    // PR review: a token the server stops taking mid-game keeps the record and posts no refusal, so the core's own
+    // message is the one that says so.
+    @Test
+    fun aTokenRejectedDuringPlayIsStillSaid() {
+        initialize(SIGNED_IN_SETTINGS)
+
+        playing {
+            server.rejectAwards = true
+            waitFor("the core's message", 30) { osdMessages.any { it.contains("Server error") } }
+        }
+        assertTrue(refusals.isEmpty())
+        assertEquals(1, queued().size)
     }
 
     /** Writes what an online start of game [hash] would have saved: the account, the hash's game, and its set. */

@@ -1713,10 +1713,14 @@ void Achievements::HandleServerErrorEvent(const rc_client_event_t* event)
                 event->server_error->error_message ? event->server_error->error_message : "UNKNOWN");
   ERROR_LOG(message.c_str());
 
-  // An unlock or entry the server won't take is said by the queue's own message, which names it.
+  // An unlock or entry the queue has reported as refused is said by its own message, which names it. Anything else
+  // (a token the server no longer takes, kept for the next sign-in) is still said here.
   const std::string_view api = event->server_error->api ? event->server_error->api : "";
-  if (AchievementsOffline::IsEnabled() && (api == "award_achievement" || api == "submit_lboard_entry"))
+  if ((api == "award_achievement" || api == "submit_lboard_entry") &&
+      AchievementsOffline::TakeReportedRefusal(api == "submit_lboard_entry", event->server_error->related_id))
+  {
     return;
+  }
 
   Host::AddOSDMessage(std::move(message), Host::OSD_ERROR_DURATION);
 }

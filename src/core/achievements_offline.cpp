@@ -33,6 +33,9 @@ std::vector<Record> s_in_flight;
 // For each user (lower case), how many records that waited have been delivered since the user last had none.
 std::map<std::string, u32> s_sent;
 
+// rcheevos's requests whose refusal the queue reported, until the core's own server error event takes it.
+std::vector<std::pair<Record::Kind, u32>> s_reported_refusals;
+
 // The running game started offline (InSession()), and whether its sign-in was built from the store.
 bool s_in_session = false;
 bool s_built_sign_in = false;
@@ -272,6 +275,8 @@ void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::s
 
   const Record record = *found;
   const Outcome outcome = Classify(record.kind, status, body);
+  if (outcome == Outcome::Refused)
+    s_reported_refusals.emplace_back(record.kind, record.id);
   // Kept, but rcheevos won't try again: it's the module's to send, at the next sign-in, game start or network return.
   if (outcome == Outcome::Keep && !WillRcheevosRetry(record.kind, status, body))
     SetInFlight(record, false);
@@ -350,6 +355,16 @@ void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_vi
                            });
     rc_api_destroy_request(&request);
   }
+}
+
+bool TakeReportedRefusal(bool entry, u32 id)
+{
+  const auto it = std::find(s_reported_refusals.begin(), s_reported_refusals.end(),
+                            std::pair(entry ? Record::Kind::Entry : Record::Kind::Unlock, id));
+  if (it == s_reported_refusals.end())
+    return false;
+  s_reported_refusals.erase(it);
+  return true;
 }
 
 void ForgetInFlight()

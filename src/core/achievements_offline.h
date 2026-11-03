@@ -46,12 +46,19 @@ void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::s
 void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_view user, std::string_view token,
                  s64 now);
 
+/// Whether the server's answer to rcheevos's request for unlock (or entry) id was a refusal the queue has reported
+/// itself (Callbacks::refused): true once per refusal. A kept record (a token the server no longer takes) is false.
+bool TakeReportedRefusal(bool entry, u32 id);
+
 /// Forgets which records have a request out: rcheevos's retries ended (a sign-out).
 void ForgetInFlight();
 
 /// The running game started offline, from what was saved online: its sign-in or its set was answered from the store.
 bool InSession();
-void BeginSession();
+/// built_sign_in: the session's sign-in is built from the store (a real one may have come first, with only the set or
+/// the session answered from it).
+void BeginSession(bool built_sign_in);
+bool SignInIsBuilt();
 void EndSession();
 
 /// The answer for a request that couldn't reach the server, from what was saved online (OfflineAnswer()), for the

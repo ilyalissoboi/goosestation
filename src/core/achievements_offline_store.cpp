@@ -362,6 +362,15 @@ bool WriteFile(const std::string& path, std::string_view contents)
 
 // Reads one of the store's files: its object, if it's there, reads as JSON and has this format's version. A file that
 // is there but can't be read so is renamed <name>.damaged, replacing an older one.
+// The name a damaged file is set aside as, beside any set aside before it: <name>.damaged, then .damaged-2, ...
+std::string SetAsideName(const std::string& path)
+{
+  std::string name = path + ".damaged";
+  for (u32 i = 2; FileSystem::FileExists(name.c_str()); i++)
+    name = fmt::format("{}.damaged-{}", path, i);
+  return name;
+}
+
 std::optional<Json> ReadFile(const std::string& path)
 {
   if (!FileSystem::FileExists(path.c_str()))
@@ -372,10 +381,8 @@ std::optional<Json> ReadFile(const std::string& path)
   if (json.has_value() && json->type == Json::Type::Object && json->NumberAt("version") == FORMAT_VERSION)
     return json;
 
-  const std::string damaged = path + ".damaged";
+  const std::string damaged = SetAsideName(path);
   Error error;
-  if (FileSystem::FileExists(damaged.c_str()))
-    FileSystem::DeleteFile(damaged.c_str());
   if (FileSystem::RenamePath(path.c_str(), damaged.c_str(), &error))
     WARNING_LOG("{} couldn't be read, so it was set aside as {}.", Path::GetFileName(path), Path::GetFileName(damaged));
   else
@@ -432,7 +439,9 @@ Store::Store(std::string folder) : m_folder(std::move(folder))
   if (!FileSystem::DirectoryExists(m_folder.c_str()) && !FileSystem::CreateDirectory(m_folder.c_str(), true, &error))
     ERROR_LOG("Couldn't create the offline achievements folder: {}", error.GetDescription());
 
-  if (const std::optional<Json> queue = ReadFile(Path::Combine(m_folder, QUEUE_FILE)); queue.has_value())
+  const std::string queue_path = Path::Combine(m_folder, QUEUE_FILE);
+  bool skipped = false;
+  if (const std::optional<Json> queue = ReadFile(queue_path); queue.has_value())
   {
     const Json* records = queue->Find("records");
     if (records && records->type == Json::Type::Array)
@@ -451,6 +460,7 @@ Store::Store(std::string folder) : m_folder(std::move(folder))
             !score.has_value() || !time.has_value())
         {
           WARNING_LOG("Skipping a queued record that can't be read.");
+          skipped = true;
           continue;
         }
 
@@ -460,6 +470,15 @@ Store::Store(std::string folder) : m_folder(std::move(folder))
                                    item.StringAt("title").value_or(std::string()), true});
       }
     }
+  }
+
+  // The next save drops a record that couldn't be read: the file as it was is kept beside it first.
+  if (skipped)
+  {
+    const std::optional<std::string> contents = FileSystem::ReadFileToString(queue_path.c_str());
+    const std::string copy = SetAsideName(queue_path);
+    if (contents.has_value() && WriteFile(copy, contents.value()))
+      WARNING_LOG("The queue as it was is kept as {}.", Path::GetFileName(copy));
   }
 
   LoadHashes();
@@ -630,6 +649,12 @@ bool Store::SaveSet(u32 game_id, std::string_view body)
   const std::string directory = Path::Combine(m_folder, "sets");
   return FileSystem::EnsureDirectoryExists(directory.c_str(), true) &&
          WriteFile(Path::Combine(directory, fmt::format("{}.json", game_id)), BodyFile(body));
+}
+
+bool Store::HasSet(u32 game_id) const
+{
+  return FileSystem::FileExists(
+    Path::Combine(Path::Combine(m_folder, "sets"), fmt::format("{}.json", game_id)).c_str());
 }
 
 std::optional<std::string> Store::LoadSet(u32 game_id) const
@@ -803,7 +828,7 @@ std::optional<std::string> OfflineAnswer(const Store& store, const std::map<std:
     if (in_session || field("t").empty() || booting_hash.empty())
       return std::nullopt;
     const std::optional<u32> game_id = store.GameIdFor(booting_hash);
-    if (!game_id.has_value() || !store.LoadSet(game_id.value()).has_value())
+    if (!game_id.has_value() || !store.HasSet(game_id.value()))
       return std::nullopt;
     const std::optional<UserInfo> user = store.LoadUser(field("u"));
     if (!user.has_value())

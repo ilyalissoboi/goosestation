@@ -33,8 +33,12 @@ std::vector<Record> s_in_flight;
 // For each user (lower case), how many records that waited have been delivered since the user last had none.
 std::map<std::string, u32> s_sent;
 
-// The running game started offline (InSession()).
+// rcheevos's requests whose refusal the queue reported, until the core's own server error event takes it.
+std::vector<std::pair<Record::Kind, u32>> s_reported_refusals;
+
+// The running game started offline (InSession()), and whether its sign-in was built from the store.
 bool s_in_session = false;
+bool s_built_sign_in = false;
 
 std::string_view Field(const std::map<std::string, std::string>& form, const char* name)
 {
@@ -121,6 +125,19 @@ std::string LowerUser(std::string_view user)
   return lower;
 }
 
+/// Once a user has nothing left waiting, says how many of their records that waited were delivered, if any.
+void ReportIfAllSent(std::string_view user)
+{
+  const auto it = s_sent.find(LowerUser(user));
+  if (it == s_sent.end() || s_store->CountFor(user) != 0)
+    return;
+
+  const u32 count = it->second;
+  s_sent.erase(it);
+  if (s_callbacks.sent)
+    s_callbacks.sent(count);
+}
+
 /// What the server's answer means for a waiting record.
 void Settle(const Record& record, Outcome outcome)
 {
@@ -128,22 +145,13 @@ void Settle(const Record& record, Outcome outcome)
   switch (outcome)
   {
     case Outcome::Delivered:
-    {
       DEV_LOG("The server has {} {}.", what, record.id);
-      const std::string user = LowerUser(record.user);
       if (record.waited)
-        s_sent[user]++;
+        s_sent[LowerUser(record.user)]++;
       s_store->Remove(record);
       SetInFlight(record, false);
-      if (const auto it = s_sent.find(user); it != s_sent.end() && s_store->CountFor(user) == 0)
-      {
-        const u32 count = it->second;
-        s_sent.erase(it);
-        if (s_callbacks.sent)
-          s_callbacks.sent(count);
-      }
+      ReportIfAllSent(record.user);
       break;
-    }
 
     case Outcome::Refused:
       WARNING_LOG("The server refused {} {}; it's dropped.", what, record.id);
@@ -151,6 +159,7 @@ void Settle(const Record& record, Outcome outcome)
       SetInFlight(record, false);
       if (s_callbacks.refused)
         s_callbacks.refused(record.title);
+      ReportIfAllSent(record.user);
       break;
 
     case Outcome::Keep:
@@ -266,6 +275,8 @@ void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::s
 
   const Record record = *found;
   const Outcome outcome = Classify(record.kind, status, body);
+  if (outcome == Outcome::Refused)
+    s_reported_refusals.emplace_back(record.kind, record.id);
   // Kept, but rcheevos won't try again: it's the module's to send, at the next sign-in, game start or network return.
   if (outcome == Outcome::Keep && !WillRcheevosRetry(record.kind, status, body))
     SetInFlight(record, false);
@@ -346,6 +357,16 @@ void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_vi
   }
 }
 
+bool TakeReportedRefusal(bool entry, u32 id)
+{
+  const auto it = std::find(s_reported_refusals.begin(), s_reported_refusals.end(),
+                            std::pair(entry ? Record::Kind::Entry : Record::Kind::Unlock, id));
+  if (it == s_reported_refusals.end())
+    return false;
+  s_reported_refusals.erase(it);
+  return true;
+}
+
 void ForgetInFlight()
 {
   s_in_flight.clear();
@@ -356,14 +377,21 @@ bool InSession()
   return s_in_session;
 }
 
-void BeginSession()
+void BeginSession(bool built_sign_in)
 {
   s_in_session = true;
+  s_built_sign_in = built_sign_in;
+}
+
+bool SignInIsBuilt()
+{
+  return s_in_session && s_built_sign_in;
 }
 
 void EndSession()
 {
   s_in_session = false;
+  s_built_sign_in = false;
 }
 
 std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,

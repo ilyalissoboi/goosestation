@@ -199,7 +199,7 @@ fun AchievementsPanel(
             )
         }
         KeyHints(
-            if (panel.tab == CheevoTab.Leaderboards && panel.open == null && rows) {
+            if (panel.tab == CheevoTab.Leaderboards && panel.open == null && rows && !game.offline) {
                 listOfNotNull(
                     KeyHint(PadGlyphs.confirm, "Open"),
                     if (twoTabs) KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Switch") else null,

@@ -492,3 +492,36 @@ TEST(AchievementsOfflineStore, RcheevosRetriesOnlyWhatItCan)
     EXPECT_TRUE(AchievementsOffline::WillRcheevosRetry(kind, -1, ""));
   }
 }
+
+// A second damaged queue is set aside beside the first, not over it.
+TEST(AchievementsOfflineStore, DamagedFilesAreAllKept)
+{
+  const TempDirectory tmp;
+  const std::string queue = tmp.PathFor("queue.json");
+  ASSERT_TRUE(FileSystem::WriteStringToFile(queue.c_str(), "first"));
+  {
+    const Store store(tmp.GetPath());
+  }
+  ASSERT_TRUE(FileSystem::WriteStringToFile(queue.c_str(), "second"));
+  {
+    const Store store(tmp.GetPath());
+  }
+
+  EXPECT_EQ(FileSystem::ReadFileToString(tmp.PathFor("queue.json.damaged").c_str()), "first");
+  EXPECT_EQ(FileSystem::ReadFileToString(tmp.PathFor("queue.json.damaged-2").c_str()), "second");
+}
+
+// A queue with one record that can't be read keeps the others, and a copy of the file as it was.
+TEST(AchievementsOfflineStore, UnreadableRecordKeepsACopy)
+{
+  const TempDirectory tmp;
+  const std::string contents =
+    R"({"version":1,"records":[{"kind":"unlock","user":"goose","hash":"h","id":101,"hardcore":false,"score":0,)"
+    R"("time":5,"title":"Ace Pilot"},{"kind":"mystery","user":"goose"}]})";
+  ASSERT_TRUE(FileSystem::WriteStringToFile(tmp.PathFor("queue.json").c_str(), contents));
+
+  const Store store(tmp.GetPath());
+  ASSERT_EQ(store.Records().size(), 1u);
+  EXPECT_EQ(store.Records()[0].id, 101u);
+  EXPECT_EQ(FileSystem::ReadFileToString(tmp.PathFor("queue.json.damaged").c_str()), contents);
+}

@@ -4728,7 +4728,8 @@ static void rc_client_award_achievement_callback(const rc_api_server_response_t*
             ach_data->hardcore ? award_achievement_response.new_player_score : award_achievement_response.new_player_score_softcore);
       }
 
-      if (award_achievement_response.achievements_remaining == 0) {
+      /* GooseStation: a retry can complete after the game unloaded (as upstream's db8ca2e62, rcheevos#570) */
+      if (award_achievement_response.achievements_remaining == 0 && ach_data->client->game) {
         rc_client_subset_info_t* subset;
         for (subset = ach_data->client->game->subsets; subset; subset = subset->next) {
           if (subset->mastery == RC_CLIENT_MASTERY_STATE_NONE &&

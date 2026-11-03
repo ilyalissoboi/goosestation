@@ -245,15 +245,6 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
     return false;
   }
 
-  // Unlocks and entries waiting for the server, and what a game needs to start offline: in the app's own storage,
-  // never in the data root, which is mirrored.
-  AchievementsOffline::Enable(Path::Canonicalize(achievements_folder),
-                              AchievementsOffline::Callbacks{
-                                .changed = []() { Host::OnAchievementsRefreshed(); },
-                                .refused = [](std::string_view title) { NotifyAchievementRefused(title); },
-                                .sent = [](u32 count) { NotifyAchievementsSent(count); },
-                              });
-
   // The settings layers can only be set once, and the core's startup only run once: after a failure from here on, a
   // later call can't retry.
   if (s_startup_attempted)
@@ -262,6 +253,15 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
     return false;
   }
   s_startup_attempted = true;
+
+  // Unlocks and entries waiting for the server, and what a game needs to start offline: in the app's own storage,
+  // never in the data root, which is mirrored.
+  AchievementsOffline::Enable(Path::Canonicalize(achievements_folder),
+                              AchievementsOffline::Callbacks{
+                                .changed = []() { Host::OnAchievementsRefreshed(); },
+                                .refused = [](std::string_view title) { NotifyAchievementRefused(title); },
+                                .sent = [](u32 count) { NotifyAchievementsSent(count); },
+                              });
 
   if (!InitializeConfig(error))
     return false;

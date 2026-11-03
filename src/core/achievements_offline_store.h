@@ -56,7 +56,8 @@ class Store
 {
 public:
   /// Creates the folder if it isn't there, and loads the queue. A queue that can't be read is renamed
-  /// queue.json.damaged, and the store starts empty.
+  /// queue.json.damaged (or .damaged-2, ... beside older ones), and the store starts empty; one with a record that
+  /// can't be read keeps the others, and a copy of the file as it was.
   explicit Store(std::string folder);
 
   const std::vector<Record>& Records() const { return m_records; }
@@ -84,6 +85,7 @@ public:
 
   bool SaveSet(u32 game_id, std::string_view body);
   std::optional<std::string> LoadSet(u32 game_id) const;
+  bool HasSet(u32 game_id) const;
 
   bool SaveSession(std::string_view user, u32 game_id, std::string_view body);
   std::optional<std::string> LoadSession(std::string_view user, u32 game_id) const;

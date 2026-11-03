@@ -57,6 +57,7 @@ class AchievementsOfflineTest {
     private val sent = CopyOnWriteArrayList<Int>()
     private val refusals = CopyOnWriteArrayList<String>()
     private val expired = AtomicInteger()
+    private val osdMessages = CopyOnWriteArrayList<String>()
 
     @Before
     fun setUp() {
@@ -86,6 +87,15 @@ class AchievementsOfflineTest {
 
                 override fun onAchievementsLoginExpired() {
                     expired.incrementAndGet()
+                }
+
+                override fun onOsdMessage(
+                    key: String,
+                    text: String,
+                    seconds: Float,
+                    icon: ArgbImage?,
+                ) {
+                    osdMessages += text
                 }
             },
         )
@@ -278,6 +288,9 @@ class AchievementsOfflineTest {
             assertTrue("offline", NativeLibrary.getGameAchievements().offline)
             assertFalse("casual", NativeLibrary.isHardcoreActive())
         }
+
+        // The sign-in was real, so it outlives the game: only one built from the store goes at the stop.
+        assertEquals(AchievementsAccount.SIGNED_IN, NativeLibrary.getAchievementsAccount().state)
     }
 
     // Review Focus 4: a reset can't bring hardcore back in a game started offline.
@@ -414,6 +427,51 @@ class AchievementsOfflineTest {
         waitFor("the queue to empty") { queued().isEmpty() }
     }
 
+    // A retried unlock that masters the set (the fake answers none remaining) after its game stopped: rcheevos read the
+    // game that had gone, and the app crashed.
+    @Test
+    fun aMasteringRetryAfterTheGameStoppedIsDelivered() {
+        initialize(SIGNED_IN_SETTINGS)
+        playing {
+            server.unreachable = true
+            waitFor("the unlock on disk", 30) { queued().isNotEmpty() }
+        }
+
+        val before = server.awards().size
+        server.unreachable = false
+        waitFor("rcheevos's retry", 60) { server.awards().drop(before).any { it.containsKey("o") } }
+        waitFor("the queue to empty") { queued().isEmpty() }
+        Thread.sleep(2000)
+        assertEquals(AchievementsAccount.SIGNED_IN, NativeLibrary.getAchievementsAccount().state)
+    }
+
+    // When the last of a user's records is refused, the ones delivered before it are still reported, once.
+    @Test
+    fun theSentCountIsReportedWhenTheLastRecordIsRefused() {
+        server.refused += ACHIEVEMENT_ID
+        seed(unlockRecord(id = 102), unlockRecord())
+        initialize(SIGNED_IN_SETTINGS)
+
+        waitFor("the refusal") { refusals.isNotEmpty() }
+        waitFor("the queue to empty") { queued().isEmpty() }
+        waitFor("the sent report") { sent.isNotEmpty() }
+        Thread.sleep(1000)
+        assertEquals(listOf(1), sent.toList())
+    }
+
+    // A refusal during play is said once, by the app: not again as the core's "Server error".
+    @Test
+    fun aRefusalDuringPlayIsSaidOnce() {
+        server.refused += ACHIEVEMENT_ID
+        initialize(SIGNED_IN_SETTINGS)
+
+        playing {
+            waitFor("the refusal", 30) { refusals.isNotEmpty() }
+            Thread.sleep(1000)
+        }
+        assertTrue(osdMessages.toString(), osdMessages.none { it.contains("Server error") })
+    }
+
     /** Writes what an online start of game [hash] would have saved: the account, the hash's game, and its set. */
     private fun seedSavedGame(hash: String) {
         File(folder, "users").mkdirs()
@@ -436,7 +494,8 @@ class AchievementsOfflineTest {
     private fun unlockRecord(
         user: String = USER,
         ageSeconds: Long = 120,
-    ) = """{"kind":"unlock","user":"$user","hash":"$GAME_HASH","id":$ACHIEVEMENT_ID,"hardcore":false,""" +
+        id: Int = ACHIEVEMENT_ID,
+    ) = """{"kind":"unlock","user":"$user","hash":"$GAME_HASH","id":$id,"hardcore":false,""" +
         """"score":0,"time":${now() - ageSeconds},"title":"$ACHIEVEMENT_TITLE"}"""
 
     private fun entryRecord(ageSeconds: Long = 120) =

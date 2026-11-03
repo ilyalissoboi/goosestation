@@ -33,8 +33,9 @@ std::vector<Record> s_in_flight;
 // For each user (lower case), how many records that waited have been delivered since the user last had none.
 std::map<std::string, u32> s_sent;
 
-// The running game started offline (InSession()).
+// The running game started offline (InSession()), and whether its sign-in was built from the store.
 bool s_in_session = false;
+bool s_built_sign_in = false;
 
 std::string_view Field(const std::map<std::string, std::string>& form, const char* name)
 {
@@ -121,6 +122,19 @@ std::string LowerUser(std::string_view user)
   return lower;
 }
 
+/// Once a user has nothing left waiting, says how many of their records that waited were delivered, if any.
+void ReportIfAllSent(std::string_view user)
+{
+  const auto it = s_sent.find(LowerUser(user));
+  if (it == s_sent.end() || s_store->CountFor(user) != 0)
+    return;
+
+  const u32 count = it->second;
+  s_sent.erase(it);
+  if (s_callbacks.sent)
+    s_callbacks.sent(count);
+}
+
 /// What the server's answer means for a waiting record.
 void Settle(const Record& record, Outcome outcome)
 {
@@ -128,22 +142,13 @@ void Settle(const Record& record, Outcome outcome)
   switch (outcome)
   {
     case Outcome::Delivered:
-    {
       DEV_LOG("The server has {} {}.", what, record.id);
-      const std::string user = LowerUser(record.user);
       if (record.waited)
-        s_sent[user]++;
+        s_sent[LowerUser(record.user)]++;
       s_store->Remove(record);
       SetInFlight(record, false);
-      if (const auto it = s_sent.find(user); it != s_sent.end() && s_store->CountFor(user) == 0)
-      {
-        const u32 count = it->second;
-        s_sent.erase(it);
-        if (s_callbacks.sent)
-          s_callbacks.sent(count);
-      }
+      ReportIfAllSent(record.user);
       break;
-    }
 
     case Outcome::Refused:
       WARNING_LOG("The server refused {} {}; it's dropped.", what, record.id);
@@ -151,6 +156,7 @@ void Settle(const Record& record, Outcome outcome)
       SetInFlight(record, false);
       if (s_callbacks.refused)
         s_callbacks.refused(record.title);
+      ReportIfAllSent(record.user);
       break;
 
     case Outcome::Keep:
@@ -356,14 +362,21 @@ bool InSession()
   return s_in_session;
 }
 
-void BeginSession()
+void BeginSession(bool built_sign_in)
 {
   s_in_session = true;
+  s_built_sign_in = built_sign_in;
+}
+
+bool SignInIsBuilt()
+{
+  return s_in_session && s_built_sign_in;
 }
 
 void EndSession()
 {
   s_in_session = false;
+  s_built_sign_in = false;
 }
 
 std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,

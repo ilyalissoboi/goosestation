@@ -51,7 +51,10 @@ void ForgetInFlight();
 
 /// The running game started offline, from what was saved online: its sign-in or its set was answered from the store.
 bool InSession();
-void BeginSession();
+/// built_sign_in: the session's sign-in is built from the store (a real one may have come first, with only the set or
+/// the session answered from it).
+void BeginSession(bool built_sign_in);
+bool SignInIsBuilt();
 void EndSession();
 
 /// The answer for a request that couldn't reach the server, from what was saved online (OfflineAnswer()), for the

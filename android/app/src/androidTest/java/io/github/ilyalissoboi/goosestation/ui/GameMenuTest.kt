@@ -578,6 +578,8 @@ class GameMenuTest {
 
         rule.onNodeWithText("Not available offline").assertExists()
         rule.onNodeWithText("Sunny Flight").assertDoesNotExist()
+        // Nothing can be opened offline, so the hints don't offer it.
+        rule.onNodeWithContentDescription("Open", substring = true).assertDoesNotExist()
         press(Key.ButtonA)
         assertTrue(calls.none { it.startsWith("openLeaderboard") })
     }

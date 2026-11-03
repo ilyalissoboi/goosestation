@@ -852,7 +852,7 @@ void Achievements::ClientServerCall(const rc_api_request_t* request, rc_client_s
                request->second == "startsession"))
           {
             INFO_LOG("Starting offline, from the set saved for '{}'.", s_game_hash);
-            AchievementsOffline::BeginSession();
+            AchievementsOffline::BeginSession(request->second == "login2");
             SetHardcoreMode(false, false);
           }
         }
@@ -1053,14 +1053,18 @@ void Achievements::GameChanged(const std::string& path, CDImage* image)
 
   IdentifyGame(path, image);
 
-  // A game started offline takes its built sign-in with it: the next game start, or a network coming back, signs in
-  // for real. The stored username and token stay.
+  // A game started offline takes a sign-in built from the store with it: the next game start, or a network coming
+  // back, signs in for real. A real sign-in stays. The stored username and token stay either way.
   if (path.empty() && AchievementsOffline::InSession())
   {
-    INFO_LOG("The offline game stopped; signing out of its offline sign-in.");
+    const bool built = AchievementsOffline::SignInIsBuilt();
     AchievementsOffline::EndSession();
-    rc_client_logout(s_client);
-    AchievementsOffline::ForgetInFlight();
+    if (built)
+    {
+      INFO_LOG("The offline game stopped; signing out of its offline sign-in.");
+      rc_client_logout(s_client);
+      AchievementsOffline::ForgetInFlight();
+    }
     Host::OnAchievementsRefreshed();
   }
 }
@@ -1216,8 +1220,8 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
   else if (result == RC_LOGIN_REQUIRED)
   {
 #ifdef __ANDROID__
-    // Nothing asks again mid-game on Android: with the sign-in over and failed, the game runs without achievements,
-    // and so without hardcore.
+    // With the sign-in over and failed, the game runs without achievements, and so without hardcore. A later sign-in
+    // (a network coming back) loads the set, in casual: hardcore can't come back without a reset.
     if (!s_login_request)
       DisableHardcoreMode();
 #endif
@@ -1708,6 +1712,12 @@ void Achievements::HandleServerErrorEvent(const rc_client_event_t* event)
                 event->server_error->api ? event->server_error->api : "UNKNOWN",
                 event->server_error->error_message ? event->server_error->error_message : "UNKNOWN");
   ERROR_LOG(message.c_str());
+
+  // An unlock or entry the server won't take is said by the queue's own message, which names it.
+  const std::string_view api = event->server_error->api ? event->server_error->api : "";
+  if (AchievementsOffline::IsEnabled() && (api == "award_achievement" || api == "submit_lboard_entry"))
+    return;
+
   Host::AddOSDMessage(std::move(message), Host::OSD_ERROR_DURATION);
 }
 
@@ -2306,7 +2316,7 @@ Achievements::AndroidSignIn Achievements::GetAndroidSignIn()
   if (!IsActive() || !s_client)
     return AndroidSignIn::SignedOut;
   // A game started offline is signed in from what was saved: the player isn't connected.
-  if (AchievementsOffline::InSession())
+  if (AchievementsOffline::SignInIsBuilt())
     return AndroidSignIn::NotConnected;
   if (rc_client_get_user_info(s_client))
     return AndroidSignIn::SignedIn;

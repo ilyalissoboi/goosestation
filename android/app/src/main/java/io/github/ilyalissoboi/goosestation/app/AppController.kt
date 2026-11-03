@@ -180,8 +180,8 @@ object AppController : NativeCallbacks {
     /** An import copied images before the core started: the overrides they leave stale are dropped once it has. */
     private var biosOverridesToCheck = false
 
-    /** initialize() succeeded: from then on, starts are resumes. */
-    private var coreStarted = false
+    /** initialize() succeeded: from then on, starts are resumes. Read off the main thread too (NetworkWatch). */
+    @Volatile private var coreStarted = false
 
     /** The cold-start sequence is under way: the data folder can't change until it's done. */
     private var coldStarting = false

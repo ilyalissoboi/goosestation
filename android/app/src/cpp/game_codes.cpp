@@ -3,6 +3,7 @@
 
 #include "game_codes.h"
 
+#include "core/achievements.h"
 #include "core/cheats.h"
 #include "core/settings.h"
 #include "core/system.h"
@@ -171,6 +172,13 @@ void Apply()
   if (System::IsShutdown() || s_codes.GetCodeCount() == 0)
     return;
 
+  // None applies in hardcore mode (Host::OnAchievementsHardcoreModeChanged() applies them once it's off).
+  if (Achievements::IsHardcoreModeActive())
+  {
+    System::SetCheatList(nullptr);
+    return;
+  }
+
   System::SetCheatList(std::make_unique<CheatList>(s_codes));
 }
 
@@ -247,6 +255,8 @@ std::optional<std::string> ApplyOnce(u32 index)
     return std::string("This code isn't applied by hand.");
   if (!System::IsValid())
     return std::string("No game is running.");
+  if (Achievements::IsHardcoreModeActive())
+    return std::string("Patch codes are off in hardcore mode.");
 
   code.Apply();
   return std::nullopt;

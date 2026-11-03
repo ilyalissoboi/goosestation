@@ -19,13 +19,19 @@ struct ANativeWindow;
 
 /// The Android host: the core's Host:: functions, the settings, the game's window and the input queue. The JNI bridge
 /// calls the functions below from the app's threads; the core itself only runs on the CPU thread (emu_thread.h).
+namespace AchievementsBridge {
+struct LeaderboardPage;
+}
+
 namespace AndroidHost {
 
 /// Sets the folders, loads settings.ini (defaults when it's missing or from another version, adapted when it's from
 /// another install: AdaptForeignSettings()) and starts the CPU thread. The BIOS images are read from bios_dir, whatever
-/// settings.ini says. Calling it again once it succeeded does nothing and returns true.
+/// settings.ini says. achievements_token is the RetroAchievements login token the app stored, or empty: secrets are
+/// kept in memory only (no secrets.ini), and NotifyAchievementsToken() reports each change the core saves. Calling it
+/// again once it succeeded does nothing and returns true.
 bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
-                Error* error);
+                std::string achievements_token, Error* error);
 
 /// The settings below are the base layer's, settings.ini, and are saved straight away. From any thread; they do
 /// nothing (or return the default) before Initialize() succeeded.
@@ -291,5 +297,21 @@ void NotifyOsdMessage(std::string_view key, std::string_view text, float seconds
 
 /// Fast forward was turned on or off, by the menu or a hotkey.
 void NotifyFastForwardChanged(bool enabled);
+
+/// The RetroAchievements login token changed (nullopt: it's gone). The app stores it before this returns. Called with
+/// the core's settings lock held, on whichever thread saved it.
+void NotifyAchievementsToken(std::optional<std::string_view> token);
+
+/// RetroAchievements, for the app (achievements_bridge.cpp): the sign-in, the game's set or hardcore mode changed; the
+/// sign-in expired; a notice, toast or live indicator to show; a picture downloaded; a sound to play. Any thread.
+void NotifyAchievementsChanged();
+void NotifyAchievementsLoginExpired();
+void NotifyAchievementNotification(std::string_view key, std::string_view title, std::string_view text,
+                                   std::string_view image_path, float seconds, s32 points);
+void NotifyAchievementToast(std::string_view title, std::string_view message, float seconds);
+void NotifyAchievementIndicator(s32 kind, u32 id, bool shown, std::string_view text, std::string_view badge_path);
+void NotifyAchievementImage(std::string_view path);
+void NotifyPlaySound(const char* path);
+void NotifyLeaderboard(s32 request, const AchievementsBridge::LeaderboardPage* page, std::string_view error);
 
 } // namespace AndroidHost

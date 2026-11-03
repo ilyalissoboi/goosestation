@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -53,6 +54,16 @@ interface CoreApi {
     fun getBiosImages(): List<BiosImage>
 
     fun getAutoBios(region: String): String?
+
+    fun getAchievementsAccount(): AchievementsAccount
+
+    /** [NativeLibrary.signIn]: null once signed in, else why not. */
+    fun signIn(
+        username: String,
+        password: String,
+    ): String?
+
+    fun signOut()
 }
 
 object NativeCoreApi : CoreApi {
@@ -97,6 +108,15 @@ object NativeCoreApi : CoreApi {
     override fun getBiosImages(): List<BiosImage> = NativeLibrary.getBiosImages().toList()
 
     override fun getAutoBios(region: String): String? = NativeLibrary.getAutoBios(region)
+
+    override fun getAchievementsAccount(): AchievementsAccount = NativeLibrary.getAchievementsAccount()
+
+    override fun signIn(
+        username: String,
+        password: String,
+    ): String? = NativeLibrary.signIn(username, password)
+
+    override fun signOut() = NativeLibrary.signOut()
 }
 
 /** The controllers, as the Controllers page uses them: [io.github.ilyalissoboi.goosestation.input.ControllerInput]. */

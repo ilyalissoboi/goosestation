@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -59,12 +61,20 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
+import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
@@ -226,8 +236,13 @@ class OrientationLayoutTest {
 
     private fun screen() = bounds(rule.onNodeWithTag(SCREEN))
 
-    /** The settings page's scrolling column, which the page's content shows through. */
-    private fun viewport() = bounds(rule.onNode(hasScrollAction()))
+    /** The settings page's scrolling column, which the page's content shows through (not a text field's scroll). */
+    private fun viewport() =
+        bounds(
+            rule.onNode(
+                hasScrollAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange),
+            ),
+        )
 
     private fun DpRect.describe() = "[$left, $top, $right, $bottom]"
 
@@ -454,6 +469,78 @@ class OrientationLayoutTest {
     }
 
     @Test
+    fun theAchievementsPanel() {
+        val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+        val game = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false)
+        val long = "Collect every gem in every world without losing a life, in one sitting"
+        val sections =
+            listOf(
+                AchievementSection(
+                    7,
+                    "Almost there",
+                    arrayOf(Achievement(1, long, long, 25, "", 0, "312/500", 62f)),
+                ),
+                AchievementSection(
+                    1,
+                    "Locked",
+                    (2..6).map { Achievement(it, "スパイロ $it", long, 10, "", 0, "", 0f) }.toTypedArray(),
+                ),
+                AchievementSection(
+                    2,
+                    "Unlocked",
+                    arrayOf(
+                        Achievement(7, "Sparx Rescue", "Free the first dragon", 5, "", now.toEpochSecond(), "", 0f),
+                    ),
+                ),
+            )
+        val state =
+            GameMenuState(
+                booted = true,
+                achievements = game,
+                cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+            )
+        eachConfig({ GameMenu(state, NoMenuActions, LONG_GAME, now) }) {
+            assertTextsLaidOut(inView = true)
+            assertTrue("the first achievement is focused, not ${focusedText()}", focusedHas(long))
+            pressUntilFocusedInView(Key.DirectionDown, "Sparx Rescue")
+            assertTextsLaidOut(inView = true)
+        }
+    }
+
+    @Test
+    fun anOpenLeaderboard() {
+        val game = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false)
+        val board = Leaderboard(31, "Fastest lap on the longest track in the whole of the championship", "Fastest time")
+
+        fun entry(rank: Int) = LeaderboardEntry(rank, "a-player-with-a-long-name-$rank", "12:34.56")
+        val page =
+            LeaderboardPage(
+                128_400,
+                (1..10).map(::entry).toTypedArray(),
+                (12_208..12_216).map(::entry).toTypedArray(),
+                4,
+            )
+        val state =
+            GameMenuState(
+                booted = true,
+                achievements = game,
+                cheevos =
+                    AchievementsPanelState(
+                        CheevoTab.Leaderboards,
+                        leaderboards = listOf(board),
+                        open = board,
+                        page = page,
+                    ),
+            )
+        eachConfig({ GameMenu(state, NoMenuActions, LONG_GAME) }) {
+            assertTextsLaidOut(inView = true)
+            assertTrue("your entry is focused, not ${focusedText()}", focusedHas("12,212"))
+            pressUntilFocusedInView(Key.DirectionUp, "1")
+            assertTextsLaidOut(inView = true)
+        }
+    }
+
+    @Test
     fun theResumePromptWithALongTitle() {
         val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
         val offer = ResumeOffer(LONG_GAME, now.toEpochSecond() - 86_400, null)
@@ -573,7 +660,55 @@ class OrientationLayoutTest {
             assertTextsLaidOut()
             assertTrue(focusedHas("Folders"))
             assertFocusedInView()
-            for (i in 0 until 3) assertShows(NEEDS_CORE, i)
+            for (i in 0 until 4) assertShows(NEEDS_CORE, i)
+        }
+    }
+
+    @Test
+    fun achievementsSignedOut() {
+        eachConfig({
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0),
+                settings = AchievementsSettings(hardcore = true, messages = true, sounds = true, indicators = true),
+                signingIn = false,
+                error = "Invalid username/password.",
+                expired = false,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            assertShows("Invalid username/password.")
+            pressUntilFocused(Key.DirectionDown, "Live indicators")
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun achievementsSignedIn() {
+        eachConfig({
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.NOT_CONNECTED, "a-rather-long-goose-name", "", 0, 0),
+                settings = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true),
+                signingIn = false,
+                error = null,
+                expired = false,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("Sign out"))
+            assertShows("Not connected")
+            pressUntilFocused(Key.DirectionDown, "Live indicators")
+            assertFocusedInView()
         }
     }
 

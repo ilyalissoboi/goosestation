@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import io.github.ilyalissoboi.goosestation.app.AchievementNotice
+import io.github.ilyalissoboi.goosestation.app.AchievementOverlay
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.OsdMessage
@@ -41,6 +44,11 @@ fun GameScreen(
     fastForward: Boolean = false,
     osdExpiry: Long? = null,
     onOsdExpire: () -> Unit = {},
+    badge: (String) -> ImageBitmap? = { null },
+    card: AchievementNotice.Card? = null,
+    indicators: List<AchievementOverlay.Indicator> = emptyList(),
+    overlayExpiry: Long? = null,
+    onOverlayExpire: () -> Unit = {},
 ) {
     BackHandler(enabled = !menuOpen, onBack = onOpenMenu)
 
@@ -63,8 +71,8 @@ fun GameScreen(
                 }
             },
         )
-        OsdLayer(osd, fastForward, osdExpiry, onOsdExpire)
-        if (menuOpen) GameMenu(menu, actions, game)
+        OsdLayer(osd, fastForward, osdExpiry, onOsdExpire, card, indicators, overlayExpiry, onOverlayExpire, badge)
+        if (menuOpen) GameMenu(menu, actions, game, badge = badge)
     }
 }
 

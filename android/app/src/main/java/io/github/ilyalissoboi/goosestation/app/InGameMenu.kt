@@ -6,9 +6,13 @@ package io.github.ilyalissoboi.goosestation.app
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -57,6 +61,24 @@ data class DiscChoice(
     val error: String? = null,
 )
 
+/** The Achievements panel's tabs. */
+enum class CheevoTab { Achievements, Leaderboards }
+
+/**
+ * The Achievements panel: its open [tab]; the Achievements tab's [sections] and the Leaderboards tab's [leaderboards]
+ * (each null until read); and the leaderboard [open] in it, its [page] once fetched or why it wasn't ([pageError]),
+ * and the [request] it was fetched by.
+ */
+data class AchievementsPanelState(
+    val tab: CheevoTab,
+    val sections: List<AchievementSection>? = null,
+    val leaderboards: List<Leaderboard>? = null,
+    val open: Leaderboard? = null,
+    val page: LeaderboardPage? = null,
+    val pageError: String? = null,
+    val request: Int = 0,
+)
+
 /**
  * The Patch codes panel: the game's codes in their [groups] (null while they're read), the player's file to add codes
  * in ([fileName]), the manual code last applied ([applied], as said), and why the last change didn't work ([error]).
@@ -74,7 +96,8 @@ data class CodePanel(
  * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, whether Exit game
  * asks before it replaces the resume state saved at [replacingResume] (Unix seconds), and whether it's saving the
  * resume state ([exiting]). A multi-disc game ([discCount] over 1) has its [disc] in the drive, and the Change disc
- * panel ([discs]) when it's open. The Patch codes panel is [codes].
+ * panel ([discs]) when it's open. The Patch codes panel is [codes]. In [hardcore] mode, Load state, Patch codes and
+ * Fast forward are off.
  */
 data class GameMenuState(
     val booted: Boolean = false,
@@ -90,6 +113,12 @@ data class GameMenuState(
     val discCount: Int = 0,
     val discs: DiscChoice? = null,
     val codes: CodePanel? = null,
+    /** Hardcore mode is active: no state loads, patch codes or fast forward. */
+    val hardcore: Boolean = false,
+    /** The game's RetroAchievements, once read. */
+    val achievements: GameAchievements? = null,
+    /** The Achievements panel, while it's open. */
+    val cheevos: AchievementsPanelState? = null,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -155,6 +184,20 @@ interface GameMenuActions {
     fun keepResume()
 
     fun cancelReplaceResume()
+
+    /** Opens the Achievements panel, if the game's set is ready. */
+    fun openAchievements() {}
+
+    fun closeAchievements() {}
+
+    /** L1 or R1: the panel's other tab, when it has two. */
+    fun switchTab() {}
+
+    /** Opens leaderboard [id] in the Leaderboards tab, fetching its entries. */
+    fun openLeaderboard(id: Int) {}
+
+    /** Back from an open leaderboard to the tab's list. */
+    fun closeLeaderboard() {}
 }
 
 /**
@@ -186,6 +229,9 @@ class InGameMenu(
 
     /** Changes as the slot panel opens and closes, so a read for an earlier panel is dropped. */
     private var panelId = 0
+
+    /** Changes as a leaderboard opens or closes, so the core's answer for an earlier one is dropped. */
+    private var leaderboardRequest = 0
 
     private val canSave get() = state.booted && !serial.isNullOrBlank()
 
@@ -220,11 +266,102 @@ class InGameMenu(
                 slots = null,
                 discs = null,
                 codes = null,
+                cheevos = null,
                 confirmingReset = false,
                 confirmingExit = false,
                 replacingResume = null,
             )
         if (state.booted) readGameState()
+    }
+
+    /** The sign-in, the game's achievements or hardcore mode changed: read them again, and the open tab's list. */
+    fun achievementsChanged() {
+        if (!state.booted) return
+        readGameState()
+        if (state.cheevos?.tab == CheevoTab.Achievements) readSections()
+    }
+
+    override fun openAchievements() {
+        val game = state.achievements
+        if (!state.booted || game == null || game.status != GameAchievements.READY) return
+        panelId++
+        val tab = if (game.hasAchievements) CheevoTab.Achievements else CheevoTab.Leaderboards
+        state =
+            state.copy(
+                slots = null,
+                discs = null,
+                codes = null,
+                cheevos = AchievementsPanelState(tab),
+                confirmingReset = false,
+            )
+        readTab(tab)
+    }
+
+    override fun closeAchievements() {
+        panelId++
+        state = state.copy(cheevos = null)
+    }
+
+    override fun switchTab() {
+        val panel = state.cheevos ?: return
+        val game = state.achievements ?: return
+        if (!game.hasAchievements || !game.hasLeaderboards) return
+        panelId++
+        val tab = if (panel.tab == CheevoTab.Achievements) CheevoTab.Leaderboards else CheevoTab.Achievements
+        // An open leaderboard closes; a reply for it that comes later is dropped.
+        state = state.copy(cheevos = AchievementsPanelState(tab, panel.sections, panel.leaderboards))
+        readTab(tab)
+    }
+
+    override fun openLeaderboard(id: Int) {
+        val panel = state.cheevos ?: return
+        val board = panel.leaderboards?.firstOrNull { it.id == id } ?: return
+        val request = ++leaderboardRequest
+        state = state.copy(cheevos = panel.copy(open = board, page = null, pageError = null, request = request))
+        scope.launch(game) { api.fetchLeaderboard(id, request) }
+    }
+
+    override fun closeLeaderboard() {
+        val panel = state.cheevos ?: return
+        leaderboardRequest++
+        state = state.copy(cheevos = panel.copy(open = null, page = null, pageError = null))
+    }
+
+    /** The core's answer to [request]: a leaderboard's [page], or why there's none. Dropped unless it's still open. */
+    fun leaderboardFetched(
+        request: Int,
+        page: LeaderboardPage?,
+        error: String?,
+    ) {
+        val panel = state.cheevos ?: return
+        if (panel.open == null || request != leaderboardRequest || panel.request != request) return
+        state = state.copy(cheevos = panel.copy(page = page, pageError = if (page == null) error.orEmpty() else null))
+    }
+
+    private fun readTab(tab: CheevoTab) {
+        if (tab == CheevoTab.Achievements) readSections() else readLeaderboards()
+    }
+
+    /** Reads the Leaderboards tab's list, for the panel open now. */
+    private fun readLeaderboards() {
+        val id = panelId
+        scope.launch {
+            val boards = withContext(game) { api.getLeaderboards() }
+            val panel = state.cheevos
+            if (id != panelId || panel == null) return@launch
+            state = state.copy(cheevos = panel.copy(leaderboards = boards))
+        }
+    }
+
+    /** Reads the Achievements tab's sections, for the panel open now. */
+    private fun readSections() {
+        val id = panelId
+        scope.launch {
+            val sections = withContext(game) { AchievementLists.sections(api.getAchievementSections()) }
+            val panel = state.cheevos
+            if (id != panelId || panel == null) return@launch
+            state = state.copy(cheevos = panel.copy(sections = sections))
+        }
     }
 
     /** Fast forward was turned on or off, by the menu or a hotkey. */
@@ -291,7 +428,7 @@ class InGameMenu(
 
     override fun openSlots(mode: SlotMode) {
         val serial = serial
-        if (!canSave || serial == null) return
+        if (!canSave || serial == null || (mode == SlotMode.Load && state.hardcore)) return
         val id = ++panelId
         state = state.copy(slots = SlotPanel(mode), discs = null, codes = null, confirmingReset = false)
         val discs = running?.discs.orEmpty()
@@ -414,7 +551,7 @@ class InGameMenu(
     }
 
     override fun openCodes() {
-        if (!state.booted) return
+        if (!state.booted || state.hardcore) return
         val id = ++panelId
         state = state.copy(slots = null, discs = null, codes = CodePanel(), confirmingReset = false)
         scope.launch {
@@ -499,7 +636,7 @@ class InGameMenu(
     }
 
     override fun toggleFastForward() {
-        if (!state.booted) return
+        if (!state.booted || state.hardcore) return
         val enabled = !state.fastForward
         // At once: the core's report comes once the game runs again.
         state = state.copy(fastForward = enabled)
@@ -606,7 +743,16 @@ class InGameMenu(
         val multiDisc = state.discCount > 1
         scope.launch {
             val (mode, cardBusy) = withContext(game) { api.getAnalogMode() to api.isSavingMemoryCards() }
-            if (id == gameId) state = state.copy(analogMode = if (mode < 0) null else mode == 1, cardBusy = cardBusy)
+            val (hardcore, achievements) = withContext(game) { api.isHardcoreActive() to api.getGameAchievements() }
+            if (id == gameId) {
+                state =
+                    state.copy(
+                        analogMode = if (mode < 0) null else mode == 1,
+                        cardBusy = cardBusy,
+                        hardcore = hardcore,
+                        achievements = achievements,
+                    )
+            }
             if (!multiDisc) return@launch
             val disc = withContext(game) { readDisc(key) }
             if (id == gameId && disc > 0) state = state.copy(disc = disc)

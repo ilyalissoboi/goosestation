@@ -85,6 +85,8 @@ class SettingsScreenTest {
         press(Key.DirectionDown)
         assertFocusedHas("Graphics", "Renderer, resolution, aspect ratio, FPS")
         press(Key.DirectionDown)
+        assertFocusedHas("Achievements", "Sign-in, hardcore mode, messages")
+        press(Key.DirectionDown)
         assertFocusedHas("BIOS")
         press(Key.DirectionDown)
         assertFocusedHas("Folders", "BIOS, games and data folders")

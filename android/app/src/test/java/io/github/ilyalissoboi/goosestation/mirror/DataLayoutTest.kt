@@ -15,7 +15,6 @@ class DataLayoutTest {
     fun goosestationsOwnFilesAreMirrored() {
         listOf(
             "settings.ini",
-            "secrets.ini",
             "playtime.dat",
             "custom_properties.ini",
             "memcards/a.mcd",
@@ -24,6 +23,15 @@ class DataLayoutTest {
             "savestates/sub/SLUS-00001_1.sav",
             "emusync/state",
         ).forEach { assertTrue(it, default.mirrored(it)) }
+    }
+
+    // The RetroAchievements token is in the Keystore on Android: desktop's secrets.ini is its own, never copied in or
+    // out, but it's GooseStation's, so it raises no "not GooseStation's" banner.
+    @Test
+    fun secretsIsOursButNotMirrored() {
+        assertFalse(default.mirrored("secrets.ini"))
+        assertFalse(default.stray("secrets.ini"))
+        assertEquals(emptyList<String>(), default.others(listOf("secrets.ini" to false)))
     }
 
     @Test

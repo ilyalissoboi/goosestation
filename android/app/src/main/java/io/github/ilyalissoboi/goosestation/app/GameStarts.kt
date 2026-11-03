@@ -13,11 +13,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** "Resume where you left off?" for [game]: its resume state, saved at [savedAt] (Unix seconds), and its [picture]. */
+/**
+ * "Resume where you left off?" for [game]: its resume state, saved at [savedAt] (Unix seconds), and its [picture]. With
+ * [hardcore], hardcore mode would start, which a boot from the resume state would end: the game only starts afresh.
+ */
 data class ResumeOffer(
     val game: GameEntry,
     val savedAt: Long,
     val picture: ArgbImage?,
+    val hardcore: Boolean = false,
 )
 
 /**
@@ -64,7 +68,12 @@ class GameStarts(
                             if (savedAt == 0L) {
                                 null
                             } else {
-                                ResumeOffer(entry, savedAt, api.getSaveStatePreview(serial, SaveSlots.RESUME)?.picture)
+                                ResumeOffer(
+                                    entry,
+                                    savedAt,
+                                    api.getSaveStatePreview(serial, SaveSlots.RESUME)?.picture,
+                                    api.hardcoreWouldStart(),
+                                )
                             }
                     }
                 offerDisc = disc
@@ -92,8 +101,9 @@ class GameStarts(
         records.setMigrated(key)
     }
 
-    /** Resume: the game boots from its resume state. */
+    /** Resume: the game boots from its resume state. Not in hardcore mode, which the state would end. */
     fun resume() {
+        if (offer?.hardcore == true) return
         val offer = take() ?: return
         start(offer.game, offerDisc, true)
     }

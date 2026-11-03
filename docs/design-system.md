@@ -241,6 +241,10 @@ SettingsPage("Graphics", onBack = onBack) {
   screen readers say it and tests check it with `assertIsOn()`.
 - `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.
 - A row's `note` explains a consequence ("Higher is sharper and slower.") or a fallback. Never repeat the label.
+- `TextFieldRow`: a text setting, its label in `label-sm` over a 48 dp `sunken` well with a `line-strong` edge at
+  `radius-sm`, the focus ring around the well. Focus doesn't open the keyboard, so a D-pad passes through; A, the
+  D-pad centre or a tap open it, and up and down leave the field as on any row. A password is the secure field:
+  dots, and never offered to a keyboard to learn. It takes a `TextFieldState`.
 
 ### `KeyHints` (`KeyHints.kt`)
 
@@ -254,6 +258,13 @@ action it takes, in a row that wraps on a narrow screen. It goes at the foot of 
 - Name the buttons with `PadGlyphs`, which labels them as the Controllers page does ("A" for `BUTTON_A`).
 - Actions are short verbs, in sentence case: Select, Back, Save.
 - It takes no input: nothing in it is focusable, and each hint reads as "A: Select".
+- `KeyChip` is the chip alone, for a glyph shown elsewhere, such as `PanelTabs`.
+
+### `PanelTabs` (`PanelTabs.kt`)
+
+A panel's tabs: the L1 chip, the tabs' labels in `label-sm` (the current one on `beak-soft` in `ink`, the others
+`ink-muted`), then R1. The panel switches them on L1 and R1 from anywhere in it, and a tap on a label selects it.
+Nothing in it takes focus, so the D-pad stays on the panel's rows. `KeyHints` says "L1 R1 Switch".
 
 ### `Eyebrow` (`Eyebrow.kt`)
 
@@ -271,7 +282,9 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   divider before Reset console, and `KeyHints` at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
   A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Load state; Patch codes (`code`) follows
-  Screenshot. One side panel shows at a time.
+  Screenshot, then Achievements (`trophy`, its value the progress, "14 of 40", or why it's off). In hardcore mode,
+  Load state, Patch codes and Fast forward are disabled with "Off in hardcore mode" as their value. One side panel
+  shows at a time.
   Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),
   since both exit.
   B steps out one layer at a time, back to the row it came from.
@@ -291,9 +304,19 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   code applied by hand, a row with Apply at its end. "Applied: <name>" shows
   as a `Success` notice and a failure as `Danger`, in the panel, which stays open. With no codes it says so and names
   the file to add, in `mono`.
+- `AchievementsPanel`: RetroAchievements, a side panel framed as `SaveSlotPanel`, with `PanelTabs` when the game has
+  both achievements and leaderboards. The Achievements tab: "14 of 40 unlocked" and the points, a 4 dp `beak` bar,
+  then each section under its `Eyebrow`, each achievement a row (focusable, with nothing to activate) with its 48 dp
+  badge on `sunken`, its title in `label` (`ink`, or `ink-muted` while locked), its description in `body-sm`, when it
+  was unlocked or its progress with a small bar, and its points in `mono` at the end. In a list under 200 dp tall,
+  each row shows its title and one line. The Leaderboards tab: a row per leaderboard, A opening it; open, its title in
+  `title-2`, the entry count, then Top and Around you (one list where they meet), each entry its rank and score in
+  `mono` and the user, the player's own on `beak-soft` and focused; "Loading…", or a `Danger` notice when it can't be
+  fetched. B steps back from a leaderboard to its row, then to the menu.
 - `ResumePrompt`: "Resume where you left off?" over the library, a centred `surface` panel at `radius-lg`: the game's
   title, the resume state's screenshot (224 x 168 dp) and time, then Resume (`Primary`, focused) and Start over. The
-  `scrim` takes every tap, and the focus can't leave the panel.
+  `scrim` takes every tap, and the focus can't leave the panel. When hardcore mode would start, it gives the game's
+  title, says the game starts from the beginning with the resume state kept, and offers only Start.
 - `OsdLayer`: the messages over the running game, the app's and the core's, at the top left, oldest first, at most
   four. Each is `osd` type in `osd-ink` on the `osd` ground at `radius-sm`, with the core's icon (a memory card's,
   say) when it has one, showing its first frame only. The app's messages last 3 s, and the core's keep their own time.
@@ -301,6 +324,12 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   forward is on, its marker (the `fastForward` icon on `osd`) shows at the top right. On Android the core's messages
   are routed here, not to its own OSD: `CoreMessages` puts those for the in-game menu's actions in the app's words
   and drops those the app says itself. The core's FPS and speed overlay is unchanged.
+  RetroAchievements adds two things: an unlock card at the top centre, at most 420 dp wide (the badge at 48 dp,
+  "Achievement unlocked" or "Set mastered" as an eyebrow in `beak-ink`, the title in `label`, the text in `body-sm`,
+  the points in `mono`, on `osd` at `radius-md`), one at a time, 5 s each (10 s for a mastery), fading as the messages
+  do, and waiting while the menu is open; and the live indicators at the bottom right, 8 dp apart on `osd` at
+  `radius-sm`: a leaderboard timer in `mono`, a challenge's 32 dp badge, the progress pop-up's badge and count for 3 s.
+  The indicators hide while the menu is open.
 
 ### `GooseMark` (`ui/theme/GooseMark.kt`)
 

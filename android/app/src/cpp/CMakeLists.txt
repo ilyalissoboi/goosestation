@@ -3,6 +3,8 @@
 
 # libgoosestation.so: the core and the Android host layer, loaded by the app with System.loadLibrary().
 add_library(goosestation SHARED
+  achievements_bridge.cpp
+  achievements_bridge.h
   android_host.cpp
   android_host.h
   bios_import.cpp
@@ -16,12 +18,14 @@ add_library(goosestation SHARED
   fullscreen_ui_stubs.cpp
   game_codes.cpp
   game_codes.h
+  http_downloader_android.cpp
+  http_downloader_android.h
   jni_bridge.cpp
   jni_util.cpp
   jni_util.h
 )
 
-target_link_libraries(goosestation PRIVATE core common util imgui minizip scmversion android log EGL aaudio)
+target_link_libraries(goosestation PRIVATE core common util imgui minizip rcheevos scmversion android log EGL aaudio)
 
 # A missing symbol fails the build instead of System.loadLibrary(), and the library also loads on 16 KB-page devices.
 target_link_options(goosestation PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384")

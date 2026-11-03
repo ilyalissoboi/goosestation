@@ -36,8 +36,19 @@ size_t PlatformMisc::GetRuntimePageSize()
   return (res > 0) ? static_cast<size_t>(res) : 0;
 }
 
+static void (*s_sound_player)(const char* path) = nullptr;
+
+void PlatformMisc::SetSoundPlayer(void (*play)(const char* path))
+{
+  s_sound_player = play;
+}
+
 bool PlatformMisc::PlaySoundAsync(const char* path)
 {
-  // No sound effects on Android.
-  return false;
+  // The app plays it, if it has said how (SetSoundPlayer()).
+  if (!s_sound_player)
+    return false;
+
+  s_sound_player(path);
+  return true;
 }

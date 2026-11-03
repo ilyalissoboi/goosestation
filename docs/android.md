@@ -341,8 +341,9 @@ adb shell run-as io.github.ilyalissoboi.goosestation cat files/mirror-manifest.t
 
 The rules:
 
-- **Only GooseStation's own data is mirrored.** That is `settings.ini`, `secrets.ini`, `playtime.dat` and
-  `custom_properties.ini` at the top of the folder, and everything in the desktop data folder's folders: `bios`,
+- **Only GooseStation's own data is mirrored.** That is `settings.ini`, `playtime.dat` and
+  `custom_properties.ini` at the top of the folder (desktop's `secrets.ini` counts as GooseStation's, so it raises no
+  banner, but it's never copied either way: Android keeps its RetroAchievements token in the Keystore), and everything in the desktop data folder's folders: `bios`,
   `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `savestates`,
   `screenshots`, `shaders`, `textures`, `resources` and `videos`, and `emusync` (memory card sync, a later stage).
   Once the core has started, the folders its `settings.ini` names inside the data folder (a `[Folders]` entry, or
@@ -699,6 +700,50 @@ press is never sent. If either is let go first, the held-back press is sent then
 held therefore reaches the game when it's let go, and lasts 100 ms (6 frames at 60 Hz), however short the tap, so the
 game's once-a-frame read of the pad sees it.
 
+### RetroAchievements
+
+**Signing in.** Settings → Achievements has the username and password fields, typed with Android's keyboard (focus
+doesn't open it, so a D-pad passes over the fields; A or a tap does), and **Sign in**. A wrong password shows the
+server's reason; no connection shows "Couldn't reach RetroAchievements". Signed in, the page says who and how many
+points, with **Sign out**. Signing in turns achievements on (`[Cheevos] Enabled`); signing out turns them off. The
+page can't be opened during a game, so its changes take effect from the next game start.
+
+**The token.** The password is never stored. The server's login token is sealed with an AES-GCM key the Android
+Keystore holds (alias `retroachievements-token`) and kept in the app's private `achievements` preferences; the host
+hands it to the core in memory at startup, and the core's secrets layer on Android is in memory only, so no
+`secrets.ini` is read or written. Keystore keys aren't backed up: after a restore or on a new phone the token won't
+open, so the app starts signed out. A `settings.ini` from another install comes in signed out too (`Enabled` off, its
+username and any old token removed). The token is never logged: `HttpBridge` logs only each request's method, host,
+path and status.
+
+**Offline.** A sign-in that fails for want of a connection keeps the token: the page says "Not connected.
+RetroAchievements is checked again when a game starts.", and the next game start tries again. A game started without
+a connection has no achievements, and says "Couldn't reach RetroAchievements; achievements are off for this game"
+once. Unlocks during a game whose connection drops are retried by rcheevos; any still pending when the app closes are
+lost, as on desktop. Only a rejected or expired token signs the player out, with "RetroAchievements sign-in expired:
+sign in again in Settings" at the next game start.
+
+**Hardcore mode** (Settings → Achievements, off by default) starts with the next game start. While it's active the
+menu's Load state, Patch codes and Fast forward are greyed out ("Off in hardcore mode"), no patch code applies, and
+fast forward and turbo are turned off every frame (which covers the hotkeys). Saving states still works. A game with a
+resume state that would start in hardcore offers only **Start**, keeping the resume state: a boot from it would turn
+hardcore off (the core's `ConfirmMessage` answers yes on Android). Hardcore drops by itself a few seconds after boot for
+a game RetroAchievements doesn't know, and the rows come back. GooseStation isn't registered with RetroAchievements
+yet (roadmap item 6), so hardcore unlocks may not count.
+
+**In the menu**, the **Achievements** row after Patch codes shows the progress ("14 of 40") or why it's off. Its panel
+has Achievements and Leaderboards tabs, which L1 and R1 switch. Achievements are in rcheevos's sections by progress
+(unlocked ones newest first); a leaderboard opens to its top 10 and the entries around you, fetched each time.
+
+**Over the game**, an unlock shows a card at the top centre for 5 s (a mastered set 10 s), one at a time, waiting while
+the menu is open; the game-start summary and leaderboard messages join the message stack; leaderboard timers,
+challenges and progress show at the bottom right. The page's switches turn the messages, sounds and live indicators
+off. The core's own sounds (`data/resources/sounds/achievements/`) play through a `SoundPool`.
+
+**Testing.** No test uses real credentials. `AchievementsSignInTest` points rcheevos at `FakeRetroAchievements`, a
+local server answering `login2` (`NativeLibrary.setAchievementsServerForTest`); debug builds allow cleartext to
+`127.0.0.1` for it (`src/debug/res/xml/network_security_config.xml`), release builds don't.
+
 ### Known limits
 
 - **Removing the SD card stops a game played from it.** Android kills any process that still has a file open on a
@@ -938,6 +983,25 @@ whose data folder was `/sdcard/GooseTest/data`, with 14 files and save states in
 | Load state slots | Pass. Slot 1 "Today · 12:35", slot 2 "Today · 14:09", slot 3 "Today · 10:00", slot 5 "Today · 14:09", the times of the folder's files. |
 | Nothing pushed back | Pass. After the game and Home (whose push doesn't wait), the folder's times and MD5s were as before setup, except `settings.ini`, and no `.goosetmp` or `.goosebak` was left. |
 
+### RetroAchievements (2026-11-02)
+
+Checked on `goose-arm64` with the debug APK, by key events and taps, signed in with the user's own account (they typed
+the password on the emulator), with Ace Combat 3 (SLPS-02020).
+
+| Check | Result |
+| --- | --- |
+| Sign-in | Pass. "Signed in as …" with the account's points, and **Sign out** focused. |
+| The token | Pass. Sealed in the `achievements` preferences; no `secrets.ini` in the working copy or the data folder, and no token in `settings.ini` or logcat (`GooseStationHttp` logged only `POST retroachievements.org/dorequest.php -> 200`). |
+| The menu's row and panel | Pass. The row read "2 of 142": one of the two is RetroAchievements' own "Warning: Unknown Emulator", which the server unlocks for a client it doesn't know (roadmap item 6). The panel showed the set's sections and badges. |
+| A leaderboard | Pass. A real board loaded 957 entries, its top 10, and "You have no entry yet" (the account has none, so "Around you" wasn't seen). |
+| Hardcore | Pass. With a resume state, the prompt offered only **Start** and kept the resume state; Load state, Patch codes and Fast forward were greyed with "Off in hardcore mode". |
+| Offline | Pass. Started with the network off: the page said "Not connected", and the game said "Couldn't reach RetroAchievements; achievements are off for this game" once (`Login failed: No response`). With the network back, the next game start signed in and loaded the set. |
+
+Found and fixed during the pass: switching tabs, or opening and closing a board, scrolled the menu away from its
+Achievements row, where the menu scrolls, as the panel's focused row went with the old content and the focus fell to
+the menu's top (fixed in `74a90b39d`: the row holds the focus for the change). Not checked by hand: an unlock's card and chime, which need a
+real unlock in play (`AchievementOverlayTest` and `OsdLayerTest` cover the card).
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -1063,6 +1127,22 @@ test `Ace Combat 3 Electrosphere.cht` of eight copies of real Ace Combat 3 codes
 | B out of the Patch codes panel | **Failed, then fixed.** The row had the focus but the menu showed its top: the panel's focused row went first, and the focus landed for a moment on another row, whose scroll outlasted the Patch codes row's. Fixed in `1ffdb2763` (the menu gives the focus back before a side panel goes); user-reported: as expected with the fix. |
 | Input | User-reported: nothing pressed in the menu or its panels reached the game, and nothing stayed held. |
 | Crash buffer | Pass: empty before (17:35) and after (18:42). |
+
+Checked on 2026-11-02 with the debug APK built from `74a90b39d` (part 3), installed over part 2's with its data kept,
+then again with each fix below. The user drove the checks (checklist step 12) with the built-in pad, on Wi-Fi, signed
+in with their own account, with Ace Combat 3 (SLPS-02020).
+
+| Check | Result |
+| --- | --- |
+| Sign-in | User-reported: as expected. The fields opened Android's keyboard on A, not on focus; "Signed in as …" with the points. |
+| The game-start summary | User-reported: as expected. "You have unlocked 2 of 142 achievements…" at the top left, with the game's icon. |
+| The menu's panel | User-reported: as expected. The row read "2 of 142"; the panel's sections and badges scrolled with the D-pad. |
+| Switching tabs | **Failed, then fixed, twice.** The first R1 to Leaderboards scrolled the menu several rows up, and L1 scrolled it back: the board list was still loading, so the tab's heading held the focus, and it stopped being focusable before a board took it, so Android put the focus on the window's first focusable, the menu's top. Fixed in `1dcf03dd1` (the heading stays focusable while it has the focus); user-reported: the menu stays put. Then the menu's Achievements row flashed its focus ring at each switch, as it holds the focus for a frame while the panel changes. Fixed in the same commit (the menu's rows draw no ring while a side panel is open); user-reported: no flash. |
+| A leaderboard | User-reported: as expected. 957 entries, the top list and "You have no entry yet"; B went back to the board, and B again to the menu's row. |
+| Hardcore | User-reported: as expected. With a resume state, only **Start**, with the resume state kept; Load state, Fast forward and Patch codes greyed with "Off in hardcore mode", and the D-pad skipped them. |
+
+Not checked on the Thor: an unlock's card and chime (no unlock came in play), and portrait, which the Thor doesn't
+reach (`OrientationLayoutTest` covers it).
 
 ## Checks on the AYN Thor
 
@@ -1272,3 +1352,17 @@ adb logcat -v time > thor.log
      row reached with the D-pad and seen whole; switching codes keeps the menu open; B goes back to the row, in view.
    - [ ] The switches hold across a disc change and an Exit and restart; the player's file is unchanged.
    - [ ] Nothing pressed in the panels reaches the game.
+
+12. **RetroAchievements.** With the build that has them, on Wi-Fi, with a RetroAchievements account and a game it
+    knows that has leaderboards.
+   - [ ] Settings → Achievements: the D-pad passes over the fields without opening the keyboard; A opens it. Sign in:
+     "Signed in as …" with the points, **Sign out** focused.
+   - [ ] A game start shows "You have unlocked N of M achievements…" with the game's icon, and the menu's
+     **Achievements** row shows "N of M".
+   - [ ] In its panel, the sections and badges scroll with the D-pad; L1 and R1 switch the tabs, and the menu stays
+     still each time, its Achievements row in view, with no focus ring flashing on it.
+   - [ ] A on a leaderboard: its entry count, the top 10 and your entry or "You have no entry yet"; B goes back to the
+     board, and B again to the menu's row.
+   - [ ] Hardcore mode on: a game with a resume state offers only **Start**; Load state, Fast forward and Patch codes
+     are greyed with "Off in hardcore mode", and the D-pad skips them. Switch it off afterwards.
+   - [ ] An unlock in play shows its card at the top centre, with its sound.

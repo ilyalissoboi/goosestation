@@ -17,7 +17,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.Resources
@@ -71,6 +73,7 @@ enum class Screen(
     Settings,
     Controllers(SettingsEntry.Controllers),
     Graphics(SettingsEntry.Graphics),
+    Achievements(SettingsEntry.Achievements),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
     Game,
@@ -86,6 +89,13 @@ enum class Screen(
  */
 object AppController : NativeCallbacks {
     private const val TAG = "GooseStation"
+
+    // RetroAchievements' messages over the game, from the design.
+    private const val SIGN_IN_EXPIRED = "RetroAchievements sign-in expired: sign in again in Settings"
+    private const val UNREACHABLE = "Couldn't reach RetroAchievements; achievements are off for this game"
+
+    /** An achievement message's picture, as big as the message's line shows it. */
+    private const val ICON_PX = 64
     private const val PUSH_INTERVAL_MS = 2_000L
     private const val UI = "UI"
     private const val GRID_VIEW = "GameListGridView"
@@ -156,6 +166,9 @@ object AppController : NativeCallbacks {
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
 
+    /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
+    val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
         ControllersPage(scope, coreDispatcher, NativeCoreApi, { controllers }, { screen == Screen.Controllers }) {
@@ -181,8 +194,14 @@ object AppController : NativeCallbacks {
      * The game's prompt (Resume or Quit to library) shows over it: the game is paused, and the controllers move the
      * prompt's focus rather than play.
      */
-    var promptOpen by mutableStateOf(false)
-        private set
+    var promptOpen: Boolean
+        get() = promptShown
+        private set(value) {
+            promptShown = value
+            // Unlock cards wait, and the live indicators hide, while the menu is open.
+            achievementOverlay.menuOpen(value)
+        }
+    private var promptShown by mutableStateOf(false)
 
     /** Saved folders whose grant is gone, as the last check found. */
     var missingGrants by mutableStateOf(emptyList<MissingGrant>())
@@ -249,6 +268,20 @@ object AppController : NativeCallbacks {
     /** The messages shown over the game, the app's and the core's ([CoreMessages]). */
     val osd = OsdMessages(SystemClock::uptimeMillis)
 
+    /** Achievement badges and game icons from the core's cache, as the menu and the game screen show them. */
+    val badges = BadgeImages(scope, Dispatchers.IO)
+
+    /** RetroAchievements' unlock cards and live indicators over the game. */
+    val achievementOverlay = AchievementOverlay(SystemClock::uptimeMillis)
+
+    private val achievementSounds by lazy { AchievementSounds() }
+
+    // Said once, at the next game start, after the server rejected the stored sign-in.
+    private var signInExpired = false
+
+    // The "couldn't reach" message has been shown for the running game.
+    private var unreachableSaid = false
+
     /** The in-game menu: its rows, its slot panel, and what they do. */
     val gameMenu by lazy {
         InGameMenu(
@@ -267,6 +300,11 @@ object AppController : NativeCallbacks {
     private val gamePrefs by lazy { SharedPreferencesStore(context, "game") }
     private val gameRecords by lazy { GameRecords(gamePrefs) }
     private val lastSlots by lazy { LastSlots(gamePrefs) }
+
+    // The RetroAchievements login token, sealed with a Keystore key: never in secrets.ini or the data folder.
+    private val achievementsToken by lazy {
+        AchievementsToken(KeystoreCipher(), SharedPreferencesStore(context, "achievements"))
+    }
 
     /** A game's start, which asks first whether to resume where it was left. */
     val gameStarts by lazy {
@@ -509,6 +547,7 @@ object AppController : NativeCallbacks {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
         when (entry) {
             SettingsEntry.Graphics -> settingsPages.loadGraphics()
+            SettingsEntry.Achievements -> achievementsPage.load()
             SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.Folders -> {}
@@ -1143,6 +1182,7 @@ object AppController : NativeCallbacks {
                             resources.absolutePath,
                             biosDir.absolutePath,
                             prefs.installId(),
+                            achievementsToken.load(),
                         ).also {
                             if (it) {
                                 readGridView()
@@ -1282,6 +1322,11 @@ object AppController : NativeCallbacks {
             // host keys it.
             val started = runningGame ?: GameEntry("", title, serial, "", 0, 0, null)
             gameMenu.gameStarted(if (started.serial.isBlank()) started.copy(serial = serial) else started)
+            unreachableSaid = false
+            if (signInExpired) {
+                signInExpired = false
+                osd.post(SIGN_IN_EXPIRED)
+            }
             readSelectChords()
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
@@ -1309,6 +1354,7 @@ object AppController : NativeCallbacks {
             runningGame = null
             holdMemcards = false
             osd.clear()
+            achievementOverlay.clear()
             gameMenu.gameStopped()
             controllers?.selectChordDescriptors = emptySet()
             if (screen == Screen.Game) screen = Screen.Library
@@ -1357,6 +1403,89 @@ object AppController : NativeCallbacks {
                 CoreMessages.translate(key, text)?.let { osd.post(it, key.ifEmpty { null }, seconds, icon) }
             }
         }
+    }
+
+    // On the core's thread, before the core goes on: the token lives only in its memory until it's stored here.
+    override fun onAchievementsToken(token: String?) = achievementsToken.store(token)
+
+    override fun onAchievementsLoginExpired() {
+        mainHandler.post {
+            signInExpired = true
+            achievementsPage.loginExpired()
+        }
+    }
+
+    override fun onAchievementsChanged() {
+        mainHandler.post {
+            gameMenu.achievementsChanged()
+            if (screen == Screen.Achievements) achievementsPage.refresh()
+            if (gameRunning && !unreachableSaid) {
+                scope.launch {
+                    val status = withContext(gameDispatcher) { NativeGameCoreApi.getGameAchievements().status }
+                    if (status == GameAchievements.UNREACHABLE && gameRunning && !unreachableSaid) {
+                        unreachableSaid = true
+                        osd.post(UNREACHABLE)
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onAchievementNotification(
+        key: String,
+        title: String,
+        text: String,
+        imagePath: String,
+        seconds: Float,
+        points: Int,
+    ) {
+        mainHandler.post {
+            when (val notice = AchievementNotices.from(key, title, text, imagePath, points)) {
+                is AchievementNotice.Card -> achievementOverlay.post(notice)
+                is AchievementNotice.Message ->
+                    scope.launch {
+                        val icon =
+                            notice.imagePath?.let {
+                                withContext(
+                                    Dispatchers.IO,
+                                ) { ArgbImages.decode(it, ICON_PX) }
+                            }
+                        osd.post(notice.text, key, seconds, icon)
+                    }
+            }
+        }
+    }
+
+    override fun onAchievementToast(
+        title: String,
+        message: String,
+        seconds: Float,
+    ) {
+        mainHandler.post { osd.post(AchievementNotices.toast(title, message), seconds = seconds) }
+    }
+
+    override fun onAchievementIndicator(
+        kind: Int,
+        id: Int,
+        shown: Boolean,
+        text: String,
+        badgePath: String,
+    ) {
+        mainHandler.post { achievementOverlay.indicator(kind, id, shown, text, badgePath) }
+    }
+
+    override fun onPlaySound(path: String) = achievementSounds.play(path)
+
+    override fun onLeaderboard(
+        request: Int,
+        page: LeaderboardPage?,
+        error: String?,
+    ) {
+        mainHandler.post { gameMenu.leaderboardFetched(request, page, error) }
+    }
+
+    override fun onAchievementImage(path: String) {
+        mainHandler.post { badges.downloaded(path) }
     }
 
     override fun onFastForwardChanged(enabled: Boolean) {

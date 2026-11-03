@@ -277,4 +277,35 @@ class GameStartsTest {
             assertEquals(listOf("getSaveStateTimes SCUS-94900", "start Crash Bandicoot 1 false"), calls)
             assertFalse(records.migrated("SCUS-94900"))
         }
+
+    // A boot with the resume state would turn hardcore off (the core's ConfirmMessage answers yes on Android): with
+    // hardcore about to start, the game starts from the beginning, and its resume state is kept.
+    @Test
+    fun hardcoreOffersNoResume() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 1_700_000_000
+            api.hardcoreWouldStart = true
+            val starts = starts()
+            starts.play(crash)
+            runCurrent()
+            assertTrue(starts.offer!!.hardcore)
+            calls.clear()
+
+            starts.resume()
+            assertEquals(emptyList<String>(), calls)
+            starts.startOver()
+            assertEquals(listOf("start Crash Bandicoot 1 false"), calls)
+        }
+
+    @Test
+    fun withoutHardcoreTheOfferIsAsBefore() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 1_700_000_000
+            val starts = starts()
+
+            starts.play(crash)
+            runCurrent()
+
+            assertFalse(starts.offer!!.hardcore)
+        }
 }

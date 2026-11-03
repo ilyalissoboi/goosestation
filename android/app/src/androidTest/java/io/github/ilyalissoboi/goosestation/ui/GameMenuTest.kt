@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.LaunchedEffect
@@ -16,17 +17,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -36,8 +43,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -48,10 +58,17 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -71,6 +88,11 @@ class GameMenuTest {
     private val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
     private val calls = mutableListOf<String>()
     private var state by mutableStateOf(GameMenuState(booted = true))
+
+    // Whether the fake opens the Achievements panel and switches its tab, as InGameMenu does; with [listsLoad], the
+    // Leaderboards tab opens without its list, which the test then gives it, as the core's read does.
+    private var switchingTabs = false
+    private var listsLoad = false
 
     // Records each call; closing a layer closes it in the state too, as InGameMenu does.
     private val actions =
@@ -193,6 +215,36 @@ class GameMenuTest {
                 calls += "cancelReplaceResume"
                 state = state.copy(replacingResume = null)
             }
+
+            override fun openAchievements() {
+                calls += "openAchievements"
+                if (switchingTabs) {
+                    state =
+                        state.copy(cheevos = AchievementsPanelState(CheevoTab.Achievements, sections))
+                }
+            }
+
+            override fun closeAchievements() {
+                calls += "closeAchievements"
+                state = state.copy(cheevos = null)
+            }
+
+            override fun switchTab() {
+                calls += "switchTab"
+                if (switchingTabs) {
+                    val list = if (listsLoad) null else boards
+                    state = state.copy(cheevos = AchievementsPanelState(CheevoTab.Leaderboards, leaderboards = list))
+                }
+            }
+
+            override fun openLeaderboard(id: Int) {
+                calls += "openLeaderboard $id"
+            }
+
+            override fun closeLeaderboard() {
+                calls += "closeLeaderboard"
+                state = state.copy(cheevos = state.cheevos?.copy(open = null, page = null, pageError = null))
+            }
         }
 
     private fun saved(vararg slots: Int): List<SlotEntry> =
@@ -238,6 +290,292 @@ class GameMenuTest {
             press(Key.DirectionDown)
             rule.onNode(isFocused() and hasText(label, substring = true)).assertExists()
         }
+    }
+
+    @Test
+    fun hardcoreRowsAreDisabledWithTheReason() {
+        state = GameMenuState(booted = true, analogMode = false, hardcore = true)
+        show()
+
+        for (row in listOf("Load state", "Fast forward", "Patch codes")) {
+            rule.onNode(hasText(row) and hasText("Off in hardcore mode")).assertIsNotEnabled()
+        }
+        // The D-pad passes over them: from Save state, Down reaches Analog mode.
+        press(Key.DirectionDown)
+        rule.onNode(isFocused()).assert(hasText("Save state"))
+        press(Key.DirectionDown)
+        rule.onNode(isFocused()).assert(hasText("Analog mode"))
+    }
+
+    private val ready = GameAchievements(GameAchievements.READY, 14, 40, 85, 400, true, true, false)
+
+    private fun cheevo(
+        id: Int,
+        title: String,
+        unlockedAt: Long = 0,
+        progress: String = "",
+    ) = Achievement(id, title, "Do the thing $id", 5, "", unlockedAt, progress, if (progress.isEmpty()) 0f else 62f)
+
+    private val sections =
+        listOf(
+            AchievementSection(7, "Almost there", arrayOf(cheevo(1, "Gem Collector", progress = "312/500"))),
+            AchievementSection(1, "Locked", arrayOf(cheevo(2, "Flawless Flight"), cheevo(3, "Dragon Master"))),
+            AchievementSection(2, "Unlocked", arrayOf(cheevo(4, "Sparx Rescue", now.toEpochSecond() - 600))),
+        )
+
+    private fun showAchievements(game: GameAchievements = ready) {
+        state =
+            GameMenuState(
+                booted = true,
+                achievements = game,
+                cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+            )
+        show()
+    }
+
+    @Test
+    fun theAchievementsRowShowsTheProgress() {
+        state = GameMenuState(booted = true, achievements = ready)
+        show()
+
+        rule.onNode(hasText("Achievements") and hasText("14 of 40")).assertIsEnabled()
+    }
+
+    @Test
+    fun theAchievementsRowSaysWhyItsOff() {
+        state =
+            GameMenuState(
+                booted = true,
+                achievements = GameAchievements(GameAchievements.OFF, 0, 0, 0, 0, false, false, false),
+            )
+        show()
+
+        rule.onNode(hasText("Achievements") and hasText("Sign in from Settings")).assertIsNotEnabled()
+    }
+
+    @Test
+    fun achievementsOpenFocusedOnTheFirstRow() {
+        showAchievements()
+
+        rule.onNodeWithText("14 of 40 unlocked").assertExists()
+        rule.onNodeWithText("85 of 400 points").assertExists()
+        rule.onNode(isFocused()).assert(hasText("Gem Collector"))
+    }
+
+    @Test
+    fun theDpadScrollsThroughTheSections() {
+        showAchievements()
+
+        for (title in listOf("Flawless Flight", "Dragon Master", "Sparx Rescue")) {
+            press(Key.DirectionDown)
+            rule.onNode(isFocused()).assert(hasText(title)).assertIsDisplayed()
+        }
+        rule.onNodeWithText("ALMOST THERE").assertExists()
+    }
+
+    @Test
+    fun l1AndR1SwitchTabs() {
+        showAchievements()
+
+        press(Key.ButtonL1)
+        press(Key.ButtonR1)
+
+        assertEquals(listOf("switchTab", "switchTab"), calls)
+    }
+
+    @Test
+    fun bClosesTheAchievementsToTheirRow() {
+        showAchievements()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeAchievements"), calls)
+        rule.onNode(isFocused()).assert(hasText("Achievements"))
+    }
+
+    @Test
+    fun oneTabShowsNoTabs() {
+        showAchievements(ready.let { GameAchievements(it.status, 14, 40, 85, 400, true, false, false) })
+
+        rule.onNodeWithText("Leaderboards").assertDoesNotExist()
+    }
+
+    @Test
+    fun progressShowsItsCountAndLockedRowsSaySo() {
+        showAchievements()
+
+        rule.onNode(hasText("Gem Collector") and hasText("312/500")).assertExists()
+        rule.onNode(hasText("Flawless Flight") and hasStateDescription("Locked")).assertExists()
+        rule.onNode(hasText("Sparx Rescue") and hasStateDescription("Unlocked")).assertExists()
+    }
+
+    private val boards =
+        listOf(Leaderboard(31, "Sunny Flight", "Fastest time"), Leaderboard(32, "Gem Rush", "Most gems"))
+
+    private fun entry(rank: Int) = LeaderboardEntry(rank, "user$rank", "1:0$rank")
+
+    private val sunnyPage =
+        LeaderboardPage(
+            1284,
+            (1..10).map(::entry).toTypedArray(),
+            (208..216).map(::entry).toTypedArray(),
+            4,
+        )
+
+    private fun showLeaderboards(
+        open: Leaderboard? = null,
+        page: LeaderboardPage? = null,
+        error: String? = null,
+    ) {
+        state =
+            GameMenuState(
+                booted = true,
+                achievements = ready,
+                cheevos =
+                    AchievementsPanelState(
+                        CheevoTab.Leaderboards,
+                        leaderboards = boards,
+                        open = open,
+                        page = page,
+                        pageError = error,
+                    ),
+            )
+        show()
+    }
+
+    // Switching tabs takes away the focused row: the menu keeps its Achievements row in view, current.
+    @Test
+    fun switchingTabsKeepsTheMenusRowInView() {
+        switchingTabs = true
+        state = GameMenuState(booted = true, analogMode = true, achievements = ready)
+        // A phone in landscape, the emulator's screen: the menu scrolls.
+        show(width = 640, height = 360)
+        repeat(12) {
+            if (rule.onAllNodes(isFocused() and hasText("Achievements")).fetchSemanticsNodes().isEmpty()) {
+                press(Key.DirectionDown)
+            }
+        }
+        rule.onNode(isFocused()).assert(hasText("Achievements"))
+        press(Key.ButtonA)
+        rule.onNode(isFocused()).assert(hasText("Gem Collector"))
+
+        press(Key.ButtonR1)
+
+        rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
+        rule.onNode(hasText("Achievements") and hasText("14 of 40")).assertIsDisplayed()
+    }
+
+    // Found on the Thor: the heading held the focus while the list loaded, then stopped being focusable, and the focus
+    // fell to the menu's top.
+    @Test
+    fun aListThatLoadsKeepsTheMenusRowInView() {
+        switchingTabs = true
+        listsLoad = true
+        state = GameMenuState(booted = true, analogMode = true, achievements = ready)
+        show(width = 640, height = 360)
+        repeat(12) {
+            if (rule.onAllNodes(isFocused() and hasText("Achievements")).fetchSemanticsNodes().isEmpty()) {
+                press(Key.DirectionDown)
+            }
+        }
+        press(Key.ButtonA)
+        press(Key.ButtonR1)
+        rule.onNodeWithText("Loading…").assertExists()
+
+        state = state.copy(cheevos = state.cheevos!!.copy(leaderboards = boards))
+        rule.waitForIdle()
+
+        rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
+        rule.onNode(hasText("Achievements") and hasText("14 of 40")).assertIsDisplayed()
+    }
+
+    // Found on the Thor: switching tabs passes the focus through the menu's row for a frame, and its ring flashed there.
+    // While a side panel is open the menu's rows draw none.
+    @Test
+    fun aMenuRowShowsNoRingWhileAPanelIsOpen() {
+        switchingTabs = true
+        state = GameMenuState(booted = true, achievements = ready)
+        var focus = Color.Unspecified
+        rule.setContent {
+            GooseStationTheme {
+                focus = GooseStationTheme.colors.focus
+                // The window's own size: the pixels are read from it.
+                Box(Modifier.fillMaxSize()) { GameMenu(state, actions, null, now) }
+            }
+        }
+        rule.waitForIdle()
+        repeat(12) {
+            if (rule.onAllNodes(isFocused() and hasText("Achievements")).fetchSemanticsNodes().isEmpty()) {
+                press(Key.DirectionDown)
+            }
+        }
+        val row = rule.onNode(hasText("Achievements") and hasText("14 of 40"))
+
+        // 3 dp above the row, halfway across: the middle of a ring around it.
+        fun ring(): Boolean {
+            val bounds = row.getUnclippedBoundsInRoot()
+            val x = with(rule.density) { ((bounds.left + bounds.right) / 2).roundToPx() }
+            val y = with(rule.density) { (bounds.top - 3.dp).roundToPx() }
+            return rule.onRoot().captureToImage().toPixelMap()[x, y] == focus
+        }
+        assertTrue(ring())
+
+        press(Key.ButtonA)
+        rule.onNode(isFocused()).assert(hasText("Gem Collector"))
+        row.requestFocus()
+        rule.waitForIdle()
+
+        row.assertIsFocused()
+        assertFalse(ring())
+    }
+
+    @Test
+    fun aLeaderboardOpensWithA() {
+        showLeaderboards()
+
+        rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
+        press(Key.DirectionDown)
+        press(Key.ButtonA)
+
+        assertEquals(listOf("openLeaderboard 32"), calls)
+    }
+
+    @Test
+    fun anOpenLeaderboardFocusesYourRow() {
+        showLeaderboards(boards[0], sunnyPage)
+
+        rule.onNodeWithText("1,284 entries").assertExists()
+        rule.onNodeWithText("AROUND YOU").assertExists()
+        rule.onNode(isFocused()).assert(hasText("user212")).assert(hasStateDescription("You"))
+    }
+
+    @Test
+    fun bBackFromALeaderboardFocusesItsRow() {
+        showLeaderboards(boards[1], sunnyPage)
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("closeLeaderboard"), calls)
+        rule.onNode(isFocused()).assert(hasText("Gem Rush"))
+        press(Key.ButtonB)
+        assertEquals(listOf("closeLeaderboard", "closeAchievements"), calls)
+    }
+
+    @Test
+    fun aLeaderboardIsLoadingUntilItsPageArrives() {
+        showLeaderboards(boards[0])
+
+        rule.onNodeWithText("Loading…").assertExists()
+        state = state.copy(cheevos = state.cheevos!!.copy(page = sunnyPage))
+        rule.waitForIdle()
+        rule.onNodeWithText("user1").assertExists()
+    }
+
+    @Test
+    fun aLeaderboardThatCouldntLoadSaysWhy() {
+        showLeaderboards(boards[0], error = "Couldn't reach RetroAchievements")
+
+        rule.onNodeWithText("Couldn't reach RetroAchievements").assertExists()
     }
 
     @Test

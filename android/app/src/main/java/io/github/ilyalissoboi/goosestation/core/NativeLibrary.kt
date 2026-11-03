@@ -18,13 +18,15 @@ object NativeLibrary {
     /**
      * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
-     * settings reset.
+     * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
+     * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken].
      */
     external fun initialize(
         dataRoot: String,
         resourcesRoot: String,
         biosDir: String,
         installId: String,
+        achievementsToken: String?,
     ): Boolean
 
     // The settings calls work on settings.ini, which they save, and can be made from any thread.
@@ -366,4 +368,78 @@ object NativeLibrary {
 
     /** Ends the capture running, if any, with no report; none arrives once this returns. */
     external fun cancelBindingCapture()
+
+    /**
+     * [HttpBridge]'s answer to [downloader]'s [request]: its [status] (or [HttpBridge.STATUS_TIMEOUT],
+     * [HttpBridge.STATUS_ERROR]), [contentType] and [body]. Any thread.
+     */
+    external fun httpDone(
+        downloader: Long,
+        request: Long,
+        status: Int,
+        contentType: String,
+        body: ByteArray,
+    )
+
+    /**
+     * For HttpDownloaderTest only: fetches [url] (a POST of [post], or a GET without) through the core's
+     * HTTPDownloader, waiting up to [timeoutSeconds], and returns the status, content type and body (as UTF-8).
+     */
+    external fun httpTestFetch(
+        url: String,
+        post: String?,
+        timeoutSeconds: Float,
+    ): Array<String>
+
+    /**
+     * For HttpDownloaderTest only: GETs [urls] through the core's HTTPDownloader one at a time (each after the first
+     * waits in its queue), each with up to [timeoutSeconds], and returns their statuses.
+     */
+    external fun httpTestFetchQueued(
+        urls: Array<String>,
+        timeoutSeconds: Float,
+    ): IntArray
+
+    /** The RetroAchievements account and its sign-in. Waits for the core. */
+    external fun getAchievementsAccount(): AchievementsAccount
+
+    /**
+     * Turns achievements on and signs in to RetroAchievements as [username], waiting for the server: null once signed
+     * in, else why not, in the server's words or "Couldn't reach RetroAchievements". The password isn't kept; the
+     * token arrives through [NativeCallbacks.onAchievementsToken]. Call it off the main thread.
+     */
+    external fun signIn(
+        username: String,
+        password: String,
+    ): String?
+
+    /** Signs out of RetroAchievements, forgetting the username and token, and turns achievements off. */
+    external fun signOut()
+
+    /** For the instrumented tests only: the RetroAchievements server to talk to ([url]), or the real one with null. */
+    external fun setAchievementsServerForTest(url: String?)
+
+    /** Hardcore mode is active in the running game. */
+    external fun isHardcoreActive(): Boolean
+
+    /** A game started now would start in hardcore mode: achievements and hardcore are on, and a sign-in is stored. */
+    external fun hardcoreWouldStart(): Boolean
+
+    /** The running game's RetroAchievements: status and counts. Waits for the core. */
+    external fun getGameAchievements(): GameAchievements
+
+    /** The running game's achievements, in rcheevos's sections by progress; empty without a set. Waits for the core. */
+    external fun getAchievementSections(): Array<AchievementSection>
+
+    /** The running game's leaderboards, in the set's order; empty without a set. Waits for the core. */
+    external fun getLeaderboards(): Array<Leaderboard>
+
+    /**
+     * Starts fetching leaderboard [id]'s top entries and those around the signed-in player, and returns: the answer
+     * comes once, to [NativeCallbacks.onLeaderboard], with [request].
+     */
+    external fun fetchLeaderboard(
+        id: Int,
+        request: Int,
+    )
 }

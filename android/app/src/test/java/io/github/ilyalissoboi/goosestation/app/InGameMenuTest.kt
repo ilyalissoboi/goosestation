@@ -3,9 +3,15 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PatchCode
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -1075,6 +1081,262 @@ class InGameMenuTest {
             runCurrent()
 
             assertNull(menu.state.codes)
+        }
+
+    @Test
+    fun hardcoreBlocksLoadCodesAndFastForward() =
+        runTest {
+            api.hardcore = true
+            api.times[SaveSlots.RESUME] = 100
+            val menu = menu()
+            assertTrue(menu.state.hardcore)
+
+            menu.openSlots(SlotMode.Load)
+            menu.openCodes()
+            menu.toggleFastForward()
+            runCurrent()
+
+            assertNull(menu.state.slots)
+            assertNull(menu.state.codes)
+            assertFalse(menu.state.fastForward)
+            assertFalse(
+                calls.any {
+                    it.startsWith("loadState") || it == "getPatchCodes" ||
+                        it.startsWith("setFastForward")
+                },
+            )
+        }
+
+    @Test
+    fun saveStillWorksInHardcore() =
+        runTest {
+            api.hardcore = true
+            val menu = menu()
+
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.pickSlot(1)
+            runCurrent()
+
+            assertTrue(calls.contains("saveState $SERIAL 1"))
+        }
+
+    // Review Focus 2: hardcore drops a few seconds after boot for a game RetroAchievements doesn't know.
+    @Test
+    fun loadComesBackWhenHardcoreDrops() =
+        runTest {
+            api.hardcore = true
+            api.times[SaveSlots.RESUME] = 100
+            val menu = menu()
+            assertTrue(menu.state.hardcore)
+
+            api.hardcore = false
+            menu.achievementsChanged()
+            runCurrent()
+            assertFalse(menu.state.hardcore)
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            assertEquals(SaveSlots.RESUME, menu.entries().first().slot)
+        }
+
+    private fun achievementsReady(
+        achievements: Boolean = true,
+        leaderboards: Boolean = true,
+    ) {
+        api.achievementsOfGame =
+            GameAchievements(GameAchievements.READY, 1, 2, 5, 10, achievements, leaderboards, false)
+        api.sections =
+            listOf(AchievementSection(2, "Unlocked", arrayOf(Achievement(7, "First", "", 5, "", 100, "", 0f))))
+    }
+
+    @Test
+    fun achievementsOpenOnTheirTab() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+
+            menu.openAchievements()
+            runCurrent()
+
+            val panel = menu.state.cheevos!!
+            assertEquals(CheevoTab.Achievements, panel.tab)
+            assertEquals(
+                listOf(7),
+                panel.sections!!
+                    .single()
+                    .achievements
+                    .map { it.id },
+            )
+            assertTrue(calls.contains("getAchievementSections"))
+        }
+
+    @Test
+    fun onlyLeaderboardsOpensThatTab() =
+        runTest {
+            achievementsReady(achievements = false)
+            val menu = menu()
+
+            menu.openAchievements()
+            runCurrent()
+
+            assertEquals(CheevoTab.Leaderboards, menu.state.cheevos!!.tab)
+        }
+
+    @Test
+    fun switchTabWithOneTabDoesNothing() =
+        runTest {
+            achievementsReady(leaderboards = false)
+            val menu = menu()
+            menu.openAchievements()
+            runCurrent()
+
+            menu.switchTab()
+
+            assertEquals(CheevoTab.Achievements, menu.state.cheevos!!.tab)
+        }
+
+    @Test
+    fun aRefreshWhileOpenReadsAgain() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+            menu.openAchievements()
+            runCurrent()
+            calls.clear()
+            api.sections =
+                listOf(AchievementSection(2, "Unlocked", arrayOf(Achievement(8, "Second", "", 5, "", 200, "", 0f))))
+
+            menu.achievementsChanged()
+            runCurrent()
+
+            assertEquals(listOf("getAchievementSections"), calls.filter { it == "getAchievementSections" })
+            assertEquals(
+                listOf(8),
+                menu.state.cheevos!!
+                    .sections!!
+                    .single()
+                    .achievements
+                    .map { it.id },
+            )
+        }
+
+    @Test
+    fun notReadyDoesNotOpen() =
+        runTest {
+            api.achievementsOfGame = GameAchievements(GameAchievements.LOADING, 0, 0, 0, 0, false, false, false)
+            val menu = menu()
+
+            menu.openAchievements()
+            runCurrent()
+
+            assertNull(menu.state.cheevos)
+        }
+
+    private val board = Leaderboard(31, "Sunny Flight", "Fastest time")
+    private val sunnyPage =
+        LeaderboardPage(1284, arrayOf(LeaderboardEntry(1, "speedgoose", "0:42.10")), emptyArray(), -1)
+
+    private fun TestScope.leaderboardsOpen(): InGameMenu {
+        achievementsReady()
+        api.boards = listOf(board, Leaderboard(32, "Gem Rush", "Most gems"))
+        val menu = menu()
+        menu.openAchievements()
+        runCurrent()
+        menu.switchTab()
+        runCurrent()
+        calls.clear()
+        return menu
+    }
+
+    @Test
+    fun openingALeaderboardFetches() =
+        runTest {
+            val menu = leaderboardsOpen()
+            assertEquals(
+                2,
+                menu.state.cheevos!!
+                    .leaderboards!!
+                    .size,
+            )
+
+            menu.openLeaderboard(31)
+
+            val panel = menu.state.cheevos!!
+            assertEquals(31, panel.open!!.id)
+            assertNull(panel.page)
+            runCurrent()
+            assertEquals(listOf("fetchLeaderboard 31 ${panel.request}"), calls)
+        }
+
+    // Review Focus 5: a reply that comes after its board was closed, or another opened, is never shown.
+    @Test
+    fun aLateLeaderboardReplyIsDropped() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+            val first = menu.state.cheevos!!.request
+            menu.closeLeaderboard()
+            menu.openLeaderboard(32)
+            val second = menu.state.cheevos!!.request
+
+            menu.leaderboardFetched(first, sunnyPage, null)
+            assertNull(menu.state.cheevos!!.page)
+            menu.leaderboardFetched(second, sunnyPage, null)
+
+            assertEquals(
+                32,
+                menu.state.cheevos!!
+                    .open!!
+                    .id,
+            )
+            assertEquals(
+                1284,
+                menu.state.cheevos!!
+                    .page!!
+                    .total,
+            )
+        }
+
+    @Test
+    fun switchingTabsClosesTheLeaderboard() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+
+            menu.switchTab()
+            menu.switchTab()
+            runCurrent()
+
+            assertNull(menu.state.cheevos!!.open)
+        }
+
+    @Test
+    fun anErrorShowsInThePanel() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+
+            menu.leaderboardFetched(menu.state.cheevos!!.request, null, "Couldn't reach RetroAchievements")
+
+            assertEquals("Couldn't reach RetroAchievements", menu.state.cheevos!!.pageError)
+            assertNull(menu.state.cheevos!!.page)
+        }
+
+    @Test
+    fun openingAgainFetchesAgain() =
+        runTest {
+            val menu = leaderboardsOpen()
+            menu.openLeaderboard(31)
+            runCurrent()
+            menu.leaderboardFetched(menu.state.cheevos!!.request, sunnyPage, null)
+            menu.closeLeaderboard()
+
+            menu.openLeaderboard(31)
+            runCurrent()
+
+            assertEquals(2, calls.count { it.startsWith("fetchLeaderboard 31") })
+            assertNull(menu.state.cheevos!!.page)
         }
 
     private class MemoryLastSlots : LastSlotStore {

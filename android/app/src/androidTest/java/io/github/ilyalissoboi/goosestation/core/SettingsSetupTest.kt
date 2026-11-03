@@ -70,6 +70,22 @@ class SettingsSetupTest {
         assertFalse(ini.toString(), ini.allValues().contains("other-pad"))
     }
 
+    // The token stays with the install that signed in (the Keystore), so another install's file comes in signed out.
+    @Test
+    fun foreignFileSignsOut() {
+        initialize(
+            DESKTOP_FILE +
+                "\n[Cheevos]\nEnabled = true\nUsername = goose\nLoginTimestamp = 1793500000\nChallengeMode = true\n" +
+                "\n[Android]\nInstallID = other-install\n",
+        )
+
+        val ini = readSettings()
+        assertEquals("false", ini.value("Cheevos", "Enabled"))
+        assertNull(ini.value("Cheevos", "Username"))
+        assertNull(ini.value("Cheevos", "LoginTimestamp"))
+        assertEquals("true", ini.value("Cheevos", "ChallengeMode"))
+    }
+
     @Test
     fun ownFileIsKept() {
         initialize(DESKTOP_FILE + "\n[Android]\nInstallID = $INSTALL_ID\n")
@@ -339,7 +355,13 @@ class SettingsSetupTest {
         if (settings != null) settingsFile.writeText(settings)
         val resources = Resources.extract(context)
         assertTrue(
-            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+            NativeLibrary.initialize(
+                dataRoot.absolutePath,
+                resources.absolutePath,
+                biosDir.absolutePath,
+                INSTALL_ID,
+                null,
+            ),
         )
     }
 

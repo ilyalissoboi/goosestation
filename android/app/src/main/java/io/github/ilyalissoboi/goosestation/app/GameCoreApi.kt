@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PatchCodes
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
@@ -88,6 +91,27 @@ interface GameCoreApi {
     fun toggleAnalogMode()
 
     fun saveScreenshot()
+
+    /** Hardcore mode is active now: no state loads, patch codes or fast forward. */
+    fun isHardcoreActive(): Boolean
+
+    /** A game started now would start in hardcore mode: it's switched on, and a sign-in is stored. */
+    fun hardcoreWouldStart(): Boolean
+
+    /** The running game's RetroAchievements: its status and counts. */
+    fun getGameAchievements(): GameAchievements
+
+    /** The running game's achievements, in rcheevos's sections by progress. */
+    fun getAchievementSections(): List<AchievementSection>
+
+    /** The running game's leaderboards, in the set's order. */
+    fun getLeaderboards(): List<Leaderboard>
+
+    /** Starts fetching leaderboard [id]'s entries; the answer comes to [NativeCallbacks.onLeaderboard] as [request]. */
+    fun fetchLeaderboard(
+        id: Int,
+        request: Int,
+    )
 }
 
 object NativeGameCoreApi : GameCoreApi {
@@ -143,4 +167,19 @@ object NativeGameCoreApi : GameCoreApi {
     override fun toggleAnalogMode() = NativeLibrary.toggleAnalogMode()
 
     override fun saveScreenshot() = NativeLibrary.saveScreenshot()
+
+    override fun isHardcoreActive(): Boolean = NativeLibrary.isHardcoreActive()
+
+    override fun hardcoreWouldStart(): Boolean = NativeLibrary.hardcoreWouldStart()
+
+    override fun getGameAchievements(): GameAchievements = NativeLibrary.getGameAchievements()
+
+    override fun getAchievementSections(): List<AchievementSection> = NativeLibrary.getAchievementSections().toList()
+
+    override fun getLeaderboards(): List<Leaderboard> = NativeLibrary.getLeaderboards().toList()
+
+    override fun fetchLeaderboard(
+        id: Int,
+        request: Int,
+    ) = NativeLibrary.fetchLeaderboard(id, request)
 }

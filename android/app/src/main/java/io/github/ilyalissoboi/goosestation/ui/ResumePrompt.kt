@@ -51,7 +51,8 @@ import java.time.ZonedDateTime
 /**
  * "Resume where you left off?", over the library before a game with a resume state starts: the [offer]'s game, the
  * picture and time of its resume state, as seen from [now], then **Resume** ([onResume], focused) and **Start over**
- * ([onStartOver]). B and Back cancel ([onCancel]), on the key-up of a press that began here. It takes every tap, and
+ * ([onStartOver]). When hardcore mode would start ([ResumeOffer.hardcore]), it says the game starts afresh, with only
+ * **Start** ([onStartOver]). B and Back cancel ([onCancel]), on the key-up of a press that began here. It takes every tap, and
  * the focus can't leave it for the library under it.
  */
 @Composable
@@ -98,52 +99,79 @@ fun ResumePrompt(
                     .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Resume where you left off?", style = MaterialTheme.typography.headlineSmall, color = colors.ink)
+            if (offer.hardcore) {
+                // A boot from the resume state would end hardcore mode: the game only starts afresh.
                 Text(
                     offer.game.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.inkMuted,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = colors.ink,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-            }
-            Box(
-                modifier = Modifier.size(224.dp, 168.dp).clip(GsShapes.small).background(colors.sunken),
-                contentAlignment = Alignment.Center,
-            ) {
-                val picture = offer.picture
-                if (picture != null) {
-                    val bitmap = remember(picture) { picture.toImageBitmap() }
-                    Image(
-                        bitmap,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        GsIcons.memoryCard,
-                        contentDescription = null,
-                        tint = colors.inkFaint,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
-            Text(SaveTimes.label(offer.savedAt, now), style = GooseStationTheme.type.mono, color = colors.inkMuted)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+                Text(HARDCORE_RESUME, style = MaterialTheme.typography.bodyLarge, color = colors.inkMuted)
                 ActionButton(
-                    "Resume",
-                    onClick = onResume,
+                    "Start",
+                    onClick = onStartOver,
                     kind = ButtonKind.Primary,
                     icon = GsIcons.play,
                     modifier = Modifier.focusRequester(resume),
                 )
-                ActionButton("Start over", onClick = onStartOver)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Resume where you left off?",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = colors.ink,
+                    )
+                    Text(
+                        offer.game.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.inkMuted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Box(
+                    modifier = Modifier.size(224.dp, 168.dp).clip(GsShapes.small).background(colors.sunken),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val picture = offer.picture
+                    if (picture != null) {
+                        val bitmap = remember(picture) { picture.toImageBitmap() }
+                        Image(
+                            bitmap,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Icon(
+                            GsIcons.memoryCard,
+                            contentDescription = null,
+                            tint = colors.inkFaint,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Text(SaveTimes.label(offer.savedAt, now), style = GooseStationTheme.type.mono, color = colors.inkMuted)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ActionButton(
+                        "Resume",
+                        onClick = onResume,
+                        kind = ButtonKind.Primary,
+                        icon = GsIcons.play,
+                        modifier = Modifier.focusRequester(resume),
+                    )
+                    ActionButton("Start over", onClick = onStartOver)
+                }
             }
         }
     }
 }
+
+/** The resume prompt's words when hardcore mode would start, from the design. */
+const val HARDCORE_RESUME =
+    "Hardcore mode is on, so the game starts from the beginning. Your resume state is kept for later."

@@ -62,15 +62,17 @@ class DataLayout private constructor(
 
     /**
      * The core's own files that stay on the device: its cache, its log, the mirror's temporary files, and the core's
-     * own temporary save states (written to `<name>.sav.XXXXXX`, then renamed over `<name>.sav`).
+     * own temporary save states (written to `<name>.sav.XXXXXX`, then renamed over `<name>.sav`). And desktop's
+     * secrets.ini, which Android neither reads nor writes (its token is in the Keystore): never copied either way.
      */
     private fun kept(path: String) =
-        path == LOG || caches.any { path.startsWith(it) } || path.endsWith(TEMP) || path.endsWith(BACKUP) ||
-            STATE_TEMP.containsMatchIn(path)
+        path == LOG || path == SECRETS || caches.any { path.startsWith(it) } || path.endsWith(TEMP) ||
+            path.endsWith(BACKUP) || STATE_TEMP.containsMatchIn(path)
 
     companion object {
         /** The core's log, rewritten at every start: not worth a copy in the data folder. */
         private const val LOG = "goosestation.log"
+        private const val SECRETS = "secrets.ini"
         private const val TEMP = ".goosetmp"
         private const val BACKUP = ".goosebak"
         private const val CACHE = "cache/"

@@ -412,7 +412,13 @@ class GameCallsTest {
     private fun initialize() {
         val resources = Resources.extract(context)
         assertTrue(
-            NativeLibrary.initialize(dataRoot.absolutePath, resources.absolutePath, biosDir.absolutePath, INSTALL_ID),
+            NativeLibrary.initialize(
+                dataRoot.absolutePath,
+                resources.absolutePath,
+                biosDir.absolutePath,
+                INSTALL_ID,
+                null,
+            ),
         )
     }
 

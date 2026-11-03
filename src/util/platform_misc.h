@@ -18,6 +18,11 @@ size_t GetRuntimePageSize();
 /// Abstracts platform-specific code for asynchronously playing a sound.
 /// On Windows, this will use PlaySound(). On Linux, it will shell out to aplay. On MacOS, it uses NSSound.
 bool PlaySoundAsync(const char* path);
+
+#ifdef __ANDROID__
+/// Android has no system sound API for a file path: the app plays them, through this.
+void SetSoundPlayer(void (*play)(const char* path));
+#endif
 } // namespace PlatformMisc
 
 namespace Host {

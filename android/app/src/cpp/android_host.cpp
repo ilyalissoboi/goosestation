@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0
 
 #include "android_host.h"
+#include "achievements_bridge.h"
 #include "emu_thread.h"
 #include "foreign_settings.h"
 #include "game_codes.h"
@@ -26,6 +27,8 @@
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
 #include "util/window_info.h"
+
+#include "common/memory_settings_interface.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
@@ -128,7 +131,41 @@ static std::mutex s_initialize_mutex;
 static std::atomic_bool s_initialized{false};
 static bool s_startup_attempted = false; // guarded by s_initialize_mutex
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
-static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
+
+/// The secrets layer, in memory only: the RetroAchievements login token comes from the app's Keystore-sealed store
+/// at startup, and each change the core saves goes back to the app to store (NotifyAchievementsToken). No secrets.ini
+/// is read or written, so the token never reaches the data folder.
+class AndroidSecrets final : public MemorySettingsInterface
+{
+public:
+  explicit AndroidSecrets(std::string token) : m_reported(std::move(token))
+  {
+    if (!m_reported.empty())
+      SetStringValue(SECTION, KEY, m_reported.c_str());
+  }
+
+  bool Save(Error* error = nullptr) override
+  {
+    std::string token;
+    GetStringValue(SECTION, KEY, &token);
+    if (token != m_reported)
+    {
+      m_reported = token;
+      NotifyAchievementsToken(token.empty() ? std::nullopt : std::optional<std::string_view>(token));
+    }
+
+    return true;
+  }
+
+private:
+  static constexpr const char* SECTION = "Cheevos";
+  static constexpr const char* KEY = "Token";
+
+  std::string m_reported;
+};
+
+static std::string s_initial_achievements_token; // until InitializeConfig() makes the secrets layer
+static std::unique_ptr<AndroidSecrets> s_secrets_settings_interface;
 
 // GameList::Refresh() isn't safe to run twice at once.
 static std::mutex s_game_list_refresh_mutex;
@@ -175,7 +212,7 @@ static std::atomic_bool s_vulkan_failed{false};
 } // namespace AndroidHost
 
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
-                             std::string install_id, Error* error)
+                             std::string install_id, std::string achievements_token, Error* error)
 {
   std::unique_lock lock(s_initialize_mutex);
   if (s_initialized)
@@ -189,6 +226,7 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   EmuFolders::DataRoot = Path::Canonicalize(data_root);
   s_bios_dir = Path::Canonicalize(bios_dir);
   s_install_id = std::move(install_id);
+  s_initial_achievements_token = std::move(achievements_token);
   INFO_LOG("DataRoot Directory: {}", EmuFolders::DataRoot);
   INFO_LOG("Resources Directory: {}", EmuFolders::Resources);
   INFO_LOG("BIOS Directory: {}", s_bios_dir);
@@ -280,12 +318,9 @@ bool AndroidHost::InitializeConfig(Error* error)
     return false;
   }
 
-  // Secrets go to secrets.ini next to it, so settings.ini can be shared without them.
-  std::string secrets_filename = Path::Combine(Path::GetDirectory(si.GetFileName()), "secrets.ini");
-  const bool secrets_exist = FileSystem::FileExists(secrets_filename.c_str());
-  s_secrets_settings_interface = std::make_unique<INISettingsInterface>(std::move(secrets_filename));
-  if (secrets_exist && !s_secrets_settings_interface->Load())
-    ERROR_LOG("Failed to load secrets from {}.", s_secrets_settings_interface->GetFileName());
+  // Secrets stay in memory (AndroidSecrets): the app keeps the token, sealed, outside the data folder.
+  s_secrets_settings_interface = std::make_unique<AndroidSecrets>(std::move(s_initial_achievements_token));
+  s_initial_achievements_token = {};
   Host::Internal::SetSecretsSettingsLayer(s_secrets_settings_interface.get());
 
   LoadFolders(si);
@@ -724,8 +759,18 @@ void AndroidHost::BootPendingGame()
   // Nothing held before the boot carries over into the game, nor stops its first press from counting.
   QueueReleaseAllInputs();
 
+  // A sign-in that failed for want of a connection is tried again, so this game's set can load.
+  Achievements::RetryAndroidSignIn();
+
   SystemBootParameters parameters(s_boot_path);
   parameters.save_state = std::move(s_pending_boot_state);
+  // A boot from a state while hardcore mode would start asks Host::ConfirmMessage(), which says yes here: hardcore would
+  // be turned off without the player's say. The app doesn't offer it (GameStarts); this makes sure.
+  if (!parameters.save_state.empty() && AchievementsBridge::HardcoreWouldStart())
+  {
+    WARNING_LOG("Not resuming: hardcore mode would start.");
+    parameters.save_state.clear();
+  }
   parameters.media_playlist_index = s_pending_playlist_index;
   s_pending_boot_state.clear();
   s_pending_playlist_index = 0;
@@ -892,6 +937,13 @@ std::optional<std::string> AndroidHost::SaveState(std::string key, s32 slot)
 std::optional<std::string> AndroidHost::LoadState(std::string key, s32 slot)
 {
   return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
+    // The core refuses too, but reports success: the app would take the load as done.
+    if (Achievements::IsHardcoreModeActive())
+    {
+      Error::SetStringView(error, "Loading states is off in hardcore mode.");
+      return false;
+    }
+
     // LoadState() doesn't say when the file is missing in so many words.
     if (!FileSystem::FileExists(path.c_str()))
     {
@@ -1110,7 +1162,13 @@ void AndroidHost::ResetGame()
 
 void AndroidHost::SetFastForward(bool enabled)
 {
-  EmuThread::RunOnThread([enabled]() { System::SetFastForwardEnabled(enabled); }, false);
+  EmuThread::RunOnThread(
+    [enabled]() {
+      // Hardcore mode allows no fast forward; the core doesn't refuse it.
+      if (!enabled || !Achievements::IsHardcoreModeActive())
+        System::SetFastForwardEnabled(enabled);
+    },
+    false);
 }
 
 void AndroidHost::ToggleAnalogMode()
@@ -2119,6 +2177,16 @@ void Host::RequestResizeHostDisplay(s32 width, s32 height)
 
 void Host::FrameDone()
 {
+  // Hardcore mode allows no fast forward or turbo, which the core doesn't refuse: a hotkey's, or one already on when a
+  // reset started hardcore, is turned off here.
+  if (Achievements::IsHardcoreModeActive())
+  {
+    if (System::IsFastForwardEnabled())
+      System::SetFastForwardEnabled(false);
+    if (System::IsTurboEnabled())
+      System::SetTurboEnabled(false);
+  }
+
   // The app shows a marker while fast forward is on, whether the menu or a hotkey turned it on.
   const bool fast_forward = System::IsFastForwardEnabled();
   if (fast_forward != AndroidHost::s_fast_forward_reported)
@@ -2208,22 +2276,6 @@ void Host::OnTextInputEnded()
 }
 
 void Host::SetMouseMode(bool relative, bool hide_cursor)
-{
-}
-
-void Host::OnAchievementsLoginRequested(Achievements::LoginRequestReason reason)
-{
-}
-
-void Host::OnAchievementsLoginSuccess(const char* username, u32 points, u32 sc_points, u32 unread_messages)
-{
-}
-
-void Host::OnAchievementsRefreshed()
-{
-}
-
-void Host::OnAchievementsHardcoreModeChanged(bool enabled)
 {
 }
 

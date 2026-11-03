@@ -20,6 +20,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
@@ -31,12 +33,20 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.core.Achievement
+import io.github.ilyalissoboi.goosestation.core.AchievementSection
+import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameDisc
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.Leaderboard
+import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
+import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
@@ -269,6 +279,44 @@ class FocusAuditTest {
     }
 
     @Test
+    fun achievementsSignedOut() {
+        show {
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0),
+                settings = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true),
+                signingIn = false,
+                error = null,
+                expired = true,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun achievementsSignedIn() {
+        show {
+            AchievementsScreen(
+                account = AchievementsAccount(AchievementsAccount.SIGNED_IN, "goose", "Goose", 300, 940),
+                settings = AchievementsSettings(hardcore = true, messages = false, sounds = true, indicators = true),
+                signingIn = false,
+                error = null,
+                expired = false,
+                passwordCleared = 0,
+                onSignIn = { _, _ -> },
+                onSignOut = {},
+                onChange = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun theLoadingPage() {
         show { SettingsLoadingPage("BIOS", onBack = {}) }
 
@@ -346,6 +394,92 @@ class FocusAuditTest {
                 NoMenuActions,
             )
         }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuAchievements() {
+        val sections =
+            listOf(
+                AchievementSection(
+                    1,
+                    "Locked",
+                    arrayOf(Achievement(1, "Flawless Flight", "No misses", 25, "", 0, "", 0f)),
+                ),
+                AchievementSection(
+                    2,
+                    "Unlocked",
+                    arrayOf(Achievement(2, "Sparx Rescue", "", 5, "", 1_700_000_000, "", 0f)),
+                ),
+            )
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
+                    cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuAchievementsLoading() {
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
+                    cheevos = AchievementsPanelState(CheevoTab.Achievements),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    private fun showLeaderboards(open: Boolean) {
+        val boards = listOf(Leaderboard(31, "Sunny Flight", "Fastest time"), Leaderboard(32, "Gem Rush", ""))
+        val page =
+            LeaderboardPage(
+                40,
+                arrayOf(LeaderboardEntry(1, "speedgoose", "0:42.10"), LeaderboardEntry(2, "you", "0:50.00")),
+                arrayOf(LeaderboardEntry(2, "you", "0:50.00")),
+                0,
+            )
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
+                    cheevos =
+                        AchievementsPanelState(
+                            CheevoTab.Leaderboards,
+                            leaderboards = boards,
+                            open = boards[0].takeIf { open },
+                            page = page.takeIf { open },
+                        ),
+                ),
+                NoMenuActions,
+            )
+        }
+    }
+
+    @Test
+    fun gameMenuLeaderboards() {
+        showLeaderboards(open = false)
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuAnOpenLeaderboard() {
+        showLeaderboards(open = true)
 
         rule.assertControllerReady()
     }

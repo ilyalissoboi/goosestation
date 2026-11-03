@@ -43,4 +43,63 @@ interface NativeCallbacks {
 
     /** Fast forward was turned on or off, by the menu or a hotkey. */
     fun onFastForwardChanged(enabled: Boolean) {}
+
+    /**
+     * The RetroAchievements login token changed: a sign-in's new [token], or null when it's gone (signed out, or
+     * rejected). Keep it before returning: the core keeps it in memory only.
+     */
+    fun onAchievementsToken(token: String?) {}
+
+    /** The RetroAchievements sign-in, the running game's set, or hardcore mode changed: read them again. */
+    fun onAchievementsChanged() {}
+
+    /** The server rejected the stored token: the player is signed out and must sign in again. */
+    fun onAchievementsLoginExpired() {}
+
+    /**
+     * An achievement notice to show: its [key] says what it is (`achievement_unlock_<id>`, `achievement_mastery`,
+     * `achievement_summary`, `leaderboard_<id>`), with its [title], [text], picture ([imagePath], a PNG, or empty),
+     * how long it shows, and an unlock's [points] (-1 otherwise).
+     */
+    fun onAchievementNotification(
+        key: String,
+        title: String,
+        text: String,
+        imagePath: String,
+        seconds: Float,
+        points: Int,
+    ) {}
+
+    /** A short achievements message, such as losing the connection: [title], or [message] if it has none. */
+    fun onAchievementToast(
+        title: String,
+        message: String,
+        seconds: Float,
+    ) {}
+
+    /**
+     * A live indicator during play ([kind] 0 a leaderboard tracker, 1 a challenge, 2 the progress pop-up) shows or
+     * changes ([shown]) or goes. [id] is the tracker's or the achievement's, [text] the tracker's value or the
+     * progress, [badgePath] the achievement's badge.
+     */
+    fun onAchievementIndicator(
+        kind: Int,
+        id: Int,
+        shown: Boolean,
+        text: String,
+        badgePath: String,
+    ) {}
+
+    /** A badge or icon downloaded to [path]: anything showing it without its picture can load it now. */
+    fun onAchievementImage(path: String) {}
+
+    /** One of the core's sounds (a WAV at [path]) to play now. */
+    fun onPlaySound(path: String) {}
+
+    /** [NativeLibrary.fetchLeaderboard]'s answer to [request]: the leaderboard's [page], or why there's none ([error]). */
+    fun onLeaderboard(
+        request: Int,
+        page: LeaderboardPage?,
+        error: String?,
+    ) {}
 }

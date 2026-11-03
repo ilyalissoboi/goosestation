@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -101,6 +102,37 @@ class FakeCoreApi(
     }
 
     override fun getAutoBios(region: String): String? = images.firstOrNull()?.description
+
+    /** The account the fake reports; [signIn] sets it signed in as the username unless [signInError] is set. */
+    var account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0)
+    var signInError: String? = null
+
+    override fun getAchievementsAccount(): AchievementsAccount {
+        calls += "getAchievementsAccount"
+        return account
+    }
+
+    override fun signIn(
+        username: String,
+        password: String,
+    ): String? {
+        calls += "signIn $username"
+        signInError?.let { return it }
+        account =
+            AchievementsAccount(
+                AchievementsAccount.SIGNED_IN,
+                username,
+                username.replaceFirstChar { it.uppercase() },
+                300,
+                940,
+            )
+        return null
+    }
+
+    override fun signOut() {
+        calls += "signOut"
+        account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0)
+    }
 
     private fun takeDuringRead() {
         val action = duringRead

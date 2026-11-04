@@ -204,6 +204,10 @@ class MemcardEditor(
     private var renameError by mutableStateOf<String?>(null)
     private var games = emptyList<MemcardGame>()
 
+    // A refresh asked for while a question, a panel or an action was open: it runs once they close, so what they act
+    // on stays the card they were opened on.
+    private var refreshWanted = false
+
     /** How many card files exist, for the Memory cards page ([loadCount]), or null while they're counted. */
     var cardCount by mutableStateOf<Int?>(null)
         private set
@@ -385,7 +389,7 @@ class MemcardEditor(
     override fun answer(confirmed: Boolean) {
         val asked = question ?: return
         question = null
-        if (confirmed) asked.onConfirm()
+        if (confirmed) asked.onConfirm() else refreshIfWanted()
     }
 
     override fun choose(index: Int) {
@@ -416,6 +420,7 @@ class MemcardEditor(
     override fun closePanel() {
         panel = null
         renameError = null
+        refreshIfWanted()
     }
 
     override fun rename(
@@ -488,7 +493,10 @@ class MemcardEditor(
     override fun back(leave: () -> Unit) {
         if (working) return
         when {
-            question != null -> question = null
+            question != null -> {
+                question = null
+                refreshIfWanted()
+            }
             panel != null -> closePanel()
             changes > 0 ->
                 ask(
@@ -514,7 +522,12 @@ class MemcardEditor(
      * changed. A card with edits is left as it is: Save asks before writing over a file that changed.
      */
     fun refresh() {
-        if (working || files == null) return
+        if (files == null) return
+        if (working || question != null || panel != null) {
+            refreshWanted = true
+            return
+        }
+        refreshWanted = false
         act(keepPanel = true, quiet = true) {
             val cards = withContext(core) { api.listCards(games) }
             for ((path, card) in loaded.toMap()) {
@@ -618,6 +631,10 @@ class MemcardEditor(
 
     private fun card(pane: Int): EditorCard? = shown.getOrNull(pane)?.let(loaded::get)
 
+    private fun refreshIfWanted() {
+        if (refreshWanted) refresh()
+    }
+
     // Asks before removing saves from the pane's card: [edit] makes the new card from its bytes.
     private fun removing(
         pane: Int,
@@ -694,6 +711,7 @@ class MemcardEditor(
                 block()
             } finally {
                 working = false
+                refreshIfWanted()
             }
         }
     }

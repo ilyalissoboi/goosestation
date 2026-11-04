@@ -503,12 +503,13 @@ by the ones setup picked. That happens once; other settings are kept.
 
 ### Changing settings
 
-**Settings**, in the library's top bar, opens a hub with four pages: **Controllers**, **Graphics**, **BIOS** and
-**Folders** (the folder settings above). Every page works with a D-pad alone, as setup does: the first row is focused
-when a page opens, A or Enter activates, and B or Back goes back. Back from a page focuses its entry in the hub, and
-Back from the hub focuses **Settings** in the library. A setting with several values shows its current one between
-two arrows: left and right step through the values, stopping at the first and the last, and each step is the change;
-a tap on an arrow steps its way. A, Enter or a tap on the row open its choices as a list under it, in the page: each
+**Settings**, in the library's top bar, opens a hub with six pages: **Controllers**, **Graphics**, **Achievements**
+(see "RetroAchievements"), **Memory cards** (see "Memory card sync"), **BIOS** and **Folders** (the folder settings
+above). Every page works with a D-pad alone, as setup does: the first row is focused when a page opens, A or Enter
+activates, and B or Back goes back. Back from a page focuses its entry in the hub, and Back from the hub focuses
+**Settings** in the library. A setting with several values shows its current one between two arrows: left and right
+step through the values, stopping at the first and the last, and each step is the change; a tap on an arrow steps its
+way. A, Enter or a tap on the row open its choices as a list under it, in the page: each
 value with its note, the current one marked and focused. Up and down move through the list (the focus stays in it),
 A picks a value and closes the list, and B, Back or a tap on the row close it with nothing changed; a tap elsewhere
 closes it and does what it would have. One list is open at a time. A value's own note, such as "made for NTSC-J",
@@ -516,9 +517,9 @@ shows under the row while it's the current one. An on/off setting is a
 square toggle, which A, Enter or a tap flip. Touch works too.
 
 - **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
-  pull, so the folders can still be picked again. Controllers, Graphics and BIOS need the core: until it has started
-  (and its first catch-up pulls are done, see "The data folder and its mirror"), they're shown disabled, with
-  "Available once GooseStation has started.", and the hub's focus starts on Folders.
+  pull, so the folders can still be picked again. The other pages need the core: until it has started (and its first
+  catch-up pulls are done, see "The data folder and its mirror"), they're shown disabled, with "Available once
+  GooseStation has started.", and the hub's focus starts on Folders.
 - **Settings change only from the library**, never while a game runs.
 - **Each change is saved at once**, to the working copy's `settings.ini`, which the core then applies
   (`System::ApplySettings`); the next push, within 2 s, takes it to the data folder. The pages use desktop's keys and
@@ -904,9 +905,9 @@ Real storage is checked by hand, with your own credentials.
   removed, so the game was stopped. Its memory cards are saved on this device." A data folder on the card stops being
   mirrored at once: the run under way stops before its next file, and the library shows the unreachable banner ("The
   data folder isn't reachable (the SD card was removed)…"). Once the card is mounted again, the next run saves the
-  changes to it. With no game running, only the mirror stops. The Thor result below is from the build before this.
-  Ejecting the data folder's card stops the game even when the game itself is on internal storage: rechecked with the
-  user on 2026-10-27, and kept.
+  changes to it. With no game running, only the mirror stops. The Thor's first result below is from the build before
+  this; its recheck with this build passed. Ejecting the data folder's card stops the game even when the game itself
+  is on internal storage: rechecked with the user on 2026-10-27, and kept.
 - **The Vulkan fallback lasts until the app restarts.** Once Vulkan has failed, every game in that process uses
   OpenGL ES, even after `Renderer` is changed back to `Vulkan`. Each new process tries Vulkan once more, as
   `settings.ini` keeps the user's choice.
@@ -922,8 +923,9 @@ Real storage is checked by hand, with your own credentials.
   which is still booting. On the emulator, leaving during an Ace Combat 3 boot (with Back, in Plan 1's build) froze
   the UI for 0.7 to 1.2 s (43 and 67 skipped frames), and the boot took 1.2 to 1.4 s. That's well under the 5 s ANR
   limit, but a slow first boot on a device could take longer.
-- **Switching audio output mid-game is untested.** The AAudio stream is reopened when its device goes away, as when
-  headphones are unplugged. The emulator can't check this; the device checklist below does.
+- **Reopening the audio stream mid-game is untested.** The AAudio stream is reopened when its device goes away, as
+  when headphones are unplugged. The emulator can't check this. On the Thor the sound moved over with headphones, but
+  Android re-routed the stream itself, so the reopen never ran (see "Results on the AYN Thor").
 - **A missing grant can't be made with `adb`.** Deleting a folder through the Storage Access Framework (the
   system's Files app, say) should take its grant with it (not checked here). Deleting or moving it from the shell
   (`rm`, `mv`) or by its file path leaves the grant, and looks like an unreachable folder instead. `GrantCheckTest` and
@@ -1218,9 +1220,10 @@ buttons besides the gamepad controls are Back and Home (found 2026-10-30).
 | Recompiler, fastmem | Recompiler in use (no `CPU[I]` line); fastmem on (no `fastmem is disabled` line) |
 | Crash buffer | Empty |
 
-Found: the memory card save message shows the Japanese game title as `?????????`. The OSD's text font (Roboto) has
-Latin glyphs only, and nothing loads a CJK font for game titles (the same happens on desktop unless the UI language
-is CJK).
+Found: the memory card save message showed the Japanese game title as `?????????`. The OSD's text font (Roboto) had
+Latin glyphs only, and nothing loaded a CJK font for game titles (the same happened on desktop unless the UI language
+was CJK). Fixed in #24: the OSD now draws CJK text with a system fallback font. Since 2026-10-31 the app draws the
+core's messages itself (see "The in-game menu"). Not re-checked on the Thor with a Japanese title.
 
 Not checked yet: a Bluetooth pad (step 2 below), the volume keys during a game, and the save-then-swipe-away check
 in step 3.
@@ -1389,13 +1392,13 @@ adb logcat -v time > thor.log
 ```
 
 1. **padtest, with the Thor's own controls.** Start padtest from the library.
-   - [ ] Each face button lights the right PS1 button: bottom = Cross, right = Circle, left = Square, top =
+   - [x] Each face button lights the right PS1 button: bottom = Cross, right = Circle, left = Square, top =
      Triangle. If Cross/Circle and Square/Triangle come out swapped, the pad reports Nintendo labels: note it, for
      the remap screen. Don't work around it in code.
-   - [ ] L1, R1, L2, R2, L3, R3, Start, Select and the D-pad each light the right button.
-   - [ ] Both sticks move their crosses and go back to 0 when let go.
-   - [ ] Nothing sticks or repeats: hold each button, then let go.
-   - [ ] L2 and R2 press once each, and let go cleanly, whether they're analog or digital.
+   - [x] L1, R1, L2, R2, L3, R3, Start, Select and the D-pad each light the right button.
+   - [x] Both sticks move their crosses and go back to 0 when let go.
+   - [x] Nothing sticks or repeats: hold each button, then let go.
+   - [x] L2 and R2 press once each, and let go cleanly, whether they're analog or digital.
    - [ ] No button leaves the game on its own; Home does, and Back, Mode or Select+Start open the prompt (step 8).
      Note any other button that sends Back.
 2. **padtest, with a Bluetooth pad**, paired in Android's settings. Start padtest with the pad off.
@@ -1411,36 +1414,37 @@ adb logcat -v time > thor.log
    - [ ] The volume keys change the volume during the game.
 3. **Ace Combat 3, with OpenGL ES.** Turn the OSD on as in "Changing settings", with `Renderer = OpenGL` in the
    pushed `settings.ini`. Play for a few minutes.
-   - [ ] Full speed: the OSD's speed stays at 100%, and `V:` is about 59.9.
-   - [ ] No audio crackle.
-   - [ ] Plug headphones in mid-game, then unplug them: the sound moves over each time, with no crash and no lasting
+   - [x] Full speed: the OSD's speed stays at 100%, and `V:` is about 59.9.
+   - [x] No audio crackle.
+   - [x] Plug headphones in mid-game, then unplug them: the sound moves over each time, with no crash and no lasting
      silence. The log should have `AAudio stream disconnected, reopening it on the new output device.` each time, and
-     no `Failed to reopen the AAudio stream`.
-   - [ ] Home, then reopen the app: the game resumes where it was.
-   - [ ] Screen off and back on: the game resumes, without a black screen.
+     no `Failed to reopen the AAudio stream`. On the Thor: the sound moved over, but Android re-routed the stream,
+     so it was never disconnected and the reopen path wasn't exercised.
+   - [x] Home, then reopen the app: the game resumes where it was.
+   - [x] Screen off and back on: the game resumes, without a black screen.
    - [ ] Save to the memory card, press Home within 5 s, then swipe the app away in Recents. Start it and the game
      again: the save is there. The log has `Saving memory card to …` just after the Home.
 4. **Ace Combat 3, with Vulkan.** Repeat step 3 with `Renderer = Vulkan` in the pushed `settings.ini`.
 5. **The default renderer.** Push the file again with the `Renderer = …` line left out (or `Renderer = Automatic`),
    and start Ace Combat 3.
-   - [ ] The log has `Allowing Vulkan as default renderer.` and `Trying to create a Vulkan GPU device...`. If it
+   - [x] The log has `Allowing Vulkan as default renderer.` and `Trying to create a Vulkan GPU device...`. If it
      has `Not using Vulkan …` and `Trying to create a OpenGL GPU device...` instead, note the GPU name it logs.
 6. **Afterwards.**
-   - [ ] `adb logcat -b crash -d` is empty.
-   - [ ] Note the renderer lines (`adb logcat -d | grep -E "GPUDevice|Trying to create"`).
-   - [ ] Note the page size (`adb shell getconf PAGE_SIZE`). The core is built for 16 KB pages, so on 4096 or 16384
+   - [x] `adb logcat -b crash -d` is empty.
+   - [x] Note the renderer lines (`adb logcat -d | grep -E "GPUDevice|Trying to create"`).
+   - [x] Note the page size (`adb shell getconf PAGE_SIZE`). The core is built for 16 KB pages, so on 4096 or 16384
      fastmem stays on and the log has no `fastmem is disabled` line.
 7. **Storage, setup and the library.** The emulator's checks above, with the BIOS and games on the SD card and the
    data folder on internal storage. Put a CUE/BIN game (a real one, so it boots to a picture) and an M3U set in the
    games folder first.
-   - [ ] The whole setup with the built-in controller, run before step 1: the D-pad moves between the buttons, A
+   - [x] The whole setup with the built-in controller, run before step 1: the D-pad moves between the buttons, A
      presses them, B goes back a step, and the focused button has a visible ring. Touch only in the system picker,
      if it needs it. The
      library then lists every game.
-   - [ ] The CUE/BIN game, the M3U set and the CHD each boot from the library.
-   - [ ] Save on a memory card in a game. `/sdcard/GooseStation/data/memcards/` has the change within 5 s. A
+   - [x] The CUE/BIN game, the M3U set and the CHD each boot from the library.
+   - [x] Save on a memory card in a game. `/sdcard/GooseStation/data/memcards/` has the change within 5 s. A
      `.goosetmp` may show up between the steps of a write, but none is left behind.
-   - [ ] Home mid-game, replace the card in the folder with `adb push`, then reopen. The game keeps its card. After
+   - [x] Home mid-game, replace the card in the folder with `adb push`, then reopen. The game keeps its card. After
      quitting, the working copy has the folder's version
      (`adb shell run-as io.github.ilyalissoboi.goosestation md5sum "files/data/memcards/<the card>"`).
    - [ ] Delete a save state from the folder, then reopen: it's gone from the working copy
@@ -1448,24 +1452,24 @@ adb logcat -v time > thor.log
    - [ ] Move the data folder away (`adb shell mv /sdcard/GooseStation/data /sdcard/GooseStation/data-away`), then
      save on a memory card. The unreachable banner shows, and the save stays in the working copy. Move it back and
      reopen the app: the save reaches the folder, and the banner goes.
-   - [ ] Remove the SD card mid-game, a moment after a memory card save. The game stops, and the library says "The
+   - [x] Remove the SD card mid-game, a moment after a memory card save. The game stops, and the library says "The
      SD card was removed, so the game was stopped. Its memory cards are saved on this device."; the app isn't killed
      (no `exited due to signal` in the log). Note what the library shows after it (a banner for the games folder, or
      none). Nothing is lost: the memory card in the data folder has the game's last save. Put the card back and
-     reopen the app: the games are listed again.
+     reopen the app: the games are listed again. On the Thor: what the library showed afterwards wasn't noted.
    - [ ] Repeat with the data folder on the SD card. Make a `GooseStation/data` folder there, then **Settings** →
      **Folders** → **Data folder** → **Change**, pick it, and choose **Copy this device's data into it**; the app
      restarts on it. Then remove the card mid-game, a moment after a save: the game stops with the same message, the
      unreachable banner shows "(the SD card was removed)", the working copy keeps the save, and it reaches the folder
      once the card is back.
-   - [ ] Kill the app during a large push. Make a 200 MB file (`adb shell "dd if=/dev/urandom
+   - [x] Kill the app during a large push. Make a 200 MB file (`adb shell "dd if=/dev/urandom
      of=/data/local/tmp/big.bin bs=1048576 count=200 && chmod 644 /data/local/tmp/big.bin"`), copy it in with
      `adb shell run-as io.github.ilyalissoboi.goosestation cp /data/local/tmp/big.bin files/data/screenshots/big.bin`,
      press Home,
      then `adb shell am kill io.github.ilyalissoboi.goosestation` once a `big.bin.goosetmp` shows in the folder.
      Start the app again: the folder has no `big.bin` that is short, no temporary document is left, and the next
      push completes.
-   - [ ] Copy a desktop `settings.ini` (version 3, `Renderer = Software`, an `SDL-0` binding) into the data folder,
+   - [x] Copy a desktop `settings.ini` (version 3, `Renderer = Software`, an `SDL-0` binding) into the data folder,
      then reopen. The renderer is back to Automatic, and the pad maps.
    - [ ] Boot time from the library: the time from `System: Boot Filename: …` to `AndroidHost: Game started: …` in
      the log, for Ace Combat 3 read in place from the SD card, three boots. For a baseline, also boot it from a games
@@ -1474,7 +1478,7 @@ adb logcat -v time > thor.log
      `/sdcard/Android/data/io.github.ilyalissoboi.goosestation/files/games`; its log has the same two lines. Plan 1
      didn't record a boot time on the Thor; on the emulator it was 0.7 to 1.4 s. This shows whether reading in place
      is slower.
-   - [ ] `adb logcat -b crash -d` is empty.
+   - [x] `adb logcat -b crash -d` is empty.
 8. **Settings and controls.** With the build that has the settings pages, after step 7's setup.
    - [x] Everything with the built-in controller alone, no touch: **Settings**, each page, every list (Renderer,
      Internal resolution, Aspect ratio, each BIOS region, the Controller row with a second pad connected), the
@@ -1524,54 +1528,58 @@ adb logcat -v time > thor.log
      in slot 1?", Replace and Cancel), Load state, Fast forward (the marker), Analog mode, Screenshot, Reset console
      (Reset and Cancel), Exit game.
    - [ ] B steps out one layer at a time: the question, then the slot panel (back to its row), then the menu.
-   - [ ] Nothing pressed in the menu reaches the game, and a direction or button held as it opens doesn't stick after
+   - [x] Nothing pressed in the menu reaches the game, and a direction or button held as it opens doesn't stick after
      Resume.
    - [ ] Exit game, then start the game again: "Resume where you left off?", with its picture and time; Resume, Start
      over and B each work.
    - [ ] Exit game again: "Replace your saved place from …?", Keep it focused. Keep it exits and the next start
      offers the old resume state's picture; Replace exits and replaces it; B stays in the game.
-   - [ ] Set each hotkey on the Controllers page (Select + a face button). In padtest: Select + that button fires it,
+   - [x] Set each hotkey on the Controllers page (Select + a face button). In padtest: Select + that button fires it,
      and padtest lights neither Select nor the button; a Select tap lights Select briefly; Select held lights it from
      about half a second; Select + Start held opens the menu without Select lighting.
    - [ ] In a game with a map or menu on Select, holding Select still shows it.
-   - [ ] With the Analog mode hotkey set (Select + Square's button), a single press of that button in a game does
+   - [x] With the Analog mode hotkey set (Select + Square's button), a single press of that button in a game does
      nothing to the analog mode; Select + it toggles it once.
-   - [ ] In a game where Square does something visible, Select + Square's button fires its hotkey and Square doesn't
+   - [x] In a game where Square does something visible, Select + Square's button fires its hotkey and Square doesn't
      happen.
-   - [ ] Scrolling: on a long settings page, the focused row stays in the middle; at the bottom the last row's ring
+   - [x] Scrolling: on a long settings page, the focused row stays in the middle; at the bottom the last row's ring
      shows whole, and going back up shows the page's title. The ring of a focused menu row isn't cut by the row
      below.
    - Exiting a game that's still starting (it saves no resume state) is too quick to try by hand on the Thor; it's
      covered by `InGameMenuTest.exitBeforeTheBootSavesNothing` and `GameMenuTest.gameRowsWaitForTheBoot`.
-   - [ ] `adb logcat -b crash -d` is empty.
+   - [x] `adb logcat -b crash -d` is empty.
 
 10. **Choice lists and PlayStation glyphs.** With the build that has them.
-   - [ ] On Graphics, A on each row opens its list, with the current value focused and marked. Up and down move and
+   - [x] On Graphics, A on each row opens its list, with the current value focused and marked. Up and down move and
      stop at the ends; A on another value picks it, and the row shows it; B closes a list with nothing changed. Left
      and right on a closed row still step.
-   - [ ] On Controllers, every Port 1 row shows its PlayStation glyph (△ ○ × □ in their colours, the D-pad, sticks,
+   - [x] On Controllers, every Port 1 row shows its PlayStation glyph (△ ○ × □ in their colours, the D-pad, sticks,
      L1–R3, Select, Start), readable with the system's largest font size; the hotkey rows keep their words.
 11. **Discs and patch codes.** With the build that has them, an M3U set with its discs in the games folder, and a
     player's `cheats/<game title>.cht` in the data folder with a few codes in groups, one marked `[*]`.
-   - [ ] The set is one tile (the M3U); a separate CUE copy of a disc is a tile of its own.
+   - [x] The set is one tile (the M3U); a separate CUE copy of a disc is a tile of its own.
    - [ ] Change disc comes after Load state with "Disc 1 of 2"; its panel focuses the disc in the drive, marked
-     Current; another disc goes in with "Disc 2 inserted"; B goes back to the row.
+     Current; another disc goes in with "Disc 2 inserted"; B goes back to the row. (Passed on the Thor: discs went in
+     with "Disc 2 inserted" and B went back; the row's place, its value and the panel's focus weren't recorded.)
    - [ ] With disc 2 in, a slot saved on disc 1 reads "Saved · Disc 1" and loads on disc 1.
-   - [ ] Patch codes comes after Screenshot; its groups, the `[*]` code on, long names wrapping at two lines, every
+   - [x] Patch codes comes after Screenshot; its groups, the `[*]` code on, long names wrapping at two lines, every
      row reached with the D-pad and seen whole; switching codes keeps the menu open; B goes back to the row, in view.
-   - [ ] The switches hold across a disc change and an Exit and restart; the player's file is unchanged.
-   - [ ] Nothing pressed in the panels reaches the game.
+     On the Thor: B out of the panel failed at first, and passed with the fix in `1ffdb2763`.
+   - [x] The switches hold across a disc change and an Exit and restart; the player's file is unchanged.
+   - [x] Nothing pressed in the panels reaches the game.
 
 12. **RetroAchievements.** With the build that has them, on Wi-Fi, with a RetroAchievements account and a game it
     knows that has leaderboards.
    - [ ] Settings → Achievements: the D-pad passes over the fields without opening the keyboard; A opens it. Sign in:
-     "Signed in as …" with the points, **Sign out** focused.
-   - [ ] A game start shows "You have unlocked N of M achievements…" with the game's icon, and the menu's
+     "Signed in as …" with the points, **Sign out** focused. (Passed on the Thor: the keyboard opened on A, not on
+     focus, and "Signed in as …" showed the points; Sign out's focus wasn't recorded.)
+   - [x] A game start shows "You have unlocked N of M achievements…" with the game's icon, and the menu's
      **Achievements** row shows "N of M".
-   - [ ] In its panel, the sections and badges scroll with the D-pad; L1 and R1 switch the tabs, and the menu stays
-     still each time, its Achievements row in view, with no focus ring flashing on it.
-   - [ ] A on a leaderboard: its entry count, the top 10 and your entry or "You have no entry yet"; B goes back to the
+   - [x] In its panel, the sections and badges scroll with the D-pad; L1 and R1 switch the tabs, and the menu stays
+     still each time, its Achievements row in view, with no focus ring flashing on it. On the Thor: the menu scrolled
+     and the ring flashed at first, and both passed with the fixes in `1dcf03dd1`.
+   - [x] A on a leaderboard: its entry count, the top 10 and your entry or "You have no entry yet"; B goes back to the
      board, and B again to the menu's row.
-   - [ ] Hardcore mode on: a game with a resume state offers only **Start**; Load state, Fast forward and Patch codes
+   - [x] Hardcore mode on: a game with a resume state offers only **Start**; Load state, Fast forward and Patch codes
      are greyed with "Off in hardcore mode", and the D-pad skips them. Switch it off afterwards.
    - [ ] An unlock in play shows its card at the top centre, with its sound.

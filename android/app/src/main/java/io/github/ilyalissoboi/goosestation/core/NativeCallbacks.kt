@@ -65,6 +65,9 @@ interface NativeCallbacks {
     /** Whether memory card sync's secret [name] is stored, without reading it. */
     fun hasMemcardSyncSecret(name: String): Boolean = false
 
+    /** Memory card sync's state may have changed: read it again ([NativeLibrary.getMemcardSyncState]). */
+    fun onMemcardSyncChanged() {}
+
     /** The RetroAchievements sign-in, the running game's set, or hardcore mode changed: read them again. */
     fun onAchievementsChanged() {}
 

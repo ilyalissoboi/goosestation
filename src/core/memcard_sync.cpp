@@ -27,6 +27,7 @@
 #include "fmt/format.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -166,6 +167,13 @@ static std::vector<SecretUpdate> s_apply_secrets;
 static std::vector<std::function<void(const std::string&)>> s_apply_done;
 static ApplySettings s_apply_settings;
 
+#ifdef __ANDROID__
+static std::atomic<Activity> s_activity{Activity::None};
+// SetPeriodicSyncForTest()'s period in ms, 0 for PERIODIC_SYNC; s_period_changed tells the worker to take it.
+static std::atomic<u32> s_periodic_ms{0};
+static bool s_period_changed = false; // s_worker_lock
+#endif
+
 static constexpr const char* NO_LIBRARY = "The emusync library is missing, so memory card sync is unavailable.";
 static constexpr const char* LOCKED_STATUS =
   "This storage is encrypted. Enter its passphrase in the memory card sync settings to sync.";
@@ -274,10 +282,61 @@ bool MemcardSync::IsAvailable()
   return LoadEmuSync();
 }
 
+// Tells the app to look at sync again (Android).
+static void NotifyChanged()
+{
+#ifdef __ANDROID__
+  Host::OnMemcardSyncChanged();
+#endif
+}
+
+#ifdef __ANDROID__
+static void SetActivity(MemcardSync::Activity activity)
+{
+  if (MemcardSync::s_activity.exchange(activity) != activity)
+    NotifyChanged();
+}
+
+// What an outcome of emusync's says sync did.
+static MemcardSync::Activity ActivityFor(es_status st)
+{
+  using MemcardSync::Activity;
+  switch (st)
+  {
+    case ES_OK:
+      return Activity::Synced;
+    case ES_OFFLINE:
+      return Activity::Offline;
+    case ES_E_LOCKED:
+    case ES_E_PASSPHRASE:
+      return Activity::Locked;
+    case ES_E_AUTH:
+      return Activity::AuthRequired;
+    default:
+      return Activity::Failed;
+  }
+}
+
+static std::chrono::steady_clock::duration PeriodicSync()
+{
+  const u32 ms = MemcardSync::s_periodic_ms.load();
+  return ms ? std::chrono::steady_clock::duration(std::chrono::milliseconds(ms)) :
+              std::chrono::steady_clock::duration(MemcardSync::PERIODIC_SYNC);
+}
+#else
+static std::chrono::steady_clock::duration PeriodicSync()
+{
+  return MemcardSync::PERIODIC_SYNC;
+}
+#endif
+
 static void SetStatus(std::string status)
 {
-  std::lock_guard lock(MemcardSync::s_state_lock);
-  MemcardSync::s_status = std::move(status);
+  {
+    std::lock_guard lock(MemcardSync::s_state_lock);
+    MemcardSync::s_status = std::move(status);
+  }
+  NotifyChanged();
 }
 
 static std::string TimeOfDay()
@@ -548,13 +607,17 @@ static void AddConflict(es_conflict_id id)
     *it = std::move(c);
   else
     s_conflicts.push_back(std::move(c));
+  NotifyChanged();
 }
 
 static void RemoveConflict(es_conflict_id id)
 {
   using namespace MemcardSync;
-  std::lock_guard lock(s_state_lock);
-  std::erase_if(s_conflicts, [id](const Conflict& c) { return c.id == id; });
+  {
+    std::lock_guard lock(s_state_lock);
+    std::erase_if(s_conflicts, [id](const Conflict& c) { return c.id == id; });
+  }
+  NotifyChanged();
 }
 
 // Drops the conflicts resolved meanwhile, on another device say. Needs the client lock (shared).
@@ -619,6 +682,16 @@ static void DrainEvents()
     {
       PruneConflicts();
     }
+#ifdef __ANDROID__
+    if (ev.type == ES_EV_SYNC_STARTED)
+      SetActivity(Activity::Syncing);
+    else if (ev.type == ES_EV_SYNC_FINISHED)
+      SetActivity(ActivityFor(ev.status));
+    else if (ev.type == ES_EV_AUTH_REQUIRED)
+      SetActivity(Activity::AuthRequired);
+    else if (ev.type == ES_EV_ERROR && ev.status == ES_E_LOCKED)
+      SetActivity(Activity::Locked);
+#endif
 
     std::string text = DescribeEvent(ev);
     if (ev.type == ES_EV_UNIT_APPLIED || ev.type == ES_EV_UNIT_UPLOADED)
@@ -636,7 +709,7 @@ static void WorkerLoop()
 {
   using namespace MemcardSync;
   Threading::SetNameOfCurrentThread("MemcardSync");
-  auto next_sync = std::chrono::steady_clock::now() + PERIODIC_SYNC;
+  auto next_sync = std::chrono::steady_clock::now() + PeriodicSync();
   for (;;)
   {
     std::vector<es_container_id> flush;
@@ -647,6 +720,10 @@ static void WorkerLoop()
       if (s_worker_stop)
         return;
       s_worker_wake = false;
+#ifdef __ANDROID__
+      if (std::exchange(s_period_changed, false))
+        next_sync = std::chrono::steady_clock::now() + PeriodicSync();
+#endif
       flush = std::exchange(s_flush_pending, {});
       resolve = std::exchange(s_resolve_pending, {});
     }
@@ -660,7 +737,7 @@ static void WorkerLoop()
     if (std::chrono::steady_clock::now() >= next_sync)
     {
       s_es.es_sync_now(s_client);
-      next_sync = std::chrono::steady_clock::now() + PERIODIC_SYNC;
+      next_sync = std::chrono::steady_clock::now() + PeriodicSync();
     }
     DrainEvents();
   }
@@ -705,6 +782,9 @@ static void StopLocked(std::unique_lock<std::shared_mutex>& client, u32 timeout_
   WipeSecret(s_config.secret_access_key);
   s_config = {};
   s_status.clear();
+#ifdef __ANDROID__
+  SetActivity(Activity::None);
+#endif
 }
 
 bool MemcardSync::Start(const Config& config, std::string* error)
@@ -741,6 +821,9 @@ bool MemcardSync::Start(const Config& config, std::string* error)
     if (error)
       *error = fmt::format("Could not open the sync data in {}: {}", config.data_dir, s_es.es_status_str(st));
     s_client = nullptr;
+#ifdef __ANDROID__
+    SetActivity(Activity::Failed);
+#endif
     // StopLocked() returns early without a client, so this is the only place the copied keys can go.
     std::lock_guard lock(s_state_lock);
     WipeSecret(s_config.secret_access_key);
@@ -777,11 +860,17 @@ bool MemcardSync::Start(const Config& config, std::string* error)
     }
     s_es.es_client_destroy(s_client, 0);
     s_client = nullptr;
+#ifdef __ANDROID__
+    SetActivity(ActivityFor(st));
+#endif
     std::lock_guard lock(s_state_lock);
     WipeSecret(s_config.secret_access_key);
     s_config = {};
     return false;
   }
+#ifdef __ANDROID__
+  SetActivity(st == ES_OK ? Activity::Syncing : ActivityFor(st));
+#endif
   SetStatus(st == ES_OFFLINE  ? "Storage not reachable yet: sync starts once it is." :
             st == ES_E_LOCKED ? std::string(LOCKED_STATUS) :
                                 "Starting...");
@@ -843,6 +932,9 @@ void MemcardSync::SyncNow()
 
   // Before asking, so the sync's own status (set when it finishes) can't be overwritten.
   SetStatus("Syncing...");
+#ifdef __ANDROID__
+  SetActivity(Activity::Syncing);
+#endif
   s_es.es_sync_now(s_client);
 }
 
@@ -1036,6 +1128,7 @@ static void ApplyLoop()
       s_apply_running = false;
     }
     s_apply_idle_cv.notify_all();
+    NotifyChanged();
   }
 }
 
@@ -1073,6 +1166,7 @@ void MemcardSync::ApplySettingsAsync(std::vector<SecretUpdate> secrets,
   if (!s_apply_thread.joinable())
     s_apply_thread = std::thread(&ApplyLoop);
   s_apply_cv.notify_one();
+  NotifyChanged();
 }
 
 bool MemcardSync::IsApplying()
@@ -1172,3 +1266,22 @@ void MemcardSync::OnCardClosed(std::string_view path)
   // snapshots the card once more, then applies what waited.
   EndSession(card);
 }
+
+#ifdef __ANDROID__
+
+MemcardSync::Activity MemcardSync::GetActivity()
+{
+  return s_activity.load();
+}
+
+void MemcardSync::SetPeriodicSyncForTest(u32 ms)
+{
+  s_periodic_ms.store(ms);
+  {
+    std::lock_guard lock(s_worker_lock);
+    s_period_changed = true;
+  }
+  WakeWorker();
+}
+
+#endif

@@ -29,7 +29,7 @@ MemcardSyncBridge::State MemcardSyncBridge::GetState()
   state.passphrase_recorded = Host::GetBaseBoolSettingValue(SECTION, "PassphraseStored", false);
   state.start_error = GetLastStartError();
   state.status = GetStatus();
-  state.activity = 0;
+  state.activity = static_cast<u8>(GetActivity());
   state.conflicts = static_cast<u32>(GetConflicts().size());
   state.kind = GetStatusKind(available, state.applying, !state.start_error.empty(), state.enabled, state.running,
                              !state.status.empty());
@@ -39,4 +39,14 @@ MemcardSyncBridge::State MemcardSyncBridge::GetState()
 void MemcardSyncBridge::Apply()
 {
   MemcardSync::ApplySettingsAsync();
+}
+
+void MemcardSyncBridge::SyncNow()
+{
+  MemcardSync::SyncNow();
+}
+
+void MemcardSyncBridge::SetPeriodicSyncForTest(u32 ms)
+{
+  MemcardSync::SetPeriodicSyncForTest(ms);
 }

@@ -56,6 +56,7 @@ jmethodID s_on_achievements_token = nullptr;
 jmethodID s_store_memcard_sync_secret = nullptr;
 jmethodID s_load_memcard_sync_secret = nullptr;
 jmethodID s_has_memcard_sync_secret = nullptr;
+jmethodID s_on_memcard_sync_changed = nullptr;
 jmethodID s_on_achievements_changed = nullptr;
 jmethodID s_on_achievements_login_expired = nullptr;
 jmethodID s_on_achievements_sent = nullptr;
@@ -490,6 +491,11 @@ std::optional<std::string> AndroidHost::LoadMemcardSyncSecret(std::string_view n
   return value;
 }
 
+void AndroidHost::NotifyMemcardSyncChanged()
+{
+  CallCallback(s_on_memcard_sync_changed, std::nullopt);
+}
+
 bool AndroidHost::HasMemcardSyncSecret(std::string_view name)
 {
   ScopedJNIEnv env;
@@ -749,6 +755,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_load_memcard_sync_secret =
     env->GetMethodID(s_callbacks_class, "loadMemcardSyncSecret", "(Ljava/lang/String;)Ljava/lang/String;");
   s_has_memcard_sync_secret = env->GetMethodID(s_callbacks_class, "hasMemcardSyncSecret", "(Ljava/lang/String;)Z");
+  s_on_memcard_sync_changed = env->GetMethodID(s_callbacks_class, "onMemcardSyncChanged", "()V");
   s_on_achievements_changed = env->GetMethodID(s_callbacks_class, "onAchievementsChanged", "()V");
   s_on_achievements_login_expired = env->GetMethodID(s_callbacks_class, "onAchievementsLoginExpired", "()V");
   s_on_achievements_sent = env->GetMethodID(s_callbacks_class, "onAchievementsSent", "(I)V");
@@ -1427,6 +1434,16 @@ NATIVE_LIBRARY_FUNCTION(jobject, getMemcardSyncState)(JNIEnv* env, jobject)
 NATIVE_LIBRARY_FUNCTION(void, applyMemcardSync)(JNIEnv*, jobject)
 {
   MemcardSyncBridge::Apply();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, memcardSyncNow)(JNIEnv*, jobject)
+{
+  MemcardSyncBridge::SyncNow();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setMemcardSyncPeriodForTest)(JNIEnv*, jobject, jlong ms)
+{
+  MemcardSyncBridge::SetPeriodicSyncForTest(static_cast<u32>(std::max<jlong>(ms, 0)));
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)

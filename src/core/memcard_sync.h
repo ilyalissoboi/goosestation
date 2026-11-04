@@ -206,5 +206,30 @@ std::optional<std::string> LoadMemcardSyncSecret(const char* name);
 bool HasMemcardSyncSecret(const char* name);
 /// This device's name, for a DeviceName left empty ("AYN Thor"): Android's host name is "localhost".
 std::string GetMemcardSyncDefaultDeviceName();
+/// What GetActivity(), the status, the conflicts or whether settings are being applied say may have changed. From
+/// sync's threads, maybe with its locks held: it must not call into sync, only note that the app should look again.
+void OnMemcardSyncChanged();
 } // namespace Host
+
+// ---- Android: what sync is doing, for the app's badge -------------------------------------------------
+namespace MemcardSync {
+
+/// What sync last did, from emusync's events and the start's result.
+enum class Activity : u8
+{
+  None,         ///< Not running, or nothing reported yet.
+  Syncing,      ///< A sync, or a start, is under way.
+  Synced,       ///< The last sync finished.
+  Offline,      ///< The storage couldn't be reached.
+  Failed,       ///< The last sync, or the start, failed.
+  Locked,       ///< The storage is encrypted and this device has no key for it, or the passphrase is wrong.
+  AuthRequired, ///< The storage rejected the access key.
+};
+
+Activity GetActivity();
+
+/// Tests: syncs every `ms` instead of every 5 minutes (0 for 5 minutes again), from now.
+void SetPeriodicSyncForTest(u32 ms);
+
+} // namespace MemcardSync
 #endif

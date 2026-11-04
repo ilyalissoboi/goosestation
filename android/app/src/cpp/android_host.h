@@ -308,6 +308,8 @@ void NotifyAchievementsToken(std::optional<std::string_view> token);
 bool StoreMemcardSyncSecret(std::string_view name, std::optional<std::string_view> value);
 std::optional<std::string> LoadMemcardSyncSecret(std::string_view name);
 bool HasMemcardSyncSecret(std::string_view name);
+/// Memory card sync's state may have changed: the app reads it again (NativeLibrary.getMemcardSyncState()). Any thread.
+void NotifyMemcardSyncChanged();
 
 /// RetroAchievements, for the app (achievements_bridge.cpp): the sign-in, the game's set or hardcore mode changed; the
 /// sign-in expired; a notice, toast or live indicator to show; a picture downloaded; a sound to play. Any thread.

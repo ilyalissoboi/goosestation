@@ -234,6 +234,11 @@ std::string Host::GetMemcardSyncDefaultDeviceName()
   return AndroidHost::s_device_name;
 }
 
+void Host::OnMemcardSyncChanged()
+{
+  AndroidHost::NotifyMemcardSyncChanged();
+}
+
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
                              std::string install_id, std::string achievements_token, std::string achievements_folder,
                              std::string device_name, Error* error)

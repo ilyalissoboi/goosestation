@@ -42,4 +42,10 @@ State GetState();
 /// MemcardSync::ApplySettingsAsync(), with the settings as they are now. Returns at once.
 void Apply();
 
+/// MemcardSync::SyncNow(): a full sync, queued. Returns at once.
+void SyncNow();
+
+/// Tests: MemcardSync::SetPeriodicSyncForTest().
+void SetPeriodicSyncForTest(u32 ms);
+
 } // namespace MemcardSyncBridge

@@ -100,6 +100,12 @@ object NativeLibrary {
      */
     external fun applyMemcardSync()
 
+    /** Queues a full memory card sync: download, apply to the cards not in use, upload. Returns at once. */
+    external fun memcardSyncNow()
+
+    /** Tests: syncs memory cards every [ms] instead of every 5 minutes (0 for 5 minutes again), from now. */
+    external fun setMemcardSyncPeriodForTest(ms: Long)
+
     /**
      * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game
      * Native)`, `Stretch To Fill` and `4:3`. Doesn't need [initialize].

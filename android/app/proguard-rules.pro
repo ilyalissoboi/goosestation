@@ -15,6 +15,7 @@
     public boolean storeMemcardSyncSecret(java.lang.String, java.lang.String);
     public java.lang.String loadMemcardSyncSecret(java.lang.String);
     public boolean hasMemcardSyncSecret(java.lang.String);
+    public void onMemcardSyncChanged();
 }
 
 # jni_bridge.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().

@@ -3,6 +3,8 @@ add_executable(common-tests
   ../core/achievements_offline_store.cpp
   android_disc_groups_tests.cpp
   ../util/android_disc_groups.cpp
+  android_memcards_tests.cpp
+  ../util/android_memcards.cpp
   android_input_keys_tests.cpp
   ../util/android_input_keys.cpp
   android_patch_codes_tests.cpp

@@ -64,6 +64,26 @@ data class PushResult(
     val complete: Boolean,
 )
 
+/**
+ * Keeps others off a working-copy file while the mirror replaces or deletes it: memory card sync off a card. [holding]
+ * runs the action with [path] held and returns true, or returns false without running it when it can't be held now.
+ */
+fun interface CopyGuard {
+    fun holding(
+        path: String,
+        action: () -> Unit,
+    ): Boolean
+
+    companion object {
+        /** Holds nothing: every action runs. */
+        val NONE =
+            CopyGuard { _, action ->
+                action()
+                true
+            }
+    }
+}
+
 /** What one run did. */
 private class SyncResult(
     val changed: Set<String>,
@@ -83,7 +103,8 @@ private class SyncResult(
  * kept, and the state [MirrorState.Unreachable]; the next run tries again. A file that fails on its own is left for
  * the next run, and so is everything when the folder is reachable but either side can't be listed in full; the
  * state is then [MirrorState.Incomplete] if a working-copy change didn't reach the folder. Nothing but cancellation
- * is thrown.
+ * is thrown. Each replace or delete in the working copy runs held by [guard]; one it refuses is left for a later run,
+ * as a deferred one is.
  */
 class Mirror(
     private val store: FolderStore,
@@ -91,6 +112,7 @@ class Mirror(
     private val manifestFile: File,
     private val clock: () -> Long,
     private val removeStrays: () -> Boolean = { true },
+    private val guard: CopyGuard = CopyGuard.NONE,
     private val layout: () -> DataLayout,
 ) {
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
@@ -208,8 +230,16 @@ class Mirror(
                     continue
                 }
                 try {
-                    record(perform(action, folder, loadManifest()))
-                    if (action is CopyToLocal || action is DeleteLocal) changed += action.path
+                    if (action is CopyToLocal || action is DeleteLocal) {
+                        val done = guard.holding(action.path) { record(perform(action, folder, loadManifest())) }
+                        if (!done) {
+                            complete = false
+                            continue
+                        }
+                        changed += action.path
+                    } else {
+                        record(perform(action, folder, loadManifest()))
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: FolderUnreachableException) {

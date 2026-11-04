@@ -15,6 +15,7 @@
 #include "core/game_database.h"
 #include "core/game_list.h"
 #include "core/host.h"
+#include "core/memcard_sync.h"
 #include "core/memory_card.h"
 #include "core/pad.h"
 #include "core/settings.h"
@@ -174,6 +175,7 @@ static std::mutex s_game_list_refresh_mutex;
 // Set once by Initialize(), before s_initialized.
 static std::string s_bios_dir;
 static std::string s_install_id;
+static std::string s_device_name; // memory card sync's default DeviceName
 
 // Input queued by the app's threads.
 static std::mutex s_input_mutex;
@@ -212,9 +214,34 @@ static u32 s_binding_capture_id = 0; // changes when a capture starts or is canc
 static std::atomic_bool s_vulkan_failed{false};
 } // namespace AndroidHost
 
+bool Host::StoreMemcardSyncSecret(const char* name, std::string_view value)
+{
+  return AndroidHost::StoreMemcardSyncSecret(name, value.empty() ? std::nullopt : std::optional(value));
+}
+
+std::optional<std::string> Host::LoadMemcardSyncSecret(const char* name)
+{
+  return AndroidHost::LoadMemcardSyncSecret(name);
+}
+
+bool Host::HasMemcardSyncSecret(const char* name)
+{
+  return AndroidHost::HasMemcardSyncSecret(name);
+}
+
+std::string Host::GetMemcardSyncDefaultDeviceName()
+{
+  return AndroidHost::s_device_name;
+}
+
+void Host::OnMemcardSyncChanged()
+{
+  AndroidHost::NotifyMemcardSyncChanged();
+}
+
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
                              std::string install_id, std::string achievements_token, std::string achievements_folder,
-                             Error* error)
+                             std::string device_name, Error* error)
 {
   std::unique_lock lock(s_initialize_mutex);
   if (s_initialized)
@@ -228,6 +255,7 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   EmuFolders::DataRoot = Path::Canonicalize(data_root);
   s_bios_dir = Path::Canonicalize(bios_dir);
   s_install_id = std::move(install_id);
+  s_device_name = std::move(device_name);
   s_initial_achievements_token = std::move(achievements_token);
   INFO_LOG("DataRoot Directory: {}", EmuFolders::DataRoot);
   INFO_LOG("Resources Directory: {}", EmuFolders::Resources);
@@ -316,7 +344,7 @@ bool AndroidHost::InitializeConfig(Error* error)
   }
 
   // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
-  changed = AdaptForeignSettings(si, s_install_id) || changed;
+  changed = AdaptForeignSettings(si, s_install_id, s_device_name) || changed;
   changed = MoveAnalogBindings(si) || changed;
 
   // The controllers this install has seen, at the indices their bindings use. An adapted file has none.
@@ -393,6 +421,27 @@ void AndroidHost::RefreshGameList(bool invalidate_cache)
   GameList::Refresh(invalidate_cache, false, nullptr);
 }
 
+namespace AndroidHost {
+namespace {
+// What memory card sync starts with, from [MemoryCardSync].
+struct MemcardSyncSettings
+{
+  bool enabled;
+  std::string remote_uri;
+  std::string access_key_id;
+  std::string device_name;
+
+  bool operator==(const MemcardSyncSettings&) const = default;
+};
+
+MemcardSyncSettings ReadMemcardSyncSettings(const SettingsInterface& si)
+{
+  return {si.GetBoolValue(MemcardSync::SECTION, "Enabled", false), si.GetStringValue(MemcardSync::SECTION, "RemoteURI"),
+          si.GetStringValue(MemcardSync::SECTION, "AccessKeyID"), si.GetStringValue(MemcardSync::SECTION, "DeviceName")};
+}
+} // namespace
+} // namespace AndroidHost
+
 void AndroidHost::ReloadSettings()
 {
   if (!s_initialized)
@@ -401,9 +450,11 @@ void AndroidHost::ReloadSettings()
   EmuThread::RunOnThread(
     []() {
       bool adapted;
+      bool sync_changed;
       {
         const auto lock = Host::GetSettingsLock();
         INISettingsInterface& si = *s_base_settings_interface;
+        const MemcardSyncSettings sync_before = ReadMemcardSyncSettings(si);
         Error error;
         if (!si.Reload(&error))
         {
@@ -413,7 +464,7 @@ void AndroidHost::ReloadSettings()
         }
 
         INFO_LOG("Reloaded the settings from {}.", si.GetFileName());
-        adapted = AdaptForeignSettings(si, s_install_id);
+        adapted = AdaptForeignSettings(si, s_install_id, s_device_name);
 
         // The indices in use stay as they are, whatever the file has: an adapted one has none.
         bool changed = MoveAnalogBindings(si) || adapted;
@@ -425,7 +476,12 @@ void AndroidHost::ReloadSettings()
 
         if (changed && !si.Save(&error))
           ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+        sync_changed = ReadMemcardSyncSettings(si) != sync_before;
       }
+
+      // Memory card sync's settings came with the file: sync follows them.
+      if (sync_changed)
+        MemcardSync::ApplySettingsAsync();
 
       // A pad connected now that the file leaves with no binding (all of them, after an adapt) won't connect again:
       // map it here.

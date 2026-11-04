@@ -21,7 +21,8 @@ object NativeLibrary {
      * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
      * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken]. [achievementsFolder] is
      * where unlocks waiting to be sent, and what a game needs to start offline, are kept: the app's private storage,
-     * outside the data root, so they're never mirrored.
+     * outside the data root, so they're never mirrored. [deviceName] is this device's name for memory card sync: what
+     * an empty `[MemoryCardSync] DeviceName` means, and what a settings.ini from another install gets.
      */
     external fun initialize(
         dataRoot: String,
@@ -30,6 +31,7 @@ object NativeLibrary {
         installId: String,
         achievementsToken: String?,
         achievementsFolder: String,
+        deviceName: String,
     ): Boolean
 
     // The settings calls work on settings.ini, which they save, and can be made from any thread.
@@ -85,6 +87,74 @@ object NativeLibrary {
      * [initialize].
      */
     external fun isVulkanFailed(): Boolean
+
+    /** Whether memory card sync's library (emusync) loaded, so sync can run. From any thread. */
+    external fun isMemcardSyncAvailable(): Boolean
+
+    /** Memory card sync's settings and state now. From any thread; never waits for a start. */
+    external fun getMemcardSyncState(): MemcardSyncState
+
+    /**
+     * Applies memory card sync's settings as settings.ini has them now: starts sync, restarts it with new settings, or
+     * stops it. Returns at once; the state says when it's done. Secrets come from [NativeCallbacks].
+     */
+    external fun applyMemcardSync()
+
+    /** Queues a full memory card sync: download, apply to the cards not in use, upload. Returns at once. */
+    external fun memcardSyncNow()
+
+    /** The memory card sync conflicts waiting for the player, oldest first. Waits for the core. */
+    external fun getMemcardSyncConflicts(): Array<SyncConflict>
+
+    /**
+     * Keeps this device's version of conflict [id]'s save ([keepLocal]), or the other version [remoteIndex]. Returns at
+     * once: the choice is uploaded, and written to the card once no game has it.
+     */
+    external fun resolveMemcardSyncConflict(
+        id: Long,
+        keepLocal: Boolean,
+        remoteIndex: Int,
+    )
+
+    /**
+     * Runs [action] with sync kept off the card at [relativePath] (in the working copy), as the mirror replaces or
+     * deletes it: true once it ran, false, without running it, when a game has the card or sync can't hold it now. An
+     * exception from [action] is thrown on once the card is let go.
+     */
+    external fun memcardSyncHoldCard(
+        relativePath: String,
+        action: Runnable,
+    ): Boolean
+
+    /**
+     * The app went to the background ([backgrounded]) or came back: memory card sync pushes what it has and rests, or
+     * syncs at once and every 5 minutes again. Queued after the core's work already asked for (a pause's card writes);
+     * returns at once.
+     */
+    external fun setMemcardSyncBackgrounded(backgrounded: Boolean)
+
+    /** Tests: syncs memory cards every [ms] instead of every 5 minutes (0 for 5 minutes again), from now. */
+    external fun setMemcardSyncPeriodForTest(ms: Long)
+
+    /** Tests: the core's card hooks, as a game's card at [path] calls them. */
+    external fun memcardCardOpenedForTest(path: String)
+
+    external fun memcardCardWrittenForTest(path: String)
+
+    external fun memcardCardClosedForTest(path: String)
+
+    /** Tests: writes [data] as save [name] on the card at [path] (a new card if there's none), replacing one. */
+    external fun writeMemoryCardSaveForTest(
+        path: String,
+        name: String,
+        data: ByteArray,
+    ): Boolean
+
+    /** Tests: save [name]'s data on the card at [path], or null. */
+    external fun readMemoryCardSaveForTest(
+        path: String,
+        name: String,
+    ): ByteArray?
 
     /**
      * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game

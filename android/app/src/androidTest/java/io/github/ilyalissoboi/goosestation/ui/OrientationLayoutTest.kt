@@ -61,6 +61,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
@@ -74,6 +75,9 @@ import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.core.SyncConflict
+import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
+import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
@@ -666,6 +670,66 @@ class OrientationLayoutTest {
     }
 
     @Test
+    fun syncConflictsWithLongNames() {
+        val long = SyncVersion("A desktop computer with a rather long name", 1_793_900_000_000, true, 3, false)
+        eachConfig({
+            SyncConflictsScreen(
+                conflicts =
+                    SyncConflictsScreenTest.CONFLICTS +
+                        SyncConflict(
+                            9,
+                            "Final Fantasy VII (Disc 1) (BASCUS-94163FF7-S01, Final_Fantasy_VII_(USA)_1)",
+                            long,
+                            listOf(long, long.copy(device = "Laptop", deleted = true)),
+                            1,
+                        ),
+                zone = java.time.ZoneOffset.UTC,
+                onResolve = { _, _ -> },
+                onKeepAll = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Keep all from this device")
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun memoryCardsWithALongAddressAndError() {
+        eachConfig({
+            MemcardSyncScreen(
+                state =
+                    MemcardSyncScreenTest.RUNNING.copy(
+                        remoteUri =
+                            "s3://a-rather-long-bucket-name/emusync/v1?endpoint=https://storage.example.com&region=auto",
+                        running = false,
+                        statusKind = SyncStatusKind.StartError,
+                        startError =
+                            "This storage is not encrypted, or was set up by a newer version of emusync. Remove the " +
+                                "passphrase to use it, or choose a new folder for encrypted saves.",
+                        hasPassphrase = true,
+                        conflictCount = 2,
+                    ),
+                onEnabled = {},
+                onText = { _, _ -> },
+                onSecret = { _, _ -> },
+                onRemovePassphrase = {},
+                onSyncNow = {},
+                onOpenConflicts = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            assertShows("Remove the passphrase to use it")
+            pressUntilFocused(Key.DirectionDown, "2 conflicts")
+            assertFocusedInView()
+        }
+    }
+
+    @Test
     fun achievementsSignedOut() {
         eachConfig({
             AchievementsScreen(
@@ -1026,6 +1090,34 @@ class OrientationLayoutTest {
             assertFocusedInView()
             press(Key.Back)
             assertTrue(capturing.value == null)
+        }
+    }
+
+    @Test
+    fun theLibrarysTopBarWithTheSyncBadge() {
+        eachConfig({
+            LibraryScreen(
+                games = emptyList(),
+                gridView = true,
+                banners = emptyList(),
+                message = null,
+                isError = false,
+                onToggleView = {},
+                onOpenSettings = {},
+                onRefresh = {},
+                onStartGame = {},
+                focusPath = null,
+                focusSettings = true,
+                syncBadge = SyncBadge.Conflicts(2),
+            )
+        }) {
+            assertTextsLaidOut()
+            rule.onNodeWithText("2 conflicts", useUnmergedTree = true).assertIsDisplayed()
+            // Left of Grid, which is left of Settings; on a narrow screen the buttons may wrap under the title.
+            repeat(4) { if (!focusedHas("2 conflicts")) press(Key.DirectionLeft) }
+            if (!focusedHas("2 conflicts")) press(Key.DirectionUp)
+            assertTrue("didn't reach the badge", focusedHas("2 conflicts"))
+            assertFocusedInView(screen())
         }
     }
 

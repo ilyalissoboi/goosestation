@@ -27,6 +27,7 @@
 #include "fmt/format.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -66,7 +67,17 @@ namespace MemcardSync {
   X(es_conflict_resolve)                                                                                               \
   X(es_secret_set)                                                                                                     \
   X(es_secret_get)                                                                                                     \
-  X(es_secret_delete)
+  X(es_secret_delete)                                                                                                  \
+  ES_PLATFORM_FUNCTIONS(X)
+
+// Android's mobile lifecycle (SetAppBackgrounded()).
+#ifdef __ANDROID__
+#define ES_PLATFORM_FUNCTIONS(X)                                                                                       \
+  X(es_app_suspend)                                                                                                    \
+  X(es_app_resume)
+#else
+#define ES_PLATFORM_FUNCTIONS(X)
+#endif
 
 namespace {
 struct EmuSyncApi
@@ -111,10 +122,12 @@ static constexpr u32 EXIT_UPLOAD_MS = 5000;
 // How long opening a card waits for a start in progress: the start's own check of the storage takes
 // up to ~10 s.
 static constexpr std::chrono::seconds OPEN_WAITS_FOR_START{12};
+#ifndef __ANDROID__
 // The credential-store service the secrets are kept under.
 static constexpr const char* SECRET_SERVICE = "GooseStation";
 // Longer than any secret emusync stores (1024 bytes), plus the NUL.
 static constexpr size_t SECRET_BUFFER = 1025;
+#endif
 
 // Serialises Start() and Stop() with each other.
 static std::mutex s_lifecycle_lock;
@@ -164,6 +177,22 @@ static std::vector<SecretUpdate> s_apply_secrets;
 static std::vector<std::function<void(const std::string&)>> s_apply_done;
 static ApplySettings s_apply_settings;
 
+#ifdef __ANDROID__
+static std::atomic<Activity> s_activity{Activity::None};
+// SetPeriodicSyncForTest()'s period in ms, 0 for PERIODIC_SYNC; s_period_changed tells the worker to take it.
+static std::atomic<u32> s_periodic_ms{0};
+static bool s_period_changed = false; // s_worker_lock
+// SetAppBackgrounded(): the app's state, and what the worker is to tell emusync about it. s_worker_lock.
+static bool s_backgrounded = false;
+static bool s_suspend_pending = false;
+static bool s_resume_pending = false;
+// The cards WithCardHeld() holds, which a game opening one waits for. s_state_lock.
+static std::vector<std::string> s_held_paths;
+static std::condition_variable s_held_cv;
+// What the background's push may take.
+static constexpr u32 SUSPEND_BUDGET_MS = 3000;
+#endif
+
 static constexpr const char* NO_LIBRARY = "The emusync library is missing, so memory card sync is unavailable.";
 static constexpr const char* LOCKED_STATUS =
   "This storage is encrypted. Enter its passphrase in the memory card sync settings to sync.";
@@ -205,12 +234,16 @@ std::string MemcardSync::CardNameFor(std::string_view path)
 
 bool MemcardSync::HasSecret(const char* name)
 {
+#ifdef __ANDROID__
+  return Host::HasMemcardSyncSecret(name);
+#else
   const std::string_view n = name;
   if (n == SECRET_ACCESS_KEY)
     return Host::GetBaseBoolSettingValue(SECTION, "SecretStored", false);
   if (n == ENCRYPTION_PASSPHRASE)
     return Host::GetBaseBoolSettingValue(SECTION, "PassphraseStored", false);
   return false;
+#endif
 }
 
 static bool OpenEmuSync(DynamicLibrary* lib)
@@ -268,10 +301,61 @@ bool MemcardSync::IsAvailable()
   return LoadEmuSync();
 }
 
+// Tells the app to look at sync again (Android).
+static void NotifyChanged()
+{
+#ifdef __ANDROID__
+  Host::OnMemcardSyncChanged();
+#endif
+}
+
+#ifdef __ANDROID__
+static void SetActivity(MemcardSync::Activity activity)
+{
+  if (MemcardSync::s_activity.exchange(activity) != activity)
+    NotifyChanged();
+}
+
+// What an outcome of emusync's says sync did.
+static MemcardSync::Activity ActivityFor(es_status st)
+{
+  using MemcardSync::Activity;
+  switch (st)
+  {
+    case ES_OK:
+      return Activity::Synced;
+    case ES_OFFLINE:
+      return Activity::Offline;
+    case ES_E_LOCKED:
+    case ES_E_PASSPHRASE:
+      return Activity::Locked;
+    case ES_E_AUTH:
+      return Activity::AuthRequired;
+    default:
+      return Activity::Failed;
+  }
+}
+
+static std::chrono::steady_clock::duration PeriodicSync()
+{
+  const u32 ms = MemcardSync::s_periodic_ms.load();
+  return ms ? std::chrono::steady_clock::duration(std::chrono::milliseconds(ms)) :
+              std::chrono::steady_clock::duration(MemcardSync::PERIODIC_SYNC);
+}
+#else
+static std::chrono::steady_clock::duration PeriodicSync()
+{
+  return MemcardSync::PERIODIC_SYNC;
+}
+#endif
+
 static void SetStatus(std::string status)
 {
-  std::lock_guard lock(MemcardSync::s_state_lock);
-  MemcardSync::s_status = std::move(status);
+  {
+    std::lock_guard lock(MemcardSync::s_state_lock);
+    MemcardSync::s_status = std::move(status);
+  }
+  NotifyChanged();
 }
 
 static std::string TimeOfDay()
@@ -343,9 +427,9 @@ static void OnEventsWaiting(void*)
   WakeWorker();
 }
 
-// Registers a card file (format ps1.card, card named after the file). Needs the client lock
-// (shared).
-static es_container_id RegisterCard(const std::string& path)
+// Registers a card file (format ps1.card, card named after the file), with emusync's answer in `status` if it's
+// given. Needs the client lock (shared).
+static es_container_id RegisterCard(const std::string& path, es_status* status = nullptr)
 {
   using namespace MemcardSync;
   const std::string card = CardNameFor(path);
@@ -356,6 +440,8 @@ static es_container_id RegisterCard(const std::string& path)
   desc.card = card.c_str();
   es_container_id id = 0;
   const es_status st = s_es.es_container_add(s_client, &desc, &id);
+  if (status)
+    *status = st;
   if (st != ES_OK)
   {
     WARNING_LOG("Not syncing {}: {}", path, s_es.es_status_str(st));
@@ -542,13 +628,17 @@ static void AddConflict(es_conflict_id id)
     *it = std::move(c);
   else
     s_conflicts.push_back(std::move(c));
+  NotifyChanged();
 }
 
 static void RemoveConflict(es_conflict_id id)
 {
   using namespace MemcardSync;
-  std::lock_guard lock(s_state_lock);
-  std::erase_if(s_conflicts, [id](const Conflict& c) { return c.id == id; });
+  {
+    std::lock_guard lock(s_state_lock);
+    std::erase_if(s_conflicts, [id](const Conflict& c) { return c.id == id; });
+  }
+  NotifyChanged();
 }
 
 // Drops the conflicts resolved meanwhile, on another device say. Needs the client lock (shared).
@@ -613,6 +703,16 @@ static void DrainEvents()
     {
       PruneConflicts();
     }
+#ifdef __ANDROID__
+    if (ev.type == ES_EV_SYNC_STARTED)
+      SetActivity(Activity::Syncing);
+    else if (ev.type == ES_EV_SYNC_FINISHED)
+      SetActivity(ActivityFor(ev.status));
+    else if (ev.type == ES_EV_AUTH_REQUIRED)
+      SetActivity(Activity::AuthRequired);
+    else if (ev.type == ES_EV_ERROR && ev.status == ES_E_LOCKED)
+      SetActivity(Activity::Locked);
+#endif
 
     std::string text = DescribeEvent(ev);
     if (ev.type == ES_EV_UNIT_APPLIED || ev.type == ES_EV_UNIT_UPLOADED)
@@ -630,19 +730,35 @@ static void WorkerLoop()
 {
   using namespace MemcardSync;
   Threading::SetNameOfCurrentThread("MemcardSync");
-  auto next_sync = std::chrono::steady_clock::now() + PERIODIC_SYNC;
+  auto next_sync = std::chrono::steady_clock::now() + PeriodicSync();
   for (;;)
   {
     std::vector<es_container_id> flush;
     std::vector<PendingResolution> resolve;
+    [[maybe_unused]] bool backgrounded = false, suspend = false, resume = false;
     {
       std::unique_lock lock(s_worker_lock);
-      s_worker_cv.wait_until(lock, next_sync, [] { return s_worker_stop || s_worker_wake; });
+#ifdef __ANDROID__
+      // In the background, no periodic sync: only what's handed to the worker.
+      if (s_backgrounded)
+        s_worker_cv.wait(lock, [] { return s_worker_stop || s_worker_wake; });
+      else
+#endif
+        s_worker_cv.wait_until(lock, next_sync, [] { return s_worker_stop || s_worker_wake; });
       if (s_worker_stop)
         return;
       s_worker_wake = false;
+#ifdef __ANDROID__
+      if (std::exchange(s_period_changed, false))
+        next_sync = std::chrono::steady_clock::now() + PeriodicSync();
+#endif
       flush = std::exchange(s_flush_pending, {});
       resolve = std::exchange(s_resolve_pending, {});
+#ifdef __ANDROID__
+      backgrounded = s_backgrounded;
+      suspend = std::exchange(s_suspend_pending, false);
+      resume = std::exchange(s_resume_pending, false);
+#endif
     }
 
     std::shared_lock client(s_client_lock);
@@ -651,10 +767,23 @@ static void WorkerLoop()
     for (const es_container_id id : flush)
       s_es.es_container_flushed(s_client, id);
     ResolvePending(resolve);
-    if (std::chrono::steady_clock::now() >= next_sync)
+#ifdef __ANDROID__
+    if (suspend)
+    {
+      const es_status st = s_es.es_app_suspend(s_client, SUSPEND_BUDGET_MS);
+      INFO_LOG("In the background: memory card sync pushed what it had ({}), and waits.", s_es.es_status_str(st));
+    }
+    if (resume)
+    {
+      s_es.es_app_resume(s_client);
+      next_sync = std::chrono::steady_clock::now() + PeriodicSync();
+      INFO_LOG("Back in front: memory card sync resumes.");
+    }
+#endif
+    if (!backgrounded && std::chrono::steady_clock::now() >= next_sync)
     {
       s_es.es_sync_now(s_client);
-      next_sync = std::chrono::steady_clock::now() + PERIODIC_SYNC;
+      next_sync = std::chrono::steady_clock::now() + PeriodicSync();
     }
     DrainEvents();
   }
@@ -699,6 +828,9 @@ static void StopLocked(std::unique_lock<std::shared_mutex>& client, u32 timeout_
   WipeSecret(s_config.secret_access_key);
   s_config = {};
   s_status.clear();
+#ifdef __ANDROID__
+  SetActivity(Activity::None);
+#endif
 }
 
 bool MemcardSync::Start(const Config& config, std::string* error)
@@ -735,6 +867,9 @@ bool MemcardSync::Start(const Config& config, std::string* error)
     if (error)
       *error = fmt::format("Could not open the sync data in {}: {}", config.data_dir, s_es.es_status_str(st));
     s_client = nullptr;
+#ifdef __ANDROID__
+    SetActivity(Activity::Failed);
+#endif
     // StopLocked() returns early without a client, so this is the only place the copied keys can go.
     std::lock_guard lock(s_state_lock);
     WipeSecret(s_config.secret_access_key);
@@ -771,19 +906,32 @@ bool MemcardSync::Start(const Config& config, std::string* error)
     }
     s_es.es_client_destroy(s_client, 0);
     s_client = nullptr;
+#ifdef __ANDROID__
+    SetActivity(ActivityFor(st));
+#endif
     std::lock_guard lock(s_state_lock);
     WipeSecret(s_config.secret_access_key);
     s_config = {};
     return false;
   }
+#ifdef __ANDROID__
+  SetActivity(st == ES_OK ? Activity::Syncing : ActivityFor(st));
+#endif
   SetStatus(st == ES_OFFLINE  ? "Storage not reachable yet: sync starts once it is." :
             st == ES_E_LOCKED ? std::string(LOCKED_STATUS) :
                                 "Starting...");
 
+  [[maybe_unused]] bool backgrounded = false;
   {
     std::lock_guard lock(s_worker_lock);
     s_worker_stop = false;
     s_worker_wake = false;
+#ifdef __ANDROID__
+    // A new client syncs as the app is now: a resume is what syncs once it's back.
+    backgrounded = s_backgrounded;
+    s_suspend_pending = false;
+    s_resume_pending = false;
+#endif
   }
   s_es.es_event_set_notifier(s_client, &OnEventsWaiting, nullptr);
   s_worker = std::thread(&WorkerLoop);
@@ -805,7 +953,9 @@ bool MemcardSync::Start(const Config& config, std::string* error)
                             TRANSLATE_STR("MemcardSync", "Memory cards in use sync from the next time they are opened."),
                             Host::OSD_INFO_DURATION);
   }
-  s_es.es_sync_now(s_client);
+  // In the background, the return's resume is what syncs.
+  if (!backgrounded)
+    s_es.es_sync_now(s_client);
   INFO_LOG("Syncing memory cards with {}", config.remote_uri);
   return true;
 }
@@ -837,6 +987,9 @@ void MemcardSync::SyncNow()
 
   // Before asking, so the sync's own status (set when it finishes) can't be overwritten.
   SetStatus("Syncing...");
+#ifdef __ANDROID__
+  SetActivity(Activity::Syncing);
+#endif
   s_es.es_sync_now(s_client);
 }
 
@@ -866,6 +1019,14 @@ bool MemcardSync::StoreSecret(const char* name, const std::string& value, std::s
       *error = NO_LIBRARY;
     return false;
   }
+#ifdef __ANDROID__
+  if (!Host::StoreMemcardSyncSecret(name, value))
+  {
+    if (error)
+      *error = "Could not store the secret in the Android Keystore.";
+    return false;
+  }
+#else
   // Without a Secret Service (Linux), the secret goes to a file only this user can read here.
   const std::string& fallback = EmuFolders::DataRoot;
   const es_status st = value.empty() ? s_es.es_secret_delete(SECRET_SERVICE, name, fallback.c_str()) :
@@ -876,6 +1037,7 @@ bool MemcardSync::StoreSecret(const char* name, const std::string& value, std::s
       *error = fmt::format("Could not store the secret in the system's credential store: {}", s_es.es_status_str(st));
     return false;
   }
+#endif
   const std::string_view n = name;
   if (n == SECRET_ACCESS_KEY)
     Host::SetBaseBoolSettingValue(SECTION, "SecretStored", !value.empty());
@@ -893,6 +1055,10 @@ std::optional<std::string> MemcardSync::LoadSecret(const char* name, std::string
       *error = NO_LIBRARY;
     return std::nullopt;
   }
+#ifdef __ANDROID__
+  // The host never fails loudly: a secret it can't read any more is no secret, and the settings are incomplete.
+  return Host::LoadMemcardSyncSecret(name);
+#else
   std::string buf(SECRET_BUFFER, '\0');
   size_t len = 0;
   const std::string& fallback = EmuFolders::DataRoot;
@@ -912,6 +1078,7 @@ std::optional<std::string> MemcardSync::LoadSecret(const char* name, std::string
   std::string value(buf.c_str());
   WipeSecret(buf);
   return value;
+#endif
 }
 
 std::string MemcardSync::GetLastStartError()
@@ -929,6 +1096,10 @@ static std::string StartFromSettings(const MemcardSync::ApplySettings& s)
   c.remote_uri = std::string(StringUtil::StripWhitespace(s.remote_uri));
   c.access_key_id = std::string(StringUtil::StripWhitespace(s.access_key_id));
   c.device_name = std::string(StringUtil::StripWhitespace(s.device_name));
+#ifdef __ANDROID__
+  if (c.device_name.empty())
+    c.device_name = Host::GetMemcardSyncDefaultDeviceName();
+#endif
   if (!s.enabled || c.remote_uri.empty() || c.access_key_id.empty())
   {
     Stop(2000);
@@ -1012,6 +1183,7 @@ static void ApplyLoop()
       s_apply_running = false;
     }
     s_apply_idle_cv.notify_all();
+    NotifyChanged();
   }
 }
 
@@ -1049,6 +1221,7 @@ void MemcardSync::ApplySettingsAsync(std::vector<SecretUpdate> secrets,
   if (!s_apply_thread.joinable())
     s_apply_thread = std::thread(&ApplyLoop);
   s_apply_cv.notify_one();
+  NotifyChanged();
 }
 
 bool MemcardSync::IsApplying()
@@ -1102,6 +1275,18 @@ void MemcardSync::OnCardOpening(std::string_view path)
   if (!Host::GetBaseBoolSettingValue(SECTION, "Enabled", false))
     return;
   WaitForPendingStart();
+#ifdef __ANDROID__
+  // The mirror is replacing the card file: its session first, then the game's.
+  {
+    std::unique_lock lock(s_state_lock);
+    if (!s_held_cv.wait_for(lock, OPEN_WAITS_FOR_START, [&]() {
+          return std::find(s_held_paths.begin(), s_held_paths.end(), path) == s_held_paths.end();
+        }))
+    {
+      WARNING_LOG("The memory card is still being copied in; it opens as it is.");
+    }
+  }
+#endif
   std::shared_lock client(s_client_lock);
   if (!s_client)
     return;
@@ -1148,3 +1333,90 @@ void MemcardSync::OnCardClosed(std::string_view path)
   // snapshots the card once more, then applies what waited.
   EndSession(card);
 }
+
+#ifdef __ANDROID__
+
+MemcardSync::Activity MemcardSync::GetActivity()
+{
+  return s_activity.load();
+}
+
+bool MemcardSync::WithCardHeld(std::string_view path, const std::function<void()>& action)
+{
+  // No start or stop under the action: a new client's first sync would write the card.
+  std::lock_guard lifecycle(s_lifecycle_lock);
+  std::shared_lock client(s_client_lock);
+  if (!s_client)
+  {
+    action();
+    return true;
+  }
+
+  // In one go, so a game that starts opening the card either is seen here, or waits for the hold (OnCardOpening()).
+  {
+    std::lock_guard lock(s_state_lock);
+    if (std::any_of(s_cards.begin(), s_cards.end(), [&](const Card& c) { return c.path == path; }))
+      return false;
+    s_held_paths.emplace_back(path);
+  }
+  const ScopedGuard unheld([path]() {
+    {
+      std::lock_guard lock(s_state_lock);
+      if (const auto it = std::find(s_held_paths.begin(), s_held_paths.end(), path); it != s_held_paths.end())
+        s_held_paths.erase(it);
+    }
+    s_held_cv.notify_all();
+  });
+
+  // Registering is idempotent. emusync busy (its worker in a slow sync) may write the card later: it waits for a
+  // later run. A card emusync can't follow, it never writes.
+  es_status registered = ES_OK;
+  const es_container_id container = RegisterCard(std::string(path), &registered);
+  if (container == 0)
+  {
+    if (registered == ES_TIMEOUT || registered == ES_E_BUSY)
+      return false;
+    action();
+    return true;
+  }
+
+  // 1 ms: only the card write in progress is waited for (0 would be emusync's default, 3 s of network). What the pull
+  // brings waits in the inbox until the session ends.
+  es_session_info info;
+  Card held;
+  held.session = BeginSession(container, std::string(), std::string(), 1, &info);
+  if (held.session == 0)
+    return false;
+  held.opened = std::chrono::steady_clock::now();
+
+  // The session's end snapshots the card as the action left it, then applies what waited.
+  const ScopedGuard end([&held]() { EndSession(held); });
+  action();
+  return true;
+}
+
+void MemcardSync::SetAppBackgrounded(bool backgrounded)
+{
+  {
+    std::lock_guard lock(s_worker_lock);
+    if (s_backgrounded == backgrounded)
+      return;
+    s_backgrounded = backgrounded;
+    // The latest wins: back and forth before the worker woke ends as the app is now.
+    s_suspend_pending = backgrounded;
+    s_resume_pending = !backgrounded;
+  }
+  WakeWorker();
+}
+
+void MemcardSync::SetPeriodicSyncForTest(u32 ms)
+{
+  s_periodic_ms.store(ms);
+  {
+    std::lock_guard lock(s_worker_lock);
+    s_period_changed = true;
+  }
+  WakeWorker();
+}
+
+#endif

@@ -273,6 +273,63 @@ class MirrorTest {
 
     private fun manifestPaths() = Manifest.decode(manifestFile.readText())!!.entries.keys
 
+    /** A mirror whose copies into the working copy go through [guard]. */
+    private fun guarded(guard: CopyGuard) =
+        Mirror(
+            SafFolderStore(context.contentResolver, tree),
+            workingCopy,
+            manifestFile,
+            System::currentTimeMillis,
+            guard = guard,
+        ) { LAYOUT }
+
+    @Test
+    fun aGuardHoldsEachCopyIn() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+        val held = ArrayList<String>()
+        val mirror =
+            guarded { path, action ->
+                held += path
+                action()
+                true
+            }
+        runBlocking { mirror.pull(never) }
+        writeLocal("memcards/b.mcd", CARD2)
+
+        runBlocking { mirror.push(true, never) }
+
+        // The pull's copy in was held; the push's copy out to the folder wasn't.
+        assertEquals(listOf("memcards/a.mcd"), held)
+        assertArrayEquals(CARD2, File(folder, "memcards/b.mcd").readBytes())
+    }
+
+    @Test
+    fun aGuardThatRefusesLeavesTheFileForLater() {
+        createTree(mapOf("memcards/a.mcd" to CARD))
+
+        val refused = runBlocking { guarded { _, _ -> false }.pull(never) }
+
+        assertFalse(local("memcards/a.mcd").exists())
+        assertFalse(refused.complete)
+        assertEquals(emptySet<String>(), refused.changed)
+        val later = runBlocking { mirror().pull(never) }
+        assertArrayEquals(CARD, local("memcards/a.mcd").readBytes())
+        assertEquals(setOf("memcards/a.mcd"), later.changed)
+    }
+
+    // emusync's data is this device's own: an earlier build mirrored it, but it's never deleted as a stray now.
+    @Test
+    fun emusyncInTheWorkingCopyIsNotDeleted() {
+        createTree(mapOf("emusync/ab12/db" to CARD, "settings.ini" to INI))
+        strayFromAnEarlierBuild("emusync/ab12/db")
+
+        runBlocking { mirror().pull(never) }
+
+        assertArrayEquals(CARD, local("emusync/ab12/db").readBytes())
+        assertArrayEquals(CARD, File(folder, "emusync/ab12/db").readBytes())
+        assertEquals(setOf("settings.ini"), manifestPaths())
+    }
+
     @Test
     fun straysLeaveTheWorkingCopyButNotTheFolder() {
         createTree(mapOf("games/x.chd" to CARD, "settings.ini" to INI))

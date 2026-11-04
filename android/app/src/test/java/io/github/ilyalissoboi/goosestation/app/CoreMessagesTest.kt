@@ -99,4 +99,43 @@ class CoreMessagesTest {
             CoreMessages.translate("CheatsLoadWarning", "1 cheat(s) are enabled. This may crash games."),
         )
     }
+
+    @Test
+    fun updatedSavesSaidPlainly() {
+        assertEquals(
+            "Updated 2 saves from other devices",
+            CoreMessages.translate(
+                "MemcardSync-/data/user/0/x/files/data/memcards/shared_card_1.mcd",
+                "\u2601 Updated 2 save(s) from other devices on shared_card_1.mcd",
+            ),
+        )
+    }
+
+    @Test
+    fun oneUpdatedSave() {
+        assertEquals(
+            "Updated 1 save from other devices",
+            CoreMessages.translate("MemcardSync-/x/shared_card_1.mcd", "Updated 1 save(s) from other devices on a.mcd"),
+        )
+    }
+
+    @Test
+    fun conflictSettledAfterTheGame() {
+        assertEquals(
+            "A save needs your choice. Settle it in Memory cards after this game.",
+            CoreMessages.translate(
+                "MemcardSync-Conflict-12",
+                "BASLUS-00067DRACULA was changed on this device and on another. Choose which to keep in Settings > " +
+                    "Memory Cards.",
+            ),
+        )
+    }
+
+    @Test
+    fun cardsInUseSaidAsTheCoreSaysIt() {
+        assertEquals(
+            "Memory cards in use sync from the next time they are opened.",
+            CoreMessages.translate("MemcardSync-InUse", "Memory cards in use sync from the next time they are opened."),
+        )
+    }
 }

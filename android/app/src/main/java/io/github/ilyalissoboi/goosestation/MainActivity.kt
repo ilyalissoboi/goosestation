@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
+import io.github.ilyalissoboi.goosestation.app.SyncBadges
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
@@ -27,11 +28,14 @@ import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
+import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
     // Registered here, before the activity starts, as the result API needs.
@@ -122,6 +126,39 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                    Screen.MemoryCards -> {
+                        val page = AppController.memcardSyncPage
+                        val state = page.state
+                        if (state == null) {
+                            SettingsLoadingPage("Memory cards", onBack = AppController::closeSettingsPage)
+                        } else {
+                            MemcardSyncScreen(
+                                state = state,
+                                onEnabled = page::setEnabled,
+                                onText = page::setText,
+                                onSecret = page::storeSecret,
+                                onRemovePassphrase = page::removePassphrase,
+                                onSyncNow = page::syncNow,
+                                onOpenConflicts = AppController::openSyncConflicts,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
+                    Screen.SyncConflicts -> {
+                        val page = AppController.memcardSyncPage
+                        val conflicts = page.conflicts
+                        if (conflicts == null) {
+                            SettingsLoadingPage("Sync conflicts", onBack = AppController::closeSyncConflicts)
+                        } else {
+                            SyncConflictsScreen(
+                                conflicts = conflicts,
+                                zone = ZoneId.systemDefault(),
+                                onResolve = page::resolve,
+                                onKeepAll = page::keepAllLocal,
+                                onBack = AppController::closeSyncConflicts,
+                            )
+                        }
+                    }
                     Screen.Bios -> {
                         val bios = AppController.settingsPages.bios
                         if (bios == null) {
@@ -202,6 +239,8 @@ class MainActivity : ComponentActivity() {
                             onStartGame = AppController::startGame,
                             focusPath = AppController.lastGamePath,
                             focusSettings = AppController.focusSettings,
+                            syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),
+                            onSyncBadge = AppController::openSyncBadge,
                         )
                         val starts = AppController.gameStarts
                         starts.offer?.let { offer ->

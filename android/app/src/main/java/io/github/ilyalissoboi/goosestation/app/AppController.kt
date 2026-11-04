@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import io.github.ilyalissoboi.emusync.SyncSettings
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
@@ -24,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
+import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
 import io.github.ilyalissoboi.goosestation.mirror.DataLayout
@@ -74,8 +76,10 @@ enum class Screen(
     Controllers(SettingsEntry.Controllers),
     Graphics(SettingsEntry.Graphics),
     Achievements(SettingsEntry.Achievements),
+    MemoryCards(SettingsEntry.MemoryCards),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
+    SyncConflicts,
     Game,
 }
 
@@ -167,6 +171,21 @@ object AppController : NativeCallbacks {
 
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
     val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+
+    /** Memory card sync's state, for the Memory cards page and the library's badge: read again as sync says it changed. */
+    val memcardSyncStatus = MemcardSyncStatus(scope, Dispatchers.IO, NativeCoreApi)
+
+    val memcardSyncPage by lazy {
+        MemcardSyncPage(
+            scope,
+            coreDispatcher,
+            Dispatchers.IO,
+            NativeCoreApi,
+            NativeCoreSettings,
+            syncSecrets,
+            memcardSyncStatus,
+        )
+    }
 
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
@@ -312,6 +331,12 @@ object AppController : NativeCallbacks {
         AchievementsToken(KeystoreCipher(), SharedPreferencesStore(context, "achievements"))
     }
 
+    // Memory card sync's secret access key and passphrase, sealed with a Keystore key of their own: never in
+    // settings.ini or the data folder.
+    private val syncSecrets by lazy {
+        SyncSecrets(KeystoreCipher("memcard-sync-secrets"), SharedPreferencesStore(context, "memcard_sync"))
+    }
+
     /** A game's start, which asks first whether to resume where it was left. */
     val gameStarts by lazy {
         GameStarts(
@@ -401,7 +426,17 @@ object AppController : NativeCallbacks {
                     push(force = false)
                 }
             }
-        if (coreStarted) scope.launch { resume() }
+        // Memory card sync resumes once the pull has brought what the data folder has, if the app is still in front.
+        syncVisibility.started()
+        if (coreStarted) {
+            scope.launch {
+                try {
+                    resume()
+                } finally {
+                    syncVisibility.pullDone()
+                }
+            }
+        }
         networkWatch.start()
     }
 
@@ -414,6 +449,8 @@ object AppController : NativeCallbacks {
         pushTicker?.cancel()
         pushTicker = null
         scope.launch { push(force = true) }
+        // After the pause's card writes, which the core has queued already: sync pushes them, then rests.
+        syncVisibility.stopped()
         networkWatch.stop()
     }
 
@@ -556,6 +593,7 @@ object AppController : NativeCallbacks {
         when (entry) {
             SettingsEntry.Graphics -> settingsPages.loadGraphics()
             SettingsEntry.Achievements -> achievementsPage.load()
+            SettingsEntry.MemoryCards -> memcardSyncStatus.refresh()
             SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.Folders -> {}
@@ -571,6 +609,39 @@ object AppController : NativeCallbacks {
         if (page == SettingsEntry.Controllers) controllersPage.close()
         settingsEntry = page
         screen = Screen.Settings
+    }
+
+    // --- Memory card sync's conflicts ---
+
+    // Where the conflict screen was opened from, which it goes back to.
+    private var conflictsFrom = Screen.MemoryCards
+
+    /** Opens the conflict screen, from the Memory cards page or the library's badge, if the settings can open. */
+    fun openSyncConflicts() {
+        if ((screen != Screen.MemoryCards && screen != Screen.Library) || !settingsReady) return
+        conflictsFrom = screen
+        memcardSyncPage.loadConflicts()
+        memcardSyncStatus.refresh()
+        screen = Screen.SyncConflicts
+    }
+
+    /** The library's sync badge: the conflict screen when there are conflicts, else Settings > Memory cards. */
+    fun openSyncBadge() {
+        if (screen != Screen.Library || !settingsReady) return
+        if (SyncBadges.of(memcardSyncStatus.state) is SyncBadge.Conflicts) {
+            openSyncConflicts()
+        } else {
+            settingsEntry = null
+            screen = Screen.Settings
+            openSettingsPage(SettingsEntry.MemoryCards)
+        }
+    }
+
+    /** Back from the conflict screen to where it was opened from. */
+    fun closeSyncConflicts() {
+        if (screen != Screen.SyncConflicts) return
+        memcardSyncStatus.refresh()
+        screen = conflictsFrom
     }
 
     // --- The Controllers page ([ControllersPage]) ---
@@ -1010,6 +1081,21 @@ object AppController : NativeCallbacks {
         }
     }
 
+    // Whether memory card sync rests in the background, as the app is shown and hidden.
+    private val syncVisibility = SyncVisibility { NativeLibrary.setMemcardSyncBackgrounded(it) }
+
+    // Memory card sync never writes a card while the mirror replaces or deletes it: sync holds the card meanwhile.
+    // Before the core starts, nothing syncs.
+    private val cardGuard =
+        CopyGuard { path, action ->
+            if (coreStarted && MemoryCardPaths.matches(path, memcardPaths)) {
+                NativeLibrary.memcardSyncHoldCard(path) { action() }
+            } else {
+                action()
+                true
+            }
+        }
+
     /** A mirror of [data], whose state the app shows from now on. */
     private fun useMirror(data: String) {
         mirrorStateJob?.cancel()
@@ -1021,6 +1107,7 @@ object AppController : NativeCallbacks {
                 manifestFile,
                 System::currentTimeMillis,
                 removeStrays = { layoutSettling.settled },
+                guard = cardGuard,
             ) { dataLayout }
         mirror = created
         mirrorStateJob = scope.launch { created.state.collect { mutableMirrorState.value = it } }
@@ -1049,6 +1136,7 @@ object AppController : NativeCallbacks {
      */
     private suspend fun prepareWorkingCopy() =
         withContext(Dispatchers.IO) {
+            EmusyncCarryOver.drop(workingCopy, SharedPreferencesStore(context, "memcard_sync"))
             if (workingCopy.isDirectory) return@withContext
             if (manifestFile.delete()) Log.w(TAG, "The working copy is gone: pulling the data folder in full.")
             if (!workingCopy.mkdirs()) Log.e(TAG, "Can't create $workingCopy")
@@ -1192,6 +1280,7 @@ object AppController : NativeCallbacks {
                             prefs.installId(),
                             achievementsToken.load(),
                             File(context.filesDir, "achievements").absolutePath,
+                            SyncSettings.defaultDeviceName(),
                         ).also {
                             if (it) {
                                 readGridView()
@@ -1211,6 +1300,8 @@ object AppController : NativeCallbacks {
         }
         Log.i(TAG, "The core is ready.")
         coreStarted = true
+        syncVisibility.coreStarted()
+        memcardSyncStatus.refresh()
         if (biosOverridesToCheck) dropStaleBiosOverrides()
         // Reported once the core takes input; it keeps connections made before then anyway.
         controllers =
@@ -1420,6 +1511,19 @@ object AppController : NativeCallbacks {
 
     // On the core's thread, before the core goes on: the token lives only in its memory until it's stored here.
     override fun onAchievementsToken(token: String?) = achievementsToken.store(token)
+
+    override fun storeMemcardSyncSecret(
+        name: String,
+        value: String?,
+    ) = syncSecrets.store(name, value)
+
+    override fun loadMemcardSyncSecret(name: String) = syncSecrets.load(name)
+
+    override fun hasMemcardSyncSecret(name: String) = syncSecrets.has(name)
+
+    override fun onMemcardSyncChanged() {
+        mainHandler.post { if (coreStarted) memcardSyncStatus.refresh() }
+    }
 
     override fun onAchievementsLoginExpired() {
         mainHandler.post {

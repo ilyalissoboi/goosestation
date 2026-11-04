@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+import java.io.IOException
+import java.net.URI
+import java.security.MessageDigest
 import javax.inject.Inject
 
 plugins {
@@ -21,6 +24,37 @@ val depsPrefix: String =
 
 // The dependencies built as shared libraries, which the APK carries next to libgoosestation.so.
 val depsSharedLibraries = listOf("libshaderc_shared.so", "libspirv-cross-c-shared.so", "libsoundtouch.so")
+
+// Memory card sync's library, emusync, from its pinned release's Android library (libemusync.so for the APK, and a
+// small Kotlin helper): a copy in dep/emusync/ if there is one (builds without network), else downloaded once into
+// the build folder. Either way its SHA-256 is checked. Keep the version in step with CMakeModules/EmuSync.cmake.
+val emusyncVersion = "0.3.0"
+val emusyncAarSha256 = "964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81"
+val emusyncAar: File =
+    run {
+        val name = "emusync-$emusyncVersion.aar"
+        val offline = rootProject.file("../dep/emusync/$name")
+        val downloaded = layout.buildDirectory.file("emusync/$name")
+        val aar = if (offline.isFile) offline else downloaded.get().asFile
+        if (!aar.isFile) {
+            val url = "https://github.com/ilyalissoboi/emusync/releases/download/v$emusyncVersion/$name"
+            val part = File(aar.parentFile, "$name.part")
+            try {
+                aar.parentFile.mkdirs()
+                URI(url).toURL().openStream().use { input -> part.outputStream().use { input.copyTo(it) } }
+                part.renameTo(aar)
+            } catch (e: IOException) {
+                part.delete()
+                throw GradleException("Couldn't download $url ($e): place $name in ${offline.parentFile}.")
+            }
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        val actual = digest.digest(aar.readBytes()).joinToString("") { "%02x".format(it) }
+        if (actual != emusyncAarSha256) {
+            throw GradleException("$aar has SHA-256 $actual, expected $emusyncAarSha256.")
+        }
+        aar
+    }
 
 android {
     namespace = "io.github.ilyalissoboi.goosestation"
@@ -47,7 +81,6 @@ android {
                     listOf(
                         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
                         "-DBUILD_QT_FRONTEND=OFF",
-                        "-DUSE_EMUSYNC=OFF",
                         "-DHOST_PAGE_SIZE=16384",
                         "-DCMAKE_FIND_ROOT_PATH=$depsPrefix",
                         "-DBUILD_TESTS=OFF",
@@ -260,6 +293,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(files(emusyncAar))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

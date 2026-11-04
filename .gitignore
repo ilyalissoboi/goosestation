@@ -48,3 +48,5 @@ android/**/build
 android/**/.cxx
 android/local.properties
 
+# emusync's Android library, when placed here for builds without network (android/app/build.gradle.kts).
+/dep/emusync/*.aar

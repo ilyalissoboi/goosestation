@@ -6,8 +6,10 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
+import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import kotlinx.coroutines.flow.StateFlow
 
@@ -68,6 +70,21 @@ interface CoreApi {
     ): String?
 
     fun signOut()
+
+    /** [NativeLibrary.getMemcardSyncState]. */
+    fun getMemcardSyncState(): MemcardSyncState
+
+    fun applyMemcardSync()
+
+    fun memcardSyncNow()
+
+    fun getMemcardSyncConflicts(): List<SyncConflict>
+
+    fun resolveMemcardSyncConflict(
+        id: Long,
+        keepLocal: Boolean,
+        remoteIndex: Int,
+    )
 }
 
 object NativeCoreApi : CoreApi {
@@ -123,6 +140,20 @@ object NativeCoreApi : CoreApi {
     ): String? = NativeLibrary.signIn(username, password)
 
     override fun signOut() = NativeLibrary.signOut()
+
+    override fun getMemcardSyncState(): MemcardSyncState = NativeLibrary.getMemcardSyncState()
+
+    override fun applyMemcardSync() = NativeLibrary.applyMemcardSync()
+
+    override fun memcardSyncNow() = NativeLibrary.memcardSyncNow()
+
+    override fun getMemcardSyncConflicts(): List<SyncConflict> = NativeLibrary.getMemcardSyncConflicts().toList()
+
+    override fun resolveMemcardSyncConflict(
+        id: Long,
+        keepLocal: Boolean,
+        remoteIndex: Int,
+    ) = NativeLibrary.resolveMemcardSyncConflict(id, keepLocal, remoteIndex)
 }
 
 /** The controllers, as the Controllers page uses them: [io.github.ilyalissoboi.goosestation.input.ControllerInput]. */

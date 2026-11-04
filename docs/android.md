@@ -48,6 +48,7 @@ distribution itself against `distributionSha256Sum`, which matches the published
 | `org.jlleitschuh.gradle.ktlint` (`./gradlew ktlintCheck`, part of `check`; latest stable on 2026-10-30) / ktlint | 14.2.0 / 1.8.0 |
 | `compileSdk` / `targetSdk` / `minSdk` | 37 / 37 / 29 |
 | NDK / CMake (`ndkVersion`, `externalNativeBuild.cmake.version`) | 30.0.16248370 / 4.1.2 |
+| emusync's Android library (memory card sync; `emusync-0.3.0.aar` from the `v0.3.0` release, SHA-256 `964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81`, checked by `build.gradle.kts`, which downloads it once into `app/build/emusync/`, or takes a copy placed in `dep/emusync/` for builds without network) | 0.3.0 |
 
 ## Installing the SDK
 
@@ -345,7 +346,12 @@ The rules:
   `custom_properties.ini` at the top of the folder (desktop's `secrets.ini` counts as GooseStation's, so it raises no
   banner, but it's never copied either way: Android keeps its RetroAchievements token in the Keystore), and everything in the desktop data folder's folders: `bios`,
   `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `savestates`,
-  `screenshots`, `shaders`, `textures`, `resources` and `videos`, and `emusync` (memory card sync, a later stage).
+  `screenshots`, `shaders`, `textures`, `resources` and `videos`. Memory card sync's own data, `emusync/`, stays on
+  the device, like the cache: it holds this device's sync identity and the storage's key, so it's never copied either
+  way, and a copy an earlier build left in the data folder is left alone. A copy an earlier build pulled into the
+  working copy is another install's identity, so it's deleted once, before the core first starts
+  (`EmusyncCarryOver`); and it's left out of backups and device-to-device transfer (`data_extraction_rules.xml`).
+  emusync's scratch files beside a card it's writing (`*.emusync-tmp`, `-old`, `-swap`) stay out too.
   Once the core has started, the folders its `settings.ini` names inside the data folder (a `[Folders]` entry, or
   `[MemoryCards] Directory`, such as `mycheats`) and the shared memory cards are mirrored too; the app asks the core
   for them, and pulls again while that adds any (a game settings folder, then the cards its files name), at most 4
@@ -775,6 +781,52 @@ PS-EXE can't be hashed, so `NativeLibrary.setAchievementsGameHashForTest` gives 
 padtest's disc image (`/sdcard/GooseTest/games/Pad Test #1 (100%).cue` and `.bin`), as a PS-EXE boot turns hardcore
 off. The store's own tests are in `common-tests` (`AchievementsOfflineStore.*`).
 
+### Memory card sync
+
+**The page.** Settings → Memory cards has what desktop and Big Picture have, with the same `settings.ini` keys
+(`[MemoryCardSync] Enabled`, `RemoteURI`, `AccessKeyID`, `DeviceName`): **Sync memory cards**, **Storage**, **Access
+key ID**, **Secret access key**, **Encryption passphrase** (and **Remove passphrase** once there is one), **Device
+name**, the **Status** line (Big Picture's words), **Sync now**, and **N conflicts** when there are any. Each text
+setting is a row showing its value; A or a tap opens its field in its place, with Android's keyboard: Done saves, B
+cancels. One field is open at a time. A change is saved, then applied off the main thread
+(`MemcardSync::ApplySettingsAsync`). The page can't be opened during a game.
+
+**The secrets.** The secret access key and the passphrase are sealed with an AES-GCM key of their own in the Android
+Keystore (alias `memcard-sync-secrets`) and kept in the app's private `memcard_sync` preferences (`SyncSecrets`), never
+in `settings.ini`, the working copy or the data folder; the page never shows one back, only "Saved" or "Not set". The
+core asks the app for them (emusync's `es_secret_*` aren't available on Android), and asks the Keystore, not the
+ini's `SecretStored`/`PassphraseStored`, whether there is one: a data folder copied from desktop says its own
+keychain has them, so here they're "Not set" and the badge says "Needs setup" until they're entered.
+
+**This device's name.** An empty **Device name** is this device's (emusync's `SyncSettings.defaultDeviceName()`, the
+maker and model), not Android's "localhost", and a `settings.ini` adapted from another install gets it.
+
+**When it syncs.** Only while the app is open, on the working copy's cards, as desktop does on its own: when the core
+starts, when a game opens and closes its cards, every 5 minutes, and on **Sync now**. In the background, after the
+pause's card writes, it pushes what it has (`es_app_suspend`, 3 s at most) and rests; back in front, once the mirror's
+pull is done, it syncs at once (`es_app_resume`). No background job, no notification. The mirror carries what sync
+brings to the data folder like any other change; while it copies a card in from the folder, or deletes one, sync
+holds that card (a session on it, as a game's), so neither ever writes the file under the other. A pull that brings a
+`settings.ini` whose `[MemoryCardSync]` changed applies it.
+
+**Status.** The library's top bar shows a badge while sync is on: **Synced**, **Syncing…**, **Offline**, **N
+conflicts**, **Needs setup** (a secret or passphrase missing here, or the access key refused) or **Sync failed**, each
+with its icon. It opens the conflicts, or the page. In a game, a card that got saves from other devices says
+"Updated 2 saves from other devices"; a conflict found while playing says "A save needs your choice. Settle it in
+Memory cards after this game."
+
+**Conflicts.** Settle them after the game, from the page's conflicts row or the badge: one row per save, with the
+game's title when the database knows it, and each device's version (device, time, blocks, or deleted). A on a row
+offers this device's version, another device's, or deciding later, the newest focused; **Keep all from this device**
+asks first. A choice for a card in use is written once the card closes.
+
+**Testing.** `FakeS3` (`androidTest/…/core/`) is as much of S3 as emusync uses (create-only PutObject, GetObject,
+HeadObject, ListObjectsV2, path-style), on `127.0.0.1`, with made-up credentials only (`GOOSEFAKEACCESSKEY` /
+`not-a-real-secret`). Two spellings of its address (`path_style=1` and `path_style=true`) have separate emusync data,
+so one test can play two devices. `MemcardSyncStateTest`, `MemcardSyncCardsTest`, `MemcardSyncLifecycleTest` and
+`MemcardSyncSecretsTest` drive the real core through it, with test hooks for a card's open, write and close.
+Real storage is checked by hand, with your own credentials.
+
 ### Known limits
 
 - **Removing the SD card stops a game played from it.** Android kills any process that still has a file open on a
@@ -811,8 +863,11 @@ off. The store's own tests are in `common-tests` (`AchievementsOfflineStore.*`).
   `LibraryBannersTest` cover the grant check and its banners.
 - **The data folder isn't shared live with desktop or another install.** Each install mirrors its own working copy,
   and the folder wins when both changed, with no merging, so two installs using one folder at once can lose each
-  other's changes. Each install also adapts a `settings.ini` another one wrote (see "Changing settings"). Syncing
-  memory cards between devices comes later, through emusync.
+  other's changes. Each install also adapts a `settings.ini` another one wrote (see "Changing settings"). Memory
+  cards sync between devices through emusync instead (see "Memory card sync").
+- **A memory card deleted in the data folder comes back.** The mirror deletes it in the working copy, but emusync
+  reads a missing card as one not created yet, not as saves deleted: the next sync writes the card's saves back, and
+  the mirror pushes it again. Sync never deletes saves on other devices because a file went away.
 - **Desktop lists a multi-disc game's states under disc 1.** It keys states by the disc running, and Android keeps
   them all under the game's key, which is disc 1's serial for a set; desktop's own states for disc 2 show under
   "Other saves" on Android. Desktop opens a state by the path it recorded, which is Android's and won't open there,
@@ -1054,6 +1109,24 @@ network was turned off and on with `svc wifi` and `svc data`.
 Not checked by hand: an unlock earned offline, its card's note, and its send on reopening, which need a real
 achievement earned in play; `AchievementsOfflineTest` covers them against the fake server (17 tests), and the full
 instrumented suite passed (437 tests) on the same AVD.
+
+### Memory card sync (2026-11-04)
+
+Checked on `goose-arm64` with the debug APK of `f0cae7512`, set up afresh (`/sdcard/GooseTest`'s BIOS, games and data
+folders), driven by taps and key events, with made-up credentials and an unreachable storage address (no real
+storage: that check is the user's).
+
+| Check | Result |
+| --- | --- |
+| The page, filled in | Pass. Each row opened its field with the keyboard; Enter saved it. The secret and passphrase rows said "Saved", their fields never showed the value, and Remove passphrase took the passphrase away. An empty Device name showed "Google sdk_gphone64_arm64". |
+| Sync on, storage unreachable | Pass. "Offline at 17:47: changes upload once the storage can be reached."; Sync now tried again ("Offline at 17:48"). |
+| The badge | Pass. "Offline", on the warning ground with the cloud-off icon; Left from Settings reached it, and A opened Settings → Memory cards. |
+| Background and back | Pass. Leaving the app: `In the background: memory card sync pushed what it had (ok), and waits.`; back in front: `Back in front: memory card sync resumes.`, then the next sync. |
+| No secret written out | Pass. `grep -r not-a-real-secret` found nothing in the data folder, the working copy or the app's preferences; `settings.ini` had `SecretStored = true` only. |
+| `emusync/` stays on the device | Pass. The working copy had `emusync/1968633d21287e0e`; the data folder had no `emusync`. |
+
+The full instrumented suite passed on the same AVD (509 of 510; the other, `ControllersScreenTest`, lost its test
+process and passed on its own, 27/27), and the native tests (196).
 
 ## Results on the AYN Thor
 

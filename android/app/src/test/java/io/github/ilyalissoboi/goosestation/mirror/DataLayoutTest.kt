@@ -21,7 +21,6 @@ class DataLayoutTest {
             "covers/x.png",
             "bios/ps-30j.bin",
             "savestates/sub/SLUS-00001_1.sav",
-            "emusync/state",
         ).forEach { assertTrue(it, default.mirrored(it)) }
     }
 
@@ -170,5 +169,32 @@ class DataLayoutTest {
         // Only a save state's: other names keep their dots.
         assertTrue(default.mirrored("memcards/x.mcd.a1B2c3"))
         assertTrue(default.mirrored("savestates/SCUS-94900_1.sav.backup1"))
+    }
+
+    // emusync's data is this device's sync identity and key: never mirrored, never deleted as a stray, and a copy in the
+    // data folder from an earlier build is neither pulled nor reported as something else's.
+    @Test
+    fun emusyncIsKeptAndNotOthers() {
+        val core = DataLayout.withCorePaths(listOf("memcards/"), cacheFolder = null)
+        for (layout in listOf(default, core)) {
+            assertFalse(layout.mirrored("emusync/ab12cd34ef56ab78/db.sqlite"))
+            assertFalse(layout.stray("emusync/ab12cd34ef56ab78/db.sqlite"))
+            assertFalse(layout.walks("emusync"))
+            assertEquals(emptyList<String>(), layout.others(listOf("emusync" to true)))
+        }
+    }
+
+    // emusync writes a card to <card>.emusync-tmp, then renames it over the card; a folder card has -old and -swap too.
+    @Test
+    fun emusyncScratchIsKept() {
+        listOf(
+            "memcards/shared_card_1.mcd.emusync-tmp",
+            "memcards/x.emusync-old/save",
+            "memcards/x.emusync-swap",
+        ).forEach {
+            assertFalse(it, default.mirrored(it))
+            assertFalse(it, default.stray(it))
+        }
+        assertTrue(default.mirrored("memcards/emusync-tmp.mcd"))
     }
 }

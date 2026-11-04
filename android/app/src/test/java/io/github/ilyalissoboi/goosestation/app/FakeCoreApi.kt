@@ -6,8 +6,12 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.core.SyncActivity
+import io.github.ilyalissoboi.goosestation.core.SyncConflict
+import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 
 /**
  * A [CoreApi] with a pad's Cross and Circle bound and [images] as the BIOS images, which writes the calls that change
@@ -137,6 +141,53 @@ class FakeCoreApi(
     override fun signOut() {
         calls += "signOut"
         account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0)
+    }
+
+    /** Memory card sync as the fake reports it; [conflicts] are its conflicts. */
+    var syncState =
+        MemcardSyncState(
+            SyncStatusKind.Off,
+            enabled = false,
+            running = false,
+            applying = false,
+            remoteUri = "",
+            accessKeyId = "",
+            deviceName = "",
+            defaultDeviceName = "Goose Test Device",
+            hasSecret = false,
+            hasPassphrase = false,
+            passphraseRecorded = false,
+            startError = "",
+            status = "",
+            activity = SyncActivity.None,
+            conflictCount = 0,
+        )
+    var conflicts = emptyList<SyncConflict>()
+
+    override fun getMemcardSyncState(): MemcardSyncState {
+        calls += "getMemcardSyncState"
+        return syncState
+    }
+
+    override fun applyMemcardSync() {
+        calls += "applyMemcardSync"
+    }
+
+    override fun memcardSyncNow() {
+        calls += "memcardSyncNow"
+    }
+
+    override fun getMemcardSyncConflicts(): List<SyncConflict> {
+        calls += "getMemcardSyncConflicts"
+        return conflicts
+    }
+
+    override fun resolveMemcardSyncConflict(
+        id: Long,
+        keepLocal: Boolean,
+        remoteIndex: Int,
+    ) {
+        calls += "resolveMemcardSyncConflict $id $keepLocal $remoteIndex"
     }
 
     private fun takeDuringRead() {

@@ -245,6 +245,7 @@ class AchievementsSignInTest {
                 INSTALL_ID,
                 token,
                 File(dataRoot.parentFile, "offline").absolutePath,
+                "Goose Test Device",
             ),
         )
     }

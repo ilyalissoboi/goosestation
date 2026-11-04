@@ -419,6 +419,7 @@ class GameCallsTest {
                 INSTALL_ID,
                 null,
                 File(dataRoot.parentFile, "offline").absolutePath,
+                "Goose Test Device",
             ),
         )
     }

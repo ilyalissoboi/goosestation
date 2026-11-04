@@ -33,6 +33,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
@@ -198,6 +199,13 @@ class FocusAuditTest {
     }
 
     @Test
+    fun libraryWithTheSyncBadge() {
+        showLibrary(GAMES, gridView = true, syncBadge = SyncBadge.NeedsSetup)
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun libraryList() {
         showLibrary(GAMES, gridView = false)
 
@@ -276,6 +284,39 @@ class FocusAuditTest {
             )
         }
 
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun syncConflicts() {
+        show {
+            SyncConflictsScreen(
+                conflicts = SyncConflictsScreenTest.CONFLICTS,
+                zone = java.time.ZoneOffset.UTC,
+                onResolve = { _, _ -> },
+                onKeepAll = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+        press(Key.ButtonA)
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memoryCards() {
+        show {
+            MemcardSyncScreen(
+                state = MemcardSyncScreenTest.RUNNING.copy(hasPassphrase = true, conflictCount = 2),
+                onEnabled = {},
+                onText = { _, _ -> },
+                onSecret = { _, _ -> },
+                onRemovePassphrase = {},
+                onSyncNow = {},
+                onOpenConflicts = {},
+                onBack = {},
+            )
+        }
         rule.assertControllerReady()
     }
 
@@ -618,6 +659,7 @@ class FocusAuditTest {
     private fun showLibrary(
         games: List<GameEntry>,
         gridView: Boolean,
+        syncBadge: SyncBadge? = null,
     ) = show {
         LibraryScreen(
             games = games,
@@ -630,6 +672,7 @@ class FocusAuditTest {
             onRefresh = {},
             onStartGame = {},
             focusPath = null,
+            syncBadge = syncBadge,
         )
     }
 

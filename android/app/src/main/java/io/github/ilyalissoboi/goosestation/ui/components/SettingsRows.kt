@@ -3,6 +3,8 @@
 
 package io.github.ilyalissoboi.goosestation.ui.components
 
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.background
@@ -14,13 +16,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicSecureTextField
@@ -42,12 +48,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -62,8 +70,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -72,6 +83,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -440,9 +452,14 @@ fun TextFieldRow(
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
+    // The keyboard shrinks the page from below once the field has focus: the field is brought back into view.
+    val inView = remember { BringIntoViewRequester() }
+    val keyboardHeight = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(focused, keyboardHeight) { if (focused && keyboardHeight > 0) inView.bringIntoView() }
     val field =
         Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(inView)
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
                 // A single-line field would move its cursor instead.
@@ -476,29 +493,67 @@ fun TextFieldRow(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(label, style = MaterialTheme.typography.titleSmall, color = if (enabled) colors.ink else colors.inkFaint)
-        if (password) {
-            BasicSecureTextField(
-                state = state,
-                modifier = field,
-                enabled = enabled,
-                textStyle = textStyle,
-                keyboardOptions = KeyboardOptions(imeAction = imeAction, showKeyboardOnFocus = false),
-                onKeyboardAction = action,
-                cursorBrush = cursor,
+        DockedKeyboard { Field(password, state, field, enabled, textStyle, imeAction, action, cursor) }
+    }
+}
+
+/**
+ * Keeps Android's keyboard docked under the app for the text fields in [content]: no full-screen editor. Gboard on a
+ * landscape handheld (the AYN Thor) ignores IME_FLAG_NO_FULLSCREEN, which Compose sets, and opens one anyway, and
+ * Compose's field never updates its box, so typing showed nothing. With IME_FLAG_NO_EXTRACT_UI too, it stays docked.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun DockedKeyboard(content: @Composable () -> Unit) {
+    InterceptPlatformTextInput(
+        interceptor = { request, next ->
+            next.startInputMethod(
+                object : PlatformTextInputMethodRequest by request {
+                    override fun createInputConnection(outAttributes: EditorInfo): InputConnection =
+                        request.createInputConnection(outAttributes).also {
+                            outAttributes.imeOptions = outAttributes.imeOptions or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                        }
+                },
             )
-        } else {
-            BasicTextField(
-                state = state,
-                modifier = field,
-                enabled = enabled,
-                textStyle = textStyle,
-                keyboardOptions =
-                    KeyboardOptions(imeAction = imeAction, autoCorrectEnabled = false, showKeyboardOnFocus = false),
-                onKeyboardAction = action,
-                lineLimits = TextFieldLineLimits.SingleLine,
-                cursorBrush = cursor,
-            )
-        }
+        },
+        content = content,
+    )
+}
+
+/** [TextFieldRow]'s well: a secure field for a [password], else a single-line one. */
+@Composable
+private fun Field(
+    password: Boolean,
+    state: TextFieldState,
+    field: Modifier,
+    enabled: Boolean,
+    textStyle: TextStyle,
+    imeAction: ImeAction,
+    action: KeyboardActionHandler,
+    cursor: Brush,
+) {
+    if (password) {
+        BasicSecureTextField(
+            state = state,
+            modifier = field,
+            enabled = enabled,
+            textStyle = textStyle,
+            keyboardOptions = KeyboardOptions(imeAction = imeAction, showKeyboardOnFocus = false),
+            onKeyboardAction = action,
+            cursorBrush = cursor,
+        )
+    } else {
+        BasicTextField(
+            state = state,
+            modifier = field,
+            enabled = enabled,
+            textStyle = textStyle,
+            keyboardOptions =
+                KeyboardOptions(imeAction = imeAction, autoCorrectEnabled = false, showKeyboardOnFocus = false),
+            onKeyboardAction = action,
+            lineLimits = TextFieldLineLimits.SingleLine,
+            cursorBrush = cursor,
+        )
     }
 }
 

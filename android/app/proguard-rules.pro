@@ -12,6 +12,10 @@
     public void onBindingCaptured(java.lang.String);
     public void onOsdMessage(java.lang.String, java.lang.String, float, io.github.ilyalissoboi.goosestation.core.ArgbImage);
     public void onFastForwardChanged(boolean);
+    public boolean storeMemcardSyncSecret(java.lang.String, java.lang.String);
+    public java.lang.String loadMemcardSyncSecret(java.lang.String);
+    public boolean hasMemcardSyncSecret(java.lang.String);
+    public void onMemcardSyncChanged();
 }
 
 # jni_bridge.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().
@@ -38,6 +42,14 @@
     <init>(java.lang.String, io.github.ilyalissoboi.goosestation.core.PatchCode[]);
 }
 
+# jni_bridge.cpp finds MemcardSyncState and its constructor, and SyncStatusKind's and SyncActivity's values, by name in
+# JNI_OnLoad, for getMemcardSyncState().
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardSyncState { <init>(...); }
+-keep enum io.github.ilyalissoboi.goosestation.core.SyncStatusKind { public static final *; }
+-keep enum io.github.ilyalissoboi.goosestation.core.SyncActivity { public static final *; }
+-keep class io.github.ilyalissoboi.goosestation.core.SyncVersion { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.SyncConflict { <init>(...); }
+
 # jni_bridge.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().
 -keep class io.github.ilyalissoboi.goosestation.core.BiosImage {
     <init>(java.lang.String, java.lang.String, java.lang.String);
@@ -63,3 +75,8 @@
     public static void invalidate();
 }
 -keep class io.github.ilyalissoboi.goosestation.storage.NativeDocument { <fields>; }
+
+# emusync's Android library (memory card sync) has a lifecycle hook, SyncController.attachToAppLifecycle(), that the app
+# doesn't call; it needs androidx lifecycle-process, which the app doesn't have.
+-dontwarn androidx.lifecycle.ProcessLifecycleOwner
+-dontwarn androidx.lifecycle.ProcessLifecycleOwner$Companion

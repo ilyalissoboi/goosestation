@@ -33,6 +33,7 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -50,6 +51,7 @@ class LibraryScreenTest {
 
     private lateinit var games: List<GameEntry>
     private val started = mutableListOf<GameEntry>()
+    private var badgeClicks = 0
 
     @Before
     fun makeGames() {
@@ -84,6 +86,7 @@ class LibraryScreenTest {
         focusPath: String? = null,
         focusSettings: Boolean = false,
         onToggleView: () -> Unit = {},
+        syncBadge: SyncBadge? = null,
     ) {
         rule.setContent {
             GooseStationTheme {
@@ -100,6 +103,8 @@ class LibraryScreenTest {
                         onStartGame = { started += it },
                         focusPath = focusPath,
                         focusSettings = focusSettings,
+                        syncBadge = syncBadge,
+                        onSyncBadge = { badgeClicks++ },
                     )
                 }
             }
@@ -241,5 +246,34 @@ class LibraryScreenTest {
 
         rule.onNodeWithText("Game 30").assertExists()
         rule.onNodeWithText("Settings").assertIsFocused()
+    }
+
+    @Test
+    fun badgeShowsWordAndIcon() {
+        show(syncBadge = SyncBadge.Conflicts(2))
+
+        rule.onNodeWithText("2 conflicts").assertExists()
+    }
+
+    @Test
+    fun noBadgeWhenOff() {
+        show(syncBadge = null)
+
+        for (word in listOf("Synced", "Syncing…", "Offline", "Needs setup", "Sync failed")) {
+            assertEquals(0, rule.onAllNodes(hasText(word)).fetchSemanticsNodes().size)
+        }
+    }
+
+    @Test
+    fun badgeIsFocusableAndOpens() {
+        show(syncBadge = SyncBadge.Synced, focusSettings = true)
+
+        // Left of Grid/List, which is left of Settings.
+        press(Key.DirectionLeft)
+        press(Key.DirectionLeft)
+        rule.onNode(isFocused()).assert(hasText("Synced"))
+        press(Key.ButtonA)
+
+        assertEquals(1, badgeClicks)
     }
 }

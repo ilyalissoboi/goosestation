@@ -189,3 +189,59 @@ void OnCardClosed(std::string_view path);
 std::string CardNameFor(std::string_view path);
 
 } // namespace MemcardSync
+
+#ifdef __ANDROID__
+// ---- Android: the host keeps the secrets ---------------------------------------------------------
+//
+// emusync's es_secret_* return ES_E_INVALID_ARG on Android, whose apps keep secrets in the Android Keystore
+// themselves: StoreSecret(), LoadSecret() and HasSecret() ask the host instead, which asks the app. The ini's
+// SecretStored and PassphraseStored are still written, as on desktop, but not read: a settings.ini copied from
+// desktop says its own keychain has them.
+namespace Host {
+/// Keeps `value` as the secret `name`, or deletes it if `value` is empty. False if it couldn't.
+bool StoreMemcardSyncSecret(const char* name, std::string_view value);
+/// The secret `name`, or nullopt for none (or one that can't be read any more).
+std::optional<std::string> LoadMemcardSyncSecret(const char* name);
+/// Whether the secret `name` is stored, without reading it.
+bool HasMemcardSyncSecret(const char* name);
+/// This device's name, for a DeviceName left empty ("AYN Thor"): Android's host name is "localhost".
+std::string GetMemcardSyncDefaultDeviceName();
+/// What GetActivity(), the status, the conflicts or whether settings are being applied say may have changed. From
+/// sync's threads, maybe with its locks held: it must not call into sync, only note that the app should look again.
+void OnMemcardSyncChanged();
+} // namespace Host
+
+// ---- Android: what sync is doing, for the app's badge -------------------------------------------------
+namespace MemcardSync {
+
+/// What sync last did, from emusync's events and the start's result.
+enum class Activity : u8
+{
+  None,         ///< Not running, or nothing reported yet.
+  Syncing,      ///< A sync, or a start, is under way.
+  Synced,       ///< The last sync finished.
+  Offline,      ///< The storage couldn't be reached.
+  Failed,       ///< The last sync, or the start, failed.
+  Locked,       ///< The storage is encrypted and this device has no key for it, or the passphrase is wrong.
+  AuthRequired, ///< The storage rejected the access key.
+};
+
+Activity GetActivity();
+
+/// The app went to the background, or came back. In the background, sync pushes what it has (es_app_suspend(), for
+/// up to 3 s on its own thread, after the card writes already handed to it), then does nothing: no periodic sync, and
+/// a start skips its first sync. Back in front, it syncs at once (es_app_resume()) and every 5 minutes again. Without
+/// a client, the state is only noted.
+void SetAppBackgrounded(bool backgrounded);
+
+/// Tests: syncs every `ms` instead of every 5 minutes (0 for 5 minutes again), from now.
+void SetPeriodicSyncForTest(u32 ms);
+
+/// Runs `action` with emusync kept off the card file at `path`, for the app's mirror replacing or deleting it: no sync
+/// starts or stops meanwhile, and a running client holds a session on the card, as a game opening it does, so emusync
+/// doesn't write it (a write of its in progress finishes first). Returns false without running `action` when the card
+/// is open in a game, or a session can't begin on it: the caller leaves the card for later.
+bool WithCardHeld(std::string_view path, const std::function<void()>& action);
+
+} // namespace MemcardSync
+#endif

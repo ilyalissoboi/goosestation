@@ -23,6 +23,8 @@ add_library(goosestation SHARED
   jni_bridge.cpp
   jni_util.cpp
   jni_util.h
+  memcard_sync_bridge.cpp
+  memcard_sync_bridge.h
 )
 
 target_link_libraries(goosestation PRIVATE core common util imgui minizip rcheevos scmversion android log EGL aaudio)

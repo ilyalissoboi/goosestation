@@ -280,6 +280,19 @@ A panel's tabs: the L1 chip, the tabs' labels in `label-sm` (the current one on 
 `ink-muted`), then R1. The panel switches them on L1 and R1 from anywhere in it, and a tap on a label selects it.
 Nothing in it takes focus, so the D-pad stays on the panel's rows. `KeyHints` says "L1 R1 Switch".
 
+### `OverlayPanel` (`OverlayPanel.kt`)
+
+```kotlin
+OverlayPanel(onBack = ::close) { Text("Erase every save on Shared card 1?", …); FlowRow { … } }
+```
+
+A small panel over a screen, drawn in the app's window, never a window dialog: a `scrim` over the whole window, past
+the system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, 24 dp
+inside, in the safe area, that scrolls. The focus can't leave it, and the caller focuses what it holds. B and Back
+call `onBack` on the key-up of a press that began in it. It scrolls the least that shows the focus, not to the middle:
+a focused text field asks to show its cursor as well as itself, which centring can't do. A question in it puts its
+destructive answer first and the focus on the safe one.
+
 ### `Eyebrow` (`Eyebrow.kt`)
 
 A small capitalised label over what it names: "Paused" over a game's title, "Step 1 of 3" over a setup step.
@@ -327,6 +340,19 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   `title-2`, the entry count, then Top and Around you (one list where they meet), each entry its rank and score in
   `mono` and the user, the player's own on `beak-soft` and focused; "Loading…", or a `Danger` notice when it can't be
   fetched. B steps back from a leaderboard to its row, then to the menu.
+- `MemcardEditorScreen`: Settings → Memory cards → Manage cards. "Memory cards" in `title-1` with the unsaved
+  changes under it ("1 change not saved"), and **Discard** and **Save** (`Primary`) at the end; then two cards side by
+  side, each a `surface` panel at `radius-md` edged `line-strong` while it holds the focus (`line` otherwise). A card's
+  picker row has its name and "N of 15 blocks free", "No card yet" or "Can't read this card"; A opens the choice list
+  of every card. Each save is a row: its icon's first frame at 32 dp on `sunken` (nearest-neighbour), its title in
+  `label` with its size under it, and its file name in `mono` on a line of its own, the row's width; a deleted save is
+  "Deleted · <title>", all in `ink-faint`. Under the saves, **Import save**, **Import card** and **Format** (`Danger`).
+  L1 and R1 move to the other card, as Left and Right do at a card's edge; under 720 dp wide one card shows, with
+  both names as `PanelTabs`. The page scrolls as one, `KeyHints` fixed at its foot (A Actions, B Back, L1 R1 Other
+  card). A on a save opens its `OverlayPanel` (Copy to <the other card> first and focused, Rename…, Export…,
+  Delete; on a deleted one, Undelete and Delete permanently); questions take the panel's place, and the rename form
+  is Title and File name as `TextFieldRow`s, the rule broken as a `Danger` notice, Rename and Cancel. When it closes,
+  the focus goes back to what had it.
 - `ResumePrompt`: "Resume where you left off?" over the library, a centred `surface` panel at `radius-lg`: the game's
   title, the resume state's screenshot (224 x 168 dp) and time, then Resume (`Primary`, focused) and Start over. The
   `scrim` takes every tap, and the focus can't leave the panel. When hardcore mode would start, it gives the game's

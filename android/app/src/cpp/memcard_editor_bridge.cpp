@@ -4,20 +4,28 @@
 #include "memcard_editor_bridge.h"
 #include "android_host.h"
 #include "emu_thread.h"
+#include "foreign_settings.h"
+#include "memcard_sync_bridge.h"
 
 #include "core/game_database.h"
 #include "core/host.h"
+#include "core/memory_card_helpers.h"
+#include "core/memory_card_image.h"
 #include "core/settings.h"
 #include "core/system.h"
 
 #include "util/android_memcards.h"
 #include "util/ini_settings_interface.h"
 
+#include "common/error.h"
 #include "common/file_system.h"
 #include "common/path.h"
 #include "common/string_util.h"
 
 #include <algorithm>
+#include <array>
+#include <cstring>
+#include <memory>
 
 namespace MemcardEditorBridge {
 namespace {
@@ -185,4 +193,313 @@ std::vector<MemcardEditorBridge::CardFile> MemcardEditorBridge::ListCards(std::s
     },
     true);
   return ret;
+}
+
+namespace MemcardEditorBridge {
+namespace {
+
+// Runs f on the CPU thread, waiting for it, and returns what it returned.
+template<typename F>
+auto OnCPUThread(F&& f) -> decltype(f())
+{
+  decltype(f()) ret{};
+  EmuThread::RunOnThread([&ret, &f]() { ret = f(); }, true);
+  return ret;
+}
+
+// The card in bytes, or null unless it's a card image.
+std::unique_ptr<MemoryCardImage::DataArray> ToCard(std::span<const u8> bytes)
+{
+  if (bytes.size() != MemoryCardImage::DATA_SIZE)
+    return nullptr;
+  auto card = std::make_unique<MemoryCardImage::DataArray>();
+  std::memcpy(card->data(), bytes.data(), bytes.size());
+  if (!MemoryCardImage::IsValid(*card))
+    return nullptr;
+  return card;
+}
+
+std::vector<u8> ToBytes(const MemoryCardImage::DataArray& card)
+{
+  return std::vector<u8>(card.begin(), card.end());
+}
+
+// The save at first_block, deleted or not.
+std::optional<MemoryCardImage::FileInfo> FindSave(const MemoryCardImage::DataArray& card, u32 first_block)
+{
+  for (MemoryCardImage::FileInfo& fi : MemoryCardImage::EnumerateFiles(card, true))
+  {
+    if (fi.first_block == first_block)
+      return std::move(fi);
+  }
+  return std::nullopt;
+}
+
+constexpr const char* NOT_A_CARD = "This isn't a memory card.";
+constexpr const char* NO_SUCH_SAVE = "That save is no longer on the card.";
+
+Edit Failed(std::string error)
+{
+  return Edit{std::nullopt, std::move(error)};
+}
+
+Edit Done(const MemoryCardImage::DataArray& card)
+{
+  return Edit{ToBytes(card), {}};
+}
+
+// The live saves' file names on card, but the one at first_block.
+std::vector<std::string> OtherNames(const MemoryCardImage::DataArray& card, u32 first_block)
+{
+  std::vector<std::string> names;
+  for (const MemoryCardImage::FileInfo& fi : MemoryCardImage::EnumerateFiles(card, false))
+  {
+    if (fi.first_block != first_block)
+      names.push_back(fi.filename);
+  }
+  return names;
+}
+
+RenameCheck Check(const MemoryCardImage::DataArray& card, const MemoryCardImage::FileInfo& fi,
+                  const std::optional<std::string>& title, const std::optional<std::string>& name,
+                  std::array<u8, MemoryCardHelpers::TITLE_SIZE>* title_sjis)
+{
+  RenameCheck check{};
+  const std::span<const u8, MemoryCardHelpers::TITLE_SIZE> stored = MemoryCardImage::GetRawTitle(card, fi);
+  const MemoryCardHelpers::TitleStyle style = MemoryCardHelpers::GetTitleStyle(stored);
+  check.single_byte_title = (style == MemoryCardHelpers::TitleStyle::SingleByte);
+  if (title.has_value())
+  {
+    check.title_error = static_cast<u32>(MemoryCardHelpers::EncodeTitle(title.value(), title_sjis, style));
+    check.title_not_shown_exactly = !MemoryCardHelpers::IsTitleShownExactly(stored);
+  }
+  if (name.has_value())
+  {
+    const std::vector<std::string> others = OtherNames(card, fi.first_block);
+    const std::vector<std::string_view> other_views(others.begin(), others.end());
+    check.name_error = static_cast<u32>(MemoryCardHelpers::CheckFileName(name.value(), other_views));
+    check.name_not_standard = !MemoryCardHelpers::IsStandardFileName(name.value());
+  }
+  return check;
+}
+
+std::optional<std::vector<u8>> ReadFile(const std::string& path)
+{
+  FileSystem::ManagedCFilePtr fp = FileSystem::OpenManagedCFile(path.c_str(), "rb");
+  if (!fp)
+    return std::nullopt;
+  std::vector<u8> bytes(READ_LIMIT);
+  bytes.resize(std::fread(bytes.data(), 1, bytes.size(), fp.get()));
+  return bytes;
+}
+
+} // namespace
+} // namespace MemcardEditorBridge
+
+std::optional<std::vector<u8>> MemcardEditorBridge::ReadCard(const std::string& path)
+{
+  return OnCPUThread([&path]() { return ReadFile(path); });
+}
+
+std::optional<MemcardEditorBridge::Contents> MemcardEditorBridge::GetContents(std::span<const u8> bytes)
+{
+  return OnCPUThread([bytes]() -> std::optional<Contents> {
+    const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
+    if (!card)
+      return std::nullopt;
+    Contents contents{MemoryCardImage::GetFreeBlockCount(*card), {}};
+    for (MemoryCardImage::FileInfo& fi : MemoryCardImage::EnumerateFiles(*card, true))
+    {
+      Save save{fi.first_block, std::move(fi.filename), std::move(fi.title), fi.num_blocks, fi.deleted, {}};
+      if (!fi.icon_frames.empty())
+        save.icon.assign(std::begin(fi.icon_frames[0].pixels), std::end(fi.icon_frames[0].pixels));
+      contents.saves.push_back(std::move(save));
+    }
+    return contents;
+  });
+}
+
+std::vector<u8> MemcardEditorBridge::Format()
+{
+  return OnCPUThread([]() {
+    auto card = std::make_unique<MemoryCardImage::DataArray>();
+    MemoryCardImage::Format(card.get());
+    return ToBytes(*card);
+  });
+}
+
+MemcardEditorBridge::Edit MemcardEditorBridge::CopySave(std::span<const u8> from_bytes, u32 from_block,
+                                                        std::span<const u8> to_bytes, bool replace)
+{
+  return OnCPUThread([&]() {
+    const std::unique_ptr<MemoryCardImage::DataArray> from = ToCard(from_bytes);
+    const std::unique_ptr<MemoryCardImage::DataArray> to = ToCard(to_bytes);
+    if (!from || !to)
+      return Failed(NOT_A_CARD);
+    const std::optional<MemoryCardImage::FileInfo> fi = FindSave(*from, from_block);
+    if (!fi.has_value() || fi->deleted)
+      return Failed(NO_SUCH_SAVE);
+
+    Error error;
+    std::vector<u8> data;
+    if (!MemoryCardImage::ReadFile(*from, fi.value(), &data, &error))
+      return Failed(error.GetDescription());
+    for (const MemoryCardImage::FileInfo& existing : MemoryCardImage::EnumerateFiles(*to, false))
+    {
+      if (existing.filename != fi->filename)
+        continue;
+      if (!replace)
+        return Failed(fmt::format("This card already has a save named {}.", existing.filename));
+      MemoryCardImage::DeleteFile(to.get(), existing, true);
+    }
+    if (!MemoryCardImage::WriteFile(to.get(), fi->filename, data, &error))
+      return Failed(error.GetDescription());
+    return Done(*to);
+  });
+}
+
+std::optional<std::vector<u8>> MemcardEditorBridge::DeleteSave(std::span<const u8> bytes, u32 first_block,
+                                                               bool permanently)
+{
+  return OnCPUThread([&]() -> std::optional<std::vector<u8>> {
+    const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
+    const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
+    if (!fi.has_value() || !MemoryCardImage::DeleteFile(card.get(), fi.value(), permanently))
+      return std::nullopt;
+    return ToBytes(*card);
+  });
+}
+
+std::optional<std::vector<u8>> MemcardEditorBridge::UndeleteSave(std::span<const u8> bytes, u32 first_block)
+{
+  return OnCPUThread([&]() -> std::optional<std::vector<u8>> {
+    const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
+    const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
+    if (!fi.has_value() || !MemoryCardImage::UndeleteFile(card.get(), fi.value()))
+      return std::nullopt;
+    return ToBytes(*card);
+  });
+}
+
+MemcardEditorBridge::RenameCheck MemcardEditorBridge::CheckRename(std::span<const u8> bytes, u32 first_block,
+                                                                  const std::optional<std::string>& title,
+                                                                  const std::optional<std::string>& name)
+{
+  return OnCPUThread([&]() {
+    const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
+    const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
+    if (!fi.has_value())
+      return RenameCheck{};
+    std::array<u8, MemoryCardHelpers::TITLE_SIZE> title_sjis;
+    return Check(*card, fi.value(), title, name, &title_sjis);
+  });
+}
+
+std::optional<std::vector<u8>> MemcardEditorBridge::Rename(std::span<const u8> bytes, u32 first_block,
+                                                           const std::optional<std::string>& title,
+                                                           const std::optional<std::string>& name)
+{
+  return OnCPUThread([&]() -> std::optional<std::vector<u8>> {
+    const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
+    const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
+    if (!fi.has_value() || fi->deleted)
+      return std::nullopt;
+    std::array<u8, MemoryCardHelpers::TITLE_SIZE> title_sjis;
+    const RenameCheck check = Check(*card, fi.value(), title, name, &title_sjis);
+    if (check.title_error != 0 || check.name_error != 0)
+      return std::nullopt;
+    if (title.has_value())
+      MemoryCardImage::SetTitle(card.get(), fi.value(), title_sjis);
+    if (name.has_value() && !MemoryCardImage::SetFileName(card.get(), fi.value(), name.value()))
+      return std::nullopt;
+    return ToBytes(*card);
+  });
+}
+
+MemcardEditorBridge::Edit MemcardEditorBridge::ImportSave(std::span<const u8> bytes, const std::string& file_name,
+                                                          std::span<const u8> data)
+{
+  return OnCPUThread([&]() {
+    const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
+    if (!card)
+      return Failed(NOT_A_CARD);
+    Error error;
+    if (!MemoryCardImage::ImportSave(card.get(), file_name.c_str(), data, &error))
+      return Failed(error.GetDescription());
+    return Done(*card);
+  });
+}
+
+MemcardEditorBridge::Edit MemcardEditorBridge::ImportCard(const std::string& file_name, std::span<const u8> data)
+{
+  return OnCPUThread([&]() {
+    auto card = std::make_unique<MemoryCardImage::DataArray>();
+    MemoryCardImage::Format(card.get());
+    Error error;
+    if (!MemoryCardImage::ImportCard(card.get(), file_name.c_str(), data, &error))
+      return Failed(error.GetDescription());
+    return Done(*card);
+  });
+}
+
+MemcardEditorBridge::Edit MemcardEditorBridge::ExportSave(std::span<const u8> bytes, u32 first_block)
+{
+  return OnCPUThread([&]() {
+    const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
+    const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
+    if (!fi.has_value() || fi->deleted)
+      return Failed(NO_SUCH_SAVE);
+    Error error;
+    std::vector<u8> mcs;
+    if (!MemoryCardImage::ExportSave(*card, fi.value(), &mcs, &error))
+      return Failed(error.GetDescription());
+    return Edit{std::move(mcs), {}};
+  });
+}
+
+bool MemcardEditorBridge::IsKnownToSync(const std::string& path)
+{
+  return MemcardSyncBridge::IsCardKnown(path);
+}
+
+MemcardEditorBridge::WriteResult MemcardEditorBridge::WriteCard(const std::string& path, std::span<const u8> card,
+                                                                const std::optional<std::span<const u8>>& expected,
+                                                                bool force)
+{
+  WriteResult result{WriteOutcome::Failed, {}};
+  const auto write = [&]() {
+    if (!force)
+    {
+      const std::optional<std::vector<u8>> current = ReadFile(path);
+      const bool same = current.has_value() == expected.has_value() &&
+                        (!current.has_value() || std::equal(current->begin(), current->end(), expected->begin(),
+                                                            expected->end()));
+      if (!same)
+      {
+        result.outcome = WriteOutcome::Changed;
+        return;
+      }
+    }
+    Error error;
+    if (!FileSystem::EnsureDirectoryExists(std::string(Path::GetDirectory(path)).c_str(), false, &error) ||
+        !FileSystem::WriteAtomicRenamedFile(path.c_str(), card.data(), card.size(), &error))
+    {
+      result.error = error.GetDescription();
+      return;
+    }
+    result.outcome = WriteOutcome::Saved;
+  };
+
+  // Off the CPU thread, as the mirror's holds are: a hold can wait for emusync.
+  const std::optional<std::string> relative = AndroidHost::RelativeToDataRoot(path);
+  if (relative.has_value() && IsKnownToSync(path))
+  {
+    if (!MemcardSyncBridge::HoldCard(relative.value(), write))
+      return WriteResult{WriteOutcome::Busy, {}};
+  }
+  else
+  {
+    write();
+  }
+  return result;
 }

@@ -74,7 +74,8 @@ namespace MemcardSync {
 #ifdef __ANDROID__
 #define ES_PLATFORM_FUNCTIONS(X)                                                                                       \
   X(es_app_suspend)                                                                                                    \
-  X(es_app_resume)
+  X(es_app_resume)                                                                                                     \
+  X(es_card_get_mode)
 #else
 #define ES_PLATFORM_FUNCTIONS(X)
 #endif
@@ -1339,6 +1340,18 @@ void MemcardSync::OnCardClosed(std::string_view path)
 MemcardSync::Activity MemcardSync::GetActivity()
 {
   return s_activity.load();
+}
+
+bool MemcardSync::IsCardKnown(std::string_view path)
+{
+  std::shared_lock client(s_client_lock);
+  if (!s_client)
+    return false;
+
+  // Any answer but "not found" counts as known, so the card is held when it's written.
+  const std::string card_id = "ps1:" + CardNameFor(path);
+  es_card_mode mode;
+  return s_es.es_card_get_mode(s_client, card_id.c_str(), &mode) != ES_E_NOT_FOUND;
 }
 
 bool MemcardSync::WithCardHeld(std::string_view path, const std::function<void()>& action)

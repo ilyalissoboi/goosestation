@@ -78,6 +78,9 @@ std::vector<Conflict> GetConflicts();
 /// MemcardSync::ResolveConflict(). Returns at once.
 void ResolveConflict(u64 id, bool keep_local, u32 remote_index);
 
+/// MemcardSync::IsCardKnown() for the card at path (a full path).
+bool IsCardKnown(std::string_view path);
+
 /// MemcardSync::WithCardHeld() for the card at relative_path, under EmuFolders::DataRoot as the core makes its card
 /// paths.
 bool HoldCard(std::string_view relative_path, const std::function<void()>& action);

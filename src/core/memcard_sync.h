@@ -237,6 +237,10 @@ void SetAppBackgrounded(bool backgrounded);
 /// Tests: syncs every `ms` instead of every 5 minutes (0 for 5 minutes again), from now.
 void SetPeriodicSyncForTest(u32 ms);
 
+/// Whether emusync's repository knows the card file at `path` (its logical card, named as RegisterCard() names it): a
+/// game used it on this device, or it came from another. Without a client, false. Doesn't wait.
+bool IsCardKnown(std::string_view path);
+
 /// Runs `action` with emusync kept off the card file at `path`, for the app's mirror replacing or deleting it: no sync
 /// starts or stops meanwhile, and a running client holds a session on the card, as a game opening it does, so emusync
 /// doesn't write it (a write of its in progress finishes first). Returns false without running `action` when the card

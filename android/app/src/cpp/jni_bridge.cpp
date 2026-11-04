@@ -15,6 +15,7 @@
 
 #include "core/game_database.h"
 #include "core/game_list.h"
+#include "core/memory_card_image.h"
 #include "core/settings.h"
 
 #include "util/platform_misc.h"
@@ -113,6 +114,17 @@ jmethodID s_runnable_run = nullptr;
 jclass s_memcard_file_class = nullptr;
 jmethodID s_memcard_file_constructor = nullptr;
 jobject s_memcard_kinds[3] = {}; // MemcardKind's values, in MemcardEditorBridge::CardKind's order (global references)
+jclass s_memcard_save_class = nullptr;
+jmethodID s_memcard_save_constructor = nullptr;
+jclass s_memcard_contents_class = nullptr;
+jmethodID s_memcard_contents_constructor = nullptr;
+jclass s_memcard_edit_class = nullptr;
+jmethodID s_memcard_edit_constructor = nullptr;
+jclass s_memcard_rename_check_class = nullptr;
+jmethodID s_memcard_rename_check_constructor = nullptr;
+jclass s_memcard_write_class = nullptr;
+jmethodID s_memcard_write_constructor = nullptr;
+jobject s_memcard_write_outcomes[4] = {}; // MemcardWriteOutcome's values, in WriteOutcome's order (global references)
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -1045,6 +1057,45 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   if (!s_memcard_file_constructor)
   {
     ClearException(env);
+    return JNI_ERR;
+  }
+
+  static constexpr const char* MEMCARD_WRITE_OUTCOME_NAMES[] = {"Saved", "Changed", "Busy", "Failed"};
+  if (!LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/MemcardWriteOutcome", MEMCARD_WRITE_OUTCOME_NAMES,
+                      s_memcard_write_outcomes))
+  {
+    return JNI_ERR;
+  }
+  // The memory card editor's classes, each with the constructor native code makes it with.
+  const auto load_class = [env](const char* name, const char* signature, jclass* cls, jmethodID* constructor) {
+    jclass local = env->FindClass(name);
+    if (local)
+    {
+      *cls = static_cast<jclass>(env->NewGlobalRef(local));
+      env->DeleteLocalRef(local);
+      *constructor = env->GetMethodID(*cls, "<init>", signature);
+    }
+    if (!local || !*constructor)
+    {
+      ClearException(env);
+      return false;
+    }
+    return true;
+  };
+  if (!load_class("io/github/ilyalissoboi/goosestation/core/MemcardSave",
+                  "(ILjava/lang/String;Ljava/lang/String;IZLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V",
+                  &s_memcard_save_class, &s_memcard_save_constructor) ||
+      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardContents",
+                  "(I[Lio/github/ilyalissoboi/goosestation/core/MemcardSave;)V", &s_memcard_contents_class,
+                  &s_memcard_contents_constructor) ||
+      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardEdit", "([BLjava/lang/String;)V",
+                  &s_memcard_edit_class, &s_memcard_edit_constructor) ||
+      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardRenameCheck", "(IIZZZ)V",
+                  &s_memcard_rename_check_class, &s_memcard_rename_check_constructor) ||
+      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardWrite",
+                  "(Lio/github/ilyalissoboi/goosestation/core/MemcardWriteOutcome;Ljava/lang/String;)V",
+                  &s_memcard_write_class, &s_memcard_write_constructor))
+  {
     return JNI_ERR;
   }
 
@@ -2364,6 +2415,210 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardFiles)(JNIEnv* env, jobject, job
     env->SetObjectArrayElement(ret, static_cast<jsize>(i), card);
     env->DeleteLocalRef(card);
   }
+  return ret;
+}
+
+namespace {
+std::vector<u8> FromJByteArray(JNIEnv* env, jbyteArray array)
+{
+  std::vector<u8> bytes(array ? static_cast<size_t>(env->GetArrayLength(array)) : 0);
+  if (!bytes.empty())
+    env->GetByteArrayRegion(array, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<jbyte*>(bytes.data()));
+  return bytes;
+}
+
+// A byte[] of bytes, or null (with no exception pending) if it can't be made.
+jbyteArray ToJByteArray(JNIEnv* env, std::span<const u8> bytes)
+{
+  jbyteArray ret = env->NewByteArray(static_cast<jsize>(bytes.size()));
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  env->SetByteArrayRegion(ret, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
+  return ret;
+}
+
+jbyteArray ToJByteArrayOrNull(JNIEnv* env, const std::optional<std::vector<u8>>& bytes)
+{
+  return bytes.has_value() ? ToJByteArray(env, std::span<const u8>(bytes.value())) : nullptr;
+}
+
+std::optional<std::string> FromOptionalJString(JNIEnv* env, jstring str)
+{
+  return str ? std::optional<std::string>(FromJString(env, str)) : std::nullopt;
+}
+
+// A MemcardSave, or null (with no exception pending) if it can't be made.
+jobject ToMemcardSave(JNIEnv* env, const MemcardEditorBridge::Save& save)
+{
+  using MemoryCardImage::ICON_HEIGHT;
+  using MemoryCardImage::ICON_WIDTH;
+  jstring file_name = ToJString(env, save.file_name);
+  jstring title = ToJString(env, save.title);
+  jobject icon = save.icon.size() == ICON_WIDTH * ICON_HEIGHT ?
+                   ToArgbImage(env, save.icon.data(), ICON_WIDTH, ICON_HEIGHT, false) :
+                   nullptr;
+  jobject ret = (file_name && title) ?
+                  env->NewObject(s_memcard_save_class, s_memcard_save_constructor, static_cast<jint>(save.first_block),
+                                 file_name, title, static_cast<jint>(save.blocks), static_cast<jboolean>(save.deleted),
+                                 icon) :
+                  nullptr;
+  if (!ret)
+    ClearException(env);
+  for (jobject ref : {static_cast<jobject>(file_name), static_cast<jobject>(title), icon})
+  {
+    if (ref)
+      env->DeleteLocalRef(ref);
+  }
+  return ret;
+}
+
+// A MemcardEdit, or null (with no exception pending) if it can't be made.
+jobject ToMemcardEdit(JNIEnv* env, const MemcardEditorBridge::Edit& edit)
+{
+  jbyteArray card = ToJByteArrayOrNull(env, edit.card);
+  jstring error = ToJString(env, edit.error);
+  jobject ret = (error && (card || !edit.card.has_value())) ?
+                  env->NewObject(s_memcard_edit_class, s_memcard_edit_constructor, card, error) :
+                  nullptr;
+  if (!ret)
+    ClearException(env);
+  for (jobject ref : {static_cast<jobject>(card), static_cast<jobject>(error)})
+  {
+    if (ref)
+      env->DeleteLocalRef(ref);
+  }
+  return ret;
+}
+} // namespace
+
+NATIVE_LIBRARY_FUNCTION(jbyteArray, readMemcard)(JNIEnv* env, jobject, jstring path)
+{
+  return ToJByteArrayOrNull(env, MemcardEditorBridge::ReadCard(FromJString(env, path)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getMemcardContents)(JNIEnv* env, jobject, jbyteArray card)
+{
+  const std::optional<MemcardEditorBridge::Contents> contents =
+    MemcardEditorBridge::GetContents(FromJByteArray(env, card));
+  if (!contents.has_value())
+    return nullptr;
+
+  jobjectArray saves = env->NewObjectArray(static_cast<jsize>(contents->saves.size()), s_memcard_save_class, nullptr);
+  if (!saves)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  for (size_t i = 0; i < contents->saves.size(); i++)
+  {
+    jobject save = ToMemcardSave(env, contents->saves[i]);
+    if (!save)
+    {
+      env->DeleteLocalRef(saves);
+      return nullptr;
+    }
+    env->SetObjectArrayElement(saves, static_cast<jsize>(i), save);
+    env->DeleteLocalRef(save);
+  }
+  jobject ret = env->NewObject(s_memcard_contents_class, s_memcard_contents_constructor,
+                               static_cast<jint>(contents->free_blocks), saves);
+  if (!ret)
+    ClearException(env);
+  env->DeleteLocalRef(saves);
+  return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(jbyteArray, formatMemcard)(JNIEnv* env, jobject)
+{
+  const std::vector<u8> card = MemcardEditorBridge::Format();
+  return ToJByteArray(env, std::span<const u8>(card));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, copyMemcardSave)(JNIEnv* env, jobject, jbyteArray from, jint first_block,
+                                                 jbyteArray to, jboolean replace)
+{
+  return ToMemcardEdit(env, MemcardEditorBridge::CopySave(FromJByteArray(env, from), static_cast<u32>(first_block),
+                                                          FromJByteArray(env, to), replace == JNI_TRUE));
+}
+
+NATIVE_LIBRARY_FUNCTION(jbyteArray, deleteMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jint first_block,
+                                                      jboolean permanently)
+{
+  return ToJByteArrayOrNull(env, MemcardEditorBridge::DeleteSave(FromJByteArray(env, card), static_cast<u32>(first_block),
+                                                           permanently == JNI_TRUE));
+}
+
+NATIVE_LIBRARY_FUNCTION(jbyteArray, undeleteMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jint first_block)
+{
+  return ToJByteArrayOrNull(env,
+                      MemcardEditorBridge::UndeleteSave(FromJByteArray(env, card), static_cast<u32>(first_block)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, checkMemcardRename)(JNIEnv* env, jobject, jbyteArray card, jint first_block,
+                                                    jstring title, jstring file_name)
+{
+  const MemcardEditorBridge::RenameCheck check =
+    MemcardEditorBridge::CheckRename(FromJByteArray(env, card), static_cast<u32>(first_block),
+                                     FromOptionalJString(env, title), FromOptionalJString(env, file_name));
+  jobject ret = env->NewObject(s_memcard_rename_check_class, s_memcard_rename_check_constructor,
+                               static_cast<jint>(check.title_error), static_cast<jint>(check.name_error),
+                               static_cast<jboolean>(check.single_byte_title),
+                               static_cast<jboolean>(check.title_not_shown_exactly),
+                               static_cast<jboolean>(check.name_not_standard));
+  if (!ret)
+    ClearException(env);
+  return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(jbyteArray, renameMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jint first_block,
+                                                      jstring title, jstring file_name)
+{
+  return ToJByteArrayOrNull(env, MemcardEditorBridge::Rename(FromJByteArray(env, card), static_cast<u32>(first_block),
+                                                       FromOptionalJString(env, title),
+                                                       FromOptionalJString(env, file_name)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, importMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jstring file_name,
+                                                   jbyteArray data)
+{
+  return ToMemcardEdit(env, MemcardEditorBridge::ImportSave(FromJByteArray(env, card), FromJString(env, file_name),
+                                                            FromJByteArray(env, data)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, importMemcard)(JNIEnv* env, jobject, jstring file_name, jbyteArray data)
+{
+  return ToMemcardEdit(env, MemcardEditorBridge::ImportCard(FromJString(env, file_name), FromJByteArray(env, data)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, exportMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jint first_block)
+{
+  return ToMemcardEdit(env,
+                       MemcardEditorBridge::ExportSave(FromJByteArray(env, card), static_cast<u32>(first_block)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, isMemcardKnownToSync)(JNIEnv* env, jobject, jstring path)
+{
+  return MemcardEditorBridge::IsKnownToSync(FromJString(env, path)) ? JNI_TRUE : JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, writeMemcard)(JNIEnv* env, jobject, jstring path, jbyteArray card,
+                                              jbyteArray expected, jboolean force)
+{
+  const std::vector<u8> expected_bytes = FromJByteArray(env, expected);
+  const MemcardEditorBridge::WriteResult result = MemcardEditorBridge::WriteCard(
+    FromJString(env, path), FromJByteArray(env, card),
+    expected ? std::optional<std::span<const u8>>(expected_bytes) : std::nullopt, force == JNI_TRUE);
+  jstring error = ToJString(env, result.error);
+  jobject ret = error ? env->NewObject(s_memcard_write_class, s_memcard_write_constructor,
+                                       s_memcard_write_outcomes[static_cast<size_t>(result.outcome)], error) :
+                        nullptr;
+  if (!ret)
+    ClearException(env);
+  if (error)
+    env->DeleteLocalRef(error);
   return ret;
 }
 

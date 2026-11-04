@@ -36,9 +36,15 @@ class MemcardGamesTest {
                 GameDisc("content://games/ff7-2.cue", "SCUS-94164", "Final Fantasy VII (Disc 2)", 2),
             )
 
-        val booted = MemcardGames.of(listOf(game("Final Fantasy VII", "SCUS-94163", "content://games/ff7-1.cue", discs)))
+        val booted =
+            MemcardGames.of(
+                listOf(game("Final Fantasy VII", "SCUS-94163", "content://games/ff7-1.cue", discs)),
+            )
 
-        assertEquals(MemcardGame("Final Fantasy VII", "SCUS-94163", "content://games/ff7-1.cue", false), booted.single())
+        assertEquals(
+            MemcardGame("Final Fantasy VII", "SCUS-94163", "content://games/ff7-1.cue", false),
+            booted.single(),
+        )
     }
 
     @Test

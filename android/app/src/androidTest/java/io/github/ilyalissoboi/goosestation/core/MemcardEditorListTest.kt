@@ -114,7 +114,10 @@ class MemcardEditorListTest {
         val mine = File(core.dataRoot, "elsewhere/mine.mcd")
         writeCard(mine)
         File(core.dataRoot, "gamesettings").mkdirs()
-        File(core.dataRoot, "gamesettings/SLUS-99999.ini").writeText("[MemoryCards]\nCard1Path = ../elsewhere/mine.mcd\n")
+        File(
+            core.dataRoot,
+            "gamesettings/SLUS-99999.ini",
+        ).writeText("[MemoryCards]\nCard1Path = ../elsewhere/mine.mcd\n")
 
         val card = list(PADTEST).named("mine")!!
         assertEquals(MemcardKind.Other, card.kind)

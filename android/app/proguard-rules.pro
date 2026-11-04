@@ -12,6 +12,9 @@
     public void onBindingCaptured(java.lang.String);
     public void onOsdMessage(java.lang.String, java.lang.String, float, io.github.ilyalissoboi.goosestation.core.ArgbImage);
     public void onFastForwardChanged(boolean);
+    public boolean storeMemcardSyncSecret(java.lang.String, java.lang.String);
+    public java.lang.String loadMemcardSyncSecret(java.lang.String);
+    public boolean hasMemcardSyncSecret(java.lang.String);
 }
 
 # jni_bridge.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().
@@ -37,6 +40,12 @@
 -keep class io.github.ilyalissoboi.goosestation.core.PatchCodes {
     <init>(java.lang.String, io.github.ilyalissoboi.goosestation.core.PatchCode[]);
 }
+
+# jni_bridge.cpp finds MemcardSyncState and its constructor, and SyncStatusKind's and SyncActivity's values, by name in
+# JNI_OnLoad, for getMemcardSyncState().
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardSyncState { <init>(...); }
+-keep enum io.github.ilyalissoboi.goosestation.core.SyncStatusKind { public static final *; }
+-keep enum io.github.ilyalissoboi.goosestation.core.SyncActivity { public static final *; }
 
 # jni_bridge.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().
 -keep class io.github.ilyalissoboi.goosestation.core.BiosImage {

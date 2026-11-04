@@ -189,3 +189,22 @@ void OnCardClosed(std::string_view path);
 std::string CardNameFor(std::string_view path);
 
 } // namespace MemcardSync
+
+#ifdef __ANDROID__
+// ---- Android: the host keeps the secrets ---------------------------------------------------------
+//
+// emusync's es_secret_* return ES_E_INVALID_ARG on Android, whose apps keep secrets in the Android Keystore
+// themselves: StoreSecret(), LoadSecret() and HasSecret() ask the host instead, which asks the app. The ini's
+// SecretStored and PassphraseStored are still written, as on desktop, but not read: a settings.ini copied from
+// desktop says its own keychain has them.
+namespace Host {
+/// Keeps `value` as the secret `name`, or deletes it if `value` is empty. False if it couldn't.
+bool StoreMemcardSyncSecret(const char* name, std::string_view value);
+/// The secret `name`, or nullopt for none (or one that can't be read any more).
+std::optional<std::string> LoadMemcardSyncSecret(const char* name);
+/// Whether the secret `name` is stored, without reading it.
+bool HasMemcardSyncSecret(const char* name);
+/// This device's name, for a DeviceName left empty ("AYN Thor"): Android's host name is "localhost".
+std::string GetMemcardSyncDefaultDeviceName();
+} // namespace Host
+#endif

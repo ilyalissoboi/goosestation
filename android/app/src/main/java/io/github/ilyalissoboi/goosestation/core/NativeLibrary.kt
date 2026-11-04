@@ -21,7 +21,8 @@ object NativeLibrary {
      * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
      * memory only, and reports changes to it through [NativeCallbacks.onAchievementsToken]. [achievementsFolder] is
      * where unlocks waiting to be sent, and what a game needs to start offline, are kept: the app's private storage,
-     * outside the data root, so they're never mirrored.
+     * outside the data root, so they're never mirrored. [deviceName] is this device's name for memory card sync: what
+     * an empty `[MemoryCardSync] DeviceName` means, and what a settings.ini from another install gets.
      */
     external fun initialize(
         dataRoot: String,
@@ -30,6 +31,7 @@ object NativeLibrary {
         installId: String,
         achievementsToken: String?,
         achievementsFolder: String,
+        deviceName: String,
     ): Boolean
 
     // The settings calls work on settings.ini, which they save, and can be made from any thread.
@@ -88,6 +90,15 @@ object NativeLibrary {
 
     /** Whether memory card sync's library (emusync) loaded, so sync can run. From any thread. */
     external fun isMemcardSyncAvailable(): Boolean
+
+    /** Memory card sync's settings and state now. From any thread; never waits for a start. */
+    external fun getMemcardSyncState(): MemcardSyncState
+
+    /**
+     * Applies memory card sync's settings as settings.ini has them now: starts sync, restarts it with new settings, or
+     * stops it. Returns at once; the state says when it's done. Secrets come from [NativeCallbacks].
+     */
+    external fun applyMemcardSync()
 
     /**
      * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game

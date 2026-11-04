@@ -53,6 +53,9 @@ jmethodID s_on_binding_captured = nullptr;
 jmethodID s_on_osd_message = nullptr;
 jmethodID s_on_fast_forward_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
+jmethodID s_store_memcard_sync_secret = nullptr;
+jmethodID s_load_memcard_sync_secret = nullptr;
+jmethodID s_has_memcard_sync_secret = nullptr;
 jmethodID s_on_achievements_changed = nullptr;
 jmethodID s_on_achievements_login_expired = nullptr;
 jmethodID s_on_achievements_sent = nullptr;
@@ -96,6 +99,10 @@ jmethodID s_bios_image_constructor = nullptr;
 jclass s_pad_binding_class = nullptr;
 jmethodID s_pad_binding_constructor = nullptr;
 jobject s_pad_binding_kinds[3] = {}; // PadBindingKind's Button, Axis and HalfAxis (global references)
+jclass s_memcard_sync_state_class = nullptr;
+jmethodID s_memcard_sync_state_constructor = nullptr;
+jobject s_sync_status_kinds[7] = {}; // SyncStatusKind's values, in MemcardSync::StatusKind's order (global references)
+jobject s_sync_activities[7] = {};   // SyncActivity's values, in MemcardSync::Activity's order (global references)
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -421,6 +428,96 @@ void WithCallbacks(F&& call)
 }
 } // namespace
 
+bool AndroidHost::StoreMemcardSyncSecret(std::string_view name, std::optional<std::string_view> value)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return false;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return false;
+
+  bool stored = false;
+  jstring jname = ToJString(env.get(), name);
+  jstring jvalue = value.has_value() ? ToJString(env.get(), value.value()) : nullptr;
+  if (jname && (!value.has_value() || jvalue))
+  {
+    stored = env->CallBooleanMethod(callbacks, s_store_memcard_sync_secret, jname, jvalue) == JNI_TRUE;
+    if (ClearException(env.get()))
+      stored = false;
+  }
+  else
+  {
+    ClearException(env.get());
+  }
+
+  if (jvalue)
+    env->DeleteLocalRef(jvalue);
+  if (jname)
+    env->DeleteLocalRef(jname);
+  env->DeleteLocalRef(callbacks);
+  return stored;
+}
+
+std::optional<std::string> AndroidHost::LoadMemcardSyncSecret(std::string_view name)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return std::nullopt;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return std::nullopt;
+
+  std::optional<std::string> value;
+  jstring jname = ToJString(env.get(), name);
+  if (jname)
+  {
+    jstring jvalue = static_cast<jstring>(env->CallObjectMethod(callbacks, s_load_memcard_sync_secret, jname));
+    if (!ClearException(env.get()) && jvalue)
+      value = FromJString(env.get(), jvalue);
+    if (jvalue)
+      env->DeleteLocalRef(jvalue);
+    env->DeleteLocalRef(jname);
+  }
+  else
+  {
+    ClearException(env.get());
+  }
+
+  env->DeleteLocalRef(callbacks);
+  return value;
+}
+
+bool AndroidHost::HasMemcardSyncSecret(std::string_view name)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return false;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return false;
+
+  bool has = false;
+  jstring jname = ToJString(env.get(), name);
+  if (jname)
+  {
+    has = env->CallBooleanMethod(callbacks, s_has_memcard_sync_secret, jname) == JNI_TRUE;
+    if (ClearException(env.get()))
+      has = false;
+    env->DeleteLocalRef(jname);
+  }
+  else
+  {
+    ClearException(env.get());
+  }
+
+  env->DeleteLocalRef(callbacks);
+  return has;
+}
+
 void AndroidHost::NotifyAchievementsChanged()
 {
   WithCallbacks([](JNIEnv* env, jobject callbacks) { env->CallVoidMethod(callbacks, s_on_achievements_changed); });
@@ -577,6 +674,39 @@ void AndroidHost::NotifyFastForwardChanged(bool enabled)
   env->DeleteLocalRef(callbacks);
 }
 
+namespace {
+// Global references to the constants called names of the enum class_name, in that order, in out.
+template<size_t N>
+bool LoadEnumValues(JNIEnv* env, const char* class_name, const char* const (&names)[N], jobject (&out)[N])
+{
+  jclass cls = env->FindClass(class_name);
+  if (!cls)
+  {
+    ClearException(env);
+    return false;
+  }
+
+  const std::string signature = std::string("L") + class_name + ";";
+  for (size_t i = 0; i < N; i++)
+  {
+    jfieldID field = env->GetStaticFieldID(cls, names[i], signature.c_str());
+    jobject value = field ? env->GetStaticObjectField(cls, field) : nullptr;
+    if (!value)
+    {
+      ClearException(env);
+      env->DeleteLocalRef(cls);
+      return false;
+    }
+
+    out[i] = env->NewGlobalRef(value);
+    env->DeleteLocalRef(value);
+  }
+
+  env->DeleteLocalRef(cls);
+  return true;
+}
+} // namespace
+
 extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
@@ -614,6 +744,11 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                      "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
   s_on_fast_forward_changed = env->GetMethodID(s_callbacks_class, "onFastForwardChanged", "(Z)V");
   s_on_achievements_token = env->GetMethodID(s_callbacks_class, "onAchievementsToken", "(Ljava/lang/String;)V");
+  s_store_memcard_sync_secret =
+    env->GetMethodID(s_callbacks_class, "storeMemcardSyncSecret", "(Ljava/lang/String;Ljava/lang/String;)Z");
+  s_load_memcard_sync_secret =
+    env->GetMethodID(s_callbacks_class, "loadMemcardSyncSecret", "(Ljava/lang/String;)Ljava/lang/String;");
+  s_has_memcard_sync_secret = env->GetMethodID(s_callbacks_class, "hasMemcardSyncSecret", "(Ljava/lang/String;)Z");
   s_on_achievements_changed = env->GetMethodID(s_callbacks_class, "onAchievementsChanged", "()V");
   s_on_achievements_login_expired = env->GetMethodID(s_callbacks_class, "onAchievementsLoginExpired", "()V");
   s_on_achievements_sent = env->GetMethodID(s_callbacks_class, "onAchievementsSent", "(I)V");
@@ -819,6 +954,38 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 
   env->DeleteLocalRef(pad_binding_kind_class);
 
+  static constexpr const char* SYNC_STATUS_KIND_NAMES[] = {"Unavailable", "Applying", "StartError", "Off",
+                                                           "Incomplete",  "Status",   "Idle"};
+  static constexpr const char* SYNC_ACTIVITY_NAMES[] = {"None",   "Syncing", "Synced",      "Offline",
+                                                        "Failed", "Locked",  "AuthRequired"};
+  if (!LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/SyncStatusKind", SYNC_STATUS_KIND_NAMES,
+                      s_sync_status_kinds) ||
+      !LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/SyncActivity", SYNC_ACTIVITY_NAMES,
+                      s_sync_activities))
+  {
+    return JNI_ERR;
+  }
+
+  jclass memcard_sync_state_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/MemcardSyncState");
+  if (!memcard_sync_state_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_memcard_sync_state_class = static_cast<jclass>(env->NewGlobalRef(memcard_sync_state_class));
+  env->DeleteLocalRef(memcard_sync_state_class);
+  s_memcard_sync_state_constructor =
+    env->GetMethodID(s_memcard_sync_state_class, "<init>",
+                     "(Lio/github/ilyalissoboi/goosestation/core/SyncStatusKind;ZZZLjava/lang/String;Ljava/lang/String;"
+                     "Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/String;Ljava/lang/String;"
+                     "Lio/github/ilyalissoboi/goosestation/core/SyncActivity;I)V");
+  if (!s_memcard_sync_state_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
   if (!AndroidContentProvider::LoadJNIReferences(env) || !HTTPDownloaderAndroid::LoadJNIReferences(env))
     return JNI_ERR;
 
@@ -833,13 +1000,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 
 NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
                                                jstring bios_dir, jstring install_id, jstring achievements_token,
-                                               jstring achievements_folder)
+                                               jstring achievements_folder, jstring device_name)
 {
   Error error;
   if (!AndroidHost::Initialize(FromJString(env, data_root), FromJString(env, resources_root),
                                FromJString(env, bios_dir), FromJString(env, install_id),
                                achievements_token ? FromJString(env, achievements_token) : std::string(),
-                               FromJString(env, achievements_folder), &error))
+                               FromJString(env, achievements_folder), FromJString(env, device_name), &error))
   {
     ERROR_LOG("Initialization failed: {}", error.GetDescription());
     AndroidHost::NotifyError(error.GetDescription());
@@ -1225,6 +1392,41 @@ NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)
 NATIVE_LIBRARY_FUNCTION(jboolean, isMemcardSyncAvailable)(JNIEnv*, jobject)
 {
   return MemcardSyncBridge::IsAvailable() ? JNI_TRUE : JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getMemcardSyncState)(JNIEnv* env, jobject)
+{
+  const MemcardSyncBridge::State state = MemcardSyncBridge::GetState();
+  const std::string* strings[] = {&state.remote_uri, &state.access_key_id, &state.device_name,
+                                  &state.default_device_name, &state.start_error, &state.status};
+  jstring jstrings[std::size(strings)] = {};
+  jobject ret = nullptr;
+  bool made = true;
+  for (size_t i = 0; i < std::size(strings); i++)
+    made = made && (jstrings[i] = ToJString(env, *strings[i])) != nullptr;
+  if (made)
+  {
+    ret = env->NewObject(s_memcard_sync_state_class, s_memcard_sync_state_constructor,
+                         s_sync_status_kinds[static_cast<size_t>(state.kind)], static_cast<jboolean>(state.enabled),
+                         static_cast<jboolean>(state.running), static_cast<jboolean>(state.applying), jstrings[0],
+                         jstrings[1], jstrings[2], jstrings[3], static_cast<jboolean>(state.has_secret),
+                         static_cast<jboolean>(state.has_passphrase), static_cast<jboolean>(state.passphrase_recorded),
+                         jstrings[4], jstrings[5], s_sync_activities[state.activity],
+                         static_cast<jint>(state.conflicts));
+  }
+  if (!ret)
+    ClearException(env);
+  for (jstring str : jstrings)
+  {
+    if (str)
+      env->DeleteLocalRef(str);
+  }
+  return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, applyMemcardSync)(JNIEnv*, jobject)
+{
+  MemcardSyncBridge::Apply();
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)

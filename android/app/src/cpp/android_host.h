@@ -28,10 +28,12 @@ namespace AndroidHost {
 /// Sets the folders, loads settings.ini (defaults when it's missing or from another version, adapted when it's from
 /// another install: AdaptForeignSettings()) and starts the CPU thread. The BIOS images are read from bios_dir, whatever
 /// settings.ini says. achievements_token is the RetroAchievements login token the app stored, or empty: secrets are
-/// kept in memory only (no secrets.ini), and NotifyAchievementsToken() reports each change the core saves. Calling it
-/// again once it succeeded does nothing and returns true.
+/// kept in memory only (no secrets.ini), and NotifyAchievementsToken() reports each change the core saves. device_name
+/// is this device's, for memory card sync's DeviceName when it's empty, and in a settings.ini adapted from another
+/// install. Calling it again once it succeeded does nothing and returns true.
 bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
-                std::string achievements_token, std::string achievements_folder, Error* error);
+                std::string achievements_token, std::string achievements_folder, std::string device_name,
+                Error* error);
 
 /// The settings below are the base layer's, settings.ini, and are saved straight away. From any thread; they do
 /// nothing (or return the default) before Initialize() succeeded.
@@ -301,6 +303,11 @@ void NotifyFastForwardChanged(bool enabled);
 /// The RetroAchievements login token changed (nullopt: it's gone). The app stores it before this returns. Called with
 /// the core's settings lock held, on whichever thread saved it.
 void NotifyAchievementsToken(std::optional<std::string_view> token);
+/// Memory card sync's secrets, which the app keeps in the Android Keystore: store (nullopt deletes), load (nullopt for
+/// none) and whether one is stored. A failed call, or no callbacks registered, is false or nullopt. Any thread.
+bool StoreMemcardSyncSecret(std::string_view name, std::optional<std::string_view> value);
+std::optional<std::string> LoadMemcardSyncSecret(std::string_view name);
+bool HasMemcardSyncSecret(std::string_view name);
 
 /// RetroAchievements, for the app (achievements_bridge.cpp): the sign-in, the game's set or hardcore mode changed; the
 /// sign-in expired; a notice, toast or live indicator to show; a picture downloaded; a sound to play. Any thread.

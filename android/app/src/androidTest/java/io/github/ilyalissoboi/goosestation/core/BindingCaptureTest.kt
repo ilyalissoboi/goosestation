@@ -62,6 +62,7 @@ class BindingCaptureTest {
                 INSTALL_ID,
                 null,
                 File(dataRoot.parentFile, "offline").absolutePath,
+                "Goose Test Device",
             ),
         )
         NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", "pad-a")

@@ -111,10 +111,12 @@ static constexpr u32 EXIT_UPLOAD_MS = 5000;
 // How long opening a card waits for a start in progress: the start's own check of the storage takes
 // up to ~10 s.
 static constexpr std::chrono::seconds OPEN_WAITS_FOR_START{12};
+#ifndef __ANDROID__
 // The credential-store service the secrets are kept under.
 static constexpr const char* SECRET_SERVICE = "GooseStation";
 // Longer than any secret emusync stores (1024 bytes), plus the NUL.
 static constexpr size_t SECRET_BUFFER = 1025;
+#endif
 
 // Serialises Start() and Stop() with each other.
 static std::mutex s_lifecycle_lock;
@@ -205,12 +207,16 @@ std::string MemcardSync::CardNameFor(std::string_view path)
 
 bool MemcardSync::HasSecret(const char* name)
 {
+#ifdef __ANDROID__
+  return Host::HasMemcardSyncSecret(name);
+#else
   const std::string_view n = name;
   if (n == SECRET_ACCESS_KEY)
     return Host::GetBaseBoolSettingValue(SECTION, "SecretStored", false);
   if (n == ENCRYPTION_PASSPHRASE)
     return Host::GetBaseBoolSettingValue(SECTION, "PassphraseStored", false);
   return false;
+#endif
 }
 
 static bool OpenEmuSync(DynamicLibrary* lib)
@@ -866,6 +872,14 @@ bool MemcardSync::StoreSecret(const char* name, const std::string& value, std::s
       *error = NO_LIBRARY;
     return false;
   }
+#ifdef __ANDROID__
+  if (!Host::StoreMemcardSyncSecret(name, value))
+  {
+    if (error)
+      *error = "Could not store the secret in the Android Keystore.";
+    return false;
+  }
+#else
   // Without a Secret Service (Linux), the secret goes to a file only this user can read here.
   const std::string& fallback = EmuFolders::DataRoot;
   const es_status st = value.empty() ? s_es.es_secret_delete(SECRET_SERVICE, name, fallback.c_str()) :
@@ -876,6 +890,7 @@ bool MemcardSync::StoreSecret(const char* name, const std::string& value, std::s
       *error = fmt::format("Could not store the secret in the system's credential store: {}", s_es.es_status_str(st));
     return false;
   }
+#endif
   const std::string_view n = name;
   if (n == SECRET_ACCESS_KEY)
     Host::SetBaseBoolSettingValue(SECTION, "SecretStored", !value.empty());
@@ -893,6 +908,10 @@ std::optional<std::string> MemcardSync::LoadSecret(const char* name, std::string
       *error = NO_LIBRARY;
     return std::nullopt;
   }
+#ifdef __ANDROID__
+  // The host never fails loudly: a secret it can't read any more is no secret, and the settings are incomplete.
+  return Host::LoadMemcardSyncSecret(name);
+#else
   std::string buf(SECRET_BUFFER, '\0');
   size_t len = 0;
   const std::string& fallback = EmuFolders::DataRoot;
@@ -912,6 +931,7 @@ std::optional<std::string> MemcardSync::LoadSecret(const char* name, std::string
   std::string value(buf.c_str());
   WipeSecret(buf);
   return value;
+#endif
 }
 
 std::string MemcardSync::GetLastStartError()
@@ -929,6 +949,10 @@ static std::string StartFromSettings(const MemcardSync::ApplySettings& s)
   c.remote_uri = std::string(StringUtil::StripWhitespace(s.remote_uri));
   c.access_key_id = std::string(StringUtil::StripWhitespace(s.access_key_id));
   c.device_name = std::string(StringUtil::StripWhitespace(s.device_name));
+#ifdef __ANDROID__
+  if (c.device_name.empty())
+    c.device_name = Host::GetMemcardSyncDefaultDeviceName();
+#endif
   if (!s.enabled || c.remote_uri.empty() || c.access_key_id.empty())
   {
     Stop(2000);

@@ -122,6 +122,7 @@ class BiosImporterTest {
                 "test-install",
                 null,
                 File(dataRoot.parentFile, "offline").path,
+                "Goose Test Device",
             ),
         )
         val tree = TestTrees.create(context, mapOf("ps-30j.bin" to bytes, "readme.txt" to "hi".toByteArray()))

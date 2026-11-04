@@ -14,9 +14,10 @@ namespace AndroidHost {
 /// A settings.ini from desktop, another Android install or a reinstall has an [Android] InstallID other than
 /// install_id. Such a file keeps its settings, except those that only make sense where it came from: the renderer,
 /// the game folders, the BIOS images and folder, the controller bindings (with [Android] ControllerDescriptors, the
-/// indices they're for), and folders outside EmuFolders::DataRoot, which go back to their defaults. InstallID is then
-/// set to install_id. Returns whether anything changed; the caller holds the settings lock and saves.
-bool AdaptForeignSettings(SettingsInterface& si, std::string_view install_id);
+/// indices they're for), and folders outside EmuFolders::DataRoot, which go back to their defaults. Memory card sync's
+/// [MemoryCardSync] DeviceName becomes device_name, this device's, so the conflict screen tells devices apart.
+/// InstallID is then set to install_id. Returns whether anything changed; the caller holds the settings lock and saves.
+bool AdaptForeignSettings(SettingsInterface& si, std::string_view install_id, std::string_view device_name);
 
 /// path relative to EmuFolders::DataRoot, with '/' separators: empty for the data root itself, and nullopt for a path
 /// outside it, or one from Windows. A relative path is relative to the data root. Symbolic links count as resolved.

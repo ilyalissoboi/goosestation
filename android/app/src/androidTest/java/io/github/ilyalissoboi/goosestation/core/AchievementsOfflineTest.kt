@@ -586,6 +586,7 @@ class AchievementsOfflineTest {
                 INSTALL_ID,
                 TOKEN,
                 folder.absolutePath,
+                "Goose Test Device",
             ),
         )
         if (signedIn) {

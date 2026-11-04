@@ -37,6 +37,7 @@ class MemcardSyncTest {
                 "test-install",
                 null,
                 File(root, "offline").absolutePath,
+                "Goose Test Device",
             ),
         )
 

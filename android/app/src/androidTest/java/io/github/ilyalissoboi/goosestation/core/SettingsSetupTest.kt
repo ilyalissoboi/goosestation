@@ -86,6 +86,17 @@ class SettingsSetupTest {
         assertEquals("true", ini.value("Cheevos", "ChallengeMode"))
     }
 
+    // Memory card sync's conflict screen tells devices apart by name: a copied file names the desktop.
+    @Test
+    fun aDesktopFileGetsThisDevicesName() {
+        initialize(
+            DESKTOP_FILE + "\n[MemoryCardSync]\nEnabled = false\nDeviceName = Desktop PC\n" +
+                "\n[Android]\nInstallID = other-install\n",
+        )
+
+        assertEquals("Goose Test Device", readSettings().value("MemoryCardSync", "DeviceName"))
+    }
+
     @Test
     fun ownFileIsKept() {
         initialize(DESKTOP_FILE + "\n[Android]\nInstallID = $INSTALL_ID\n")
@@ -362,6 +373,7 @@ class SettingsSetupTest {
                 INSTALL_ID,
                 null,
                 File(dataRoot.parentFile, "offline").absolutePath,
+                "Goose Test Device",
             ),
         )
     }

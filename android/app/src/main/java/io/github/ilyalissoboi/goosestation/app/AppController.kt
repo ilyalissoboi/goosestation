@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import io.github.ilyalissoboi.emusync.SyncSettings
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
@@ -310,6 +311,12 @@ object AppController : NativeCallbacks {
     // The RetroAchievements login token, sealed with a Keystore key: never in secrets.ini or the data folder.
     private val achievementsToken by lazy {
         AchievementsToken(KeystoreCipher(), SharedPreferencesStore(context, "achievements"))
+    }
+
+    // Memory card sync's secret access key and passphrase, sealed with a Keystore key of their own: never in
+    // settings.ini or the data folder.
+    private val syncSecrets by lazy {
+        SyncSecrets(KeystoreCipher("memcard-sync-secrets"), SharedPreferencesStore(context, "memcard_sync"))
     }
 
     /** A game's start, which asks first whether to resume where it was left. */
@@ -1192,6 +1199,7 @@ object AppController : NativeCallbacks {
                             prefs.installId(),
                             achievementsToken.load(),
                             File(context.filesDir, "achievements").absolutePath,
+                            SyncSettings.defaultDeviceName(),
                         ).also {
                             if (it) {
                                 readGridView()
@@ -1420,6 +1428,15 @@ object AppController : NativeCallbacks {
 
     // On the core's thread, before the core goes on: the token lives only in its memory until it's stored here.
     override fun onAchievementsToken(token: String?) = achievementsToken.store(token)
+
+    override fun storeMemcardSyncSecret(
+        name: String,
+        value: String?,
+    ) = syncSecrets.store(name, value)
+
+    override fun loadMemcardSyncSecret(name: String) = syncSecrets.load(name)
+
+    override fun hasMemcardSyncSecret(name: String) = syncSecrets.has(name)
 
     override fun onAchievementsLoginExpired() {
         mainHandler.post {

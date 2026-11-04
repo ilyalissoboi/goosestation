@@ -79,7 +79,8 @@ std::optional<std::string> AndroidHost::RelativeToDataRoot(std::string_view path
   return full.substr(root.size() + 1);
 }
 
-bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view install_id)
+bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view install_id,
+                                       std::string_view device_name)
 {
   const std::string file_install_id = si.GetStringValue(AndroidInputKeys::SETTINGS_SECTION, "InstallID");
   if (file_install_id == install_id)
@@ -106,6 +107,9 @@ bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view i
   si.DeleteValue("Cheevos", "Username");
   si.DeleteValue("Cheevos", "LoginTimestamp");
   si.DeleteValue("Cheevos", "Token");
+
+  // Memory card sync names this device to the others: not as the device the file came from.
+  si.SetStringValue("MemoryCardSync", "DeviceName", std::string(device_name).c_str());
 
   // Its controller indices are another install's: here every controller is new.
   si.DeleteValue(AndroidInputKeys::SETTINGS_SECTION, AndroidInputKeys::DESCRIPTORS_KEY);

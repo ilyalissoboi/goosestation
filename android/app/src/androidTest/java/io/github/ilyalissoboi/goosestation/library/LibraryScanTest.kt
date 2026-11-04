@@ -50,6 +50,7 @@ class LibraryScanTest {
                 "test-install",
                 null,
                 File(root, "offline").absolutePath,
+                "Goose Test Device",
             ),
         )
         NativeLibrary.setGameFolders(arrayOf(tree))

@@ -50,6 +50,21 @@ interface NativeCallbacks {
      */
     fun onAchievementsToken(token: String?) {}
 
+    /**
+     * Memory card sync's secret [name] (`s3-secret-access-key` or `encryption-passphrase`) is now [value], or gone
+     * with null. Keep it in the Keystore before returning, and say whether that worked.
+     */
+    fun storeMemcardSyncSecret(
+        name: String,
+        value: String?,
+    ): Boolean = false
+
+    /** Memory card sync's secret [name], or null for none. */
+    fun loadMemcardSyncSecret(name: String): String? = null
+
+    /** Whether memory card sync's secret [name] is stored, without reading it. */
+    fun hasMemcardSyncSecret(name: String): Boolean = false
+
     /** The RetroAchievements sign-in, the running game's set, or hardcore mode changed: read them again. */
     fun onAchievementsChanged() {}
 

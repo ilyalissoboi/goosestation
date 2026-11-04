@@ -3,11 +3,10 @@
 
 #include "memory_card_image.h"
 #include "gpu_types.h"
-#include "system.h"
 
 #include "util/shiftjis.h"
-#include "util/state_wrapper.h"
 
+#include "common/assert.h"
 #include "common/bitutils.h"
 #include "common/error.h"
 #include "common/file_system.h"
@@ -91,9 +90,8 @@ static bool ImportCardMCD(DataArray* data, const char* filename, std::span<const
 static bool ImportCardGME(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error);
 static bool ImportCardVGS(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error);
 static bool ImportCardPSX(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error);
-static bool ImportSaveWithDirectoryFrame(DataArray* data, const char* filename, const FILESYSTEM_STAT_DATA& sd,
-                                         Error* error);
-static bool ImportRawSave(DataArray* data, const char* filename, const FILESYSTEM_STAT_DATA& sd, Error* error);
+static bool ImportSaveWithDirectoryFrame(DataArray* data, std::span<const u8> file_data, Error* error);
+static bool ImportRawSave(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error);
 } // namespace MemoryCardImage
 
 bool MemoryCardImage::LoadFromFile(DataArray* data, const char* filename, Error* error)
@@ -234,12 +232,9 @@ std::vector<MemoryCardImage::FileInfo> MemoryCardImage::EnumerateFiles(const Dat
   for (u32 dir_frame = 1; dir_frame < FRAMES_PER_BLOCK; dir_frame++)
   {
     const DirectoryFrame* df = GetFramePtr<DirectoryFrame>(data, 0, dir_frame);
-    if (df->block_allocation_state != 0x51 &&
-        (!include_deleted || (df->block_allocation_state != 0xA1 && df->block_allocation_state != 0xA2 &&
-                              df->block_allocation_state != 0xA3)))
-    {
+    // A deleted save starts at its first block (0xA1); its middle and last blocks (0xA2, 0xA3) are part of it.
+    if (df->block_allocation_state != 0x51 && (!include_deleted || df->block_allocation_state != 0xA1))
       continue;
-    }
 
     u32 filename_length = 0;
     while (filename_length < sizeof(df->filename) && df->filename[filename_length] != '\0')
@@ -399,9 +394,11 @@ bool MemoryCardImage::DeleteFile(DataArray* data, const FileInfo& fi, bool clear
     {
       std::memset(df, 0, sizeof(DirectoryFrame));
       df->block_allocation_state = 0xA0;
+      df->next_block_number = 0xFFFF;
     }
     else
     {
+      // The links stay, as the BIOS leaves them, so the save can be undeleted whole.
       if (i == 0)
         df->block_allocation_state = 0xA1;
       else if (i == (fi.num_blocks - 1))
@@ -410,7 +407,6 @@ bool MemoryCardImage::DeleteFile(DataArray* data, const FileInfo& fi, bool clear
         df->block_allocation_state = 0xA2;
     }
 
-    df->next_block_number = 0xFFFF;
     UpdateChecksum(df);
   }
 
@@ -422,6 +418,13 @@ bool MemoryCardImage::UndeleteFile(DataArray* data, const FileInfo& fi)
   if (!fi.deleted)
   {
     ERROR_LOG("File '{}' is not deleted", fi.filename);
+    return false;
+  }
+
+  // A chain shorter than the save: its links were cut, as DeleteFile() once did, so its other blocks are unknown.
+  if (fi.num_blocks * BLOCK_SIZE < fi.size)
+  {
+    ERROR_LOG("File '{}' has {} bytes but only {} blocks are linked", fi.filename, fi.size, fi.num_blocks);
     return false;
   }
 
@@ -667,18 +670,15 @@ bool MemoryCardImage::ImportCard(DataArray* data, const char* filename, Error* e
 
 bool MemoryCardImage::ExportSave(DataArray* data, const FileInfo& fi, const char* filename, Error* error)
 {
-  // TODO: This could be span...
   std::vector<u8> file_data;
-  if (!ReadFile(*data, fi, &file_data, error))
+  if (!ExportSave(*data, fi, &file_data, error))
     return false;
 
   auto fp = FileSystem::CreateAtomicRenamedFile(filename, "wb", error);
   if (!fp)
     return false;
 
-  DirectoryFrame* df_ptr = GetFramePtr<DirectoryFrame>(data, 0, fi.first_block);
-  if (std::fwrite(df_ptr, sizeof(DirectoryFrame), 1, fp.get()) != 1 ||
-      std::fwrite(file_data.data(), file_data.size(), 1, fp.get()) != 1)
+  if (std::fwrite(file_data.data(), file_data.size(), 1, fp.get()) != 1)
   {
     Error::SetErrno(error, "fwrite() failed: ", errno);
     FileSystem::DiscardAtomicRenamedFile(fp);
@@ -688,40 +688,41 @@ bool MemoryCardImage::ExportSave(DataArray* data, const FileInfo& fi, const char
   return true;
 }
 
-bool MemoryCardImage::ImportSaveWithDirectoryFrame(DataArray* data, const char* filename,
-                                                   const FILESYSTEM_STAT_DATA& sd, Error* error)
+bool MemoryCardImage::ExportSave(const DataArray& data, const FileInfo& fi, std::vector<u8>* out, Error* error)
+{
+  std::vector<u8> blocks;
+  if (!ReadFile(data, fi, &blocks, error))
+    return false;
+
+  const DirectoryFrame* df_ptr = GetFramePtr<DirectoryFrame>(data, 0, fi.first_block);
+  out->resize(sizeof(DirectoryFrame) + blocks.size());
+  std::memcpy(out->data(), df_ptr, sizeof(DirectoryFrame));
+  std::memcpy(out->data() + sizeof(DirectoryFrame), blocks.data(), blocks.size());
+  return true;
+}
+
+bool MemoryCardImage::ImportSaveWithDirectoryFrame(DataArray* data, std::span<const u8> file_data, Error* error)
 {
   // Make sure the size of the actual file is valid
-  if (sd.Size <= FRAME_SIZE || (sd.Size - FRAME_SIZE) % BLOCK_SIZE != 0u || (sd.Size - FRAME_SIZE) / BLOCK_SIZE > 15u)
+  const size_t size = file_data.size();
+  if (size <= FRAME_SIZE || (size - FRAME_SIZE) % BLOCK_SIZE != 0u || (size - FRAME_SIZE) / BLOCK_SIZE > 15u)
   {
     Error::SetStringView(error, "Invalid size for save file.");
     return false;
   }
 
-  auto fp = FileSystem::OpenManagedCFile(filename, "rb", error);
-  if (!fp)
-    return false;
-
   DirectoryFrame df;
-  if (std::fread(&df, sizeof(df), 1, fp.get()) != 1)
-  {
-    Error::SetErrno(error, "Failed to read directory frame: ", errno);
-    return false;
-  }
+  std::memcpy(&df, file_data.data(), sizeof(df));
 
   // Make sure the size reported by the directory frame is valid
-  if (df.file_size < BLOCK_SIZE || df.file_size % BLOCK_SIZE != 0 || df.file_size / BLOCK_SIZE > 15u)
+  if (df.file_size < BLOCK_SIZE || df.file_size % BLOCK_SIZE != 0 || df.file_size / BLOCK_SIZE > 15u ||
+      df.file_size > size - sizeof(df))
   {
     Error::SetStringFmt(error, "Invalid size ({} bytes) reported by directory frame.", df.file_size);
     return false;
   }
 
-  std::vector<u8> blocks = std::vector<u8>(static_cast<size_t>(df.file_size));
-  if (std::fread(blocks.data(), df.file_size, 1, fp.get()) != 1)
-  {
-    Error::SetErrno(error, "Failed to read block bytes: ", errno);
-    return false;
-  }
+  const std::span<const u8> blocks = file_data.subspan(sizeof(df), df.file_size);
 
   const u32 num_blocks = (static_cast<u32>(blocks.size()) + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
   if (GetFreeBlockCount(*data) < num_blocks)
@@ -729,6 +730,9 @@ bool MemoryCardImage::ImportSaveWithDirectoryFrame(DataArray* data, const char* 
     Error::SetStringView(error, "Insufficient free blocks.");
     return false;
   }
+
+  // The file name as stored, which may fill the field with no terminator.
+  const std::string_view filename(df.filename, std::find(df.filename, df.filename + sizeof(df.filename), '\0'));
 
   // Make sure there isn't already a save with the same name
   std::vector<FileInfo> fileinfos = EnumerateFiles(*data, true);
@@ -746,12 +750,11 @@ bool MemoryCardImage::ImportSaveWithDirectoryFrame(DataArray* data, const char* 
     }
   }
 
-  return WriteFile(data, df.filename, blocks, error);
+  return WriteFile(data, filename, blocks, error);
 }
 
-bool MemoryCardImage::ImportRawSave(DataArray* data, const char* filename, const FILESYSTEM_STAT_DATA& sd, Error* error)
+bool MemoryCardImage::ImportRawSave(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error)
 {
-  const std::string display_name = FileSystem::GetDisplayNameFromPath(filename);
   std::string save_name(Path::GetFileTitle(filename));
   if (save_name.length() == 0)
   {
@@ -762,12 +765,8 @@ bool MemoryCardImage::ImportRawSave(DataArray* data, const char* filename, const
   if (save_name.length() > DirectoryFrame::FILE_NAME_LENGTH)
     save_name.erase(DirectoryFrame::FILE_NAME_LENGTH);
 
-  std::optional<DynamicHeapArray<u8>> blocks = FileSystem::ReadBinaryFile(filename, error);
-  if (!blocks.has_value())
-    return false;
-
   const u32 free_block_count = GetFreeBlockCount(*data);
-  const u32 num_blocks = (static_cast<u32>(blocks->size()) + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
+  const u32 num_blocks = (static_cast<u32>(file_data.size()) + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
   if (free_block_count < num_blocks)
   {
     Error::SetStringFmt(error, "Insufficient free blocks, needs {} blocks, but only have {}.", num_blocks,
@@ -791,7 +790,7 @@ bool MemoryCardImage::ImportRawSave(DataArray* data, const char* filename, const
     }
   }
 
-  return WriteFile(data, save_name, blocks.value(), error);
+  return WriteFile(data, save_name, file_data, error);
 }
 
 bool MemoryCardImage::ImportSave(DataArray* data, const char* filename, Error* error)
@@ -804,13 +803,28 @@ bool MemoryCardImage::ImportSave(DataArray* data, const char* filename, Error* e
     return false;
   }
 
+  std::optional<DynamicHeapArray<u8>> file_data = FileSystem::ReadBinaryFile(filename, error);
+  if (!file_data.has_value())
+    return false;
+
+  return ImportSave(data, filename, file_data->cspan(), error);
+}
+
+bool MemoryCardImage::ImportSave(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error)
+{
+  if (file_data.empty())
+  {
+    Error::SetStringView(error, "File does not exist, or is empty.");
+    return false;
+  }
+
   if (StringUtil::EqualNoCase(Path::GetExtension(filename), "mcs"))
   {
-    return ImportSaveWithDirectoryFrame(data, filename, sd, error);
+    return ImportSaveWithDirectoryFrame(data, file_data, error);
   }
-  else if (sd.Size > 0 && sd.Size < DATA_SIZE && (sd.Size % BLOCK_SIZE) == 0)
+  else if (file_data.size() < DATA_SIZE && (file_data.size() % BLOCK_SIZE) == 0)
   {
-    return ImportRawSave(data, filename, sd, error);
+    return ImportRawSave(data, filename, file_data, error);
   }
   else
   {

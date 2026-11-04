@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "common/types.h"
+
 #include <array>
 #include <span>
 #include <string>
@@ -66,5 +68,12 @@ void SetTitle(DataArray* data, const FileInfo& fi, std::span<const u8, 64> title
 bool ImportCard(DataArray* data, const char* filename, Error* error);
 bool ImportCard(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error);
 bool ExportSave(DataArray* data, const FileInfo& fi, const char* filename, Error* error);
+
+/// A save as an .mcs file holds it: its directory frame, then its blocks.
+bool ExportSave(const DataArray& data, const FileInfo& fi, std::vector<u8>* out, Error* error);
 bool ImportSave(DataArray* data, const char* filename, Error* error);
+
+/// ImportSave() of file_data, read from a file named filename: the format is the name's extension's, and a raw save is
+/// named after its file title.
+bool ImportSave(DataArray* data, const char* filename, std::span<const u8> file_data, Error* error);
 } // namespace MemoryCardImage

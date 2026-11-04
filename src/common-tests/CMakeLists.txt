@@ -17,6 +17,8 @@ add_executable(common-tests
   ../core/memcard_sync_ui.cpp
   memory_card_helpers_tests.cpp
   ../core/memory_card_helpers.cpp
+  memory_card_image_tests.cpp
+  ../core/memory_card_image.cpp
   path_tests.cpp
   rectangle_tests.cpp
   shiftjis_tests.cpp

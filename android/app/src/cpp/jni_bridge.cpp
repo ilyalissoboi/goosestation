@@ -10,6 +10,7 @@
 #include "emu_thread.h"
 #include "http_downloader_android.h"
 #include "jni_util.h"
+#include "memcard_editor_bridge.h"
 #include "memcard_sync_bridge.h"
 
 #include "core/game_database.h"
@@ -109,6 +110,9 @@ jmethodID s_sync_version_constructor = nullptr;
 jclass s_sync_conflict_class = nullptr;
 jmethodID s_sync_conflict_constructor = nullptr;
 jmethodID s_runnable_run = nullptr;
+jclass s_memcard_file_class = nullptr;
+jmethodID s_memcard_file_constructor = nullptr;
+jobject s_memcard_kinds[3] = {}; // MemcardKind's values, in MemcardEditorBridge::CardKind's order (global references)
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -1019,6 +1023,26 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   env->DeleteLocalRef(sync_conflict_class);
   env->DeleteLocalRef(runnable_class);
   if (!s_sync_version_constructor || !s_sync_conflict_constructor || !s_runnable_run)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  static constexpr const char* MEMCARD_KIND_NAMES[] = {"Game", "Shared", "Other"};
+  if (!LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/MemcardKind", MEMCARD_KIND_NAMES, s_memcard_kinds))
+    return JNI_ERR;
+  jclass memcard_file_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/MemcardFile");
+  if (!memcard_file_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+  s_memcard_file_class = static_cast<jclass>(env->NewGlobalRef(memcard_file_class));
+  env->DeleteLocalRef(memcard_file_class);
+  s_memcard_file_constructor =
+    env->GetMethodID(s_memcard_file_class, "<init>",
+                     "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/MemcardKind;Z)V");
+  if (!s_memcard_file_constructor)
   {
     ClearException(env);
     return JNI_ERR;
@@ -2274,6 +2298,73 @@ NATIVE_LIBRARY_FUNCTION(void, startBindingCapture)(JNIEnv* env, jobject, jstring
 NATIVE_LIBRARY_FUNCTION(void, cancelBindingCapture)(JNIEnv*, jobject)
 {
   AndroidHost::CancelBindingCapture();
+}
+
+
+namespace {
+// Element i of a String[], as UTF-8.
+std::string StringAt(JNIEnv* env, jobjectArray array, jsize i)
+{
+  jstring str = static_cast<jstring>(env->GetObjectArrayElement(array, i));
+  std::string ret = FromJString(env, str);
+  if (str)
+    env->DeleteLocalRef(str);
+  return ret;
+}
+
+// A MemcardFile, or null (with no exception pending) if it can't be made.
+jobject ToMemcardFile(JNIEnv* env, const MemcardEditorBridge::CardFile& card)
+{
+  jstring path = ToJString(env, card.path);
+  jstring name = ToJString(env, card.name);
+  jobject ret = (path && name) ? env->NewObject(s_memcard_file_class, s_memcard_file_constructor, path, name,
+                                                s_memcard_kinds[static_cast<size_t>(card.kind)],
+                                                static_cast<jboolean>(card.exists)) :
+                                 nullptr;
+  if (!ret)
+    ClearException(env);
+  for (jstring ref : {path, name})
+  {
+    if (ref)
+      env->DeleteLocalRef(ref);
+  }
+  return ret;
+}
+} // namespace
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardFiles)(JNIEnv* env, jobject, jobjectArray titles, jobjectArray serials,
+                                                      jobjectArray boot_paths, jbooleanArray playlists)
+{
+  const jsize count = env->GetArrayLength(titles);
+  std::vector<jboolean> playlist(static_cast<size_t>(count));
+  env->GetBooleanArrayRegion(playlists, 0, count, playlist.data());
+  std::vector<MemcardEditorBridge::GameCard> games;
+  games.reserve(static_cast<size_t>(count));
+  for (jsize i = 0; i < count; i++)
+  {
+    games.push_back(MemcardEditorBridge::GameCard{StringAt(env, titles, i), StringAt(env, serials, i),
+                                                  StringAt(env, boot_paths, i), playlist[i] == JNI_TRUE});
+  }
+
+  const std::vector<MemcardEditorBridge::CardFile> cards = MemcardEditorBridge::ListCards(games);
+  jobjectArray ret = env->NewObjectArray(static_cast<jsize>(cards.size()), s_memcard_file_class, nullptr);
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  for (size_t i = 0; i < cards.size(); i++)
+  {
+    jobject card = ToMemcardFile(env, cards[i]);
+    if (!card)
+    {
+      env->DeleteLocalRef(ret);
+      return nullptr;
+    }
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), card);
+    env->DeleteLocalRef(card);
+  }
+  return ret;
 }
 
 } // extern "C"

@@ -144,6 +144,18 @@ object NativeLibrary {
 
     external fun memcardCardClosedForTest(path: String)
 
+    /**
+     * The memory cards the editor lists: each game's own card, at the path it boots with (the games given as parallel
+     * arrays, in the order to list them), then the shared cards and the other card files. On the CPU thread, waiting
+     * for it.
+     */
+    external fun getMemcardFiles(
+        titles: Array<String>,
+        serials: Array<String>,
+        bootPaths: Array<String>,
+        playlists: BooleanArray,
+    ): Array<MemcardFile>
+
     /** Tests: writes [data] as save [name] on the card at [path] (a new card if there's none), replacing one. */
     external fun writeMemoryCardSaveForTest(
         path: String,

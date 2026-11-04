@@ -348,8 +348,10 @@ The rules:
   `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `savestates`,
   `screenshots`, `shaders`, `textures`, `resources` and `videos`. Memory card sync's own data, `emusync/`, stays on
   the device, like the cache: it holds this device's sync identity and the storage's key, so it's never copied either
-  way, and a copy an earlier build left in the data folder is left alone. emusync's scratch files beside a card it's
-  writing (`*.emusync-tmp`, `-old`, `-swap`) stay out too.
+  way, and a copy an earlier build left in the data folder is left alone. A copy an earlier build pulled into the
+  working copy is another install's identity, so it's deleted once, before the core first starts
+  (`EmusyncCarryOver`); and it's left out of backups and device-to-device transfer (`data_extraction_rules.xml`).
+  emusync's scratch files beside a card it's writing (`*.emusync-tmp`, `-old`, `-swap`) stay out too.
   Once the core has started, the folders its `settings.ini` names inside the data folder (a `[Folders]` entry, or
   `[MemoryCards] Directory`, such as `mycheats`) and the shared memory cards are mirrored too; the app asks the core
   for them, and pulls again while that adds any (a game settings folder, then the cards its files name), at most 4

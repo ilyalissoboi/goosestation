@@ -426,11 +426,15 @@ object AppController : NativeCallbacks {
                     push(force = false)
                 }
             }
-        // Memory card sync resumes once the pull has brought what the data folder has.
+        // Memory card sync resumes once the pull has brought what the data folder has, if the app is still in front.
+        syncVisibility.started()
         if (coreStarted) {
             scope.launch {
-                resume()
-                NativeLibrary.setMemcardSyncBackgrounded(false)
+                try {
+                    resume()
+                } finally {
+                    syncVisibility.pullDone()
+                }
             }
         }
         networkWatch.start()
@@ -446,7 +450,7 @@ object AppController : NativeCallbacks {
         pushTicker = null
         scope.launch { push(force = true) }
         // After the pause's card writes, which the core has queued already: sync pushes them, then rests.
-        if (coreStarted) NativeLibrary.setMemcardSyncBackgrounded(true)
+        syncVisibility.stopped()
         networkWatch.stop()
     }
 
@@ -1077,6 +1081,9 @@ object AppController : NativeCallbacks {
         }
     }
 
+    // Whether memory card sync rests in the background, as the app is shown and hidden.
+    private val syncVisibility = SyncVisibility { NativeLibrary.setMemcardSyncBackgrounded(it) }
+
     // Memory card sync never writes a card while the mirror replaces or deletes it: sync holds the card meanwhile.
     // Before the core starts, nothing syncs.
     private val cardGuard =
@@ -1129,6 +1136,7 @@ object AppController : NativeCallbacks {
      */
     private suspend fun prepareWorkingCopy() =
         withContext(Dispatchers.IO) {
+            EmusyncCarryOver.drop(workingCopy, SharedPreferencesStore(context, "memcard_sync"))
             if (workingCopy.isDirectory) return@withContext
             if (manifestFile.delete()) Log.w(TAG, "The working copy is gone: pulling the data folder in full.")
             if (!workingCopy.mkdirs()) Log.e(TAG, "Can't create $workingCopy")
@@ -1292,6 +1300,7 @@ object AppController : NativeCallbacks {
         }
         Log.i(TAG, "The core is ready.")
         coreStarted = true
+        syncVisibility.coreStarted()
         memcardSyncStatus.refresh()
         if (biosOverridesToCheck) dropStaleBiosOverrides()
         // Reported once the core takes input; it keeps connections made before then anyway.

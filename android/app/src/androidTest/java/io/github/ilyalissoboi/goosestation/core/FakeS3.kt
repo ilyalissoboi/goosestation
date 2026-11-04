@@ -32,6 +32,9 @@ class FakeS3 : AutoCloseable {
     /** Closes each connection without an answer, as storage that can't be reached looks. */
     @Volatile var unreachable = false
 
+    /** How long each request waits before its answer, as slow storage takes. */
+    @Volatile var delayMs = 0L
+
     /**
      * The storage's address. emusync keeps its data per address, so [otherDevice]'s spelling of the same storage
      * (`path_style=true` for `1`) is another device's.
@@ -76,6 +79,7 @@ class FakeS3 : AutoCloseable {
                     }
                 }
                 if (unreachable) return
+                if (delayMs > 0) Thread.sleep(delayMs)
                 if (headers["expect"].equals("100-continue", ignoreCase = true)) {
                     output.write("HTTP/1.1 100 Continue\r\n\r\n".toByteArray())
                     output.flush()

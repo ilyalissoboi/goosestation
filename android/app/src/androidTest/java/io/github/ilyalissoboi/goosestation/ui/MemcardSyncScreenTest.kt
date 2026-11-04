@@ -3,6 +3,10 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -180,6 +184,32 @@ class MemcardSyncScreenTest {
         press(Key.ButtonA)
 
         assertEquals(1, removed)
+    }
+
+    // Remove passphrase goes once there's none: the focus goes to the passphrase's row, never nowhere.
+    @Test
+    fun removingThePassphraseKeepsTheFocus() {
+        rule.setContent {
+            var state by remember { mutableStateOf(RUNNING.copy(hasPassphrase = true)) }
+            GooseStationTheme {
+                MemcardSyncScreen(
+                    state = state,
+                    onEnabled = {},
+                    onText = { _, _ -> },
+                    onSecret = { _, _ -> },
+                    onRemovePassphrase = { state = state.copy(hasPassphrase = false) },
+                    onSyncNow = {},
+                    onOpenConflicts = {},
+                    onBack = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        pressUntilFocused(Key.DirectionDown, "Remove passphrase")
+        press(Key.ButtonA)
+
+        rule.onNode(isFocused()).assert(hasText("Encryption passphrase", substring = true))
     }
 
     @Test

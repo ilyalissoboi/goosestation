@@ -120,6 +120,46 @@ class MemcardSyncCardsTest {
         }
     }
 
+    // emusync's worker is busy with slow storage, so registering a card times out: the card waits for a later run.
+    @Test
+    fun aHoldThatTimesOutLeavesTheCardForLater() {
+        asThisDevice()
+        fake.delayMs = 15_000
+        NativeLibrary.memcardSyncNow()
+        Thread.sleep(500)
+        var ran = false
+
+        val held = NativeLibrary.memcardSyncHoldCard("memcards/shared_card_2.mcd") { ran = true }
+
+        fake.delayMs = 0
+        assertFalse(held)
+        assertFalse(ran)
+    }
+
+    // A game opening the card while the mirror holds it waits, so its session begins once the copy is done.
+    @Test
+    fun aCardOpenedDuringAHoldWaitsForIt() {
+        asThisDevice()
+        writeSave(card, V0)
+        var openedAt = 0L
+        var releasedAt = 0L
+        val opener = Thread { NativeLibrary.memcardCardOpenedForTest(card).also { openedAt = System.nanoTime() } }
+
+        assertTrue(
+            NativeLibrary.memcardSyncHoldCard("memcards/$CARD") {
+                opener.start()
+                Thread.sleep(1500)
+                releasedAt = System.nanoTime()
+            },
+        )
+        opener.join(10_000)
+
+        assertTrue("the open didn't wait for the hold", openedAt > releasedAt)
+        // In the game's session now: the mirror can't hold it.
+        assertFalse(NativeLibrary.memcardSyncHoldCard("memcards/$CARD") {})
+        NativeLibrary.memcardCardClosedForTest(card)
+    }
+
     @Test
     fun aCardInAGameIsNotHeld() {
         asThisDevice()

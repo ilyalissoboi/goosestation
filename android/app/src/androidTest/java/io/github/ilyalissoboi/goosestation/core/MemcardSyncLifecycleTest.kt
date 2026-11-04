@@ -80,6 +80,8 @@ class MemcardSyncLifecycleTest {
         NativeLibrary.applyMemcardSync()
         core.waitFor("running") { core.state().let { it.running && !it.applying } }
         val listings = fake.listings()
+        // Anything that wakes sync's worker in the background still syncs nothing.
+        NativeLibrary.setMemcardSyncPeriodForTest(PERIOD_MS)
         Thread.sleep(2000)
         assertEquals(listings, fake.listings())
 

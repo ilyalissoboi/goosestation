@@ -186,6 +186,9 @@ static bool s_period_changed = false; // s_worker_lock
 static bool s_backgrounded = false;
 static bool s_suspend_pending = false;
 static bool s_resume_pending = false;
+// The cards WithCardHeld() holds, which a game opening one waits for. s_state_lock.
+static std::vector<std::string> s_held_paths;
+static std::condition_variable s_held_cv;
 // What the background's push may take.
 static constexpr u32 SUSPEND_BUDGET_MS = 3000;
 #endif
@@ -424,9 +427,9 @@ static void OnEventsWaiting(void*)
   WakeWorker();
 }
 
-// Registers a card file (format ps1.card, card named after the file). Needs the client lock
-// (shared).
-static es_container_id RegisterCard(const std::string& path)
+// Registers a card file (format ps1.card, card named after the file), with emusync's answer in `status` if it's
+// given. Needs the client lock (shared).
+static es_container_id RegisterCard(const std::string& path, es_status* status = nullptr)
 {
   using namespace MemcardSync;
   const std::string card = CardNameFor(path);
@@ -437,6 +440,8 @@ static es_container_id RegisterCard(const std::string& path)
   desc.card = card.c_str();
   es_container_id id = 0;
   const es_status st = s_es.es_container_add(s_client, &desc, &id);
+  if (status)
+    *status = st;
   if (st != ES_OK)
   {
     WARNING_LOG("Not syncing {}: {}", path, s_es.es_status_str(st));
@@ -948,17 +953,9 @@ bool MemcardSync::Start(const Config& config, std::string* error)
                             TRANSLATE_STR("MemcardSync", "Memory cards in use sync from the next time they are opened."),
                             Host::OSD_INFO_DURATION);
   }
-#ifdef __ANDROID__
-  if (backgrounded)
-  {
-    std::lock_guard lock(s_worker_lock);
-    s_resume_pending = true;
-  }
-  else
-#endif
-  {
+  // In the background, the return's resume is what syncs.
+  if (!backgrounded)
     s_es.es_sync_now(s_client);
-  }
   INFO_LOG("Syncing memory cards with {}", config.remote_uri);
   return true;
 }
@@ -1278,6 +1275,18 @@ void MemcardSync::OnCardOpening(std::string_view path)
   if (!Host::GetBaseBoolSettingValue(SECTION, "Enabled", false))
     return;
   WaitForPendingStart();
+#ifdef __ANDROID__
+  // The mirror is replacing the card file: its session first, then the game's.
+  {
+    std::unique_lock lock(s_state_lock);
+    if (!s_held_cv.wait_for(lock, OPEN_WAITS_FOR_START, [&]() {
+          return std::find(s_held_paths.begin(), s_held_paths.end(), path) == s_held_paths.end();
+        }))
+    {
+      WARNING_LOG("The memory card is still being copied in; it opens as it is.");
+    }
+  }
+#endif
   std::shared_lock client(s_client_lock);
   if (!s_client)
     return;
@@ -1343,16 +1352,30 @@ bool MemcardSync::WithCardHeld(std::string_view path, const std::function<void()
     return true;
   }
 
+  // In one go, so a game that starts opening the card either is seen here, or waits for the hold (OnCardOpening()).
   {
     std::lock_guard lock(s_state_lock);
     if (std::any_of(s_cards.begin(), s_cards.end(), [&](const Card& c) { return c.path == path; }))
       return false;
+    s_held_paths.emplace_back(path);
   }
+  const ScopedGuard unheld([path]() {
+    {
+      std::lock_guard lock(s_state_lock);
+      if (const auto it = std::find(s_held_paths.begin(), s_held_paths.end(), path); it != s_held_paths.end())
+        s_held_paths.erase(it);
+    }
+    s_held_cv.notify_all();
+  });
 
-  // Registering is idempotent; a card emusync can't follow, it never writes.
-  const es_container_id container = RegisterCard(std::string(path));
+  // Registering is idempotent. emusync busy (its worker in a slow sync) may write the card later: it waits for a
+  // later run. A card emusync can't follow, it never writes.
+  es_status registered = ES_OK;
+  const es_container_id container = RegisterCard(std::string(path), &registered);
   if (container == 0)
   {
+    if (registered == ES_TIMEOUT || registered == ES_E_BUSY)
+      return false;
     action();
     return true;
   }

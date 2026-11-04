@@ -66,6 +66,10 @@ fun MemcardSyncScreen(
     LaunchedEffect(Unit) { first.requestFocus() }
     // The row whose field is open, by its key, or null.
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
+    // Rows that take the focus when what had it goes: Remove passphrase, the conflicts' row.
+    val passphraseRow = remember { FocusRequester() }
+    var conflictsFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(state.conflictCount > 0) { if (state.conflictCount == 0 && conflictsFocused) first.requestFocus() }
 
     @Composable
     fun Editable(
@@ -75,8 +79,10 @@ fun MemcardSyncScreen(
         initial: String,
         note: String?,
         secret: Boolean,
+        focus: FocusRequester = remember { FocusRequester() },
     ) = EditableRow(
         label = label,
+        focus = focus,
         shown = shown,
         initial = initial,
         note = note,
@@ -129,11 +135,16 @@ fun MemcardSyncScreen(
             "",
             "Optional. Use the same passphrase on every device: it can't be recovered, and encryption can't be turned off later.",
             secret = true,
+            focus = passphraseRow,
         )
         if (state.hasPassphrase) {
             ActionButton(
                 "Remove passphrase",
-                onClick = onRemovePassphrase,
+                // The button goes with the passphrase: the focus goes to its row first.
+                onClick = {
+                    passphraseRow.requestFocus()
+                    onRemovePassphrase()
+                },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 kind = ButtonKind.Ghost,
             )
@@ -165,6 +176,7 @@ fun MemcardSyncScreen(
                 if (state.conflictCount == 1) "1 conflict" else "${state.conflictCount} conflicts",
                 "Choose which version of each save to keep",
                 onClick = onOpenConflicts,
+                modifier = Modifier.onFocusChanged { conflictsFocused = it.isFocused },
             )
         }
     }
@@ -181,6 +193,7 @@ private const val NOT_SET = "Not set"
 @Composable
 private fun EditableRow(
     label: String,
+    focus: FocusRequester,
     shown: String,
     initial: String,
     note: String?,
@@ -191,7 +204,7 @@ private fun EditableRow(
     onClose: () -> Unit,
 ) {
     val colors = GooseStationTheme.colors
-    val row = remember { FocusRequester() }
+    val row = focus
     val field = remember { FocusRequester() }
     var wasEditing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current

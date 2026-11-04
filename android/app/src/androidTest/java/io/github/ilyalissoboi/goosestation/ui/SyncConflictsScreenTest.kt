@@ -3,6 +3,10 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -120,6 +124,29 @@ class SyncConflictsScreenTest {
         pressUntilFocused(Key.DirectionLeft, "Keep all")
         press(Key.ButtonA)
         assertEquals(1, keptAll)
+    }
+
+    // A choice settles its conflict, which leaves the list: the focus goes on to the next one, never nowhere.
+    @Test
+    fun aPickMovesTheFocusOn() {
+        rule.setContent {
+            var conflicts by remember { mutableStateOf(CONFLICTS) }
+            GooseStationTheme {
+                SyncConflictsScreen(
+                    conflicts = conflicts,
+                    zone = ZoneOffset.UTC,
+                    onResolve = { id, _ -> conflicts = conflicts.filterNot { it.id == id } },
+                    onKeepAll = {},
+                    onBack = {},
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        press(Key.ButtonA)
+        press(Key.ButtonA)
+
+        rule.onNode(isFocused()).assert(hasText("BESLUS-01234SAVE", substring = true))
     }
 
     @Test

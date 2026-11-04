@@ -12,7 +12,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,10 +53,18 @@ fun SyncConflictsScreen(
 ) {
     val colors = GooseStationTheme.colors
     var asking by remember { mutableStateOf(false) }
-    val first = remember { FocusRequester() }
+    // Each conflict's row, by its id, so the focus can go to a row that stays when another is settled.
+    val rows = remember { mutableMapOf<Long, FocusRequester>() }
     val keepAll = remember { FocusRequester() }
+    // Where the focus goes once the list has changed: a row's id, or KEEP_ALL.
+    var focusNext by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(conflicts.isEmpty()) { if (conflicts.isEmpty()) onBack() }
-    LaunchedEffect(Unit) { if (conflicts.isNotEmpty()) first.requestFocus() }
+    LaunchedEffect(Unit) { conflicts.firstOrNull()?.let { focusNext = it.id } }
+    LaunchedEffect(conflicts, focusNext) {
+        val target = focusNext ?: return@LaunchedEffect
+        focusNext = null
+        (if (target == KEEP_ALL) keepAll else rows[target])?.requestFocus()
+    }
 
     SettingsPage("Sync conflicts", onBack = onBack) {
         Text(
@@ -64,11 +74,23 @@ fun SyncConflictsScreen(
             modifier = Modifier.padding(horizontal = 16.dp),
         )
         conflicts.forEachIndexed { i, conflict ->
+            val focus = key(conflict.id) { remember { FocusRequester() } }
+            SideEffect { rows[conflict.id] = focus }
             ConflictRow(
                 conflict,
                 zone,
-                onPick = { onResolve(conflict.id, it) },
-                modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                focus = focus,
+                onPick = { choice ->
+                    // Deciding later keeps the row; a choice settles it, so the next row (else the one before, else
+                    // Keep all) takes the focus, never nothing.
+                    focusNext =
+                        if (choice > conflict.remote.size) {
+                            conflict.id
+                        } else {
+                            (conflicts.getOrNull(i + 1) ?: conflicts.getOrNull(i - 1))?.id ?: KEEP_ALL
+                        }
+                    onResolve(conflict.id, choice)
+                },
             )
         }
         if (asking) {
@@ -100,16 +122,20 @@ fun SyncConflictsScreen(
     }
 }
 
+// focusNext's value for the Keep all button: no conflict has this id.
+private const val KEEP_ALL = -1L
+
 /** A conflict: its name and its versions; A opens its choices under it, and A on one picks it ([onPick]). */
 @Composable
 private fun ConflictRow(
     conflict: SyncConflict,
     zone: ZoneId,
+    focus: FocusRequester,
     onPick: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
-    val row = remember { FocusRequester() }
+    val row = focus
     val host = LocalChoiceListHost.current ?: remember { ChoiceListHost() }
     val key = remember { Any() }
     val open = host.open === key

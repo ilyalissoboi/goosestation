@@ -150,3 +150,8 @@ std::optional<std::vector<u8>> MemcardSyncBridge::ReadSaveForTest(std::string_vi
   }
   return std::nullopt;
 }
+
+void MemcardSyncBridge::SetBackgrounded(bool backgrounded)
+{
+  EmuThread::RunOnThread([backgrounded]() { MemcardSync::SetAppBackgrounded(backgrounded); }, false);
+}

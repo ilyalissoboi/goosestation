@@ -126,6 +126,13 @@ object NativeLibrary {
         action: Runnable,
     ): Boolean
 
+    /**
+     * The app went to the background ([backgrounded]) or came back: memory card sync pushes what it has and rests, or
+     * syncs at once and every 5 minutes again. Queued after the core's work already asked for (a pause's card writes);
+     * returns at once.
+     */
+    external fun setMemcardSyncBackgrounded(backgrounded: Boolean)
+
     /** Tests: syncs memory cards every [ms] instead of every 5 minutes (0 for 5 minutes again), from now. */
     external fun setMemcardSyncPeriodForTest(ms: Long)
 

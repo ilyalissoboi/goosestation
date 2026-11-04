@@ -228,6 +228,12 @@ enum class Activity : u8
 
 Activity GetActivity();
 
+/// The app went to the background, or came back. In the background, sync pushes what it has (es_app_suspend(), for
+/// up to 3 s on its own thread, after the card writes already handed to it), then does nothing: no periodic sync, and
+/// a start skips its first sync. Back in front, it syncs at once (es_app_resume()) and every 5 minutes again. Without
+/// a client, the state is only noted.
+void SetAppBackgrounded(bool backgrounded);
+
 /// Tests: syncs every `ms` instead of every 5 minutes (0 for 5 minutes again), from now.
 void SetPeriodicSyncForTest(u32 ms);
 

@@ -82,6 +82,10 @@ void ResolveConflict(u64 id, bool keep_local, u32 remote_index);
 /// paths.
 bool HoldCard(std::string_view relative_path, const std::function<void()>& action);
 
+/// MemcardSync::SetAppBackgrounded(), queued on the CPU thread, so it comes after the card writes queued there
+/// (AndroidHost::SetPaused()'s flush). Returns at once.
+void SetBackgrounded(bool backgrounded);
+
 /// Tests: MemcardSync::SetPeriodicSyncForTest().
 void SetPeriodicSyncForTest(u32 ms);
 

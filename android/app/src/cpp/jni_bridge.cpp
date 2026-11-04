@@ -1601,6 +1601,11 @@ NATIVE_LIBRARY_FUNCTION(void, memcardSyncNow)(JNIEnv*, jobject)
   MemcardSyncBridge::SyncNow();
 }
 
+NATIVE_LIBRARY_FUNCTION(void, setMemcardSyncBackgrounded)(JNIEnv*, jobject, jboolean backgrounded)
+{
+  MemcardSyncBridge::SetBackgrounded(backgrounded == JNI_TRUE);
+}
+
 NATIVE_LIBRARY_FUNCTION(void, setMemcardSyncPeriodForTest)(JNIEnv*, jobject, jlong ms)
 {
   MemcardSyncBridge::SetPeriodicSyncForTest(static_cast<u32>(std::max<jlong>(ms, 0)));

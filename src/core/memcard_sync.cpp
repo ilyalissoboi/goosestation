@@ -67,7 +67,17 @@ namespace MemcardSync {
   X(es_conflict_resolve)                                                                                               \
   X(es_secret_set)                                                                                                     \
   X(es_secret_get)                                                                                                     \
-  X(es_secret_delete)
+  X(es_secret_delete)                                                                                                  \
+  ES_PLATFORM_FUNCTIONS(X)
+
+// Android's mobile lifecycle (SetAppBackgrounded()).
+#ifdef __ANDROID__
+#define ES_PLATFORM_FUNCTIONS(X)                                                                                       \
+  X(es_app_suspend)                                                                                                    \
+  X(es_app_resume)
+#else
+#define ES_PLATFORM_FUNCTIONS(X)
+#endif
 
 namespace {
 struct EmuSyncApi
@@ -172,6 +182,12 @@ static std::atomic<Activity> s_activity{Activity::None};
 // SetPeriodicSyncForTest()'s period in ms, 0 for PERIODIC_SYNC; s_period_changed tells the worker to take it.
 static std::atomic<u32> s_periodic_ms{0};
 static bool s_period_changed = false; // s_worker_lock
+// SetAppBackgrounded(): the app's state, and what the worker is to tell emusync about it. s_worker_lock.
+static bool s_backgrounded = false;
+static bool s_suspend_pending = false;
+static bool s_resume_pending = false;
+// What the background's push may take.
+static constexpr u32 SUSPEND_BUDGET_MS = 3000;
 #endif
 
 static constexpr const char* NO_LIBRARY = "The emusync library is missing, so memory card sync is unavailable.";
@@ -714,9 +730,16 @@ static void WorkerLoop()
   {
     std::vector<es_container_id> flush;
     std::vector<PendingResolution> resolve;
+    [[maybe_unused]] bool backgrounded = false, suspend = false, resume = false;
     {
       std::unique_lock lock(s_worker_lock);
-      s_worker_cv.wait_until(lock, next_sync, [] { return s_worker_stop || s_worker_wake; });
+#ifdef __ANDROID__
+      // In the background, no periodic sync: only what's handed to the worker.
+      if (s_backgrounded)
+        s_worker_cv.wait(lock, [] { return s_worker_stop || s_worker_wake; });
+      else
+#endif
+        s_worker_cv.wait_until(lock, next_sync, [] { return s_worker_stop || s_worker_wake; });
       if (s_worker_stop)
         return;
       s_worker_wake = false;
@@ -726,6 +749,11 @@ static void WorkerLoop()
 #endif
       flush = std::exchange(s_flush_pending, {});
       resolve = std::exchange(s_resolve_pending, {});
+#ifdef __ANDROID__
+      backgrounded = s_backgrounded;
+      suspend = std::exchange(s_suspend_pending, false);
+      resume = std::exchange(s_resume_pending, false);
+#endif
     }
 
     std::shared_lock client(s_client_lock);
@@ -734,7 +762,20 @@ static void WorkerLoop()
     for (const es_container_id id : flush)
       s_es.es_container_flushed(s_client, id);
     ResolvePending(resolve);
-    if (std::chrono::steady_clock::now() >= next_sync)
+#ifdef __ANDROID__
+    if (suspend)
+    {
+      const es_status st = s_es.es_app_suspend(s_client, SUSPEND_BUDGET_MS);
+      INFO_LOG("In the background: memory card sync pushed what it had ({}), and waits.", s_es.es_status_str(st));
+    }
+    if (resume)
+    {
+      s_es.es_app_resume(s_client);
+      next_sync = std::chrono::steady_clock::now() + PeriodicSync();
+      INFO_LOG("Back in front: memory card sync resumes.");
+    }
+#endif
+    if (!backgrounded && std::chrono::steady_clock::now() >= next_sync)
     {
       s_es.es_sync_now(s_client);
       next_sync = std::chrono::steady_clock::now() + PeriodicSync();
@@ -875,10 +916,17 @@ bool MemcardSync::Start(const Config& config, std::string* error)
             st == ES_E_LOCKED ? std::string(LOCKED_STATUS) :
                                 "Starting...");
 
+  [[maybe_unused]] bool backgrounded = false;
   {
     std::lock_guard lock(s_worker_lock);
     s_worker_stop = false;
     s_worker_wake = false;
+#ifdef __ANDROID__
+    // A new client syncs as the app is now: a resume is what syncs once it's back.
+    backgrounded = s_backgrounded;
+    s_suspend_pending = false;
+    s_resume_pending = false;
+#endif
   }
   s_es.es_event_set_notifier(s_client, &OnEventsWaiting, nullptr);
   s_worker = std::thread(&WorkerLoop);
@@ -900,7 +948,17 @@ bool MemcardSync::Start(const Config& config, std::string* error)
                             TRANSLATE_STR("MemcardSync", "Memory cards in use sync from the next time they are opened."),
                             Host::OSD_INFO_DURATION);
   }
-  s_es.es_sync_now(s_client);
+#ifdef __ANDROID__
+  if (backgrounded)
+  {
+    std::lock_guard lock(s_worker_lock);
+    s_resume_pending = true;
+  }
+  else
+#endif
+  {
+    s_es.es_sync_now(s_client);
+  }
   INFO_LOG("Syncing memory cards with {}", config.remote_uri);
   return true;
 }
@@ -1312,6 +1370,20 @@ bool MemcardSync::WithCardHeld(std::string_view path, const std::function<void()
   const ScopedGuard end([&held]() { EndSession(held); });
   action();
   return true;
+}
+
+void MemcardSync::SetAppBackgrounded(bool backgrounded)
+{
+  {
+    std::lock_guard lock(s_worker_lock);
+    if (s_backgrounded == backgrounded)
+      return;
+    s_backgrounded = backgrounded;
+    // The latest wins: back and forth before the worker woke ends as the app is now.
+    s_suspend_pending = backgrounded;
+    s_resume_pending = !backgrounded;
+  }
+  WakeWorker();
 }
 
 void MemcardSync::SetPeriodicSyncForTest(u32 ms)

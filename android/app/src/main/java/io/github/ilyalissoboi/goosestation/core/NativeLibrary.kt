@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import android.view.Surface
+import io.github.ilyalissoboi.goosestation.BuildConfig
 
 /**
  * The emulator core, in libgoosestation.so. The core runs on its own thread: these calls queue work for it and
@@ -503,6 +504,19 @@ object NativeLibrary {
 
     /** For the instrumented tests only: the hash a game the core can't hash (a PS-EXE) gets, or none with null. */
     external fun setAchievementsGameHashForTest(hash: String?)
+
+    /**
+     * For the instrumented tests only, in a debug build (it throws in another): a send rcheevos is waiting to retry
+     * (up to two minutes) goes at the core's next idle update, about a tenth of a second later. Each call moves
+     * rcheevos's clock on by 120 s, for the current sign-in's client, so a retried award's "seconds since unlock" grows
+     * by that much, and what rcheevos schedules (its pings) comes due at once: a test mustn't check either.
+     */
+    fun skipAchievementsRetryWaitForTest() {
+        check(BuildConfig.DEBUG) { "skipAchievementsRetryWaitForTest is for the debug build's tests only." }
+        skipAchievementsRetryWaitNative()
+    }
+
+    private external fun skipAchievementsRetryWaitNative()
 
     /** Hardcore mode is active in the running game. */
     external fun isHardcoreActive(): Boolean

@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.core
 
 import android.os.ParcelFileDescriptor
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.KeystoreCipher
 import io.github.ilyalissoboi.goosestation.app.SyncSecrets
@@ -24,6 +25,7 @@ import java.io.File
  * is a closed port on this device, so a start finds it unreachable, which isn't an error. Every value is made up.
  * Each test runs in its own process.
  */
+@LargeTest
 @RunWith(AndroidJUnit4::class)
 class MemcardSyncSecretsTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext

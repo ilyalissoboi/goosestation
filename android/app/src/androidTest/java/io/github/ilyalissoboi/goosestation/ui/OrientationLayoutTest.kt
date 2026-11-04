@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -31,6 +32,7 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -47,7 +49,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
@@ -98,6 +102,7 @@ import java.time.ZonedDateTime
  * the D-pad, and in view once focused.
  */
 @OptIn(ExperimentalTestApi::class)
+@LargeTest
 @RunWith(AndroidJUnit4::class)
 class OrientationLayoutTest {
     private data class Config(
@@ -274,10 +279,10 @@ class OrientationLayoutTest {
     private fun assertFocusedInView(viewport: DpRect = viewport()) {
         val focused = rule.onNode(isFocused())
         focused.assertIsDisplayed()
-        val box = bounds(focused)
+        val node = focused.fetchSemanticsNode()
+        val box = node.boxInRoot()
         assertTrue(
-            "the focused ${focused.fetchSemanticsNode().mergedText()} at ${box.describe()} isn't all in the " +
-                "viewport ${viewport.describe()}",
+            "the focused ${node.mergedText()} at ${box.describe()} isn't all in the viewport ${viewport.describe()}",
             viewport.contains(box),
         )
     }
@@ -293,11 +298,6 @@ class OrientationLayoutTest {
         key: Key,
         text: String,
         limit: Int = 60,
-    ) {
-        repeat(limit) {
-            if (focused()) return
-            press(key)
-            assertFocusedInView()
     ) = pressUntil(key, "\"$text\"", limit) { focusedHas(text) }
 
     /**
@@ -315,6 +315,11 @@ class OrientationLayoutTest {
         what: String,
         limit: Int = 60,
         focused: () -> Boolean,
+    ) {
+        repeat(limit) {
+            if (focused()) return
+            press(key)
+            assertFocusedInView()
         }
         if (!focused()) fail("$key never focused $what")
     }
@@ -345,18 +350,17 @@ class OrientationLayoutTest {
      * and texts scrolled out of view are left out: for a screen of several scrolling panels.
      */
     private fun assertTextsLaidOut(inView: Boolean = false) {
-        val screen = screen()
-        val nodes =
+        // One fetch, so one wait for the screen to settle: the screen's box and every text's come from these nodes.
+        val fetched =
             rule
-                .onAllNodes(hasText("", substring = true), useUnmergedTree = true)
+                .onAllNodes(hasText("", substring = true) or hasTestTag(SCREEN), useUnmergedTree = true)
                 .fetchSemanticsNodes()
-                .filter { it.config.getOrNull(SemanticsActions.GetTextLayoutResult) != null }
+        val screen = fetched.single { it.config.getOrNull(SemanticsProperties.TestTag) == SCREEN }.boxInRoot()
         val boxes =
-            nodes
-                .map { node ->
-                    val interaction = rule.onNode(matchesId(node.id), useUnmergedTree = true)
-                    node to if (inView) interaction.getBoundsInRoot() else bounds(interaction)
-                }.filter { (_, box) -> !inView || (box.right > box.left && box.bottom > box.top) }
+            fetched
+                .filter { it.config.getOrNull(SemanticsActions.GetTextLayoutResult) != null }
+                .map { node -> node to node.boxInRoot(clipped = inView) }
+                .filter { (_, box) -> !inView || (box.right > box.left && box.bottom > box.top) }
         for ((node, box) in boxes) {
             val text = node.text()
             val results = mutableListOf<TextLayoutResult>()
@@ -392,7 +396,21 @@ class OrientationLayoutTest {
         }
     }
 
-    private fun matchesId(id: Int) = SemanticsMatcher("id $id") { it.id == id }
+    /**
+     * The node's box in the root, as [getUnclippedBoundsInRoot] gives it, or with [clipped], as [getBoundsInRoot]: the
+     * part its scrolling containers show. Read from the node, without another fetch.
+     */
+    private fun SemanticsNode.boxInRoot(clipped: Boolean = false): DpRect {
+        val rect =
+            when {
+                clipped -> boundsInRoot
+                layoutInfo.isPlaced -> Rect(positionInRoot, size.toSize())
+                else -> Rect(Float.NaN, Float.NaN, Float.NaN, Float.NaN)
+            }
+        return with(layoutInfo.density) {
+            DpRect(rect.left.toDp(), rect.top.toDp(), rect.right.toDp(), rect.bottom.toDp())
+        }
+    }
 
     private fun assertShows(
         text: String,
@@ -976,6 +994,7 @@ class OrientationLayoutTest {
                 onDropUndo = {},
                 onReset = {},
                 onBack = {},
+                glyphs = glyphs,
             )
         }) {
             assertTextsLaidOut()
@@ -994,7 +1013,6 @@ class OrientationLayoutTest {
             pressUntilInput(Key.DirectionDown, "Right Stick Right", glyphs)
             press(Key.DirectionRight)
             assertTrue(focusedHas("Clear"))
-                glyphs = glyphs,
             assertFocusedInView()
             press(Key.DirectionLeft)
             pressUntilFocused(Key.DirectionDown, "Analog mode")
@@ -1070,6 +1088,7 @@ class OrientationLayoutTest {
                 onDropUndo = {},
                 onReset = {},
                 onBack = {},
+                glyphs = glyphs,
             )
         }) {
             pads.value = listOf(PAD)
@@ -1088,7 +1107,6 @@ class OrientationLayoutTest {
         }
     }
 
-                glyphs = glyphs,
     @Test
     fun aCapturePromptFitsAndStaysInView() = capturePrompt(glyphs = true)
 
@@ -1115,6 +1133,7 @@ class OrientationLayoutTest {
                 onDropUndo = {},
                 onReset = {},
                 onBack = {},
+                glyphs = glyphs,
             )
         }) {
             // The row that's lowest on screen once Down has scrolled to it: a capture there grows it at the bottom.
@@ -1133,7 +1152,6 @@ class OrientationLayoutTest {
         eachConfig({
             LibraryScreen(
                 games = emptyList(),
-                glyphs = glyphs,
                 gridView = true,
                 banners = emptyList(),
                 message = null,

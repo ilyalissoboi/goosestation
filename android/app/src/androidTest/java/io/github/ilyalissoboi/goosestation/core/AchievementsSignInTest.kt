@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Signing in to RetroAchievements, against [FakeRetroAchievements]: never the real server, never real credentials. */
+@BootsGames
 @RunWith(AndroidJUnit4::class)
 class AchievementsSignInTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -186,6 +187,7 @@ class AchievementsSignInTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
+            TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             waitFor("the sign-in") { NativeLibrary.getAchievementsAccount().state == AchievementsAccount.SIGNED_IN }

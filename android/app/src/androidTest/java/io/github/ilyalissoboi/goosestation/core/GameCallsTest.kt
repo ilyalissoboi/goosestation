@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 
 /** The in-game menu's core calls: save state times and pictures, saving and loading, and the analog mode. */
+@BootsGames
 @RunWith(AndroidJUnit4::class)
 class GameCallsTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -160,6 +161,7 @@ class GameCallsTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
+            TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             assertEquals(PADTEST_SERIAL, lastSerial)
@@ -264,6 +266,7 @@ class GameCallsTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
+            TestRenderer.apply()
             NativeLibrary.startGame(padtest.path, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             NativeLibrary.setPaused(true)
@@ -393,6 +396,7 @@ class GameCallsTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
+            TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             Thread.sleep(1_000)

@@ -56,6 +56,10 @@ val emusyncAar: File =
         aar
     }
 
+// The instrumented tests' Gradle properties (testOptions below).
+val orchestrated: Boolean = providers.gradleProperty("goose.orchestrator").orNull?.toBooleanStrict() ?: true
+val testResults: String? = providers.gradleProperty("goose.testResults").orNull
+
 android {
     namespace = "io.github.ilyalissoboi.goosestation"
     compileSdk = 37
@@ -111,11 +115,23 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG keeps the tests' hooks (NativeLibrary) out of a release build's use.
+        buildConfig = true
     }
 
-    // Each instrumented test runs in a process of its own, so each gets its own one-shot NativeLibrary.initialize.
     testOptions {
-        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+        // Each instrumented test runs in a process of its own, so each gets its own one-shot NativeLibrary.initialize.
+        // Tests that don't start the core (the ui package's) can share one: -Pgoose.orchestrator=false runs them
+        // without the Orchestrator, which is much faster, as scripts/run-instrumented-tests.sh does.
+        execution = if (orchestrated) "ANDROIDX_TEST_ORCHESTRATOR" else "HOST"
+        animationsDisabled = true
+        // -Pgoose.testResults=<name> keeps a run's results and report under that name, so runs side by side (one per
+        // emulator) don't overwrite each other's.
+        testResults?.let {
+            val build = layout.buildDirectory.get().asFile
+            resultsDir = "$build/outputs/androidTest-results/$it"
+            reportDir = "$build/reports/androidTests/$it"
+        }
     }
 }
 

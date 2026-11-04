@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -22,6 +23,7 @@ import java.io.File
  * storage: this one, whose card is in the working copy, and [OTHER], another spelling of the storage's address with a
  * card of the same name of its own. Each test runs in its own process.
  */
+@LargeTest
 @RunWith(AndroidJUnit4::class)
 class MemcardSyncCardsTest {
     private val core = SyncTestCore(InstrumentationRegistry.getInstrumentation().targetContext, "memcard-sync-cards")

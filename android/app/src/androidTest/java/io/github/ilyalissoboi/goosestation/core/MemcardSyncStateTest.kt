@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -14,6 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /** What memory card sync says it's doing, against a fake S3 on the device. Each test runs in its own process. */
+@LargeTest
 @RunWith(AndroidJUnit4::class)
 class MemcardSyncStateTest {
     private val core = SyncTestCore(InstrumentationRegistry.getInstrumentation().targetContext, "memcard-sync-state")

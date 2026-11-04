@@ -1110,6 +1110,24 @@ Not checked by hand: an unlock earned offline, its card's note, and its send on 
 achievement earned in play; `AchievementsOfflineTest` covers them against the fake server (17 tests), and the full
 instrumented suite passed (437 tests) on the same AVD.
 
+### Memory card sync (2026-11-04)
+
+Checked on `goose-arm64` with the debug APK of `f0cae7512`, set up afresh (`/sdcard/GooseTest`'s BIOS, games and data
+folders), driven by taps and key events, with made-up credentials and an unreachable storage address (no real
+storage: that check is the user's).
+
+| Check | Result |
+| --- | --- |
+| The page, filled in | Pass. Each row opened its field with the keyboard; Enter saved it. The secret and passphrase rows said "Saved", their fields never showed the value, and Remove passphrase took the passphrase away. An empty Device name showed "Google sdk_gphone64_arm64". |
+| Sync on, storage unreachable | Pass. "Offline at 17:47: changes upload once the storage can be reached."; Sync now tried again ("Offline at 17:48"). |
+| The badge | Pass. "Offline", on the warning ground with the cloud-off icon; Left from Settings reached it, and A opened Settings → Memory cards. |
+| Background and back | Pass. Leaving the app: `In the background: memory card sync pushed what it had (ok), and waits.`; back in front: `Back in front: memory card sync resumes.`, then the next sync. |
+| No secret written out | Pass. `grep -r not-a-real-secret` found nothing in the data folder, the working copy or the app's preferences; `settings.ini` had `SecretStored = true` only. |
+| `emusync/` stays on the device | Pass. The working copy had `emusync/1968633d21287e0e`; the data folder had no `emusync`. |
+
+The full instrumented suite passed on the same AVD (509 of 510; the other, `ControllersScreenTest`, lost its test
+process and passed on its own, 27/27), and the native tests (196).
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon

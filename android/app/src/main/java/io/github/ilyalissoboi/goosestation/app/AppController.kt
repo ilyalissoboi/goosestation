@@ -76,6 +76,7 @@ enum class Screen(
     Controllers(SettingsEntry.Controllers),
     Graphics(SettingsEntry.Graphics),
     Achievements(SettingsEntry.Achievements),
+    MemoryCards(SettingsEntry.MemoryCards),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
     Game,
@@ -169,6 +170,21 @@ object AppController : NativeCallbacks {
 
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
     val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+
+    /** Memory card sync's state, for the Memory cards page and the library's badge: read again as sync says it changed. */
+    val memcardSyncStatus = MemcardSyncStatus(scope, Dispatchers.IO, NativeCoreApi)
+
+    val memcardSyncPage by lazy {
+        MemcardSyncPage(
+            scope,
+            coreDispatcher,
+            Dispatchers.IO,
+            NativeCoreApi,
+            NativeCoreSettings,
+            syncSecrets,
+            memcardSyncStatus,
+        )
+    }
 
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
@@ -572,6 +588,7 @@ object AppController : NativeCallbacks {
         when (entry) {
             SettingsEntry.Graphics -> settingsPages.loadGraphics()
             SettingsEntry.Achievements -> achievementsPage.load()
+            SettingsEntry.MemoryCards -> memcardSyncStatus.refresh()
             SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.Folders -> {}
@@ -1241,6 +1258,7 @@ object AppController : NativeCallbacks {
         }
         Log.i(TAG, "The core is ready.")
         coreStarted = true
+        memcardSyncStatus.refresh()
         if (biosOverridesToCheck) dropStaleBiosOverrides()
         // Reported once the core takes input; it keeps connections made before then anyway.
         controllers =
@@ -1459,6 +1477,10 @@ object AppController : NativeCallbacks {
     override fun loadMemcardSyncSecret(name: String) = syncSecrets.load(name)
 
     override fun hasMemcardSyncSecret(name: String) = syncSecrets.has(name)
+
+    override fun onMemcardSyncChanged() {
+        mainHandler.post { if (coreStarted) memcardSyncStatus.refresh() }
+    }
 
     override fun onAchievementsLoginExpired() {
         mainHandler.post {

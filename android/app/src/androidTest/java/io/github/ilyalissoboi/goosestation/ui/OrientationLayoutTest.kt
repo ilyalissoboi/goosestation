@@ -74,6 +74,7 @@ import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
@@ -662,6 +663,39 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Folders"))
             assertFocusedInView()
             for (i in 0 until 4) assertShows(NEEDS_CORE, i)
+        }
+    }
+
+    @Test
+    fun memoryCardsWithALongAddressAndError() {
+        eachConfig({
+            MemcardSyncScreen(
+                state =
+                    MemcardSyncScreenTest.RUNNING.copy(
+                        remoteUri =
+                            "s3://a-rather-long-bucket-name/emusync/v1?endpoint=https://storage.example.com&region=auto",
+                        running = false,
+                        statusKind = SyncStatusKind.StartError,
+                        startError =
+                            "This storage is not encrypted, or was set up by a newer version of emusync. Remove the " +
+                                "passphrase to use it, or choose a new folder for encrypted saves.",
+                        hasPassphrase = true,
+                        conflictCount = 2,
+                    ),
+                onEnabled = {},
+                onText = { _, _ -> },
+                onSecret = { _, _ -> },
+                onRemovePassphrase = {},
+                onSyncNow = {},
+                onOpenConflicts = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            assertShows("Remove the passphrase to use it")
+            pressUntilFocused(Key.DirectionDown, "2 conflicts")
+            assertFocusedInView()
         }
     }
 

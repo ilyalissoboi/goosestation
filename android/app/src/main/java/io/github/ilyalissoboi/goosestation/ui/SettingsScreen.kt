@@ -21,6 +21,7 @@ enum class SettingsEntry(
     Controllers("Controllers", "Remap each controller's buttons"),
     Graphics("Graphics", "Renderer, resolution, aspect ratio, FPS"),
     Achievements("Achievements", "Sign-in, hardcore mode, messages"),
+    MemoryCards("Memory cards", "Sync your saves with your other devices"),
     Bios("BIOS", "Which BIOS each region uses, fast boot"),
     Folders("Folders", "BIOS, games and data folders", needsCore = false),
 }

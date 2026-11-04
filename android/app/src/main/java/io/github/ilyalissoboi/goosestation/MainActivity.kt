@@ -27,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
@@ -118,6 +119,24 @@ class MainActivity : ComponentActivity() {
                                 onSignIn = page::signIn,
                                 onSignOut = page::signOut,
                                 onChange = page::change,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
+                    Screen.MemoryCards -> {
+                        val page = AppController.memcardSyncPage
+                        val state = page.state
+                        if (state == null) {
+                            SettingsLoadingPage("Memory cards", onBack = AppController::closeSettingsPage)
+                        } else {
+                            MemcardSyncScreen(
+                                state = state,
+                                onEnabled = page::setEnabled,
+                                onText = page::setText,
+                                onSecret = page::storeSecret,
+                                onRemovePassphrase = page::removePassphrase,
+                                onSyncNow = page::syncNow,
+                                onOpenConflicts = {},
                                 onBack = AppController::closeSettingsPage,
                             )
                         }

@@ -280,6 +280,23 @@ class FocusAuditTest {
     }
 
     @Test
+    fun memoryCards() {
+        show {
+            MemcardSyncScreen(
+                state = MemcardSyncScreenTest.RUNNING.copy(hasPassphrase = true, conflictCount = 2),
+                onEnabled = {},
+                onText = { _, _ -> },
+                onSecret = { _, _ -> },
+                onRemovePassphrase = {},
+                onSyncNow = {},
+                onOpenConflicts = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun achievementsSignedOut() {
         show {
             AchievementsScreen(

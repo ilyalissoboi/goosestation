@@ -87,6 +87,8 @@ class SettingsScreenTest {
         press(Key.DirectionDown)
         assertFocusedHas("Achievements", "Sign-in, hardcore mode, messages")
         press(Key.DirectionDown)
+        assertFocusedHas("Memory cards", "Sync your saves with your other devices")
+        press(Key.DirectionDown)
         assertFocusedHas("BIOS")
         press(Key.DirectionDown)
         assertFocusedHas("Folders", "BIOS, games and data folders")
@@ -113,7 +115,7 @@ class SettingsScreenTest {
     fun withoutTheCoreTheOtherEntriesCantBeFocusedOrOpened() {
         show(focusEntry = null, coreReady = false)
 
-        for (label in listOf("Controllers", "Graphics", "BIOS")) {
+        for (label in listOf("Controllers", "Graphics", "Memory cards", "BIOS")) {
             val entry = rule.onNode(hasText(label) and hasText(UNAVAILABLE))
             entry.assertIsNotEnabled()
             // Not focusable: no way to request the focus, and so neither the D-pad nor anything else can.

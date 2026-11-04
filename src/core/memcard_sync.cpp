@@ -1274,6 +1274,46 @@ MemcardSync::Activity MemcardSync::GetActivity()
   return s_activity.load();
 }
 
+bool MemcardSync::WithCardHeld(std::string_view path, const std::function<void()>& action)
+{
+  // No start or stop under the action: a new client's first sync would write the card.
+  std::lock_guard lifecycle(s_lifecycle_lock);
+  std::shared_lock client(s_client_lock);
+  if (!s_client)
+  {
+    action();
+    return true;
+  }
+
+  {
+    std::lock_guard lock(s_state_lock);
+    if (std::any_of(s_cards.begin(), s_cards.end(), [&](const Card& c) { return c.path == path; }))
+      return false;
+  }
+
+  // Registering is idempotent; a card emusync can't follow, it never writes.
+  const es_container_id container = RegisterCard(std::string(path));
+  if (container == 0)
+  {
+    action();
+    return true;
+  }
+
+  // 1 ms: only the card write in progress is waited for (0 would be emusync's default, 3 s of network). What the pull
+  // brings waits in the inbox until the session ends.
+  es_session_info info;
+  Card held;
+  held.session = BeginSession(container, std::string(), std::string(), 1, &info);
+  if (held.session == 0)
+    return false;
+  held.opened = std::chrono::steady_clock::now();
+
+  // The session's end snapshots the card as the action left it, then applies what waited.
+  const ScopedGuard end([&held]() { EndSession(held); });
+  action();
+  return true;
+}
+
 void MemcardSync::SetPeriodicSyncForTest(u32 ms)
 {
   s_periodic_ms.store(ms);

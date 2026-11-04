@@ -47,6 +47,8 @@
 -keep class io.github.ilyalissoboi.goosestation.core.MemcardSyncState { <init>(...); }
 -keep enum io.github.ilyalissoboi.goosestation.core.SyncStatusKind { public static final *; }
 -keep enum io.github.ilyalissoboi.goosestation.core.SyncActivity { public static final *; }
+-keep class io.github.ilyalissoboi.goosestation.core.SyncVersion { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.SyncConflict { <init>(...); }
 
 # jni_bridge.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().
 -keep class io.github.ilyalissoboi.goosestation.core.BiosImage {

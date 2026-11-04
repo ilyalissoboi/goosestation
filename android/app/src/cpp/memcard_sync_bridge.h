@@ -7,7 +7,12 @@
 
 #include "common/types.h"
 
+#include <functional>
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
+#include <vector>
 
 /// Memory card sync for the app (core/memcard_sync.h): whether it can run, its state, and what the settings page and
 /// the mirror ask of it.
@@ -45,7 +50,51 @@ void Apply();
 /// MemcardSync::SyncNow(): a full sync, queued. Returns at once.
 void SyncNow();
 
+/// One device's version of a save in a conflict, as the conflict screen shows it.
+struct Version
+{
+  std::string device;
+  s64 modified_unix_ms;
+  bool time_known; // a time that can be real (MemcardSync::GetLocalTime())
+  u32 blocks;
+  bool deleted;
+};
+
+/// A save changed both here and on another device: its name in a list (with the game's title, if the game database
+/// knows the serial), this device's version, the others', and the choice preselected (MemcardSync::GetConflictChoices()'s
+/// order: this device's, each remote one, decide later).
+struct Conflict
+{
+  u64 id;
+  std::string name;
+  std::optional<Version> local;
+  std::vector<Version> remote;
+  u32 default_choice;
+};
+
+/// The conflicts waiting for the player, oldest first. On the CPU thread (the game database), and waits for it.
+std::vector<Conflict> GetConflicts();
+
+/// MemcardSync::ResolveConflict(). Returns at once.
+void ResolveConflict(u64 id, bool keep_local, u32 remote_index);
+
+/// MemcardSync::WithCardHeld() for the card at relative_path, under EmuFolders::DataRoot as the core makes its card
+/// paths.
+bool HoldCard(std::string_view relative_path, const std::function<void()>& action);
+
 /// Tests: MemcardSync::SetPeriodicSyncForTest().
 void SetPeriodicSyncForTest(u32 ms);
+
+/// Tests: the card hooks, as a game's card calls them, on the card at path.
+void CardOpenedForTest(std::string_view path);
+void CardWrittenForTest(std::string_view path);
+void CardClosedForTest(std::string_view path);
+
+/// Tests: writes data as the save name on the card at path (formatted if there's no file), replacing a save of that
+/// name. False if it couldn't.
+bool WriteSaveForTest(std::string_view path, std::string_view name, std::span<const u8> data);
+
+/// Tests: the save name's data on the card at path, or nullopt.
+std::optional<std::vector<u8>> ReadSaveForTest(std::string_view path, std::string_view name);
 
 } // namespace MemcardSyncBridge

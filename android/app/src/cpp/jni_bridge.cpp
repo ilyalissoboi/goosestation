@@ -104,6 +104,11 @@ jclass s_memcard_sync_state_class = nullptr;
 jmethodID s_memcard_sync_state_constructor = nullptr;
 jobject s_sync_status_kinds[7] = {}; // SyncStatusKind's values, in MemcardSync::StatusKind's order (global references)
 jobject s_sync_activities[7] = {};   // SyncActivity's values, in MemcardSync::Activity's order (global references)
+jclass s_sync_version_class = nullptr;
+jmethodID s_sync_version_constructor = nullptr;
+jclass s_sync_conflict_class = nullptr;
+jmethodID s_sync_conflict_constructor = nullptr;
+jmethodID s_runnable_run = nullptr;
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -993,6 +998,32 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     return JNI_ERR;
   }
 
+  jclass sync_version_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SyncVersion");
+  jclass sync_conflict_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SyncConflict");
+  jclass runnable_class = env->FindClass("java/lang/Runnable");
+  if (!sync_version_class || !sync_conflict_class || !runnable_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  s_sync_version_class = static_cast<jclass>(env->NewGlobalRef(sync_version_class));
+  s_sync_conflict_class = static_cast<jclass>(env->NewGlobalRef(sync_conflict_class));
+  s_sync_version_constructor = env->GetMethodID(s_sync_version_class, "<init>", "(Ljava/lang/String;JZIZ)V");
+  s_sync_conflict_constructor =
+    env->GetMethodID(s_sync_conflict_class, "<init>",
+                     "(JLjava/lang/String;Lio/github/ilyalissoboi/goosestation/core/SyncVersion;"
+                     "[Lio/github/ilyalissoboi/goosestation/core/SyncVersion;I)V");
+  s_runnable_run = env->GetMethodID(runnable_class, "run", "()V");
+  env->DeleteLocalRef(sync_version_class);
+  env->DeleteLocalRef(sync_conflict_class);
+  env->DeleteLocalRef(runnable_class);
+  if (!s_sync_version_constructor || !s_sync_conflict_constructor || !s_runnable_run)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
   if (!AndroidContentProvider::LoadJNIReferences(env) || !HTTPDownloaderAndroid::LoadJNIReferences(env))
     return JNI_ERR;
 
@@ -1434,6 +1465,135 @@ NATIVE_LIBRARY_FUNCTION(jobject, getMemcardSyncState)(JNIEnv* env, jobject)
 NATIVE_LIBRARY_FUNCTION(void, applyMemcardSync)(JNIEnv*, jobject)
 {
   MemcardSyncBridge::Apply();
+}
+
+namespace {
+// A SyncVersion, or null (with no exception pending) if it can't be made.
+jobject ToSyncVersion(JNIEnv* env, const MemcardSyncBridge::Version& v)
+{
+  jstring device = ToJString(env, v.device);
+  jobject ret = device ? env->NewObject(s_sync_version_class, s_sync_version_constructor, device,
+                                        static_cast<jlong>(v.modified_unix_ms), static_cast<jboolean>(v.time_known),
+                                        static_cast<jint>(v.blocks), static_cast<jboolean>(v.deleted)) :
+                         nullptr;
+  if (!ret)
+    ClearException(env);
+  if (device)
+    env->DeleteLocalRef(device);
+  return ret;
+}
+
+// A SyncConflict, or null (with no exception pending) if it can't be made.
+jobject ToSyncConflict(JNIEnv* env, const MemcardSyncBridge::Conflict& c)
+{
+  jstring name = ToJString(env, c.name);
+  jobject local = c.local.has_value() ? ToSyncVersion(env, c.local.value()) : nullptr;
+  jobjectArray remote = env->NewObjectArray(static_cast<jsize>(c.remote.size()), s_sync_version_class, nullptr);
+  jobject ret = nullptr;
+  bool made = name && remote && (local || !c.local.has_value());
+  for (size_t i = 0; made && i < c.remote.size(); i++)
+  {
+    jobject v = ToSyncVersion(env, c.remote[i]);
+    made = v != nullptr;
+    if (v)
+    {
+      env->SetObjectArrayElement(remote, static_cast<jsize>(i), v);
+      env->DeleteLocalRef(v);
+    }
+  }
+  if (made)
+  {
+    ret = env->NewObject(s_sync_conflict_class, s_sync_conflict_constructor, static_cast<jlong>(c.id), name, local,
+                         remote, static_cast<jint>(c.default_choice));
+  }
+  if (!ret)
+    ClearException(env);
+  for (jobject ref : {static_cast<jobject>(name), local, static_cast<jobject>(remote)})
+  {
+    if (ref)
+      env->DeleteLocalRef(ref);
+  }
+  return ret;
+}
+} // namespace
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardSyncConflicts)(JNIEnv* env, jobject)
+{
+  const std::vector<MemcardSyncBridge::Conflict> conflicts = MemcardSyncBridge::GetConflicts();
+  jobjectArray ret = env->NewObjectArray(static_cast<jsize>(conflicts.size()), s_sync_conflict_class, nullptr);
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  for (size_t i = 0; i < conflicts.size(); i++)
+  {
+    jobject c = ToSyncConflict(env, conflicts[i]);
+    if (!c)
+    {
+      env->DeleteLocalRef(ret);
+      return nullptr;
+    }
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), c);
+    env->DeleteLocalRef(c);
+  }
+  return ret;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, resolveMemcardSyncConflict)(JNIEnv*, jobject, jlong id, jboolean keep_local,
+                                                          jint remote_index)
+{
+  MemcardSyncBridge::ResolveConflict(static_cast<u64>(id), keep_local == JNI_TRUE,
+                                     static_cast<u32>(std::max<jint>(remote_index, 0)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, memcardSyncHoldCard)(JNIEnv* env, jobject, jstring relative_path, jobject action)
+{
+  // An exception from the action stays pending, so it reaches the caller once the card is let go.
+  return MemcardSyncBridge::HoldCard(FromJString(env, relative_path),
+                                     [env, action]() { env->CallVoidMethod(action, s_runnable_run); }) ?
+           JNI_TRUE :
+           JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, memcardCardOpenedForTest)(JNIEnv* env, jobject, jstring path)
+{
+  MemcardSyncBridge::CardOpenedForTest(FromJString(env, path));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, memcardCardWrittenForTest)(JNIEnv* env, jobject, jstring path)
+{
+  MemcardSyncBridge::CardWrittenForTest(FromJString(env, path));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, memcardCardClosedForTest)(JNIEnv* env, jobject, jstring path)
+{
+  MemcardSyncBridge::CardClosedForTest(FromJString(env, path));
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, writeMemoryCardSaveForTest)(JNIEnv* env, jobject, jstring path, jstring name,
+                                                              jbyteArray data)
+{
+  std::vector<u8> bytes(static_cast<size_t>(env->GetArrayLength(data)));
+  env->GetByteArrayRegion(data, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<jbyte*>(bytes.data()));
+  return MemcardSyncBridge::WriteSaveForTest(FromJString(env, path), FromJString(env, name), bytes) ? JNI_TRUE :
+                                                                                                       JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jbyteArray, readMemoryCardSaveForTest)(JNIEnv* env, jobject, jstring path, jstring name)
+{
+  const std::optional<std::vector<u8>> data =
+    MemcardSyncBridge::ReadSaveForTest(FromJString(env, path), FromJString(env, name));
+  if (!data.has_value())
+    return nullptr;
+  jbyteArray ret = env->NewByteArray(static_cast<jsize>(data->size()));
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  env->SetByteArrayRegion(ret, 0, static_cast<jsize>(data->size()), reinterpret_cast<const jbyte*>(data->data()));
+  return ret;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, memcardSyncNow)(JNIEnv*, jobject)

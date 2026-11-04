@@ -74,3 +74,33 @@ data class MemcardSyncState(
     val activity: SyncActivity,
     val conflictCount: Int,
 )
+
+/**
+ * One device's version of a save in a conflict: the [device] that made it, when ([modifiedMs], Unix ms; not
+ * [timeKnown] for a time that can't be real), how many [blocks] it takes on a card, or that it [deleted] the save.
+ */
+data class SyncVersion(
+    val device: String,
+    val modifiedMs: Long,
+    val timeKnown: Boolean,
+    val blocks: Int,
+    val deleted: Boolean,
+)
+
+/**
+ * A save changed both on this device and on another since they last synced ([NativeLibrary.getMemcardSyncConflicts]):
+ * its [name] in a list (the game's title, if known, then the save and its card), this device's version ([local], null
+ * if the save isn't on its card) and the others' ([remote]). Its choices are this device's version, each remote one,
+ * then deciding later; [defaultChoice] is the newest's index among them.
+ */
+data class SyncConflict(
+    val id: Long,
+    val name: String,
+    val local: SyncVersion?,
+    val remote: List<SyncVersion>,
+    val defaultChoice: Int,
+) {
+    // For jni_bridge.cpp, which has an array to give.
+    constructor(id: Long, name: String, local: SyncVersion?, remote: Array<SyncVersion>, defaultChoice: Int) :
+        this(id, name, local, remote.toList(), defaultChoice)
+}

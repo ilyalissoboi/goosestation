@@ -103,8 +103,51 @@ object NativeLibrary {
     /** Queues a full memory card sync: download, apply to the cards not in use, upload. Returns at once. */
     external fun memcardSyncNow()
 
+    /** The memory card sync conflicts waiting for the player, oldest first. Waits for the core. */
+    external fun getMemcardSyncConflicts(): Array<SyncConflict>
+
+    /**
+     * Keeps this device's version of conflict [id]'s save ([keepLocal]), or the other version [remoteIndex]. Returns at
+     * once: the choice is uploaded, and written to the card once no game has it.
+     */
+    external fun resolveMemcardSyncConflict(
+        id: Long,
+        keepLocal: Boolean,
+        remoteIndex: Int,
+    )
+
+    /**
+     * Runs [action] with sync kept off the card at [relativePath] (in the working copy), as the mirror replaces or
+     * deletes it: true once it ran, false, without running it, when a game has the card or sync can't hold it now. An
+     * exception from [action] is thrown on once the card is let go.
+     */
+    external fun memcardSyncHoldCard(
+        relativePath: String,
+        action: Runnable,
+    ): Boolean
+
     /** Tests: syncs memory cards every [ms] instead of every 5 minutes (0 for 5 minutes again), from now. */
     external fun setMemcardSyncPeriodForTest(ms: Long)
+
+    /** Tests: the core's card hooks, as a game's card at [path] calls them. */
+    external fun memcardCardOpenedForTest(path: String)
+
+    external fun memcardCardWrittenForTest(path: String)
+
+    external fun memcardCardClosedForTest(path: String)
+
+    /** Tests: writes [data] as save [name] on the card at [path] (a new card if there's none), replacing one. */
+    external fun writeMemoryCardSaveForTest(
+        path: String,
+        name: String,
+        data: ByteArray,
+    ): Boolean
+
+    /** Tests: save [name]'s data on the card at [path], or null. */
+    external fun readMemoryCardSaveForTest(
+        path: String,
+        name: String,
+    ): ByteArray?
 
     /**
      * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game

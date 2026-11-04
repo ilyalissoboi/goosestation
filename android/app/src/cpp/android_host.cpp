@@ -421,6 +421,27 @@ void AndroidHost::RefreshGameList(bool invalidate_cache)
   GameList::Refresh(invalidate_cache, false, nullptr);
 }
 
+namespace AndroidHost {
+namespace {
+// What memory card sync starts with, from [MemoryCardSync].
+struct MemcardSyncSettings
+{
+  bool enabled;
+  std::string remote_uri;
+  std::string access_key_id;
+  std::string device_name;
+
+  bool operator==(const MemcardSyncSettings&) const = default;
+};
+
+MemcardSyncSettings ReadMemcardSyncSettings(const SettingsInterface& si)
+{
+  return {si.GetBoolValue(MemcardSync::SECTION, "Enabled", false), si.GetStringValue(MemcardSync::SECTION, "RemoteURI"),
+          si.GetStringValue(MemcardSync::SECTION, "AccessKeyID"), si.GetStringValue(MemcardSync::SECTION, "DeviceName")};
+}
+} // namespace
+} // namespace AndroidHost
+
 void AndroidHost::ReloadSettings()
 {
   if (!s_initialized)
@@ -429,9 +450,11 @@ void AndroidHost::ReloadSettings()
   EmuThread::RunOnThread(
     []() {
       bool adapted;
+      bool sync_changed;
       {
         const auto lock = Host::GetSettingsLock();
         INISettingsInterface& si = *s_base_settings_interface;
+        const MemcardSyncSettings sync_before = ReadMemcardSyncSettings(si);
         Error error;
         if (!si.Reload(&error))
         {
@@ -453,7 +476,12 @@ void AndroidHost::ReloadSettings()
 
         if (changed && !si.Save(&error))
           ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+        sync_changed = ReadMemcardSyncSettings(si) != sync_before;
       }
+
+      // Memory card sync's settings came with the file: sync follows them.
+      if (sync_changed)
+        MemcardSync::ApplySettingsAsync();
 
       // A pad connected now that the file leaves with no binding (all of them, after an adapt) won't connect again:
       // map it here.

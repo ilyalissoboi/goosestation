@@ -99,4 +99,21 @@ class MemcardSyncStateTest {
 
         core.waitFor("two more syncs", seconds = 5) { fake.listings() >= listings + 2 }
     }
+
+    // A pull brought a settings.ini with another storage: sync follows it.
+    @Test
+    fun aReloadedSettingsFileReapplies() {
+        core.configure(fake.uri())
+        NativeLibrary.applyMemcardSync()
+        core.waitFor("Synced") { core.state().activity == SyncActivity.Synced }
+        FakeS3().use { second ->
+            val settings = java.io.File(core.dataRoot, "settings.ini")
+            settings.writeText(settings.readText().replace(fake.uri(), second.uri()))
+
+            NativeLibrary.reloadSettings()
+
+            core.waitFor("the second storage") { second.listings() > 0 }
+            assertEquals(second.uri(), core.state().remoteUri)
+        }
+    }
 }

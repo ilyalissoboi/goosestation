@@ -8,9 +8,10 @@ package io.github.ilyalissoboi.goosestation.mirror
  * folder holds (the user's games, say). Paths are relative, with `/` separators.
  *
  * The layout is the top-level files the core keeps, and every file under its folders: the desktop data folder's
- * (`EmuFolders::SetDefaults`, and `emusync/`), plus those the core is configured to use inside the data root, and
- * the shared memory card files, once it reports them ([withCorePaths]). Never mirrored, even inside a layout folder:
- * the core's cache, its log, and its and the mirror's own temporary files, which stay on the device ([kept]).
+ * (`EmuFolders::SetDefaults`), plus those the core is configured to use inside the data root, and the shared memory
+ * card files, once it reports them ([withCorePaths]). Never mirrored, even inside a layout folder: the core's cache,
+ * its log, memory card sync's data (`emusync/`) and scratch files, and the core's and the mirror's own temporary
+ * files, which stay on the device ([kept]).
  *
  * [fromCore] says whether the core reported the layout. Before it starts, its settings may name folders the defaults
  * lack, so only a layout from the core says which working-copy files are [stray].
@@ -62,12 +63,15 @@ class DataLayout private constructor(
 
     /**
      * The core's own files that stay on the device: its cache, its log, the mirror's temporary files, and the core's
-     * own temporary save states (written to `<name>.sav.XXXXXX`, then renamed over `<name>.sav`). And desktop's
+     * own temporary save states (written to `<name>.sav.XXXXXX`, then renamed over `<name>.sav`). Memory card sync's
+     * data, `emusync/`, which holds this device's sync identity and the storage's key, so a copy elsewhere would give
+     * it away or make another device this one; and emusync's scratch files beside a card it's writing. And desktop's
      * secrets.ini, which Android neither reads nor writes (its token is in the Keystore): never copied either way.
      */
     private fun kept(path: String) =
         path == LOG || path == SECRETS || caches.any { path.startsWith(it) } || path.endsWith(TEMP) ||
-            path.endsWith(BACKUP) || STATE_TEMP.containsMatchIn(path)
+            path.endsWith(BACKUP) || STATE_TEMP.containsMatchIn(path) || path.startsWith(EMUSYNC) ||
+            EMUSYNC_SCRATCH.containsMatchIn(path)
 
     companion object {
         /** The core's log, rewritten at every start: not worth a copy in the data folder. */
@@ -76,6 +80,10 @@ class DataLayout private constructor(
         private const val TEMP = ".goosetmp"
         private const val BACKUP = ".goosebak"
         private const val CACHE = "cache/"
+        private const val EMUSYNC = "emusync/"
+
+        // emusync's siblings of a card it's replacing: `<name>.emusync-tmp`, and a folder card's `-old` and `-swap`.
+        private val EMUSYNC_SCRATCH = Regex("""\.emusync-(tmp|old|swap)(/|$)""")
 
         // FileSystem::CreateAtomicRenamedFile()'s name for a save state on its way in: mkstemp()'s six characters.
         private val STATE_TEMP = Regex("""\.sav\.[A-Za-z0-9]{6}$""")
@@ -97,7 +105,6 @@ class DataLayout private constructor(
                 "textures",
                 "resources",
                 "videos",
-                "emusync",
             ).map { "$it/" }.toSet()
 
         /** The layout before the core says otherwise: its defaults. */

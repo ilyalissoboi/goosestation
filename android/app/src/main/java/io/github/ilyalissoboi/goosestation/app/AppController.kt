@@ -25,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
+import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
 import io.github.ilyalissoboi.goosestation.mirror.DataLayout
@@ -408,7 +409,13 @@ object AppController : NativeCallbacks {
                     push(force = false)
                 }
             }
-        if (coreStarted) scope.launch { resume() }
+        // Memory card sync resumes once the pull has brought what the data folder has.
+        if (coreStarted) {
+            scope.launch {
+                resume()
+                NativeLibrary.setMemcardSyncBackgrounded(false)
+            }
+        }
         networkWatch.start()
     }
 
@@ -421,6 +428,8 @@ object AppController : NativeCallbacks {
         pushTicker?.cancel()
         pushTicker = null
         scope.launch { push(force = true) }
+        // After the pause's card writes, which the core has queued already: sync pushes them, then rests.
+        if (coreStarted) NativeLibrary.setMemcardSyncBackgrounded(true)
         networkWatch.stop()
     }
 
@@ -1017,6 +1026,18 @@ object AppController : NativeCallbacks {
         }
     }
 
+    // Memory card sync never writes a card while the mirror replaces or deletes it: sync holds the card meanwhile.
+    // Before the core starts, nothing syncs.
+    private val cardGuard =
+        CopyGuard { path, action ->
+            if (coreStarted && MemoryCardPaths.matches(path, memcardPaths)) {
+                NativeLibrary.memcardSyncHoldCard(path) { action() }
+            } else {
+                action()
+                true
+            }
+        }
+
     /** A mirror of [data], whose state the app shows from now on. */
     private fun useMirror(data: String) {
         mirrorStateJob?.cancel()
@@ -1028,6 +1049,7 @@ object AppController : NativeCallbacks {
                 manifestFile,
                 System::currentTimeMillis,
                 removeStrays = { layoutSettling.settled },
+                guard = cardGuard,
             ) { dataLayout }
         mirror = created
         mirrorStateJob = scope.launch { created.state.collect { mutableMirrorState.value = it } }

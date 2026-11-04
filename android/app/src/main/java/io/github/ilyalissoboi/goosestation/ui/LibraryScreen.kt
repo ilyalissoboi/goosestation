@@ -36,19 +36,22 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.unit.dp
+import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.Banner
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
+import io.github.ilyalissoboi.goosestation.ui.components.SyncStatusBadge
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseMark
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 
 /**
- * The games, as a cover grid ([gridView]) or a list, under a top bar of the goose and "Library", then Grid/List
- * ([onToggleView]), Settings ([onOpenSettings]) and Refresh ([onRefresh]). [banners] and [message] sit under the bar:
+ * The games, as a cover grid ([gridView]) or a list, under a top bar of the goose and "Library", then memory card
+ * sync's badge while sync is on ([syncBadge]; [onSyncBadge]), Grid/List ([onToggleView]), Settings ([onOpenSettings])
+ * and Refresh ([onRefresh]). [banners] and [message] sit under the bar:
  * prompts to pick a folder again, the latest error ([isError]), or what the app is doing.
  *
  * On opening, Settings has focus when [focusSettings] (coming back from the settings), or else the game at
@@ -68,6 +71,8 @@ fun LibraryScreen(
     onStartGame: (GameEntry) -> Unit,
     focusPath: String?,
     focusSettings: Boolean = false,
+    syncBadge: SyncBadge? = null,
+    onSyncBadge: () -> Unit = {},
 ) {
     val settings = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
@@ -122,7 +127,9 @@ fun LibraryScreen(
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
             ) {
+                syncBadge?.let { SyncStatusBadge(it, onClick = onSyncBadge) }
                 ActionButton(
                     if (gridView) "List" else "Grid",
                     onClick = onToggleView,

@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
+import io.github.ilyalissoboi.goosestation.app.SyncBadges
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
@@ -238,6 +239,8 @@ class MainActivity : ComponentActivity() {
                             onStartGame = AppController::startGame,
                             focusPath = AppController.lastGamePath,
                             focusSettings = AppController.focusSettings,
+                            syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),
+                            onSyncBadge = AppController::openSyncBadge,
                         )
                         val starts = AppController.gameStarts
                         starts.offer?.let { offer ->

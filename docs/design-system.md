@@ -216,6 +216,19 @@ A message in the page, on its status's `-soft` ground, with the status icon: `In
 first, and leave when their cause does. A notice never holds a primary button. `MessageBar` in `LibraryScreen.kt` is
 the app's passing status line, an info or danger notice.
 
+### `SyncStatusBadge` (`SyncStatusBadge.kt`)
+
+```kotlin
+SyncStatusBadge(SyncBadge.Conflicts(2), onClick = ::openConflicts)
+```
+
+Memory card sync's state in the library's top bar, while sync is on: the status icon at `icon-sm` (16 dp) in the
+status colour and a word in `label-sm` `ink`, `space-1` apart, on the status's `-soft` ground at `radius-sm`. Synced
+is `success` (a ticked square), Syncing… `info` (`sync`), Offline `warning` (`cloud-off`), N conflicts and Needs setup
+`warning` (a triangle), Sync failed `danger` (an octagon), so each reads without colour. It's focusable, with the touch
+height, and opens what it's about: the conflicts, or Settings > Memory cards. `SyncBadges.of()` picks the badge;
+it's never Synced while nothing syncs.
+
 ### Settings: `SettingsPage`, `CyclerRow`, `SwitchRow`, `NavRow` (`SettingsRows.kt`)
 
 ```kotlin
@@ -430,7 +443,7 @@ See [docs/android.md](android.md) for running them.
 ## Not built yet
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
-Android; badges for region and memory card sync;
+Android; a badge for region;
 progress bars; on-screen touch controls; the
 desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

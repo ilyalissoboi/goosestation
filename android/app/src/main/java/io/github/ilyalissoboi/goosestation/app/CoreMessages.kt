@@ -31,6 +31,11 @@ object CoreMessages {
             key == "system_reset" -> "Console reset"
             key == "CheatsLoadWarning" -> codesOn(text)
             key == "analog_mode_toggle_0" || key == "Controller0AnalogMode" -> analogMode(text)
+            // Memory card sync: a conflict found while playing waits for the game to end, as settings do.
+            key.startsWith(
+                "MemcardSync-Conflict-",
+            ) -> "A save needs your choice. Settle it in Memory cards after this game."
+            key.startsWith("MemcardSync-") && text.startsWith("Updated ") -> updatedSaves(text)
             key.startsWith("ScreenshotSaver_") ->
                 when {
                     text.startsWith("Saved") -> "Screenshot saved"
@@ -39,6 +44,12 @@ object CoreMessages {
                 }
             else -> text
         }
+    }
+
+    // "Updated 2 save(s) from other devices on shared_card_1.mcd": the count is the core's, the card its file.
+    private fun updatedSaves(text: String): String {
+        val count = text.removePrefix("Updated ").takeWhile { it.isDigit() }.toIntOrNull() ?: return text
+        return if (count == 1) "Updated 1 save from other devices" else "Updated $count saves from other devices"
     }
 
     // "2 cheat(s) are enabled. This may crash games." The count is the core's.

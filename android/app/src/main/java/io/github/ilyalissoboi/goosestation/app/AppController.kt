@@ -621,6 +621,18 @@ object AppController : NativeCallbacks {
         screen = Screen.SyncConflicts
     }
 
+    /** The library's sync badge: the conflict screen when there are conflicts, else Settings > Memory cards. */
+    fun openSyncBadge() {
+        if (screen != Screen.Library || !settingsReady) return
+        if (SyncBadges.of(memcardSyncStatus.state) is SyncBadge.Conflicts) {
+            openSyncConflicts()
+        } else {
+            settingsEntry = null
+            screen = Screen.Settings
+            openSettingsPage(SettingsEntry.MemoryCards)
+        }
+    }
+
     /** Back from the conflict screen to where it was opened from. */
     fun closeSyncConflicts() {
         if (screen != Screen.SyncConflicts) return

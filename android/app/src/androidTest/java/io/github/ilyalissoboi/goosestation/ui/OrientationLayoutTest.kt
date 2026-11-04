@@ -61,6 +61,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
@@ -1089,6 +1090,34 @@ class OrientationLayoutTest {
             assertFocusedInView()
             press(Key.Back)
             assertTrue(capturing.value == null)
+        }
+    }
+
+    @Test
+    fun theLibrarysTopBarWithTheSyncBadge() {
+        eachConfig({
+            LibraryScreen(
+                games = emptyList(),
+                gridView = true,
+                banners = emptyList(),
+                message = null,
+                isError = false,
+                onToggleView = {},
+                onOpenSettings = {},
+                onRefresh = {},
+                onStartGame = {},
+                focusPath = null,
+                focusSettings = true,
+                syncBadge = SyncBadge.Conflicts(2),
+            )
+        }) {
+            assertTextsLaidOut()
+            rule.onNodeWithText("2 conflicts", useUnmergedTree = true).assertIsDisplayed()
+            // Left of Grid, which is left of Settings; on a narrow screen the buttons may wrap under the title.
+            repeat(4) { if (!focusedHas("2 conflicts")) press(Key.DirectionLeft) }
+            if (!focusedHas("2 conflicts")) press(Key.DirectionUp)
+            assertTrue("didn't reach the badge", focusedHas("2 conflicts"))
+            assertFocusedInView(screen())
         }
     }
 

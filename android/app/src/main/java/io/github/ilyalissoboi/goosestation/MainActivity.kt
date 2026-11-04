@@ -31,8 +31,10 @@ import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
+import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
     // Registered here, before the activity starts, as the result API needs.
@@ -136,8 +138,23 @@ class MainActivity : ComponentActivity() {
                                 onSecret = page::storeSecret,
                                 onRemovePassphrase = page::removePassphrase,
                                 onSyncNow = page::syncNow,
-                                onOpenConflicts = {},
+                                onOpenConflicts = AppController::openSyncConflicts,
                                 onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    }
+                    Screen.SyncConflicts -> {
+                        val page = AppController.memcardSyncPage
+                        val conflicts = page.conflicts
+                        if (conflicts == null) {
+                            SettingsLoadingPage("Sync conflicts", onBack = AppController::closeSyncConflicts)
+                        } else {
+                            SyncConflictsScreen(
+                                conflicts = conflicts,
+                                zone = ZoneId.systemDefault(),
+                                onResolve = page::resolve,
+                                onKeepAll = page::keepAllLocal,
+                                onBack = AppController::closeSyncConflicts,
                             )
                         }
                     }

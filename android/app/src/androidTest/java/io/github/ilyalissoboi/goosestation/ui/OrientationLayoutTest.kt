@@ -74,7 +74,9 @@ import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
+import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
@@ -663,6 +665,33 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Folders"))
             assertFocusedInView()
             for (i in 0 until 4) assertShows(NEEDS_CORE, i)
+        }
+    }
+
+    @Test
+    fun syncConflictsWithLongNames() {
+        val long = SyncVersion("A desktop computer with a rather long name", 1_793_900_000_000, true, 3, false)
+        eachConfig({
+            SyncConflictsScreen(
+                conflicts =
+                    SyncConflictsScreenTest.CONFLICTS +
+                        SyncConflict(
+                            9,
+                            "Final Fantasy VII (Disc 1) (BASCUS-94163FF7-S01, Final_Fantasy_VII_(USA)_1)",
+                            long,
+                            listOf(long, long.copy(device = "Laptop", deleted = true)),
+                            1,
+                        ),
+                zone = java.time.ZoneOffset.UTC,
+                onResolve = { _, _ -> },
+                onKeepAll = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Keep all from this device")
+            assertFocusedInView()
         }
     }
 

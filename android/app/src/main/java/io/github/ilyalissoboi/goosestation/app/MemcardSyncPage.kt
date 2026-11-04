@@ -3,7 +3,11 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
+import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -27,6 +31,45 @@ class MemcardSyncPage(
 ) {
     /** Sync's settings and state, as last read. */
     val state: MemcardSyncState? get() = status.state
+
+    /** The conflicts, as read on opening the conflict screen; a choice made drops its conflict at once. */
+    var conflicts by mutableStateOf<List<SyncConflict>?>(null)
+        private set
+
+    /** Reads the conflicts, from none shown. */
+    fun loadConflicts() {
+        conflicts = null
+        scope.launch { conflicts = withContext(core) { api.getMemcardSyncConflicts() } }
+    }
+
+    /**
+     * Takes choice [choice] of conflict [id]: index 0 this device's version, then each other one, then deciding
+     * later, which does nothing. The core writes the choice to the card once no game has it.
+     */
+    fun resolve(
+        id: Long,
+        choice: Int,
+    ) {
+        val conflict = conflicts?.firstOrNull { it.id == id } ?: return
+        if (choice > conflict.remote.size) return
+        val keepLocal = choice == 0
+        val remote = if (keepLocal) 0 else choice - 1
+        conflicts = conflicts?.filterNot { it.id == id }
+        scope.launch {
+            withContext(core) { api.resolveMemcardSyncConflict(id, keepLocal, remote) }
+            status.refresh()
+        }
+    }
+
+    /** Keeps this device's version of every conflict shown. */
+    fun keepAllLocal() {
+        val ids = conflicts.orEmpty().map { it.id }
+        conflicts = emptyList()
+        scope.launch {
+            withContext(core) { ids.forEach { api.resolveMemcardSyncConflict(it, true, 0) } }
+            status.refresh()
+        }
+    }
 
     /** Turns sync on or off. */
     fun setEnabled(on: Boolean) =

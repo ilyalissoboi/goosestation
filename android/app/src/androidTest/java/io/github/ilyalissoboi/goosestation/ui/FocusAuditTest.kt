@@ -280,6 +280,22 @@ class FocusAuditTest {
     }
 
     @Test
+    fun syncConflicts() {
+        show {
+            SyncConflictsScreen(
+                conflicts = SyncConflictsScreenTest.CONFLICTS,
+                zone = java.time.ZoneOffset.UTC,
+                onResolve = { _, _ -> },
+                onKeepAll = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+        press(Key.ButtonA)
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun memoryCards() {
         show {
             MemcardSyncScreen(

@@ -4,7 +4,9 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.SyncActivity
+import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
+import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -202,4 +204,62 @@ class MemcardSyncPageTest {
         // An activity of its own doesn't change the line: the line is the core's.
         assertEquals("Off.", SyncStatusWords.line(state.copy(activity = SyncActivity.Synced)))
     }
+
+    private fun conflict(id: Long) =
+        SyncConflict(
+            id,
+            "BASLUS-00067DRACULA (shared_card_1)",
+            SyncVersion("Goose Test Device", 1, true, 1, false),
+            listOf(SyncVersion("Desktop PC", 2, true, 1, false), SyncVersion("Laptop", 3, true, 1, false)),
+            2,
+        )
+
+    @Test
+    fun laterResolvesNothing() =
+        runTest {
+            api.conflicts = listOf(conflict(7))
+            val page = page()
+            page.loadConflicts()
+            runCurrent()
+            calls.clear()
+
+            page.resolve(7, 3)
+            runCurrent()
+
+            assertFalse(calls.any { it.startsWith("resolveMemcardSyncConflict") })
+            assertEquals(listOf(7L), page.conflicts!!.map { it.id })
+        }
+
+    @Test
+    fun resolveDropsTheRow() =
+        runTest {
+            api.conflicts = listOf(conflict(7), conflict(8))
+            val page = page()
+            page.loadConflicts()
+            runCurrent()
+
+            page.resolve(7, 0)
+            page.resolve(8, 2)
+            runCurrent()
+
+            assertTrue("resolveMemcardSyncConflict 7 true 0" in calls)
+            assertTrue("resolveMemcardSyncConflict 8 false 1" in calls)
+            assertEquals(emptyList<SyncConflict>(), page.conflicts)
+        }
+
+    @Test
+    fun keepAllResolvesEachAsLocal() =
+        runTest {
+            api.conflicts = listOf(conflict(7), conflict(8))
+            val page = page()
+            page.loadConflicts()
+            runCurrent()
+
+            page.keepAllLocal()
+            runCurrent()
+
+            assertTrue("resolveMemcardSyncConflict 7 true 0" in calls)
+            assertTrue("resolveMemcardSyncConflict 8 true 0" in calls)
+            assertEquals(emptyList<SyncConflict>(), page.conflicts)
+        }
 }

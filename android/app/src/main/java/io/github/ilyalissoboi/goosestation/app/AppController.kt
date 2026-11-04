@@ -79,6 +79,7 @@ enum class Screen(
     MemoryCards(SettingsEntry.MemoryCards),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
+    SyncConflicts,
     Game,
 }
 
@@ -604,6 +605,27 @@ object AppController : NativeCallbacks {
         if (page == SettingsEntry.Controllers) controllersPage.close()
         settingsEntry = page
         screen = Screen.Settings
+    }
+
+    // --- Memory card sync's conflicts ---
+
+    // Where the conflict screen was opened from, which it goes back to.
+    private var conflictsFrom = Screen.MemoryCards
+
+    /** Opens the conflict screen, from the Memory cards page or the library's badge, if the settings can open. */
+    fun openSyncConflicts() {
+        if ((screen != Screen.MemoryCards && screen != Screen.Library) || !settingsReady) return
+        conflictsFrom = screen
+        memcardSyncPage.loadConflicts()
+        memcardSyncStatus.refresh()
+        screen = Screen.SyncConflicts
+    }
+
+    /** Back from the conflict screen to where it was opened from. */
+    fun closeSyncConflicts() {
+        if (screen != Screen.SyncConflicts) return
+        memcardSyncStatus.refresh()
+        screen = conflictsFrom
     }
 
     // --- The Controllers page ([ControllersPage]) ---

@@ -6,9 +6,12 @@
 #     library next to the program, or into the app bundle's Frameworks on macOS. A copy of that archive
 #     placed in dep/emusync/ is used instead of downloading (builds without network, like the Flatpak).
 #   - Windows: dep/emusync/emusync.props (MSBuild); a CMake build on Windows runs without sync.
+#   - Android: the APK carries the library from emusync's .aar (android/app/build.gradle.kts), so nothing is
+#     downloaded here.
 # Anything else, -DUSE_EMUSYNC=OFF, or a download that fails: the program runs without sync.
 # -DEMUSYNC_LIBRARY=<file> uses a library built from emusync's source instead.
-# Keep EMUSYNC_VERSION in step with dep/emusync/emusync.props, dep/emusync/README.md and the Flatpak manifest.
+# Keep EMUSYNC_VERSION in step with dep/emusync/emusync.props, dep/emusync/README.md, the Flatpak manifest and
+# android/app/build.gradle.kts.
 
 option(USE_EMUSYNC "Memory card sync with emusync" ON)
 set(EMUSYNC_VERSION 0.3.0)
@@ -18,7 +21,7 @@ set(EMUSYNC_RUNTIME "")
 
 if(USE_EMUSYNC AND EMUSYNC_LIBRARY)
   set(EMUSYNC_RUNTIME "${EMUSYNC_LIBRARY}")
-elseif(USE_EMUSYNC AND NOT WIN32)
+elseif(USE_EMUSYNC AND NOT WIN32 AND NOT ANDROID)
   set(_emusync_package "")
   if(APPLE)
     set(_emusync_package macos-universal)

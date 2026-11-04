@@ -63,3 +63,8 @@
     public static void invalidate();
 }
 -keep class io.github.ilyalissoboi.goosestation.storage.NativeDocument { <fields>; }
+
+# emusync's Android library (memory card sync) has a lifecycle hook, SyncController.attachToAppLifecycle(), that the app
+# doesn't call; it needs androidx lifecycle-process, which the app doesn't have.
+-dontwarn androidx.lifecycle.ProcessLifecycleOwner
+-dontwarn androidx.lifecycle.ProcessLifecycleOwner$Companion

@@ -10,6 +10,7 @@
 #include "emu_thread.h"
 #include "http_downloader_android.h"
 #include "jni_util.h"
+#include "memcard_sync_bridge.h"
 
 #include "core/game_database.h"
 #include "core/game_list.h"
@@ -1219,6 +1220,11 @@ NATIVE_LIBRARY_FUNCTION(void, achievementsNetworkBack)(JNIEnv*, jobject)
 NATIVE_LIBRARY_FUNCTION(jboolean, isVulkanFailed)(JNIEnv*, jobject)
 {
   return AndroidHost::IsVulkanFailed() ? JNI_TRUE : JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, isMemcardSyncAvailable)(JNIEnv*, jobject)
+{
+  return MemcardSyncBridge::IsAvailable() ? JNI_TRUE : JNI_FALSE;
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)

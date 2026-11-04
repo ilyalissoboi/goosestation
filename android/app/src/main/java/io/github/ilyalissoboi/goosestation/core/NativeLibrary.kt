@@ -86,6 +86,9 @@ object NativeLibrary {
      */
     external fun isVulkanFailed(): Boolean
 
+    /** Whether memory card sync's library (emusync) loaded, so sync can run. From any thread. */
+    external fun isMemcardSyncAvailable(): Boolean
+
     /**
      * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game
      * Native)`, `Stretch To Fill` and `4:3`. Doesn't need [initialize].

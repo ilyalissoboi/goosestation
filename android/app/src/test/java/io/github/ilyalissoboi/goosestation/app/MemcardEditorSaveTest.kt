@@ -610,10 +610,24 @@ class MemcardEditorSaveTest {
             api.files[CRASH.path] = FakeCard(listOf(FakeSave("PULLED"))).bytes()
 
             step { editor.refresh() }
-            assertEquals(listOf("BASCUS-94900"), editor.pane(0).fake().saves.map { it.fileName })
+            assertEquals(
+                listOf("BASCUS-94900"),
+                editor
+                    .pane(0)
+                    .fake()
+                    .saves
+                    .map { it.fileName },
+            )
 
             step { editor.answer(false) }
-            assertEquals(listOf("PULLED"), editor.pane(0).fake().saves.map { it.fileName })
+            assertEquals(
+                listOf("PULLED"),
+                editor
+                    .pane(0)
+                    .fake()
+                    .saves
+                    .map { it.fileName },
+            )
         }
 
     @Test
@@ -631,7 +645,14 @@ class MemcardEditorSaveTest {
                 "Crash Bandicoot changed on this device since you opened it. Save over it?",
                 editor.ui!!.question!!.text,
             )
-            assertEquals("PULLED", FakeCard.of(api.files[CRASH.path])!!.saves.single().fileName)
+            assertEquals(
+                "PULLED",
+                FakeCard
+                    .of(api.files[CRASH.path])!!
+                    .saves
+                    .single()
+                    .fileName,
+            )
         }
 
     @Test
@@ -642,10 +663,23 @@ class MemcardEditorSaveTest {
             api.files[SHARED.path] = FakeCard(listOf(FakeSave("PULLED"))).bytes()
 
             step { editor.refresh() }
-            assertTrue(editor.pane(1).fake().saves.isEmpty())
+            assertTrue(
+                editor
+                    .pane(1)
+                    .fake()
+                    .saves
+                    .isEmpty(),
+            )
 
             step { editor.closePanel() }
-            assertEquals(listOf("PULLED"), editor.pane(1).fake().saves.map { it.fileName })
+            assertEquals(
+                listOf("PULLED"),
+                editor
+                    .pane(1)
+                    .fake()
+                    .saves
+                    .map { it.fileName },
+            )
         }
 
     @Test

@@ -251,9 +251,15 @@ std::vector<MemoryCardImage::FileInfo> MemoryCardImage::EnumerateFiles(const Dat
     const DirectoryFrame* next_df = df;
     while (next_df->next_block_number < (NUM_BLOCKS - 1) && fi.num_blocks < FRAMES_PER_BLOCK)
     {
+      // A deleted save's chain ends where another save has taken a block of it: that block isn't the deleted save's
+      // to undelete or clear. The save then reads shorter than its size, which UndeleteFile() refuses.
+      const DirectoryFrame* following = GetFramePtr<DirectoryFrame>(data, 0, next_df->next_block_number + 1);
+      if (fi.deleted && following->block_allocation_state != 0xA2 && following->block_allocation_state != 0xA3)
+        break;
+
       fi.num_blocks++;
       fi.block_mask |= static_cast<u16>(1u << (next_df->next_block_number + 1));
-      next_df = GetFramePtr<DirectoryFrame>(data, 0, next_df->next_block_number + 1);
+      next_df = following;
     }
 
     if (fi.num_blocks == FRAMES_PER_BLOCK)

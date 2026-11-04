@@ -71,6 +71,7 @@ private const val MENU_TRIGGERS =
  * Back go back ([onBack]); Back during a capture cancels it ([onCancelCapture]), as B is captured like any button.
  * After the bindings, the Hotkeys section lists the controller's [hotkeys], each a Select chord; a row's A or Enter
  * captures the button to hold Select with ([onCaptureHotkey]), and Clear and Undo work as on a binding.
+ * Port 1's inputs show as their PlayStation glyphs, unless not [glyphs] (a type outside [GLYPH_TYPES]): then as words.
  */
 @Composable
 fun ControllersScreen(
@@ -92,7 +93,7 @@ fun ControllersScreen(
     onBack: () -> Unit,
     hotkeys: List<PadBinding> = emptyList(),
     onCaptureHotkey: (String) -> Unit = {},
-    glyphs: Boolean = false,
+    glyphs: Boolean = true,
 ) {
     val first = remember { FocusRequester() }
     var focusInPage by remember { mutableStateOf(false) }

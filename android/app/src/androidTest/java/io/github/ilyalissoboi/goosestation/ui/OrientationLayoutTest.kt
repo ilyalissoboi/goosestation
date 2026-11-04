@@ -295,11 +295,28 @@ class OrientationLayoutTest {
         limit: Int = 60,
     ) {
         repeat(limit) {
-            if (focusedHas(text)) return
+            if (focused()) return
             press(key)
             assertFocusedInView()
+    ) = pressUntil(key, "\"$text\"", limit) { focusedHas(text) }
+
+    /**
+     * Presses [key] until the Controllers page's row for the input [name] has the focus, checking each one it reaches
+     * is in view: found by its glyph's description with [glyphs], else by its words.
+     */
+    private fun pressUntilInput(
+        key: Key,
+        name: String,
+        glyphs: Boolean,
+    ) = pressUntil(key, name) { if (glyphs) focusedDescribedAs(name) else focusedHas(name) }
+
+    private fun pressUntil(
+        key: Key,
+        what: String,
+        limit: Int = 60,
+        focused: () -> Boolean,
         }
-        if (!focusedHas(text)) fail("$key never focused \"$text\"")
+        if (!focused()) fail("$key never focused $what")
     }
 
     private fun focusedText(): String = rule.onNode(isFocused()).fetchSemanticsNode().mergedText()
@@ -932,7 +949,13 @@ class OrientationLayoutTest {
     }
 
     @Test
-    fun controllersWithTwoPadsAndEveryInput() {
+    fun controllersWithTwoPadsAndEveryInput() = controllersWithTwoPads(glyphs = true)
+
+    // A controller type without glyphs: the inputs' names as words.
+    @Test
+    fun controllersWithTwoPadsAndEveryInputAsText() = controllersWithTwoPads(glyphs = false)
+
+    private fun controllersWithTwoPads(glyphs: Boolean) {
         eachConfig({
             var selected by remember { mutableStateOf(LONG_PAD.descriptor) }
             ControllersScreen(
@@ -968,9 +991,10 @@ class OrientationLayoutTest {
             assertTextsLaidOut()
             assertTrue(focusedHas(LONG_PAD.name))
 
-            pressUntilFocused(Key.DirectionDown, "Right Stick Right")
+            pressUntilInput(Key.DirectionDown, "Right Stick Right", glyphs)
             press(Key.DirectionRight)
             assertTrue(focusedHas("Clear"))
+                glyphs = glyphs,
             assertFocusedInView()
             press(Key.DirectionLeft)
             pressUntilFocused(Key.DirectionDown, "Analog mode")
@@ -1021,7 +1045,12 @@ class OrientationLayoutTest {
         rule.onAllNodes(isFocused() and hasContentDescription(name)).fetchSemanticsNodes().isNotEmpty()
 
     @Test
-    fun controllersWithOnePadAndNone() {
+    fun controllersWithOnePadAndNone() = onePadThenNone(glyphs = true)
+
+    @Test
+    fun controllersWithOnePadAndNoneAsText() = onePadThenNone(glyphs = false)
+
+    private fun onePadThenNone(glyphs: Boolean) {
         val pads = mutableStateOf(listOf(PAD))
         eachConfig({
             ControllersScreen(
@@ -1059,8 +1088,14 @@ class OrientationLayoutTest {
         }
     }
 
+                glyphs = glyphs,
     @Test
-    fun aCapturePromptFitsAndStaysInView() {
+    fun aCapturePromptFitsAndStaysInView() = capturePrompt(glyphs = true)
+
+    @Test
+    fun aCapturePromptFitsAndStaysInViewAsText() = capturePrompt(glyphs = false)
+
+    private fun capturePrompt(glyphs: Boolean) {
         val capturing: MutableState<String?> = mutableStateOf(null)
         eachConfig({
             ControllersScreen(
@@ -1083,7 +1118,7 @@ class OrientationLayoutTest {
             )
         }) {
             // The row that's lowest on screen once Down has scrolled to it: a capture there grows it at the bottom.
-            pressUntilFocused(Key.DirectionDown, "Right Stick Down")
+            pressUntilInput(Key.DirectionDown, "Right Stick Down", glyphs)
             press(Key.Enter)
             assertTextsLaidOut()
             assertTrue(focusedHas("Press the new button for Right Stick Down… Back cancels (5)"))
@@ -1098,6 +1133,7 @@ class OrientationLayoutTest {
         eachConfig({
             LibraryScreen(
                 games = emptyList(),
+                glyphs = glyphs,
                 gridView = true,
                 banners = emptyList(),
                 message = null,

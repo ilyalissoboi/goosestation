@@ -37,8 +37,9 @@ source for it. When a value changes, change `tokens.json` and the implementation
 
 The Android app's screens, in [`docs/design-system/screenshots/`](design-system/screenshots/): rendered from the
 Compose code, off a device, at a handheld's 960 x 540 dp in landscape (the AYN Thor's) and a phone's 411 x 891 dp in
-portrait. The pause menu and its slot panel are from the emulator, a phone in landscape (914 x 411 dp), over Ace
-Combat 3. The orange outline is the focus, where a controller is.
+portrait. The Controllers page, with its PlayStation glyphs, is the page's composable alone at 960 x 540 dp too,
+rendered on the emulator. The pause menu and its slot panel are from the emulator, a phone in landscape (914 x 411
+dp), over Ace Combat 3. The orange outline is the focus, where a controller is.
 
 | | |
 | --- | --- |

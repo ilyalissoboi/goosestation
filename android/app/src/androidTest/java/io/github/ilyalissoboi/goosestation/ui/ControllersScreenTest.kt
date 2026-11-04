@@ -95,6 +95,7 @@ class ControllersScreenTest {
         undoFor: String? = null,
         labels: Map<String, String> = emptyMap(),
         hotkeys: List<PadBinding> = emptyList(),
+        // Words, which most tests find the rows by, unless a test asks for the glyphs the page shows by default.
         glyphs: Boolean = false,
     ) {
         this.controllers = controllers

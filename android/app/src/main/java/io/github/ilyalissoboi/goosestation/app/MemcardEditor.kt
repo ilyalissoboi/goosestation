@@ -11,7 +11,9 @@ import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.MemcardContents
 import io.github.ilyalissoboi.goosestation.core.MemcardFile
+import io.github.ilyalissoboi.goosestation.core.MemcardRenameCheck
 import io.github.ilyalissoboi.goosestation.core.MemcardSave
+import io.github.ilyalissoboi.goosestation.core.MemcardWriteOutcome
 import io.github.ilyalissoboi.goosestation.storage.DocumentRead
 import io.github.ilyalissoboi.goosestation.storage.Documents
 import kotlinx.coroutines.CoroutineDispatcher
@@ -79,6 +81,18 @@ class EditorQuestion(
     val safe: String = MemcardEditorWords.CANCEL,
 )
 
+/**
+ * A save's panel, open over the editor: the save at [firstBlock] on [pane]'s card, with its actions, or its rename
+ * form while [renaming], holding what was typed ([title] and [fileName], null until the form is sent once).
+ */
+data class SavePanel(
+    val pane: Int,
+    val firstBlock: Int,
+    val renaming: Boolean,
+    val title: String? = null,
+    val fileName: String? = null,
+)
+
 /** What the editor's screen shows: the [cards] to pick from, the card in each of the two [panes], and the rest. */
 data class MemcardEditorUi(
     val cards: List<MemcardFile>,
@@ -87,6 +101,8 @@ data class MemcardEditorUi(
     val message: EditorMessage?,
     val question: EditorQuestion?,
     val working: Boolean,
+    val panel: SavePanel? = null,
+    val renameError: String? = null,
 )
 
 /** What the editor's screen can ask of it. */
@@ -134,6 +150,32 @@ interface MemcardEditorActions {
     fun choose(index: Int)
 
     fun clearMessage()
+
+    /** Opens [save]'s panel. */
+    fun openSave(
+        pane: Int,
+        save: MemcardSave,
+    )
+
+    /** Turns the open panel into its rename form. */
+    fun startRename()
+
+    fun closePanel()
+
+    /** Renames the open panel's save to [title] and [fileName], by the core's rules, asking first about any warning. */
+    fun rename(
+        title: String,
+        fileName: String,
+    )
+
+    /** Writes every edited card to its file. */
+    fun save()
+
+    /** Drops every edit, asking first. */
+    fun discard()
+
+    /** B or Back: closes the question or the panel; else, asking first about unsaved changes, calls [leave]. */
+    fun back(leave: () -> Unit)
 }
 
 /**
@@ -149,6 +191,7 @@ class MemcardEditor(
     private val api: MemcardEditorApi,
     private val documents: Documents,
     private val syncOn: () -> Boolean,
+    private val onSaved: () -> Unit = {},
 ) : MemcardEditorActions {
     private var files by mutableStateOf<List<MemcardFile>?>(null)
     private val loaded = mutableStateMapOf<String, EditorCard>()
@@ -157,12 +200,28 @@ class MemcardEditor(
     private var message by mutableStateOf<EditorMessage?>(null)
     private var question by mutableStateOf<EditorQuestion?>(null)
     private var working by mutableStateOf(false)
+    private var panel by mutableStateOf<SavePanel?>(null)
+    private var renameError by mutableStateOf<String?>(null)
+    private var games = emptyList<MemcardGame>()
+
+    /** How many card files exist, for the Memory cards page ([loadCount]), or null while they're counted. */
+    var cardCount by mutableStateOf<Int?>(null)
+        private set
 
     /** What the screen shows, or null until the cards are listed. */
     val ui: MemcardEditorUi?
         get() =
             files?.let { cards ->
-                MemcardEditorUi(cards, shown.map { it?.let(loaded::get) }, changes, message, question, working)
+                MemcardEditorUi(
+                    cards,
+                    shown.map { it?.let(loaded::get) },
+                    changes,
+                    message,
+                    question,
+                    working,
+                    panel,
+                    renameError,
+                )
             }
 
     /** Lists the cards for [games], forgetting any edits, and shows the first two whose files exist. */
@@ -172,8 +231,10 @@ class MemcardEditor(
         changes = 0
         message = null
         question = null
+        panel = null
+        this.games = MemcardGames.of(games)
         act {
-            val cards = withContext(core) { api.listCards(MemcardGames.of(games)) }
+            val cards = withContext(core) { api.listCards(this@MemcardEditor.games) }
             val first = (cards.filter { it.exists } + cards.filterNot { it.exists }).take(2)
             for (card in first) loaded[card.path] = load(card)
             shown = first.map { it.path } + List(2 - first.size) { null }
@@ -338,6 +399,223 @@ class MemcardEditor(
         message = null
     }
 
+    override fun openSave(
+        pane: Int,
+        save: MemcardSave,
+    ) {
+        if (working || card(pane) == null) return
+        panel = SavePanel(pane, save.firstBlock, renaming = false)
+        renameError = null
+    }
+
+    override fun startRename() {
+        panel = panel?.copy(renaming = true)
+        renameError = null
+    }
+
+    override fun closePanel() {
+        panel = null
+        renameError = null
+    }
+
+    override fun rename(
+        title: String,
+        fileName: String,
+    ) {
+        val open = panel ?: return
+        val card = card(open.pane) ?: return
+        val current = card.current ?: return
+        val save = card.contents?.saves?.firstOrNull { it.firstBlock == open.firstBlock } ?: return
+        val newTitle = title.takeIf { it != save.title }
+        val newName = fileName.takeIf { it != save.fileName }
+        if (newTitle == null && newName == null) return closePanel()
+        act(keepPanel = true) {
+            val check = withContext(core) { api.checkRename(current, save.firstBlock, newTitle, newName) }
+            panel = open.copy(title = title, fileName = fileName)
+            renameError =
+                if (check.titleError == 0 && check.nameError == MemcardRenameCheck.NAME_DUPLICATE) {
+                    MemcardEditorWords.nameTaken(fileName)
+                } else {
+                    renameErrorOf(check)
+                }
+            if (renameError != null) return@act
+            val warnings =
+                listOfNotNull(
+                    MemcardEditorWords.TITLE_NOT_SHOWN_EXACTLY.takeIf {
+                        newTitle != null && check.titleNotShownExactly
+                    },
+                    newName?.takeIf { check.nameNotStandard }?.let(MemcardEditorWords::nameNotStandard),
+                    newName?.takeIf { syncOn() && card.knownToSync }?.let {
+                        MemcardEditorWords.renameSyncs(
+                            save.fileName,
+                            it,
+                        )
+                    },
+                )
+            val doRename: suspend () -> Unit = {
+                withContext(core) { api.rename(current, save.firstBlock, newTitle, newName) }
+                    ?.let { apply(card.file.path, it) }
+                closePanel()
+            }
+            if (warnings.isEmpty()) {
+                doRename()
+            } else {
+                ask(
+                    EditorQuestion(
+                        (warnings + MemcardEditorWords.RENAME_ANYWAY).joinToString("\n\n"),
+                        RENAME,
+                        { act(keepPanel = true) { doRename() } },
+                    ),
+                )
+            }
+        }
+    }
+
+    override fun save() = saveThen {}
+
+    override fun discard() {
+        if (working || changes == 0) return
+        ask(
+            EditorQuestion(
+                MemcardEditorWords.DISCARD_CHANGES,
+                DISCARD,
+                { act { reloadAll() } },
+                safe = MemcardEditorWords.KEEP_EDITING,
+            ),
+        )
+    }
+
+    override fun back(leave: () -> Unit) {
+        if (working) return
+        when {
+            question != null -> question = null
+            panel != null -> closePanel()
+            changes > 0 ->
+                ask(
+                    EditorQuestion(
+                        MemcardEditorWords.SAVE_CHANGES,
+                        DISCARD,
+                        {
+                            act {
+                                reloadAll()
+                                leave()
+                            }
+                        },
+                        choices = listOf(QuestionChoice(SAVE, danger = false) { saveThen(leave) }),
+                        safe = MemcardEditorWords.KEEP_EDITING,
+                    ),
+                )
+            else -> leave()
+        }
+    }
+
+    /**
+     * Reads the card list again, and each card without edits from its file, which a sync or the data folder may have
+     * changed. A card with edits is left as it is: Save asks before writing over a file that changed.
+     */
+    fun refresh() {
+        if (working || files == null) return
+        act(keepPanel = true, quiet = true) {
+            val cards = withContext(core) { api.listCards(games) }
+            for ((path, card) in loaded.toMap()) {
+                if (card.edited) continue
+                val file = cards.firstOrNull { it.path == path } ?: card.file
+                val bytes = withContext(core) { api.readCard(path) }
+                if (!sameBytes(bytes, card.onFile)) loaded[path] = load(file)
+            }
+            files = cards
+            val open = panel
+            if (open != null && card(open.pane)?.contents?.saves?.none { it.firstBlock == open.firstBlock } != false) {
+                closePanel()
+            }
+        }
+    }
+
+    /** Counts the card files there are for [games], into [cardCount]. */
+    fun loadCount(games: List<GameEntry>) {
+        cardCount = null
+        val listed = MemcardGames.of(games)
+        scope.launch { cardCount = withContext(core) { api.listCards(listed).count { it.exists } } }
+    }
+
+    // Writes every edited card, then, once they're all written, says so and calls [after].
+    private fun saveThen(after: () -> Unit) {
+        if (loaded.values.none { it.edited }) return after()
+        act { writeEdited(emptySet(), after) }
+    }
+
+    private suspend fun writeEdited(
+        force: Set<String>,
+        after: () -> Unit,
+    ) {
+        val changed = mutableListOf<EditorCard>()
+        var failed = false
+        // In the list's order, so a question names them that way.
+        val order = files.orEmpty().map { it.path }
+        for (card in loaded.values.filter { it.edited }.sortedBy { order.indexOf(it.file.path) }) {
+            val current = card.current ?: continue
+            val path = card.file.path
+            val result = withContext(core) { api.writeCard(path, current, card.onFile, force = path in force) }
+            when (result.outcome) {
+                MemcardWriteOutcome.Saved ->
+                    loaded[path] =
+                        EditorCard(card.file, current, current, card.contents, card.knownToSync)
+                MemcardWriteOutcome.Changed -> changed += card
+                MemcardWriteOutcome.Busy -> {
+                    message = EditorMessage(MemcardEditorWords.syncBusy(card.file.name), error = true)
+                    failed = true
+                }
+                MemcardWriteOutcome.Failed -> {
+                    message = EditorMessage(MemcardEditorWords.cantSave(card.file.name, result.error), error = true)
+                    failed = true
+                }
+            }
+        }
+        if (changed.isNotEmpty()) {
+            val paths = changed.map { it.file.path }.toSet()
+            ask(
+                EditorQuestion(
+                    MemcardEditorWords.changedOnDevice(changed.map { it.file.name }),
+                    MemcardEditorWords.saveOver(changed.size),
+                    { act { writeEdited(paths, after) } },
+                ),
+            )
+            return
+        }
+        if (failed) return
+        changes = 0
+        message = EditorMessage(MemcardEditorWords.SAVED, error = false)
+        val cards = withContext(core) { api.listCards(games) }
+        files = cards
+        for ((path, card) in loaded.toMap()) {
+            cards.firstOrNull { it.path == path }?.let {
+                loaded[path] = EditorCard(it, card.onFile, card.current, card.contents, card.knownToSync)
+            }
+        }
+        onSaved()
+        after()
+    }
+
+    // Every card shown, as its file is now: the edits dropped.
+    private suspend fun reloadAll() {
+        for ((path, card) in loaded.toMap()) loaded[path] = load(card.file)
+        changes = 0
+    }
+
+    private fun renameErrorOf(check: MemcardRenameCheck): String? =
+        when (check.titleError) {
+            MemcardRenameCheck.TITLE_UNENCODABLE -> MemcardEditorWords.TITLE_UNENCODABLE
+            MemcardRenameCheck.TITLE_TOO_LONG -> MemcardEditorWords.titleTooLong(check.singleByteTitle)
+            else ->
+                when (check.nameError) {
+                    MemcardRenameCheck.NAME_EMPTY -> MemcardEditorWords.NAME_EMPTY
+                    MemcardRenameCheck.NAME_TOO_LONG -> MemcardEditorWords.NAME_TOO_LONG
+                    MemcardRenameCheck.NAME_INVALID -> MemcardEditorWords.NAME_INVALID
+                    MemcardRenameCheck.NAME_DUPLICATE -> null
+                    else -> null
+                }
+        }
+
     private fun card(pane: Int): EditorCard? = shown.getOrNull(pane)?.let(loaded::get)
 
     // Asks before removing saves from the pane's card: [edit] makes the new card from its bytes.
@@ -400,11 +678,17 @@ class MemcardEditor(
         changes = if (loaded.values.any { it.edited }) changes + 1 else 0
     }
 
-    // Acts: runs [block] as the one action under way, unless one already is; the message goes first.
-    private fun act(block: suspend () -> Unit) {
+    // Acts: runs [block] as the one action under way, unless one already is. The message goes first, unless [quiet],
+    // and so does the save's panel, unless [keepPanel].
+    private fun act(
+        keepPanel: Boolean = false,
+        quiet: Boolean = false,
+        block: suspend () -> Unit,
+    ) {
         if (working) return
         working = true
-        message = null
+        if (!quiet) message = null
+        if (!keepPanel) closePanel()
         scope.launch {
             try {
                 block()
@@ -420,6 +704,9 @@ class MemcardEditor(
         const val REPLACE = "Replace"
         const val DELETE = "Delete"
         const val ERASE = "Erase"
+        const val RENAME = "Rename"
+        const val DISCARD = "Discard"
+        const val SAVE = "Save"
     }
 }
 

@@ -732,6 +732,79 @@ class OrientationLayoutTest {
     }
 
     @Test
+    fun theMemoryCardEditorFitsWithLongNames() {
+        val long = MemcardSamples.file("The Legend of the Extraordinarily Long-Named Adventure: Director's Cut")
+        val saves =
+            (1..15).map { n ->
+                // 32 characters, as the core shows a full-width title: in plain letters.
+                MemcardSamples.save(n, "BASLUS-0${1000 + n}ABCDEFG", "CASTLEVANIA SYMPHONY OF THE NIGHT".take(32))
+            }
+        val full = MemcardSamples.card(long, saves)
+        eachConfig({
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(left = full, right = MemcardSamples.SHARED_CARD, changes = 3),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }) {
+            assertTextsLaidOut(inView = true)
+            assertFocusedInEditor()
+            reachFormat()
+            assertTextsLaidOut(inView = true)
+            // Up to the header's buttons, Save or Discard, whichever is nearer.
+            repeat(30) {
+                if (focusedHas("Save") || focusedHas("Discard")) return@repeat
+                press(Key.DirectionUp)
+                assertFocusedInEditor()
+            }
+            assertTrue("didn't reach the header", focusedHas("Save") || focusedHas("Discard"))
+            pressUntilFocusedInEditor(Key.DirectionLeft, "Discard")
+            // R1 goes to the other card than the last one focused: each card's picker in turn.
+            val pickers =
+                (1..2).map {
+                    press(Key.ButtonR1)
+                    assertFocusedInEditor()
+                    focusedText()
+                }
+            assertTrue(
+                "R1 focused $pickers",
+                pickers.any { "Shared card 1" in it } && pickers.any { "The Legend" in it },
+            )
+            if (!focusedHas("Shared card 1")) press(Key.ButtonR1)
+            reachFormat()
+        }
+    }
+
+    // The memory card editor's focus is in view: in its page's one scroll.
+    private fun assertFocusedInEditor() = assertFocusedInView()
+
+    private fun pressUntilFocusedInEditor(
+        key: Key,
+        text: String,
+    ) {
+        repeat(30) {
+            if (focusedHas(text)) return
+            press(key)
+            assertFocusedInEditor()
+        }
+        if (!focusedHas(text)) fail("$key never focused \"$text\"")
+    }
+
+    // Down through a memory card's saves lands on its nearest action; Format is after it, beside or under as they wrap.
+    private fun reachFormat() {
+        pressUntilFocusedInEditor(Key.DirectionDown, "Import")
+        val seen = mutableListOf(focusedText())
+        repeat(3) {
+            if (!focusedHas("Format")) press(Key.DirectionRight)
+            seen += focusedText()
+            if (!focusedHas("Format")) press(Key.DirectionDown)
+            seen += focusedText()
+        }
+        assertTrue("didn't reach Format: $seen", focusedHas("Format"))
+        assertFocusedInEditor()
+    }
+
+    @Test
     fun memoryCardsWithALongAddressAndError() {
         eachConfig({
             MemcardSyncScreen(

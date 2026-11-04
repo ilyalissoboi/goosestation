@@ -14,11 +14,16 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
@@ -57,6 +62,7 @@ import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
+import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertThrows
@@ -300,6 +306,37 @@ class FocusAuditTest {
         }
         rule.assertControllerReady()
         press(Key.ButtonA)
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardEditor() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(changes = 1),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardEditorNarrow() {
+        show {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 891.dp))) {
+                MemcardEditorScreen(ui = MemcardSamples.ui(), actions = RecordingEditorActions(), onLeave = {})
+            }
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardEditorPickerOpen() {
+        show { MemcardEditorScreen(ui = MemcardSamples.ui(), actions = RecordingEditorActions(), onLeave = {}) }
+        press(Key.DirectionUp)
+        press(Key.Enter)
+        rule.onNodeWithTag(CHOICE_LIST).assertExists()
         rule.assertControllerReady()
     }
 

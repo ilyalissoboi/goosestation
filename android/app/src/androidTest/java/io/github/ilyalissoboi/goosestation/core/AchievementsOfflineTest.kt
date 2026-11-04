@@ -7,6 +7,7 @@ import android.graphics.SurfaceTexture
 import android.os.ParcelFileDescriptor
 import android.view.Surface
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.ACHIEVEMENT_ID
 import io.github.ilyalissoboi.goosestation.core.FakeRetroAchievements.Companion.ACHIEVEMENT_TITLE
@@ -37,6 +38,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * turns it off). Skipped without the emulator's /sdcard/GooseTest bios/ps-30j.bin and games/padtest.psexe and
  * "Pad Test #1 (100%).cue" and ".bin" (docs/android.md).
  */
+@LargeTest
+@BootsGames
 @RunWith(AndroidJUnit4::class)
 class AchievementsOfflineTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -199,11 +202,13 @@ class AchievementsOfflineTest {
     // Review Focus 3: records are only ever sent as their own user.
     @Test
     fun anotherAccountsRecordsWait() {
-        seed(unlockRecord(user = "swan"))
+        // With one of this user's too: the two would go together, so once this one is delivered, the other's would be.
+        // The other user's goes first in the queue, so it would be sent first: after this user's, the check would race.
+        seed(unlockRecord(user = "swan"), unlockRecord(id = OWN_ID))
         initialize(SIGNED_IN_SETTINGS)
 
-        Thread.sleep(5000)
-        assertTrue(server.awards().isEmpty())
+        waitFor("this user's record") { sent.isNotEmpty() && queued().size == 1 }
+        assertEquals(listOf(OWN_ID.toString()), server.awards().map { it["a"] })
         assertEquals("swan", queued().single().getString("user"))
     }
 
@@ -440,8 +445,12 @@ class AchievementsOfflineTest {
 
         val before = server.awards().size
         server.unreachable = false
-        // rcheevos waits up to 120 s between retries.
-        waitFor("rcheevos's retry", 150) { server.awards().drop(before).any { it.containsKey("o") } }
+        // rcheevos waits up to 120 s between retries: its clock is moved on instead, at each look, in case a retry
+        // was still on its way to the unreachable server and was put off again.
+        waitFor("rcheevos's retry", 30) {
+            NativeLibrary.skipAchievementsRetryWaitForTest()
+            server.awards().drop(before).any { it.containsKey("o") }
+        }
         waitFor("the queue to empty") { queued().isEmpty() }
         Thread.sleep(2000)
         assertEquals(AchievementsAccount.SIGNED_IN, NativeLibrary.getAchievementsAccount().state)
@@ -532,6 +541,7 @@ class AchievementsOfflineTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
+            TestRenderer.apply()
             NativeLibrary.startGame(game.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             if (ready) waitFor("the set") { NativeLibrary.getGameAchievements().status == GameAchievements.READY }
@@ -617,6 +627,10 @@ class AchievementsOfflineTest {
 
     private companion object {
         const val INSTALL_ID = "test-install"
+
+        /** An achievement other than [ACHIEVEMENT_ID], which the fake awards too: for a second record. */
+        const val OWN_ID = 102
+
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val PAD_TEST_DISC = "Pad Test #1 (100%)"
 

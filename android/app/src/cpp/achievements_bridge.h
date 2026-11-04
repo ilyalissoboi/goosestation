@@ -118,4 +118,8 @@ void FetchLeaderboard(u32 id, s32 request);
 /// For the instrumented tests only: the server rcheevos talks to, or the real one with an empty host.
 void SetServerForTest(const std::string& host);
 
+/// For the instrumented tests only: moves the current client's clock on by rcheevos's longest wait between retries,
+/// so a send it scheduled to retry goes at the core's next idle update instead of up to two minutes later.
+void SkipRetryWaitForTest();
+
 } // namespace AchievementsBridge

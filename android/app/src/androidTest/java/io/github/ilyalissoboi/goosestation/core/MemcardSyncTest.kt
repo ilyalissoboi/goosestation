@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import org.junit.Assert.assertTrue
@@ -13,6 +14,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /** Memory card sync's library in the APK: each test runs in its own process. */
+@LargeTest
 @RunWith(AndroidJUnit4::class)
 class MemcardSyncTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext

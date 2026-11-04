@@ -103,6 +103,35 @@ out.
 
 The image uses 4 KB pages, like most devices. `libgoosestation.so` is also linked to load on 16 KB-page devices.
 
+### The test emulators
+
+The instrumented tests run on two emulators of their own, so `goose-arm64` stays as it is for checks by hand.
+`android/scripts/create-test-avd.sh` makes them once, `goose-test-1` and `goose-test-2`, from the same system image:
+
+| Setting (`config.ini`) | Value | Why |
+| --- | --- | --- |
+| `hw.gpu.enabled`, `hw.gpu.mode` | `yes`, `host` | Drawn on the Mac's GPU, where `goose-arm64` (`hw.gpu.enabled=no`) draws in software |
+| `hw.lcd.width`, `hw.lcd.height`, `hw.lcd.density` | 1080, 2400, 420 | `goose-arm64`'s (a Pixel 7's): the tests that don't force a size of their own were written at it |
+| `hw.cpu.ncore`, `hw.ramSize` | 4, 3072M | |
+| `fastboot.forceColdBoot` | `yes` | Nothing is saved to a snapshot, so each boot is cold |
+
+`android/scripts/start-test-emulators.sh` starts both without a window (`-no-window -no-boot-anim
+-no-snapshot-save -no-audio -gpu host`), `goose-test-1` as `emulator-5580` and `goose-test-2` as `emulator-5582`,
+waits for them to boot and turns their animations off. If an emulator doesn't boot on the host's GPU without a window,
+it starts it again with `-gpu swiftshader_indirect`, and says so. On an M2 Pro, both boot on the GPU in about 30 s
+(`GLES: ... Android Emulator OpenGL ES Translator (Apple M2 Pro), OpenGL ES 3.0 (4.1 Metal - 90.5)` in `adb shell
+dumpsys SurfaceFlinger`). Stop them with `adb -s emulator-5580 emu kill` and `adb -s emulator-5582 emu kill`.
+
+On the host's GPU, the core's Vulkan renderer runs (`Using Vulkan GPU 'Goldfish GFXStream (Apple M2 Pro)'`), and
+`Automatic` picks it, so the tests that boot padtest run under Vulkan there, where `goose-arm64` runs them under OpenGL
+ES. The core's OpenGL ES renderer can't start on the host's GPU: the guest gets OpenGL ES 3.0 (the emulator's Metal
+translator), and the core needs 3.1 ("OpenGL renderer unavailable"); with `-feature GuestAngle`, ANGLE has no EGL
+config for it (`eglChooseConfig() failed`). OpenGL ES runs with `-gpu swiftshader_indirect`, as `goose-arm64` draws
+(ANGLE over SwiftShader, OpenGL ES 3.1): `run-instrumented-tests.sh full` boots the games there under OpenGL ES (see
+"Testing the app"), and `GOOSE_TEST_GPU=swiftshader_indirect android/scripts/start-test-emulators.sh` starts both
+emulators so. With AVD names as arguments, the script starts only those. It takes an emulator already on 5580 or 5582
+as one of its own only if it runs that AVD, and `create-test-avd.sh` won't make an AVD again while it's running.
+
 ## Dependencies
 
 `scripts/deps/build-dependencies-android.sh` builds the core's dependencies for arm64-v8a, API 29, with the NDK. It
@@ -194,6 +223,41 @@ cd android
 ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest   # instrumented tests, in app/src/androidTest
 ```
 
+`android/scripts/run-instrumented-tests.sh` runs the instrumented tests on the two test emulators (see "The test
+emulators" above) at once, half the suite on each:
+
+```bash
+android/scripts/start-test-emulators.sh
+GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh quick   # on every change
+GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh full    # before a pull request
+```
+
+- **quick** leaves out the classes tagged `@LargeTest` (`androidx.test.filters.LargeTest`): `OrientationLayoutTest`,
+  `AchievementsOfflineTest` and the `MemcardSync*` classes (no other class takes over a minute; tag one that comes
+  to). It's the runner's `notAnnotation=androidx.test.filters.LargeTest`. **full** runs every test, then the classes
+  that boot a game (tagged `@BootsGames`: `GameCallsTest`, `AchievementsSignInTest`, `AchievementsOfflineTest` and
+  `SettingsSetupTest`) once more under OpenGL ES, which the host's GPU can't run (see "The test emulators"): it
+  restarts `goose-test-2` with `-gpu swiftshader_indirect`, runs them there unsharded under the Orchestrator with the
+  runner argument `gooseRenderer=OpenGL` (each test writes `[GPU] Renderer = OpenGL` before it boots padtest:
+  `core/TestRenderer.kt`), checks the log has `Created an OpenGL ES context` and no Vulkan device, and puts
+  `goose-test-2` back on the host's GPU. full won't run without `GOOSE_TEST_DATA`'s BIOS, so most core tests can't
+  skip in it.
+- Each emulator runs one shard (`-Pandroid.testInstrumentationRunnerArguments.numShards=2` and `shardIndex`), with its
+  own `ANDROID_SERIAL`, in two parts: the `ui` package's tests, which don't start the core, in one process without the
+  Orchestrator (`-Pgoose.orchestrator=false`), then the rest under it. Each part's results are under
+  `app/build/outputs/androidTest-results/shard<N>-<part>` (`-Pgoose.testResults`), its log in `$TMPDIR`; the script
+  prints the counts and every failure, and exits non-zero on one.
+- It only runs on emulators (`GOOSE_TEST_SERIALS`, by default `emulator-5580 emulator-5582`), never a phone or
+  handheld that's plugged in.
+- `GOOSE_TEST_DATA` is a folder laid out as `/sdcard/GooseTest`, pushed to each emulator: `bios/ps-30j.bin`,
+  `games/padtest.psexe` and padtest's disc image, `games/Pad Test #1 (100%).cue` and `.bin`. Here it's
+  `~/work/goose-test-data`: the BIOS is a dump of a Japanese v3.0 one, `padtest.psexe` is
+  `extras/padtest/padtest.psexe`, and the disc image is made from it as the CUE/BIN row of Plan 2's results describes
+  ("Results on the emulator"). `full` won't start unless all four are there, since a test missing one is skipped
+  rather than failed. Without the folder (quick only) just `extras/padtest/padtest.psexe` is pushed, and the tests
+  that need the BIOS are skipped.
+- The tests run with animations off (`testOptions.animationsDisabled`).
+
 ```bash
 ./gradlew ktlintCheck    # the Kotlin layout rules, in android/.editorconfig; ktlintFormat fixes what it can
 ./gradlew check          # ktlintCheck, Android Lint, checkNoWindowDialogs and the JVM tests
@@ -207,7 +271,8 @@ dependency prefix into `~/deps-android` (cached by the script's hash and the NDK
 has no secrets, and isn't part of a release.
 
 The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
-can only be initialized once per process). Tests that need a document tree build one in `TestDocumentsProvider`, a
+can only be initialized once per process); with `-Pgoose.orchestrator=false` they share one, which only the `ui`
+package's tests can, and each must leave nothing behind for the next. Tests that need a document tree build one in `TestDocumentsProvider`, a
 `DocumentsProvider` in the debug build only (`app/src/debug`), over `files/test-documents`. It's disabled until a
 test enables it, and shares the app's UID, so the app reads it without a grant.
 
@@ -779,7 +844,9 @@ entries, with switches for an unreachable server, an outage page, a refused unlo
 allow cleartext to `127.0.0.1` for it (`src/debug/res/xml/network_security_config.xml`), release builds don't. A
 PS-EXE can't be hashed, so `NativeLibrary.setAchievementsGameHashForTest` gives padtest the fake's hash; the hardcore tests boot
 padtest's disc image (`/sdcard/GooseTest/games/Pad Test #1 (100%).cue` and `.bin`), as a PS-EXE boot turns hardcore
-off. The store's own tests are in `common-tests` (`AchievementsOfflineStore.*`).
+off. rcheevos waits up to two minutes between retries of a send; `NativeLibrary.skipAchievementsRetryWaitForTest`
+moves its clock on, so the test of a retry doesn't wait for it (debug builds only). The store's own tests are in `common-tests`
+(`AchievementsOfflineStore.*`).
 
 ### Memory card sync
 

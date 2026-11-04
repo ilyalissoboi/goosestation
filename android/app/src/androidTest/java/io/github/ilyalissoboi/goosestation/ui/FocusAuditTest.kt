@@ -375,8 +375,14 @@ class FocusAuditTest {
     }
 
     @Test
-    fun controllersWithTwo() {
-        showControllers(PADS)
+    fun controllersWithTwo() = controllersWithTwo(glyphs = true)
+
+    // A controller type without glyphs: the inputs' names as words.
+    @Test
+    fun controllersWithTwoAsText() = controllersWithTwo(glyphs = false)
+
+    private fun controllersWithTwo(glyphs: Boolean) {
+        showControllers(PADS, glyphs)
         rule.assertControllerReady()
 
         // The controllers to pick from, open under the row.
@@ -698,25 +704,28 @@ class FocusAuditTest {
             )
         }
 
-    private fun showControllers(controllers: List<ConnectedController>) =
-        show {
-            ControllersScreen(
-                controllers = controllers,
-                labels = emptyMap(),
-                selected = controllers.firstOrNull()?.descriptor,
-                bindings = BINDINGS,
-                bindingsFor = controllers.firstOrNull()?.descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
-                onBack = {},
-            )
-        }
+    private fun showControllers(
+        controllers: List<ConnectedController>,
+        glyphs: Boolean = true,
+    ) = show {
+        ControllersScreen(
+            controllers = controllers,
+            labels = emptyMap(),
+            selected = controllers.firstOrNull()?.descriptor,
+            bindings = BINDINGS,
+            bindingsFor = controllers.firstOrNull()?.descriptor,
+            capturing = null,
+            secondsLeft = 0,
+            undoFor = null,
+            onSelect = {},
+            onCapture = {},
+            onCancelCapture = {},
+            onClear = {},
+            onUndo = {},
+            onDropUndo = {},
+            onReset = {},
+            onBack = {},
+            glyphs = glyphs,
+        )
+    }
 }

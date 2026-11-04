@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /** settings.ini as the core reads it at start: each test runs in its own process, so it gets its own initialize(). */
+@BootsGames
 @RunWith(AndroidJUnit4::class)
 class SettingsSetupTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -287,6 +288,7 @@ class SettingsSetupTest {
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
         try {
+            TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             // The game has read it: from now on only the running game names the card.

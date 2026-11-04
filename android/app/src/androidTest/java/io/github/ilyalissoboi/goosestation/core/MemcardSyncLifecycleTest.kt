@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -17,6 +18,7 @@ import java.io.File
  * Memory card sync while the app is in the background: it pushes what's waiting, then does nothing until the app is
  * back, which syncs at once. Periodic syncs every [PERIOD_MS] instead of 5 minutes. Each test runs in its own process.
  */
+@LargeTest
 @RunWith(AndroidJUnit4::class)
 class MemcardSyncLifecycleTest {
     private val core =

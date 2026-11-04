@@ -19,7 +19,9 @@
 
 #include "rc_client.h"
 
+#include <atomic>
 #include <charconv>
+#include <ctime>
 
 Log_SetChannel(AndroidHost);
 
@@ -318,6 +320,33 @@ bool AchievementsBridge::IsHardcoreActive()
 void AchievementsBridge::SetServerForTest(const std::string& host)
 {
   Achievements::SetServerForTest(host);
+}
+
+namespace {
+// How far SkipRetryWaitForTest() has moved rcheevos's clock on, in ms.
+std::atomic<rc_clock_t> s_clock_skip_for_test{0};
+
+// rcheevos's own clock (CLOCK_MONOTONIC, in ms), moved on by s_clock_skip_for_test.
+rc_clock_t ClockForTest(const rc_client_t*)
+{
+  timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) < 0)
+    return 0;
+  return static_cast<rc_clock_t>(now.tv_sec) * 1000 + static_cast<rc_clock_t>(now.tv_nsec) / 1000000 +
+         s_clock_skip_for_test.load();
+}
+} // namespace
+
+void AchievementsBridge::SkipRetryWaitForTest()
+{
+  const auto lock = Achievements::GetLock();
+  rc_client_t* client = Achievements::GetClient();
+  if (!client)
+    return;
+
+  // rcheevos's longest wait between retries is two minutes: what's scheduled comes due at its next idle update.
+  s_clock_skip_for_test += 120 * 1000;
+  rc_client_set_get_time_millisecs_function(client, ClockForTest);
 }
 
 // The core's achievement events, which Big Picture draws on the other platforms.

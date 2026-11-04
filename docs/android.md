@@ -253,7 +253,8 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
   `games/padtest.psexe` and padtest's disc image, `games/Pad Test #1 (100%).cue` and `.bin`. Here it's
   `~/work/goose-test-data`: the BIOS is a dump of a Japanese v3.0 one, `padtest.psexe` is
   `extras/padtest/padtest.psexe`, and the disc image is made from it as the CUE/BIN row of Plan 2's results describes
-  ("Results on the emulator"). Without it (quick only) just `extras/padtest/padtest.psexe` is pushed, and the tests
+  ("Results on the emulator"). `full` won't start unless all four are there, since a test missing one is skipped
+  rather than failed. Without the folder (quick only) just `extras/padtest/padtest.psexe` is pushed, and the tests
   that need the BIOS are skipped.
 - The tests run with animations off (`testOptions.animationsDisabled`).
 

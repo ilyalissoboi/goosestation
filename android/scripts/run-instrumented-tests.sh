@@ -51,9 +51,21 @@ SHARDS=${#SERIALS[@]}
 UI_PACKAGE=io.github.ilyalissoboi.goosestation.ui
 RUNNER_ARGS=-Pandroid.testInstrumentationRunnerArguments
 
-if [ "$TIER" = full ] && [ ! -f "$GOOSE_TEST_DATA/bios/ps-30j.bin" ]; then
-	echo "full needs GOOSE_TEST_DATA, with bios/ps-30j.bin (see docs/android.md): without it, most core tests skip."
-	exit 1
+# Every file a test assumes: one missing would skip its tests, and a full run would still pass.
+if [ "$TIER" = full ]; then
+	missing=""
+	for want in bios/ps-30j.bin games/padtest.psexe "games/Pad*.cue" "games/Pad*.bin"; do
+		found=""
+		for path in "$GOOSE_TEST_DATA"/$want; do
+			[ -f "$path" ] && found=yes
+		done
+		[ -n "$found" ] || missing="$missing $want"
+	done
+	if [ -z "$GOOSE_TEST_DATA" ] || [ -n "$missing" ]; then
+		echo "full needs GOOSE_TEST_DATA with bios/ps-30j.bin, games/padtest.psexe and padtest's disc image" \
+			"(games/Pad*.cue and .bin; see docs/android.md). Missing:${missing:- GOOSE_TEST_DATA}"
+		exit 1
+	fi
 fi
 
 # An interrupted run stops its Gradle builds (and the log reader) too.

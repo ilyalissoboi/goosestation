@@ -879,6 +879,8 @@ class OrientationLayoutTest {
                 onRemovePassphrase = {},
                 onSyncNow = {},
                 onOpenConflicts = {},
+                cardsSummary = "12 cards",
+                onManageCards = {},
                 onBack = {},
             )
         }) {

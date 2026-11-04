@@ -85,12 +85,15 @@ private class FocusMemory {
     private val requesters = mutableMapOf<Any, FocusRequester>()
     private var last: Any? = null
 
-    /** Whether something is over the screen, as last seen. */
+    /** Whether something is over the screen, from when it shows until the focus is given back. */
     var overlaid = false
 
     fun requester(key: Any) = requesters.getOrPut(key) { FocusRequester() }
 
     fun focused(key: Any) {
+        // Not while something is over the screen: as what had the focus there goes, Android gives it to the screen's
+        // first element, which isn't where it's to come back to.
+        if (overlaid) return
         last = key
     }
 
@@ -138,129 +141,132 @@ fun MemcardEditorScreen(
     val memory = remember { FocusMemory() }
     val pickers = List(2) { memory.requester(pickerKey(it)) }
     val overlay = ui.question != null || ui.panel != null
+    // At once, before the focus moves into what shows: no element under it is recorded meanwhile.
+    if (overlay) memory.overlaid = true
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(colors.ground).safeDrawingPadding()) {
-        val narrow = maxWidth < TWO_PANES
+    // The overlay goes over the whole window, its scrim past the system bars; the screen keeps inside them.
+    Box(Modifier.fillMaxSize().background(colors.ground)) {
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+            val narrow = maxWidth < TWO_PANES
 
-        LaunchedEffect(Unit) {
-            val first =
-                ui.panes[active]
-                    ?.contents
-                    ?.saves
-                    ?.firstOrNull()
-            if (first !=
-                null
-            ) {
-                memory.requester(saveKey(active, first)).requestFocus()
-            } else {
-                pickers[active].requestFocus()
+            LaunchedEffect(Unit) {
+                val first =
+                    ui.panes[active]
+                        ?.contents
+                        ?.saves
+                        ?.firstOrNull()
+                if (first !=
+                    null
+                ) {
+                    memory.requester(saveKey(active, first)).requestFocus()
+                } else {
+                    pickers[active].requestFocus()
+                }
             }
-        }
-        // Once what was over the screen closes, the focus goes back to what had it.
-        LaunchedEffect(overlay) {
-            if (overlay) {
-                memory.overlaid = true
-            } else if (memory.overlaid) {
-                memory.overlaid = false
-                memory.restore(fallback = pickers[active])
+            // Once what was over the screen closes, the focus goes back to what had it.
+            LaunchedEffect(overlay) {
+                if (!overlay && memory.overlaid) {
+                    memory.overlaid = false
+                    memory.restore(fallback = pickers[active])
+                }
             }
-        }
-        LaunchedEffect(active, switched) {
-            if (switched) {
-                pickers[active].requestFocus()
-                switched = false
+            LaunchedEffect(active, switched) {
+                if (switched) {
+                    pickers[active].requestFocus()
+                    switched = false
+                }
             }
-        }
 
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .onPreviewKeyEvent { event ->
-                        when (event.key) {
-                            // B, and a Back key reaching Compose, go to the back handlers, the innermost first.
-                            Key.Back, Key.ButtonB -> {
-                                if (event.type ==
-                                    KeyEventType.KeyUp
-                                ) {
-                                    dispatcher?.onBackPressed() ?: actions.back(onLeave)
-                                }
-                                true
-                            }
-                            Key.ButtonL1, Key.ButtonR1 -> {
-                                // Not while a panel or question is over the screen, which keeps the focus.
-                                if (overlay) return@onPreviewKeyEvent false
-                                if (event.type == KeyEventType.KeyUp) {
-                                    val other = 1 - active
-                                    if (narrow) {
-                                        active = other
-                                        switched = true
-                                    } else {
-                                        pickers[other].requestFocus()
-                                    }
-                                }
-                                true
-                            }
-                            else -> false
-                        }
-                    }.padding(horizontal = 32.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // One scroll for the whole page, so a short screen still shows a whole save at a time.
             Column(
-                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .onPreviewKeyEvent { event ->
+                            when (event.key) {
+                                // B, and a Back key reaching Compose, go to the back handlers, the innermost first.
+                                Key.Back, Key.ButtonB -> {
+                                    if (event.type ==
+                                        KeyEventType.KeyUp
+                                    ) {
+                                        dispatcher?.onBackPressed() ?: actions.back(onLeave)
+                                    }
+                                    true
+                                }
+                                Key.ButtonL1, Key.ButtonR1 -> {
+                                    // Not while a panel or question is over the screen, which keeps the focus.
+                                    if (overlay) return@onPreviewKeyEvent false
+                                    if (event.type == KeyEventType.KeyUp) {
+                                        val other = 1 - active
+                                        if (narrow) {
+                                            active = other
+                                            switched = true
+                                        } else {
+                                            pickers[other].requestFocus()
+                                        }
+                                    }
+                                    true
+                                }
+                                else -> false
+                            }
+                        }.padding(horizontal = 32.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Header(ui.changes, memory, onDiscard = actions::discard, onSave = actions::save)
-                ui.message?.let { message ->
-                    Notice(if (message.error) NoticeStatus.Danger else NoticeStatus.Success) {
-                        Text(message.text, style = MaterialTheme.typography.titleMedium, color = colors.ink)
+                // One scroll for the whole page, so a short screen still shows a whole save at a time.
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Header(ui.changes, memory, onDiscard = actions::discard, onSave = actions::save)
+                    ui.message?.let { message ->
+                        Notice(if (message.error) NoticeStatus.Danger else NoticeStatus.Success) {
+                            Text(message.text, style = MaterialTheme.typography.titleMedium, color = colors.ink)
+                        }
                     }
-                }
-                if (narrow) {
-                    PanelTabs(
-                        ui.panes.mapIndexed { index, card -> card?.file?.name ?: noCardName(index) },
-                        current = active,
-                        onSelect = {
-                            active = it
-                            switched = true
-                        },
-                    )
-                    CardPane(
-                        pane = active,
-                        ui = ui,
-                        focused = true,
-                        memory = memory,
-                        actions = actions,
-                        modifier = Modifier.fillMaxWidth(),
-                        sideways = emptySet(),
-                    )
-                } else {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        for (pane in 0..1) {
-                            CardPane(
-                                pane = pane,
-                                ui = ui,
-                                focused = active == pane,
-                                memory = memory,
-                                actions = actions,
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .onFocusChanged { if (it.hasFocus) active = pane },
-                                sideways = setOf(if (pane == 0) FocusDirection.Right else FocusDirection.Left),
-                            )
+                    if (narrow) {
+                        PanelTabs(
+                            ui.panes.mapIndexed { index, card -> card?.file?.name ?: noCardName(index) },
+                            current = active,
+                            onSelect = {
+                                active = it
+                                switched = true
+                            },
+                        )
+                        CardPane(
+                            pane = active,
+                            ui = ui,
+                            focused = true,
+                            memory = memory,
+                            actions = actions,
+                            modifier = Modifier.fillMaxWidth(),
+                            sideways = emptySet(),
+                        )
+                    } else {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            for (pane in 0..1) {
+                                CardPane(
+                                    pane = pane,
+                                    ui = ui,
+                                    focused = active == pane,
+                                    memory = memory,
+                                    actions = actions,
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .onFocusChanged { if (it.hasFocus) active = pane },
+                                    sideways = setOf(if (pane == 0) FocusDirection.Right else FocusDirection.Left),
+                                )
+                            }
                         }
                     }
                 }
+                KeyHints(
+                    listOf(
+                        KeyHint(PadGlyphs.confirm, "Actions"),
+                        KeyHint(PadGlyphs.back, "Back"),
+                        KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Other card"),
+                    ),
+                )
             }
-            KeyHints(
-                listOf(
-                    KeyHint(PadGlyphs.confirm, "Actions"),
-                    KeyHint(PadGlyphs.back, "Back"),
-                    KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Other card"),
-                ),
-            )
         }
         MemcardOverlay(ui, actions, onLeave)
     }

@@ -21,9 +21,11 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
+import io.github.ilyalissoboi.goosestation.app.MemcardEditorActions
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorUi
 import io.github.ilyalissoboi.goosestation.app.QuestionChoice
 import io.github.ilyalissoboi.goosestation.app.SavePanel
+import io.github.ilyalissoboi.goosestation.core.MemcardSave
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -150,6 +152,85 @@ class MemcardPanelsTest {
         rule.waitForIdle()
 
         assertTrue(focusedText(), focusedHas("Deleted · Castlevania"))
+    }
+
+    @Test
+    fun deletingFromThePanelFocusesTheSaveAgain() {
+        val live = MemcardSamples.save(1, "BESLES-01234", "Tekken 3", blocks = 2)
+        val right = MemcardSamples.card(MemcardSamples.SHARED, listOf(live))
+        val ui = mutableStateOf(MemcardSamples.ui(right = right))
+        rule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(960.dp, 540.dp))) {
+                GooseStationTheme { MemcardEditorScreen(ui = ui.value, actions = actions, onLeave = {}) }
+            }
+        }
+        rule.waitForIdle()
+        press(Key.ButtonR1)
+        press(Key.DirectionDown)
+        assertTrue(focusedText(), focusedHas("Tekken 3"))
+
+        ui.value = MemcardSamples.ui(right = right, panel = SavePanel(1, 1, renaming = false))
+        rule.waitForIdle()
+        ui.value =
+            MemcardSamples.ui(
+                right = right,
+                panel = SavePanel(1, 1, renaming = false),
+                question = EditorQuestion("Delete Tekken 3?", "Delete", {}),
+            )
+        rule.waitForIdle()
+        val deleted =
+            MemcardSamples.card(
+                MemcardSamples.SHARED,
+                listOf(MemcardSamples.save(1, "BESLES-01234", "Tekken 3", 2, deleted = true)),
+            )
+        ui.value = MemcardSamples.ui(right = deleted, changes = 1)
+        rule.waitForIdle()
+
+        assertTrue(focusedText(), focusedHas("Deleted · Tekken 3"))
+    }
+
+    @Test
+    fun undeletingWithKeysFocusesTheSaveAgain() {
+        val deleted = MemcardSamples.save(1, "BESLES-01234", "Tekken 3", blocks = 2, deleted = true)
+        val before = MemcardSamples.ui(right = MemcardSamples.card(MemcardSamples.SHARED, listOf(deleted)))
+        val ui = mutableStateOf(before)
+        // As the controller does: A on the save opens its panel, Undelete closes it with the save back.
+        val stateful =
+            object : MemcardEditorActions by actions {
+                override fun openSave(
+                    pane: Int,
+                    save: MemcardSave,
+                ) {
+                    ui.value = ui.value.copy(panel = SavePanel(pane, save.firstBlock, renaming = false))
+                }
+
+                override fun undelete(
+                    pane: Int,
+                    save: MemcardSave,
+                ) {
+                    val back = MemcardSamples.save(1, "BESLES-01234", "Tekken 3", blocks = 2)
+                    ui.value =
+                        before.copy(
+                            panes = listOf(before.panes[0], MemcardSamples.card(MemcardSamples.SHARED, listOf(back))),
+                        )
+                }
+            }
+        rule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(960.dp, 540.dp))) {
+                GooseStationTheme { MemcardEditorScreen(ui = ui.value, actions = stateful, onLeave = {}) }
+            }
+        }
+        rule.waitForIdle()
+        press(Key.ButtonR1)
+        press(Key.DirectionDown)
+        assertTrue(focusedText(), focusedHas("Deleted · Tekken 3"))
+
+        press(Key.ButtonA)
+        assertTrue(focusedText(), focusedHas("Undelete"))
+        press(Key.ButtonA)
+
+        assertTrue(focusedText(), focusedHas("Tekken 3"))
+        assertTrue(focusedText(), focusedHas("BESLES-01234"))
     }
 
     private val deleteQuestion = EditorQuestion("Delete Crash Bandicoot? You can undelete it.", "Delete", {})

@@ -67,6 +67,15 @@ object MemcardEditorWords {
 
     const val CANCEL = "Cancel"
 
+    /** The Memory cards page's Manage cards row: how many card files there are, or null while they're counted. */
+    fun cardCount(count: Int?) =
+        when (count) {
+            null -> "Counting your cards…"
+            0 -> "No cards yet"
+            1 -> "1 card"
+            else -> "$count cards"
+        }
+
     // Renaming, in the desktop editor's meaning (memorycardeditorwindow.cpp), in the design system's voice.
 
     const val TITLE_UNENCODABLE = "The title has characters a memory card can't store."

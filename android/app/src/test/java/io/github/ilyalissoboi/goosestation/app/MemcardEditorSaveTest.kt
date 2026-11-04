@@ -612,6 +612,14 @@ class MemcardEditorSaveTest {
             assertEquals(2, editor.cardCount)
         }
 
+    @Test
+    fun cardCountWords() {
+        assertEquals("Counting your cards…", MemcardEditorWords.cardCount(null))
+        assertEquals("No cards yet", MemcardEditorWords.cardCount(0))
+        assertEquals("1 card", MemcardEditorWords.cardCount(1))
+        assertEquals("12 cards", MemcardEditorWords.cardCount(12))
+    }
+
     private companion object {
         val CRASH = MemcardFile("/data/memcards/Crash Bandicoot_1.mcd", "Crash Bandicoot", MemcardKind.Game, true)
         val SPYRO = MemcardFile("/data/memcards/Spyro_1.mcd", "Spyro", MemcardKind.Game, false)

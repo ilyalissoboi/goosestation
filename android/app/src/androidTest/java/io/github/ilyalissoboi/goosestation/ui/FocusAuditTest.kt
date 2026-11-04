@@ -401,6 +401,8 @@ class FocusAuditTest {
                 onRemovePassphrase = {},
                 onSyncNow = {},
                 onOpenConflicts = {},
+                cardsSummary = "12 cards",
+                onManageCards = {},
                 onBack = {},
             )
         }

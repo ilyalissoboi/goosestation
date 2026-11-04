@@ -44,8 +44,12 @@ class MemcardSyncScreenTest {
     private var removed = 0
     private var syncs = 0
     private var conflictsOpened = 0
+    private var manageOpened = 0
 
-    private fun show(state: MemcardSyncState) {
+    private fun show(
+        state: MemcardSyncState,
+        cardsSummary: String = "3 cards",
+    ) {
         rule.setContent {
             GooseStationTheme {
                 MemcardSyncScreen(
@@ -56,6 +60,8 @@ class MemcardSyncScreenTest {
                     onRemovePassphrase = { removed++ },
                     onSyncNow = { syncs++ },
                     onOpenConflicts = { conflictsOpened++ },
+                    cardsSummary = cardsSummary,
+                    onManageCards = { manageOpened++ },
                     onBack = {},
                 )
             }
@@ -84,10 +90,29 @@ class MemcardSyncScreenTest {
     private fun field(label: String) = hasSetTextAction().and(hasContentDescription(label))
 
     @Test
-    fun focusStartsOnTheSwitch() {
+    fun focusStartsOnManageCards() {
         show(RUNNING)
 
+        rule.onNode(isFocused()).assert(hasText("Manage cards"))
+        rule.onNode(isFocused()).assert(hasText("3 cards"))
+        press(Key.DirectionDown)
         rule.onNode(isFocused()).assert(hasText("Sync memory cards"))
+    }
+
+    @Test
+    fun manageCardsOpensTheEditor() {
+        show(RUNNING)
+
+        press(Key.ButtonA)
+
+        assertEquals(1, manageOpened)
+    }
+
+    @Test
+    fun manageCardsSaysHowManyCards() {
+        show(RUNNING, cardsSummary = "Counting your cards…")
+
+        rule.onNode(isFocused()).assert(hasText("Counting your cards…"))
     }
 
     @Test
@@ -200,6 +225,8 @@ class MemcardSyncScreenTest {
                     onRemovePassphrase = { state = state.copy(hasPassphrase = false) },
                     onSyncNow = {},
                     onOpenConflicts = {},
+                    cardsSummary = "3 cards",
+                    onManageCards = {},
                     onBack = {},
                 )
             }

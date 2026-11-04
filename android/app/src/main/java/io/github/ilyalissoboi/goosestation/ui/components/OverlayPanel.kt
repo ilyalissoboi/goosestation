@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,10 +38,11 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 
 /**
- * A small panel over the screen, drawn in the app's window (never a window dialog): a `scrim` that takes every tap,
- * and a centred `surface` panel at `radius-lg`, at most 420 dp wide, that scrolls. The focus can't leave it; the
- * caller focuses what it holds. B, Back and the system's Back call [onBack], B and Back on the key-up of a press that
- * began in it, so a press held from the screen under it doesn't close it.
+ * A small panel over the screen, drawn in the app's window (never a window dialog): a `scrim` over all of it, past the
+ * system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, inside the safe
+ * area, that scrolls. The focus can't leave it; the caller focuses what it holds. B, Back and the system's Back call
+ * [onBack], B and Back on the key-up of a press that began in it, so a press held from the screen under it doesn't
+ * close it.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -67,7 +69,8 @@ fun OverlayPanel(
                         KeyEventType.KeyUp -> if (down.remove(key)) onBack()
                     }
                     true
-                }.padding(32.dp),
+                }.safeDrawingPadding()
+                .padding(32.dp),
         contentAlignment = Alignment.Center,
     ) {
         // The panel scrolls only as far as it must: a focused text field asks to show its cursor as well as itself, and

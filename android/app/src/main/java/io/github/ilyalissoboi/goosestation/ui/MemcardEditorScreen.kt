@@ -78,6 +78,44 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 private val TWO_PANES = 720.dp
 
 /**
+ * The screen's focusable elements by key, each with its requester, and the last one focused: what the focus goes back
+ * to when a panel or question over the screen closes.
+ */
+private class FocusMemory {
+    private val requesters = mutableMapOf<Any, FocusRequester>()
+    private var last: Any? = null
+
+    /** Whether something is over the screen, as last seen. */
+    var overlaid = false
+
+    fun requester(key: Any) = requesters.getOrPut(key) { FocusRequester() }
+
+    fun focused(key: Any) {
+        last = key
+    }
+
+    /** Focuses the last element focused, or [fallback] if it's gone. */
+    fun restore(fallback: FocusRequester) {
+        val back = last?.let(requesters::get)
+        if (back == null || runCatching { back.requestFocus() }.isFailure) fallback.requestFocus()
+    }
+}
+
+/** This element, known to [memory] by [key]: it can take the focus back once what's over the screen closes. */
+@Composable
+private fun Modifier.remembered(
+    memory: FocusMemory,
+    key: Any,
+): Modifier = focusRequester(memory.requester(key)).onFocusChanged { if (it.isFocused) memory.focused(key) }
+
+private fun pickerKey(pane: Int) = "picker" to pane
+
+private fun saveKey(
+    pane: Int,
+    save: MemcardSave,
+) = Triple("save", pane, save.firstBlock)
+
+/**
  * The memory card editor: its title, the unsaved changes and Discard and Save at the top, then two cards side by side,
  * each with its picker, its saves and its own actions. L1 and R1 move to the other card (Left and Right do at a pane's
  * edge); on a screen under 720 dp wide, one card shows at a time, and L1 and R1 switch it. A on a save opens its panel
@@ -97,21 +135,34 @@ fun MemcardEditorScreen(
     var active by rememberSaveable { mutableIntStateOf(0) }
     // Set as L1 or R1 switch the pane on a narrow screen, for its picker to take the focus once it shows.
     var switched by remember { mutableStateOf(false) }
-    val pickers = remember { List(2) { FocusRequester() } }
-    val firsts = remember { List(2) { FocusRequester() } }
+    val memory = remember { FocusMemory() }
+    val pickers = List(2) { memory.requester(pickerKey(it)) }
+    val overlay = ui.question != null || ui.panel != null
 
     BoxWithConstraints(Modifier.fillMaxSize().background(colors.ground).safeDrawingPadding()) {
         val narrow = maxWidth < TWO_PANES
 
         LaunchedEffect(Unit) {
-            if (ui.panes[active]
+            val first =
+                ui.panes[active]
                     ?.contents
                     ?.saves
-                    ?.isNotEmpty() == true
+                    ?.firstOrNull()
+            if (first !=
+                null
             ) {
-                firsts[active].requestFocus()
+                memory.requester(saveKey(active, first)).requestFocus()
             } else {
                 pickers[active].requestFocus()
+            }
+        }
+        // Once what was over the screen closes, the focus goes back to what had it.
+        LaunchedEffect(overlay) {
+            if (overlay) {
+                memory.overlaid = true
+            } else if (memory.overlaid) {
+                memory.overlaid = false
+                memory.restore(fallback = pickers[active])
             }
         }
         LaunchedEffect(active, switched) {
@@ -137,6 +188,8 @@ fun MemcardEditorScreen(
                                 true
                             }
                             Key.ButtonL1, Key.ButtonR1 -> {
+                                // Not while a panel or question is over the screen, which keeps the focus.
+                                if (overlay) return@onPreviewKeyEvent false
                                 if (event.type == KeyEventType.KeyUp) {
                                     val other = 1 - active
                                     if (narrow) {
@@ -158,7 +211,7 @@ fun MemcardEditorScreen(
                 modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Header(ui.changes, onDiscard = actions::discard, onSave = actions::save)
+                Header(ui.changes, memory, onDiscard = actions::discard, onSave = actions::save)
                 ui.message?.let { message ->
                     Notice(if (message.error) NoticeStatus.Danger else NoticeStatus.Success) {
                         Text(message.text, style = MaterialTheme.typography.titleMedium, color = colors.ink)
@@ -177,8 +230,7 @@ fun MemcardEditorScreen(
                         pane = active,
                         ui = ui,
                         focused = true,
-                        picker = pickers[active],
-                        first = firsts[active],
+                        memory = memory,
                         actions = actions,
                         modifier = Modifier.fillMaxWidth(),
                         sideways = emptySet(),
@@ -190,8 +242,7 @@ fun MemcardEditorScreen(
                                 pane = pane,
                                 ui = ui,
                                 focused = active == pane,
-                                picker = pickers[pane],
-                                first = firsts[pane],
+                                memory = memory,
                                 actions = actions,
                                 modifier =
                                     Modifier
@@ -211,6 +262,7 @@ fun MemcardEditorScreen(
                 ),
             )
         }
+        MemcardOverlay(ui, actions, onLeave)
     }
 }
 
@@ -220,6 +272,7 @@ private fun noCardName(pane: Int) = if (pane == 0) "Left card" else "Right card"
 @Composable
 private fun Header(
     changes: Int,
+    memory: FocusMemory,
     onDiscard: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -242,8 +295,19 @@ private fun Header(
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionButton("Discard", onClick = onDiscard, enabled = changes > 0)
-            ActionButton("Save", onClick = onSave, enabled = changes > 0, kind = ButtonKind.Primary)
+            ActionButton(
+                "Discard",
+                onClick = onDiscard,
+                enabled = changes > 0,
+                modifier = Modifier.remembered(memory, "discard"),
+            )
+            ActionButton(
+                "Save",
+                onClick = onSave,
+                enabled = changes > 0,
+                kind = ButtonKind.Primary,
+                modifier = Modifier.remembered(memory, "save"),
+            )
         }
     }
 }
@@ -257,8 +321,7 @@ private fun CardPane(
     pane: Int,
     ui: MemcardEditorUi,
     focused: Boolean,
-    picker: FocusRequester,
-    first: FocusRequester,
+    memory: FocusMemory,
     actions: MemcardEditorActions,
     modifier: Modifier = Modifier,
     sideways: Set<FocusDirection>,
@@ -286,7 +349,7 @@ private fun CardPane(
                 .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        CardPicker(pane, card, ui.cards, picker, onPick = { actions.pick(pane, it) })
+        CardPicker(pane, card, ui.cards, memory, onPick = { actions.pick(pane, it) })
         if (card != null) {
             val saves = card.contents?.saves.orEmpty()
             if (card.state == CardState.Ready && saves.isEmpty()) {
@@ -297,14 +360,14 @@ private fun CardPane(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
-            saves.forEachIndexed { index, save ->
+            for (save in saves) {
                 SaveRow(
                     save,
                     onClick = { actions.openSave(pane, save) },
-                    modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                    modifier = Modifier.remembered(memory, saveKey(pane, save)),
                 )
             }
-            CardActions(card.state, pane, actions)
+            CardActions(card.state, pane, memory, actions)
         }
     }
 }
@@ -315,9 +378,10 @@ private fun CardPicker(
     pane: Int,
     card: EditorCard?,
     cards: List<MemcardFile>,
-    focus: FocusRequester,
+    memory: FocusMemory,
     onPick: (String) -> Unit,
 ) {
+    val focus = memory.requester(pickerKey(pane))
     val colors = GooseStationTheme.colors
     var open by remember { mutableStateOf(false) }
     BackHandler(enabled = open) {
@@ -329,7 +393,7 @@ private fun CardPicker(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .focusRequester(focus)
+                    .remembered(memory, pickerKey(pane))
                     .focusRing(role = Role.Button, onClick = { open = !open })
                     .heightIn(min = 48.dp)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -448,6 +512,7 @@ private fun SaveRow(
 private fun CardActions(
     state: CardState,
     pane: Int,
+    memory: FocusMemory,
     actions: MemcardEditorActions,
 ) {
     FlowRow(
@@ -455,10 +520,25 @@ private fun CardActions(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (state != CardState.Unreadable) ActionButton("Import save", onClick = { actions.importSave(pane) })
-        ActionButton("Import card", onClick = { actions.importCard(pane) })
+        if (state != CardState.Unreadable) {
+            ActionButton(
+                "Import save",
+                onClick = { actions.importSave(pane) },
+                modifier = Modifier.remembered(memory, "importSave" to pane),
+            )
+        }
+        ActionButton(
+            "Import card",
+            onClick = { actions.importCard(pane) },
+            modifier = Modifier.remembered(memory, "importCard" to pane),
+        )
         if (state != CardState.NoCardYet) {
-            ActionButton("Format", onClick = { actions.format(pane) }, kind = ButtonKind.Danger)
+            ActionButton(
+                "Format",
+                onClick = { actions.format(pane) },
+                kind = ButtonKind.Danger,
+                modifier = Modifier.remembered(memory, "format" to pane),
+            )
         }
     }
 }

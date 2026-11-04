@@ -56,11 +56,14 @@ import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
+import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -802,6 +805,56 @@ class OrientationLayoutTest {
         }
         assertTrue("didn't reach Format: $seen", focusedHas("Format"))
         assertFocusedInEditor()
+    }
+
+    @Test
+    fun aMemoryCardQuestionWithTheSyncLineFits() {
+        val question =
+            EditorQuestion(
+                "Erase every save on The Legend of the Extraordinarily Long-Named Adventure: Director's Cut?\n\n" +
+                    "Memory card sync is on: your other devices will see these saves removed.",
+                "Erase",
+                {},
+            )
+        // The overlay alone: the texts under its scrim aren't to be read through it.
+        eachConfig({ MemcardOverlay(MemcardSamples.ui(question = question), RecordingEditorActions(), onLeave = {}) }) {
+            assertTextsLaidOut(inView = true)
+            assertTrue(focusedHas("Cancel"))
+            assertFocusedInView(screen())
+            pressUntilFocusedInPanel(Key.DirectionLeft, "Erase")
+        }
+    }
+
+    @Test
+    fun theRenameFormFits() {
+        val save = MemcardSamples.save(1, "BASLUS-01001ABCDEFGH", "CASTLEVANIA SYMPHONY OF THE NIGH")
+        eachConfig({
+            MemcardOverlay(
+                MemcardSamples.ui(
+                    left = MemcardSamples.card(MemcardSamples.CRASH, listOf(save)),
+                    panel = SavePanel(0, 1, renaming = true),
+                    renameError = MemcardEditorWords.NAME_INVALID,
+                ),
+                RecordingEditorActions(),
+                onLeave = {},
+            )
+        }) {
+            assertTextsLaidOut(inView = true)
+            pressUntilFocusedInPanel(Key.DirectionDown, "Cancel")
+        }
+    }
+
+    // In a panel over the screen, the focus moves within its own scroll.
+    private fun pressUntilFocusedInPanel(
+        key: Key,
+        text: String,
+    ) {
+        repeat(12) {
+            if (focusedHas(text)) return
+            press(key)
+            assertFocusedInView(scrollerAroundFocused())
+        }
+        if (!focusedHas(text)) fail("$key never focused \"$text\"")
     }
 
     @Test

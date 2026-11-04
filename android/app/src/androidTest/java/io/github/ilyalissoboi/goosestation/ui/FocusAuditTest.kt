@@ -29,11 +29,13 @@ import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
+import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -337,6 +339,54 @@ class FocusAuditTest {
         press(Key.DirectionUp)
         press(Key.Enter)
         rule.onNodeWithTag(CHOICE_LIST).assertExists()
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardSavePanel() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(panel = SavePanel(0, 1, renaming = false)),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardDeletedSavePanel() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(panel = SavePanel(0, 2, renaming = false)),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardQuestion() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(question = EditorQuestion("Erase every save on Crash Bandicoot?", "Erase", {})),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardRenameForm() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(panel = SavePanel(0, 1, renaming = true), renameError = "Enter a file name."),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
         rule.assertControllerReady()
     }
 

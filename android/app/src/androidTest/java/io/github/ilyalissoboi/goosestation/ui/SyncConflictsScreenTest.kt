@@ -149,6 +149,29 @@ class SyncConflictsScreenTest {
         rule.onNode(isFocused()).assert(hasText("BESLUS-01234SAVE", substring = true))
     }
 
+    // Settling the last conflict empties the list: the screen goes back, with no focus request on what went.
+    @Test
+    fun settlingTheLastGoesBack() {
+        rule.setContent {
+            var conflicts by remember { mutableStateOf(CONFLICTS.take(1)) }
+            GooseStationTheme {
+                SyncConflictsScreen(
+                    conflicts = conflicts,
+                    zone = ZoneOffset.UTC,
+                    onResolve = { id, _ -> conflicts = conflicts.filterNot { it.id == id } },
+                    onKeepAll = {},
+                    onBack = { backs++ },
+                )
+            }
+        }
+        rule.waitForIdle()
+
+        press(Key.ButtonA)
+        press(Key.ButtonA)
+
+        assertEquals(1, backs)
+    }
+
     @Test
     fun noneLeftGoesBack() {
         show(emptyList())

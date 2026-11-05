@@ -132,5 +132,8 @@ object EmulationSettings {
         )
     }
 
+    /** Rewind's note: it goes back only while its hotkey is held, which Controllers doesn't offer yet. */
+    const val REWIND_HOTKEY_NOTE = "Hold the Rewind hotkey to go back. Bind it in settings.ini for now."
+
     private const val MIB = 1_048_576L
 }

@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings.REWIND_HOTKEY_NOTE
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -130,6 +131,13 @@ class EmulationScreenTest {
         rule
             .onNodeWithText("Goes back up to 100.0 s, using up to 40 MB of memory and 20 MB of video memory.")
             .assertExists()
+    }
+
+    @Test
+    fun rewindSaysItNeedsAHotkey() {
+        show()
+
+        rule.onNodeWithText(REWIND_HOTKEY_NOTE).assertExists()
     }
 
     @Test

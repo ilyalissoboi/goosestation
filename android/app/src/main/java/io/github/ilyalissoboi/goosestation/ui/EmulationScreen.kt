@@ -115,7 +115,7 @@ fun EmulationScreen(
             when {
                 hardcore -> Hardcore.OFF
                 runAhead -> "Off while run-ahead is on."
-                else -> null
+                else -> EmulationSettings.REWIND_HOTKEY_NOTE
             },
             enabled = !hardcore,
         )

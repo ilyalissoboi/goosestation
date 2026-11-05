@@ -244,13 +244,15 @@ fun NumberRow(
 ) {
     val change by rememberUpdatedState(onChange)
     // The value last asked for, so a held key's repeats that come before the page shows it step on from it.
-    val latest = remember { IntArray(1) }
+    val latest = remember { intArrayOf(value) }
     SideEffect { latest[0] = value }
     val choices = (scale.presets + value).distinct().sorted().map { Choice(it, scale.label(it)) }
     SteppedRow(
         label = label,
         value = scale.label(value),
         canStep = { by -> scale.next(latest[0], by) != null },
+        // The arrows as the value shown has them: a row that hasn't recomposed since a change still draws them right.
+        canStepShown = { by -> scale.next(value, by) != null },
         onStep = { by ->
             scale.next(latest[0], by)?.let {
                 latest[0] = it
@@ -287,14 +289,15 @@ fun SettingsSection(
 
 /**
  * [CyclerRow]'s and [NumberRow]'s row: the [label], the [value] between arrows that step by -1 or 1 ([onStep]) where
- * [canStep] says, and the list of [choices], which [onPick] picks from. [currentNote] is the current choice's note,
- * shown under [note] while the list is closed.
+ * [canStep] says, drawn lit where [canStepShown] says, and the list of [choices], which [onPick] picks from.
+ * [currentNote] is the current choice's note, shown under [note] while the list is closed.
  */
 @Composable
 private fun <T> SteppedRow(
     label: String,
     value: String,
     canStep: (Int) -> Boolean,
+    canStepShown: (Int) -> Boolean = canStep,
     onStep: (Int) -> Unit,
     choices: List<Choice<T>>,
     selected: T,
@@ -378,8 +381,8 @@ private fun <T> SteppedRow(
                     active = focused,
                     enabled = enabled,
                     // Faint while the list is open: it doesn't step then.
-                    canGoBack = enabled && !open && canStep(-1),
-                    canGoForward = enabled && !open && canStep(1),
+                    canGoBack = enabled && !open && canStepShown(-1),
+                    canGoForward = enabled && !open && canStepShown(1),
                     onBack = { step(-1) },
                     onForward = { step(1) },
                 )

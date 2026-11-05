@@ -11,18 +11,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -51,6 +57,7 @@ class NumberRowTest {
     private fun show(
         start: Int = 5,
         enabled: Boolean = true,
+        focusTheRow: Boolean = true,
     ) {
         rule.setContent {
             GooseStationTheme {
@@ -76,7 +83,7 @@ class NumberRowTest {
         }
         rule.waitForIdle()
         // From the switch above, past the heading.
-        press(Key.DirectionDown)
+        if (focusTheRow) press(Key.DirectionDown)
     }
 
     private fun press(key: Key) {
@@ -86,6 +93,38 @@ class NumberRowTest {
 
     private fun assertFocusedHas(text: String) {
         rule.onNode(isFocused()).assert(hasText(text, substring = true))
+    }
+
+    // The arrows of a row that hasn't had the focus yet, as a tap finds them when a page opens.
+    private fun tapArrow(
+        forward: Boolean,
+        valueText: String,
+    ) {
+        val value = rule.onNodeWithText(valueText, useUnmergedTree = true).getBoundsInRoot()
+        val density = rule.density.density
+        val y = (value.top + value.bottom) / 2 * density
+        // Each arrow is a 40 dp box beside the value.
+        val x = (if (forward) value.right + 20.dp else value.left - 20.dp).value * density
+        rule.onRoot().performTouchInput { click(Offset(x, y.value)) }
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun anUnfocusedRowsBackArrowSteps() {
+        show(start = 5, focusTheRow = false)
+
+        tapArrow(forward = false, "5 goslings")
+
+        assertEquals(listOf(4), changes)
+    }
+
+    @Test
+    fun anUnfocusedRowsForwardArrowStopsAtTheEnd() {
+        show(start = 10, focusTheRow = false)
+
+        tapArrow(forward = true, "10 goslings")
+
+        assertEquals(emptyList<Int>(), changes)
     }
 
     @Test

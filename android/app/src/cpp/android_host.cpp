@@ -98,7 +98,7 @@ static const Controller::ControllerInfo* GetPadControllerInfo(SettingsInterface&
 static u32 AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad);
 static bool HasDeviceBinding(SettingsInterface& si, u32 index, u32 pad);
 static bool AddControllerToPort(const std::string& identifier);
-static void UpdateSourcePads();
+static void UpdateSourceControllers();
 static void MapNewController(const std::string& identifier);
 static bool IsVulkanRenderer(GPURenderer renderer);
 static bool PadHasAnalogButton(SettingsInterface& si, u32 pad);
@@ -116,6 +116,7 @@ using AndroidInputKeys::ParseDeviceIndex;
 static constexpr const char* DESCRIPTORS_SECTION = AndroidInputKeys::SETTINGS_SECTION;
 static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY;
 static constexpr const char* PORTS_KEY = AndroidInputKeys::PORTS_KEY;
+static constexpr const char* RUMBLE_KEY = AndroidInputKeys::RUMBLE_KEY;
 
 // The inputs the remap page lists (GetPadBindings()) and edits (SetPadBinding()).
 // The DualShock's Analog button, Port 1's, which the app presses with a hotkey.
@@ -512,7 +513,7 @@ void AndroidHost::ReloadSettings()
       }
 
       // The file can put controllers on other ports.
-      UpdateSourcePads();
+      UpdateSourceControllers();
 
       // Update() takes the lock itself, and loads the folders again.
       EmuFolders::Update();
@@ -1504,7 +1505,8 @@ void AndroidHost::ProcessInputQueue()
     {
       for (const ConnectedDevice& device : s_connected_devices)
         source->QueueDeviceConnected(device.device_id, device.index, device.name);
-      UpdateSourcePads();
+      source->SetRumbleCallback([](s32 device_id, float large, float small) { NotifyRumble(device_id, large, small); });
+      UpdateSourceControllers();
     }
   }
 
@@ -1657,8 +1659,8 @@ bool AndroidHost::HasDeviceBinding(SettingsInterface& si, u32 index, u32 pad)
   return AndroidInputKeys::GetDeviceBinding(bindings, index).has_value();
 }
 
-// CPU thread: gives the input source each controller's pad, for its rumble.
-void AndroidHost::UpdateSourcePads()
+// CPU thread: gives the input source each controller's pad and rumble strength.
+void AndroidHost::UpdateSourceControllers()
 {
   AndroidInputSource* const source =
     static_cast<AndroidInputSource*>(InputManager::GetInputSourceInterface(InputSourceType::Android));
@@ -1666,13 +1668,72 @@ void AndroidHost::UpdateSourcePads()
     return;
 
   std::vector<u32> pads(s_descriptors.size());
+  std::vector<float> strengths(s_descriptors.size());
   {
     const auto lock = Host::GetSettingsLock();
+    SettingsInterface& si = *s_base_settings_interface;
+    const std::vector<std::string> rumble = si.GetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY);
     for (u32 i = 0; i < pads.size(); i++)
-      pads[i] = GetPadOfIndex(*s_base_settings_interface, i);
+    {
+      pads[i] = GetPadOfIndex(si, i);
+      strengths[i] = static_cast<float>(AndroidInputKeys::RumbleForIndex(rumble, i)) / 100.0f;
+    }
   }
 
   source->SetControllerPads(std::move(pads));
+  source->SetRumbleStrengths(std::move(strengths));
+}
+
+std::optional<u32> AndroidHost::GetRumbleStrength(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<u32> result;
+  EmuThread::RunOnThread(
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      const auto lock = Host::GetSettingsLock();
+      result = AndroidInputKeys::RumbleForIndex(
+        s_base_settings_interface->GetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY), index.value());
+    },
+    true);
+  return result;
+}
+
+void AndroidHost::SetRumbleStrength(std::string descriptor, u32 percent)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor, percent]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        si.SetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY,
+                         AndroidInputKeys::SetRumbleForIndex(si.GetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY),
+                                                             index.value(), percent));
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      UpdateSourceControllers();
+    },
+    true);
+}
+
+void AndroidHost::SetPadVibrationForTest(u32 pad, float large, float small)
+{
+  EmuThread::RunOnThread([pad, large, small]() { InputManager::SetPadVibrationIntensity(pad, large, small); }, true);
 }
 
 bool AndroidHost::AddControllerToPort(const std::string& identifier)
@@ -1934,7 +1995,7 @@ void AndroidHost::SetControllerPort(std::string descriptor, u32 pad)
           ERROR_LOG("Failed to save settings: {}", error.GetDescription());
       }
 
-      UpdateSourcePads();
+      UpdateSourceControllers();
       System::ReloadInputBindings();
     },
     true);

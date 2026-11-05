@@ -387,6 +387,63 @@ class GameCallsTest {
             assertEquals(0f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
         }
 
+    // Review Focus 2: two controllers on Port 1, and the one used last rumbles, at its strength.
+    @Test
+    fun rumbleGoesToTheLastUsedControllerOnItsPort() {
+        val rumbles = LinkedBlockingQueue<Triple<Int, Float, Float>>()
+        withPadtest(onRumble = { id, large, small -> rumbles.put(Triple(id, large, small)) }) {
+            connectSecondPad()
+            NativeLibrary.setRumbleStrength(PAD_B, 50)
+            pressAndRelease(DEVICE_ID)
+            pressAndRelease(DEVICE_B)
+            rumbles.clear()
+
+            NativeLibrary.setPadVibrationForTest(0, 1f, 0.5f)
+
+            assertEquals(Triple(DEVICE_B, 0.5f, 0.25f), rumbles.poll(3, TimeUnit.SECONDS))
+            Thread.sleep(300)
+            assertTrue("only B rumbled: $rumbles", rumbles.none { it.first == DEVICE_ID && it.second > 0f })
+        }
+    }
+
+    @Test
+    fun aControllerOnAnotherPortDoesntRumble() {
+        val rumbles = LinkedBlockingQueue<Triple<Int, Float, Float>>()
+        withPadtest(
+            settings = { NativeLibrary.setStringSetting("Pad2", "Type", "AnalogController") },
+            onRumble = { id, large, small -> rumbles.put(Triple(id, large, small)) },
+        ) {
+            connectSecondPad()
+            NativeLibrary.setControllerPort(PAD, 1)
+            pressAndRelease(DEVICE_B)
+            pressAndRelease(DEVICE_ID)
+            rumbles.clear()
+
+            NativeLibrary.setPadVibrationForTest(0, 1f, 0f)
+
+            assertEquals(Triple(DEVICE_B, 1f, 0f), rumbles.poll(3, TimeUnit.SECONDS))
+            Thread.sleep(300)
+            assertTrue("A is on Port 2: $rumbles", rumbles.none { it.first == DEVICE_ID })
+        }
+    }
+
+    private fun connectSecondPad() {
+        NativeLibrary.onDeviceConnected(DEVICE_B, "Pad B", PAD_B)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (NativeLibrary.getPadBindings(PAD_B) == null) {
+            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for the second pad to connect")
+            Thread.sleep(50)
+        }
+        Thread.sleep(500)
+    }
+
+    private fun pressAndRelease(deviceId: Int) {
+        NativeLibrary.onKey(deviceId, CROSS, true)
+        Thread.sleep(200)
+        NativeLibrary.onKey(deviceId, CROSS, false)
+        Thread.sleep(200)
+    }
+
     // A controller on Port 2 presses Port 2's inputs, and not Port 1's.
     @Test
     fun aControllerOnPort2DrivesPort2() =
@@ -501,6 +558,7 @@ class GameCallsTest {
         onStarted: (startPaused: Boolean, pauseOnDisconnect: Boolean) -> Unit = { _, _ -> },
         onMessage: (key: String, text: String) -> Unit = { _, _ -> },
         onHotkey: (String) -> Unit = {},
+        onRumble: (deviceId: Int, large: Float, small: Float) -> Unit = { _, _, _ -> },
         refreshRate: Float = 0f,
         body: () -> Unit,
     ) {
@@ -531,6 +589,12 @@ class GameCallsTest {
                 override fun onFastForwardChanged(enabled: Boolean) = onFastForward(enabled)
 
                 override fun onHotkey(name: String) = onHotkey.invoke(name)
+
+                override fun onRumble(
+                    deviceId: Int,
+                    large: Float,
+                    small: Float,
+                ) = onRumble.invoke(deviceId, large, small)
 
                 override fun onOsdMessage(
                     key: String,
@@ -612,5 +676,7 @@ class GameCallsTest {
         const val SELECT = 109
         const val X = 99
         const val CROSS = 96
+        const val PAD_B = "pad-b"
+        const val DEVICE_B = 2
     }
 }

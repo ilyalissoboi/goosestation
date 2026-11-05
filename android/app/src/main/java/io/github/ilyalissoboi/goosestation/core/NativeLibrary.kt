@@ -515,6 +515,22 @@ object NativeLibrary {
      */
     external fun getMacroBindings(descriptor: String): Array<PadBinding>?
 
+    /** The controller with [descriptor]'s rumble strength, in percent (100 by default), or -1 for one never connected. */
+    external fun getRumbleStrength(descriptor: String): Int
+
+    /** Sets the controller with [descriptor]'s rumble strength, 0 to 100 percent. Waits for the core. */
+    external fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    )
+
+    /** Tests: sets [pad]'s motors as a game would (`InputManager::SetPadVibrationIntensity`). Waits for the core. */
+    external fun setPadVibrationForTest(
+        pad: Int,
+        large: Float,
+        small: Float,
+    )
+
     /** Undoes the running game's last state load; false when there's none to undo. Waits for the core. */
     external fun undoLoadState(): Boolean
 

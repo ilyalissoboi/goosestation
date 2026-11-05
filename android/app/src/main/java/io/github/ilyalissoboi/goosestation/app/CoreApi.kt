@@ -57,6 +57,14 @@ interface CoreApi {
 
     fun getMacroBindings(descriptor: String): List<PadBinding>?
 
+    /** [NativeLibrary.getRumbleStrength], or null for a controller not in the table. */
+    fun getRumbleStrength(descriptor: String): Int?
+
+    fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    )
+
     fun setHotkeyBinding(
         descriptor: String,
         name: String,
@@ -153,6 +161,14 @@ object NativeCoreApi : CoreApi {
     ) = NativeLibrary.setPadBinding(descriptor, name, binding)
 
     override fun resetPadBindings(descriptor: String) = NativeLibrary.resetPadBindings(descriptor)
+
+    override fun getRumbleStrength(descriptor: String): Int? =
+        NativeLibrary.getRumbleStrength(descriptor).takeIf { it >= 0 }
+
+    override fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    ) = NativeLibrary.setRumbleStrength(descriptor, percent)
 
     override fun getMacroBindings(descriptor: String): List<PadBinding>? =
         NativeLibrary.getMacroBindings(descriptor)?.toList()

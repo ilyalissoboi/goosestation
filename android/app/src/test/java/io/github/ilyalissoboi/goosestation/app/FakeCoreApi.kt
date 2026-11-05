@@ -86,6 +86,19 @@ class FakeCoreApi(
 
     override fun getTypeSettings(type: String): List<TypeSetting> = typeSettings[type].orEmpty()
 
+    /** Each controller's rumble strength, by descriptor; one not in it has 100. */
+    var rumble = emptyMap<String, Int>()
+
+    override fun getRumbleStrength(descriptor: String): Int? = rumble[descriptor] ?: 100
+
+    override fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    ) {
+        calls += "setRumbleStrength $descriptor $percent"
+        rumble = rumble + (descriptor to percent)
+    }
+
     /** Each macro's trigger, as one controller has it. */
     val macros = (1..4).associate { "Macro$it" to null as String? }.toMutableMap()
 

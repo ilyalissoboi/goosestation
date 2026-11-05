@@ -554,6 +554,31 @@ class ControllerBindingsTest {
     }
 
     @Test
+    fun rumbleStrengthIsKeptPerController() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+        connectNewPad(2, "pad-b", 1)
+
+        assertEquals(100, NativeLibrary.getRumbleStrength("pad-b"))
+        NativeLibrary.setRumbleStrength("pad-b", 30)
+
+        assertEquals(30, NativeLibrary.getRumbleStrength("pad-b"))
+        assertEquals(100, NativeLibrary.getRumbleStrength("pad-a"))
+        assertEquals(listOf("100", "30"), readSettings().values("Android", "ControllerRumble"))
+        assertEquals(-1, NativeLibrary.getRumbleStrength("pad-unknown"))
+    }
+
+    @Test
+    fun theSavedRumbleStrengthIsRead() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\nControllerDescriptors = pad-a\n" +
+                "ControllerRumble = 40\n",
+        )
+
+        assertEquals(40, NativeLibrary.getRumbleStrength("pad-a"))
+    }
+
+    @Test
     fun theSavedPortIsRead() {
         initialize(
             "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\nControllerDescriptors = pad-a\n" +

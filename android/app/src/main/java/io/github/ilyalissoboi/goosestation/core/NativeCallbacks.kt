@@ -42,6 +42,16 @@ interface NativeCallbacks {
     fun onHotkey(name: String) {}
 
     /**
+     * The controller device [deviceId]'s motors' levels, 0 to 1, times its strength: the core's rumble for its port,
+     * which goes to the port's last-used controller. Both 0 stops it. Called on the core's thread.
+     */
+    fun onRumble(
+        deviceId: Int,
+        large: Float,
+        small: Float,
+    ) {}
+
+    /**
      * An on-screen message from the core: its [text] (icon characters gone), shown for [seconds], replacing any with
      * the same [key] (empty for none), and its [icon], if it has one. [seconds] 0 takes [key]'s message away.
      */

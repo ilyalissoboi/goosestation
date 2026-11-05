@@ -248,6 +248,16 @@ std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
 /// nullopt as GetPadBindings() gives it. SetPadBinding() sets them, as an input.
 std::optional<std::vector<PadBinding>> GetMacroBindings(std::string descriptor);
 
+/// The controller's rumble strength in percent ([Android] ControllerRumble, 100 when it has none); nullopt as
+/// GetControllerIndex() gives it. Runs on the CPU thread and blocks.
+std::optional<u32> GetRumbleStrength(std::string descriptor);
+
+/// Sets the controller's rumble strength, 0 to 100 percent. Saves and applies it.
+void SetRumbleStrength(std::string descriptor, u32 percent);
+
+/// For the instrumented tests: sets the pad's motors, as a game would (InputManager::SetPadVibrationIntensity()).
+void SetPadVibrationForTest(u32 pad, float large, float small);
+
 /// The pad's controller type as settings.ini has it ([PadN] Type, or the core's default for the pad), even one the
 /// core doesn't know; nullopt before Initialize() succeeded or for a pad past 7. Pads are 0-based: [Pad1] is 0.
 std::optional<std::string> GetPortType(u32 pad);
@@ -338,6 +348,10 @@ void NotifyOsdMessage(std::string_view key, std::string_view text, float seconds
 
 /// Fast forward was turned on or off, by the menu or a hotkey.
 void NotifyFastForwardChanged(bool enabled);
+
+/// The controller device's motors' levels (0 to 1, times its strength), as its port's rumble goes to it: both 0 stop
+/// it. Called on the CPU thread.
+void NotifyRumble(s32 device_id, float large, float small);
 
 /// One of the host's save state hotkeys fired, by its name (SaveSelectedSaveState and so on): the app saves, loads or
 /// picks the slot itself.

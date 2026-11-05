@@ -56,6 +56,7 @@ jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
 jmethodID s_on_binding_captured = nullptr;
 jmethodID s_on_hotkey = nullptr;
+jmethodID s_on_rumble = nullptr;
 jmethodID s_on_osd_message = nullptr;
 jmethodID s_on_fast_forward_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
@@ -355,6 +356,21 @@ void AndroidHost::NotifyError(std::string_view message)
 void AndroidHost::NotifyBindingCaptured(std::string_view binding)
 {
   CallCallback(s_on_binding_captured, binding);
+}
+
+void AndroidHost::NotifyRumble(s32 device_id, float large, float small)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  env->CallVoidMethod(callbacks, s_on_rumble, static_cast<jint>(device_id), large, small);
+  ClearException(env.get());
+  env->DeleteLocalRef(callbacks);
 }
 
 void AndroidHost::NotifyHotkey(std::string_view name)
@@ -804,6 +820,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
   s_on_hotkey = env->GetMethodID(s_callbacks_class, "onHotkey", "(Ljava/lang/String;)V");
+  s_on_rumble = env->GetMethodID(s_callbacks_class, "onRumble", "(IFF)V");
   s_on_osd_message =
     env->GetMethodID(s_callbacks_class, "onOsdMessage",
                      "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
@@ -831,7 +848,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_leaderboard =
     env->GetMethodID(s_callbacks_class, "onLeaderboard",
                      "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey ||
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey || !s_on_rumble ||
       !s_on_osd_message ||
       !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
       !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
@@ -2456,6 +2473,23 @@ NATIVE_LIBRARY_FUNCTION(jstring, getPortType)(JNIEnv* env, jobject, jint pad)
 
   const std::optional<std::string> type = AndroidHost::GetPortType(static_cast<u32>(pad));
   return type.has_value() ? ToJString(env, type.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getRumbleStrength)(JNIEnv* env, jobject, jstring descriptor)
+{
+  const std::optional<u32> percent = AndroidHost::GetRumbleStrength(FromJString(env, descriptor));
+  return percent.has_value() ? static_cast<jint>(percent.value()) : -1;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setRumbleStrength)(JNIEnv* env, jobject, jstring descriptor, jint percent)
+{
+  AndroidHost::SetRumbleStrength(FromJString(env, descriptor), static_cast<u32>(std::clamp<jint>(percent, 0, 100)));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setPadVibrationForTest)(JNIEnv*, jobject, jint pad, jfloat large, jfloat small)
+{
+  if (pad >= 0)
+    AndroidHost::SetPadVibrationForTest(static_cast<u32>(pad), large, small);
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, undoLoadState)(JNIEnv*, jobject)

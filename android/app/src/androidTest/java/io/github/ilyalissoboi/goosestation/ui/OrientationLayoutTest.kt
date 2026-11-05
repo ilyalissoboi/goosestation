@@ -828,6 +828,90 @@ class OrientationLayoutTest {
         )
 
     @Test
+    fun theGraphicsPage() =
+        settingsPageFits(
+            {
+                var values by remember {
+                    mutableStateOf(
+                        pageValues(
+                            GraphicsSettings.all,
+                            "GPU/DownsampleMode" to "Box",
+                            "GPU/ResolutionScale" to "4",
+                            "GPU/PGXPEnable" to "true",
+                            "GPU/PGXPDepthBuffer" to "true",
+                            "Display/AspectRatio" to "Custom",
+                            "TextureReplacements/EnableVRAMWriteReplacements" to "true",
+                        ),
+                    )
+                }
+                GraphicsScreen(values, SampleNames.ALL, vulkanFailed = true, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Renderer",
+                    "Internal resolution",
+                    "Downsampling",
+                    "Downsampling scale",
+                    "Multisampling",
+                    "Threaded presentation",
+                    "Texture filtering",
+                    "Sprite texture filtering",
+                    "True colour",
+                    "Debanding",
+                    "Widescreen rendering",
+                    "Round upscaled texture coordinates",
+                    "Line detection",
+                    "Force NTSC timings",
+                    "Disable interlacing",
+                    "FMV chroma smoothing",
+                    "Software renderer for readbacks",
+                    "Use old MDEC routines",
+                    "Geometry correction",
+                    "Perspective-correct textures",
+                    "Perspective-correct colours",
+                    "Culling correction",
+                    "Preserve projection precision",
+                    "Depth buffer",
+                    "Depth clear threshold",
+                    "CPU mode",
+                    "Vertex cache",
+                    "Disable on 2D polygons",
+                    "Geometry tolerance",
+                    "Aspect ratio",
+                    "Custom ratio width",
+                    "Custom ratio height",
+                    "Deinterlacing",
+                    "Crop",
+                    "Scaling",
+                    "Screen position",
+                    "Rotation",
+                    "Stretch vertically",
+                    "Force 4:3 for FMVs",
+                    "Show messages",
+                    "Show FPS",
+                    "Show speed",
+                    "Show resolution",
+                    "Show CPU usage",
+                    "Show GPU usage",
+                    "Show GPU statistics",
+                    "Show latency",
+                    "Show frame times",
+                    "Show controller input",
+                    "Statistics size",
+                    "Size",
+                    "Format",
+                    "Quality",
+                    "VRAM write replacements",
+                    "Preload replacement textures",
+                ),
+            lists =
+                mapOf(
+                    "Multisampling" to ("Off" to "8x SSAA"),
+                    "Rotation" to ("No Rotation" to "Rotate 90° (Clockwise)"),
+                ),
+        )
+
+    @Test
     fun theHubWithTheCoreReady() {
         eachConfig({ SettingsScreen(focusEntry = null, coreReady = true, onOpen = {}, onBack = {}) }) {
             assertTextsLaidOut()

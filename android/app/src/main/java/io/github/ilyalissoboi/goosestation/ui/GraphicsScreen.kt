@@ -15,6 +15,7 @@ import io.github.ilyalissoboi.goosestation.settings.NameList
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
+import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 
@@ -191,9 +192,74 @@ fun GraphicsScreen(
             GraphicsSettings.ASPECT_RATIO,
             notes = GraphicsSettings.ASPECT_NOTES,
         )
+        if (values[GraphicsSettings.ASPECT_RATIO] == CUSTOM) {
+            // As the core takes them: at least 1 (a new settings.ini has a numerator of 0).
+            for (
+            (label, term) in
+            listOf(
+                "Custom ratio width" to GraphicsSettings.CUSTOM_ASPECT_NUMERATOR,
+                "Custom ratio height" to GraphicsSettings.CUSTOM_ASPECT_DENOMINATOR,
+            )
+            ) {
+                NumberRow(
+                    label,
+                    values[term].coerceAtLeast(1),
+                    GraphicsSettings.ASPECT_TERMS,
+                    onChange = { onChange(values.with(term, it)) },
+                )
+            }
+        }
+        Names(values, onChange, names, "Deinterlacing", GraphicsSettings.DEINTERLACING)
+        Names(values, onChange, names, "Crop", GraphicsSettings.CROP)
+        Names(values, onChange, names, "Scaling", GraphicsSettings.SCALING)
+        Names(values, onChange, names, "Screen position", GraphicsSettings.ALIGNMENT)
+        Names(values, onChange, names, "Rotation", GraphicsSettings.ROTATION)
+        Switch(values, onChange, "Stretch vertically", GraphicsSettings.STRETCH_VERTICALLY)
+        Switch(values, onChange, "Force 4:3 for FMVs", GraphicsSettings.FORCE_4_3_FOR_FMVS)
 
         SettingsSection("On-screen display")
+        Switch(
+            values,
+            onChange,
+            "Show messages",
+            GraphicsSettings.SHOW_MESSAGES,
+            "The game's messages, such as a memory card save. The app's own still show.",
+        )
         Switch(values, onChange, "Show FPS", GraphicsSettings.SHOW_FPS)
+        Switch(values, onChange, "Show speed", GraphicsSettings.SHOW_SPEED)
+        Switch(values, onChange, "Show resolution", GraphicsSettings.SHOW_RESOLUTION)
+        Switch(values, onChange, "Show CPU usage", GraphicsSettings.SHOW_CPU)
+        Switch(values, onChange, "Show GPU usage", GraphicsSettings.SHOW_GPU)
+        Switch(values, onChange, "Show GPU statistics", GraphicsSettings.SHOW_GPU_STATISTICS)
+        Switch(values, onChange, "Show latency", GraphicsSettings.SHOW_LATENCY)
+        Switch(values, onChange, "Show frame times", GraphicsSettings.SHOW_FRAME_TIMES)
+        Switch(values, onChange, "Show controller input", GraphicsSettings.SHOW_INPUTS)
+        Number(
+            values,
+            onChange,
+            "Statistics size",
+            GraphicsSettings.OSD_SCALE,
+            GraphicsSettings.OSD_SCALES,
+            units = 1,
+            note = "The size of what's drawn over the game.",
+        )
+
+        SettingsSection("Screenshots")
+        Names(values, onChange, names, "Size", GraphicsSettings.SCREENSHOT_MODE)
+        Names(values, onChange, names, "Format", GraphicsSettings.SCREENSHOT_FORMAT)
+        Number(values, onChange, "Quality", GraphicsSettings.SCREENSHOT_QUALITY, GraphicsSettings.SCREENSHOT_QUALITIES)
+
+        SettingsSection("Texture replacement")
+        Switch(
+            values,
+            onChange,
+            "VRAM write replacements",
+            GraphicsSettings.VRAM_REPLACEMENTS,
+            "From the data folder's textures folder.",
+        )
+        if (values[GraphicsSettings.VRAM_REPLACEMENTS]) {
+            Switch(values, onChange, "Preload replacement textures", GraphicsSettings.PRELOAD_TEXTURES)
+        }
     }
 }
 
@@ -204,3 +270,4 @@ private const val AUTOMATIC = "Automatic"
 private const val VULKAN = "Vulkan"
 private const val SOFTWARE = "Software"
 private const val BOX = "Box"
+private const val CUSTOM = "Custom"

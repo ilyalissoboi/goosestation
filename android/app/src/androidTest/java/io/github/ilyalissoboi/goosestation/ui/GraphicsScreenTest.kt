@@ -191,6 +191,90 @@ class GraphicsScreenTest {
     }
 
     @Test
+    fun customShowsItsRatio() {
+        show(pageValues(GraphicsSettings.all, "Display/AspectRatio" to "Custom"))
+
+        downTo("Custom ratio width")
+        press(Key.DirectionRight)
+        press(Key.DirectionDown)
+        assertFocusedHas("Custom ratio height")
+        press(Key.DirectionLeft)
+
+        val custom = pageValues(GraphicsSettings.all, "Display/AspectRatio" to "Custom")
+        assertEquals(
+            listOf(
+                custom.with(GraphicsSettings.CUSTOM_ASPECT_NUMERATOR, 5),
+                custom.with(GraphicsSettings.CUSTOM_ASPECT_DENOMINATOR, 2),
+            ),
+            changes,
+        )
+    }
+
+    // A new settings.ini has a numerator of 0, which the core takes as 1 (settings.cpp's clamp).
+    @Test
+    fun aZeroTermShowsAsTheCoreTakesIt() {
+        show(
+            pageValues(
+                GraphicsSettings.all,
+                "Display/AspectRatio" to "Custom",
+                "Display/CustomAspectRatioNumerator" to "0",
+            ),
+        )
+
+        downTo("Custom ratio width")
+        assertFocusedHas("1")
+        press(Key.DirectionRight)
+
+        assertEquals(2, changes.single()[GraphicsSettings.CUSTOM_ASPECT_NUMERATOR])
+    }
+
+    @Test
+    fun noCustomRatioOtherwise() {
+        show()
+
+        rule.onNodeWithText("Custom ratio width").assertDoesNotExist()
+    }
+
+    @Test
+    fun eachOnScreenDisplaySwitchHasItsKey() {
+        show()
+
+        val rows =
+            listOf(
+                "Show messages" to GraphicsSettings.SHOW_MESSAGES,
+                "Show FPS" to GraphicsSettings.SHOW_FPS,
+                "Show speed" to GraphicsSettings.SHOW_SPEED,
+                "Show resolution" to GraphicsSettings.SHOW_RESOLUTION,
+                "Show CPU usage" to GraphicsSettings.SHOW_CPU,
+                "Show GPU usage" to GraphicsSettings.SHOW_GPU,
+                "Show GPU statistics" to GraphicsSettings.SHOW_GPU_STATISTICS,
+                "Show latency" to GraphicsSettings.SHOW_LATENCY,
+                "Show frame times" to GraphicsSettings.SHOW_FRAME_TIMES,
+                "Show controller input" to GraphicsSettings.SHOW_INPUTS,
+            )
+        for ((label, _) in rows) {
+            downTo(label)
+            press(Key.ButtonA)
+        }
+
+        assertEquals(rows.map { start.with(it.second, !start[it.second]) }, changes)
+    }
+
+    @Test
+    fun noPreloadingWithoutReplacements() {
+        show()
+
+        rule.onNodeWithText("Preload replacement textures").assertDoesNotExist()
+    }
+
+    @Test
+    fun preloadingGoesWithReplacements() {
+        show(pageValues(GraphicsSettings.all, "TextureReplacements/EnableVRAMWriteReplacements" to "true"))
+
+        downTo("Preload replacement textures")
+    }
+
+    @Test
     fun openGlIsCalledOpenGlEs() {
         show(pageValues(GraphicsSettings.all, "GPU/Renderer" to "OpenGL"))
 

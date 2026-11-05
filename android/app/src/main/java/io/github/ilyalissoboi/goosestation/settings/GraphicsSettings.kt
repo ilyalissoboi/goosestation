@@ -65,7 +65,41 @@ object GraphicsSettings {
 
     // Display.
     val ASPECT_RATIO = NameSetting("Display", "AspectRatio", "Auto (Game Native)", NameList.AspectRatio)
+
+    /** The ratio's terms with `Custom`. */
+    val CUSTOM_ASPECT_NUMERATOR = IntSetting("Display", "CustomAspectRatioNumerator", 4)
+    val CUSTOM_ASPECT_DENOMINATOR = IntSetting("Display", "CustomAspectRatioDenominator", 3)
+    val DEINTERLACING = NameSetting("Display", "DeinterlacingMode", "Adaptive", NameList.DeinterlacingMode)
+    val CROP = NameSetting("Display", "CropMode", "Overscan", NameList.CropMode)
+    val SCALING = NameSetting("Display", "Scaling", "BilinearSmooth", NameList.Scaling)
+    val ALIGNMENT = NameSetting("Display", "Alignment", "Center", NameList.Alignment)
+    val ROTATION = NameSetting("Display", "Rotation", "Normal", NameList.Rotation)
+    val STRETCH_VERTICALLY = BoolSetting("Display", "StretchVertically", false)
+    val FORCE_4_3_FOR_FMVS = BoolSetting("Display", "Force4_3For24Bit", false)
+
+    // On-screen display: the core's messages (which reach the app's message layer) and statistics (drawn by the core).
+    val SHOW_MESSAGES = BoolSetting("Display", "ShowOSDMessages", true)
     val SHOW_FPS = BoolSetting("Display", "ShowFPS", false)
+    val SHOW_SPEED = BoolSetting("Display", "ShowSpeed", false)
+    val SHOW_RESOLUTION = BoolSetting("Display", "ShowResolution", false)
+    val SHOW_CPU = BoolSetting("Display", "ShowCPU", false)
+    val SHOW_GPU = BoolSetting("Display", "ShowGPU", false)
+    val SHOW_GPU_STATISTICS = BoolSetting("Display", "ShowGPUStatistics", false)
+    val SHOW_LATENCY = BoolSetting("Display", "ShowLatencyStatistics", false)
+    val SHOW_FRAME_TIMES = BoolSetting("Display", "ShowFrameTimes", false)
+    val SHOW_INPUTS = BoolSetting("Display", "ShowInputs", false)
+
+    /** In percent: the statistics' size. The app's message layer doesn't follow it. */
+    val OSD_SCALE = FloatSetting("Display", "OSDScale", 100f)
+
+    // Screenshots.
+    val SCREENSHOT_MODE = NameSetting("Display", "ScreenshotMode", "ScreenResolution", NameList.ScreenshotMode)
+    val SCREENSHOT_FORMAT = NameSetting("Display", "ScreenshotFormat", "PNG", NameList.ScreenshotFormat)
+    val SCREENSHOT_QUALITY = IntSetting("Display", "ScreenshotQuality", 85)
+
+    // Texture replacement.
+    val VRAM_REPLACEMENTS = BoolSetting("TextureReplacements", "EnableVRAMWriteReplacements", false)
+    val PRELOAD_TEXTURES = BoolSetting("TextureReplacements", "PreloadTextures", false)
 
     val all: List<Setting<*>> =
         listOf(
@@ -103,7 +137,31 @@ object GraphicsSettings {
             PGXP_DISABLE_2D,
             PGXP_TOLERANCE,
             ASPECT_RATIO,
+            CUSTOM_ASPECT_NUMERATOR,
+            CUSTOM_ASPECT_DENOMINATOR,
+            DEINTERLACING,
+            CROP,
+            SCALING,
+            ALIGNMENT,
+            ROTATION,
+            STRETCH_VERTICALLY,
+            FORCE_4_3_FOR_FMVS,
+            SHOW_MESSAGES,
             SHOW_FPS,
+            SHOW_SPEED,
+            SHOW_RESOLUTION,
+            SHOW_CPU,
+            SHOW_GPU,
+            SHOW_GPU_STATISTICS,
+            SHOW_LATENCY,
+            SHOW_FRAME_TIMES,
+            SHOW_INPUTS,
+            OSD_SCALE,
+            SCREENSHOT_MODE,
+            SCREENSHOT_FORMAT,
+            SCREENSHOT_QUALITY,
+            VRAM_REPLACEMENTS,
+            PRELOAD_TEXTURES,
         )
 
     val RESOLUTIONS =
@@ -114,6 +172,12 @@ object GraphicsSettings {
                 else -> "${it}x"
             }
         }
+
+    val ASPECT_TERMS = NumberScale.Range(1, 64, 1, presets = listOf(1, 3, 4, 9, 16, 21)) { "$it" }
+
+    val OSD_SCALES = NumberScale.Range(25, 500, 5, presets = listOf(50, 75, 100, 150, 200)) { "$it%" }
+
+    val SCREENSHOT_QUALITIES = NumberScale.Range(1, 100, 1, presets = listOf(50, 75, 85, 90, 95, 100)) { "$it%" }
 
     val DOWNSAMPLE_SCALES = NumberScale.Range(1, 16, 1, presets = listOf(1, 2, 3, 4)) { "${it}x" }
 

@@ -389,6 +389,31 @@ class GameCallsTest {
         }
 
     @Test
+    fun aCoreMessageReachesTheApp() {
+        val keys = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(onMessage = { key, _ -> keys += key }) {
+            NativeLibrary.resetGame()
+            Thread.sleep(1_000)
+        }
+
+        assertTrue(keys.toString(), "system_reset" in keys)
+    }
+
+    @Test
+    fun noCoreMessagesWithShowOSDMessagesOff() {
+        val keys = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            settings = { NativeLibrary.setBoolSetting("Display", "ShowOSDMessages", false) },
+            onMessage = { key, _ -> keys += key },
+        ) {
+            NativeLibrary.resetGame()
+            Thread.sleep(1_000)
+        }
+
+        assertTrue(keys.toString(), "system_reset" !in keys)
+    }
+
+    @Test
     fun theScreensRefreshRateReachesTheCore() =
         withPadtest(refreshRate = 60f) {
             assertEquals(60f, NativeLibrary.getSurfaceRefreshRateForTest())

@@ -1413,6 +1413,28 @@ answered **Keep it**, so the resume state of 1 Nov 02:02 stayed as it was. Wi-Fi
 
 Not checked: the game's own picture (the screen capture can't read its surface), and an unlock earned offline.
 
+### The memory card editor (2026-11-05)
+
+The debug APK of `e7f87d062` installed over the existing one (data kept), with the user's memory card sync on, so
+nothing was saved: every check ended in Discard or Cancel. The three cards (`padtest_1.mcd` and Ace Combat 3's two)
+were backed up first and were byte-for-byte the same afterwards, in the working copy and the data folder. The user
+drove it with the Thor's own controls; the keyboard was also checked over adb.
+
+| Check | Result |
+| --- | --- |
+| Manage cards | Pass. The page's first row, "3 cards", focused on opening. |
+| The editor at 640 x 360 | Pass. Two cards side by side; icons, the Japanese title, file names and block counts readable. |
+| L1, R1, Left, Right | Pass. L1 and R1 moved between the cards, as did Left and Right at a card's edge (the pad's D-pad is a hat). |
+| The card list | Pass. A opened it; B closed it unchanged. |
+| A save's panel | Pass. Copy first and focused; B closed it, the focus back on the save. |
+| Copy | Pass. "1 change not saved", the save on the other card. |
+| Rename and the keyboard | **Found: A on a field didn't open the keyboard**, only a touch did. Compose's text field starts the text session the keyboard needs only for a tap or while it shows the keyboard on focus, which `TextFieldRow` turns off; the Memory cards page's fields and the Achievements sign-in had it too. Fixed in `e37377b84` (A or the D-pad centre turn it on while the field has the focus, with `TextFieldRowTest`); rechecked by the user with the pad: Gboard opened docked under the app, and the rename warning and Cancel worked. |
+| Export | Pass. The picker opened from Export…, and the editor said "Exported …". |
+| Delete | Pass. "Deleted · …" greyed, its blocks kept. |
+| Leaving | Pass. B asked "Save your changes?" with Keep editing focused; Discard went back to Memory cards, Manage cards focused. |
+
+Not checked on the Thor: Save itself (it would have reached the user's other devices; checked on the emulator).
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
@@ -1640,3 +1662,15 @@ adb logcat -v time > thor.log
    - [x] Hardcore mode on: a game with a resume state offers only **Start**; Load state, Fast forward and Patch codes
      are greyed with "Off in hardcore mode", and the D-pad skips them. Switch it off afterwards.
    - [ ] An unlock in play shows its card at the top centre, with its sound.
+
+13. **The memory card editor.** With the build that has it. With memory card sync on, press nothing that saves:
+    leave with **Discard**.
+   - [x] Settings → Memory cards → **Manage cards**, the first row, with the number of cards; the editor shows two
+     cards side by side, readable at 640 x 360.
+   - [x] L1 and R1 move between the cards, as do Left and Right at a card's edge; A on a card's name opens the list of
+     cards, B closes it.
+   - [x] A on a save: its panel, Copy focused; B back to the save. Copy makes "1 change not saved".
+   - [x] Rename…: A on Title or File name opens the keyboard, docked under the app (fixed in `e37377b84`); a name that
+     doesn't follow the usual pattern asks "Rename anyway?", and B goes back to the form with the name kept.
+   - [x] Export… opens the file picker and says "Exported …"; Delete keeps the save listed, greyed.
+   - [x] B with changes asks Save, Discard or Keep editing (focused); Discard leaves, and the cards are unchanged.

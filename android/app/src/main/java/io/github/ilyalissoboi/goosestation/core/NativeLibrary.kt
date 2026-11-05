@@ -144,6 +144,86 @@ object NativeLibrary {
 
     external fun memcardCardClosedForTest(path: String)
 
+    /**
+     * The memory cards the editor lists: each game's own card, at the path it boots with (the games given as parallel
+     * arrays, in the order to list them), then the shared cards and the other card files. On the CPU thread, waiting
+     * for it.
+     */
+    external fun getMemcardFiles(
+        titles: Array<String>,
+        serials: Array<String>,
+        bootPaths: Array<String>,
+        playlists: BooleanArray,
+    ): Array<MemcardFile>
+
+    // The memory card editor's card operations (MemcardEditorApi): each takes a card's bytes and gives the new ones.
+    // On the CPU thread, waiting for it, but writeMemcard and isMemcardKnownToSync, on the calling thread.
+
+    /** The card file's bytes (the first 256 KiB), or null without a file. */
+    external fun readMemcard(path: String): ByteArray?
+
+    /** What's on [card], or null unless it's a memory card image. */
+    external fun getMemcardContents(card: ByteArray): MemcardContents?
+
+    external fun formatMemcard(): ByteArray
+
+    external fun copyMemcardSave(
+        from: ByteArray,
+        firstBlock: Int,
+        to: ByteArray,
+        replace: Boolean,
+    ): MemcardEdit
+
+    external fun deleteMemcardSave(
+        card: ByteArray,
+        firstBlock: Int,
+        permanently: Boolean,
+    ): ByteArray?
+
+    external fun undeleteMemcardSave(
+        card: ByteArray,
+        firstBlock: Int,
+    ): ByteArray?
+
+    external fun checkMemcardRename(
+        card: ByteArray,
+        firstBlock: Int,
+        title: String?,
+        fileName: String?,
+    ): MemcardRenameCheck
+
+    external fun renameMemcardSave(
+        card: ByteArray,
+        firstBlock: Int,
+        title: String?,
+        fileName: String?,
+    ): ByteArray?
+
+    external fun importMemcardSave(
+        card: ByteArray,
+        fileName: String,
+        data: ByteArray,
+    ): MemcardEdit
+
+    external fun importMemcard(
+        fileName: String,
+        data: ByteArray,
+    ): MemcardEdit
+
+    external fun exportMemcardSave(
+        card: ByteArray,
+        firstBlock: Int,
+    ): MemcardEdit
+
+    external fun isMemcardKnownToSync(path: String): Boolean
+
+    external fun writeMemcard(
+        path: String,
+        card: ByteArray,
+        expected: ByteArray?,
+        force: Boolean,
+    ): MemcardWrite
+
     /** Tests: writes [data] as save [name] on the card at [path] (a new card if there's none), replacing one. */
     external fun writeMemoryCardSaveForTest(
         path: String,

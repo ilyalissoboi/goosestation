@@ -6,13 +6,22 @@ package io.github.ilyalissoboi.goosestation.ui
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.input.ImeAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
@@ -24,7 +33,7 @@ import org.junit.runner.RunWith
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** What a text row asks of Android's keyboard. */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class TextFieldRowTest {
     @get:Rule val rule = createComposeRule()
@@ -60,5 +69,75 @@ class TextFieldRowTest {
         val last = options.last()
         assertTrue("imeOptions 0x${last.toString(16)}", last and EditorInfo.IME_FLAG_NO_EXTRACT_UI != 0)
         assertTrue("imeOptions 0x${last.toString(16)}", last and EditorInfo.IME_FLAG_NO_FULLSCREEN != 0)
+    }
+
+    // The text sessions the rows below start, as Android's keyboard would be asked to open for each.
+    private val sessions = CopyOnWriteArrayList<Int>()
+
+    // A row focused as a controller focuses it: by the focus moving to it, not by a tap.
+    private fun showFocused(keyboardOnFocus: Boolean = false) {
+        rule.setContent {
+            GooseStationTheme {
+                InterceptPlatformTextInput(
+                    interceptor = { request, next ->
+                        next.startInputMethod(
+                            object : PlatformTextInputMethodRequest by request {
+                                override fun createInputConnection(outAttributes: EditorInfo): InputConnection =
+                                    request.createInputConnection(outAttributes).also {
+                                        sessions +=
+                                            outAttributes.imeOptions
+                                    }
+                            },
+                        )
+                    },
+                ) {
+                    val focus = remember { FocusRequester() }
+                    LaunchedEffect(Unit) { focus.requestFocus() }
+                    TextFieldRow(
+                        "File name",
+                        remember { TextFieldState("BASLUS-00067") },
+                        modifier = Modifier.focusRequester(focus),
+                        keyboardOnFocus = keyboardOnFocus,
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    // The Thor: A on a field the D-pad reached started no text session, so Android's keyboard never opened.
+    @Test
+    fun aOnAFocusedFieldOpensTheKeyboard() {
+        showFocused()
+
+        rule.onRoot().performKeyInput { pressKey(Key.ButtonA) }
+
+        rule.waitUntil(5_000) { sessions.isNotEmpty() }
+    }
+
+    @Test
+    fun theDPadCentreOpensItToo() {
+        showFocused()
+
+        rule.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+
+        rule.waitUntil(5_000) { sessions.isNotEmpty() }
+    }
+
+    @Test
+    fun focusAloneDoesntOpenIt() {
+        showFocused()
+        Thread.sleep(500)
+        rule.waitForIdle()
+
+        assertTrue("sessions: $sessions", sessions.isEmpty())
+    }
+
+    // A field opened on purpose, as the Memory cards page opens its rows' fields, has the keyboard from the start.
+    @Test
+    fun aFieldOpenedOnPurposeOpensItOnFocus() {
+        showFocused(keyboardOnFocus = true)
+
+        rule.waitUntil(5_000) { sessions.isNotEmpty() }
     }
 }

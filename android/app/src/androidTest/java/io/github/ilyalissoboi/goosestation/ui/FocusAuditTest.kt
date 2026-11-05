@@ -14,21 +14,28 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
+import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -57,6 +64,7 @@ import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
 import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
+import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertThrows
@@ -304,6 +312,85 @@ class FocusAuditTest {
     }
 
     @Test
+    fun memcardEditor() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(changes = 1),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardEditorNarrow() {
+        show {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(411.dp, 891.dp))) {
+                MemcardEditorScreen(ui = MemcardSamples.ui(), actions = RecordingEditorActions(), onLeave = {})
+            }
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardEditorPickerOpen() {
+        show { MemcardEditorScreen(ui = MemcardSamples.ui(), actions = RecordingEditorActions(), onLeave = {}) }
+        press(Key.DirectionUp)
+        press(Key.Enter)
+        rule.onNodeWithTag(CHOICE_LIST).assertExists()
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardSavePanel() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(panel = SavePanel(0, 1, renaming = false)),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardDeletedSavePanel() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(panel = SavePanel(0, 2, renaming = false)),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardQuestion() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(question = EditorQuestion("Erase every save on Crash Bandicoot?", "Erase", {})),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun memcardRenameForm() {
+        show {
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(panel = SavePanel(0, 1, renaming = true), renameError = "Enter a file name."),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun memoryCards() {
         show {
             MemcardSyncScreen(
@@ -314,6 +401,8 @@ class FocusAuditTest {
                 onRemovePassphrase = {},
                 onSyncNow = {},
                 onOpenConflicts = {},
+                cardsSummary = "12 cards",
+                onManageCards = {},
                 onBack = {},
             )
         }

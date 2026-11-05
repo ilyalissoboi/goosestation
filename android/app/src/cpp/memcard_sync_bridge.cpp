@@ -96,6 +96,11 @@ void MemcardSyncBridge::ResolveConflict(u64 id, bool keep_local, u32 remote_inde
   MemcardSync::ResolveConflict(id, keep_local, remote_index);
 }
 
+bool MemcardSyncBridge::IsCardKnown(std::string_view path)
+{
+  return MemcardSync::IsCardKnown(path);
+}
+
 bool MemcardSyncBridge::HoldCard(std::string_view relative_path, const std::function<void()>& action)
 {
   return MemcardSync::WithCardHeld(Path::Combine(EmuFolders::DataRoot, relative_path), action);

@@ -37,8 +37,10 @@ import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
+import io.github.ilyalissoboi.goosestation.storage.CurrentDocuments
 import io.github.ilyalissoboi.goosestation.storage.DataFolderCheck
 import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
+import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderKind
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPrefs
@@ -80,6 +82,9 @@ enum class Screen(
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
     SyncConflicts,
+
+    /** The memory card editor, from the Memory cards page. */
+    MemcardEditor,
     Game,
 }
 
@@ -127,6 +132,7 @@ object AppController : NativeCallbacks {
     private val currentActivity = CurrentActivity<Activity>()
     private val activity get() = currentActivity.current
     private var picker: FolderPicker? = null
+    private var documentPicker: DocumentPicker? = null
     private var mirror: Mirror? = null
     private var mirrorStateJob: Job? = null
     private var pushTicker: Job? = null
@@ -184,6 +190,25 @@ object AppController : NativeCallbacks {
             NativeCoreSettings,
             syncSecrets,
             memcardSyncStatus,
+        )
+    }
+
+    // The file picker of the activity shown, for the memory card editor: nothing is picked without one.
+    private val documents = CurrentDocuments { documentPicker }
+
+    /**
+     * The memory card editor, its edits kept in memory while the process lives. Each Save is pushed to the data folder
+     * at once, as a game's writes are when it stops.
+     */
+    val memcardEditor by lazy {
+        MemcardEditor(
+            scope,
+            coreDispatcher,
+            Dispatchers.IO,
+            NativeMemcardEditorApi,
+            documents,
+            syncOn = { memcardSyncStatus.state?.enabled == true },
+            onSaved = { scope.launch { push(force = true) } },
         )
     }
 
@@ -398,15 +423,21 @@ object AppController : NativeCallbacks {
     fun attach(
         activity: Activity,
         folderPicker: FolderPicker,
+        filePicker: DocumentPicker,
     ) {
         currentActivity.attach(activity)
         picker = folderPicker
+        // A pick under way in the activity this one replaces gets no result: it ends with nothing.
+        documentPicker?.takeIf { it !== filePicker }?.abandon()
+        documentPicker = filePicker
     }
 
     fun detach(activity: Activity) {
         if (!currentActivity.isCurrent(activity)) return
         currentActivity.detach(activity)
         picker = null
+        documentPicker?.abandon()
+        documentPicker = null
     }
 
     /** Whether [activity] is the one the app is shown in, the last attached. */
@@ -593,7 +624,10 @@ object AppController : NativeCallbacks {
         when (entry) {
             SettingsEntry.Graphics -> settingsPages.loadGraphics()
             SettingsEntry.Achievements -> achievementsPage.load()
-            SettingsEntry.MemoryCards -> memcardSyncStatus.refresh()
+            SettingsEntry.MemoryCards -> {
+                memcardSyncStatus.refresh()
+                memcardEditor.loadCount(games)
+            }
             SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.Folders -> {}
@@ -609,6 +643,27 @@ object AppController : NativeCallbacks {
         if (page == SettingsEntry.Controllers) controllersPage.close()
         settingsEntry = page
         screen = Screen.Settings
+    }
+
+    // --- The memory card editor ---
+
+    /** Opens the memory card editor, from the Memory cards page, if the settings can open: no game is under way. */
+    fun openMemcardEditor() {
+        if (screen != Screen.MemoryCards || !settingsReady) return
+        memcardEditor.open(games)
+        screen = Screen.MemcardEditor
+    }
+
+    /** Back from the editor to the Memory cards page, which counts the cards again. */
+    fun closeMemcardEditor() {
+        if (screen != Screen.MemcardEditor) return
+        memcardEditor.loadCount(games)
+        screen = Screen.MemoryCards
+    }
+
+    // Cards the data folder or sync changed while the editor shows: read again, unless they have edits.
+    private fun refreshEditor() {
+        if (screen == Screen.MemcardEditor) memcardEditor.refresh()
     }
 
     // --- Memory card sync's conflicts ---
@@ -1182,6 +1237,7 @@ object AppController : NativeCallbacks {
                 }
             }
         val applied = applyChanged(result.changed, onGrowth)
+        if (result.changed.isNotEmpty()) refreshEditor()
         // Only the memory cards: game settings that name more files may be among those it left.
         if (!onlyMemcards) layoutSettling.pulled(pull, result.complete)
         return applied
@@ -1195,6 +1251,7 @@ object AppController : NativeCallbacks {
         catchUps.guardGrowth(::catchUp) { onGrowth ->
             val result = mirror.push(force) { MemoryCardPaths.deferred(it, memcardPaths, holdMemcards) }
             applyChanged(result.changed, onGrowth)
+            if (result.changed.isNotEmpty()) refreshEditor()
         }
     }
 
@@ -1522,7 +1579,10 @@ object AppController : NativeCallbacks {
     override fun hasMemcardSyncSecret(name: String) = syncSecrets.has(name)
 
     override fun onMemcardSyncChanged() {
-        mainHandler.post { if (coreStarted) memcardSyncStatus.refresh() }
+        mainHandler.post {
+            if (coreStarted) memcardSyncStatus.refresh()
+            refreshEditor()
+        }
     }
 
     override fun onAchievementsLoginExpired() {

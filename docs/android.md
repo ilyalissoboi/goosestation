@@ -895,7 +895,45 @@ so one test can play two devices. `MemcardSyncStateTest`, `MemcardSyncCardsTest`
 `MemcardSyncSecretsTest` drive the real core through it, with test hooks for a card's open, write and close.
 Real storage is checked by hand, with your own credentials.
 
+### The memory card editor
+
+**Where.** Settings → Memory cards → **Manage cards** (the page's first row, "N cards"). Like the page, it can't be
+opened during a game, so it never edits a card a game has open.
+
+**Which cards.** One card per library game, at the path the game boots with: `System::GetGameMemoryCardPath` for its
+first disc's serial and path, except a playlist whose file title differs from the database's title, which boots with
+a card named after the playlist (unless the database-title card exists, or `[MemoryCards] UsePlaylistTitle` is off in
+the game's own settings or settings.ini), as the boot code chooses. A game's card that
+doesn't exist yet says "No card yet"; Save creates it (formatted). Slot 2 is listed only for a per-game card type
+there. Then the shared cards (when they exist, settings.ini makes the type Shared, or a game's ini does), and the
+other card files: those `Card1Path`/`Card2Path` name, and every `.mcd` in the memory card folder, by name.
+
+**Editing.** Two cards side by side (one at a time under 720 dp wide). A on a save: Copy to the other card (asking
+before replacing a save of the same name, refused without the free blocks), Rename (the core's rules and the desktop
+editor's warnings), Export (Android's file picker, an `.mcs`), Delete (undeletable while its blocks aren't reused),
+and, on a deleted save, Undelete and Delete permanently. A card's own actions: Import save (any format the core
+imports), Import card (replacing everything, asking first), Format (asking first). Files come and go only through the
+picker's `content://` documents, at most 256 KiB read. A card that can't be read offers Import card and Format only.
+
+**Saving.** Edits stay in memory, per card, until **Save** (or **Discard**); leaving with changes asks Save, Discard
+or Keep editing. Save writes each changed card atomically, refusing one whose file changed since it was read unless
+the player says to write over it, then pushes the data folder's mirror. A card memory card sync knows (a game used it
+here, or it came from another device: emusync's `es_card_get_mode` finds it) is written under sync's hold, so it
+syncs as one change; any other card stays on this device until a game uses it. With sync on, Delete, Delete
+permanently, Format and Import card on a card sync knows say other devices will see the saves removed. A card changed
+under the editor (a pull, or sync) with no edits is read again.
+
+**Testing.** `MemcardEditorListTest`, `MemcardEditorCoreTest` and `MemcardEditorSyncTest` (`@LargeTest`, two devices
+through `FakeS3`) drive the real core; `MemcardEditorTest` and `MemcardEditorSaveTest` the controller on fake cards
+(`FakeMemcardEditorApi`); `MemcardEditorScreenTest`, `MemcardPanelsTest` and `OverlayPanelTest` the screens by keys,
+with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is in `common-tests`
+(`memory_card_image_tests.cpp`, with the undelete fix), and the playlist rule in `android_memcards_tests.cpp`.
+
 ### Known limits
+
+- **Memory card editor:** edits held in memory are lost if Android ends the process while the app is in the
+  background, without a notice afterwards. Cards from outside the data folder come in only through Import card, and
+  multitap cards aren't shown.
 
 - **Removing the SD card stops a game played from it.** Android kills any process that still has a file open on a
   card it unmounts, about 5 s after the eject begins (`exited due to signal 2`), and a game holds its disc open. So
@@ -1197,6 +1235,25 @@ storage: that check is the user's).
 The full instrumented suite passed on the same AVD (509 of 510; the other, `ControllersScreenTest`, lost its test
 process and passed on its own, 27/27), and the native tests (196).
 
+### The memory card editor (2026-11-05)
+
+Checked on `goose-arm64` (2400 x 1080, landscape) with the debug APK of the editor's branch, set up afresh with
+`/sdcard/GooseTest`'s folders, whose data folder held four cards from earlier checks (backed up first, and put back
+after). Driven by key events, the file picker by taps.
+
+| Check | Result |
+| --- | --- |
+| The list | Pass. "Manage cards · 4 cards", focused on opening. The picker listed Ace Combat 3 Electrosphere, Pad Test #1 (100%) and padtest (the games) and Ace Combat 3 - Electrosphere (Japan) (a stray file). |
+| A playlist's card | Pass. Ace Combat 3's playlist is named apart from the database; the editor showed `Ace Combat 3 Electrosphere_1.mcd` as its card, and booting the playlist opened that file (`Memory Card Slot 1: …/memcards/Ace Combat 3 Electrosphere_1.mcd`). |
+| A real save | Pass. エ-スコンバット3 エレクトロスフィア, 2 blocks, `BISLPSP02020AC3ES`, with its icon. |
+| Copy, Replace?, Save | Pass. Copy to Pad Test #1 (100%) made "1 change not saved"; a second copy asked "Replace the save of the same name on Pad Test #1 (100%)?", Cancel focused; Save said "Saved", and the card was the same in the working copy and the data folder (the mirror pushed it). |
+| Delete, Undelete | Pass. "Delete エ-スコンバット3 エレクトロスフィア? You can undelete it while its blocks aren't reused."; the save stayed listed as "Deleted · …", still 2 blocks; Undelete brought it back (13 of 15 blocks free). |
+| Export, Import | Pass. Export… opened the picker with `BISLPSP02020AC3ES.mcs`; the file had 16,512 bytes and the editor said "Exported …". Import save of it onto the stray card added the save. Import card of the `.mcs` was refused with the core's reason ("Unknown extension 'mcs'."). Backing out of the picker changed nothing. |
+| Rename | Pass. File name MYSAVE asked first, with the usual-pattern warning and "Rename anyway?"; Cancel went back to the form with MYSAVE kept. |
+| Leaving | Pass. B with a change asked "Save your changes?" (Discard, Save, Keep editing focused); Discard left, and the card's file was unchanged. |
+| Found and fixed | The focus went to the left card's picker after a panel closed, as Android focused the screen's first element first; Export said it failed after writing the file (a `?:` on the picker's null, which means success); the overlay's scrim left the cutout strip and status bar undimmed. All fixed and rechecked here; the export has `CurrentDocumentsTest`. |
+| Crashes | None (`adb logcat -b crash -d` empty). |
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -1355,6 +1412,28 @@ answered **Keep it**, so the resume state of 1 Nov 02:02 stayed as it was. Wi-Fi
 | The resume state | Pass. `SLPS-02020_resume.sav` still 2026-11-01 02:02. |
 
 Not checked: the game's own picture (the screen capture can't read its surface), and an unlock earned offline.
+
+### The memory card editor (2026-11-05)
+
+The debug APK of `e7f87d062` installed over the existing one (data kept), with the user's memory card sync on, so
+nothing was saved: every check ended in Discard or Cancel. The three cards (`padtest_1.mcd` and Ace Combat 3's two)
+were backed up first and were byte-for-byte the same afterwards, in the working copy and the data folder. The user
+drove it with the Thor's own controls; the keyboard was also checked over adb.
+
+| Check | Result |
+| --- | --- |
+| Manage cards | Pass. The page's first row, "3 cards", focused on opening. |
+| The editor at 640 x 360 | Pass. Two cards side by side; icons, the Japanese title, file names and block counts readable. |
+| L1, R1, Left, Right | Pass. L1 and R1 moved between the cards, as did Left and Right at a card's edge (the pad's D-pad is a hat). |
+| The card list | Pass. A opened it; B closed it unchanged. |
+| A save's panel | Pass. Copy first and focused; B closed it, the focus back on the save. |
+| Copy | Pass. "1 change not saved", the save on the other card. |
+| Rename and the keyboard | **Found: A on a field didn't open the keyboard**, only a touch did. Compose's text field starts the text session the keyboard needs only for a tap or while it shows the keyboard on focus, which `TextFieldRow` turns off; the Memory cards page's fields and the Achievements sign-in had it too. Fixed in `e37377b84` (A or the D-pad centre turn it on while the field has the focus, with `TextFieldRowTest`); rechecked by the user with the pad: Gboard opened docked under the app, and the rename warning and Cancel worked. |
+| Export | Pass. The picker opened from Export…, and the editor said "Exported …". |
+| Delete | Pass. "Deleted · …" greyed, its blocks kept. |
+| Leaving | Pass. B asked "Save your changes?" with Keep editing focused; Discard went back to Memory cards, Manage cards focused. |
+
+Not checked on the Thor: Save itself (it would have reached the user's other devices; checked on the emulator).
 
 ## Checks on the AYN Thor
 
@@ -1583,3 +1662,15 @@ adb logcat -v time > thor.log
    - [x] Hardcore mode on: a game with a resume state offers only **Start**; Load state, Fast forward and Patch codes
      are greyed with "Off in hardcore mode", and the D-pad skips them. Switch it off afterwards.
    - [ ] An unlock in play shows its card at the top centre, with its sound.
+
+13. **The memory card editor.** With the build that has it. With memory card sync on, press nothing that saves:
+    leave with **Discard**.
+   - [x] Settings → Memory cards → **Manage cards**, the first row, with the number of cards; the editor shows two
+     cards side by side, readable at 640 x 360.
+   - [x] L1 and R1 move between the cards, as do Left and Right at a card's edge; A on a card's name opens the list of
+     cards, B closes it.
+   - [x] A on a save: its panel, Copy focused; B back to the save. Copy makes "1 change not saved".
+   - [x] Rename…: A on Title or File name opens the keyboard, docked under the app (fixed in `e37377b84`); a name that
+     doesn't follow the usual pattern asks "Rename anyway?", and B goes back to the form with the name kept.
+   - [x] Export… opens the file picker and says "Exported …"; Delete keeps the save listed, greyed.
+   - [x] B with changes asks Save, Discard or Keep editing (focused); Discard leaves, and the cards are unchanged.

@@ -50,6 +50,17 @@
 -keep class io.github.ilyalissoboi.goosestation.core.SyncVersion { <init>(...); }
 -keep class io.github.ilyalissoboi.goosestation.core.SyncConflict { <init>(...); }
 
+# jni_bridge.cpp finds the memory card editor's classes, their constructors and MemcardKind's values by name in
+# JNI_OnLoad.
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardFile { <init>(...); }
+-keep enum io.github.ilyalissoboi.goosestation.core.MemcardKind { public static final *; }
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardSave { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardContents { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardEdit { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardRenameCheck { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.MemcardWrite { <init>(...); }
+-keep enum io.github.ilyalissoboi.goosestation.core.MemcardWriteOutcome { public static final *; }
+
 # jni_bridge.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().
 -keep class io.github.ilyalissoboi.goosestation.core.BiosImage {
     <init>(java.lang.String, java.lang.String, java.lang.String);

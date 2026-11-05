@@ -56,11 +56,14 @@ import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
+import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -732,6 +735,129 @@ class OrientationLayoutTest {
     }
 
     @Test
+    fun theMemoryCardEditorFitsWithLongNames() {
+        val long = MemcardSamples.file("The Legend of the Extraordinarily Long-Named Adventure: Director's Cut")
+        val saves =
+            (1..15).map { n ->
+                // 32 characters, as the core shows a full-width title: in plain letters.
+                MemcardSamples.save(n, "BASLUS-0${1000 + n}ABCDEFG", "CASTLEVANIA SYMPHONY OF THE NIGHT".take(32))
+            }
+        val full = MemcardSamples.card(long, saves)
+        eachConfig({
+            MemcardEditorScreen(
+                ui = MemcardSamples.ui(left = full, right = MemcardSamples.SHARED_CARD, changes = 3),
+                actions = RecordingEditorActions(),
+                onLeave = {},
+            )
+        }) {
+            assertTextsLaidOut(inView = true)
+            assertFocusedInEditor()
+            reachFormat()
+            assertTextsLaidOut(inView = true)
+            // Up to the header's buttons, Save or Discard, whichever is nearer.
+            repeat(30) {
+                if (focusedHas("Save") || focusedHas("Discard")) return@repeat
+                press(Key.DirectionUp)
+                assertFocusedInEditor()
+            }
+            assertTrue("didn't reach the header", focusedHas("Save") || focusedHas("Discard"))
+            pressUntilFocusedInEditor(Key.DirectionLeft, "Discard")
+            // R1 goes to the other card than the last one focused: each card's picker in turn.
+            val pickers =
+                (1..2).map {
+                    press(Key.ButtonR1)
+                    assertFocusedInEditor()
+                    focusedText()
+                }
+            assertTrue(
+                "R1 focused $pickers",
+                pickers.any { "Shared card 1" in it } && pickers.any { "The Legend" in it },
+            )
+            if (!focusedHas("Shared card 1")) press(Key.ButtonR1)
+            reachFormat()
+        }
+    }
+
+    // The memory card editor's focus is in view: in its page's one scroll.
+    private fun assertFocusedInEditor() = assertFocusedInView()
+
+    private fun pressUntilFocusedInEditor(
+        key: Key,
+        text: String,
+    ) {
+        repeat(30) {
+            if (focusedHas(text)) return
+            press(key)
+            assertFocusedInEditor()
+        }
+        if (!focusedHas(text)) fail("$key never focused \"$text\"")
+    }
+
+    // Down through a memory card's saves lands on its nearest action; Format is after it, beside or under as they wrap.
+    private fun reachFormat() {
+        pressUntilFocusedInEditor(Key.DirectionDown, "Import")
+        val seen = mutableListOf(focusedText())
+        repeat(3) {
+            if (!focusedHas("Format")) press(Key.DirectionRight)
+            seen += focusedText()
+            if (!focusedHas("Format")) press(Key.DirectionDown)
+            seen += focusedText()
+        }
+        assertTrue("didn't reach Format: $seen", focusedHas("Format"))
+        assertFocusedInEditor()
+    }
+
+    @Test
+    fun aMemoryCardQuestionWithTheSyncLineFits() {
+        val question =
+            EditorQuestion(
+                "Erase every save on The Legend of the Extraordinarily Long-Named Adventure: Director's Cut?\n\n" +
+                    "Memory card sync is on: your other devices will see these saves removed.",
+                "Erase",
+                {},
+            )
+        // The overlay alone: the texts under its scrim aren't to be read through it.
+        eachConfig({ MemcardOverlay(MemcardSamples.ui(question = question), RecordingEditorActions(), onLeave = {}) }) {
+            assertTextsLaidOut(inView = true)
+            assertTrue(focusedHas("Cancel"))
+            assertFocusedInView(screen())
+            pressUntilFocusedInPanel(Key.DirectionLeft, "Erase")
+        }
+    }
+
+    @Test
+    fun theRenameFormFits() {
+        val save = MemcardSamples.save(1, "BASLUS-01001ABCDEFGH", "CASTLEVANIA SYMPHONY OF THE NIGH")
+        eachConfig({
+            MemcardOverlay(
+                MemcardSamples.ui(
+                    left = MemcardSamples.card(MemcardSamples.CRASH, listOf(save)),
+                    panel = SavePanel(0, 1, renaming = true),
+                    renameError = MemcardEditorWords.NAME_INVALID,
+                ),
+                RecordingEditorActions(),
+                onLeave = {},
+            )
+        }) {
+            assertTextsLaidOut(inView = true)
+            pressUntilFocusedInPanel(Key.DirectionDown, "Cancel")
+        }
+    }
+
+    // In a panel over the screen, the focus moves within its own scroll.
+    private fun pressUntilFocusedInPanel(
+        key: Key,
+        text: String,
+    ) {
+        repeat(12) {
+            if (focusedHas(text)) return
+            press(key)
+            assertFocusedInView(scrollerAroundFocused())
+        }
+        if (!focusedHas(text)) fail("$key never focused \"$text\"")
+    }
+
+    @Test
     fun memoryCardsWithALongAddressAndError() {
         eachConfig({
             MemcardSyncScreen(
@@ -753,6 +879,8 @@ class OrientationLayoutTest {
                 onRemovePassphrase = {},
                 onSyncNow = {},
                 onOpenConflicts = {},
+                cardsSummary = "12 cards",
+                onManageCards = {},
                 onBack = {},
             )
         }) {

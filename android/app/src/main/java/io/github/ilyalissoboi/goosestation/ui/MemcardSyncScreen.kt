@@ -40,7 +40,8 @@ import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 /**
- * Settings > Memory cards: memory card sync, as desktop and Big Picture have it. The switch has focus on opening.
+ * Settings > Memory cards: Manage cards, which opens the memory card editor ([onManageCards]), with the
+ * [cardsSummary], and has the focus on opening; then memory card sync, as desktop and Big Picture have it.
  *
  * The text settings and the secrets are rows showing their value; A, Enter or a tap on one open its field in its
  * place, with Android's keyboard, as Big Picture opens a dialog. Done hands the text to [onText] (`RemoteURI`,
@@ -59,6 +60,8 @@ fun MemcardSyncScreen(
     onRemovePassphrase: () -> Unit,
     onSyncNow: () -> Unit,
     onOpenConflicts: () -> Unit,
+    cardsSummary: String,
+    onManageCards: () -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = GooseStationTheme.colors
@@ -97,11 +100,11 @@ fun MemcardSyncScreen(
     )
 
     SettingsPage("Memory cards", onBack = onBack) {
+        NavRow("Manage cards", cardsSummary, onClick = onManageCards, modifier = Modifier.focusRequester(first))
         SwitchRow(
             "Sync memory cards",
             state.enabled,
             onToggle = onEnabled,
-            modifier = Modifier.focusRequester(first),
             note = "Syncs your saves with your other devices, through storage you own.",
         )
         Editable(
@@ -229,6 +232,8 @@ private fun EditableRow(
             password = secret,
             imeAction = ImeAction.Done,
             onDone = { onDone(text.text.toString()) },
+            // Opened on purpose, by A on the row: the keyboard comes with it.
+            keyboardOnFocus = true,
         )
     } else {
         Column(

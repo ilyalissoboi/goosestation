@@ -437,6 +437,7 @@ fun NavRow(
  * the keyboard, so a D-pad passes through; A, the D-pad centre or a tap do. Up and down leave it, as on any row. A
  * [password] is a secure field: masked, never offered to keyboards to learn, and read by TalkBack as a password. The
  * keyboard's action is [imeAction]; Done calls [onDone]. Its content description is [label], as TalkBack reads it.
+ * With [keyboardOnFocus], for a field opened on purpose, focus opens the keyboard too.
  */
 @Composable
 fun TextFieldRow(
@@ -447,11 +448,15 @@ fun TextFieldRow(
     enabled: Boolean = true,
     imeAction: ImeAction = ImeAction.Next,
     onDone: (() -> Unit)? = null,
+    keyboardOnFocus: Boolean = false,
 ) {
     val colors = GooseStationTheme.colors
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
+    // A or the D-pad centre asked for the keyboard, until the focus leaves. Compose's field starts its text session,
+    // which the keyboard needs, only for a tap or while it's to show the keyboard on focus: so A turns that on.
+    var keyboardWanted by remember { mutableStateOf(false) }
     // The keyboard shrinks the page from below once the field has focus: the field is brought back into view.
     val inView = remember { BringIntoViewRequester() }
     val keyboardHeight = WindowInsets.ime.getBottom(LocalDensity.current)
@@ -460,8 +465,10 @@ fun TextFieldRow(
         Modifier
             .fillMaxWidth()
             .bringIntoViewRequester(inView)
-            .onFocusChanged { focused = it.isFocused }
-            .onPreviewKeyEvent { event ->
+            .onFocusChanged {
+                focused = it.isFocused
+                if (!it.isFocused) keyboardWanted = false
+            }.onPreviewKeyEvent { event ->
                 // A single-line field would move its cursor instead.
                 val direction =
                     when (event.key) {
@@ -474,7 +481,10 @@ fun TextFieldRow(
                     return@onPreviewKeyEvent true
                 }
                 val opens = event.key == Key.ButtonA || event.key == Key.DirectionCenter
-                if (opens && event.type == KeyEventType.KeyUp) keyboard?.show()
+                if (opens && event.type == KeyEventType.KeyUp) {
+                    keyboardWanted = true
+                    keyboard?.show()
+                }
                 opens
             }.semantics { contentDescription = label }
             .focusIndicator(focused, colors.focus, GsShapes.small)
@@ -493,7 +503,19 @@ fun TextFieldRow(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(label, style = MaterialTheme.typography.titleSmall, color = if (enabled) colors.ink else colors.inkFaint)
-        DockedKeyboard { Field(password, state, field, enabled, textStyle, imeAction, action, cursor) }
+        DockedKeyboard {
+            Field(
+                password,
+                state,
+                field,
+                enabled,
+                textStyle,
+                imeAction,
+                action,
+                cursor,
+                keyboardOnFocus || keyboardWanted,
+            )
+        }
     }
 }
 
@@ -531,6 +553,7 @@ private fun Field(
     imeAction: ImeAction,
     action: KeyboardActionHandler,
     cursor: Brush,
+    keyboardOnFocus: Boolean,
 ) {
     if (password) {
         BasicSecureTextField(
@@ -538,7 +561,7 @@ private fun Field(
             modifier = field,
             enabled = enabled,
             textStyle = textStyle,
-            keyboardOptions = KeyboardOptions(imeAction = imeAction, showKeyboardOnFocus = false),
+            keyboardOptions = KeyboardOptions(imeAction = imeAction, showKeyboardOnFocus = keyboardOnFocus),
             onKeyboardAction = action,
             cursorBrush = cursor,
         )
@@ -549,7 +572,11 @@ private fun Field(
             enabled = enabled,
             textStyle = textStyle,
             keyboardOptions =
-                KeyboardOptions(imeAction = imeAction, autoCorrectEnabled = false, showKeyboardOnFocus = false),
+                KeyboardOptions(
+                    imeAction = imeAction,
+                    autoCorrectEnabled = false,
+                    showKeyboardOnFocus = keyboardOnFocus,
+                ),
             onKeyboardAction = action,
             lineLimits = TextFieldLineLimits.SingleLine,
             cursorBrush = cursor,

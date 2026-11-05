@@ -15,10 +15,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
+import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.app.SyncBadges
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
@@ -28,6 +30,7 @@ import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
@@ -40,6 +43,7 @@ import java.time.ZoneId
 class MainActivity : ComponentActivity() {
     // Registered here, before the activity starts, as the result API needs.
     private lateinit var folderPicker: FolderPicker
+    private lateinit var documentPicker: DocumentPicker
 
     private val inGame get() = AppController.screen == Screen.Game
 
@@ -50,7 +54,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         folderPicker = FolderPicker(this)
-        AppController.attach(this, folderPicker)
+        documentPicker = DocumentPicker(this)
+        AppController.attach(this, folderPicker, documentPicker)
         // The app is always dark, whatever the system's theme.
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         AppController.start(applicationContext)
@@ -140,8 +145,19 @@ class MainActivity : ComponentActivity() {
                                 onRemovePassphrase = page::removePassphrase,
                                 onSyncNow = page::syncNow,
                                 onOpenConflicts = AppController::openSyncConflicts,
+                                cardsSummary = MemcardEditorWords.cardCount(AppController.memcardEditor.cardCount),
+                                onManageCards = AppController::openMemcardEditor,
                                 onBack = AppController::closeSettingsPage,
                             )
+                        }
+                    }
+                    Screen.MemcardEditor -> {
+                        val editor = AppController.memcardEditor
+                        val ui = editor.ui
+                        if (ui == null) {
+                            SettingsLoadingPage("Memory cards", onBack = AppController::closeMemcardEditor)
+                        } else {
+                            MemcardEditorScreen(ui = ui, actions = editor, onLeave = AppController::closeMemcardEditor)
                         }
                     }
                     Screen.SyncConflicts -> {

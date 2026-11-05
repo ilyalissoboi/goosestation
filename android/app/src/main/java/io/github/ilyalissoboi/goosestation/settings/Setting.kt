@@ -72,16 +72,17 @@ data class NameSetting(
     ) = s.setString(section, key, value)
 }
 
-/** A setting whose value is free text, such as a file name. */
+/** A setting whose value is free text, such as a file name; with [deleteEmpty], an empty one deletes the key. */
 data class StringSetting(
     override val section: String,
     override val key: String,
     override val default: String,
+    val deleteEmpty: Boolean = false,
 ) : Setting<String> {
     override fun read(s: CoreSettings) = s.getString(section, key, default)
 
     override fun write(
         s: CoreSettings,
         value: String,
-    ) = s.setString(section, key, value)
+    ) = s.setString(section, key, value.takeUnless { deleteEmpty && it.isEmpty() })
 }

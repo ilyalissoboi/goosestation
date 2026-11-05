@@ -244,6 +244,10 @@ struct PadBinding
 /// controller's first binding for it.
 std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
 
+/// The controller's macro triggers on its port, Macro1 to Macro4 ([PadN] MacroK), each its first binding or none.
+/// nullopt as GetPadBindings() gives it. SetPadBinding() sets them, as an input.
+std::optional<std::vector<PadBinding>> GetMacroBindings(std::string descriptor);
+
 /// The pad's controller type as settings.ini has it ([PadN] Type, or the core's default for the pad), even one the
 /// core doesn't know; nullopt before Initialize() succeeded or for a pad past 7. Pads are 0-based: [Pad1] is 0.
 std::optional<std::string> GetPortType(u32 pad);

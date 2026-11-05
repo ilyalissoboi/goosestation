@@ -1782,6 +1782,46 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
   return result;
 }
 
+// The macros' triggers' keys, Macro1 to Macro4 (InputManager::NUM_MACRO_BUTTONS_PER_CONTROLLER).
+static bool IsMacroKey(std::string_view name)
+{
+  for (u32 i = 1; i <= InputManager::NUM_MACRO_BUTTONS_PER_CONTROLLER; i++)
+  {
+    if (name == fmt::format("Macro{}", i))
+      return true;
+  }
+
+  return false;
+}
+
+std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetMacroBindings(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<std::vector<PadBinding>> result;
+  EmuThread::RunOnThread(
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface& si = *s_base_settings_interface;
+      const std::string section = Controller::GetSettingsSection(GetPadOfIndex(si, index.value()));
+      result.emplace();
+      for (u32 i = 1; i <= InputManager::NUM_MACRO_BUTTONS_PER_CONTROLLER; i++)
+      {
+        const std::string key = fmt::format("Macro{}", i);
+        result->push_back(PadBinding{key, fmt::format("Macro {}", i), PadBindingKind::Button,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), key.c_str()),
+                                                                        index.value())});
+      }
+    },
+    true);
+  return result;
+}
+
 std::optional<std::string> AndroidHost::GetPortType(u32 pad)
 {
   if (!s_initialized || pad >= AndroidInputKeys::NUM_PADS)
@@ -2064,13 +2104,14 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
-        // Only what GetPadBindings() lists: a button or an axis, never a pointer or a motor.
+        // Only what GetPadBindings() and GetMacroBindings() list: a button, an axis or a macro's trigger, never a
+        // pointer or a motor.
         const u32 pad = GetPadOfIndex(si, index.value());
         const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
-        if (!info || std::none_of(info->bindings.begin(), info->bindings.end(),
-                                  [&name](const Controller::ControllerBindingInfo& bi) {
-                                    return name == bi.name && IsPadBindingType(bi.type);
-                                  }))
+        if (!info || (!IsMacroKey(name) && std::none_of(info->bindings.begin(), info->bindings.end(),
+                                                        [&name](const Controller::ControllerBindingInfo& bi) {
+                                                          return name == bi.name && IsPadBindingType(bi.type);
+                                                        })))
         {
           WARNING_LOG("Port {} has no button or axis '{}', not binding it.", pad + 1, name);
           return;

@@ -531,6 +531,28 @@ class ControllerBindingsTest {
         assertFalse("ToggleAnalogMode" in NativeLibrary.getHotkeyBindings("pad-a")!!.map { it.name })
     }
 
+    // A macro's trigger is each controller's own, in its port's [PadN], and moves with it.
+    @Test
+    fun aMacroTriggerIsTheControllersOwn() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad2]\nType = AnalogController\n",
+        )
+        connectNewPad(1, "pad-a", 0)
+
+        NativeLibrary.setPadBinding("pad-a", "Macro1", "Button99")
+
+        assertEquals(listOf("Android-0/Button99"), readSettings().values("Pad1", "Macro1"))
+        val macros = NativeLibrary.getMacroBindings("pad-a")!!.toList()
+        assertEquals(listOf("Macro1", "Macro2", "Macro3", "Macro4"), macros.map { it.name })
+        assertEquals("Button99", macros[0].binding)
+        assertEquals("Macro 1", macros[0].displayName)
+        assertNull(NativeLibrary.getMacroBindings("pad-unknown"))
+
+        NativeLibrary.setControllerPort("pad-a", 1)
+        assertEquals(listOf("Android-0/Button99"), readSettings().values("Pad2", "Macro1"))
+        assertEquals("Button99", NativeLibrary.getMacroBindings("pad-a")!![0].binding)
+    }
+
     @Test
     fun theSavedPortIsRead() {
         initialize(

@@ -371,6 +371,22 @@ class GameCallsTest {
         }
     }
 
+    // A macro presses its buttons while its trigger is held.
+    @Test
+    fun aMacroPressesItsButtons() =
+        withPadtest(settings = { NativeLibrary.setStringSetting("Pad1", "Macro1Binds", "Cross & Circle") }) {
+            NativeLibrary.setPadBinding(PAD, "Macro1", "Button99")
+            Thread.sleep(500)
+
+            NativeLibrary.onKey(DEVICE_ID, X, true)
+            Thread.sleep(300)
+            assertEquals(1f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
+            assertEquals(1f, NativeLibrary.getPadBindStateForTest(0, "Circle"))
+            NativeLibrary.onKey(DEVICE_ID, X, false)
+            Thread.sleep(300)
+            assertEquals(0f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
+        }
+
     // A controller on Port 2 presses Port 2's inputs, and not Port 1's.
     @Test
     fun aControllerOnPort2DrivesPort2() =

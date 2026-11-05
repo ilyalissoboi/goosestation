@@ -509,6 +509,12 @@ object NativeLibrary {
     /** The controller [type]'s settings, as [TypeSetting.parse] reads them; empty for a type with none, or unknown. */
     external fun getTypeSettings(type: String): Array<String>
 
+    /**
+     * The controller with [descriptor]'s macro triggers on its port, `Macro1` to `Macro4`, each its binding or null;
+     * [setPadBinding] sets them. Null as [getPadBindings] is.
+     */
+    external fun getMacroBindings(descriptor: String): Array<PadBinding>?
+
     /** Undoes the running game's last state load; false when there's none to undo. Waits for the core. */
     external fun undoLoadState(): Boolean
 

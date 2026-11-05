@@ -56,7 +56,7 @@ class FakeCoreApi(
         binding: String?,
     ) {
         calls += "setPadBinding $descriptor $name $binding"
-        bindings[name] = binding
+        if (name in macros) macros[name] = binding else bindings[name] = binding
     }
 
     override fun getPortType(pad: Int): String? = portTypes[pad]
@@ -85,6 +85,14 @@ class FakeCoreApi(
     }
 
     override fun getTypeSettings(type: String): List<TypeSetting> = typeSettings[type].orEmpty()
+
+    /** Each macro's trigger, as one controller has it. */
+    val macros = (1..4).associate { "Macro$it" to null as String? }.toMutableMap()
+
+    override fun getMacroBindings(descriptor: String): List<PadBinding>? =
+        macros.map { (name, binding) ->
+            PadBinding(name, name.replace("Macro", "Macro "), PadBindingKind.Button, binding)
+        }
 
     override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
         hotkeys.map { (name, binding) -> PadBinding(name, name, PadBindingKind.Button, binding) }

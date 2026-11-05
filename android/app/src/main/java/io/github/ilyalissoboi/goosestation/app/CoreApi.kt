@@ -55,6 +55,8 @@ interface CoreApi {
 
     fun getHotkeyBindings(descriptor: String): List<PadBinding>?
 
+    fun getMacroBindings(descriptor: String): List<PadBinding>?
+
     fun setHotkeyBinding(
         descriptor: String,
         name: String,
@@ -151,6 +153,9 @@ object NativeCoreApi : CoreApi {
     ) = NativeLibrary.setPadBinding(descriptor, name, binding)
 
     override fun resetPadBindings(descriptor: String) = NativeLibrary.resetPadBindings(descriptor)
+
+    override fun getMacroBindings(descriptor: String): List<PadBinding>? =
+        NativeLibrary.getMacroBindings(descriptor)?.toList()
 
     override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
         NativeLibrary.getHotkeyBindings(descriptor)?.toList()

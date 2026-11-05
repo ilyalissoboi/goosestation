@@ -1296,6 +1296,22 @@ after). Driven by key events, the file picker by taps.
 | Found and fixed | The focus went to the left card's picker after a panel closed, as Android focused the screen's first element first; Export said it failed after writing the file (a `?:` on the picker's null, which means success); the overlay's scrim left the cutout strip and status bar undimmed. All fixed and rechecked here; the export has `CurrentDocumentsTest`. |
 | Crashes | None (`adb logcat -b crash -d` empty). |
 
+### The settings pages, stage 1 (2026-11-05)
+
+Checked on `goose-arm64` (2400 x 1080, landscape) with the debug APK of `c8d18dff2`, installed over the existing one
+(data kept). Driven by key events, the library's tiles by taps. Every setting changed was turned back off afterwards,
+and the states saved were deleted (the data folder's mirror had none left).
+
+| Check | Result |
+| --- | --- |
+| The hub | Pass. The ten pages in desktop's order, Controllers focused on opening; Graphics' summary "Renderer, enhancements, display, on-screen display", Memory cards' "Card types, sync, the card editor". |
+| Emulation | Pass. The Speed section's heading over Emulation speed (100%), Fast-forward and Turbo speed (Unlimited, the back arrow faint at that end), Turbo's note "While the Turbo hotkey is held.". Right made it 125%, and `settings.ini` had `EmulationSpeed = 1.25`; Left put it back. |
+| Pause on start | Pass. With `StartPaused = true`, padtest booted paused with its menu open on Resume. |
+| The refresh rate | Pass. With VSync and sync to host refresh rate on, the log had `Refresh rate: Host=60.000004hz Guest=49.74682hz Ratio=1.2061074 - can't sync`: the core had the screen's rate (padtest is PAL, so it rightly doesn't sync). |
+| Save state backups | Pass. With `CreateSaveStateBackups = true`, saving to slot 1, then Replace on slot 1, left `HASH-9FDA0E1A56D8DF5B_1.sav` and `_1.bak`. |
+| Pause on a disconnect | Not checked: the emulator has no controller to unplug. It waits for the Thor. |
+| Crashes | None (`adb logcat -b crash -d` empty). The emulator's System UI asked to be waited for once, with three emulators running. |
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon

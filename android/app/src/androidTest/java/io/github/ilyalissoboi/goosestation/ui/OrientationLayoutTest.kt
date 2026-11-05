@@ -93,6 +93,7 @@ import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
@@ -1515,6 +1516,81 @@ class OrientationLayoutTest {
             assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "Toggle Analog Mode")
             assertFocusedInView()
+        }
+    }
+
+    // The longest Port page: NeGcon's sixteen settings, its bindings and macros, reached with the D-pad.
+    @Test
+    fun aPortWithNeGconsSettings() {
+        eachConfig({
+            PortScreen(
+                title = "Port 1A",
+                controllers = listOf(PAD, LONG_PAD),
+                labels = emptyMap(),
+                selected = LONG_PAD.descriptor,
+                bindings = BINDINGS,
+                bindingsFor = LONG_PAD.descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                glyphs = false,
+                type = "NeGcon",
+                typeNames = listOf(Choice("NeGcon", "NeGcon")),
+                typeSettings = NEGCON_SETTINGS,
+                values = portPageValues(NEGCON_SETTINGS, "Pad1/Macro4Binds" to "Cross & Circle & Square & Triangle"),
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("Controller type"))
+            pressUntilFocused(Key.DirectionDown, "L Button Scaling")
+            assertFocusedInView()
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "Macro 4")
+            assertFocusedInView()
+            assertTextsLaidOut()
+        }
+    }
+
+    @Test
+    fun aMacroPage() {
+        eachConfig({
+            MacroScreen(
+                title = "Macro 2 · Port 2C",
+                pad = 6,
+                macro = 2,
+                controllers = listOf(LONG_PAD),
+                labels = emptyMap(),
+                selected = LONG_PAD.descriptor,
+                triggers = listOf(PadBinding("Macro2", "Macro 2", PadBindingKind.Button, null)),
+                triggersFor = LONG_PAD.descriptor,
+                inputs = BINDINGS,
+                values = pageValues(MacroSettings.settings(6, 2)),
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onChange = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas(LONG_PAD.name))
+            pressUntilFocused(Key.DirectionDown, "Press to toggle")
+            assertFocusedInView()
+            assertTextsLaidOut()
         }
     }
 

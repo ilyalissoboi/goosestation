@@ -40,6 +40,7 @@ import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.HotkeysScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
+import io.github.ilyalissoboi.goosestation.ui.MacroScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.PortScreen
@@ -293,8 +294,49 @@ class MainActivity : ComponentActivity() {
                                         onDropUndo = page::dropUndo,
                                         onReset = AppController::resetBindings,
                                         onBack = AppController::controllersBack,
+                                        pad = view.pad,
+                                        type = state.portTypes[view.pad],
+                                        typeNames = state.typeNames,
+                                        onType = { page.setType(view.pad, it) },
+                                        typeSettings = state.typeSettings,
+                                        values = state.portValues,
+                                        onChange = page::changePort,
+                                        onOpenMacro = { page.openMacro(view.pad, it) },
+                                        focusMacro = (state.cameFrom as? ControllersView.Macro)?.macro,
                                     )
                                 }
+                            }
+                            is ControllersView.Macro -> {
+                                val port =
+                                    state.offered.firstOrNull { it.value == view.pad }?.label ?: "Port ${view.pad + 1}"
+                                MacroScreen(
+                                    title = "Macro ${view.macro} · $port",
+                                    pad = view.pad,
+                                    macro = view.macro,
+                                    controllers =
+                                        state.controllers.filter {
+                                            (state.ports[it.descriptor] ?: 0) ==
+                                                view.pad
+                                        },
+                                    labels = state.labels,
+                                    selected = state.selected,
+                                    triggers = state.macros.orEmpty(),
+                                    triggersFor = state.bindingsFor.takeIf { state.macros != null },
+                                    inputs = state.macroInputs,
+                                    values = state.macroValues,
+                                    capturing = state.capturing,
+                                    secondsLeft = state.secondsLeft,
+                                    undoFor = state.undo?.name,
+                                    onSelect = AppController::selectController,
+                                    onCapture = AppController::captureBinding,
+                                    onCancelCapture = AppController::cancelCapture,
+                                    onClear = AppController::clearBinding,
+                                    onUndo = page::undo,
+                                    onDropUndo = page::dropUndo,
+                                    onChange = page::changeMacro,
+                                    onBack = AppController::controllersBack,
+                                    port = port,
+                                )
                             }
                             ControllersView.Hotkeys ->
                                 HotkeysScreen(
@@ -314,7 +356,6 @@ class MainActivity : ComponentActivity() {
                                     onDropUndo = page::dropUndo,
                                     onBack = AppController::controllersBack,
                                 )
-                            else -> SettingsLoadingPage("Controllers", onBack = AppController::controllersBack)
                         }
                     }
                     Screen.Folders -> {

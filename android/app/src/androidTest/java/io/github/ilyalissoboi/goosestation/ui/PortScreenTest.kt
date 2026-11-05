@@ -25,8 +25,15 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.BindingLabels
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.BoolSetting
+import io.github.ilyalissoboi.goosestation.settings.FloatSetting
+import io.github.ilyalissoboi.goosestation.settings.MacroSettings
+import io.github.ilyalissoboi.goosestation.settings.PortSettings
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -40,6 +47,60 @@ class PortScreenTest {
     private companion object {
         val PAD = ConnectedController(deviceId = 5, name = "Test Pad", descriptor = "pad-a")
         val OTHER_PAD = ConnectedController(deviceId = 6, name = "Other Pad", descriptor = "pad-b")
+        val TYPES =
+            listOf(
+                Choice("None", "Not Connected"),
+                Choice("AnalogController", "Analog Controller (DualShock)"),
+                Choice("NeGcon", "NeGcon"),
+            )
+
+        val DEADZONE =
+            TypeSetting(
+                TypeSetting.Kind.Float,
+                "AnalogDeadzone",
+                "Analog Deadzone",
+                "Ignores small pushes.",
+                "0.00",
+                "0.00",
+                "1.00",
+                "0.01",
+                "%.0f%%",
+                100f,
+                emptyList(),
+            )
+        val INVERT =
+            TypeSetting(
+                TypeSetting.Kind.IntList,
+                "InvertLeftStick",
+                "Invert Left Stick",
+                "",
+                "0",
+                "0",
+                "3",
+                "1",
+                "",
+                1f,
+                listOf("Not Inverted", "Invert Left/Right", "Invert Up/Down", "Invert Left/Right + Up/Down"),
+            )
+        val FORCE =
+            TypeSetting(
+                TypeSetting.Kind.Bool,
+                "ForceAnalogOnReset",
+                "Force Analog Mode on Reset",
+                "",
+                "true",
+                "",
+                "",
+                "",
+                "",
+                1f,
+                emptyList(),
+            )
+        val SETTINGS = listOf(DEADZONE, INVERT, FORCE)
+
+        fun portValues(vararg file: Pair<String, String>) =
+            pageValues(PortSettings.settings(0, SETTINGS) + (1..4).map { MacroSettings.binds(0, it) }, *file)
+
         val BINDINGS =
             listOf(
                 PadBinding("Up", "D-Pad Up", PadBindingKind.Button, "Button19"),
@@ -59,6 +120,9 @@ class PortScreenTest {
     @get:Rule val rule = createComposeRule()
 
     private val selects = mutableListOf<String>()
+    private val types = mutableListOf<String>()
+    private val changes = mutableListOf<SettingValues>()
+    private val macros = mutableListOf<Int>()
     private val captures = mutableListOf<String>()
     private val clears = mutableListOf<String>()
     private var cancels = 0
@@ -83,6 +147,9 @@ class PortScreenTest {
         labels: Map<String, String> = emptyMap(),
         // Words, which most tests find the rows by, unless a test asks for the glyphs the page shows by default.
         glyphs: Boolean = false,
+        type: String? = null,
+        typeSettings: List<TypeSetting> = emptyList(),
+        values: SettingValues? = null,
     ) {
         this.controllers = controllers
         this.capturing = capturing
@@ -111,6 +178,14 @@ class PortScreenTest {
                     onReset = { resets++ },
                     onBack = { backs++ },
                     glyphs = glyphs,
+                    pad = 0,
+                    type = type,
+                    typeNames = TYPES,
+                    onType = { types += it },
+                    typeSettings = typeSettings,
+                    values = values,
+                    onChange = { changes += it },
+                    onOpenMacro = { macros += it },
                 )
             }
         }
@@ -164,6 +239,84 @@ class PortScreenTest {
 
     private fun assertFocusedHas(vararg texts: String) {
         texts.forEach { rule.onNode(isFocused()).assert(hasText(it, substring = true)) }
+    }
+
+    // --- The type, its settings and the macros ---
+
+    @Test
+    fun withATypeThePageOpensOnIt() {
+        show(type = "AnalogController", typeSettings = SETTINGS, values = portValues())
+
+        assertFocusedHas("Controller type", "Analog Controller (DualShock)")
+        press(Key.DirectionRight)
+        assertEquals(listOf("NeGcon"), types)
+    }
+
+    // Review Focus 3: a type the page doesn't offer (a desktop GunCon) shows as itself.
+    @Test
+    fun aTypeFromTheFileShowsAsItself() {
+        show(type = "GunCon", values = portValues())
+
+        assertFocusedHas("GunCon (from settings.ini)")
+    }
+
+    @Test
+    fun aFloatSettingStepsThroughItsFormat() {
+        show(type = "AnalogController", typeSettings = SETTINGS, values = portValues("Pad1/AnalogDeadzone" to "0.25"))
+
+        rule.onNodeWithText("Ignores small pushes.").assertExists()
+        press(Key.DirectionDown)
+        assertFocusedHas("Analog Deadzone", "25%")
+        press(Key.DirectionRight)
+
+        assertEquals(0.26f, changes.single()[PortSettings.setting(0, DEADZONE) as FloatSetting], 1e-4f)
+    }
+
+    @Test
+    fun anOptionListShowsTheCoresOptions() {
+        show(type = "AnalogController", typeSettings = SETTINGS, values = portValues("Pad1/InvertLeftStick" to "2"))
+
+        repeat(2) { press(Key.DirectionDown) }
+        assertFocusedHas("Invert Left Stick", "Invert Up/Down")
+    }
+
+    @Test
+    fun aBoolSettingIsASwitch() {
+        show(type = "AnalogController", typeSettings = SETTINGS, values = portValues())
+
+        repeat(3) { press(Key.DirectionDown) }
+        assertFocusedHas("Force Analog Mode on Reset")
+        press(Key.Enter)
+
+        assertEquals(false, changes.single()[PortSettings.setting(0, FORCE) as BoolSetting])
+    }
+
+    @Test
+    fun aMacroRowSaysWhatItPressesAndOpensIt() {
+        show(
+            type = "AnalogController",
+            typeSettings = SETTINGS,
+            values =
+                portValues("Pad1/Macro2Binds" to "Cross & Circle"),
+        )
+
+        rule.onNodeWithText("Cross & Circle").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Macro 2").performScrollTo().performClick()
+        rule.waitForIdle()
+
+        assertEquals(listOf(2), macros)
+        rule.onNodeWithText("Macro 1").assertExists()
+    }
+
+    // Not Connected: nothing to bind, set or press.
+    @Test
+    fun notConnectedHasOnlyTheTypeRow() {
+        show(type = "None", values = portValues())
+
+        assertFocusedHas("Controller type", "Not Connected")
+        rule.onAllNodes(hasText("Macro 1")).assertCountEquals(0)
+        rule.onAllNodes(hasText("Reset to defaults")).assertCountEquals(0)
+        rule.onAllNodes(hasText("D-Pad Up")).assertCountEquals(0)
     }
 
     // F-2: never a binding row, so an A pressed as the page opens captures nothing.

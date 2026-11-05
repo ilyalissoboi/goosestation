@@ -62,6 +62,7 @@ import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
@@ -591,6 +592,100 @@ class FocusAuditTest {
                 onClear = {},
                 onUndo = {},
                 onDropUndo = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aPortWithNeGconsSettings() {
+        show {
+            PortScreen(
+                title = "Port 1",
+                controllers = PADS,
+                labels = emptyMap(),
+                selected = PADS.first().descriptor,
+                bindings = BINDINGS,
+                bindingsFor = PADS.first().descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                glyphs = false,
+                type = "NeGcon",
+                typeNames =
+                    listOf(
+                        Choice("NeGcon", "NeGcon"),
+                        Choice("AnalogController", "Analog Controller (DualShock)"),
+                    ),
+                typeSettings = NEGCON_SETTINGS,
+                values = portPageValues(NEGCON_SETTINGS, "Pad1/Macro1Binds" to "I & II"),
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aPortNotConnected() {
+        show {
+            PortScreen(
+                title = "Port 2",
+                controllers = emptyList(),
+                labels = emptyMap(),
+                selected = null,
+                bindings = emptyList(),
+                bindingsFor = null,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                type = "None",
+                typeNames = listOf(Choice("None", "Not Connected")),
+                values = portPageValues(emptyList()),
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aMacro() {
+        show {
+            MacroScreen(
+                title = "Macro 1 · Port 1",
+                pad = 0,
+                macro = 1,
+                controllers = PADS,
+                labels = emptyMap(),
+                selected = PADS.first().descriptor,
+                triggers = listOf(PadBinding("Macro1", "Macro 1", PadBindingKind.Button, "Button99")),
+                triggersFor = PADS.first().descriptor,
+                inputs = BINDINGS,
+                values = pageValues(MacroSettings.settings(0, 1), "Pad1/Macro1Binds" to "Cross"),
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onChange = {},
                 onBack = {},
             )
         }

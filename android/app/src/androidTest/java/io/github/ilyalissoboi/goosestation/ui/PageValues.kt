@@ -3,7 +3,10 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
+import io.github.ilyalissoboi.goosestation.settings.MacroSettings
+import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 
@@ -65,3 +68,29 @@ fun pageValues(
     settings: List<Setting<*>>,
     vararg file: Pair<String, String>,
 ): SettingValues = SettingValues.read(FileSettings(file.toMap()), settings)
+
+/** A type's settings as the core describes NeGcon's: sixteen floats, the longest Port page. */
+val NEGCON_SETTINGS: List<TypeSetting> =
+    listOf("Steering", "I", "II", "L").flatMap { input ->
+        listOf("Deadzone", "Saturation", "Linearity", "Scaling").map { what ->
+            TypeSetting(
+                TypeSetting.Kind.Float,
+                "$input$what",
+                "$input Button $what",
+                "How the $input input's $what shapes what the game sees, from the controller's own range.",
+                "0.00",
+                "0.00",
+                "2.00",
+                "0.01",
+                "%.0f%%",
+                100f,
+                emptyList(),
+            )
+        }
+    }
+
+/** A port's page's values for [settings] and its macros, as a settings.ini holding [file] would give them. */
+fun portPageValues(
+    settings: List<TypeSetting>,
+    vararg file: Pair<String, String>,
+) = pageValues(PortSettings.settings(0, settings) + (1..MacroSettings.COUNT).map { MacroSettings.binds(0, it) }, *file)

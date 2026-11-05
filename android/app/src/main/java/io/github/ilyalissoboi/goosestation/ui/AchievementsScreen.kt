@@ -28,6 +28,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
+import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
@@ -46,9 +47,9 @@ const val EXPIRED_NOTE = "Your RetroAchievements sign-in has expired. Sign in ag
  * The Achievements page. Signed out ([account]'s state), the username and password fields and **Sign in**
  * ([onSignIn]), with [error] or the [expired] notice under them; [passwordCleared] changing clears the password.
  * Otherwise, who is signed in and **Sign out** ([onSignOut]). Then what's waiting to be sent ([queue]): the account's
- * own count, and each other account's, kept for it. Then the [settings] switches, each change as the whole
- * settings with that field changed ([onChange]). The username, or Sign out, is focused on opening; B or Back go back
- * ([onBack]).
+ * own count, and each other account's, kept for it. Then the [settings]: switches, and the messages' times while
+ * they show, each change as the whole settings with that field changed ([onChange]). The username, or Sign out, is
+ * focused on opening; B or Back go back ([onBack]).
  */
 @Composable
 fun AchievementsScreen(
@@ -166,6 +167,38 @@ fun AchievementsScreen(
             settings.indicators,
             onToggle = { onChange(settings.copy(indicators = it)) },
         )
+        SwitchRow(
+            "Encore mode",
+            settings.encore,
+            onToggle = { onChange(settings.copy(encore = it)) },
+            note = "Each session starts as if nothing were unlocked.",
+        )
+        SwitchRow(
+            "Spectator mode",
+            settings.spectator,
+            onToggle = { onChange(settings.copy(spectator = it)) },
+            note = "Unlocks aren't sent to RetroAchievements.",
+        )
+        SwitchRow(
+            "Test unofficial achievements",
+            settings.unofficial,
+            onToggle = { onChange(settings.copy(unofficial = it)) },
+            note = "Lists unofficial sets, which aren't tracked.",
+        )
+        if (settings.messages) {
+            NumberRow(
+                "Unlock message time",
+                settings.unlockSeconds,
+                AchievementsSettings.DURATIONS,
+                onChange = { onChange(settings.copy(unlockSeconds = it)) },
+            )
+            NumberRow(
+                "Leaderboard message time",
+                settings.leaderboardSeconds,
+                AchievementsSettings.DURATIONS,
+                onChange = { onChange(settings.copy(leaderboardSeconds = it)) },
+            )
+        }
     }
 }
 

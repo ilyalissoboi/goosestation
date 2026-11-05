@@ -215,4 +215,43 @@ class AchievementsScreenTest {
 
         rule.onNodeWithText("2 unlocks for goose are kept until goose signs in again").assertExists()
     }
+
+    @Test
+    fun theNewRowsFollowLiveIndicators() {
+        show(SIGNED_IN)
+
+        pressUntilFocused(Key.DirectionDown, "Live indicators")
+        for (row in listOf(
+            "Encore mode",
+            "Spectator mode",
+            "Test unofficial achievements",
+            "Unlock message time",
+            "Leaderboard message time",
+        )) {
+            press(Key.DirectionDown)
+            rule.onNode(isFocused()).assert(hasText(row, substring = true))
+        }
+    }
+
+    @Test
+    fun theTimesStepBySeconds() {
+        show(SIGNED_IN)
+
+        pressUntilFocused(Key.DirectionDown, "Unlock message time")
+        rule.onNode(isFocused()).assert(hasText("5 s", substring = true))
+        press(Key.DirectionRight)
+
+        assertEquals(SWITCHES.copy(unlockSeconds = 6), changes.last())
+    }
+
+    @Test
+    fun theTimesGoWithTheMessages() {
+        show(SIGNED_IN)
+
+        pressUntilFocused(Key.DirectionDown, "Unlock and leaderboard messages")
+        press(Key.ButtonA)
+
+        rule.onNodeWithText("Unlock message time").assertDoesNotExist()
+        rule.onNodeWithText("Leaderboard message time").assertDoesNotExist()
+    }
 }

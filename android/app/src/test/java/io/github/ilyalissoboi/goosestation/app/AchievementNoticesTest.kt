@@ -100,4 +100,18 @@ class AchievementNoticesTest {
             ).note,
         )
     }
+
+    @Test
+    fun anUnlockLastsTheCoresSeconds() {
+        val card = AchievementNotices.from("achievement_unlock_42", "Sparx Rescue", "", "", 5, seconds = 12f)
+
+        assertEquals(12_000L, (card as AchievementNotice.Card).durationMs)
+    }
+
+    @Test
+    fun masteryKeepsItsTime() {
+        val card = AchievementNotices.from("achievement_mastery", "Mastered", "", "", -1, seconds = 20f)
+
+        assertEquals(AchievementOverlay.MASTERY_MS, (card as AchievementNotice.Card).durationMs)
+    }
 }

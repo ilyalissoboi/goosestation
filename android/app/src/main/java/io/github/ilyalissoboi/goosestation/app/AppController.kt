@@ -1661,7 +1661,7 @@ object AppController : NativeCallbacks {
         offline: Boolean,
     ) {
         mainHandler.post {
-            when (val notice = AchievementNotices.from(key, title, text, imagePath, points, offline)) {
+            when (val notice = AchievementNotices.from(key, title, text, imagePath, points, offline, seconds)) {
                 is AchievementNotice.Card -> achievementOverlay.post(notice)
                 is AchievementNotice.Message ->
                     scope.launch {

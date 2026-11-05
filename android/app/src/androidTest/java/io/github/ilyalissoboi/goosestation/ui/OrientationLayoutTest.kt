@@ -1175,6 +1175,8 @@ class OrientationLayoutTest {
             assertShows("Invalid username/password.")
             pressUntilFocused(Key.DirectionDown, "Live indicators")
             assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Leaderboard message time")
+            assertTextsLaidOut()
         }
     }
 
@@ -1200,6 +1202,8 @@ class OrientationLayoutTest {
             assertShows("Not connected")
             pressUntilFocused(Key.DirectionDown, "Live indicators")
             assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Leaderboard message time")
+            assertTextsLaidOut()
         }
     }
 

@@ -118,4 +118,28 @@ class AchievementOverlayTest {
         advance(10_000)
         assertNull(overlay.card)
     }
+
+    @Test
+    fun aCardLastsItsOwnTime() {
+        overlay.post(AchievementNotice.Card(CardKind.Unlock, "Long", "", "", 5, durationMs = 12_000))
+
+        advance(11_999)
+        assertEquals("Long", overlay.card!!.title)
+        advance(1)
+        assertNull(overlay.card)
+    }
+
+    @Test
+    fun aLongCardWaitsForTheMenuWithItsTimeLeft() {
+        overlay.post(AchievementNotice.Card(CardKind.Unlock, "Long", "", "", 5, durationMs = 12_000))
+        advance(2_000)
+        overlay.menuOpen(true)
+        advance(60_000)
+        overlay.menuOpen(false)
+
+        advance(9_999)
+        assertEquals("Long", overlay.card!!.title)
+        advance(1)
+        assertNull(overlay.card)
+    }
 }

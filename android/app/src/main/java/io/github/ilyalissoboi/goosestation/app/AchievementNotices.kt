@@ -9,8 +9,8 @@ enum class CardKind { Unlock, Mastery }
 /** One of the core's achievement notices, as the game screen shows it. */
 sealed interface AchievementNotice {
     /**
-     * A card at the top centre: its [title], [text], picture ([imagePath], may be empty), an unlock's [points], and a
-     * [note] under the text (an unlock earned without a connection).
+     * A card at the top centre: its [title], [text], picture ([imagePath], may be empty), an unlock's [points], a
+     * [note] under the text (an unlock earned without a connection), and how long it shows ([durationMs]).
      */
     data class Card(
         val kind: CardKind,
@@ -19,6 +19,14 @@ sealed interface AchievementNotice {
         val imagePath: String,
         val points: Int?,
         val note: String? = null,
+        val durationMs: Long =
+            if (kind ==
+                CardKind.Mastery
+            ) {
+                AchievementOverlay.MASTERY_MS
+            } else {
+                AchievementOverlay.UNLOCK_MS
+            },
     ) : AchievementNotice
 
     /** A line in the message stack, with its picture ([imagePath], or null for none). */
@@ -32,7 +40,8 @@ sealed interface AchievementNotice {
 object AchievementNotices {
     /**
      * The notice for the core's notification [key], with its [title], [text], picture and an unlock's [points] (-1); an
-     * unlock [offline] (with no connection) says it's sent later.
+     * unlock [offline] (with no connection) says it's sent later. An unlock's card shows for the core's [seconds]
+     * (`[Cheevos] NotificationsDuration`); the mastery card keeps its own time.
      */
     fun from(
         key: String,
@@ -41,6 +50,7 @@ object AchievementNotices {
         imagePath: String,
         points: Int,
         offline: Boolean = false,
+        seconds: Float = AchievementOverlay.UNLOCK_MS / 1000f,
     ): AchievementNotice =
         when {
             key.startsWith("achievement_unlock_") ->
@@ -51,6 +61,7 @@ object AchievementNotices {
                     imagePath,
                     points.takeIf { it >= 0 },
                     AchievementQueueWords.CARD_NOTE.takeIf { offline },
+                    (seconds * 1000).toLong(),
                 )
             key == "achievement_mastery" -> AchievementNotice.Card(CardKind.Mastery, title, text, imagePath, null)
             key == "achievement_summary" -> AchievementNotice.Message(text, imagePath.ifEmpty { null })

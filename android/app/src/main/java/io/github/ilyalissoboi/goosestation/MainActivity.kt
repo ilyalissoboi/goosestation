@@ -27,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
+import io.github.ilyalissoboi.goosestation.ui.ConsoleScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
@@ -102,6 +103,15 @@ class MainActivity : ComponentActivity() {
                     Screen.Interface ->
                         CorePageRoute(CorePage.Interface) { values, onChange ->
                             InterfaceScreen(values, onChange, onBack = AppController::closeSettingsPage)
+                        }
+                    Screen.Console ->
+                        CorePageRoute(CorePage.Console) { values, onChange ->
+                            ConsoleScreen(
+                                values,
+                                AppController.settingsPages.names,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
                         }
                     Screen.Graphics ->
                         CorePageRoute(CorePage.Graphics) { values, onChange ->

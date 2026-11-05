@@ -11,6 +11,7 @@ import io.github.ilyalissoboi.goosestation.settings.BiosFastBoot
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
 import io.github.ilyalissoboi.goosestation.settings.BiosPage
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
@@ -29,6 +30,7 @@ enum class CorePage(
     val entry: SettingsEntry,
 ) {
     Interface(SettingsEntry.Interface),
+    Console(SettingsEntry.Console),
     Graphics(SettingsEntry.Graphics),
     ;
 
@@ -39,6 +41,7 @@ enum class CorePage(
         get() =
             when (this) {
                 Interface -> InterfaceSettings.all
+                Console -> ConsoleSettings.all
                 Graphics -> GraphicsSettings.all
             }
 

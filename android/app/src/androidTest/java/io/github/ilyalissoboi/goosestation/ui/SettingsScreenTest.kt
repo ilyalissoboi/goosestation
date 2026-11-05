@@ -89,12 +89,15 @@ class SettingsScreenTest {
         press(Key.DirectionUp)
         assertFocusedHas("BIOS", "Which BIOS each region uses, fast boot")
         press(Key.DirectionUp)
+        assertFocusedHas("Console", "Region, CPU, CD-ROM speed")
+        press(Key.DirectionUp)
         assertFocusedHas("Interface", "Pausing, resume states, backups")
         press(Key.DirectionUp)
         assertFocusedHas("Interface")
         for (
         (label, summary) in
         listOf(
+            "Console" to "Region, CPU, CD-ROM speed",
             "BIOS" to "Which BIOS each region uses, fast boot",
             "Graphics" to "Renderer, enhancements, display, on-screen display",
             "Controllers" to "Remap each controller's buttons",

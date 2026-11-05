@@ -57,6 +57,7 @@ import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
@@ -264,6 +265,12 @@ class FocusAuditTest {
     @Test
     fun interfacePage() {
         show { InterfaceScreen(pageValues(InterfaceSettings.all), onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun consolePage() {
+        show { ConsoleScreen(pageValues(ConsoleSettings.all), SampleNames.ALL, onChange = {}, onBack = {}) }
         rule.assertControllerReady()
     }
 

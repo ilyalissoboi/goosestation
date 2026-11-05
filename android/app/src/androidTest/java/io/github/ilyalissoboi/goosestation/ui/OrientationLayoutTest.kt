@@ -88,6 +88,7 @@ import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
@@ -738,6 +739,44 @@ class OrientationLayoutTest {
                     "Pause when a controller disconnects",
                     "Save state on exit",
                     "Create save state backups",
+                ),
+        )
+
+    @Test
+    fun theConsolePage() =
+        settingsPageFits(
+            {
+                var values by remember {
+                    mutableStateOf(
+                        pageValues(
+                            ConsoleSettings.all,
+                            "CPU/OverclockEnable" to "true",
+                            "CDROM/ReadSpeedup" to "12",
+                        ),
+                    )
+                }
+                ConsoleScreen(values, SampleNames.ALL, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Region",
+                    "8 MB RAM",
+                    "Disable all enhancements",
+                    "Execution mode",
+                    "Overclocking",
+                    "Overclocking percentage",
+                    "Recompiler ICache",
+                    "Read speed-up",
+                    "Seek speed-up",
+                    "Readahead",
+                    "Preload disc to RAM",
+                    "Apply image patches",
+                ),
+            lists =
+                mapOf(
+                    "Region" to ("Auto-Detect" to "NTSC-U/C (US, Canada)"),
+                    "Read speed-up" to ("None (double speed)" to "12x (24x speed)"),
+                    "Overclocking percentage" to ("50%" to "400%"),
                 ),
         )
 

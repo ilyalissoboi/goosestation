@@ -9,6 +9,7 @@ import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
+import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
@@ -44,6 +45,9 @@ interface CoreApi {
 
     /** [NativeLibrary.getTypeSettings], parsed. */
     fun getTypeSettings(type: String): List<TypeSetting>
+
+    /** [NativeLibrary.getTypeInputs]: the type's buttons and axes, unbound, as a macro can press them. */
+    fun getTypeInputs(type: String): List<PadBinding>
 
     fun setPadBinding(
         descriptor: String,
@@ -148,6 +152,11 @@ object NativeCoreApi : CoreApi {
 
     override fun getTypeSettings(type: String): List<TypeSetting> =
         TypeSetting.parse(NativeLibrary.getTypeSettings(type))
+
+    override fun getTypeInputs(type: String): List<PadBinding> =
+        NativeLibrary.getTypeInputs(type).toList().chunked(2).map { (name, display) ->
+            PadBinding(name, display, PadBindingKind.Button, null)
+        }
 
     override fun getOfferedPorts(): List<Choice<Int>> =
         NativeLibrary.getOfferedPorts().toList().chunked(2).mapNotNull { (pad, label) ->

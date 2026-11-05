@@ -227,7 +227,9 @@ object AppController : NativeCallbacks {
 
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
-        ControllersPage(scope, coreDispatcher, NativeCoreApi, { controllers }, { screen == Screen.Controllers }) {
+        ControllersPage(scope, coreDispatcher, NativeCoreApi, {
+            controllers
+        }, { screen == Screen.Controllers }, NativeCoreSettings) {
             Log.i(TAG, it)
         }
 

@@ -2503,6 +2503,25 @@ NATIVE_LIBRARY_FUNCTION(void, setPortType)(JNIEnv* env, jobject, jint pad, jstri
     AndroidHost::SetPortType(static_cast<u32>(pad), FromJString(env, type));
 }
 
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getTypeInputs)(JNIEnv* env, jobject, jstring type)
+{
+  // What a macro can press: the type's buttons and axes, never a pointer or a motor.
+  std::vector<std::string> pairs;
+  const Controller::ControllerInfo* info = Controller::GetControllerInfo(FromJString(env, type));
+  for (const Controller::ControllerBindingInfo& bi :
+       info ? info->bindings : std::span<const Controller::ControllerBindingInfo>())
+  {
+    if (bi.type == InputBindingInfo::Type::Button || bi.type == InputBindingInfo::Type::Axis ||
+        bi.type == InputBindingInfo::Type::HalfAxis)
+    {
+      pairs.emplace_back(bi.name);
+      pairs.push_back(Host::TranslateToString(info->name, bi.display_name));
+    }
+  }
+
+  return ToNonNullStringArray(env, pairs);
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getTypeSettings)(JNIEnv* env, jobject, jstring type)
 {
   // TypeSetting.parse()'s list: 11 strings a setting.

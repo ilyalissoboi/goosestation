@@ -86,6 +86,12 @@ class FakeCoreApi(
 
     override fun getTypeSettings(type: String): List<TypeSetting> = typeSettings[type].orEmpty()
 
+    /** Each type's inputs, as the core lists them; a type not in it has Cross and Circle. */
+    var typeInputs = emptyMap<String, List<PadBinding>>()
+
+    override fun getTypeInputs(type: String): List<PadBinding> =
+        typeInputs[type] ?: listOf("Cross", "Circle").map { PadBinding(it, it, PadBindingKind.Button, null) }
+
     /** Each controller's rumble strength, by descriptor; one not in it has 100. */
     var rumble = emptyMap<String, Int>()
 

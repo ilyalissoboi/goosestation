@@ -578,6 +578,17 @@ class ControllerBindingsTest {
         assertEquals(40, NativeLibrary.getRumbleStrength("pad-a"))
     }
 
+    // What a macro can press: the type's buttons and axes, in the core's order.
+    @Test
+    fun typeInputsAreTheCores() {
+        initialize(null)
+
+        val negcon = NativeLibrary.getTypeInputs("NeGcon").toList().chunked(2)
+        assertEquals(listOf("Up", "D-Pad Up"), negcon.first())
+        assertTrue(listOf("SteeringLeft", "Steering (Twist) Left") in negcon)
+        assertEquals(0, NativeLibrary.getTypeInputs("NoSuchType").size)
+    }
+
     @Test
     fun theSavedPortIsRead() {
         initialize(

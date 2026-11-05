@@ -506,6 +506,12 @@ object NativeLibrary {
         type: String,
     )
 
+    /**
+     * The controller [type]'s buttons and axes, as a macro can press them: name, display name, name, display name…, in
+     * the core's order; empty for an unknown type.
+     */
+    external fun getTypeInputs(type: String): Array<String>
+
     /** The controller [type]'s settings, as [TypeSetting.parse] reads them; empty for a type with none, or unknown. */
     external fun getTypeSettings(type: String): Array<String>
 

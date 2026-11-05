@@ -171,7 +171,8 @@ repository (git-ignored).
   arguments as the Gradle build. `BUILD_TESTS=ON` adds `common-tests`. Build with
   `cmake --build build-android --target goosestation`.
 - `run-native-tests.sh [gtest arguments]` configures with `BUILD_TESTS=ON`, builds `common-tests`, pushes it to
-  `/data/local/tmp` on the emulator and runs it there. Its exit code is the tests'. It needs `ANDROID_HOME` for
+  `/data/local/tmp` on the emulator and runs it there. Its exit code is the tests'. The tests link the core, on a
+  no-op host (`src/common-tests/core_host_stubs.cpp`), so `libsoundtouch.so` from the dependency prefix goes along. It needs `ANDROID_HOME` for
   `adb`, and uses `ANDROID_SERIAL` (default `emulator-5554`) to pick the device. For example:
   `android/scripts/run-native-tests.sh --gtest_filter='FileSystem.*'`.
 - `check-undefined.sh` builds `goosestation` in `build-android/` (configure it first), then links all of core,

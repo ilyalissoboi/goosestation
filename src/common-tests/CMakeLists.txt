@@ -11,6 +11,7 @@ add_executable(common-tests
   ../util/android_patch_codes.cpp
   bitutils_tests.cpp
   content_uri_tests.cpp
+  core_host_stubs.cpp
   fallback_fonts_tests.cpp
   ../util/fallback_fonts.cpp
   file_system_tests.cpp
@@ -23,6 +24,7 @@ add_executable(common-tests
   ../core/memory_card_image.cpp
   path_tests.cpp
   rectangle_tests.cpp
+  settings_multitap_tests.cpp
   shiftjis_tests.cpp
   ../util/shiftjis.cpp
   string_tests.cpp
@@ -48,4 +50,4 @@ if(ANDROID)
   target_link_libraries(common-tests PRIVATE imgui)
 endif()
 
-target_link_libraries(common-tests PRIVATE common rcheevos gtest gtest_main)
+target_link_libraries(common-tests PRIVATE core scmversion common rcheevos gtest gtest_main)

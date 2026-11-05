@@ -1339,6 +1339,168 @@ class InGameMenuTest {
             assertNull(menu.state.cheevos!!.page)
         }
 
+    // --- The save-state hotkeys: the menu's own save path, without the menu. ---
+
+    private fun TestScope.hotkey(
+        menu: InGameMenu,
+        which: StateHotkey,
+    ) {
+        menu.hotkey(which)
+        runCurrent()
+    }
+
+    @Test
+    fun saveHotkeySavesToTheLastSlot() =
+        runTest {
+            lastSlots.set(SERIAL, 4)
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.Save)
+
+            assertEquals(listOf("saveState $SERIAL 4", "message Saved to slot 4"), calls)
+        }
+
+    @Test
+    fun saveHotkeyWithNoSlotYetSavesToSlot1() =
+        runTest {
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.Save)
+
+            assertEquals(listOf("saveState $SERIAL 1", "message Saved to slot 1"), calls)
+            assertEquals(1, lastSlots.get(SERIAL))
+        }
+
+    @Test
+    fun nextWrapsAndSays() =
+        runTest {
+            lastSlots.set(SERIAL, 10)
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.Next)
+            assertEquals(listOf("message Slot 1 selected"), calls)
+            calls.clear()
+            hotkey(menu, StateHotkey.Save)
+
+            assertEquals(listOf("saveState $SERIAL 1", "message Saved to slot 1"), calls)
+        }
+
+    @Test
+    fun previousWraps() =
+        runTest {
+            lastSlots.set(SERIAL, 1)
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.Previous)
+
+            assertEquals(listOf("message Slot 10 selected"), calls)
+        }
+
+    @Test
+    fun loadHotkeyLoadsTheSelectedSlot() =
+        runTest {
+            lastSlots.set(SERIAL, 3)
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.Load)
+
+            assertEquals(listOf("loadState $SERIAL 3", "message Loaded slot 3"), calls)
+        }
+
+    // Review Focus 5: Load in hardcore mode loads nothing, and says why.
+    @Test
+    fun loadHotkeyInHardcoreIsRefused() =
+        runTest {
+            api.hardcore = true
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.Load)
+
+            assertEquals(listOf("message Loading a state is off in hardcore mode"), calls)
+        }
+
+    // Review Focus 5: a game without a key keeps no states.
+    @Test
+    fun aGameWithNoKeyKeepsNoStates() =
+        runTest {
+            val menu = menu(booted = false)
+            menu.gameStarted(game(""))
+            runCurrent()
+            calls.clear()
+
+            hotkey(menu, StateHotkey.Save)
+            hotkey(menu, StateHotkey.Next)
+
+            assertEquals(List(2) { "message This game can't keep save states" }, calls)
+        }
+
+    @Test
+    fun aFailedHotkeySaveSaysWhy() =
+        runTest {
+            api.saveError = "disk full"
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.Save)
+
+            assertEquals(listOf("saveState $SERIAL 1", "message Couldn't save to slot 1: disk full"), calls)
+            assertNull(lastSlots.get(SERIAL))
+        }
+
+    @Test
+    fun saveAndNextSavesThenSelectsTheNext() =
+        runTest {
+            lastSlots.set(SERIAL, 2)
+            val menu = menu()
+
+            hotkey(menu, StateHotkey.SaveAndNext)
+            assertEquals(listOf("saveState $SERIAL 2", "message Saved to slot 2"), calls)
+            calls.clear()
+            hotkey(menu, StateHotkey.Save)
+
+            assertEquals(listOf("saveState $SERIAL 3", "message Saved to slot 3"), calls)
+        }
+
+    @Test
+    fun undoSaysWhetherItDid() =
+        runTest {
+            val menu = menu()
+
+            api.undoes = false
+            hotkey(menu, StateHotkey.Undo)
+            api.undoes = true
+            hotkey(menu, StateHotkey.Undo)
+
+            assertEquals(
+                listOf("undoLoadState", "message No load to undo", "undoLoadState", "message Undid the last load"),
+                calls,
+            )
+        }
+
+    @Test
+    fun noHotkeyBeforeTheBoot() =
+        runTest {
+            val menu = menu(booted = false)
+
+            hotkey(menu, StateHotkey.Save)
+
+            assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun eachHotkeyHasTheCoresName() {
+        assertEquals(
+            listOf(
+                "SaveSelectedSaveState",
+                "LoadSelectedSaveState",
+                "SelectPreviousSaveStateSlot",
+                "SelectNextSaveStateSlot",
+                "SaveStateAndSelectNextSlot",
+                "UndoLoadState",
+            ),
+            StateHotkey.entries.map { it.coreName },
+        )
+    }
+
     private class MemoryLastSlots : LastSlotStore {
         private val slots = HashMap<String, Int>()
 

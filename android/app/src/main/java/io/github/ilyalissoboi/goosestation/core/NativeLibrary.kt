@@ -509,6 +509,9 @@ object NativeLibrary {
     /** The controller [type]'s settings, as [TypeSetting.parse] reads them; empty for a type with none, or unknown. */
     external fun getTypeSettings(type: String): Array<String>
 
+    /** Undoes the running game's last state load; false when there's none to undo. Waits for the core. */
+    external fun undoLoadState(): Boolean
+
     /** The controller with [descriptor]'s pad (0-based, Port 1 by default), or -1 for one never connected. */
     external fun getControllerPort(descriptor: String): Int
 

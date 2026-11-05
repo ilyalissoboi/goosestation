@@ -1713,6 +1713,11 @@ object AppController : NativeCallbacks {
         mainHandler.post { gameMenu.fastForwardChanged(enabled) }
     }
 
+    override fun onHotkey(name: String) {
+        val hotkey = StateHotkey.entries.firstOrNull { it.coreName == name } ?: return
+        mainHandler.post { gameMenu.hotkey(hotkey) }
+    }
+
     override fun onError(message: String) {
         mainHandler.post {
             Log.w(TAG, "Error: $message")

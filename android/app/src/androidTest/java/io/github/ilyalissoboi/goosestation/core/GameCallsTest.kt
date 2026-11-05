@@ -353,6 +353,24 @@ class GameCallsTest {
         }
     }
 
+    // The save-state hotkeys are the app's: the chord reaches onHotkey, and the core writes no state of its own.
+    @Test
+    fun aSaveStateHotkeyGoesToTheApp() {
+        val hotkeys = LinkedBlockingQueue<String>()
+        withPadtest(onHotkey = { hotkeys.put(it) }) {
+            NativeLibrary.setHotkeyBinding(PAD, "SaveSelectedSaveState", "Button99")
+            Thread.sleep(500)
+
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+            Thread.sleep(300)
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+
+            assertEquals("SaveSelectedSaveState", hotkeys.poll(3, TimeUnit.SECONDS))
+            Thread.sleep(500)
+            assertEquals(emptyList<String>(), File(dataRoot, "savestates").list().orEmpty().toList())
+        }
+    }
+
     // A controller on Port 2 presses Port 2's inputs, and not Port 1's.
     @Test
     fun aControllerOnPort2DrivesPort2() =
@@ -466,6 +484,7 @@ class GameCallsTest {
         settings: () -> Unit = {},
         onStarted: (startPaused: Boolean, pauseOnDisconnect: Boolean) -> Unit = { _, _ -> },
         onMessage: (key: String, text: String) -> Unit = { _, _ -> },
+        onHotkey: (String) -> Unit = {},
         refreshRate: Float = 0f,
         body: () -> Unit,
     ) {
@@ -494,6 +513,8 @@ class GameCallsTest {
                 override fun onError(message: String) {}
 
                 override fun onFastForwardChanged(enabled: Boolean) = onFastForward(enabled)
+
+                override fun onHotkey(name: String) = onHotkey.invoke(name)
 
                 override fun onOsdMessage(
                     key: String,

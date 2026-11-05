@@ -36,6 +36,9 @@ class FakeGameCore(
     var resumeOn = true
     var analog = -1
 
+    /** [undoLoadState]'s result. */
+    var undoes = true
+
     /** [isHardcoreActive] and [hardcoreWouldStart]: queries, so not logged. */
     var hardcore = false
     var hardcoreWouldStart = false
@@ -83,6 +86,11 @@ class FakeGameCore(
         val picture = screenshots[slot]
         val disc = stateDiscs[slot] ?: 0
         return if (picture == null && disc == 0) null else SaveStatePreview(picture, disc)
+    }
+
+    override fun undoLoadState(): Boolean {
+        calls += "undoLoadState"
+        return undoes
     }
 
     override fun saveState(

@@ -225,14 +225,15 @@ enum class PadBindingKind : u8
   HalfAxis,
 };
 
-/// One of Port 1's inputs, and the binding one controller has for it, without its Android-<index>/ prefix (Button96,
-/// +Axis23), if it has one.
+/// One of a port's inputs, or a hotkey, and the binding one controller has for it, without its Android-<index>/
+/// prefix (Button96, +Axis23), if it has one.
 struct PadBinding
 {
-  std::string name;         // the [Pad1] key
+  std::string name;         // the [PadN] or [Hotkeys] key
   std::string display_name; // the core's, untranslated
   PadBindingKind kind;
   std::optional<std::string> binding;
+  std::string category = {}; // a hotkey's, as the core groups them ("General", "Save States")
 };
 
 /// Each controller's own bindings on its port, by its descriptor. They run on the CPU thread and block; the two that
@@ -280,9 +281,10 @@ void SetPadBinding(std::string descriptor, std::string name, std::string binding
 /// gets them.
 void ResetPadBindings(std::string descriptor);
 
-/// The controller's hotkeys, each a Select chord (Button109 & Android-<index>/Button99) or none: [Hotkeys]
-/// ToggleFastForward, then [Pad1] Analog when Port 1's type has it, then [Hotkeys] Screenshot. nullopt as
-/// GetPadBindings() gives it.
+/// The controller's hotkeys, each a Select chord (Button109 & Android-<index>/Button99) or none: the core's
+/// (InputManager::GetHotkeyList(), in its order, with their categories and names), but Change disc, Reset and the
+/// per-slot save state ones, which the app's menu has or does its own way, and the analog mode hotkey unless the
+/// controller's port's type has the Analog button. nullopt as GetPadBindings() gives it.
 std::optional<std::vector<PadBinding>> GetHotkeyBindings(std::string descriptor);
 
 /// Binds the hotkey name (one GetHotkeyBindings() lists) to Select held with button (Button99) on the controller, or
@@ -332,6 +334,13 @@ void NotifyOsdMessage(std::string_view key, std::string_view text, float seconds
 
 /// Fast forward was turned on or off, by the menu or a hotkey.
 void NotifyFastForwardChanged(bool enabled);
+
+/// One of the host's save state hotkeys fired, by its name (SaveSelectedSaveState and so on): the app saves, loads or
+/// picks the slot itself.
+void NotifyHotkey(std::string_view name);
+
+/// Undoes the last state load (System::UndoLoadState()), on the CPU thread, waiting; false when there's none.
+bool UndoLoadState();
 
 /// The RetroAchievements login token changed (nullopt: it's gone). The app stores it before this returns. Called with
 /// the core's settings lock held, on whichever thread saved it.

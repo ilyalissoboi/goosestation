@@ -69,7 +69,7 @@
 # jni_bridge.cpp finds PadBinding and its constructor, and PadBindingKind's values, by name in JNI_OnLoad, for
 # getPadBindings().
 -keep class io.github.ilyalissoboi.goosestation.core.PadBinding {
-    <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.PadBindingKind, java.lang.String);
+    <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.PadBindingKind, java.lang.String, java.lang.String);
 }
 -keep enum io.github.ilyalissoboi.goosestation.core.PadBindingKind {
     public static final io.github.ilyalissoboi.goosestation.core.PadBindingKind Button;

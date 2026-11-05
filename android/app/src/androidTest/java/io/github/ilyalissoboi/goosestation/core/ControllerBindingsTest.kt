@@ -219,13 +219,36 @@ class ControllerBindingsTest {
     }
 
     @Test
-    fun hotkeysListFastForwardAnalogModeAndScreenshot() {
+    fun hotkeysAreTheCoresListWithoutTheMenus() {
         initialize(null)
         connectNewPad(1, "pad-a", 0)
 
         val hotkeys = NativeLibrary.getHotkeyBindings("pad-a")!!.toList()
+        val names = hotkeys.map { it.name }
 
-        assertEquals(listOf("ToggleFastForward", "ToggleAnalogMode", "Screenshot"), hotkeys.map { it.name })
+        for (name in listOf(
+            "ToggleFastForward",
+            "Turbo",
+            "Rewind",
+            "Screenshot",
+            "SaveSelectedSaveState",
+            "UndoLoadState",
+            "ToggleAnalogMode",
+        )) {
+            assertTrue("$name is offered", name in names)
+        }
+        for (name in listOf("Reset", "ChangeDisc", "TogglePause", "OpenPauseMenu")) {
+            assertFalse("$name isn't offered", name in names)
+        }
+        assertTrue(names.none { it.startsWith("LoadGameState") || it.startsWith("SaveGlobalState") })
+        assertEquals(names.distinct(), names)
+        // The core's categories and names, in its order: General first, the save states before the controller's.
+        val rewind = hotkeys.single { it.name == "Rewind" }
+        assertEquals("System", rewind.category)
+        assertEquals("Rewind", rewind.displayName)
+        assertEquals("Toggle Fast Forward", hotkeys.single { it.name == "ToggleFastForward" }.displayName)
+        assertEquals("General", hotkeys.first().category)
+        assertTrue(names.indexOf("UndoLoadState") < names.indexOf("ToggleAnalogMode"))
         // Unassigned by default.
         assertTrue(hotkeys.all { it.binding == null && it.kind == PadBindingKind.Button })
         assertNull(NativeLibrary.getHotkeyBindings("pad-unknown"))
@@ -493,6 +516,19 @@ class ControllerBindingsTest {
         )
         assertEquals(0, NativeLibrary.getTypeSettings("None").size)
         assertEquals(0, NativeLibrary.getTypeSettings("NoSuchType").size)
+    }
+
+    // The analog mode hotkey is for a DualShock only, on the controller's own port.
+    @Test
+    fun theAnalogHotkeyFollowsThePortsType() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad2]\nType = DigitalController\n",
+        )
+        connectNewPad(1, "pad-a", 0)
+
+        NativeLibrary.setControllerPort("pad-a", 1)
+
+        assertFalse("ToggleAnalogMode" in NativeLibrary.getHotkeyBindings("pad-a")!!.map { it.name })
     }
 
     @Test

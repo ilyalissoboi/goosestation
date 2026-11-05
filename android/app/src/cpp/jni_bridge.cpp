@@ -55,6 +55,7 @@ jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
 jmethodID s_on_binding_captured = nullptr;
+jmethodID s_on_hotkey = nullptr;
 jmethodID s_on_osd_message = nullptr;
 jmethodID s_on_fast_forward_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
@@ -255,16 +256,18 @@ jobjectArray ToPadBindingArray(JNIEnv* env, const std::optional<std::vector<Andr
     jstring name = ToJString(env, binding.name);
     jstring display_name = ToJString(env, binding.display_name);
     jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
+    jstring category = ToJString(env, binding.category);
     jobject entry = nullptr;
-    if (name && display_name && (value || !binding.binding.has_value()))
+    if (name && display_name && category && (value || !binding.binding.has_value()))
     {
       entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
-                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
+                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value, category);
       if (ClearException(env))
         entry = nullptr;
     }
 
-    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
+    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value),
+                        static_cast<jobject>(category)})
     {
       if (ref)
         env->DeleteLocalRef(ref);
@@ -352,6 +355,11 @@ void AndroidHost::NotifyError(std::string_view message)
 void AndroidHost::NotifyBindingCaptured(std::string_view binding)
 {
   CallCallback(s_on_binding_captured, binding);
+}
+
+void AndroidHost::NotifyHotkey(std::string_view name)
+{
+  CallCallback(s_on_hotkey, name);
 }
 
 void AndroidHost::NotifyOsdMessage(std::string_view key, std::string_view text, float seconds, const u32* image_pixels,
@@ -795,6 +803,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
+  s_on_hotkey = env->GetMethodID(s_callbacks_class, "onHotkey", "(Ljava/lang/String;)V");
   s_on_osd_message =
     env->GetMethodID(s_callbacks_class, "onOsdMessage",
                      "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
@@ -822,7 +831,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_leaderboard =
     env->GetMethodID(s_callbacks_class, "onLeaderboard",
                      "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey ||
+      !s_on_osd_message ||
       !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
       !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
       !s_on_achievement_notification || !s_on_achievement_toast ||
@@ -976,7 +986,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_pad_binding_constructor =
     env->GetMethodID(s_pad_binding_class, "<init>",
                      "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;"
-                     "Ljava/lang/String;)V");
+                     "Ljava/lang/String;Ljava/lang/String;)V");
   if (!s_pad_binding_constructor)
   {
     ClearException(env);
@@ -2446,6 +2456,11 @@ NATIVE_LIBRARY_FUNCTION(jstring, getPortType)(JNIEnv* env, jobject, jint pad)
 
   const std::optional<std::string> type = AndroidHost::GetPortType(static_cast<u32>(pad));
   return type.has_value() ? ToJString(env, type.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, undoLoadState)(JNIEnv*, jobject)
+{
+  return AndroidHost::UndoLoadState() ? JNI_TRUE : JNI_FALSE;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setPortType)(JNIEnv* env, jobject, jint pad, jstring type)

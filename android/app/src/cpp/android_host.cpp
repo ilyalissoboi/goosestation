@@ -102,6 +102,7 @@ static void UpdateSourcePads();
 static void MapNewController(const std::string& identifier);
 static bool IsVulkanRenderer(GPURenderer renderer);
 static bool PadHasAnalogButton(SettingsInterface& si, u32 pad);
+static std::vector<const HotkeyInfo*> GetOfferedHotkeys(SettingsInterface& si, u32 pad);
 static bool MoveAnalogBindings(SettingsInterface& si);
 static void PressAnalogButton();
 
@@ -124,8 +125,11 @@ static constexpr std::string_view ANALOG_BUTTON = "Analog";
 // would fire on each of a chord's keys.
 static constexpr std::string_view ANALOG_HOTKEY = "ToggleAnalogMode";
 
-// The hotkeys the Controllers page has, in its order, all in [Hotkeys]: each a Select chord.
-static constexpr std::string_view HOTKEYS[] = {"ToggleFastForward", ANALOG_HOTKEY, "Screenshot"};
+// Hotkeys the Controllers page leaves out: the menu has Change disc and Reset with their questions, and the app has no
+// global slots (the per-slot hotkeys are left out by their prefixes, GetOfferedHotkeys()).
+static constexpr std::string_view LEFT_OUT_HOTKEYS[] = {"ChangeDisc", "Reset"};
+static constexpr std::string_view LEFT_OUT_HOTKEY_PREFIXES[] = {"LoadGameState", "SaveGameState", "LoadGlobalState",
+                                                                "SaveGlobalState"};
 
 static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 {
@@ -1979,17 +1983,13 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetHotkeyBindin
 
       const auto lock = Host::GetSettingsLock();
       SettingsInterface& si = *s_base_settings_interface;
-      const bool analog = PadHasAnalogButton(si, GetPadOfIndex(si, index.value()));
       result.emplace();
-      for (const std::string_view name : HOTKEYS)
+      for (const HotkeyInfo* hotkey : GetOfferedHotkeys(si, GetPadOfIndex(si, index.value())))
       {
-        if (name == ANALOG_HOTKEY && !analog)
-          continue;
-
-        const std::string key(name);
-        result->push_back(PadBinding{key, key, PadBindingKind::Button,
-                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList("Hotkeys", key.c_str()),
-                                                                        index.value())});
+        result->push_back(PadBinding{hotkey->name, hotkey->display_name, PadBindingKind::Button,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList("Hotkeys", hotkey->name),
+                                                                        index.value()),
+                                     hotkey->category});
       }
     },
     true);
@@ -2010,8 +2010,8 @@ void AndroidHost::SetHotkeyBinding(std::string descriptor, std::string name, std
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
-        if (std::find(std::begin(HOTKEYS), std::end(HOTKEYS), name) == std::end(HOTKEYS) ||
-            (name == ANALOG_HOTKEY && !PadHasAnalogButton(si, GetPadOfIndex(si, index.value()))))
+        const std::vector<const HotkeyInfo*> offered = GetOfferedHotkeys(si, GetPadOfIndex(si, index.value()));
+        if (std::none_of(offered.begin(), offered.end(), [&name](const HotkeyInfo* hotkey) { return name == hotkey->name; }))
         {
           WARNING_LOG("'{}' isn't a hotkey this pad can have, not binding it.", name);
           return;
@@ -2102,6 +2102,38 @@ bool AndroidHost::PadHasAnalogButton(SettingsInterface& si, u32 pad)
                              [](const Controller::ControllerBindingInfo& bi) { return bi.name == ANALOG_BUTTON; });
 }
 
+// The hotkeys the Controllers page offers for a controller on pad, in the core's order, under the settings lock.
+std::vector<const HotkeyInfo*> AndroidHost::GetOfferedHotkeys(SettingsInterface& si, u32 pad)
+{
+  const bool analog = PadHasAnalogButton(si, pad);
+  std::vector<const HotkeyInfo*> offered;
+  for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
+  {
+    const std::string_view name(hotkey->name);
+    if (std::find(std::begin(LEFT_OUT_HOTKEYS), std::end(LEFT_OUT_HOTKEYS), name) != std::end(LEFT_OUT_HOTKEYS) ||
+        std::any_of(std::begin(LEFT_OUT_HOTKEY_PREFIXES), std::end(LEFT_OUT_HOTKEY_PREFIXES),
+                    [&name](std::string_view prefix) { return name.starts_with(prefix); }) ||
+        (name == ANALOG_HOTKEY && !analog))
+    {
+      continue;
+    }
+
+    offered.push_back(hotkey);
+  }
+
+  return offered;
+}
+
+bool AndroidHost::UndoLoadState()
+{
+  if (!s_initialized)
+    return false;
+
+  bool undone = false;
+  EmuThread::RunOnThread([&undone]() { undone = System::IsValid() && System::UndoLoadState(); }, true);
+  return undone;
+}
+
 // Moves [Pad1] Analog's Android bindings (the old Analog Toggle row's) to the analog mode hotkey, under the settings
 // lock. Returns whether it changed anything, to save.
 bool AndroidHost::MoveAnalogBindings(SettingsInterface& si)
@@ -2179,14 +2211,13 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
             si.SetStringList(section.c_str(), key.c_str(), kept);
         }
 
-        // Its hotkeys too: unassigned by default.
-        for (const std::string_view name : HOTKEYS)
+        // Its hotkeys too, every one the core has: unassigned by default.
+        for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
         {
-          const std::string key(name);
-          const std::vector<std::string> bindings = si.GetStringList("Hotkeys", key.c_str());
+          const std::vector<std::string> bindings = si.GetStringList("Hotkeys", hotkey->name);
           const std::vector<std::string> kept = AndroidInputKeys::SetDeviceBinding(bindings, index.value(), {});
           if (kept.size() != bindings.size())
-            si.SetStringList("Hotkeys", key.c_str(), kept);
+            si.SetStringList("Hotkeys", hotkey->name, kept);
         }
 
         AddDefaultBindings(si, index.value(), pad);
@@ -2685,8 +2716,22 @@ const char* InputManager::ConvertHostKeyboardCodeToIcon(u32 code)
   return nullptr;
 }
 
-// No host hotkeys yet.
+// The save state hotkeys, the core's names (compiled out of its own list on Android): the app saves, loads and picks
+// the slot, as its menu does, under the game's key and with its messages. On the chord's release, as the core's.
+#define APP_STATE_HOTKEY(name, display_name)                                                                           \
+  DEFINE_HOTKEY(name, TRANSLATE_NOOP("Hotkeys", "Save States"), TRANSLATE_NOOP("Hotkeys", display_name),               \
+                [](s32 pressed) {                                                                                      \
+                  if (pressed == 0)                                                                                    \
+                    AndroidHost::NotifyHotkey(name);                                                                   \
+                })
+
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
+APP_STATE_HOTKEY("LoadSelectedSaveState", "Load From Selected Slot")
+APP_STATE_HOTKEY("SaveSelectedSaveState", "Save To Selected Slot")
+APP_STATE_HOTKEY("SelectPreviousSaveStateSlot", "Select Previous Save Slot")
+APP_STATE_HOTKEY("SelectNextSaveStateSlot", "Select Next Save Slot")
+APP_STATE_HOTKEY("SaveStateAndSelectNextSlot", "Save State and Select Next Slot")
+APP_STATE_HOTKEY("UndoLoadState", "Undo Load State")
 // The Controllers page's Analog mode hotkey: the DualShock's Analog button, on the chord's release, as the core's
 // toggles are.
 DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANSLATE_NOOP("Hotkeys", "Toggle Analog Mode"),

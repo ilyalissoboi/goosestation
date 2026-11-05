@@ -46,6 +46,9 @@ interface GameCoreApi {
         slot: Int,
     ): String?
 
+    /** Undoes the last load, as the core keeps it: false when there's none. */
+    fun undoLoadState(): Boolean
+
     /** The running game's patch codes. */
     fun getPatchCodes(): PatchCodes
 
@@ -131,6 +134,8 @@ object NativeGameCoreApi : GameCoreApi {
         key: String,
         slot: Int,
     ): String? = NativeLibrary.loadState(key, slot)
+
+    override fun undoLoadState(): Boolean = NativeLibrary.undoLoadState()
 
     override fun getPatchCodes(): PatchCodes = NativeLibrary.getPatchCodes() ?: PatchCodes("", emptyArray())
 

@@ -588,6 +588,8 @@ DEFINE_HOTKEY("AudioVolumeDown", TRANSLATE_NOOP("Hotkeys", "Audio"), TRANSLATE_N
                 }
               })
 
+// Android: the host has these, as the app's own save path (the game's key, its slots and messages).
+#ifndef __ANDROID__
 // NOTE: All save/load state hotkeys are deferred, because it can trigger setting reapply, which reloads bindings.
 DEFINE_HOTKEY("LoadSelectedSaveState", TRANSLATE_NOOP("Hotkeys", "Save States"),
               TRANSLATE_NOOP("Hotkeys", "Load From Selected Slot"), [](s32 pressed) {
@@ -623,6 +625,7 @@ DEFINE_HOTKEY("UndoLoadState", TRANSLATE_NOOP("Hotkeys", "Save States"), TRANSLA
                 if (!pressed)
                   Host::RunOnCPUThread(System::UndoLoadState);
               })
+#endif
 
 #define MAKE_LOAD_STATE_HOTKEY(global, slot, name)                                                                     \
   DEFINE_HOTKEY(global ? "LoadGameState" #slot : "LoadGlobalState" #slot, TRANSLATE_NOOP("Hotkeys", "Save States"),    \

@@ -80,6 +80,34 @@ object NativeLibrary {
         value: Int,
     )
 
+    external fun getFloatSetting(
+        section: String,
+        key: String,
+        default: Float,
+    ): Float
+
+    external fun setFloatSetting(
+        section: String,
+        key: String,
+        value: Float,
+    )
+
+    /**
+     * The choices of one of the core's lists of setting values, [kind] being its enum's name (`GPURenderer`,
+     * `DisplayAspectRatio` and so on): each value as settings.ini has it, then its name as desktop shows it, in the
+     * core's order. Empty for a kind the bridge doesn't know. Doesn't need [initialize].
+     */
+    external fun getSettingNames(kind: String): Array<String>
+
+    /** The card files in the memory card folder (`*.mcd`), by their names there, sorted. Empty before [initialize]. */
+    external fun getSharedCardNames(): Array<String>
+
+    /**
+     * The core's estimate of what [slots] rewind states take, `[RAM, video memory]` in bytes, at the internal
+     * resolution and multisampling the core has now. On the CPU thread, waiting for it.
+     */
+    external fun getRewindMemoryUsage(slots: Int): LongArray
+
     /** Applies settings.ini as it is now, as the core does after its own settings change. Waits for the core. */
     external fun applySettings()
 

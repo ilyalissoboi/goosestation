@@ -578,6 +578,57 @@ void AndroidHost::SetIntSetting(const char* section, const char* key, s32 value)
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
 }
 
+float AndroidHost::GetFloatSetting(const char* section, const char* key, float default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetFloatValue(section, key, default_value);
+}
+
+void AndroidHost::SetFloatSetting(const char* section, const char* key, float value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  s_base_settings_interface->SetFloatValue(section, key, value);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+std::vector<std::string> AndroidHost::GetSharedCardNames()
+{
+  std::vector<std::string> names;
+  if (!s_initialized)
+    return names;
+
+  FileSystem::FindResultsArray results;
+  FileSystem::FindFiles(EmuFolders::MemoryCards.c_str(), "*.mcd",
+                        FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES | FILESYSTEM_FIND_RELATIVE_PATHS,
+                        &results);
+  names.reserve(results.size());
+  for (FILESYSTEM_FIND_DATA& result : results)
+    names.push_back(std::move(result.FileName));
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
+std::pair<u64, u64> AndroidHost::GetRewindMemoryUsage(u32 num_saves)
+{
+  std::pair<u64, u64> usage{0, 0};
+  if (!s_initialized)
+    return usage;
+
+  // The core reads the resolution and multisampling from g_settings, which the CPU thread owns.
+  EmuThread::RunOnThread([&]() { System::CalculateRewindMemoryUsage(num_saves, 0, &usage.first, &usage.second); },
+                         true);
+  return usage;
+}
+
 void AndroidHost::ApplySettings()
 {
   if (!s_initialized)

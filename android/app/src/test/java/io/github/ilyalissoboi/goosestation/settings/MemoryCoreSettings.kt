@@ -48,4 +48,18 @@ class MemoryCoreSettings : CoreSettings {
     ) {
         values["$section/$key"] = value.toString()
     }
+
+    override fun getFloat(
+        section: String,
+        key: String,
+        default: Float,
+    ) = values["$section/$key"]?.toFloatOrNull() ?: default
+
+    override fun setFloat(
+        section: String,
+        key: String,
+        value: Float,
+    ) {
+        values["$section/$key"] = value.toString()
+    }
 }

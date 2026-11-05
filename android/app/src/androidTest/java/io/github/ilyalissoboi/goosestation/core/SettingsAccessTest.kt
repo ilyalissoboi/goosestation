@@ -73,6 +73,77 @@ class SettingsAccessTest {
     }
 
     @Test
+    fun floatSettingRoundTrips() {
+        initialize()
+
+        NativeLibrary.setFloatSetting("Main", "EmulationSpeed", 1.25f)
+        NativeLibrary.setFloatSetting("Main", "RewindFrequency", 0.1f)
+
+        assertEquals(1.25f, NativeLibrary.getFloatSetting("Main", "EmulationSpeed", 1f))
+        assertEquals("1.25", readSettings().value("Main", "EmulationSpeed"))
+        assertEquals("0.1", readSettings().value("Main", "RewindFrequency"))
+    }
+
+    @Test
+    fun aFloatDesktopWroteReads() {
+        settingsFile.writeText("[Main]\nSettingsVersion = 3\nEmulationSpeed = 10.000000\n")
+        initialize()
+
+        assertEquals(10f, NativeLibrary.getFloatSetting("Main", "EmulationSpeed", 1f))
+    }
+
+    @Test
+    fun eachKindHasTheCoresNames() {
+        initialize()
+
+        for (kind in KINDS) {
+            val names = NativeLibrary.getSettingNames(kind)
+            assertTrue("$kind has no names", names.isNotEmpty())
+            assertEquals("$kind isn't name and display name pairs", 0, names.size % 2)
+        }
+        assertEquals(
+            listOf("Automatic", "Vulkan", "OpenGL", "Software"),
+            NativeLibrary
+                .getSettingNames("GPURenderer")
+                .toList()
+                .chunked(2)
+                .map { it[0] },
+        )
+        assertTrue(
+            "Custom" in
+                NativeLibrary
+                    .getSettingNames("DisplayAspectRatio")
+                    .toList()
+                    .chunked(2)
+                    .map { it[0] },
+        )
+        assertEquals(0, NativeLibrary.getSettingNames("NoSuchKind").size)
+    }
+
+    @Test
+    fun sharedCardNamesAreTheCardFolders() {
+        initialize()
+        val cards = File(dataRoot, "memcards").apply { mkdirs() }
+        File(cards, "shared_card_1.mcd").writeBytes(ByteArray(16))
+        File(cards, "b.mcd").writeBytes(ByteArray(16))
+        File(cards, "notes.txt").writeText("not a card")
+
+        assertEquals(listOf("b.mcd", "shared_card_1.mcd"), NativeLibrary.getSharedCardNames().toList())
+    }
+
+    @Test
+    fun rewindUsageGrowsWithSlots() {
+        initialize()
+
+        val ten = NativeLibrary.getRewindMemoryUsage(10)
+        val twenty = NativeLibrary.getRewindMemoryUsage(20)
+
+        assertTrue(ten.toList().toString(), ten[0] > 0 && ten[1] > 0)
+        assertEquals(ten[0] * 2, twenty[0])
+        assertEquals(ten[1] * 2, twenty[1])
+    }
+
+    @Test
     fun defaultsBeforeInitialize() {
         assertEquals(7, NativeLibrary.getIntSetting("GPU", "ResolutionScale", 7))
         assertEquals("Automatic", NativeLibrary.getStringSetting("GPU", "Renderer", "Automatic"))
@@ -97,5 +168,26 @@ class SettingsAccessTest {
 
     private companion object {
         const val INSTALL_ID = "test-install"
+
+        /** Every choice list the bridge names. */
+        val KINDS =
+            listOf(
+                "ConsoleRegion",
+                "CPUExecutionMode",
+                "GPURenderer",
+                "GPUTextureFilter",
+                "GPUDownsampleMode",
+                "GPULineDetectMode",
+                "DisplayAspectRatio",
+                "DisplayDeinterlacingMode",
+                "DisplayCropMode",
+                "DisplayScalingMode",
+                "DisplayAlignment",
+                "DisplayRotation",
+                "DisplayScreenshotMode",
+                "DisplayScreenshotFormat",
+                "AudioStretchMode",
+                "MemoryCardType",
+            )
     }
 }

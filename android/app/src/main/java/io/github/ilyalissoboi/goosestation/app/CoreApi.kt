@@ -11,7 +11,14 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import kotlinx.coroutines.flow.StateFlow
+
+/** What rewind's states take: [ramBytes] of memory and [vramBytes] of video memory. */
+data class RewindUsage(
+    val ramBytes: Long,
+    val vramBytes: Long,
+)
 
 /**
  * The core's calls the settings pages make, as [NativeLibrary] has them ([NativeCoreApi]), so the pages can be tested
@@ -53,6 +60,15 @@ interface CoreApi {
     fun getAspectRatioNames(): List<String>
 
     fun isVulkanFailed(): Boolean
+
+    /** The core's choice list [kind] (an enum's name, as [NativeLibrary.getSettingNames] takes it), in its order. */
+    fun getSettingNames(kind: String): List<Choice<String>>
+
+    /** The memory card folder's card files, by their names there, sorted. */
+    fun getSharedCardNames(): List<String>
+
+    /** What [slots] rewind states take, as the core estimates it at the settings it has now. */
+    fun getRewindMemoryUsage(slots: Int): RewindUsage
 
     fun getBiosImages(): List<BiosImage>
 
@@ -125,6 +141,21 @@ object NativeCoreApi : CoreApi {
     override fun getAspectRatioNames(): List<String> = NativeLibrary.getAspectRatioNames().toList()
 
     override fun isVulkanFailed(): Boolean = NativeLibrary.isVulkanFailed()
+
+    override fun getSettingNames(kind: String): List<Choice<String>> =
+        NativeLibrary
+            .getSettingNames(kind)
+            .toList()
+            .chunked(2)
+            .filter { it.size == 2 }
+            .map { Choice(it[0], it[1]) }
+
+    override fun getSharedCardNames(): List<String> = NativeLibrary.getSharedCardNames().toList()
+
+    override fun getRewindMemoryUsage(slots: Int): RewindUsage {
+        val usage = NativeLibrary.getRewindMemoryUsage(slots)
+        return RewindUsage(usage.getOrElse(0) { 0L }, usage.getOrElse(1) { 0L })
+    }
 
     override fun getBiosImages(): List<BiosImage> = NativeLibrary.getBiosImages().toList()
 

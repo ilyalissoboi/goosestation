@@ -53,6 +53,15 @@ std::string GetStringSetting(const char* section, const char* key, const char* d
 void SetStringSetting(const char* section, const char* key, const char* value);
 s32 GetIntSetting(const char* section, const char* key, s32 default_value);
 void SetIntSetting(const char* section, const char* key, s32 value);
+float GetFloatSetting(const char* section, const char* key, float default_value);
+void SetFloatSetting(const char* section, const char* key, float value);
+
+/// The card files (*.mcd) in the memory card folder, by their names there, sorted. Empty before initializing.
+std::vector<std::string> GetSharedCardNames();
+
+/// The core's estimate of what num_saves rewind states take, at the settings the core has now: {RAM, VRAM} bytes. On
+/// the CPU thread, waiting for it.
+std::pair<u64, u64> GetRewindMemoryUsage(u32 num_saves);
 
 /// Applies the settings: System::ApplySettings(false). Blocks until the CPU thread has done so.
 void ApplySettings();

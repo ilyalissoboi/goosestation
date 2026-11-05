@@ -12,6 +12,7 @@ import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 
 /**
  * A [CoreApi] with a pad's Cross and Circle bound and [images] as the BIOS images, which writes the calls that change
@@ -99,6 +100,33 @@ class FakeCoreApi(
     }
 
     override fun isVulkanFailed(): Boolean = false
+
+    /** Each choice list the core names, by kind: its values, each its own label unless [nameLabels] has one. */
+    var names = mutableMapOf<String, List<String>>()
+
+    /** The labels the core gives values in [names], where they differ from the value. */
+    var nameLabels = mutableMapOf<String, String>()
+
+    /** The memory card folder's cards. */
+    var sharedCards = emptyList<String>()
+
+    /** What each rewind state takes, in bytes of memory and of video memory. */
+    var rewindPerSlot = RewindUsage(4L * MIB, 2L * MIB)
+
+    override fun getSettingNames(kind: String): List<Choice<String>> {
+        calls += "getSettingNames $kind"
+        return names[kind].orEmpty().map { Choice(it, nameLabels[it] ?: it) }
+    }
+
+    override fun getSharedCardNames(): List<String> {
+        calls += "getSharedCardNames"
+        return sharedCards
+    }
+
+    override fun getRewindMemoryUsage(slots: Int): RewindUsage {
+        calls += "getRewindMemoryUsage $slots"
+        return RewindUsage(rewindPerSlot.ramBytes * slots, rewindPerSlot.vramBytes * slots)
+    }
 
     override fun getBiosImages(): List<BiosImage> {
         calls += "getBiosImages"
@@ -194,5 +222,9 @@ class FakeCoreApi(
         val action = duringRead
         duringRead = {}
         action()
+    }
+
+    private companion object {
+        const val MIB = 1_048_576L
     }
 }

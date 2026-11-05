@@ -472,4 +472,129 @@ std::optional<u32> ParseDeviceIndex(std::string_view identifier)
   return StringUtil::FromChars<u32>(identifier.substr(DEVICE_PREFIX.size()));
 }
 
+u32 PadForIndex(std::span<const std::string> ports, u32 index)
+{
+  if (index >= ports.size())
+    return 0;
+
+  const std::optional<u32> number = StringUtil::FromChars<u32>(ports[index]);
+  return (number.has_value() && number.value() >= 1 && number.value() <= NUM_PADS) ? (number.value() - 1) : 0;
+}
+
+std::vector<std::string> SetPadForIndex(std::span<const std::string> ports, u32 index, u32 pad)
+{
+  std::vector<std::string> ret(ports.begin(), ports.end());
+  if (ret.size() <= index)
+    ret.resize(index + 1, "1");
+  ret[index] = fmt::format("{}", std::min(pad, NUM_PADS - 1) + 1);
+  return ret;
+}
+
+u32 RumbleForIndex(std::span<const std::string> rumble, u32 index)
+{
+  if (index >= rumble.size())
+    return 100;
+
+  const std::optional<u32> percent = StringUtil::FromChars<u32>(rumble[index]);
+  return (percent.has_value() && percent.value() <= 100) ? percent.value() : 100;
+}
+
+std::vector<std::string> SetRumbleForIndex(std::span<const std::string> rumble, u32 index, u32 percent)
+{
+  std::vector<std::string> ret(rumble.begin(), rumble.end());
+  if (ret.size() <= index)
+    ret.resize(index + 1, "100");
+  ret[index] = fmt::format("{}", std::min(percent, 100u));
+  return ret;
+}
+
+InputBindingKey MakePortMotorKey(u32 pad, u32 motor)
+{
+  InputBindingKey key = {};
+  key.source_type = PAD_SOURCE_TYPE;
+  key.source_index = pad;
+  key.source_subtype = InputSubclass::ControllerMotor;
+  key.data = motor;
+  return key;
+}
+
+void RumbleRouter::OnConnected(s32 device_id, u32 index)
+{
+  if (std::none_of(m_devices.begin(), m_devices.end(), [device_id](const Device& d) { return d.device_id == device_id; }))
+    m_devices.push_back(Device{device_id, index, 0});
+}
+
+void RumbleRouter::OnDisconnected(s32 device_id)
+{
+  std::erase_if(m_devices, [device_id](const Device& d) { return d.device_id == device_id; });
+  for (Pad& pad : m_pads)
+  {
+    if (pad.target == device_id)
+      pad.target.reset();
+  }
+}
+
+void RumbleRouter::OnInput(s32 device_id)
+{
+  for (Device& device : m_devices)
+  {
+    if (device.device_id == device_id)
+      device.last_input = ++m_input_count;
+  }
+}
+
+void RumbleRouter::SetPads(std::vector<u32> pad_of_index)
+{
+  m_pad_of_index = std::move(pad_of_index);
+}
+
+void RumbleRouter::SetStrengths(std::vector<float> strength_of_index)
+{
+  m_strength_of_index = std::move(strength_of_index);
+}
+
+u32 RumbleRouter::PadOf(u32 index) const
+{
+  return (index < m_pad_of_index.size()) ? m_pad_of_index[index] : 0;
+}
+
+float RumbleRouter::StrengthOf(u32 index) const
+{
+  return (index < m_strength_of_index.size()) ? std::clamp(m_strength_of_index[index], 0.0f, 1.0f) : 1.0f;
+}
+
+std::vector<RumbleRouter::Command> RumbleRouter::SetMotor(u32 pad_index, u32 motor, float value)
+{
+  std::vector<Command> ret;
+  if (pad_index >= NUM_PADS || motor > 1)
+    return ret;
+
+  Pad& pad = m_pads[pad_index];
+  pad.levels[motor] = value;
+
+  // The pad's last-used device, or its first connected one before any is used.
+  const Device* target = nullptr;
+  for (const Device& device : m_devices)
+  {
+    if (PadOf(device.index) == pad_index && (!target || device.last_input > target->last_input))
+      target = &device;
+  }
+
+  if (pad.target.has_value() && (!target || pad.target.value() != target->device_id))
+  {
+    const s32 old = pad.target.value();
+    pad.target.reset();
+    if (target && std::any_of(m_devices.begin(), m_devices.end(), [old](const Device& d) { return d.device_id == old; }))
+      ret.push_back(Command{old, 0.0f, 0.0f});
+  }
+
+  if (!target)
+    return ret;
+
+  pad.target = target->device_id;
+  const float strength = StrengthOf(target->index);
+  ret.push_back(Command{target->device_id, pad.levels[0] * strength, pad.levels[1] * strength});
+  return ret;
+}
+
 } // namespace AndroidInputKeys

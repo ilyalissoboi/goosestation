@@ -14,6 +14,10 @@
 #include "imgui_manager.h"
 #include "input_source.h"
 
+#ifdef __ANDROID__
+#include "android_input_keys.h"
+#endif
+
 #include "IconsPromptFont.h"
 
 #include "fmt/core.h"
@@ -909,6 +913,23 @@ void InputManager::AddPadBindings(SettingsInterface& si, const std::string& sect
     vib.pad_index = pad_index;
 
     bool has_any_bindings = false;
+#ifdef __ANDROID__
+    // Android: the pad's motors go to the Android source by pad, which picks the pad's last-used controller. The motor
+    // keys are left alone: a settings.ini shared with desktop keeps desktop's own there.
+    InputSource* const android_source = s_input_sources[static_cast<u32>(InputSourceType::Android)].get();
+    if (android_source)
+    {
+      vib.motors[0].binding = AndroidInputKeys::MakePortMotorKey(pad_index, 0);
+      vib.motors[0].source = android_source;
+      if (cinfo->vibration_caps == Controller::VibrationCapabilities::LargeSmallMotors)
+      {
+        vib.motors[1].binding = AndroidInputKeys::MakePortMotorKey(pad_index, 1);
+        vib.motors[1].source = android_source;
+      }
+
+      has_any_bindings = true;
+    }
+#else
     switch (cinfo->vibration_caps)
     {
       case Controller::VibrationCapabilities::LargeSmallMotors:
@@ -930,6 +951,7 @@ void InputManager::AddPadBindings(SettingsInterface& si, const std::string& sect
       default:
         break;
     }
+#endif
 
     if (has_any_bindings)
       s_pad_vibration_array.push_back(std::move(vib));

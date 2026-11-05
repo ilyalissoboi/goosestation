@@ -656,3 +656,109 @@ TEST(AndroidInputKeys, NoOldAnalogBindingsChangeNothing)
   EXPECT_EQ(moved.hotkey, hotkey);
   EXPECT_FALSE(moved.changed);
 }
+
+// [Android] ControllerPorts and ControllerRumble: parallel to ControllerDescriptors, entry n for Android-<n>.
+
+TEST(AndroidInputKeys, PortsListDefaultsToPort1)
+{
+  using AndroidInputKeys::PadForIndex;
+  using AndroidInputKeys::SetPadForIndex;
+  EXPECT_EQ(PadForIndex({}, 3), 0u);
+  EXPECT_EQ(PadForIndex(std::vector<std::string>{"2", "x"}, 0), 1u);
+  EXPECT_EQ(PadForIndex(std::vector<std::string>{"2", "x"}, 1), 0u); // not a number
+  EXPECT_EQ(PadForIndex(std::vector<std::string>{"9"}, 0), 0u);      // past Pad8
+  EXPECT_EQ(PadForIndex(std::vector<std::string>{"0"}, 0), 0u);
+  EXPECT_EQ(SetPadForIndex({}, 2, 4), (std::vector<std::string>{"1", "1", "5"}));
+  EXPECT_EQ(SetPadForIndex(std::vector<std::string>{"2", "3"}, 0, 0), (std::vector<std::string>{"1", "3"}));
+}
+
+TEST(AndroidInputKeys, RumbleListDefaultsToFull)
+{
+  using AndroidInputKeys::RumbleForIndex;
+  using AndroidInputKeys::SetRumbleForIndex;
+  EXPECT_EQ(RumbleForIndex({}, 0), 100u);
+  EXPECT_EQ(RumbleForIndex(std::vector<std::string>{"30"}, 0), 30u);
+  EXPECT_EQ(RumbleForIndex(std::vector<std::string>{"300"}, 0), 100u);
+  EXPECT_EQ(RumbleForIndex(std::vector<std::string>{"-5"}, 0), 100u);
+  EXPECT_EQ(SetRumbleForIndex({}, 1, 40), (std::vector<std::string>{"100", "40"}));
+  EXPECT_EQ(SetRumbleForIndex({}, 0, 400), (std::vector<std::string>{"100"}));
+}
+
+TEST(AndroidInputKeys, PortMotorKey)
+{
+  const InputBindingKey key = AndroidInputKeys::MakePortMotorKey(3, 1);
+  EXPECT_EQ(key.source_type, AndroidInputKeys::PAD_SOURCE_TYPE);
+  EXPECT_EQ(key.source_index, 3u);
+  EXPECT_EQ(key.source_subtype, InputSubclass::ControllerMotor);
+  EXPECT_EQ(key.data, 1u);
+}
+
+using AndroidInputKeys::RumbleRouter;
+using RumbleCommands = std::vector<RumbleRouter::Command>;
+
+TEST(AndroidInputKeys, RumbleGoesToTheLastUsedOnThePort)
+{
+  RumbleRouter r;
+  r.OnConnected(10, 0);
+  r.OnConnected(11, 1);
+  r.OnConnected(12, 2);
+  r.SetPads({0, 0, 1});
+  r.OnInput(10);
+  r.OnInput(11);
+  EXPECT_EQ(r.SetMotor(0, 0, 1.0f), (RumbleCommands{{11, 1.0f, 0.0f}}));
+
+  // 10 is used now: it takes the port's levels, and 11 stops.
+  r.OnInput(10);
+  EXPECT_EQ(r.SetMotor(0, 1, 0.5f), (RumbleCommands{{11, 0.0f, 0.0f}, {10, 1.0f, 0.5f}}));
+
+  // Port 2's controller isn't touched by Port 1's.
+  EXPECT_EQ(r.SetMotor(1, 0, 0.25f), (RumbleCommands{{12, 0.25f, 0.0f}}));
+}
+
+TEST(AndroidInputKeys, RumbleWithoutInputGoesToTheFirstOnThePort)
+{
+  RumbleRouter r;
+  r.OnConnected(10, 0);
+  r.OnConnected(11, 1);
+  EXPECT_EQ(r.SetMotor(0, 0, 1.0f), (RumbleCommands{{10, 1.0f, 0.0f}}));
+}
+
+TEST(AndroidInputKeys, RumbleSkipsAGoneDevice)
+{
+  RumbleRouter r;
+  r.OnConnected(10, 0);
+  r.OnConnected(11, 1);
+  r.OnInput(10);
+  r.OnInput(11);
+  EXPECT_EQ(r.SetMotor(0, 0, 1.0f), (RumbleCommands{{11, 1.0f, 0.0f}}));
+  r.OnDisconnected(11);
+  EXPECT_EQ(r.SetMotor(0, 0, 1.0f), (RumbleCommands{{10, 1.0f, 0.0f}}));
+}
+
+TEST(AndroidInputKeys, RumbleIsScaledByStrength)
+{
+  RumbleRouter r;
+  r.OnConnected(10, 0);
+  r.SetStrengths({0.5f});
+  r.SetMotor(0, 0, 1.0f);
+  EXPECT_EQ(r.SetMotor(0, 1, 0.5f), (RumbleCommands{{10, 0.5f, 0.25f}}));
+}
+
+TEST(AndroidInputKeys, NoRumbleWithNobodyOnThePort)
+{
+  RumbleRouter r;
+  EXPECT_TRUE(r.SetMotor(1, 0, 1.0f).empty());
+  r.OnConnected(10, 0);
+  EXPECT_TRUE(r.SetMotor(1, 0, 1.0f).empty());
+}
+
+TEST(AndroidInputKeys, RumbleFollowsAPortChange)
+{
+  RumbleRouter r;
+  r.OnConnected(10, 0);
+  r.SetMotor(0, 0, 1.0f);
+  r.SetPads({1});
+  // Port 1 has nobody now, so its next level goes nowhere; Port 2's reaches the controller.
+  EXPECT_TRUE(r.SetMotor(0, 0, 1.0f).empty());
+  EXPECT_EQ(r.SetMotor(1, 0, 0.5f), (RumbleCommands{{10, 0.5f, 0.0f}}));
+}

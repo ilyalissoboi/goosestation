@@ -728,6 +728,11 @@ object AppController : NativeCallbacks {
 
     // --- The Controllers page ([ControllersPage]) ---
 
+    /** Back on the Controllers page: one view up, and out of the page from its hub. */
+    fun controllersBack() {
+        if (!controllersPage.back()) closeSettingsPage()
+    }
+
     fun selectController(descriptor: String) = controllersPage.select(descriptor)
 
     fun captureBinding(name: String) = controllersPage.capture(name)

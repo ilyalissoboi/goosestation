@@ -69,7 +69,7 @@ class SettingsScreenTest {
     fun controllersIsFocusedWithoutAnEntry() {
         show(focusEntry = null)
 
-        assertFocusedHas("Controllers", "Remap each controller's buttons")
+        assertFocusedHas("Controllers", "Ports, types, bindings, hotkeys, rumble")
     }
 
     @Test
@@ -106,7 +106,7 @@ class SettingsScreenTest {
             "BIOS" to "Which BIOS each region uses, fast boot",
             "Graphics" to "Renderer, enhancements, display, on-screen display",
             "Audio" to "Volume, latency",
-            "Controllers" to "Remap each controller's buttons",
+            "Controllers" to "Ports, types, bindings, hotkeys, rumble",
             "Memory cards" to "Card types, sync, the card editor",
             "Achievements" to "Sign-in, hardcore mode, messages",
             "Folders" to "BIOS, games and data folders",

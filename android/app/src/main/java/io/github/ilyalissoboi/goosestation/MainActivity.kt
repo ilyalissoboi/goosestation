@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
+import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CorePage
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PausePolicy
@@ -36,10 +37,12 @@ import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
+import io.github.ilyalissoboi.goosestation.ui.HotkeysScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
+import io.github.ilyalissoboi.goosestation.ui.PortScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
@@ -238,32 +241,80 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Screen.Controllers -> {
-                        val state = AppController.controllersPage.state
-                        val bindings = state.bindings
-                        if (bindings == null) {
-                            SettingsLoadingPage("Controllers", onBack = AppController::closeSettingsPage)
-                        } else {
-                            ControllersScreen(
-                                controllers = state.controllers,
-                                labels = state.labels,
-                                selected = state.selected,
-                                bindings = bindings,
-                                bindingsFor = state.bindingsFor,
-                                capturing = state.capturing,
-                                secondsLeft = state.secondsLeft,
-                                undoFor = state.undo?.name,
-                                onSelect = AppController::selectController,
-                                onCapture = AppController::captureBinding,
-                                hotkeys = state.hotkeys.orEmpty(),
-                                onCaptureHotkey = AppController::captureHotkey,
-                                glyphs = state.bindingsType in GLYPH_TYPES,
-                                onCancelCapture = AppController::cancelCapture,
-                                onClear = AppController::clearBinding,
-                                onUndo = AppController.controllersPage::undo,
-                                onDropUndo = AppController.controllersPage::dropUndo,
-                                onReset = AppController::resetBindings,
-                                onBack = AppController::closeSettingsPage,
-                            )
+                        val page = AppController.controllersPage
+                        val state = page.state
+                        when (val view = state.view) {
+                            ControllersView.Hub ->
+                                ControllersScreen(
+                                    controllers = state.controllers,
+                                    labels = state.labels,
+                                    ports = state.ports,
+                                    rumble = state.rumble,
+                                    offered = state.offered,
+                                    portTypes = state.portTypes,
+                                    typeNames = state.typeNames,
+                                    multitap = state.multitap,
+                                    multitapNames = state.multitapNames,
+                                    onPort = page::setPort,
+                                    onRumble = page::setRumble,
+                                    onMultitap = page::setMultitap,
+                                    onOpenPort = page::openPort,
+                                    onOpenHotkeys = page::openHotkeys,
+                                    onBack = AppController::controllersBack,
+                                    cameFrom = state.cameFrom,
+                                )
+                            is ControllersView.Port -> {
+                                val bindings = state.bindings
+                                val title =
+                                    state.offered.firstOrNull { it.value == view.pad }?.label ?: "Port ${view.pad + 1}"
+                                if (bindings == null) {
+                                    SettingsLoadingPage(title, onBack = AppController::controllersBack)
+                                } else {
+                                    PortScreen(
+                                        title = title,
+                                        controllers =
+                                            state.controllers.filter {
+                                                (state.ports[it.descriptor] ?: 0) ==
+                                                    view.pad
+                                            },
+                                        labels = state.labels,
+                                        selected = state.selected,
+                                        bindings = bindings,
+                                        bindingsFor = state.bindingsFor,
+                                        capturing = state.capturing,
+                                        secondsLeft = state.secondsLeft,
+                                        undoFor = state.undo?.name,
+                                        onSelect = AppController::selectController,
+                                        onCapture = AppController::captureBinding,
+                                        glyphs = state.bindingsType in GLYPH_TYPES,
+                                        onCancelCapture = AppController::cancelCapture,
+                                        onClear = AppController::clearBinding,
+                                        onUndo = page::undo,
+                                        onDropUndo = page::dropUndo,
+                                        onReset = AppController::resetBindings,
+                                        onBack = AppController::controllersBack,
+                                    )
+                                }
+                            }
+                            ControllersView.Hotkeys ->
+                                HotkeysScreen(
+                                    controllers = state.controllers,
+                                    labels = state.labels,
+                                    selected = state.selected,
+                                    hotkeys = state.hotkeys.orEmpty(),
+                                    hotkeysFor = state.bindingsFor.takeIf { state.hotkeys != null },
+                                    capturing = state.capturing,
+                                    secondsLeft = state.secondsLeft,
+                                    undoFor = state.undo?.name,
+                                    onSelect = AppController::selectController,
+                                    onCaptureHotkey = AppController::captureHotkey,
+                                    onCancelCapture = AppController::cancelCapture,
+                                    onClear = AppController::clearBinding,
+                                    onUndo = page::undo,
+                                    onDropUndo = page::dropUndo,
+                                    onBack = AppController::controllersBack,
+                                )
+                            else -> SettingsLoadingPage("Controllers", onBack = AppController::controllersBack)
                         }
                     }
                     Screen.Folders -> {

@@ -71,6 +71,8 @@ class ControllersPageTest {
         runTest {
             api.ports = mapOf(PAD_A to 1)
             api.rumble = mapOf(PAD_A to 40)
+            api.names["ControllerType"] = listOf("None", "AnalogController")
+            api.names["MultitapMode"] = listOf("Disabled", "Port1Only")
 
             val page = openPage()
 
@@ -80,6 +82,50 @@ class ControllersPageTest {
             assertEquals("AnalogController", page.state.portTypes[0])
             assertEquals("None", page.state.portTypes[1])
             assertEquals("Disabled", page.state.multitap!![PortSettings.MULTITAP])
+            assertEquals(listOf("None", "AnalogController"), page.state.typeNames.map { it.value })
+            assertEquals(listOf("Disabled", "Port1Only"), page.state.multitapNames.map { it.value })
+        }
+
+    @Test
+    fun theNamesStayAcrossAReopen() =
+        runTest {
+            api.names["ControllerType"] = listOf("None", "AnalogController")
+            val page = openPage()
+
+            page.close()
+            page.open()
+            runCurrent()
+
+            assertEquals(listOf("None", "AnalogController"), page.state.typeNames.map { it.value })
+            assertEquals(1, calls.count { it == "getSettingNames ControllerType" })
+        }
+
+    // Back to the hub focuses the row the page was opened from.
+    @Test
+    fun backSaysWhereItCameFrom() =
+        runTest {
+            val page = openPage()
+            page.openPort(1)
+            page.openMacro(1, 3)
+            runCurrent()
+
+            page.back()
+            assertEquals(ControllersView.Macro(1, 3), page.state.cameFrom)
+            page.back()
+            assertEquals(ControllersView.Port(1), page.state.cameFrom)
+        }
+
+    @Test
+    fun aPortReadsItsMacrosButtons() =
+        runTest {
+            settings.values["Pad1/Macro2Binds"] = "Cross & Circle"
+            val page = openPage()
+
+            page.openPort(0)
+            runCurrent()
+
+            assertEquals("Cross & Circle", page.state.portValues!![MacroSettings.binds(0, 2)])
+            assertEquals("", page.state.portValues!![MacroSettings.binds(0, 1)])
         }
 
     @Test

@@ -11,6 +11,7 @@ import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.MacroSettings
+import io.github.ilyalissoboi.goosestation.settings.NameList
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -59,6 +60,11 @@ data class ControllersState(
     /** The open macro's settings ([MacroSettings.settings]) and the inputs its port's type has for it to press. */
     val macroValues: SettingValues? = null,
     val macroInputs: List<PadBinding> = emptyList(),
+    /** The core's controller types (no pointer ones) and multitap modes, read with the hub. */
+    val typeNames: List<Choice<String>> = emptyList(),
+    val multitapNames: List<Choice<String>> = emptyList(),
+    /** The view Back last left, whose row the view it went to focuses; null on opening. */
+    val cameFrom: ControllersView? = null,
 )
 
 /** The Controllers page's views: the hub, a port's page, one of a port's macros, and the hotkeys. */
@@ -129,10 +135,14 @@ class ControllersPage(
     private var portRead = 0
     private var macroRead = 0
 
+    /** The core's type and multitap names have been read: on [core], once. */
+    @Volatile private var namesRead = false
+
     /** Follows the controllers connected while the page is open, from no bindings read yet. */
     fun open() {
         controllersJob?.cancel()
-        state = ControllersState()
+        // The core's names stay: they were read once.
+        state = ControllersState(typeNames = state.typeNames, multitapNames = state.multitapNames)
         val input = pads() ?: return
         controllersJob = scope.launch { input.connected.collect(::onControllersChanged) }
     }
@@ -188,11 +198,13 @@ class ControllersPage(
 
     /** One view up: a macro to its port, a port or the hotkeys to the hub. False on the hub, which the page leaves. */
     fun back(): Boolean {
-        when (val view = state.view) {
+        val view = state.view
+        when (view) {
             ControllersView.Hub -> return false
             is ControllersView.Macro -> show(ControllersView.Port(view.pad))
             else -> show(ControllersView.Hub)
         }
+        state = state.copy(cameFrom = view)
         return true
     }
 
@@ -296,7 +308,13 @@ class ControllersPage(
                     val offered = api.getOfferedPorts()
                     val pads = (offered.map { it.value } + ports.values).distinct()
                     val types = pads.mapNotNull { pad -> api.getPortType(pad)?.let { pad to it } }.toMap()
-                    Hub(ports, rumble, offered, types, SettingValues.read(settings, listOf(PortSettings.MULTITAP)))
+                    val multitap = SettingValues.read(settings, listOf(PortSettings.MULTITAP))
+                    // They don't change: read once.
+                    val first = !namesRead
+                    namesRead = true
+                    val typeNames = if (first) api.getSettingNames(NameList.ControllerType.kind) else state.typeNames
+                    val modes = if (first) api.getSettingNames(NameList.MultitapMode.kind) else state.multitapNames
+                    Hub(ports, rumble, offered, types, multitap, typeNames, modes)
                 }
             if (read != hubRead) return@launch
             val lost =
@@ -311,6 +329,8 @@ class ControllersPage(
                     offered = (hub.offered + lost).sortedBy { it.value },
                     portTypes = hub.types,
                     multitap = hub.multitap,
+                    typeNames = hub.typeNames,
+                    multitapNames = hub.multitapNames,
                 )
             // A port's view covers the controllers on it, which the read may have changed.
             reselect()
@@ -325,7 +345,9 @@ class ControllersPage(
                 withContext(core) {
                     val type = api.getPortType(pad).orEmpty()
                     val info = api.getTypeSettings(type)
-                    Triple(type, info, SettingValues.read(settings, PortSettings.settings(pad, info)))
+                    // With each macro's inputs, for the macros' rows.
+                    val macros = (1..MacroSettings.COUNT).map { MacroSettings.binds(pad, it) }
+                    Triple(type, info, SettingValues.read(settings, PortSettings.settings(pad, info) + macros))
                 }
             if (read != portRead || state.view != ControllersView.Port(pad)) return@launch
             state = state.copy(portTypes = state.portTypes + (pad to type), typeSettings = info, portValues = values)
@@ -356,6 +378,8 @@ class ControllersPage(
         val offered: List<Choice<Int>>,
         val types: Map<Int, String>,
         val multitap: SettingValues,
+        val typeNames: List<Choice<String>>,
+        val multitapNames: List<Choice<String>>,
     )
 
     /** The page is left: a capture running ends, and the controllers aren't followed any more. */

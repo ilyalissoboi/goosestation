@@ -152,8 +152,8 @@ struct Settings
   DisplayScreenshotMode display_screenshot_mode = DEFAULT_DISPLAY_SCREENSHOT_MODE;
   DisplayScreenshotFormat display_screenshot_format = DEFAULT_DISPLAY_SCREENSHOT_FORMAT;
   u8 display_screenshot_quality = DEFAULT_DISPLAY_SCREENSHOT_QUALITY;
-  u16 display_aspect_ratio_custom_numerator = 0;
-  u16 display_aspect_ratio_custom_denominator = 0;
+  u16 display_aspect_ratio_custom_numerator = 4;
+  u16 display_aspect_ratio_custom_denominator = 3;
   s16 display_active_start_offset = 0;
   s16 display_active_end_offset = 0;
   s8 display_line_start_offset = 0;

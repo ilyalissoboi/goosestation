@@ -210,7 +210,7 @@ class GraphicsScreenTest {
         )
     }
 
-    // A new settings.ini has a numerator of 0, which the core takes as 1 (settings.cpp's clamp).
+    // A settings.ini from desktop can hold a numerator of 0, which the core takes as 1 (settings.cpp's clamp).
     @Test
     fun aZeroTermShowsAsTheCoreTakesIt() {
         show(

@@ -578,9 +578,9 @@ import, goes back to Automatic: its key is deleted, with no prompt (`Back to Aut
 has their image: [NtscU, Pal]`, say, in the log). After setup that waits until the core has started, since only
 the core reads and writes `settings.ini`. Controllers is under "Controllers" below.
 
-A new `settings.ini` from the core holds `CustomAspectRatioNumerator = 0` and no denominator (the core's `Save` writes
-its member default, 0, and reads the denominator where it means to write it, on desktop too), so Custom starts as the
-1:3 the core makes of that. The page shows the 1 the core takes 0 as.
+A new `settings.ini` from the core holds a custom aspect ratio of 4:3 (`CustomAspectRatioNumerator = 4`,
+`CustomAspectRatioDenominator = 3`). A file from desktop can still hold a term of 0: the page shows the 1 the core takes
+it as.
 
 **Every other setting** is changed by editing `settings.ini` in the data folder, on the device or from a computer:
 developer tools (wireframe, the GPU's debug and disable switches, VRAM write dumps, `[Hacks]` but old MDEC routines,

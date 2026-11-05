@@ -193,7 +193,7 @@ fun GraphicsScreen(
             notes = GraphicsSettings.ASPECT_NOTES,
         )
         if (values[GraphicsSettings.ASPECT_RATIO] == CUSTOM) {
-            // As the core takes them: at least 1 (a new settings.ini has a numerator of 0).
+            // As the core takes them: at least 1 (a settings.ini from desktop can hold 0).
             for (
             (label, term) in
             listOf(

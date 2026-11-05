@@ -74,4 +74,13 @@ class EmulationSettingsTest {
         assertEquals("1 frame", EmulationSettings.RUNAHEAD_FRAMES.label(1))
         assertEquals("3 frames", EmulationSettings.RUNAHEAD_FRAMES.label(3))
     }
+
+    // The Rewind hotkey is on the Controllers page now: the note says where.
+    @Test
+    fun theRewindNoteSaysWhereItsHotkeyIs() {
+        assertEquals(
+            "Hold the Rewind hotkey to go back. Set it in Controllers, Hotkeys.",
+            EmulationSettings.REWIND_HOTKEY_NOTE,
+        )
+    }
 }

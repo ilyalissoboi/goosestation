@@ -584,9 +584,8 @@ it as.
 
 **Every other setting** is changed by editing `settings.ini` in the data folder, on the device or from a computer:
 developer tools (wireframe, the GPU's debug and disable switches, VRAM write dumps, `[Hacks]` but old MDEC routines,
-TTY logging, `[PCDrv]`, the display offsets, the log filter), input profiles, cheats (patch codes cover them), and,
-until the next stage adds them to Controllers, Port 2, multitap, macros, rumble and the hotkeys the page doesn't
-offer yet (Rewind and Turbo among them: their speed and rewind rows work with a hotkey bound by hand).
+TTY logging, `[PCDrv]`, the display offsets, the log filter), input profiles, cheats (patch codes cover them), and the
+hotkeys the Controllers page leaves out (see "Controllers").
 Then switch to the app, or reopen it: the pull on coming back copies the file in, and the core reloads it, then scans
 the library again. While the app stays in front, the next push (within 2 s) also notices the change and copies it in.
 Edit the file the app wrote, so it keeps its `[Android] InstallID` (see below). For example, to turn on the GPU's
@@ -640,38 +639,76 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 
 ### Controllers
 
-Every connected controller drives Port 1. The core knows each one as `Android-<n>`, and `[Pad1]`'s bindings name it
-that way (`Cross = Android-0/Button96`, one entry per controller, as each binding is a list). `[Android]
-ControllerDescriptors` in `settings.ini` keeps the numbers: a list of Android's input device descriptors, one
-`ControllerDescriptors = …` line each, whose position is `<n>`. So a controller keeps its number, and its bindings,
-across restarts, whatever order the controllers connect in.
+Each controller is on a port: Port 1 unless it's been put on another. The core knows each one as `Android-<n>`, and
+its port's `[PadN]` bindings name it that way (`Cross = Android-0/Button96`, one entry per controller, as each binding
+is a list). `[Android]` in `settings.ini` keeps three lists, one line per controller in the same order, whose position
+is `<n>`: `ControllerDescriptors` (Android's input device descriptors), `ControllerPorts` (each one's `[PadN]` number,
+1 to 8) and `ControllerRumble` (its rumble strength, 0 to 100). A missing entry is Port 1 and 100%. So a controller
+keeps its number, port, strength and bindings across restarts, whatever order the controllers connect in. Desktop
+ignores `[Android]`, as before.
 
-- **The first time a controller is seen**, its descriptor is added to the list, and its default bindings to Port 1's:
-  the log has `'<name>' is a new controller, Android-<n>.` and `Added 24 bindings for Android-<n> to Port 1.` A
-  controller seen before gets nothing added, so a binding removed from it stays removed. The exception is one with no
-  binding at all in `[Pad1]` (a `settings.ini` restored from an older copy, say): it gets its defaults again when it
-  connects, and after a settings reload.
+- **The first time a controller is seen**, its descriptor is added to the list, and its default bindings to its
+  port's: the log has `'<name>' is a new controller, Android-<n>.` and `Added 24 bindings for Android-<n> to Port 1.`
+  A controller seen before gets nothing added, so a binding removed from it stays removed. The exception is one with
+  no binding at all on its port (a `settings.ini` restored from an older copy, say): it gets its defaults again when
+  it connects, and after a settings reload.
 - **Two identical controllers that Android gives the same descriptor** are one controller to the app: they share a
-  mapping, and the Controllers page lists them once.
+  mapping and a port, and the Controllers page lists them once.
 - **Controllers that share a name but not a descriptor** (two DualShock 4s, say) are numbered on the Controllers page
   by their place in the list, plus one: "Wireless Controller (1)", "Wireless Controller (2)". The numbers stay the
   same from one run to the next. A controller whose name no other connected one has is shown by its name alone.
 
-**Settings** → **Controllers** remaps them, one controller at a time:
+**Settings** → **Controllers** opens on the hub:
 
 - First, a card: "Back, the Mode (Home or Guide) button, or holding Select + Start for a second pauses the game and
   opens the menu. These buttons always do this, whatever is mapped to them."
-- With no controller connected, "Connect a controller to remap it." follows, and nothing else. With more than one, a
-  **Controller** row picks which; with one, its name. Either holds the focus on opening: it never starts on a binding,
-  so an A pressed as the page opens captures nothing, and Down reaches the first binding. A controller connecting or
-  going doesn't move a focus already in the page, nor a capture's row. Then "Every connected controller drives Port 1.
-  Each one keeps its own mapping."
-- Then one row per Port 1 input, in the core's order (D-Pad Up, Cross, Left Stick Left and so on). On a digital pad
-  or DualShock (`[Pad1] Type`), each input shows as its PlayStation button: the face buttons as their symbols in their
-  colours, the D-pad, the sticks with their direction, the shoulder buttons, Select and Start; screen readers say its
-  name. Other controller types keep the names. Each row has the binding's name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button 1`, `Key
-  <n>` for any other key, or `Not set`. Picking another controller shows "Reading <name>'s bindings…" in their place
-  until its own are read.
+- **Controllers**: each connected controller's port, a row named after it ("Connect a controller to set it up." with
+  none). The ports offered are Port 1 and Port 2, and, for a port that has multitap in `settings.ini` or in any game's
+  file (`gamesettings/*.ini`, `[ControllerPorts] MultitapMode`), its four slots instead: Port 1A to 1D, Port 2A to 2D.
+  A controller on a port nothing offers any more (multitap turned off everywhere) shows it as itself, "No game uses
+  this port". Moving a controller moves its own `Android-<n>` entries from the old `[PadN]`'s keys to the new one's
+  (macro triggers too); other sources' entries in those keys, a desktop's `SDL-0/…` say, stay where they are, in
+  order. The new port's type then gets its defaults for each input the controller has none for. The port is global,
+  never a game's. Under it, **Rumble strength** (0 to 100% by 10%), or "<name> has no motors Android can drive, so it
+  doesn't rumble."
+- **Ports**: **Multitap** (`[ControllerPorts] MultitapMode`, the core's modes), then a row per port offered, with its
+  type and the controllers on it ("Analog Controller (DualShock) · Wireless Controller"), which opens its page.
+- **Hotkeys**, which opens the hotkeys page.
+- Back from a port's page, or the hotkeys, focuses its row on the hub, and Back from the hub leaves the page.
+
+**A port's page** (titled with its port, "Port 1" or "Port 1A"):
+
+- **Controller type** (`[PadN] Type`): the core's types but those that need a pointer Android hasn't got (the GunCon,
+  the Justifier and the mouse). A type a file names that the page doesn't offer (a desktop's GunCon) shows as itself,
+  "(from settings.ini)", until another is picked. Picking a type gives each controller on the port that type's
+  default bindings for each input it has none for: the bindings are kept for each type, as its inputs' keys, so a
+  remapped Cross stays remapped from Analog to Digital and back, and a NeGcon's steering gets a default the first
+  time. Not Connected (`None`) shows its type row and nothing else.
+- **Settings**: the type's own (`Controller::ControllerInfo::settings`), as the core describes them: a switch for an
+  on/off one, a list for one of a few options, and a number for the rest, stepped by the core's step and shown through
+  its format ("25%" for a deadzone of `0.25`). The core's description is each row's note. A value desktop wrote off
+  the steps shows as itself.
+- **Bindings**: those of a controller on the port, as the rest of this section describes, with a **Controller** row
+  when there's more than one on it. With none: "No controller is on Port 2. Pick Port 2 for one on the Controllers
+  page." Then "Each controller on Port 1 keeps its own bindings." On a digital pad or DualShock each input shows as its
+  PlayStation button: the face buttons as their symbols in their colours, the D-pad, the sticks with their direction,
+  the shoulder buttons, Select and Start; screen readers say its name. Other types keep the names. Each row has the
+  binding's name: `A`, `B`, `X`, `Y`, `L1`, `Start`, `D-pad up`, `Left stick left`, `Brake (left trigger)`, `Button
+  1`, `Key <n>` for any other key, or `Not set`. Picking another controller shows "Reading <name>'s bindings…" in their
+  place until its own are read.
+- **Macros**: Macro 1 to 4, each with the inputs it presses ("Cross & Circle", or "Not set"), which opens its page.
+- **Reset to defaults**, at the end, drops all of the controller's bindings on the port and its hotkeys, and adds its
+  defaults again.
+
+**A macro's page** ("Macro 1 · Port 1"): its **Trigger**, the controller's own binding for `[PadN] MacroK`, captured,
+cleared and undone as a binding is; **Presses**, a switch for each of the type's inputs (`MacroKBinds`, written as
+desktop writes it, "Cross & Circle" in the type's order, the key deleted when there are none; a name the type hasn't
+got, from another type, is kept); and **Repeat**: **Repeats** (`MacroKFrequency`, "Doesn't repeat" or every 1 to 60
+frames, how often a held macro lets go of its inputs and presses them again) and **Press to toggle**
+(`MacroKToggle`). With no controller on the port, the presses and repeat can still be set.
+
+On a binding, a macro trigger or a hotkey:
+
 - A on a row asks for the input: "Press the new button for <input>… Back cancels (5)", counting down. The controller's
   next press, or a stick or trigger pushed past halfway, becomes that row's binding for this controller only; the other
   controllers' entries in the key stay. A button already held when it starts isn't taken, nor is an axis until it has
@@ -689,21 +726,59 @@ across restarts, whatever order the controllers connect in.
 - **The menu's triggers can't be remapped.** Back and Mode can't be bound: Back never reaches the core, and the core
   refuses Mode, so a capture never sees either. Select and Start can be bound to anything, but the controller's own
   Select and Start keys, held together, open the menu whatever they're mapped to (see "The in-game menu").
-- **Hotkeys**, after the bindings: **Fast forward**, **Analog mode** (presses the DualShock's Analog button, in place
-  of the old "Analog Toggle" row; only for a DualShock) and **Screenshot**, each Select held with a button. A on a row asks "Hold
-  Select and press a button for <hotkey>… Back cancels (5)" and takes the next button but Select and Start (Back and
-  Mode never reach it); its value then reads "Select + X". Clear and Undo work as on a binding, and Reset to defaults
-  clears them (they're unassigned by default). Each controller has its own: `[Hotkeys] ToggleFastForward`,
-  `ToggleAnalogMode` (a hotkey of the app's own) and `Screenshot`, as the core's chord bindings (`Android-0/Button109 &
-  Android-0/Button99`). They work while a game runs and the menu is closed. A chord's keys don't reach the game: when
-  one completes, the core lets go of the pad buttons on its keys in the same pass (`InputManager::ProcessEvent`, on
-  Android only), so the game sees neither Select nor the button. An "Analog Toggle" binding from before (`[Pad1]
-  Analog`) becomes the Analog mode hotkey, with Select, the first time the settings are read.
+- **The menu's triggers can't be remapped.** Back and Mode can't be bound: Back never reaches the core, and the core
+  refuses Mode, so a capture never sees either. Select and Start can be bound to anything, but the controller's own
+  Select and Start keys, held together, open the menu whatever they're mapped to (see "The in-game menu").
+
+**The hotkeys page** has the **Controller** row (any connected controller), "Hold Select and press the button you set.
+They work while a game runs.", then the core's hotkeys under its categories and names, in its order (General, System,
+Graphics, Audio, Save States, Controller): fast forward and turbo, rewind, the speeds, the renderer, PGXP, the
+resolution, widescreen, the on-screen display, rotation, mute and volume, the save states, and so on. Left out: Change
+disc and Reset (the in-game menu has them, with their questions), Toggle pause (not on Android: it would pause with no
+menu), and the per-slot and global save state hotkeys (the app's slots are each game's; the selected slot's do the
+same). Each is Select held with a button: A on a row asks "Hold Select and press a button for <hotkey>… Back cancels
+(5)" and takes the next button but Select and Start; its value then reads "Select + X". Each controller has its own, in
+`[Hotkeys]`, as the core's chord bindings (`Android-0/Button109 & Android-0/Button99`). They work while a game runs and
+the menu is closed. A chord's keys don't reach the game: when one completes, the core lets go of the pad buttons on
+its keys in the same pass (`InputManager::ProcessEvent`, on Android only), so the game sees neither Select nor the
+button. **Toggle Analog Mode** (the app's own, pressing the DualShock's Analog button) is offered for a controller on a
+port whose type has the button, and presses the Analog button of the port whose controller fired it. An "Analog
+Toggle" binding from before (`[Pad1] Analog`) becomes it, with Select, the first time the settings are read.
+
+- **The save state hotkeys go through the app**: on Android the core's own are compiled out, and the app's save
+  them, load them and pick the slot the in-game menu's way, under the game's key, so the states keep their pictures
+  and the resume rules. **Save To Selected Slot** and **Load From Selected Slot** use the slot last saved to or loaded
+  from (slot 1 before any), and say "Saved to slot 4" or "Loaded slot 4"; **Select Previous/Next Save Slot** step
+  through 1 to 10, wrapping, "Slot 5 selected"; **Save State and Select Next Slot** saves, then selects the next;
+  **Undo Load State** says "Undid the last load" or "No load to undo". Load in hardcore mode says "Loading a state is
+  off in hardcore mode", and a game without a key "This game can't keep save states". None opens the menu.
 - **Select on a controller with a hotkey** is held back from the game until it's known not to start a chord: it goes
   to the game when it's let go (held down 100 ms, as a tap), together with the next button pressed (in one batch, so
   the core's chord fires and the game sees neither), or once held for 500 ms, for a game that wants Select held (a map,
   say). A chord pressed after that still fires, but the game has seen Select by then. Select and Start held for the
   menu never reach the game. A controller with no hotkey sends Select as it comes.
+
+
+**A controller on a port the game doesn't use** drives nothing: a port whose type is Not Connected, or a multitap slot
+while the game has no multitap on that port (multitap on in another game's file, say). As the game starts, each such
+controller is told: "Wireless Controller is on Port 1C, which this game doesn't use." What counts is the core's own
+setup for the game (`g_settings.controller_types` and `multitap_mode`).
+
+**Rumble** goes to a controller's own motors only, those Android gives its input device (its `VibratorManager` on
+Android 12 and later, the first motor large and the second small; its vibrator before), never the phone's or
+handheld's own: a device Android says is built in (`InputDevice.isExternal()` false), such as a handheld's own
+controls, doesn't rumble. The app has the `VIBRATE` permission for it, granted at install. On Android the core doesn't
+read the `[PadN]` motor keys (`LargeMotor`, `SmallMotor`, `Motor`): each vibrating port's motors are bound to the
+Android source by port (`InputManager::AddPadBindings`, `#ifdef __ANDROID__`), so a `settings.ini` shared with desktop
+keeps desktop's own motor bindings. With several controllers on one port, the one last used (the last whose input
+changed what it reports) rumbles, at its own strength; if it goes, the next level goes to another on the port. The
+core repeats a level every half second while it lasts, and the app plays each for a second, so it doesn't gap; a level
+of 0, the menu opening and the game ending stop it. Each controller's strength scales both motors.
+
+**Known limits**: the core's multitap code (desktop's too) reads "Port 2 only" as Port 1's in
+`Settings::IsPort2MultitapEnabled` and checks the slot where it means the pad in `Settings::Load`, so under "Port 2
+only" Ports 2C and 2D have no controller; the start message says so. The bindings shown are the port's own type's:
+the types games' files set for a port (stage 3) aren't offered for remapping yet.
 
 ### The in-game menu
 
@@ -1312,6 +1387,28 @@ and the states saved were deleted (the data folder's mirror had none left).
 | Pause on a disconnect | Not checked: the emulator has no controller to unplug. It waits for the Thor. |
 | Crashes | None (`adb logcat -b crash -d` empty). The emulator's System UI asked to be waited for once, with three emulators running. |
 
+### The settings pages, stage 2: controllers (2026-11-06)
+
+On `goose-arm64` (emulator-5554) at `ea98ffb14`, with no controller connected (the emulator has none). The full tier
+at the same commit: 816/816 (four shard parts 734 and the OpenGL ES part 82; 40 OpenGL ES contexts, 0 Vulkan), read from
+the result XML.
+
+| Check | Result |
+|---|---|
+| Settings hub | Pass. Controllers' summary "Ports, types, bindings, hotkeys, rumble". |
+| Controllers hub | Pass. The menu triggers' card, "Connect a controller to set it up.", Multitap Disabled, Port 1 "Analog Controller · No controller", Port 2 "Not Connected · No controller", Hotkeys. |
+| Multitap | Pass. Right made it "Enable on Port 1 Only" (`[ControllerPorts] MultitapMode = Port1Only`), and the ports became 1A, 2, 1B, 1C, 1D. |
+| Port 1A | Pass. Controller type Analog Controller, the core's settings with its descriptions (Analog Deadzone 0%, Analog Sensitivity 133%); Right on the deadzone wrote `AnalogDeadzone = 0.01`. Bindings: "No controller is on Port 1A…". Macros 1 to 4, "Not set". |
+| Macro 4 | Pass. Trigger line for no controller, a switch per input; switching Circle on wrote `Macro4Binds = Circle`, and off deleted the key. Back focused Macro 4, now "Circle". |
+| Back | Pass. Back from Port 1A focused its row on the hub; Port 1C (Not Connected) shows its type row only. |
+| Hotkeys | Pass. "Connect a controller to set its hotkeys." with none. |
+
+Not checkable on the emulator: a controller's port, bindings, hotkeys and macro triggers (no controller), and rumble (no
+motors); `ControllerBindingsTest` and `GameCallsTest` cover them with the core, and the Thor's checklist (step 14) has
+them by hand. The emulator's System UI and the app both showed "isn't responding" once early on, while the host was
+loaded from the test runs (load average 28): the app's trace showed its main thread running a layout, not blocked, and
+the page opened at once after a fresh start.
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -1732,3 +1829,17 @@ adb logcat -v time > thor.log
      doesn't follow the usual pattern asks "Rename anyway?", and B goes back to the form with the name kept.
    - [x] Export… opens the file picker and says "Exported …"; Delete keeps the save listed, greyed.
    - [x] B with changes asks Save, Discard or Keep editing (focused); Discard leaves, and the cards are unchanged.
+
+14. **Controllers, stage 2.** With the build that has it, a Bluetooth controller with motors (a DualShock 4 or an Xbox
+    pad) and the Thor's own controls. Note `settings.ini`'s `[Android]` and `[PadN]` before and after.
+   - [ ] The hub lists both controllers; the Thor's own says it has no motors Android can drive, and the Bluetooth
+     pad has **Rumble strength** at 100%.
+   - [ ] The Bluetooth pad on **Port 2**, Port 2's type **Analog Controller (DualShock)**: in a two-player game, each
+     controller drives its own player; `[Android] ControllerPorts` has `2` for it, and its bindings are in `[Pad2]`.
+   - [ ] Rumble in a game that rumbles: the Bluetooth pad rumbles, never the Thor itself; at 30% it's weaker, at 0%
+     it doesn't. With both on Port 1, the one pressed last rumbles. The menu opening and the game's end stop it.
+   - [ ] A save state hotkey (Select + a button for **Save To Selected Slot**) saves "Saved to slot N", which the
+     in-game menu's Load lists with its picture; **Load From Selected Slot** loads it.
+   - [ ] Multitap **Enable on Port 1 Only**: the ports become 1A to 1D; a controller on 1C starts a game without
+     multitap with "<name> is on Port 1C, which this game doesn't use."
+   - [ ] A macro (Cross & Circle, Repeats every 5 frames) fires while its trigger is held.

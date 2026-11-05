@@ -108,7 +108,7 @@ class AchievementOverlay(
         val card = queue.removeFirstOrNull()
         current = card
         if (card != null) {
-            val duration = if (card.kind == CardKind.Mastery) MASTERY_MS else UNLOCK_MS
+            val duration = card.durationMs
             if (menuOpen) pausedLeft = duration else currentUntil = clock() + duration
         }
         publish()

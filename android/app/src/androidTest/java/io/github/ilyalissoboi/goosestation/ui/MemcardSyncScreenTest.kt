@@ -27,6 +27,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -46,9 +48,12 @@ class MemcardSyncScreenTest {
     private var conflictsOpened = 0
     private var manageOpened = 0
 
+    private val cardChanges = mutableListOf<SettingValues>()
+
     private fun show(
         state: MemcardSyncState,
         cardsSummary: String = "3 cards",
+        cards: SettingValues? = null,
     ) {
         rule.setContent {
             GooseStationTheme {
@@ -63,10 +68,70 @@ class MemcardSyncScreenTest {
                     cardsSummary = cardsSummary,
                     onManageCards = { manageOpened++ },
                     onBack = {},
+                    cards =
+                        cards?.let {
+                            CardSlots(it, SampleNames.ALL, listOf("a.mcd", "shared_card_1.mcd"), onChange = { new ->
+                                cardChanges +=
+                                    new
+                            })
+                        },
                 )
             }
         }
         rule.waitForIdle()
+    }
+
+    private fun downTo(text: String) {
+        repeat(40) {
+            if (rule
+                    .onAllNodes(
+                        isFocused() and hasText(text, substring = true),
+                    ).fetchSemanticsNodes()
+                    .isNotEmpty()
+            ) {
+                return
+            }
+            press(Key.DirectionDown)
+        }
+        throw AssertionError("Down never reached $text")
+    }
+
+    @Test
+    fun theCardRowsComeAfterSync() {
+        show(RUNNING, cards = pageValues(MemoryCardSettings.all))
+
+        rule.onNode(isFocused()).assert(hasText("Manage cards", substring = true))
+        downTo("Card 1 type")
+        press(Key.DirectionDown)
+        rule.onNode(isFocused()).assert(hasText("Card 2 type", substring = true))
+        press(Key.DirectionDown)
+        rule.onNode(isFocused()).assert(hasText("One card for all discs of a game", substring = true))
+        rule.onNodeWithText("Shared card 1").assertDoesNotExist()
+    }
+
+    @Test
+    fun aSharedSlotPicksItsCardAmongTheFolders() {
+        val shared = pageValues(MemoryCardSettings.all, "MemoryCards/Card1Type" to "Shared")
+        show(RUNNING, cards = shared)
+
+        downTo("Shared card 1")
+        rule.onNode(isFocused()).assert(hasText("(the default)", substring = true))
+        press(Key.ButtonA)
+        press(Key.DirectionDown)
+        press(Key.ButtonA)
+
+        assertEquals(listOf(shared.with(MemoryCardSettings.path(1), "a.mcd")), cardChanges)
+    }
+
+    @Test
+    fun oneCardPerGameToggles() {
+        val start = pageValues(MemoryCardSettings.all)
+        show(RUNNING, cards = start)
+
+        downTo("One card for all discs of a game")
+        press(Key.ButtonA)
+
+        assertEquals(listOf(start.with(MemoryCardSettings.ONE_CARD_PER_GAME, false)), cardChanges)
     }
 
     private fun press(key: Key) {

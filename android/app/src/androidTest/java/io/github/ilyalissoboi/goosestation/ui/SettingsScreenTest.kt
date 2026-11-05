@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -82,16 +83,38 @@ class SettingsScreenTest {
     fun theEntriesAreInOrder() {
         show(focusEntry = null)
 
-        press(Key.DirectionDown)
-        assertFocusedHas("Graphics", "Renderer, resolution, aspect ratio, FPS")
-        press(Key.DirectionDown)
-        assertFocusedHas("Achievements", "Sign-in, hardcore mode, messages")
-        press(Key.DirectionDown)
-        assertFocusedHas("Memory cards", "Sync your saves with your other devices")
-        press(Key.DirectionDown)
-        assertFocusedHas("BIOS")
-        press(Key.DirectionDown)
-        assertFocusedHas("Folders", "BIOS, games and data folders")
+        // From Controllers up to the first entry, then down to the last.
+        press(Key.DirectionUp)
+        assertFocusedHas("Audio", "Volume, latency")
+        press(Key.DirectionUp)
+        assertFocusedHas("Graphics", "Renderer, enhancements, display, on-screen display")
+        press(Key.DirectionUp)
+        assertFocusedHas("BIOS", "Which BIOS each region uses, fast boot")
+        press(Key.DirectionUp)
+        assertFocusedHas("Emulation", "Speed, frame pacing, rewind, run-ahead")
+        press(Key.DirectionUp)
+        assertFocusedHas("Console", "Region, CPU, CD-ROM speed")
+        press(Key.DirectionUp)
+        assertFocusedHas("Interface", "Pausing, resume states, backups")
+        press(Key.DirectionUp)
+        assertFocusedHas("Interface")
+        for (
+        (label, summary) in
+        listOf(
+            "Console" to "Region, CPU, CD-ROM speed",
+            "Emulation" to "Speed, frame pacing, rewind, run-ahead",
+            "BIOS" to "Which BIOS each region uses, fast boot",
+            "Graphics" to "Renderer, enhancements, display, on-screen display",
+            "Audio" to "Volume, latency",
+            "Controllers" to "Remap each controller's buttons",
+            "Memory cards" to "Card types, sync, the card editor",
+            "Achievements" to "Sign-in, hardcore mode, messages",
+            "Folders" to "BIOS, games and data folders",
+        )
+        ) {
+            press(Key.DirectionDown)
+            assertFocusedHas(label, summary)
+        }
         press(Key.Enter)
 
         assertEquals(listOf(SettingsEntry.Folders), opened)
@@ -155,8 +178,8 @@ class SettingsScreenTest {
         rule.setContent {
             GooseStationTheme {
                 GraphicsScreen(
-                    settings = GraphicsSettings("Automatic", 3, "Auto (Game Native)", false),
-                    aspectNames = listOf("Auto (Game Native)", "Stretch To Fill", "Custom", "4:3"),
+                    values = pageValues(GraphicsSettings.all, "GPU/ResolutionScale" to "3"),
+                    names = SampleNames.ALL,
                     vulkanFailed = true,
                     onChange = {},
                     onBack = {},
@@ -165,7 +188,7 @@ class SettingsScreenTest {
         }
         rule.waitForIdle()
 
-        assertFocusedHas("Renderer", "Automatic (Vulkan where it works well)")
+        assertFocusedHas("Renderer", "Automatic", "Vulkan where it works well, else OpenGL ES")
         rule
             .onNode(hasText("Vulkan didn't start on this device, so games use OpenGL ES until the app restarts."))
             .assertExists()
@@ -175,18 +198,12 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun theGraphicsPageChangesOneFieldAtATime() {
-        val changes = mutableListOf<GraphicsSettings>()
-        val settings = GraphicsSettings("Automatic", 1, "Auto (Game Native)", false)
+    fun theGraphicsPageChangesOneSettingAtATime() {
+        val changes = mutableListOf<SettingValues>()
+        val values = pageValues(GraphicsSettings.all)
         rule.setContent {
             GooseStationTheme {
-                GraphicsScreen(
-                    settings = settings,
-                    aspectNames = listOf("Auto (Game Native)", "Stretch To Fill"),
-                    vulkanFailed = false,
-                    onChange = { changes += it },
-                    onBack = {},
-                )
+                GraphicsScreen(values, SampleNames.ALL, vulkanFailed = false, onChange = { changes += it }, onBack = {})
             }
         }
         rule.waitForIdle()
@@ -197,12 +214,20 @@ class SettingsScreenTest {
             .onNode(hasText("Higher is sharper and slower. Match the screen picks the highest that fits."))
             .assertDoesNotExist()
 
-        // Renderer, Internal resolution, Aspect ratio, then Show FPS.
-        repeat(3) { press(Key.DirectionDown) }
+        repeat(60) {
+            if (rule
+                    .onAllNodes(
+                        isFocused() and hasText("Show FPS"),
+                    ).fetchSemanticsNodes()
+                    .isEmpty()
+            ) {
+                press(Key.DirectionDown)
+            }
+        }
         assertFocusedHas("Show FPS")
         rule.onNode(isFocused()).assertIsOff()
         press(Key.Enter)
 
-        assertEquals(listOf(settings.copy(showFps = true)), changes)
+        assertEquals(listOf(values.with(GraphicsSettings.SHOW_FPS, true)), changes)
     }
 }

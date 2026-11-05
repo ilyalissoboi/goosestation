@@ -55,6 +55,8 @@ class AchievementsSignInTest {
                 override fun onGameStarted(
                     title: String,
                     serial: String,
+                    startPaused: Boolean,
+                    pauseOnDisconnect: Boolean,
                 ) = started.countDown()
 
                 override fun onGameStopped() = stopped.countDown()
@@ -185,7 +187,7 @@ class AchievementsSignInTest {
 
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, 0f)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
@@ -194,7 +196,7 @@ class AchievementsSignInTest {
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
-            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             surface.release()
             texture.release()
         }

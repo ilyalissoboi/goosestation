@@ -10,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -146,6 +147,8 @@ class GameCallsTest {
                 override fun onGameStarted(
                     title: String,
                     serial: String,
+                    startPaused: Boolean,
+                    pauseOnDisconnect: Boolean,
                 ) {
                     lastSerial = serial
                     started.countDown()
@@ -159,7 +162,7 @@ class GameCallsTest {
         initialize()
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, 0f)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
@@ -184,7 +187,7 @@ class GameCallsTest {
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
-            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             NativeLibrary.setCallbacks(null)
             surface.release()
             texture.release()
@@ -251,6 +254,8 @@ class GameCallsTest {
                 override fun onGameStarted(
                     title: String,
                     serial: String,
+                    startPaused: Boolean,
+                    pauseOnDisconnect: Boolean,
                 ) = started.countDown()
 
                 override fun onGameStopped() = stopped.countDown()
@@ -264,7 +269,7 @@ class GameCallsTest {
         val padtest = NativeLibrary.getGameList().single()
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, 0f)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(padtest.path, 1, false)
@@ -274,7 +279,7 @@ class GameCallsTest {
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
-            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             NativeLibrary.setCallbacks(null)
             surface.release()
             texture.release()
@@ -348,10 +353,106 @@ class GameCallsTest {
         }
     }
 
-    /** Boots padtest with a pad connected, runs [body], and shuts it down; skipped without the files. */
+    @Test
+    fun aSlotSaveKeepsABackupWhenAsked() =
+        withPadtest(settings = { NativeLibrary.setBoolSetting("Main", "CreateSaveStateBackups", true) }) {
+            NativeLibrary.setPaused(true)
+
+            assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 1))
+            assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 1))
+
+            assertTrue(File(states, "${PADTEST_SERIAL}_1.sav").length() > 0)
+            assertTrue(File(states, "${PADTEST_SERIAL}_1.bak").length() > 0)
+        }
+
+    @Test
+    fun noBackupByDefault() =
+        withPadtest {
+            NativeLibrary.setPaused(true)
+
+            assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 1))
+            assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 1))
+
+            assertFalse(File(states, "${PADTEST_SERIAL}_1.bak").exists())
+        }
+
+    @Test
+    fun theResumeStateKeepsNoBackup() =
+        withPadtest(settings = { NativeLibrary.setBoolSetting("Main", "CreateSaveStateBackups", true) }) {
+            NativeLibrary.setPaused(true)
+
+            assertNull(NativeLibrary.saveResumeState(PADTEST_SERIAL))
+            assertNull(NativeLibrary.saveResumeState(PADTEST_SERIAL))
+
+            assertTrue(File(states, "${PADTEST_SERIAL}_resume.sav").length() > 0)
+            assertFalse(File(states, "${PADTEST_SERIAL}_resume.bak").exists())
+        }
+
+    @Test
+    fun aCoreMessageReachesTheApp() {
+        val keys = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(onMessage = { key, _ -> keys += key }) {
+            NativeLibrary.resetGame()
+            Thread.sleep(1_000)
+        }
+
+        assertTrue(keys.toString(), "system_reset" in keys)
+    }
+
+    @Test
+    fun noCoreMessagesWithShowOSDMessagesOff() {
+        val keys = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            settings = { NativeLibrary.setBoolSetting("Display", "ShowOSDMessages", false) },
+            onMessage = { key, _ -> keys += key },
+        ) {
+            NativeLibrary.resetGame()
+            Thread.sleep(1_000)
+        }
+
+        assertTrue(keys.toString(), "system_reset" !in keys)
+    }
+
+    @Test
+    fun theScreensRefreshRateReachesTheCore() =
+        withPadtest(refreshRate = 60f) {
+            assertEquals(60f, NativeLibrary.getSurfaceRefreshRateForTest())
+        }
+
+    @Test
+    fun theBootSaysWhatThePauseSettingsAre() {
+        var flags: Pair<Boolean, Boolean>? = null
+        withPadtest(
+            settings = {
+                NativeLibrary.setBoolSetting("Main", "StartPaused", true)
+                NativeLibrary.setBoolSetting("Main", "PauseOnControllerDisconnection", true)
+            },
+            onStarted = { startPaused, pauseOnDisconnect -> flags = startPaused to pauseOnDisconnect },
+        ) {}
+
+        assertEquals(true to true, flags)
+    }
+
+    @Test
+    fun thePauseSettingsAreOffByDefault() {
+        var flags: Pair<Boolean, Boolean>? = null
+        withPadtest(onStarted = { startPaused, pauseOnDisconnect -> flags = startPaused to pauseOnDisconnect }) {}
+
+        assertEquals(false to false, flags)
+    }
+
+    /**
+     * Boots padtest with a pad connected, after [settings] change settings.ini (applied before the boot), runs [body],
+     * and shuts it down; skipped without the files. [onStarted] gets the boot's StartPaused and
+     * PauseOnControllerDisconnection, [onMessage] each OSD message's key and text.
+     */
     private fun withPadtest(
         onFastForward: (Boolean) -> Unit = {},
         onAnalogPress: () -> Unit = {},
+        settings: () -> Unit = {},
+        onStarted: (startPaused: Boolean, pauseOnDisconnect: Boolean) -> Unit = { _, _ -> },
+        onMessage: (key: String, text: String) -> Unit = { _, _ -> },
+        refreshRate: Float = 0f,
         body: () -> Unit,
     ) {
         val exe = File(root, "padtest.psexe")
@@ -367,7 +468,12 @@ class GameCallsTest {
                 override fun onGameStarted(
                     title: String,
                     serial: String,
-                ) = started.countDown()
+                    startPaused: Boolean,
+                    pauseOnDisconnect: Boolean,
+                ) {
+                    onStarted(startPaused, pauseOnDisconnect)
+                    started.countDown()
+                }
 
                 override fun onGameStopped() = stopped.countDown()
 
@@ -381,11 +487,14 @@ class GameCallsTest {
                     seconds: Float,
                     icon: ArgbImage?,
                 ) {
+                    onMessage(key, text)
                     if (key == "Controller0AnalogMode" && "locked" in text) onAnalogPress()
                 }
             },
         )
         initialize()
+        settings()
+        NativeLibrary.applySettings()
         NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", PAD)
         val deadline = System.nanoTime() + 5_000_000_000L
         while (NativeLibrary.getPadBindings(PAD) == null) {
@@ -394,7 +503,7 @@ class GameCallsTest {
         }
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, refreshRate)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
@@ -404,7 +513,7 @@ class GameCallsTest {
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
-            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             NativeLibrary.setCallbacks(null)
             surface.release()
             texture.release()

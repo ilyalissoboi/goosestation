@@ -43,4 +43,67 @@ class PausePolicyTest {
         assertEquals(true, PausePolicy.atBoot(pausedDuringBoot = false, running = false))
         assertEquals(true, PausePolicy.atBoot(pausedDuringBoot = true, running = false))
     }
+
+    @Test
+    fun startPausedOpensTheMenu() {
+        assertTrue(PausePolicy.opensMenuAtBoot(startPaused = true, atBoot = null))
+    }
+
+    @Test
+    fun startPausedLeavesABootTheAppPausedAlone() {
+        // In the background, or with the prompt open: paused for that, with its own way back.
+        assertFalse(PausePolicy.opensMenuAtBoot(startPaused = true, atBoot = true))
+        assertFalse(PausePolicy.opensMenuAtBoot(startPaused = true, atBoot = false))
+    }
+
+    @Test
+    fun noMenuWithoutStartPaused() {
+        assertFalse(PausePolicy.opensMenuAtBoot(startPaused = false, atBoot = null))
+    }
+
+    @Test
+    fun aDisconnectPausesARunningGame() {
+        assertTrue(
+            PausePolicy.pausesOnDisconnect(setting = true, gameRunning = true, onGameScreen = true, promptOpen = false),
+        )
+    }
+
+    @Test
+    fun noPauseWhileTheMenuIsOpen() {
+        assertFalse(
+            PausePolicy.pausesOnDisconnect(setting = true, gameRunning = true, onGameScreen = true, promptOpen = true),
+        )
+    }
+
+    @Test
+    fun noPauseWhileBootingOrOffTheGame() {
+        assertFalse(
+            PausePolicy.pausesOnDisconnect(
+                setting = true,
+                gameRunning = false,
+                onGameScreen = true,
+                promptOpen = false,
+            ),
+        )
+        assertFalse(
+            PausePolicy.pausesOnDisconnect(
+                setting = true,
+                gameRunning = true,
+                onGameScreen = false,
+                promptOpen = false,
+            ),
+        )
+    }
+
+    @Test
+    fun noPauseWithTheSettingOff() {
+        assertFalse(
+            PausePolicy.pausesOnDisconnect(
+                setting = false,
+                gameRunning = true,
+                onGameScreen = true,
+                promptOpen = false,
+            ),
+        )
+    }
 }

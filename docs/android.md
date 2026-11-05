@@ -503,39 +503,73 @@ by the ones setup picked. That happens once; other settings are kept.
 
 ### Changing settings
 
-**Settings**, in the library's top bar, opens a hub with six pages: **Controllers**, **Graphics**, **Achievements**
-(see "RetroAchievements"), **Memory cards** (see "Memory card sync"), **BIOS** and **Folders** (the folder settings
-above). Every page works with a D-pad alone, as setup does: the first row is focused when a page opens, A or Enter
-activates, and B or Back goes back. Back from a page focuses its entry in the hub, and Back from the hub focuses
-**Settings** in the library. A setting with several values shows its current one between two arrows: left and right
-step through the values, stopping at the first and the last, and each step is the change; a tap on an arrow steps its
-way. A, Enter or a tap on the row open its choices as a list under it, in the page: each
-value with its note, the current one marked and focused. Up and down move through the list (the focus stays in it),
-A picks a value and closes the list, and B, Back or a tap on the row close it with nothing changed; a tap elsewhere
-closes it and does what it would have. One list is open at a time. A value's own note, such as "made for NTSC-J",
-shows under the row while it's the current one. An on/off setting is a
-square toggle, which A, Enter or a tap flip. Touch works too.
+**Settings**, in the library's top bar, opens a hub with ten pages, in desktop's order: **Interface**, **Console**,
+**Emulation**, **BIOS**, **Graphics**, **Audio**, **Controllers**, **Memory cards** (see "Memory card sync"),
+**Achievements** (see "RetroAchievements") and **Folders** (the folder settings above). Every page works with a D-pad
+alone, as setup does: the first row is focused when a page opens, A or Enter activates, and B or Back goes back. Back
+from a page focuses its entry in the hub, and Back from the hub focuses **Settings** in the library. A long page is
+split into desktop's sections, each under its name in small capitals (a heading, never a stop for the focus).
+
+- **A setting with a few values** shows its current one between two arrows: left and right step through the values,
+  stopping at the first and the last, and each step is the change; a tap on an arrow steps its way. A, Enter or a tap
+  on the row open its choices as a list under it, in the page: each value with its note, the current one marked and
+  focused. Up and down move through the list (the focus stays in it), A picks a value and closes the list, and B,
+  Back or a tap on the row close it with nothing changed; a tap elsewhere closes it and does what it would have. One
+  list is open at a time. A value's own note, such as "made for NTSC-J", shows under the row while it's the current
+  one.
+- **A number, or a long ladder of values** (speeds, volumes, sizes, counts) looks the same: left and right step by
+  the row's step and stop at its ends, a held key repeats, and A opens a list of the common values with the current
+  one among them. A value off the row's steps (`EmulationSpeed = 1.33` from desktop) shows as itself ("133%"), and
+  a step goes to the nearest one on the steps that way.
+- **An on/off setting** is a square toggle, which A, Enter or a tap flip. Touch works too.
+- **A row that does nothing as things are set is left out**, as Big Picture leaves it out: the hardware renderers'
+  rows under Software, PGXP's options with PGXP off, the frame time buffer without reduced input latency, a slot's
+  shared card unless its type is Shared, and so on. Turning the setting they depend on on shows them under it.
+- **Hardcore mode** (`[Cheevos] ChallengeMode` while signed in) is what the core makes of it
+  (`Settings::FixIncompatibleSettings`): Rewind shows disabled, "Off in hardcore mode", and skipped by the focus; a
+  speed below 100% says "Runs at 100% in hardcore mode."; an overclock below 100% says "Off in hardcore mode below
+  100%.". Run-ahead isn't refused.
 
 - **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
   pull, so the folders can still be picked again. The other pages need the core: until it has started (and its first
   catch-up pulls are done, see "The data folder and its mirror"), they're shown disabled, with "Available once
   GooseStation has started.", and the hub's focus starts on Folders.
-- **Settings change only from the library**, never while a game runs.
+- **Settings change only from the library**, never while a game runs, so every change takes effect at the next game
+  start.
 - **Each change is saved at once**, to the working copy's `settings.ini`, which the core then applies
   (`System::ApplySettings`); the next push, within 2 s, takes it to the data folder. The pages use desktop's keys and
-  values, so the file stays one desktop can read.
-- A value in `settings.ini` that a page doesn't offer (set by hand or on desktop, such as `Renderer = Software`,
-  `ResolutionScale = 12` or `AspectRatio = Custom`) is shown marked "(from settings.ini)", and kept until another is
-  picked.
+  values, so the file stays one desktop can read. Only the setting changed is written: opening a page writes nothing.
+- **The choices are the core's own**: each list of names (renderers, filters, aspect ratios, card types and the rest)
+  comes from the core's `Settings::Get…Name` and `Get…DisplayName` (`NativeLibrary.getSettingNames`), as desktop
+  shows them. A value in `settings.ini` the core doesn't name is shown marked "(from settings.ini)", and kept until
+  another is picked.
+- **The defaults are the core's Android ones**, which a new `settings.ini` holds (`SettingsAccessTest` checks each
+  page's against it). Big Picture's own rows differ in a few places, and the pages don't copy them: the turbo speed
+  defaults to 0 (unlimited), the fast-forward volume to 100% with a maximum of 100%, the vertex cache to off, and the
+  depth clear threshold is `[GPU] PGXPDepthClearThreshold` (Big Picture's row writes `PGXPDepthBuffer`).
 
-| Page | Row | Key | Values |
-| --- | --- | --- | --- |
-| Graphics | Renderer | `[GPU] Renderer` | Automatic ("Automatic (Vulkan where it works well)", the default), Vulkan, OpenGL ES (`OpenGL`) |
-| Graphics | Internal resolution | `[GPU] ResolutionScale` | Match the screen (`0`), 1x (native) (`1`, the default), 2x to 8x |
-| Graphics | Aspect ratio | `[Display] AspectRatio` | Every name the core has but `Custom`: "The game's own (4:3 for most games)" (`Auto (Game Native)`, the default), "Stretch to the screen" (`Stretch To Fill`), "Square pixels" (`PAR 1:1`), and the others as they are, such as `4:3` and `16:9` |
-| Graphics | Show FPS | `[Display] ShowFPS` | On, Off (the default) |
-| BIOS | NTSC-U (Americas), NTSC-J (Japan), PAL (Europe) | `[BIOS] PathNTSCU`, `PathNTSCJ`, `PathPAL` | "Automatic: <the image the core picks>" (no key, the default), or "Automatic: none found"; then each image copied from the BIOS folder, by its description, noted "made for <region>" when it's for another region |
-| BIOS | Fast boot (skip the BIOS intro) | `[BIOS] PatchFastBoot` | On (Android's default), Off |
+| Page | Section | Rows (`[Section] Key`) |
+| --- | --- | --- |
+| Interface | | Pause on start (`[Main] StartPaused`: the game boots paused, with its menu open), pause when a controller disconnects (`PauseOnControllerDisconnection`: the running game opens its menu, as Back does, and says "<name> disconnected"), save state on exit (`SaveStateOnExit`), create save state backups (`CreateSaveStateBackups`, off on Android: saving over a slot keeps the old state as `<key>_<slot>.bak`; the resume state never has one) |
+| Console | Console | Region (`[Console] Region`), 8 MB RAM (`Enable8MBRAM`), disable all enhancements (`[Main] DisableAllEnhancements`) |
+| Console | CPU | Execution mode (`[CPU] ExecutionMode`), overclocking (`OverclockEnable`) and its percentage, 10–1000% by 10 (written as desktop's fraction, `OverclockNumerator`/`OverclockDenominator`, 150% as 3/2), recompiler ICache (`RecompilerICache`) |
+| Console | CD-ROM | Read speed-up (`[CDROM] ReadSpeedup`: 1 "None (double speed)" to 10 "10x (20x speed)"), seek speed-up (`SeekSpeedup`: 0 "Instant", 1 "None (normal speed)", to 10x), readahead (`ReadaheadSectors`, 0 "Off" to 32 sectors), preload disc to RAM (`LoadImageToRAM`), apply image patches (`LoadImagePatches`) |
+| Emulation | Speed | Emulation, fast-forward and turbo speed (`[Main] EmulationSpeed`, `FastForwardSpeed`, `TurboSpeed`: desktop's ladder, "Unlimited" (0), 10% to 1000%, written as factors such as `1.25`) |
+| Emulation | Frame pacing | VSync (`[Display] VSync`), sync to host refresh rate (`[Main] SyncToHostRefreshRate`; the app gives the core the screen's refresh rate with the surface), optimal frame pacing (`[Display] OptimalFramePacing`), reduce input latency (`PreFrameSleep`) and its frame time buffer (`PreFrameSleepBuffer`, 0–20 ms by 1), skip duplicate frames (`SkipPresentingDuplicateFrames`, left out with VSync and sync to host both on) |
+| Emulation | Rewind | Rewind (`[Main] RewindEnable`; "Off while run-ahead is on." with run-ahead), save frequency (`RewindFrequency`: "Every frame", 0.05 s to 60 s), save slots (`RewindSaveSlots`, 1 to 10000, with the core's estimate under it: "Goes back up to 100.0 s, using up to … MB of memory and … MB of video memory.") |
+| Emulation | Run-ahead | Run-ahead (`[Main] RunaheadFrameCount`, "Off" to 10 frames) |
+| Graphics | Rendering | Renderer (`[GPU] Renderer`: Automatic, Vulkan, OpenGL, Software; noted "Vulkan where it works well, else OpenGL ES" and "OpenGL ES"), internal resolution (`ResolutionScale`, "Match the screen" (0), "1x (native)", to 16x), downsampling (`DownsampleMode`) and, for Box, its scale (`DownsampleScale`), multisampling (`Multisamples` with `PerSampleShading`: Off, 2x/4x/8x MSAA, 2x/4x/8x SSAA; the device's maximum applies), threaded presentation (`ThreadedPresentation`, Vulkan and Automatic), threaded rendering (`UseThread`, Software) |
+| Graphics | Enhancements | Texture and sprite texture filtering (`TextureFilter`, `SpriteTextureFilter`: unset, the texture filter's), true colour (`TrueColor`) with debanding (`Debanding`) or else scaled dithering and accurate blending (`ScaledDithering`, `AccurateBlending`), widescreen rendering (`WidescreenHack`), round upscaled texture coordinates (`ForceRoundTextureCoordinates`, above 1x), line detection (`LineDetectMode`), force NTSC timings (`ForceNTSCTimings`), disable interlacing (`DisableInterlacing`), FMV chroma smoothing (`ChromaSmoothing24Bit`), software renderer for readbacks (`UseSoftwareRendererForReadbacks`), use old MDEC routines (`[Hacks] UseOldMDECRoutines`) |
+| Graphics | PGXP | Geometry correction (`[GPU] PGXPEnable`), then perspective-correct textures and colours (`PGXPTextureCorrection`, `PGXPColorCorrection`), culling correction (`PGXPCulling`), preserve projection precision (`PGXPPreserveProjFP`), depth buffer (`PGXPDepthBuffer`) and its clear threshold (`PGXPDepthClearThreshold`, 0–4096 by 10), CPU mode (`PGXPCPU`), vertex cache (`PGXPVertexCache`), disable on 2D polygons (`PGXPDisableOn2DPolygons`), geometry tolerance (`PGXPTolerance`: "Off" (-1), 0 to 100 px by 0.25) |
+| Graphics | Display | Aspect ratio (`[Display] AspectRatio`, every name the core has, Custom with its width and height, `CustomAspectRatioNumerator`/`Denominator`), deinterlacing (`DeinterlacingMode`), crop (`CropMode`), scaling (`Scaling`), screen position (`Alignment`), rotation (`Rotation`), stretch vertically (`StretchVertically`), force 4:3 for FMVs (`Force4_3For24Bit`) |
+| Graphics | On-screen display | Show messages (`[Display] ShowOSDMessages`: the core's messages, which reach the app's message layer only while it's on; the app's own still show), show FPS, speed, resolution, CPU usage, GPU usage, GPU statistics, latency, frame times and controller input (`ShowFPS`, `ShowSpeed`, `ShowResolution`, `ShowCPU`, `ShowGPU`, `ShowGPUStatistics`, `ShowLatencyStatistics`, `ShowFrameTimes`, `ShowInputs`), statistics size (`OSDScale`, 25–500%: the core's statistics, not the app's messages) |
+| Graphics | Screenshots | Size (`[Display] ScreenshotMode`), format (`ScreenshotFormat`), quality (`ScreenshotQuality`, 1–100%) |
+| Graphics | Texture replacement | VRAM write replacements (`[TextureReplacements] EnableVRAMWriteReplacements`, from the data folder's `textures/`) and preloading them (`PreloadTextures`) |
+| Audio | Volume | Output volume (`[Audio] OutputVolume`, 0–200%), fast-forward volume (`FastForwardVolume`, 0–100%), mute (`OutputMuted`), mute CD audio (`[CDROM] MuteCDAudio`) |
+| Audio | Output | Stretch mode (`[Audio] StretchMode`), buffer size (`BufferMS`, 10–500 ms, 100 on Android), minimal output latency (`OutputLatencyMinimal`) or else output latency (`OutputLatencyMS`, 1–500 ms) |
+| Memory cards | Cards | After Manage cards and sync: card 1 and card 2 type (`[MemoryCards] Card1Type`, `Card2Type`), each Shared slot's card (`Card1Path`, `Card2Path`: "shared_card_<n>.mcd (the default)" (empty, as no key is), then the memory card folder's `.mcd` files), one card for all discs of a game (`UsePlaylistTitle`) |
+| Achievements | | After live indicators: encore mode (`[Cheevos] EncoreMode`), spectator mode (`SpectatorMode`), test unofficial achievements (`UnofficialTestMode`), and while messages show, unlock and leaderboard message time (`NotificationsDuration`, `LeaderboardsDuration`, 3–30 s; the unlock card lasts that long) |
+| BIOS | | NTSC-U (Americas), NTSC-J (Japan), PAL (Europe) (`[BIOS] PathNTSCU`, `PathNTSCJ`, `PathPAL`): "Automatic: <the image the core picks>" (no key, the default), or "Automatic: none found"; then each image copied from the BIOS folder, by its description, noted "made for <region>" when it's for another region. Fast boot (skip the BIOS intro) (`[BIOS] PatchFastBoot`, on on Android) |
 
 The internal resolution's note, for any value but 1x, says "Higher is sharper and slower. Match the screen picks the
 highest that fits." The BIOS page ends with "The images come from your BIOS folder. Change it, or rescan it, in
@@ -544,15 +578,23 @@ import, goes back to Automatic: its key is deleted, with no prompt (`Back to Aut
 has their image: [NtscU, Pal]`, say, in the log). After setup that waits until the core has started, since only
 the core reads and writes `settings.ini`. Controllers is under "Controllers" below.
 
-**Every other setting** is changed by editing `settings.ini` in the data folder, on the device or from a computer.
+A new `settings.ini` from the core holds `CustomAspectRatioNumerator = 0` and no denominator (the core's `Save` writes
+its member default, 0, and reads the denominator where it means to write it, on desktop too), so Custom starts as the
+1:3 the core makes of that. The page shows the 1 the core takes 0 as.
+
+**Every other setting** is changed by editing `settings.ini` in the data folder, on the device or from a computer:
+developer tools (wireframe, the GPU's debug and disable switches, VRAM write dumps, `[Hacks]` but old MDEC routines,
+TTY logging, `[PCDrv]`, the display offsets, the log filter), input profiles, cheats (patch codes cover them), and,
+until the next stage adds them to Controllers, Port 2, multitap, macros, rumble and the hotkeys the page doesn't
+offer yet (Rewind and Turbo among them: their speed and rewind rows work with a hotkey bound by hand).
 Then switch to the app, or reopen it: the pull on coming back copies the file in, and the core reloads it, then scans
 the library again. While the app stays in front, the next push (within 2 s) also notices the change and copies it in.
-Edit the file the app wrote, so it keeps its `[Android] InstallID` (see below). For example, to pick the renderer and
-turn on the OSD's speed and frame times as well as its frame rates:
+Edit the file the app wrote, so it keeps its `[Android] InstallID` (see below). For example, to turn on the GPU's
+wireframe view:
 
 ```bash
 adb pull /sdcard/GooseStation/data/settings.ini /tmp/settings.ini
-# In /tmp/settings.ini: under [GPU], Renderer = Vulkan; under [Display], ShowFPS, ShowSpeed and ShowCPU = true.
+# In /tmp/settings.ini: under [GPU], WireframeMode = OverlayWireframe.
 adb push /tmp/settings.ini /sdcard/GooseStation/data/settings.ini
 adb shell input keyevent KEYCODE_HOME
 adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
@@ -1253,6 +1295,22 @@ after). Driven by key events, the file picker by taps.
 | Leaving | Pass. B with a change asked "Save your changes?" (Discard, Save, Keep editing focused); Discard left, and the card's file was unchanged. |
 | Found and fixed | The focus went to the left card's picker after a panel closed, as Android focused the screen's first element first; Export said it failed after writing the file (a `?:` on the picker's null, which means success); the overlay's scrim left the cutout strip and status bar undimmed. All fixed and rechecked here; the export has `CurrentDocumentsTest`. |
 | Crashes | None (`adb logcat -b crash -d` empty). |
+
+### The settings pages, stage 1 (2026-11-05)
+
+Checked on `goose-arm64` (2400 x 1080, landscape) with the debug APK of `c8d18dff2`, installed over the existing one
+(data kept). Driven by key events, the library's tiles by taps. Every setting changed was turned back off afterwards,
+and the states saved were deleted (the data folder's mirror had none left).
+
+| Check | Result |
+| --- | --- |
+| The hub | Pass. The ten pages in desktop's order, Controllers focused on opening; Graphics' summary "Renderer, enhancements, display, on-screen display", Memory cards' "Card types, sync, the card editor". |
+| Emulation | Pass. The Speed section's heading over Emulation speed (100%), Fast-forward and Turbo speed (Unlimited, the back arrow faint at that end), Turbo's note "While the Turbo hotkey is held.". Right made it 125%, and `settings.ini` had `EmulationSpeed = 1.25`; Left put it back. |
+| Pause on start | Pass. With `StartPaused = true`, padtest booted paused with its menu open on Resume. |
+| The refresh rate | Pass. With VSync and sync to host refresh rate on, the log had `Refresh rate: Host=60.000004hz Guest=49.74682hz Ratio=1.2061074 - can't sync`: the core had the screen's rate (padtest is PAL, so it rightly doesn't sync). |
+| Save state backups | Pass. With `CreateSaveStateBackups = true`, saving to slot 1, then Replace on slot 1, left `HASH-9FDA0E1A56D8DF5B_1.sav` and `_1.bak`. |
+| Pause on a disconnect | Not checked: the emulator has no controller to unplug. It waits for the Thor. |
+| Crashes | None (`adb logcat -b crash -d` empty). The emulator's System UI asked to be waited for once, with three emulators running. |
 
 ## Results on the AYN Thor
 

@@ -166,7 +166,7 @@ Every screen must work with a D-pad alone. That's tested (see Checking a new scr
 - **A, Enter, the D-pad centre or a tap activate.** Only an A *pressed* on the element counts, not the release of one
   held from the previous screen. `focusRing` does this.
 - **B and Back go back** (from the innermost thing that takes Back first, such as a dialog).
-- **Left and right step a value** on a cycler row; elsewhere they move focus sideways.
+- **Left and right step a value** on a cycler or number row; elsewhere they move focus sideways.
 - **Nothing can be clicked that can't be focused.** A tap-only part, such as a cycler's arrows, uses
   `pointerInput` rather than `clickable`, so it isn't a separate focus stop, and the row it's in carries the action.
 
@@ -230,11 +230,13 @@ is `success` (a ticked square), Syncing… `info` (`sync`), Offline `warning` (`
 height, and opens what it's about: the conflicts, or Settings > Memory cards. `SyncBadges.of()` picks the badge;
 it's never Synced while nothing syncs.
 
-### Settings: `SettingsPage`, `CyclerRow`, `SwitchRow`, `NavRow` (`SettingsRows.kt`)
+### Settings: `SettingsPage`, `CyclerRow`, `NumberRow`, `SwitchRow`, `NavRow`, `SettingsSection` (`SettingsRows.kt`)
 
 ```kotlin
 SettingsPage("Graphics", onBack = onBack) {
-    CyclerRow("Internal resolution", choices, settings.scale, onSelect = { … }, note = "Higher is sharper.")
+    SettingsSection("Rendering")
+    CyclerRow("Renderer", choices, settings.renderer, onSelect = { … })
+    NumberRow("Internal resolution", settings.scale, scale, onChange = { … }, note = "Higher is sharper.")
     SwitchRow("Show FPS", settings.showFps, onToggle = { … })
 }
 ```
@@ -244,7 +246,17 @@ SettingsPage("Graphics", onBack = onBack) {
 - `CyclerRow`: a setting with a few values, shown between two arrows. Left and right step and stop at the ends; a tap
   on an arrow steps its way. Each step is the change. A, Enter or a tap on the row open its choice list. A
   `Choice`'s `note` shows under the row while it's the current value. Values that aren't among the choices show as
-  themselves. For more than about eight values, or values that need explaining, make a page of its own instead.
+  themselves. For more than about eight values use a `NumberRow`; for values that need explaining, make a page of
+  their own.
+- `NumberRow`: a number, or a long ladder of values (speeds, sizes, counts), shown between two arrows as its
+  `NumberScale` labels it. Left and right step by the scale and stop at its ends, and a held key repeats; a tap on an
+  arrow steps. A, Enter or a tap open the choice list of the scale's common values, with the current value among
+  them. A value off the scale shows as itself, and a step from it goes to the nearest one on the scale.
+- `SettingsSection`: a page's section heading, in `eyebrow` `ink-muted`, named as desktop names the section. It's a
+  heading for screen readers and never a focus stop. Split a long page into sections rather than into pages.
+- A disabled row (`enabled = false` on `CyclerRow`, `NumberRow` and `SwitchRow`) is dimmed to `ink-faint`, with no
+  beak on its toggle, and the focus passes it by. Its note says why ("Off in hardcore mode"). A row that does nothing
+  in the current state (a renderer's own options under another renderer) is left out instead.
 - The choice list: a `CyclerRow`'s choices, open in the page under its label line (never a window), on `sunken` at
   `radius-md` with a `line-strong` edge. Each choice is a 48 dp row with its label in `label` and its note in
   `body-sm` `ink-muted`; the current one is on `beak-soft` with a `check` in `beak-ink`. The focus starts on the

@@ -12,23 +12,31 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
+import io.github.ilyalissoboi.goosestation.app.CorePage
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.app.SyncBadges
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
+import io.github.ilyalissoboi.goosestation.ui.AudioScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
+import io.github.ilyalissoboi.goosestation.ui.CardSlots
+import io.github.ilyalissoboi.goosestation.ui.ConsoleScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
+import io.github.ilyalissoboi.goosestation.ui.EmulationScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
+import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
@@ -95,20 +103,47 @@ class MainActivity : ComponentActivity() {
                             onOpen = AppController::openSettingsPage,
                             onBack = AppController::closeSettings,
                         )
-                    Screen.Graphics -> {
-                        val graphics = AppController.settingsPages.graphics
-                        if (graphics == null) {
-                            SettingsLoadingPage("Graphics", onBack = AppController::closeSettingsPage)
-                        } else {
-                            GraphicsScreen(
-                                settings = graphics,
-                                aspectNames = AppController.settingsPages.aspectRatioNames,
-                                vulkanFailed = AppController.settingsPages.vulkanFailed,
-                                onChange = AppController.settingsPages::changeGraphics,
+                    Screen.Interface ->
+                        CorePageRoute(CorePage.Interface) { values, onChange ->
+                            InterfaceScreen(values, onChange, onBack = AppController::closeSettingsPage)
+                        }
+                    Screen.Console ->
+                        CorePageRoute(CorePage.Console) { values, onChange ->
+                            ConsoleScreen(
+                                values,
+                                AppController.settingsPages.names,
+                                onChange,
                                 onBack = AppController::closeSettingsPage,
                             )
                         }
-                    }
+                    Screen.Emulation ->
+                        CorePageRoute(CorePage.Emulation) { values, onChange ->
+                            EmulationScreen(
+                                values,
+                                AppController.settingsPages.rewindUsage,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    Screen.Audio ->
+                        CorePageRoute(CorePage.Audio) { values, onChange ->
+                            AudioScreen(
+                                values,
+                                AppController.settingsPages.names,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    Screen.Graphics ->
+                        CorePageRoute(CorePage.Graphics) { values, onChange ->
+                            GraphicsScreen(
+                                values = values,
+                                names = AppController.settingsPages.names,
+                                vulkanFailed = AppController.settingsPages.vulkanFailed,
+                                onChange = onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
                     Screen.Achievements -> {
                         val page = AppController.achievementsPage
                         val account = page.account
@@ -148,6 +183,17 @@ class MainActivity : ComponentActivity() {
                                 cardsSummary = MemcardEditorWords.cardCount(AppController.memcardEditor.cardCount),
                                 onManageCards = AppController::openMemcardEditor,
                                 onBack = AppController::closeSettingsPage,
+                                cards =
+                                    AppController.settingsPages.values(CorePage.MemoryCards)?.let {
+                                        CardSlots(
+                                            it,
+                                            AppController.settingsPages.names,
+                                            AppController.settingsPages.sharedCards,
+                                            onChange = { new ->
+                                                AppController.settingsPages.change(CorePage.MemoryCards, new)
+                                            },
+                                        )
+                                    },
                             )
                         }
                     }
@@ -327,5 +373,19 @@ class MainActivity : ComponentActivity() {
         val controllers = AppController.controllers
         if (controllers != null && controllers.onMotionEvent(event, padInput)) return true
         return super.dispatchGenericMotionEvent(event)
+    }
+}
+
+/** [page] once its values are read ([content], given them and where its changes go), its loading page until then. */
+@Composable
+private fun CorePageRoute(
+    page: CorePage,
+    content: @Composable (SettingValues, (SettingValues) -> Unit) -> Unit,
+) {
+    val values = AppController.settingsPages.values(page)
+    if (values == null) {
+        SettingsLoadingPage(page.title, onBack = AppController::closeSettingsPage)
+    } else {
+        content(values) { AppController.settingsPages.change(page, it) }
     }
 }

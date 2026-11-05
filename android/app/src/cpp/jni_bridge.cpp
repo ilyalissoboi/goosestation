@@ -18,6 +18,7 @@
 #include "core/memory_card_image.h"
 #include "core/settings.h"
 
+#include "util/audio_stream.h"
 #include "util/platform_misc.h"
 
 #include "common/error.h"
@@ -309,7 +310,8 @@ void AndroidHost::DetachCurrentThreadFromJVM()
   s_attached_env = nullptr;
 }
 
-void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view serial)
+void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view serial, bool start_paused,
+                                    bool pause_on_disconnect)
 {
   ScopedJNIEnv env;
   if (!env)
@@ -323,7 +325,8 @@ void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view ser
   jstring jserial = ToJString(env.get(), serial);
   if (jtitle && jserial)
   {
-    env->CallVoidMethod(callbacks, s_on_game_started, jtitle, jserial);
+    env->CallVoidMethod(callbacks, s_on_game_started, jtitle, jserial, start_paused ? JNI_TRUE : JNI_FALSE,
+                        pause_on_disconnect ? JNI_TRUE : JNI_FALSE);
     ClearException(env.get());
   }
 
@@ -734,6 +737,30 @@ bool LoadEnumValues(JNIEnv* env, const char* class_name, const char* const (&nam
 }
 } // namespace
 
+// Each of an enum's values, its settings.ini name then its display name, through the core's own functions.
+template<typename T>
+static void AppendSettingNames(std::vector<std::string>& names, const char* (*name)(T), const char* (*display)(T))
+{
+  for (u32 i = 0; i < static_cast<u32>(T::Count); i++)
+  {
+    names.emplace_back(name(static_cast<T>(i)));
+    names.emplace_back(display(static_cast<T>(i)));
+  }
+}
+
+// Kotlin takes these arrays as never null: a failure gives an empty one.
+static jobjectArray ToNonNullStringArray(JNIEnv* env, const std::vector<std::string>& strings)
+{
+  jobjectArray result = ToJStringArray(env, strings);
+  if (!result)
+  {
+    result = env->NewObjectArray(0, s_string_class, nullptr);
+    ClearException(env);
+  }
+
+  return result;
+}
+
 extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
@@ -762,7 +789,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_callbacks_class = static_cast<jclass>(env->NewGlobalRef(callbacks_class));
   env->DeleteLocalRef(callbacks_class);
   s_on_game_started =
-    env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;Ljava/lang/String;)V");
+    env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;Ljava/lang/String;ZZ)V");
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
@@ -1210,6 +1237,104 @@ NATIVE_LIBRARY_FUNCTION(void, setIntSetting)(JNIEnv* env, jobject, jstring secti
   const std::string section_str = FromJString(env, section);
   const std::string key_str = FromJString(env, key);
   AndroidHost::SetIntSetting(section_str.c_str(), key_str.c_str(), value);
+}
+
+NATIVE_LIBRARY_FUNCTION(jfloat, getFloatSetting)(JNIEnv* env, jobject, jstring section, jstring key,
+                                                jfloat default_value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  return AndroidHost::GetFloatSetting(section_str.c_str(), key_str.c_str(), default_value);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setFloatSetting)(JNIEnv* env, jobject, jstring section, jstring key, jfloat value)
+{
+  const std::string section_str = FromJString(env, section);
+  const std::string key_str = FromJString(env, key);
+  AndroidHost::SetFloatSetting(section_str.c_str(), key_str.c_str(), value);
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getSettingNames)(JNIEnv* env, jobject, jstring kind)
+{
+  using Append = void (*)(std::vector<std::string>&);
+  static const std::unordered_map<std::string_view, Append> lists = {
+    {"ConsoleRegion",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetConsoleRegionName, &Settings::GetConsoleRegionDisplayName); }},
+    {"CPUExecutionMode",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetCPUExecutionModeName, &Settings::GetCPUExecutionModeDisplayName);
+     }},
+    {"GPURenderer",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetRendererName, &Settings::GetRendererDisplayName); }},
+    {"GPUTextureFilter",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetTextureFilterName, &Settings::GetTextureFilterDisplayName); }},
+    {"GPUDownsampleMode",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetDownsampleModeName, &Settings::GetDownsampleModeDisplayName); }},
+    {"GPULineDetectMode",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetLineDetectModeName, &Settings::GetLineDetectModeDisplayName);
+     }},
+    {"DisplayAspectRatio",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetDisplayAspectRatioName, &Settings::GetDisplayAspectRatioDisplayName);
+     }},
+    {"DisplayDeinterlacingMode",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetDisplayDeinterlacingModeName,
+                          &Settings::GetDisplayDeinterlacingModeDisplayName);
+     }},
+    {"DisplayCropMode",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetDisplayCropModeName, &Settings::GetDisplayCropModeDisplayName); }},
+    {"DisplayScalingMode",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetDisplayScalingName, &Settings::GetDisplayScalingDisplayName); }},
+    {"DisplayAlignment",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetDisplayAlignmentName, &Settings::GetDisplayAlignmentDisplayName);
+     }},
+    {"DisplayRotation",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetDisplayRotationName, &Settings::GetDisplayRotationDisplayName);
+     }},
+    {"DisplayScreenshotMode",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetDisplayScreenshotModeName, &Settings::GetDisplayScreenshotModeDisplayName);
+     }},
+    {"DisplayScreenshotFormat",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetDisplayScreenshotFormatName,
+                          &Settings::GetDisplayScreenshotFormatDisplayName);
+     }},
+    {"AudioStretchMode",
+     [](auto& n) { AppendSettingNames(n, &AudioStream::GetStretchModeName, &AudioStream::GetStretchModeDisplayName); }},
+    {"MemoryCardType",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetMemoryCardTypeName, &Settings::GetMemoryCardTypeDisplayName); }},
+  };
+
+  std::vector<std::string> names;
+  if (const auto it = lists.find(FromJString(env, kind)); it != lists.end())
+    it->second(names);
+
+  return ToNonNullStringArray(env, names);
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getSharedCardNames)(JNIEnv* env, jobject)
+{
+  return ToNonNullStringArray(env, AndroidHost::GetSharedCardNames());
+}
+
+NATIVE_LIBRARY_FUNCTION(jlongArray, getRewindMemoryUsage)(JNIEnv* env, jobject, jint slots)
+{
+  const auto [ram, vram] = AndroidHost::GetRewindMemoryUsage(static_cast<u32>(std::max<jint>(slots, 0)));
+  const jlong values[] = {static_cast<jlong>(ram), static_cast<jlong>(vram)};
+  jlongArray result = env->NewLongArray(2);
+  if (!result)
+  {
+    ClearException(env);
+    return env->NewLongArray(0);
+  }
+
+  env->SetLongArrayRegion(result, 0, 2, values);
+  return result;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, applySettings)(JNIEnv*, jobject)
@@ -1689,24 +1814,6 @@ NATIVE_LIBRARY_FUNCTION(void, setMemcardSyncBackgrounded)(JNIEnv*, jobject, jboo
 NATIVE_LIBRARY_FUNCTION(void, setMemcardSyncPeriodForTest)(JNIEnv*, jobject, jlong ms)
 {
   MemcardSyncBridge::SetPeriodicSyncForTest(static_cast<u32>(std::max<jlong>(ms, 0)));
-}
-
-NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)
-{
-  std::vector<std::string> names;
-  names.reserve(static_cast<size_t>(DisplayAspectRatio::Count));
-  for (u32 i = 0; i < static_cast<u32>(DisplayAspectRatio::Count); i++)
-    names.emplace_back(Settings::GetDisplayAspectRatioName(static_cast<DisplayAspectRatio>(i)));
-
-  // Kotlin takes the array as never null: a failure gives an empty one.
-  jobjectArray result = ToJStringArray(env, names);
-  if (!result)
-  {
-    result = env->NewObjectArray(0, s_string_class, nullptr);
-    ClearException(env);
-  }
-
-  return result;
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemoryCardPaths)(JNIEnv* env, jobject)
@@ -2245,7 +2352,7 @@ NATIVE_LIBRARY_FUNCTION(void, setPaused)(JNIEnv*, jobject, jboolean paused)
 }
 
 NATIVE_LIBRARY_FUNCTION(void, surfaceChanged)(JNIEnv* env, jobject, jobject surface, jint width, jint height,
-                                              jfloat scale)
+                                              jfloat scale, jfloat refresh_rate)
 {
   ANativeWindow* window = nullptr;
   if (surface)
@@ -2256,7 +2363,12 @@ NATIVE_LIBRARY_FUNCTION(void, surfaceChanged)(JNIEnv* env, jobject, jobject surf
       ERROR_LOG("ANativeWindow_fromSurface() failed, treating the surface as destroyed.");
   }
 
-  AndroidHost::SurfaceChanged(window, width, height, scale);
+  AndroidHost::SurfaceChanged(window, width, height, scale, refresh_rate);
+}
+
+NATIVE_LIBRARY_FUNCTION(jfloat, getSurfaceRefreshRateForTest)(JNIEnv*, jobject)
+{
+  return AndroidHost::GetSurfaceRefreshRateForTest();
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, onKey)(JNIEnv*, jobject, jint device_id, jint keycode, jboolean pressed)

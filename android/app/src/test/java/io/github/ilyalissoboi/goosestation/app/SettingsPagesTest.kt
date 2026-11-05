@@ -5,7 +5,11 @@ package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
+import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.NameList
+import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.SettingsEntry
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -18,7 +22,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The Graphics and BIOS pages' loads, reloads and saves, with a fake core and settings in memory. */
+/** The core pages' and the BIOS page's loads, reloads and saves, with a fake core and settings in memory. */
 class SettingsPagesTest {
     private val calls = mutableListOf<String>()
     private val api = FakeCoreApi(calls)
@@ -30,19 +34,20 @@ class SettingsPagesTest {
     fun reloadShownReloadsOnlyTheOpenPage() =
         runTest {
             val pages = pages()
-            pages.loadGraphics()
+            pages.load(CorePage.Graphics)
             runCurrent()
-            assertFalse(pages.graphics!!.showFps)
+            assertFalse(pages.values(CorePage.Graphics)!![GraphicsSettings.SHOW_FPS])
             settings.setBool("Display", "ShowFPS", true)
             calls.clear()
 
             pages.reloadShown(SettingsEntry.Graphics)
             // The old values stay shown meanwhile: no loading page, so the focus stays where it was.
-            assertNotNull(pages.graphics)
+            assertNotNull(pages.values(CorePage.Graphics))
             runCurrent()
 
-            assertTrue(pages.graphics!!.showFps)
-            assertEquals(listOf("getAspectRatioNames"), calls)
+            assertTrue(pages.values(CorePage.Graphics)!![GraphicsSettings.SHOW_FPS])
+            // The core's names are read once.
+            assertEquals(emptyList<String>(), calls)
             assertNull(pages.bios)
         }
 
@@ -61,7 +66,7 @@ class SettingsPagesTest {
 
             assertEquals(api.images, pages.bios!!.images)
             assertEquals(listOf("getBiosImages"), calls)
-            assertNull(pages.graphics)
+            assertNull(pages.values(CorePage.Graphics))
         }
 
     @Test
@@ -82,18 +87,18 @@ class SettingsPagesTest {
     fun aReadOvertakenByAChangeIsDropped() =
         runTest {
             val pages = pages()
-            pages.loadGraphics()
+            pages.load(CorePage.Graphics)
             pages.loadBios()
             runCurrent()
 
-            api.duringRead = { pages.changeGraphics(pages.graphics!!.copy(showFps = true)) }
+            settings.duringRead = { pages.change(CorePage.Graphics, pages.graphicsWith(showFps = true)) }
             pages.reloadShown(SettingsEntry.Graphics)
             runCurrent()
             api.duringRead = { pages.setFastBoot(true) }
             pages.reloadShown(SettingsEntry.Bios)
             runCurrent()
 
-            assertTrue(pages.graphics!!.showFps)
+            assertTrue(pages.values(CorePage.Graphics)!![GraphicsSettings.SHOW_FPS])
             assertTrue(pages.bios!!.fastBoot)
         }
 
@@ -102,22 +107,22 @@ class SettingsPagesTest {
     fun aReloadOvertakenByAChangeStillShowsTheFile() =
         runTest {
             val pages = pages()
-            pages.loadGraphics()
+            pages.load(CorePage.Graphics)
             pages.loadBios()
             runCurrent()
             // settings.ini was reloaded with these from elsewhere.
             settings.setString("GPU", "Renderer", "OpenGL")
             api.images = listOf(BiosImage("scph5501.bin", "SCPH-5501", "NTSC-U"))
 
-            api.duringRead = { pages.changeGraphics(pages.graphics!!.copy(showFps = true)) }
+            settings.duringRead = { pages.change(CorePage.Graphics, pages.graphicsWith(showFps = true)) }
             pages.reloadShown(SettingsEntry.Graphics)
             runCurrent()
             api.duringRead = { pages.setFastBoot(true) }
             pages.reloadShown(SettingsEntry.Bios)
             runCurrent()
 
-            assertEquals("OpenGL", pages.graphics!!.renderer)
-            assertTrue(pages.graphics!!.showFps)
+            assertEquals("OpenGL", pages.values(CorePage.Graphics)!![GraphicsSettings.RENDERER])
+            assertTrue(pages.values(CorePage.Graphics)!![GraphicsSettings.SHOW_FPS])
             assertEquals(api.images, pages.bios!!.images)
             assertTrue(pages.bios!!.fastBoot)
         }
@@ -127,13 +132,13 @@ class SettingsPagesTest {
         runTest {
             val pages = pages()
             settings.setString("GPU", "Renderer", "Vulkan")
-            pages.loadGraphics()
+            pages.load(CorePage.Graphics)
             pages.loadBios()
             runCurrent()
             val before = settings.values.toMap()
             calls.clear()
 
-            pages.changeGraphics(pages.graphics!!.copy(showFps = true))
+            pages.change(CorePage.Graphics, pages.graphicsWith(showFps = true))
             pages.setBiosOverride(BiosRegion.NtscJ, "scph5500.bin")
             pages.setFastBoot(true)
             runCurrent()
@@ -149,4 +154,68 @@ class SettingsPagesTest {
             )
             assertEquals(listOf("applySettings", "applySettings", "applySettings"), calls)
         }
+
+    @Test
+    fun namesAreReadOnce() =
+        runTest {
+            val pages = pages()
+            api.names["GPURenderer"] = listOf("Automatic", "Vulkan")
+
+            pages.load(CorePage.Graphics)
+            runCurrent()
+            pages.load(CorePage.Graphics)
+            runCurrent()
+
+            assertEquals(NameList.entries.map { "getSettingNames ${it.kind}" }, calls)
+            assertEquals(listOf("Automatic", "Vulkan"), pages.names[NameList.GPURenderer]!!.map { it.value })
+        }
+
+    @Test
+    fun aLoadShowsNothingUntilRead() =
+        runTest {
+            val pages = pages()
+            pages.load(CorePage.Graphics)
+            runCurrent()
+
+            pages.load(CorePage.Graphics)
+
+            assertNull(pages.values(CorePage.Graphics))
+            runCurrent()
+            assertNotNull(pages.values(CorePage.Graphics))
+        }
+
+    @Test
+    fun theRewindEstimateIsReadWithEmulationAndAfterEachChange() =
+        runTest {
+            val pages = pages()
+            pages.load(CorePage.Emulation)
+            runCurrent()
+            assertEquals(RewindUsage(40L * 1_048_576, 20L * 1_048_576), pages.rewindUsage)
+            calls.clear()
+
+            pages.change(
+                CorePage.Emulation,
+                pages.values(CorePage.Emulation)!!.with(EmulationSettings.REWIND_SLOTS, 20),
+            )
+            runCurrent()
+
+            assertEquals(listOf("applySettings", "getRewindMemoryUsage 20"), calls)
+            assertEquals(RewindUsage(80L * 1_048_576, 40L * 1_048_576), pages.rewindUsage)
+        }
+
+    @Test
+    fun theSharedCardsAreReadWithMemoryCards() =
+        runTest {
+            val pages = pages()
+            api.sharedCards = listOf("a.mcd", "shared_card_1.mcd")
+
+            pages.load(CorePage.MemoryCards)
+            runCurrent()
+
+            assertEquals(listOf("a.mcd", "shared_card_1.mcd"), pages.sharedCards)
+            assertNotNull(pages.values(CorePage.MemoryCards))
+        }
+
+    private fun SettingsPages.graphicsWith(showFps: Boolean) =
+        values(CorePage.Graphics)!!.with(GraphicsSettings.SHOW_FPS, showFps)
 }

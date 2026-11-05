@@ -40,6 +40,8 @@ class MemcardSyncSecretsTest {
             override fun onGameStarted(
                 title: String,
                 serial: String,
+                startPaused: Boolean,
+                pauseOnDisconnect: Boolean,
             ) {}
 
             override fun onGameStopped() {}

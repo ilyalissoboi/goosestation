@@ -56,8 +56,13 @@ import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
 import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
@@ -261,11 +266,29 @@ class FocusAuditTest {
     }
 
     @Test
+    fun interfacePage() {
+        show { InterfaceScreen(pageValues(InterfaceSettings.all), onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun consolePage() {
+        show { ConsoleScreen(pageValues(ConsoleSettings.all), SampleNames.ALL, onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun emulationPage() {
+        show { EmulationScreen(pageValues(EmulationSettings.all), null, onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun graphics() {
         show {
             GraphicsScreen(
-                settings = GraphicsSettings("Automatic", 1, "Auto (Game Native)", false),
-                aspectNames = listOf("Auto (Game Native)", "4:3"),
+                values = pageValues(GraphicsSettings.all),
+                names = SampleNames.ALL,
                 vulkanFailed = false,
                 onChange = {},
                 onBack = {},
@@ -404,8 +427,21 @@ class FocusAuditTest {
                 cardsSummary = "12 cards",
                 onManageCards = {},
                 onBack = {},
+                cards =
+                    CardSlots(
+                        pageValues(MemoryCardSettings.all, "MemoryCards/Card1Type" to "Shared"),
+                        SampleNames.ALL,
+                        listOf("a.mcd"),
+                        onChange = {},
+                    ),
             )
         }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun audioPage() {
+        show { AudioScreen(pageValues(AudioSettings.all), SampleNames.ALL, onChange = {}, onBack = {}) }
         rule.assertControllerReady()
     }
 

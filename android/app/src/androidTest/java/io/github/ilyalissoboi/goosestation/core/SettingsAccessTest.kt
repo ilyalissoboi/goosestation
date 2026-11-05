@@ -5,6 +5,14 @@ package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.settings.AudioSettings
+import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
+import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
+import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,7 +71,12 @@ class SettingsAccessTest {
 
     @Test
     fun aspectRatioNamesAreDesktops() {
-        val names = NativeLibrary.getAspectRatioNames().toList()
+        val names =
+            NativeLibrary
+                .getSettingNames("DisplayAspectRatio")
+                .toList()
+                .chunked(2)
+                .map { it[0] }
 
         assertTrue(
             names.toString(),
@@ -71,6 +84,95 @@ class SettingsAccessTest {
         )
         assertFalse(names.toString(), "Auto (Match Window)" in names)
     }
+
+    @Test
+    fun floatSettingRoundTrips() {
+        initialize()
+
+        NativeLibrary.setFloatSetting("Main", "EmulationSpeed", 1.25f)
+        NativeLibrary.setFloatSetting("Main", "RewindFrequency", 0.1f)
+
+        assertEquals(1.25f, NativeLibrary.getFloatSetting("Main", "EmulationSpeed", 1f))
+        assertEquals("1.25", readSettings().value("Main", "EmulationSpeed"))
+        assertEquals("0.1", readSettings().value("Main", "RewindFrequency"))
+    }
+
+    @Test
+    fun aFloatDesktopWroteReads() {
+        settingsFile.writeText("[Main]\nSettingsVersion = 3\nEmulationSpeed = 10.000000\n")
+        initialize()
+
+        assertEquals(10f, NativeLibrary.getFloatSetting("Main", "EmulationSpeed", 1f))
+    }
+
+    @Test
+    fun eachKindHasTheCoresNames() {
+        initialize()
+
+        for (kind in KINDS) {
+            val names = NativeLibrary.getSettingNames(kind)
+            assertTrue("$kind has no names", names.isNotEmpty())
+            assertEquals("$kind isn't name and display name pairs", 0, names.size % 2)
+        }
+        assertEquals(
+            listOf("Automatic", "Vulkan", "OpenGL", "Software"),
+            NativeLibrary
+                .getSettingNames("GPURenderer")
+                .toList()
+                .chunked(2)
+                .map { it[0] },
+        )
+        assertTrue(
+            "Custom" in
+                NativeLibrary
+                    .getSettingNames("DisplayAspectRatio")
+                    .toList()
+                    .chunked(2)
+                    .map { it[0] },
+        )
+        assertEquals(0, NativeLibrary.getSettingNames("NoSuchKind").size)
+    }
+
+    @Test
+    fun sharedCardNamesAreTheCardFolders() {
+        initialize()
+        val cards = File(dataRoot, "memcards").apply { mkdirs() }
+        File(cards, "shared_card_1.mcd").writeBytes(ByteArray(16))
+        File(cards, "b.mcd").writeBytes(ByteArray(16))
+        File(cards, "notes.txt").writeText("not a card")
+
+        assertEquals(listOf("b.mcd", "shared_card_1.mcd"), NativeLibrary.getSharedCardNames().toList())
+    }
+
+    @Test
+    fun rewindUsageGrowsWithSlots() {
+        initialize()
+
+        val ten = NativeLibrary.getRewindMemoryUsage(10)
+        val twenty = NativeLibrary.getRewindMemoryUsage(20)
+
+        assertTrue(ten.toList().toString(), ten[0] > 0 && ten[1] > 0)
+        assertEquals(ten[0] * 2, twenty[0])
+        assertEquals(ten[1] * 2, twenty[1])
+    }
+
+    @Test
+    fun graphicsDefaultsMatchTheCore() = assertDefaultsMatchTheCore(GraphicsSettings.all)
+
+    @Test
+    fun audioDefaultsMatchTheCore() = assertDefaultsMatchTheCore(AudioSettings.all)
+
+    @Test
+    fun memoryCardDefaultsMatchTheCore() = assertDefaultsMatchTheCore(MemoryCardSettings.all)
+
+    @Test
+    fun consoleDefaultsMatchTheCore() = assertDefaultsMatchTheCore(ConsoleSettings.all)
+
+    @Test
+    fun emulationDefaultsMatchTheCore() = assertDefaultsMatchTheCore(EmulationSettings.all)
+
+    @Test
+    fun interfaceDefaultsMatchTheCore() = assertDefaultsMatchTheCore(InterfaceSettings.all)
 
     @Test
     fun defaultsBeforeInitialize() {
@@ -95,7 +197,54 @@ class SettingsAccessTest {
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())
 
+    // The core writes every default into a new settings.ini: each page's own defaults must be the same. The keys
+    // adapting a new install's file deletes (foreign_settings.cpp) take the core's default when read instead.
+    private fun assertDefaultsMatchTheCore(settings: List<Setting<*>>) {
+        initialize()
+        val file = readSettings()
+        for (setting in settings) {
+            val name = "${setting.section}/${setting.key}"
+            if (name in ADAPTED_AWAY) continue
+            assertTrue("$name isn't in a new settings.ini", file.value(setting.section, setting.key) != null)
+            assertEquals(name, setting.default, setting.read(NativeCoreSettings))
+        }
+    }
+
     private companion object {
         const val INSTALL_ID = "test-install"
+
+        /** The keys a new settings.ini doesn't hold at their default: the device-specific ones its adapting deletes, and two the core writes wrong. */
+        val ADAPTED_AWAY =
+            setOf(
+                "GPU/Renderer",
+                // The core's Save writes the numerator's member default (0, which Load takes as 1) and never writes
+                // the denominator (settings.cpp:571-572): a desktop bug, left as it is here. Load's own 4:3 is kept.
+                "Display/CustomAspectRatioNumerator",
+                "Display/CustomAspectRatioDenominator",
+                // Left out while empty (Settings::Save), which is their default: the slot's own shared card.
+                "MemoryCards/Card1Path",
+                "MemoryCards/Card2Path",
+            )
+
+        /** Every choice list the bridge names. */
+        val KINDS =
+            listOf(
+                "ConsoleRegion",
+                "CPUExecutionMode",
+                "GPURenderer",
+                "GPUTextureFilter",
+                "GPUDownsampleMode",
+                "GPULineDetectMode",
+                "DisplayAspectRatio",
+                "DisplayDeinterlacingMode",
+                "DisplayCropMode",
+                "DisplayScalingMode",
+                "DisplayAlignment",
+                "DisplayRotation",
+                "DisplayScreenshotMode",
+                "DisplayScreenshotFormat",
+                "AudioStretchMode",
+                "MemoryCardType",
+            )
     }
 }

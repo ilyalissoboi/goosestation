@@ -46,6 +46,18 @@ interface CoreSettings {
         key: String,
         value: Boolean,
     )
+
+    fun getFloat(
+        section: String,
+        key: String,
+        default: Float,
+    ): Float
+
+    fun setFloat(
+        section: String,
+        key: String,
+        value: Float,
+    )
 }
 
 /** [CoreSettings] on [NativeLibrary]: they do I/O, so call them off the main thread. */
@@ -85,4 +97,16 @@ object NativeCoreSettings : CoreSettings {
         key: String,
         value: Boolean,
     ) = NativeLibrary.setBoolSetting(section, key, value)
+
+    override fun getFloat(
+        section: String,
+        key: String,
+        default: Float,
+    ) = NativeLibrary.getFloatSetting(section, key, default)
+
+    override fun setFloat(
+        section: String,
+        key: String,
+        value: Float,
+    ) = NativeLibrary.setFloatSetting(section, key, value)
 }

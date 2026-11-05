@@ -87,8 +87,14 @@ import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
+import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertTrue
@@ -158,7 +164,17 @@ class OrientationLayoutTest {
             mapOf(
                 "Renderer" to "Automatic",
                 "Internal resolution" to "Match the screen",
-                "Aspect ratio" to "The game's own",
+                "Aspect ratio" to "Auto (Game Native)",
+            )
+
+        /** Values from settings.ini that the Graphics page doesn't offer, so each list ends with one. */
+        val GRAPHICS_FROM_FILE =
+            pageValues(
+                GraphicsSettings.all,
+                "GPU/Renderer" to "Metal",
+                "GPU/ResolutionScale" to "12",
+                "Display/AspectRatio" to "21:9",
+                "Display/ShowFPS" to "true",
             )
 
         val CONFIGS = SIZES.flatMap { (name, size) -> listOf(1f, 1.3f).map { Config(name, size, it) } }
@@ -202,9 +218,6 @@ class OrientationLayoutTest {
                     Triple("RDown", "Right Stick Down", "+Axis14"),
                     Triple("RUp", "Right Stick Up", "-Axis14"),
                 ).map { (name, display, binding) -> PadBinding(name, display, PadBindingKind.HalfAxis, binding) }
-
-        val ASPECT_NAMES =
-            listOf("Auto (Game Native)", "Stretch To Fill", "Custom", "4:3", "16:9", "19:9", "20:9", "PAR 1:1")
     }
 
     @get:Rule val rule = createComposeRule()
@@ -687,6 +700,240 @@ class OrientationLayoutTest {
         override fun cancelReplaceResume() {}
     }
 
+    /**
+     * A settings page at every size: its texts laid out, the focus on [rows]' first on opening, each row reached with
+     * Down in order and scrolled into view, then each of [lists]' rows opened, from its first choice to its last.
+     */
+    private fun settingsPageFits(
+        content: @Composable () -> Unit,
+        rows: List<String>,
+        lists: Map<String, Pair<String, String>> = emptyMap(),
+    ) {
+        eachConfig(content) {
+            assertTextsLaidOut()
+            assertTrue("the page opened on ${focusedText()}", focusedHas(rows.first()))
+            assertFocusedInView()
+            for (row in rows.drop(1)) pressUntilFocused(Key.DirectionDown, row)
+            for ((row, ends) in lists) {
+                pressUntilFocused(Key.DirectionUp, rows.first())
+                pressUntilFocused(Key.DirectionDown, row)
+                press(Key.ButtonA)
+                assertFocusedInView()
+                pressUntilFocused(Key.DirectionUp, ends.first)
+                assertTextsLaidOut()
+                pressUntilFocused(Key.DirectionDown, ends.second)
+                assertTextsLaidOut()
+                press(Key.ButtonB)
+                assertTrue("B didn't close $row's list: the focus is on ${focusedText()}", focusedHas(row))
+            }
+            pressUntilFocused(Key.DirectionUp, rows.first())
+        }
+    }
+
+    @Test
+    fun theInterfacePage() =
+        settingsPageFits(
+            {
+                var values by remember { mutableStateOf(pageValues(InterfaceSettings.all)) }
+                InterfaceScreen(values, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Pause on start",
+                    "Pause when a controller disconnects",
+                    "Save state on exit",
+                    "Create save state backups",
+                ),
+        )
+
+    @Test
+    fun theConsolePage() =
+        settingsPageFits(
+            {
+                var values by remember {
+                    mutableStateOf(
+                        pageValues(
+                            ConsoleSettings.all,
+                            "CPU/OverclockEnable" to "true",
+                            "CDROM/ReadSpeedup" to "12",
+                        ),
+                    )
+                }
+                ConsoleScreen(values, SampleNames.ALL, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Region",
+                    "8 MB RAM",
+                    "Disable all enhancements",
+                    "Execution mode",
+                    "Overclocking",
+                    "Overclocking percentage",
+                    "Recompiler ICache",
+                    "Read speed-up",
+                    "Seek speed-up",
+                    "Readahead",
+                    "Preload disc to RAM",
+                    "Apply image patches",
+                ),
+            lists =
+                mapOf(
+                    "Region" to ("Auto-Detect" to "NTSC-U/C (US, Canada)"),
+                    "Read speed-up" to ("None (double speed)" to "12x (24x speed)"),
+                    "Overclocking percentage" to ("50%" to "400%"),
+                ),
+        )
+
+    @Test
+    fun theEmulationPage() =
+        settingsPageFits(
+            {
+                var values by remember {
+                    mutableStateOf(
+                        pageValues(
+                            EmulationSettings.all,
+                            "Main/EmulationSpeed" to "1.33",
+                            "Display/OptimalFramePacing" to "true",
+                            "Display/PreFrameSleep" to "true",
+                            "Main/RewindEnable" to "true",
+                        ),
+                    )
+                }
+                EmulationScreen(
+                    values,
+                    RewindUsage(40L * 1_048_576, 20L * 1_048_576),
+                    onChange = { values = it },
+                    onBack = {},
+                )
+            },
+            rows =
+                listOf(
+                    "Emulation speed",
+                    "Fast-forward speed",
+                    "Turbo speed",
+                    "VSync",
+                    "Sync to host refresh rate",
+                    "Optimal frame pacing",
+                    "Reduce input latency",
+                    "Frame time buffer",
+                    "Skip duplicate frames",
+                    "Rewind",
+                    "Save frequency",
+                    "Save slots",
+                    "Run-ahead",
+                ),
+            lists =
+                mapOf(
+                    "Emulation speed" to ("Unlimited" to "1000%"),
+                    "Save slots" to ("10 states" to "1000 states"),
+                ),
+        )
+
+    @Test
+    fun theGraphicsPage() =
+        settingsPageFits(
+            {
+                var values by remember {
+                    mutableStateOf(
+                        pageValues(
+                            GraphicsSettings.all,
+                            "GPU/DownsampleMode" to "Box",
+                            "GPU/ResolutionScale" to "4",
+                            "GPU/PGXPEnable" to "true",
+                            "GPU/PGXPDepthBuffer" to "true",
+                            "Display/AspectRatio" to "Custom",
+                            "TextureReplacements/EnableVRAMWriteReplacements" to "true",
+                        ),
+                    )
+                }
+                GraphicsScreen(values, SampleNames.ALL, vulkanFailed = true, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Renderer",
+                    "Internal resolution",
+                    "Downsampling",
+                    "Downsampling scale",
+                    "Multisampling",
+                    "Threaded presentation",
+                    "Texture filtering",
+                    "Sprite texture filtering",
+                    "True colour",
+                    "Debanding",
+                    "Widescreen rendering",
+                    "Round upscaled texture coordinates",
+                    "Line detection",
+                    "Force NTSC timings",
+                    "Disable interlacing",
+                    "FMV chroma smoothing",
+                    "Software renderer for readbacks",
+                    "Use old MDEC routines",
+                    "Geometry correction",
+                    "Perspective-correct textures",
+                    "Perspective-correct colours",
+                    "Culling correction",
+                    "Preserve projection precision",
+                    "Depth buffer",
+                    "Depth clear threshold",
+                    "CPU mode",
+                    "Vertex cache",
+                    "Disable on 2D polygons",
+                    "Geometry tolerance",
+                    "Aspect ratio",
+                    "Custom ratio width",
+                    "Custom ratio height",
+                    "Deinterlacing",
+                    "Crop",
+                    "Scaling",
+                    "Screen position",
+                    "Rotation",
+                    "Stretch vertically",
+                    "Force 4:3 for FMVs",
+                    "Show messages",
+                    "Show FPS",
+                    "Show speed",
+                    "Show resolution",
+                    "Show CPU usage",
+                    "Show GPU usage",
+                    "Show GPU statistics",
+                    "Show latency",
+                    "Show frame times",
+                    "Show controller input",
+                    "Statistics size",
+                    "Size",
+                    "Format",
+                    "Quality",
+                    "VRAM write replacements",
+                    "Preload replacement textures",
+                ),
+            lists =
+                mapOf(
+                    "Multisampling" to ("Off" to "8x SSAA"),
+                    "Rotation" to ("No Rotation" to "Rotate 90° (Clockwise)"),
+                ),
+        )
+
+    @Test
+    fun theAudioPage() =
+        settingsPageFits(
+            {
+                var values by remember { mutableStateOf(pageValues(AudioSettings.all)) }
+                AudioScreen(values, SampleNames.ALL, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Output volume",
+                    "Fast-forward volume",
+                    "Mute",
+                    "Mute CD audio",
+                    "Stretch mode",
+                    "Buffer size",
+                    "Minimal output latency",
+                    "Output latency",
+                ),
+            lists = mapOf("Output volume" to ("0%" to "200%")),
+        )
+
     @Test
     fun theHubWithTheCoreReady() {
         eachConfig({ SettingsScreen(focusEntry = null, coreReady = true, onOpen = {}, onBack = {}) }) {
@@ -882,6 +1129,17 @@ class OrientationLayoutTest {
                 cardsSummary = "12 cards",
                 onManageCards = {},
                 onBack = {},
+                cards =
+                    CardSlots(
+                        pageValues(
+                            MemoryCardSettings.all,
+                            "MemoryCards/Card1Type" to "Shared",
+                            "MemoryCards/Card1Path" to "a_card_with_a_rather_long_name_from_desktop.mcd",
+                        ),
+                        SampleNames.ALL,
+                        listOf("b.mcd"),
+                        onChange = {},
+                    ),
             )
         }) {
             assertTextsLaidOut()
@@ -889,6 +1147,9 @@ class OrientationLayoutTest {
             assertShows("Remove the passphrase to use it")
             pressUntilFocused(Key.DirectionDown, "2 conflicts")
             assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Shared card 1")
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "One card for all discs of a game")
         }
     }
 
@@ -914,6 +1175,8 @@ class OrientationLayoutTest {
             assertShows("Invalid username/password.")
             pressUntilFocused(Key.DirectionDown, "Live indicators")
             assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Leaderboard message time")
+            assertTextsLaidOut()
         }
     }
 
@@ -939,6 +1202,8 @@ class OrientationLayoutTest {
             assertShows("Not connected")
             pressUntilFocused(Key.DirectionDown, "Live indicators")
             assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Leaderboard message time")
+            assertTextsLaidOut()
         }
     }
 
@@ -955,8 +1220,8 @@ class OrientationLayoutTest {
     fun graphicsThroughEachRowsChoices() {
         eachConfig({
             // Values from settings.ini that the page doesn't offer, so each list ends with one.
-            var settings by remember { mutableStateOf(GraphicsSettings("Software", 12, "21:9", showFps = true)) }
-            GraphicsScreen(settings, ASPECT_NAMES, vulkanFailed = true, onChange = { settings = it }, onBack = {})
+            var values by remember { mutableStateOf(GRAPHICS_FROM_FILE) }
+            GraphicsScreen(values, SampleNames.ALL, vulkanFailed = true, onChange = { values = it }, onBack = {})
         }) {
             assertTextsLaidOut()
             assertShows("Vulkan didn't start")
@@ -968,8 +1233,8 @@ class OrientationLayoutTest {
             for (
             (row, last) in
             listOf(
-                "Renderer" to "Software (from settings.ini)",
-                "Internal resolution" to "12x (from settings.ini)",
+                "Renderer" to "Metal (from settings.ini)",
+                "Internal resolution" to "12x",
                 "Aspect ratio" to "21:9 (from settings.ini)",
             )
             ) {
@@ -986,15 +1251,15 @@ class OrientationLayoutTest {
     @Test
     fun graphicsWithEachListOpen() {
         eachConfig({
-            var settings by remember { mutableStateOf(GraphicsSettings("Software", 12, "21:9", showFps = true)) }
-            GraphicsScreen(settings, ASPECT_NAMES, vulkanFailed = true, onChange = { settings = it }, onBack = {})
+            var values by remember { mutableStateOf(GRAPHICS_FROM_FILE) }
+            GraphicsScreen(values, SampleNames.ALL, vulkanFailed = true, onChange = { values = it }, onBack = {})
         }) {
             // Each row's list, from its first choice to its last (the value from settings.ini), every one in view.
             for (
             (row, last) in
             listOf(
-                "Renderer" to "Software (from settings.ini)",
-                "Internal resolution" to "12x (from settings.ini)",
+                "Renderer" to "Metal (from settings.ini)",
+                "Internal resolution" to "12x",
                 "Aspect ratio" to "21:9 (from settings.ini)",
             )
             ) {

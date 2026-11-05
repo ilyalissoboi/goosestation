@@ -45,6 +45,29 @@ class AchievementsPageTest {
         }
 
     @Test
+    fun theNewRowsLoadAndSaveOnlyWhenChanged() =
+        runTest {
+            settings.setBool("Cheevos", "EncoreMode", true)
+            settings.setInt("Cheevos", "NotificationsDuration", 12)
+            val page = page()
+            val loaded = page.settings!!
+            assertEquals(true, loaded.encore)
+            assertEquals(false, loaded.spectator)
+            assertEquals(false, loaded.unofficial)
+            assertEquals(12, loaded.unlockSeconds)
+            assertEquals(10, loaded.leaderboardSeconds)
+            val before = settings.values.toMap()
+
+            page.change(loaded.copy(spectator = true, leaderboardSeconds = 20))
+            runCurrent()
+
+            assertEquals(
+                before + mapOf("Cheevos/SpectatorMode" to "true", "Cheevos/LeaderboardsDuration" to "20"),
+                settings.values,
+            )
+        }
+
+    @Test
     fun signInSuccessReadsTheAccount() =
         runTest {
             val page = page()

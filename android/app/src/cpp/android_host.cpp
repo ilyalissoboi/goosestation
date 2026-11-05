@@ -89,7 +89,7 @@ static bool InitializeConfig(Error* error);
 static void SetDefaultSettings(SettingsInterface& si);
 static void LoadFolders(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
-static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
+static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
 static std::optional<u32> FindDescriptorIndex(std::string_view descriptor);
 static void WriteDescriptors(SettingsInterface& si);
 static const Controller::ControllerInfo* GetPort1ControllerInfo(SettingsInterface& si);
@@ -197,6 +197,7 @@ static ANativeWindow* s_window = nullptr;
 static u32 s_window_width = 0;
 static u32 s_window_height = 0;
 static float s_window_scale = 1.0f;
+static float s_window_refresh_rate = 0.0f; // the screen's, in Hz; 0 when the app doesn't know it
 static std::optional<std::string> s_pending_boot_path;
 static AndroidDiscGroups::Game s_pending_game;     // the game the pending boot is for
 static u32 s_pending_playlist_index = 0;          // the pending boot's sub-image, for a playlist
@@ -578,12 +579,75 @@ void AndroidHost::SetIntSetting(const char* section, const char* key, s32 value)
     ERROR_LOG("Failed to save settings: {}", error.GetDescription());
 }
 
+float AndroidHost::GetFloatSetting(const char* section, const char* key, float default_value)
+{
+  if (!s_initialized)
+    return default_value;
+
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetFloatValue(section, key, default_value);
+}
+
+void AndroidHost::SetFloatSetting(const char* section, const char* key, float value)
+{
+  if (!s_initialized)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  s_base_settings_interface->SetFloatValue(section, key, value);
+
+  Error error;
+  if (!s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+std::vector<std::string> AndroidHost::GetSharedCardNames()
+{
+  std::vector<std::string> names;
+  if (!s_initialized)
+    return names;
+
+  FileSystem::FindResultsArray results;
+  FileSystem::FindFiles(EmuFolders::MemoryCards.c_str(), "*.mcd",
+                        FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES | FILESYSTEM_FIND_RELATIVE_PATHS,
+                        &results);
+  names.reserve(results.size());
+  for (FILESYSTEM_FIND_DATA& result : results)
+    names.push_back(std::move(result.FileName));
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
+std::pair<u64, u64> AndroidHost::GetRewindMemoryUsage(u32 num_saves)
+{
+  std::pair<u64, u64> usage{0, 0};
+  if (!s_initialized)
+    return usage;
+
+  // The core reads the resolution and multisampling from g_settings, which the CPU thread owns.
+  EmuThread::RunOnThread([&]() { System::CalculateRewindMemoryUsage(num_saves, 0, &usage.first, &usage.second); },
+                         true);
+  return usage;
+}
+
 void AndroidHost::ApplySettings()
 {
   if (!s_initialized)
     return;
 
   EmuThread::RunOnThread([]() { System::ApplySettings(false); }, true);
+}
+
+float AndroidHost::GetSurfaceRefreshRateForTest()
+{
+  float rate = 0.0f;
+  EmuThread::RunOnThread(
+    [&rate]() {
+      if (g_gpu_device)
+        rate = g_gpu_device->GetWindowInfo().surface_refresh_rate;
+    },
+    true);
+  return rate;
 }
 
 bool AndroidHost::IsVulkanFailed()
@@ -996,8 +1060,9 @@ static std::optional<std::string> RunOnSlot(const std::string& key, s32 slot, co
 
 std::optional<std::string> AndroidHost::SaveState(std::string key, s32 slot)
 {
+  // A slot save keeps the state it replaces as a .bak when asked, as desktop's do; the resume state never does.
   return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
-    return System::SaveState(path.c_str(), error, false);
+    return System::SaveState(path.c_str(), error, g_settings.create_save_state_backups);
   });
 }
 
@@ -1253,7 +1318,7 @@ void AndroidHost::SaveScreenshot()
     false);
 }
 
-void AndroidHost::SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale)
+void AndroidHost::SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate)
 {
   if (!s_initialized)
   {
@@ -1264,16 +1329,18 @@ void AndroidHost::SurfaceChanged(ANativeWindow* window, s32 width, s32 height, f
   }
 
   // Blocks, so the app's surface outlives the GPU device's use of it.
-  EmuThread::RunOnThread([window, width, height, scale]() { SetWindow(window, width, height, scale); }, true);
+  EmuThread::RunOnThread(
+    [window, width, height, scale, refresh_rate]() { SetWindow(window, width, height, scale, refresh_rate); }, true);
 }
 
-void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float scale)
+void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate)
 {
   if (window)
   {
     s_window_width = static_cast<u32>((width > 0) ? width : ANativeWindow_getWidth(window));
     s_window_height = static_cast<u32>((height > 0) ? height : ANativeWindow_getHeight(window));
     s_window_scale = (scale > 0.0f) ? scale : 1.0f;
+    s_window_refresh_rate = std::max(refresh_rate, 0.0f);
   }
 
   if (window && window == s_window)
@@ -2157,8 +2224,10 @@ void Host::OnSystemStarted()
   // A file the library didn't list is keyed by the core's ID for it.
   if (AndroidHost::s_running_game.has_value() && AndroidHost::s_running_game->key.empty())
     AndroidHost::s_running_game->key = System::GetGameSerial();
+  // As the core has them for this game, on the CPU thread: the app opens the menu for these itself.
   AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
-                                 System::GetGameSerial());
+                                 System::GetGameSerial(), g_settings.start_paused,
+                                 g_settings.pause_on_controller_disconnection);
 }
 
 void Host::OnSystemDestroyed()
@@ -2316,6 +2385,8 @@ std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)
   wi.surface_width = AndroidHost::s_window_width;
   wi.surface_height = AndroidHost::s_window_height;
   wi.surface_scale = AndroidHost::s_window_scale;
+  // Sync to host refresh rate compares this with the game's rate.
+  wi.surface_refresh_rate = AndroidHost::s_window_refresh_rate;
   return wi;
 }
 

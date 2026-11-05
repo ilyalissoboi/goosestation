@@ -29,11 +29,16 @@ import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SyncSecrets
 import io.github.ilyalissoboi.goosestation.app.SyncStatusWords
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
+import io.github.ilyalissoboi.goosestation.settings.CoreNames
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
@@ -49,7 +54,8 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
  * close it unchanged. A stored secret is never shown, not even in its field: the row says "Saved" or "Not set".
  *
  * Remove passphrase, while there is one, calls [onRemovePassphrase]; Sync now, while sync runs, [onSyncNow]; the
- * conflicts' row, when there are any, [onOpenConflicts]. B or Back go back ([onBack]).
+ * conflicts' row, when there are any, [onOpenConflicts]. Then, once read, the [cards]' slots. B or Back go back
+ * ([onBack]).
  */
 @Composable
 fun MemcardSyncScreen(
@@ -63,6 +69,7 @@ fun MemcardSyncScreen(
     cardsSummary: String,
     onManageCards: () -> Unit,
     onBack: () -> Unit,
+    cards: CardSlots? = null,
 ) {
     val colors = GooseStationTheme.colors
     val first = remember { FocusRequester() }
@@ -182,7 +189,45 @@ fun MemcardSyncScreen(
                 modifier = Modifier.onFocusChanged { conflictsFocused = it.isFocused },
             )
         }
+        cards?.let { CardSlotRows(it) }
     }
+}
+
+/**
+ * Memory cards' card slot settings: their [values], the core's [names] for the card types, the memory card folder's
+ * [sharedCards], and where a change goes ([onChange]), as the whole values with that setting changed.
+ */
+class CardSlots(
+    val values: SettingValues,
+    val names: CoreNames,
+    val sharedCards: List<String>,
+    val onChange: (SettingValues) -> Unit,
+)
+
+/** Each slot's card type, its shared card when the type is Shared, and one card for a game's discs. */
+@Composable
+private fun CardSlotRows(cards: CardSlots) {
+    val values = cards.values
+    SettingsSection("Cards")
+    for (slot in 1..2) {
+        Names(values, cards.onChange, cards.names, "Card $slot type", MemoryCardSettings.type(slot))
+        if (values[MemoryCardSettings.type(slot)] == MemoryCardSettings.SHARED) {
+            val path = MemoryCardSettings.path(slot)
+            CyclerRow(
+                "Shared card $slot",
+                MemoryCardSettings.sharedCards(slot, cards.sharedCards, values[path]),
+                values[path],
+                onSelect = { cards.onChange(values.with(path, it)) },
+            )
+        }
+    }
+    Switch(
+        values,
+        cards.onChange,
+        "One card for all discs of a game",
+        MemoryCardSettings.ONE_CARD_PER_GAME,
+        "A multi-disc game keeps its saves on one card.",
+    )
 }
 
 private const val SAVED = "Saved"

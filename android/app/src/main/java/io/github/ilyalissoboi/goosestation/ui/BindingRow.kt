@@ -46,6 +46,9 @@ internal fun ControllerPicker(
     selected: ConnectedController,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    // A lone controller's name holds the focus only as a page's first row: it has no ring, so elsewhere it'd be an
+    // invisible stop.
+    nameFocusable: Boolean = true,
 ) {
     if (controllers.size > 1) {
         CyclerRow(
@@ -60,7 +63,7 @@ internal fun ControllerPicker(
             labels[selected.descriptor] ?: selected.name,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = modifier.focusable().padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = modifier.focusable(nameFocusable).padding(horizontal = 16.dp, vertical = 12.dp),
         )
     }
 }

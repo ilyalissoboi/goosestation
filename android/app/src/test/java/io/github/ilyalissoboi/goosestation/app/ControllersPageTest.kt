@@ -176,13 +176,13 @@ class ControllersPageTest {
     fun multitapOnReadsTheOfferedPortsAgain() =
         runTest {
             val page = openPage()
-            api.offered = listOf(Choice(0, "Port 1A"), Choice(1, "Port 2"), Choice(2, "Port 1B"))
+            api.offered = listOf(Choice(0, "Port 1A"), Choice(2, "Port 1B"), Choice(1, "Port 2"))
 
             page.setMultitap(page.state.multitap!!.with(PortSettings.MULTITAP, "Port1Only"))
             runCurrent()
 
             assertEquals("Port1Only", settings.values["ControllerPorts/MultitapMode"])
-            assertEquals(listOf("Port 1A", "Port 2", "Port 1B"), page.state.offered.map { it.label })
+            assertEquals(listOf("Port 1A", "Port 1B", "Port 2"), page.state.offered.map { it.label })
         }
 
     @Test
@@ -321,6 +321,54 @@ class ControllersPageTest {
 
             assertEquals(ControllersView.Hotkeys, page.state.view)
             assertEquals(PAD_B, page.state.selected)
+        }
+
+    // After a move, the controller's bindings are its new port's type's, read again.
+    @Test
+    fun aMoveReadsTheBindingsOfTheNewPortsType() =
+        runTest {
+            api.portTypes = mapOf(0 to "AnalogController", 1 to "NeGcon")
+            val page = openPage()
+            assertEquals("AnalogController", page.state.bindingsType)
+
+            page.setPort(PAD_A, 1)
+            runCurrent()
+
+            assertEquals("NeGcon", page.state.bindingsType)
+        }
+
+    // Two hub reads close together (a controller connecting as the page opens) still give the core's names.
+    @Test
+    fun theNamesSurviveTwoReadsAtOnce() =
+        runTest {
+            api.names["ControllerType"] = listOf("None", "AnalogController")
+            val page =
+                ControllersPage(
+                    backgroundScope,
+                    StandardTestDispatcher(testScheduler),
+                    api,
+                    { pads },
+                    { true },
+                    settings,
+                )
+            page.open()
+            pads.connected.value =
+                listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", PAD_B))
+            runCurrent()
+
+            assertEquals(listOf("None", "AnalogController"), page.state.typeNames.map { it.value })
+        }
+
+    // The ports offered keep the core's order, a port's slots together; a lost one goes in its place.
+    @Test
+    fun theOfferedOrderIsTheCores() =
+        runTest {
+            api.offered = listOf(Choice(0, "Port 1A"), Choice(2, "Port 1B"), Choice(1, "Port 2"))
+            api.ports = mapOf(PAD_A to 6)
+
+            val page = openPage()
+
+            assertEquals(listOf(0, 2, 1, 6), page.state.offered.map { it.value })
         }
 
     @Test

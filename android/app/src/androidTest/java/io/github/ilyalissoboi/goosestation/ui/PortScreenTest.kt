@@ -308,6 +308,32 @@ class PortScreenTest {
         rule.onNodeWithText("Macro 1").assertExists()
     }
 
+    // Below the settings, one controller's name isn't a stop: it has no ring, so Down goes on to the first binding.
+    @Test
+    fun oneControllersNameIsNoStopBelowTheSettings() {
+        show(type = "AnalogController", typeSettings = SETTINGS, values = portValues())
+
+        repeat(4) { press(Key.DirectionDown) }
+
+        assertFocusedHas("D-Pad Up")
+    }
+
+    // Nor is the line saying no controller is on the port: Down goes from the settings to the macros.
+    @Test
+    fun noControllersLineIsNoStopBelowTheSettings() {
+        show(
+            controllers = emptyList(),
+            bindings = emptyList(),
+            type = "AnalogController",
+            typeSettings = SETTINGS,
+            values = portValues(),
+        )
+
+        repeat(4) { press(Key.DirectionDown) }
+
+        assertFocusedHas("Macro 1")
+    }
+
     // Not Connected: nothing to bind, set or press.
     @Test
     fun notConnectedHasOnlyTheTypeRow() {

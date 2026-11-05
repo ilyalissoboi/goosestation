@@ -663,7 +663,7 @@ ignores `[Android]`, as before.
 - First, a card: "Back, the Mode (Home or Guide) button, or holding Select + Start for a second pauses the game and
   opens the menu. These buttons always do this, whatever is mapped to them."
 - **Controllers**: each connected controller's port, a row named after it ("Connect a controller to set it up." with
-  none). The ports offered are Port 1 and Port 2, and, for a port that has multitap in `settings.ini` or in any game's
+  none). The ports offered, in desktop's order (a port's slots together), are Port 1 and Port 2, and, for a port that has multitap in `settings.ini` or in any game's
   file (`gamesettings/*.ini`, `[ControllerPorts] MultitapMode`), its four slots instead: Port 1A to 1D, Port 2A to 2D.
   A controller on a port nothing offers any more (multitap turned off everywhere) shows it as itself, "No game uses
   this port". Moving a controller moves its own `Android-<n>` entries from the old `[PadN]`'s keys to the new one's
@@ -1397,7 +1397,7 @@ the result XML.
 |---|---|
 | Settings hub | Pass. Controllers' summary "Ports, types, bindings, hotkeys, rumble". |
 | Controllers hub | Pass. The menu triggers' card, "Connect a controller to set it up.", Multitap Disabled, Port 1 "Analog Controller · No controller", Port 2 "Not Connected · No controller", Hotkeys. |
-| Multitap | Pass. Right made it "Enable on Port 1 Only" (`[ControllerPorts] MultitapMode = Port1Only`), and the ports became 1A, 2, 1B, 1C, 1D. |
+| Multitap | Pass. Right made it "Enable on Port 1 Only" (`[ControllerPorts] MultitapMode = Port1Only`), and the ports became 1A, 2, 1B, 1C, 1D (in pad order then; the final review's fix shows a port's slots together, 1A to 1D then 2, as desktop does). |
 | Port 1A | Pass. Controller type Analog Controller, the core's settings with its descriptions (Analog Deadzone 0%, Analog Sensitivity 133%); Right on the deadzone wrote `AnalogDeadzone = 0.01`. Bindings: "No controller is on Port 1A…". Macros 1 to 4, "Not set". |
 | Macro 4 | Pass. Trigger line for no controller, a switch per input; switching Circle on wrote `Macro4Binds = Circle`, and off deleted the key. Back focused Macro 4, now "Circle". |
 | Back | Pass. Back from Port 1A focused its row on the hub; Port 1C (Not Connected) shows its type row only. |

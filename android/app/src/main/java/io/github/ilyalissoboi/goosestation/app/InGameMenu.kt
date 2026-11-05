@@ -740,6 +740,8 @@ class InGameMenu(
                 updatePanel(id) { it.copy(busy = false, error = failed(error)) }
                 return@launch
             }
+            // The save state hotkeys' slot follows the menu's too.
+            if (remember) selectedSlot = slot
             if (id == panelId) closeSlots()
             onMessage(done)
             onResume()

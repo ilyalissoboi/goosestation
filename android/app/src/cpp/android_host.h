@@ -275,8 +275,8 @@ std::optional<u32> GetControllerPort(std::string descriptor);
 /// new port's type gets its defaults for each input the controller has none for. Saves and applies it.
 void SetControllerPort(std::string descriptor, u32 pad);
 
-/// The ports a controller can be put on, as (pad, label), in pad order: Ports 1 and 2, and a port's multitap slots
-/// (1A to 1D, 2A to 2D) when settings.ini or any game's file turns multitap on for it.
+/// The ports a controller can be put on, as (pad, label), in desktop's order (a port's slots together): Ports 1 and 2,
+/// and a port's multitap slots (1A to 1D, 2A to 2D) when settings.ini or any game's file turns multitap on for it.
 std::vector<std::pair<u32, std::string>> GetOfferedPorts();
 
 /// For the instrumented tests: the running game's pad's input name's state (Controller::GetBindState()), 0 without a

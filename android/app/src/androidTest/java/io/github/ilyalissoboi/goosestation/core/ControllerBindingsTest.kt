@@ -589,6 +589,22 @@ class ControllerBindingsTest {
         assertEquals(0, NativeLibrary.getTypeInputs("NoSuchType").size)
     }
 
+    // A settings.ini from another install renumbers the controllers: its ports and strengths, by position, go with its
+    // descriptors, or this install's first controller would land on the other's Port 2.
+    @Test
+    fun anotherInstallsPortsAndStrengthsGo() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = another-install\nControllerDescriptors = pad-x\n" +
+                "ControllerPorts = 2\nControllerRumble = 30\n",
+        )
+
+        val ini = readSettings()
+        assertEquals(emptyList<String>(), ini.values("Android", "ControllerPorts"))
+        assertEquals(emptyList<String>(), ini.values("Android", "ControllerRumble"))
+        connectNewPad(1, "pad-a", 0)
+        assertEquals(0, NativeLibrary.getControllerPort("pad-a"))
+    }
+
     @Test
     fun theSavedPortIsRead() {
         initialize(
@@ -614,7 +630,8 @@ class ControllerBindingsTest {
         initialize(null)
 
         assertEquals(
-            listOf("0", "Port 1A", "1", "Port 2", "2", "Port 1B", "3", "Port 1C", "4", "Port 1D"),
+            // Desktop's order: a port's slots together, then the other port.
+            listOf("0", "Port 1A", "2", "Port 1B", "3", "Port 1C", "4", "Port 1D", "1", "Port 2"),
             NativeLibrary.getOfferedPorts().toList(),
         )
     }

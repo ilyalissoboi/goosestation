@@ -135,8 +135,8 @@ class ControllersPage(
     private var portRead = 0
     private var macroRead = 0
 
-    /** The core's type and multitap names have been read: on [core], once. */
-    @Volatile private var namesRead = false
+    /** The core's type and multitap names are shown: set on the main thread, read on [core]. */
+    @Volatile private var namesShown = false
 
     /** Follows the controllers connected while the page is open, from no bindings read yet. */
     fun open() {
@@ -157,6 +157,8 @@ class ControllersPage(
         scope.launch {
             withContext(core) { api.setControllerPort(descriptor, pad) }
             readHub()
+            // Its bindings are its new port's type's now.
+            if (state.selected == descriptor) readBindings(descriptor)
         }
     }
 
@@ -309,11 +311,10 @@ class ControllersPage(
                     val pads = (offered.map { it.value } + ports.values).distinct()
                     val types = pads.mapNotNull { pad -> api.getPortType(pad)?.let { pad to it } }.toMap()
                     val multitap = SettingValues.read(settings, listOf(PortSettings.MULTITAP))
-                    // They don't change: read once.
-                    val first = !namesRead
-                    namesRead = true
-                    val typeNames = if (first) api.getSettingNames(NameList.ControllerType.kind) else state.typeNames
-                    val modes = if (first) api.getSettingNames(NameList.MultitapMode.kind) else state.multitapNames
+                    // They don't change: read until a read that has them is shown, null after.
+                    val names = !namesShown
+                    val typeNames = if (names) api.getSettingNames(NameList.ControllerType.kind) else null
+                    val modes = if (names) api.getSettingNames(NameList.MultitapMode.kind) else null
                     Hub(ports, rumble, offered, types, multitap, typeNames, modes)
                 }
             if (read != hubRead) return@launch
@@ -326,12 +327,14 @@ class ControllersPage(
                 state.copy(
                     ports = hub.ports,
                     rumble = hub.rumble,
-                    offered = (hub.offered + lost).sortedBy { it.value },
+                    // The core's order, a lost port in its place in it.
+                    offered = (hub.offered + lost).sortedBy { PORT_ORDER.indexOf(it.value) },
                     portTypes = hub.types,
                     multitap = hub.multitap,
-                    typeNames = hub.typeNames,
-                    multitapNames = hub.multitapNames,
+                    typeNames = hub.typeNames ?: state.typeNames,
+                    multitapNames = hub.multitapNames ?: state.multitapNames,
                 )
+            if (hub.typeNames != null) namesShown = true
             // A port's view covers the controllers on it, which the read may have changed.
             reselect()
         }
@@ -378,8 +381,8 @@ class ControllersPage(
         val offered: List<Choice<Int>>,
         val types: Map<Int, String>,
         val multitap: SettingValues,
-        val typeNames: List<Choice<String>>,
-        val multitapNames: List<Choice<String>>,
+        val typeNames: List<Choice<String>>?,
+        val multitapNames: List<Choice<String>>?,
     )
 
     /** The page is left: a capture running ends, and the controllers aren't followed any more. */
@@ -670,6 +673,9 @@ class ControllersPage(
 
     private companion object {
         const val CAPTURE_SECONDS = 5
+
+        /** The order the core offers the pads in ([NativeLibrary.getOfferedPorts], desktop's): a port's slots together. */
+        val PORT_ORDER = listOf(0, 2, 3, 4, 1, 5, 6, 7)
 
         /** The note on a port a controller is on that no game's multitap offers. */
         const val NOT_USED = "No game uses this port"

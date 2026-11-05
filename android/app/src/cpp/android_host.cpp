@@ -2010,14 +2010,16 @@ std::vector<std::pair<u32, std::string>> AndroidHost::GetOfferedPorts()
 
   // Multitap's ports are offered when settings.ini or any game's file turns it on for that port.
   std::vector<std::string> modes;
+  std::string folder;
   {
+    // The CPU thread changes the folders under it (EmuFolders::Update()).
     const auto lock = Host::GetSettingsLock();
     modes.push_back(s_base_settings_interface->GetStringValue("ControllerPorts", "MultitapMode"));
+    folder = EmuFolders::GameSettings;
   }
 
   FileSystem::FindResultsArray files;
-  FileSystem::FindFiles(EmuFolders::GameSettings.c_str(), "*.ini", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES,
-                        &files);
+  FileSystem::FindFiles(folder.c_str(), "*.ini", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES, &files);
   for (const FILESYSTEM_FIND_DATA& file : files)
   {
     INISettingsInterface game(file.FileName);
@@ -2037,8 +2039,10 @@ std::vector<std::pair<u32, std::string>> AndroidHost::GetOfferedPorts()
     multitap[1] |= (mode == MultitapMode::Port2Only || mode == MultitapMode::BothPorts);
   }
 
+  // Desktop's order: a port's slots together, then the other port's.
+  static constexpr std::array<u32, AndroidInputKeys::NUM_PADS> ORDER = {0, 2, 3, 4, 1, 5, 6, 7};
   std::vector<std::pair<u32, std::string>> ports;
-  for (u32 pad = 0; pad < AndroidInputKeys::NUM_PADS; pad++)
+  for (const u32 pad : ORDER)
   {
     const auto [port, slot] = Controller::ConvertPadToPortAndSlot(pad);
     if (slot == 0 || multitap[port])

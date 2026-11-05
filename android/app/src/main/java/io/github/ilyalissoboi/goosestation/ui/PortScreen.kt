@@ -142,14 +142,15 @@ fun PortScreen(
             val firstHere = if (type == null) Modifier.focusRequester(first) else Modifier
             if (controller == null) {
                 // It holds the focus, so B and Back reach the page.
+                // It holds the focus only as the first row, so B and Back reach the page; below the type, no stop.
                 Line(
                     "No controller is on $title. Pick $title for one on the Controllers page.",
-                    firstHere.focusable(),
+                    firstHere.focusable(type == null),
                 )
             } else {
                 val label = labels[controller.descriptor] ?: controller.name
                 // It holds the focus on opening, with nothing to activate for one controller.
-                ControllerPicker(controllers, labels, controller, onSelect, firstHere)
+                ControllerPicker(controllers, labels, controller, onSelect, firstHere, nameFocusable = type == null)
                 Line("Each controller on $title keeps its own bindings.")
                 if (bindingsFor != controller.descriptor) {
                     Line("Reading $label's bindings…")

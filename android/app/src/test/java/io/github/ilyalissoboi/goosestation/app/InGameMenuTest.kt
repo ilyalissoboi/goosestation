@@ -1460,6 +1460,24 @@ class InGameMenuTest {
             assertEquals(listOf("saveState $SERIAL 3", "message Saved to slot 3"), calls)
         }
 
+    // The menu's own save and load move the hotkeys' slot too, so Save never overwrites another slot than the last used.
+    @Test
+    fun theMenusLoadMovesTheHotkeysSlot() =
+        runTest {
+            val menu = menu()
+            hotkey(menu, StateHotkey.Save)
+            api.times[5] = 1_700_000_000L
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.pickSlot(5)
+            runCurrent()
+            calls.clear()
+
+            hotkey(menu, StateHotkey.Save)
+
+            assertEquals(listOf("saveState $SERIAL 5", "message Saved to slot 5"), calls)
+        }
+
     @Test
     fun undoSaysWhetherItDid() =
         runTest {

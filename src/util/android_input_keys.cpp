@@ -553,6 +553,18 @@ void RumbleRouter::SetStrengths(std::vector<float> strength_of_index)
   m_strength_of_index = std::move(strength_of_index);
 }
 
+std::optional<u32> RumbleRouter::GetLastUsedIndex() const
+{
+  const Device* last = nullptr;
+  for (const Device& device : m_devices)
+  {
+    if (device.last_input > 0 && (!last || device.last_input > last->last_input))
+      last = &device;
+  }
+
+  return last ? std::optional<u32>(last->index) : std::nullopt;
+}
+
 u32 RumbleRouter::PadOf(u32 index) const
 {
   return (index < m_pad_of_index.size()) ? m_pad_of_index[index] : 0;

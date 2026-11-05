@@ -328,6 +328,11 @@ void AndroidInputSource::SetControllerPads(std::vector<u32> pad_of_index)
   m_rumble.SetPads(std::move(pad_of_index));
 }
 
+std::optional<u32> AndroidInputSource::GetLastUsedIndex() const
+{
+  return m_rumble.GetLastUsedIndex();
+}
+
 void AndroidInputSource::SetRumbleStrengths(std::vector<float> strength_of_index)
 {
   m_rumble.SetStrengths(std::move(strength_of_index));

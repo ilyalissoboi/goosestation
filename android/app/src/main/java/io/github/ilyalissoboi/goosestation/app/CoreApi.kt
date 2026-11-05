@@ -22,7 +22,19 @@ import kotlinx.coroutines.flow.StateFlow
 interface CoreApi {
     fun getPadBindings(descriptor: String): List<PadBinding>?
 
-    fun getPort1ControllerType(): String?
+    /** [NativeLibrary.getPortType]. */
+    fun getPortType(pad: Int): String?
+
+    /** [NativeLibrary.getControllerPort], or null for a controller not in the table. */
+    fun getControllerPort(descriptor: String): Int?
+
+    fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    )
+
+    /** [NativeLibrary.getOfferedPorts]: each port as its pad and label. */
+    fun getOfferedPorts(): List<Choice<Int>>
 
     fun setPadBinding(
         descriptor: String,
@@ -100,7 +112,20 @@ object NativeCoreApi : CoreApi {
     override fun getPadBindings(descriptor: String): List<PadBinding>? =
         NativeLibrary.getPadBindings(descriptor)?.toList()
 
-    override fun getPort1ControllerType(): String? = NativeLibrary.getPort1ControllerType()
+    override fun getPortType(pad: Int): String? = NativeLibrary.getPortType(pad)
+
+    override fun getControllerPort(descriptor: String): Int? =
+        NativeLibrary.getControllerPort(descriptor).takeIf { it >= 0 }
+
+    override fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    ) = NativeLibrary.setControllerPort(descriptor, pad)
+
+    override fun getOfferedPorts(): List<Choice<Int>> =
+        NativeLibrary.getOfferedPorts().toList().chunked(2).mapNotNull { (pad, label) ->
+            pad.toIntOrNull()?.let { Choice(it, label) }
+        }
 
     override fun setPadBinding(
         descriptor: String,

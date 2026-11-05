@@ -762,3 +762,18 @@ TEST(AndroidInputKeys, RumbleFollowsAPortChange)
   EXPECT_TRUE(r.SetMotor(0, 0, 1.0f).empty());
   EXPECT_EQ(r.SetMotor(1, 0, 0.5f), (RumbleCommands{{10, 0.5f, 0.0f}}));
 }
+
+TEST(AndroidInputKeys, LastUsedIndex)
+{
+  RumbleRouter r;
+  EXPECT_FALSE(r.GetLastUsedIndex().has_value());
+  r.OnConnected(10, 0);
+  r.OnConnected(11, 3);
+  EXPECT_FALSE(r.GetLastUsedIndex().has_value()); // none used yet
+  r.OnInput(11);
+  EXPECT_EQ(r.GetLastUsedIndex(), 3u);
+  r.OnInput(10);
+  EXPECT_EQ(r.GetLastUsedIndex(), 0u);
+  r.OnDisconnected(10);
+  EXPECT_EQ(r.GetLastUsedIndex(), 3u);
+}

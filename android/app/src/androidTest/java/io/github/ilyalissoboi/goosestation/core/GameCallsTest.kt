@@ -353,6 +353,20 @@ class GameCallsTest {
         }
     }
 
+    // A controller on Port 2 presses Port 2's inputs, and not Port 1's.
+    @Test
+    fun aControllerOnPort2DrivesPort2() =
+        withPadtest(settings = { NativeLibrary.setStringSetting("Pad2", "Type", "AnalogController") }) {
+            NativeLibrary.setControllerPort(PAD, 1)
+            Thread.sleep(500)
+
+            NativeLibrary.onKey(DEVICE_ID, CROSS, true)
+            Thread.sleep(300)
+            assertEquals(1f, NativeLibrary.getPadBindStateForTest(1, "Cross"))
+            assertEquals(0f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
+            NativeLibrary.onKey(DEVICE_ID, CROSS, false)
+        }
+
     @Test
     fun aSlotSaveKeepsABackupWhenAsked() =
         withPadtest(settings = { NativeLibrary.setBoolSetting("Main", "CreateSaveStateBackups", true) }) {
@@ -560,5 +574,6 @@ class GameCallsTest {
         const val DEVICE_ID = 1
         const val SELECT = 109
         const val X = 99
+        const val CROSS = 96
     }
 }

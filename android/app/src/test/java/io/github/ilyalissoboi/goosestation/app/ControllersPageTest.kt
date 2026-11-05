@@ -30,13 +30,14 @@ class ControllersPageTest {
     }
 
     @Test
-    fun thePort1TypeIsReadWithTheBindings() =
+    fun theControllersPortTypeIsReadWithTheBindings() =
         runTest {
-            api.port1Type = "PlayStationMouse"
+            api.ports = mapOf(PAD_A to 1)
+            api.portTypes = mapOf(0 to "AnalogController", 1 to "PlayStationMouse")
 
             val page = openPage()
 
-            assertEquals("PlayStationMouse", page.state.port1Type)
+            assertEquals("PlayStationMouse", page.state.bindingsType)
         }
 
     @Test

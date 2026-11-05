@@ -342,7 +342,7 @@ Android: each controller has a port, kept with its descriptor
     connectNewPad(1, "pad-a"); NativeLibrary.setPadBinding("pad-a", "Cross", "Button97")
     NativeLibrary.setPortType(0, "NeGcon")
     assertEquals(listOf("Android-0/Button97"), readSettings().values("Pad1", "Cross"))  // kept
-    assertTrue(readSettings().values("Pad1", "Steering").single().startsWith("Android-0/"))
+    assertTrue(readSettings().values("Pad1", "SteeringLeft").single().startsWith("Android-0/"))
     NativeLibrary.setPortType(0, "DigitalController"); NativeLibrary.setPortType(0, "AnalogController")
     assertEquals(listOf("Android-0/Button97"), readSettings().values("Pad1", "Cross"))
 }

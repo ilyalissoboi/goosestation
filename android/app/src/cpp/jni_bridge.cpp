@@ -2419,10 +2419,42 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstr
   return ToPadBindingArray(env, AndroidHost::GetPadBindings(FromJString(env, descriptor)));
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, getPort1ControllerType)(JNIEnv* env, jobject)
+NATIVE_LIBRARY_FUNCTION(jstring, getPortType)(JNIEnv* env, jobject, jint pad)
 {
-  const std::optional<std::string> type = AndroidHost::GetPort1ControllerType();
+  if (pad < 0)
+    return nullptr;
+
+  const std::optional<std::string> type = AndroidHost::GetPortType(static_cast<u32>(pad));
   return type.has_value() ? ToJString(env, type.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getControllerPort)(JNIEnv* env, jobject, jstring descriptor)
+{
+  const std::optional<u32> pad = AndroidHost::GetControllerPort(FromJString(env, descriptor));
+  return pad.has_value() ? static_cast<jint>(pad.value()) : -1;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setControllerPort)(JNIEnv* env, jobject, jstring descriptor, jint pad)
+{
+  if (pad >= 0)
+    AndroidHost::SetControllerPort(FromJString(env, descriptor), static_cast<u32>(pad));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getOfferedPorts)(JNIEnv* env, jobject)
+{
+  std::vector<std::string> pairs;
+  for (auto& [pad, label] : AndroidHost::GetOfferedPorts())
+  {
+    pairs.push_back(std::to_string(pad));
+    pairs.push_back(std::move(label));
+  }
+
+  return ToNonNullStringArray(env, pairs);
+}
+
+NATIVE_LIBRARY_FUNCTION(jfloat, getPadBindStateForTest)(JNIEnv* env, jobject, jint pad, jstring name)
+{
+  return (pad >= 0) ? AndroidHost::GetPadBindStateForTest(static_cast<u32>(pad), FromJString(env, name)) : 0.0f;
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getHotkeyBindings)(JNIEnv* env, jobject, jstring descriptor)

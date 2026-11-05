@@ -34,8 +34,14 @@ class FakeCoreApi(
     /** Each pad's place in the descriptor table, by descriptor; a pad not in it has none. */
     var indices = emptyMap<String, Int>()
 
-    /** Port 1's controller type, as the core names it. */
-    var port1Type: String? = "AnalogController"
+    /** Each controller's pad, by descriptor; one not in it is on Port 1 (pad 0). */
+    var ports = emptyMap<String, Int>()
+
+    /** Each pad's controller type, as the core names it; a pad not in it has none. */
+    var portTypes = mapOf(0 to "AnalogController", 1 to "None")
+
+    /** The ports a controller can be put on. */
+    var offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2"))
 
     /** Runs once, as the next read of the BIOS page reaches the core, as if the user acted meanwhile. */
     var duringRead: () -> Unit = {}
@@ -52,7 +58,19 @@ class FakeCoreApi(
         bindings[name] = binding
     }
 
-    override fun getPort1ControllerType(): String? = port1Type
+    override fun getPortType(pad: Int): String? = portTypes[pad]
+
+    override fun getControllerPort(descriptor: String): Int? = ports[descriptor] ?: 0
+
+    override fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    ) {
+        calls += "setControllerPort $descriptor $pad"
+        ports = ports + (descriptor to pad)
+    }
+
+    override fun getOfferedPorts(): List<Choice<Int>> = offered
 
     override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
         hotkeys.map { (name, binding) -> PadBinding(name, name, PadBindingKind.Button, binding) }

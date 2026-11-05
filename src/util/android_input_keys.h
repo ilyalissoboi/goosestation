@@ -245,6 +245,9 @@ public:
   /// and a stop to the previous target if it changed and is still connected. Nothing without a device on the pad.
   std::vector<Command> SetMotor(u32 pad, u32 motor, float value);
 
+  /// The device index of the connected controller used last, if any has been used.
+  std::optional<u32> GetLastUsedIndex() const;
+
 private:
   struct Device
   {

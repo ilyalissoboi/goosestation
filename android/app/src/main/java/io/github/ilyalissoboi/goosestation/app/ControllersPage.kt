@@ -17,8 +17,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * The Controllers page: the [controllers] connected, each with its [labels] entry, by descriptor; the [selected] one's
- * descriptor; and the [bindings] and [hotkeys] of [bindingsFor], null until they're first read, with Port 1's
- * controller type read with them ([port1Type], as the core names it). While [bindingsFor] isn't [selected], the
+ * descriptor; and the [bindings] and [hotkeys] of [bindingsFor], null until they're first read, with its port's
+ * controller type read with them ([bindingsType], as the core names it). While [bindingsFor] isn't [selected], the
  * selected one's are being read. While [capturing] is a binding's or hotkey's name, the next input on that controller
  * becomes its binding (for a hotkey, the button held with Select), unless [secondsLeft] runs out first. Once a capture
  * lands, [undo] can put back what it replaced.
@@ -30,7 +30,7 @@ data class ControllersState(
     val bindings: List<PadBinding>? = null,
     val hotkeys: List<PadBinding>? = null,
     val bindingsFor: String? = null,
-    val port1Type: String? = null,
+    val bindingsType: String? = null,
     val capturing: String? = null,
     val secondsLeft: Int = 0,
     val undo: Undo? = null,
@@ -314,7 +314,7 @@ class ControllersPage(
                     Triple(
                         api.getPadBindings(descriptor),
                         api.getHotkeyBindings(descriptor),
-                        api.getPort1ControllerType(),
+                        api.getControllerPort(descriptor)?.let { api.getPortType(it) },
                     )
                 }
             if (read != bindingsRead || state.selected != descriptor) return@launch
@@ -323,7 +323,7 @@ class ControllersPage(
                     bindings = loaded.orEmpty(),
                     hotkeys = hotkeys.orEmpty(),
                     bindingsFor = descriptor,
-                    port1Type = type,
+                    bindingsType = type,
                 )
         }
     }

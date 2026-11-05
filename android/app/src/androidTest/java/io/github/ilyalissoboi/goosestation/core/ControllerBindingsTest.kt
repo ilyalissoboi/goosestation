@@ -348,20 +348,143 @@ class ControllerBindingsTest {
     }
 
     @Test
-    fun port1TypeIsTheDefaultWithoutASetting() {
+    fun portTypeIsTheDefaultWithoutASetting() {
         initialize(null)
 
-        // The core's default for Port 1 (Settings::DEFAULT_CONTROLLER_1_TYPE).
-        assertEquals("AnalogController", NativeLibrary.getPort1ControllerType())
+        // The core's defaults (Settings::DEFAULT_CONTROLLER_1_TYPE and _2_TYPE).
+        assertEquals("AnalogController", NativeLibrary.getPortType(0))
+        assertEquals("None", NativeLibrary.getPortType(1))
     }
 
     @Test
-    fun port1TypeIsTheSettings() {
+    fun portTypeIsTheSettings() {
         initialize(
-            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad1]\nType = DigitalController\n",
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad1]\nType = DigitalController\n" +
+                "\n[Pad2]\nType = NeGcon\n",
         )
 
-        assertEquals("DigitalController", NativeLibrary.getPort1ControllerType())
+        assertEquals("DigitalController", NativeLibrary.getPortType(0))
+        assertEquals("NeGcon", NativeLibrary.getPortType(1))
+    }
+
+    @Test
+    fun aNewControllerIsOnPort1() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+
+        assertEquals(0, NativeLibrary.getControllerPort("pad-a"))
+        assertEquals(-1, NativeLibrary.getControllerPort("no-such-pad"))
+    }
+
+    @Test
+    fun movingAControllerMovesItsBindings() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad2]\nType = AnalogController\n",
+        )
+        connectNewPad(1, "pad-a", 0)
+        connectNewPad(2, "pad-b", 1)
+
+        NativeLibrary.setControllerPort("pad-b", 1)
+
+        val ini = readSettings()
+        assertEquals(listOf("Android-0/Button96"), ini.values("Pad1", "Cross"))
+        assertEquals(listOf("Android-1/Button96"), ini.values("Pad2", "Cross"))
+        assertEquals(listOf("1", "2"), ini.values("Android", "ControllerPorts"))
+        assertEquals(1, NativeLibrary.getControllerPort("pad-b"))
+        assertEquals("Button96", crossOf("pad-b"))
+    }
+
+    // Review Focus 3: a desktop file's other sources stay first and untouched in the keys a controller moves into, and
+    // a type Android doesn't offer stays.
+    @Test
+    fun aMoveKeepsOtherSourcesEntries() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\nControllerDescriptors = pad-a\n\n" +
+                "[Pad1]\nType = AnalogController\nCross = SDL-0/FaceSouth\nCross = Android-0/Button97\n\n" +
+                "[Pad2]\nType = AnalogController\nCross = SDL-1/FaceSouth\n",
+        )
+        NativeLibrary.onDeviceConnected(1, "Pad A", "pad-a")
+
+        NativeLibrary.setControllerPort("pad-a", 1)
+
+        val ini = readSettings()
+        assertEquals(listOf("SDL-0/FaceSouth"), ini.values("Pad1", "Cross"))
+        assertEquals(listOf("SDL-1/FaceSouth", "Android-0/Button97"), ini.values("Pad2", "Cross"))
+    }
+
+    // Review Focus 1: a controller moved away and back has the bindings it had.
+    @Test
+    fun movingBackRestoresTheRemap() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+        NativeLibrary.setPadBinding("pad-a", "Cross", "Button97")
+
+        NativeLibrary.setControllerPort("pad-a", 3)
+        assertEquals(listOf("Android-0/Button97"), readSettings().values("Pad4", "Cross"))
+        NativeLibrary.setControllerPort("pad-a", 0)
+
+        assertEquals("Button97", crossOf("pad-a"))
+        assertEquals(emptyList<String>(), readSettings().values("Pad4", "Cross"))
+    }
+
+    // A move to a port whose type has inputs the controller has no entry for gives it their defaults there.
+    @Test
+    fun aMoveAddsTheNewTypesMissingDefaults() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n[Pad2]\nType = NeGcon\n",
+        )
+        connectNewPad(1, "pad-a", 0)
+
+        NativeLibrary.setControllerPort("pad-a", 1)
+
+        assertTrue(readSettings().values("Pad2", "SteeringLeft").single().startsWith("Android-0/"))
+    }
+
+    @Test
+    fun theSavedPortIsRead() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\nControllerDescriptors = pad-a\n" +
+                "ControllerDescriptors = pad-b\nControllerPorts = 1\nControllerPorts = 6\n",
+        )
+
+        assertEquals(0, NativeLibrary.getControllerPort("pad-a"))
+        assertEquals(5, NativeLibrary.getControllerPort("pad-b"))
+    }
+
+    @Test
+    fun withoutMultitapOnlyPorts1And2() {
+        initialize(null)
+
+        assertEquals(listOf("0", "Port 1", "1", "Port 2"), NativeLibrary.getOfferedPorts().toList())
+    }
+
+    @Test
+    fun multitapInAGamesFileOffersItsPorts() {
+        File(dataRoot, "gamesettings").mkdirs()
+        File(dataRoot, "gamesettings/SLUS-00001.ini").writeText("[ControllerPorts]\nMultitapMode = Port1Only\n")
+        initialize(null)
+
+        assertEquals(
+            listOf("0", "Port 1A", "1", "Port 2", "2", "Port 1B", "3", "Port 1C", "4", "Port 1D"),
+            NativeLibrary.getOfferedPorts().toList(),
+        )
+    }
+
+    @Test
+    fun port2OnlyMultitapOffersPort2s() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[Android]\nInstallID = $INSTALL_ID\n\n" +
+                "[ControllerPorts]\nMultitapMode = Port2Only\n",
+        )
+
+        assertEquals(
+            listOf("Port 1", "Port 2A", "Port 2B", "Port 2C", "Port 2D"),
+            NativeLibrary
+                .getOfferedPorts()
+                .toList()
+                .chunked(2)
+                .map { it[1] },
+        )
     }
 
     private fun initialize(settings: String?) {

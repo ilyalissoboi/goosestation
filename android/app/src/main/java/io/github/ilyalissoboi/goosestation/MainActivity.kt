@@ -256,7 +256,7 @@ class MainActivity : ComponentActivity() {
                                 onCapture = AppController::captureBinding,
                                 hotkeys = state.hotkeys.orEmpty(),
                                 onCaptureHotkey = AppController::captureHotkey,
-                                glyphs = state.port1Type in GLYPH_TYPES,
+                                glyphs = state.bindingsType in GLYPH_TYPES,
                                 onCancelCapture = AppController::cancelCapture,
                                 onClear = AppController::clearBinding,
                                 onUndo = AppController.controllersPage::undo,

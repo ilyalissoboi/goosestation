@@ -62,6 +62,10 @@ public:
   /// Each device index's pad, 0-based ([Android] ControllerPorts).
   void SetControllerPads(std::vector<u32> pad_of_index);
 
+  /// The device index of the connected controller used last, as far as the events polled go: the one whose hotkey
+  /// chord just fired.
+  std::optional<u32> GetLastUsedIndex() const;
+
   /// Each device index's rumble strength, 0 to 1 ([Android] ControllerRumble).
   void SetRumbleStrengths(std::vector<float> strength_of_index);
 

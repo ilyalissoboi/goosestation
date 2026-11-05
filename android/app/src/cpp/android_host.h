@@ -235,27 +235,44 @@ struct PadBinding
   std::optional<std::string> binding;
 };
 
-/// Each controller's own bindings on Port 1, by its descriptor. They run on the CPU thread and block; the two that
+/// Each controller's own bindings on its port, by its descriptor. They run on the CPU thread and block; the two that
 /// change bindings save settings.ini and apply them (System::ReloadInputBindings()). For a descriptor not in the table
 /// (one never connected), or before Initialize() succeeded, they do nothing and GetPadBindings() gives nullopt.
 
-/// Port 1's controller type's buttons and axes (Button, Axis and HalfAxis), in the core's order, each with the
+/// The controller's port's type's buttons and axes (Button, Axis and HalfAxis), in the core's order, each with the
 /// controller's first binding for it.
 std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
 
-/// Port 1's controller type, as the core names it ([Pad1] Type, or the core's default): nullopt before Initialize()
-/// succeeded, or for a type the core doesn't know. Runs on the CPU thread and blocks.
-std::optional<std::string> GetPort1ControllerType();
+/// The pad's controller type as settings.ini has it ([PadN] Type, or the core's default for the pad), even one the
+/// core doesn't know; nullopt before Initialize() succeeded or for a pad past 7. Pads are 0-based: [Pad1] is 0.
+std::optional<std::string> GetPortType(u32 pad);
+
+/// The controller's pad ([Android] ControllerPorts, Port 1 when it has none); nullopt as GetControllerIndex() gives
+/// it. Runs on the CPU thread and blocks.
+std::optional<u32> GetControllerPort(std::string descriptor);
+
+/// Puts the controller on pad: each of its own entries in the old [PadN]'s keys (Android-<index>/..., macro triggers
+/// too) moves to the same key of the new one, other sources' and controllers' entries staying where they are, and the
+/// new port's type gets its defaults for each input the controller has none for. Saves and applies it.
+void SetControllerPort(std::string descriptor, u32 pad);
+
+/// The ports a controller can be put on, as (pad, label), in pad order: Ports 1 and 2, and a port's multitap slots
+/// (1A to 1D, 2A to 2D) when settings.ini or any game's file turns multitap on for it.
+std::vector<std::pair<u32, std::string>> GetOfferedPorts();
+
+/// For the instrumented tests: the running game's pad's input name's state (Controller::GetBindState()), 0 without a
+/// game or controller there. Runs on the CPU thread and blocks.
+float GetPadBindStateForTest(u32 pad, std::string name);
 
 /// The controller's place in the descriptor table, as its Android-<index> devices are numbered, which stays the same
 /// from one run to the next; nullopt for one never connected, or before Initialize() succeeded.
 std::optional<u32> GetControllerIndex(std::string descriptor);
 
-/// Replaces the controller's bindings for Port 1's input name with binding, or with none if it's empty. Other
-/// controllers' stay as they are. An input Port 1's type doesn't have is refused.
+/// Replaces the controller's bindings for its port's input name with binding, or with none if it's empty. Other
+/// controllers' stay as they are. An input its port's type doesn't have is refused.
 void SetPadBinding(std::string descriptor, std::string name, std::string binding);
 
-/// Drops the controller's bindings from every [Pad1] key and its hotkeys, then adds its defaults, as a new controller
+/// Drops the controller's bindings from every key of its port's [PadN] and its hotkeys, then adds its defaults, as a new controller
 /// gets them.
 void ResetPadBindings(std::string descriptor);
 

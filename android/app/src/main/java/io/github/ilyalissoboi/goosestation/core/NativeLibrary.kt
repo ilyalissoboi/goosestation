@@ -491,10 +491,35 @@ object NativeLibrary {
     external fun getPadBindings(descriptor: String): Array<PadBinding>?
 
     /**
-     * Port 1's controller type, as the core names it (`AnalogController`, `DigitalController`, …): `[Pad1] Type`, or
-     * the core's default. Null before [initialize], or for a type the core doesn't know.
+     * The [pad]'s controller type as settings.ini has it (`AnalogController`, `DigitalController`, …): `[PadN] Type`,
+     * or the core's default for it, even a type the core doesn't know. Pads are 0-based (`[Pad1]` is 0). Null before
+     * [initialize], or for a pad past 7.
      */
-    external fun getPort1ControllerType(): String?
+    external fun getPortType(pad: Int): String?
+
+    /** The controller with [descriptor]'s pad (0-based, Port 1 by default), or -1 for one never connected. */
+    external fun getControllerPort(descriptor: String): Int
+
+    /**
+     * Puts the controller with [descriptor] on [pad]: its own bindings move to the new `[PadN]`, other sources' stay,
+     * and the new port's type gets its defaults where it has none. Saved and applied; waits for the core.
+     */
+    external fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    )
+
+    /**
+     * The ports a controller can be put on: pad number, label, pad number, label…, in pad order. Ports 1 and 2, and
+     * multitap's (`Port 1A`…`Port 1D`, `Port 2A`…`Port 2D`) when settings.ini or any game's file turns it on.
+     */
+    external fun getOfferedPorts(): Array<String>
+
+    /** Tests: the running game's [pad]'s input [name]'s state, 0 without a game or controller. Waits for the core. */
+    external fun getPadBindStateForTest(
+        pad: Int,
+        name: String,
+    ): Float
 
     /**
      * The controller with [descriptor]'s place in the table of controllers this install has seen, which stays the same

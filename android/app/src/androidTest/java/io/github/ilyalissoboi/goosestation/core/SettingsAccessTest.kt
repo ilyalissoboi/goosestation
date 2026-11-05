@@ -213,14 +213,10 @@ class SettingsAccessTest {
     private companion object {
         const val INSTALL_ID = "test-install"
 
-        /** The keys a new settings.ini doesn't hold at their default: the device-specific ones its adapting deletes, and two the core writes wrong. */
+        /** The keys a new settings.ini doesn't hold at their default: the device-specific ones its adapting deletes, and the card paths it leaves out. */
         val ADAPTED_AWAY =
             setOf(
                 "GPU/Renderer",
-                // The core's Save writes the numerator's member default (0, which Load takes as 1) and never writes
-                // the denominator (settings.cpp:571-572): a desktop bug, left as it is here. Load's own 4:3 is kept.
-                "Display/CustomAspectRatioNumerator",
-                "Display/CustomAspectRatioDenominator",
                 // Left out while empty (Settings::Save), which is their default: the slot's own shared card.
                 "MemoryCards/Card1Path",
                 "MemoryCards/Card2Path",

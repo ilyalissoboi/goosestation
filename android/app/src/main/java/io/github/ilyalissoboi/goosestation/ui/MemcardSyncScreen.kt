@@ -232,6 +232,8 @@ private fun EditableRow(
             password = secret,
             imeAction = ImeAction.Done,
             onDone = { onDone(text.text.toString()) },
+            // Opened on purpose, by A on the row: the keyboard comes with it.
+            keyboardOnFocus = true,
         )
     } else {
         Column(

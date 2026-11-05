@@ -1789,6 +1789,35 @@ std::optional<std::string> AndroidHost::GetPortType(u32 pad)
                                                    Controller::GetDefaultPadType(pad));
 }
 
+void AndroidHost::SetPortType(u32 pad, std::string type)
+{
+  if (!s_initialized || pad >= AndroidInputKeys::NUM_PADS)
+    return;
+
+  EmuThread::RunOnThread(
+    [pad, &type]() {
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        si.SetStringValue(Controller::GetSettingsSection(pad).c_str(), "Type", type.c_str());
+
+        // The bindings are kept for each type, as its inputs' keys: only the ones a controller has none for get theirs.
+        for (u32 index = 0; index < s_descriptors.size(); index++)
+        {
+          if (GetPadOfIndex(si, index) == pad)
+            AddDefaultBindings(si, index, pad);
+        }
+
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      System::ApplySettings(false);
+    },
+    true);
+}
+
 std::optional<u32> AndroidHost::GetControllerPort(std::string descriptor)
 {
   if (!s_initialized)

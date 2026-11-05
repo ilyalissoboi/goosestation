@@ -12,6 +12,7 @@ import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
+import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 
@@ -71,6 +72,19 @@ class FakeCoreApi(
     }
 
     override fun getOfferedPorts(): List<Choice<Int>> = offered
+
+    /** Each type's settings, as the core would describe them. */
+    var typeSettings = emptyMap<String, List<TypeSetting>>()
+
+    override fun setPortType(
+        pad: Int,
+        type: String,
+    ) {
+        calls += "setPortType $pad $type"
+        portTypes = portTypes + (pad to type)
+    }
+
+    override fun getTypeSettings(type: String): List<TypeSetting> = typeSettings[type].orEmpty()
 
     override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
         hotkeys.map { (name, binding) -> PadBinding(name, name, PadBindingKind.Button, binding) }

@@ -497,6 +497,18 @@ object NativeLibrary {
      */
     external fun getPortType(pad: Int): String?
 
+    /**
+     * Sets [pad]'s controller [type] (`[PadN] Type`), gives each controller on it the type's default bindings where it
+     * has none, and applies it. Waits for the core.
+     */
+    external fun setPortType(
+        pad: Int,
+        type: String,
+    )
+
+    /** The controller [type]'s settings, as [TypeSetting.parse] reads them; empty for a type with none, or unknown. */
+    external fun getTypeSettings(type: String): Array<String>
+
     /** The controller with [descriptor]'s pad (0-based, Port 1 by default), or -1 for one never connected. */
     external fun getControllerPort(descriptor: String): Int
 

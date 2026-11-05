@@ -440,6 +440,61 @@ class ControllerBindingsTest {
         assertTrue(readSettings().values("Pad2", "SteeringLeft").single().startsWith("Android-0/"))
     }
 
+    // Review Focus 4: picking a type adds its defaults only for the inputs the controller has none for, so a remap stays
+    // across Analog, Digital and back, and a NeGcon's steering gets one the first time.
+    @Test
+    fun pickingATypeAddsItsMissingDefaults() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+        NativeLibrary.setPadBinding("pad-a", "Cross", "Button97")
+
+        NativeLibrary.setPortType(0, "NeGcon")
+        assertEquals("NeGcon", NativeLibrary.getPortType(0))
+        assertEquals(listOf("Android-0/Button97"), readSettings().values("Pad1", "Cross"))
+        assertTrue(readSettings().values("Pad1", "SteeringLeft").single().startsWith("Android-0/"))
+
+        NativeLibrary.setPortType(0, "DigitalController")
+        NativeLibrary.setPortType(0, "AnalogController")
+        assertEquals(listOf("Android-0/Button97"), readSettings().values("Pad1", "Cross"))
+        assertEquals("Button97", crossOf("pad-a"))
+    }
+
+    // Each controller on the port gets the type's defaults, and one on another port doesn't.
+    @Test
+    fun aTypeGivesDefaultsToEachControllerOnItsPort() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+        connectNewPad(2, "pad-b", 1)
+        NativeLibrary.setControllerPort("pad-b", 1)
+
+        NativeLibrary.setPortType(0, "NeGcon")
+
+        assertTrue(readSettings().values("Pad1", "SteeringLeft").single().startsWith("Android-0/"))
+        assertEquals(emptyList<String>(), readSettings().values("Pad2", "SteeringLeft"))
+    }
+
+    @Test
+    fun typeSettingsAreTheCores() {
+        initialize(null)
+
+        val flat = NativeLibrary.getTypeSettings("AnalogController")
+        assertEquals(0, flat.size % TypeSetting.FIELDS)
+        val byKey = TypeSetting.parse(flat).associateBy { it.key }
+        val deadzone = byKey.getValue("AnalogDeadzone")
+        assertEquals(TypeSetting.Kind.Float, deadzone.kind)
+        assertEquals("%.0f%%", deadzone.format)
+        assertEquals(100f, deadzone.multiplier)
+        assertEquals(TypeSetting.Kind.Bool, byKey.getValue("ForceAnalogOnReset").kind)
+        assertEquals(4, byKey.getValue("InvertLeftStick").options.size)
+        assertEquals(TypeSetting.Kind.IntList, byKey.getValue("InvertLeftStick").kind)
+        assertEquals(
+            listOf("ForcePopnControllerMode"),
+            TypeSetting.parse(NativeLibrary.getTypeSettings("DigitalController")).map { it.key },
+        )
+        assertEquals(0, NativeLibrary.getTypeSettings("None").size)
+        assertEquals(0, NativeLibrary.getTypeSettings("NoSuchType").size)
+    }
+
     @Test
     fun theSavedPortIsRead() {
         initialize(

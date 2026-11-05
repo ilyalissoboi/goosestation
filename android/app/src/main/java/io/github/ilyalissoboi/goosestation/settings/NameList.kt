@@ -25,6 +25,10 @@ enum class NameList(
     ScreenshotFormat("DisplayScreenshotFormat"),
     StretchMode("AudioStretchMode"),
     MemoryCardType("MemoryCardType"),
+
+    /** Every controller type but those that need a pointer (GunCon, Justifier, mouse). */
+    ControllerType("ControllerType"),
+    MultitapMode("MultitapMode"),
 }
 
 /** Each of the core's lists, its choices as the core names them. */

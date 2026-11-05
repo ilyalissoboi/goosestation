@@ -247,6 +247,10 @@ std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
 /// core doesn't know; nullopt before Initialize() succeeded or for a pad past 7. Pads are 0-based: [Pad1] is 0.
 std::optional<std::string> GetPortType(u32 pad);
 
+/// Sets the pad's controller type ([PadN] Type), gives each controller on the pad the type's default binding for each
+/// input it has none for, saves, and applies it.
+void SetPortType(u32 pad, std::string type);
+
 /// The controller's pad ([Android] ControllerPorts, Port 1 when it has none); nullopt as GetControllerIndex() gives
 /// it. Runs on the CPU thread and blocks.
 std::optional<u32> GetControllerPort(std::string descriptor);

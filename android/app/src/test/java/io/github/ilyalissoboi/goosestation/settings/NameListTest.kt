@@ -47,6 +47,8 @@ class NameListTest {
                 "DisplayScreenshotFormat",
                 "AudioStretchMode",
                 "MemoryCardType",
+                "ControllerType",
+                "MultitapMode",
             ),
             NameList.entries.map { it.kind },
         )

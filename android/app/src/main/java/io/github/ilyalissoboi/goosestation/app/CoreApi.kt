@@ -10,6 +10,7 @@ import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
+import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -35,6 +36,14 @@ interface CoreApi {
 
     /** [NativeLibrary.getOfferedPorts]: each port as its pad and label. */
     fun getOfferedPorts(): List<Choice<Int>>
+
+    fun setPortType(
+        pad: Int,
+        type: String,
+    )
+
+    /** [NativeLibrary.getTypeSettings], parsed. */
+    fun getTypeSettings(type: String): List<TypeSetting>
 
     fun setPadBinding(
         descriptor: String,
@@ -121,6 +130,14 @@ object NativeCoreApi : CoreApi {
         descriptor: String,
         pad: Int,
     ) = NativeLibrary.setControllerPort(descriptor, pad)
+
+    override fun setPortType(
+        pad: Int,
+        type: String,
+    ) = NativeLibrary.setPortType(pad, type)
+
+    override fun getTypeSettings(type: String): List<TypeSetting> =
+        TypeSetting.parse(NativeLibrary.getTypeSettings(type))
 
     override fun getOfferedPorts(): List<Choice<Int>> =
         NativeLibrary.getOfferedPorts().toList().chunked(2).mapNotNull { (pad, label) ->

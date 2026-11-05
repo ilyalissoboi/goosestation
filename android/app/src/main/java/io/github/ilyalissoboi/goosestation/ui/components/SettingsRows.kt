@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +80,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
@@ -186,7 +188,8 @@ fun SettingsLoadingPage(
  *
  * A, Enter or a tap on the row open its [ChoiceList] under the label line, one per page ([LocalChoiceListHost]).
  * Nothing changes until A on a choice, which selects it (if it isn't already) and closes the list. B, Back or a tap
- * on the row close it without a change; the focus goes back to the row. With no choices left, it closes.
+ * on the row close it without a change; the focus goes back to the row. With no choices left, it closes. Disabled
+ * ([enabled] false), it's dimmed and can't take the focus; its note still shows.
  */
 @Composable
 fun <T> CyclerRow(
@@ -196,12 +199,113 @@ fun <T> CyclerRow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     note: String? = null,
+    enabled: Boolean = true,
 ) {
-    val colors = GooseStationTheme.colors
-    var focused by remember { mutableStateOf(false) }
     val index = choices.indexOfFirst { it.value == selected }
     val current = choices.getOrNull(index)
     val select by rememberUpdatedState(onSelect)
+    SteppedRow(
+        label = label,
+        value = current?.label ?: selected?.toString() ?: "",
+        canStep = { by ->
+            choices.isNotEmpty() && if (by < 0) index != 0 else index != choices.lastIndex
+        },
+        onStep = { by ->
+            val next = if (index < 0) 0 else (index + by).coerceIn(0, choices.lastIndex)
+            if (choices.isNotEmpty() && next != index) select(choices[next].value)
+        },
+        choices = choices,
+        selected = selected,
+        onPick = { if (it != selected) select(it) },
+        modifier = modifier,
+        note = note,
+        currentNote = current?.note,
+        enabled = enabled,
+    )
+}
+
+/**
+ * A number setting, or one with a long ladder of values: the [label], and [value] as [scale] labels it, between two
+ * arrows. Left and right step by the scale ([NumberScale.next]), stopping at its ends, on each key-down, so a key held
+ * repeats; a tap on an arrow steps its way. Each step calls [onChange]. A, Enter or a tap on the row open the list of
+ * the scale's common values ([NumberScale.presets]), with [value] among them when it isn't one, as a [CyclerRow]'s
+ * list. A value off the scale shows as itself. [note] goes under the row. Disabled ([enabled] false), it's dimmed and
+ * can't take the focus.
+ */
+@Composable
+fun NumberRow(
+    label: String,
+    value: Int,
+    scale: NumberScale,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    note: String? = null,
+    enabled: Boolean = true,
+) {
+    val change by rememberUpdatedState(onChange)
+    // The value last asked for, so a held key's repeats that come before the page shows it step on from it.
+    val latest = remember { IntArray(1) }
+    SideEffect { latest[0] = value }
+    val choices = (scale.presets + value).distinct().sorted().map { Choice(it, scale.label(it)) }
+    SteppedRow(
+        label = label,
+        value = scale.label(value),
+        canStep = { by -> scale.next(latest[0], by) != null },
+        onStep = { by ->
+            scale.next(latest[0], by)?.let {
+                latest[0] = it
+                change(it)
+            }
+        },
+        choices = choices,
+        selected = value,
+        onPick = { if (it != value) change(it) },
+        modifier = modifier,
+        note = note,
+        currentNote = null,
+        enabled = enabled,
+    )
+}
+
+/**
+ * A page's section heading: [title] in the eyebrow style, as desktop names the section. Never a focus stop; read as
+ * a heading.
+ */
+@Composable
+fun SettingsSection(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Eyebrow(
+        title,
+        modifier =
+            modifier
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp)
+                .semantics { heading() },
+    )
+}
+
+/**
+ * [CyclerRow]'s and [NumberRow]'s row: the [label], the [value] between arrows that step by -1 or 1 ([onStep]) where
+ * [canStep] says, and the list of [choices], which [onPick] picks from. [currentNote] is the current choice's note,
+ * shown under [note] while the list is closed.
+ */
+@Composable
+private fun <T> SteppedRow(
+    label: String,
+    value: String,
+    canStep: (Int) -> Boolean,
+    onStep: (Int) -> Unit,
+    choices: List<Choice<T>>,
+    selected: T,
+    onPick: (T) -> Unit,
+    modifier: Modifier,
+    note: String?,
+    currentNote: String?,
+    enabled: Boolean,
+) {
+    val colors = GooseStationTheme.colors
+    var focused by remember { mutableStateOf(false) }
     val row = remember { FocusRequester() }
     // The page's, or the row's own outside a page.
     val host = LocalChoiceListHost.current ?: remember { ChoiceListHost() }
@@ -217,9 +321,8 @@ fun <T> CyclerRow(
     LaunchedEffect(open, choices.isEmpty()) { if (open && choices.isEmpty()) close() }
 
     fun step(by: Int) {
-        if (choices.isEmpty() || open) return
-        val next = if (index < 0) 0 else (index + by).coerceIn(0, choices.lastIndex)
-        if (next != index) select(choices[next].value)
+        if (!enabled || open || !canStep(by)) return
+        onStep(by)
     }
 
     Column(
@@ -229,7 +332,7 @@ fun <T> CyclerRow(
                 .focusRequester(row)
                 .onGloballyPositioned { if (open) host.openCoordinates = it }
                 // Before the focus ring, so the keys bubble up to it from the focused row. Both halves of the press
-                // are taken, so neither moves the focus sideways.
+                // are taken, so neither moves the focus sideways. Each key-down steps, a held key's repeats too.
                 .onKeyEvent { event ->
                     val by =
                         when (event.key) {
@@ -239,7 +342,7 @@ fun <T> CyclerRow(
                         }
                     if (event.type == KeyEventType.KeyDown) step(by)
                     true
-                }.focusRing(onFocusChange = { focused = it }, onClick = {
+                }.focusRing(enabled = enabled, onFocusChange = { focused = it }, onClick = {
                     when {
                         open -> close()
                         choices.isNotEmpty() -> host.open(key, row)
@@ -262,14 +365,21 @@ fun <T> CyclerRow(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         LabelValue(
-            label = { Text(label, style = MaterialTheme.typography.titleMedium, color = colors.ink) },
+            label = {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (enabled) colors.ink else colors.inkFaint,
+                )
+            },
             value = {
                 Cycler(
-                    value = current?.label ?: selected?.toString() ?: "",
+                    value = value,
                     active = focused,
+                    enabled = enabled,
                     // Faint while the list is open: it doesn't step then.
-                    canGoBack = !open && index != 0 && choices.isNotEmpty(),
-                    canGoForward = !open && index != choices.lastIndex && choices.isNotEmpty(),
+                    canGoBack = enabled && !open && canStep(-1),
+                    canGoForward = enabled && !open && canStep(1),
                     onBack = { step(-1) },
                     onForward = { step(1) },
                 )
@@ -281,24 +391,26 @@ fun <T> CyclerRow(
                 choices,
                 selected,
                 onPick = {
-                    if (it.value != selected) select(it.value)
+                    onPick(it.value)
                     close()
                 },
             )
         } else {
-            current?.note?.let { RowNote(it) }
+            currentNote?.let { RowNote(it) }
         }
     }
 }
 
 /**
- * The value of a [CyclerRow] in a well, between its arrows: in the beak's ink while the row is [active], faint at an
- * end they can't step past. The arrows take taps only; the row is what the focus lands on.
+ * The value of a [CyclerRow] or [NumberRow] in a well, between its arrows: in the beak's ink while the row is
+ * [active], faint at an end they can't step past, and the value faint while the row isn't [enabled]. The arrows take
+ * taps only; the row is what the focus lands on.
  */
 @Composable
 private fun Cycler(
     value: String,
     active: Boolean,
+    enabled: Boolean,
     canGoBack: Boolean,
     canGoForward: Boolean,
     onBack: () -> Unit,
@@ -317,7 +429,7 @@ private fun Cycler(
         Text(
             value,
             style = MaterialTheme.typography.titleSmall,
-            color = colors.ink,
+            color = if (enabled) colors.ink else colors.inkFaint,
             textAlign = TextAlign.Center,
             // After the arrows, so a long value wraps between them rather than pushing one out.
             modifier = Modifier.weight(1f, fill = false).widthIn(min = 96.dp).padding(vertical = 8.dp),
@@ -360,7 +472,8 @@ private fun CyclerArrow(
 
 /**
  * An on/off setting: the [label], and a square toggle showing [checked]. A, Enter or a tap call [onToggle]. The label
- * and its [note] wrap, each up to [maxLines] lines, then end in an ellipsis.
+ * and its [note] wrap, each up to [maxLines] lines, then end in an ellipsis. Disabled ([enabled] false), it's dimmed
+ * and can't take the focus; its note, which says why, still shows.
  */
 @Composable
 fun SwitchRow(
@@ -370,12 +483,13 @@ fun SwitchRow(
     modifier: Modifier = Modifier,
     note: String? = null,
     maxLines: Int = Int.MAX_VALUE,
+    enabled: Boolean = true,
 ) {
     Column(
         modifier =
             modifier
                 .fillMaxWidth()
-                .focusRing(role = Role.Switch, onClick = { onToggle(!checked) })
+                .focusRing(enabled = enabled, role = Role.Switch, onClick = { onToggle(!checked) })
                 .semantics { toggleableState = ToggleableState(checked) }
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -385,12 +499,12 @@ fun SwitchRow(
                 Text(
                     label,
                     style = MaterialTheme.typography.titleMedium,
-                    color = GooseStationTheme.colors.ink,
+                    color = if (enabled) GooseStationTheme.colors.ink else GooseStationTheme.colors.inkFaint,
                     maxLines = maxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             },
-            value = { Toggle(checked) },
+            value = { Toggle(checked, enabled) },
         )
         note?.let { RowNote(it, maxLines) }
     }
@@ -584,23 +698,37 @@ private fun Field(
     }
 }
 
-/** A square switch: a well with a muted thumb at the start when off, the beak with a dark thumb at the end when on. */
+/**
+ * A square switch: a well with a muted thumb at the start when off, the beak with a dark thumb at the end when on.
+ * Disabled, a well either way, with a faint thumb.
+ */
 @Composable
-private fun Toggle(checked: Boolean) {
+private fun Toggle(
+    checked: Boolean,
+    enabled: Boolean,
+) {
     val colors = GooseStationTheme.colors
+    val lit = checked && enabled
     Box(
         modifier =
             Modifier
                 .size(width = 44.dp, height = 24.dp)
-                .background(if (checked) colors.beak else colors.sunken, GsShapes.small)
-                .border(1.dp, if (checked) colors.beak else colors.lineStrong, GsShapes.small)
+                .background(if (lit) colors.beak else colors.sunken, GsShapes.small)
+                .border(1.dp, if (lit) colors.beak else colors.lineStrong, GsShapes.small)
                 .padding(4.dp),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         Box(
             Modifier
                 .size(16.dp)
-                .background(if (checked) colors.onBeak else colors.inkMuted, RoundedCornerShape(2.dp)),
+                .background(
+                    when {
+                        !enabled -> colors.inkFaint
+                        checked -> colors.onBeak
+                        else -> colors.inkMuted
+                    },
+                    RoundedCornerShape(2.dp),
+                ),
         )
     }
 }

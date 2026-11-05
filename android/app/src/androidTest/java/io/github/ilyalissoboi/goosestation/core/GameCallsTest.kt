@@ -444,6 +444,43 @@ class GameCallsTest {
         Thread.sleep(200)
     }
 
+    // Review Focus 1: a controller on a port the game doesn't have is told at the start. Multitap is on only in another
+    // game's file, so Port 1C is offered but this game has no multitap.
+    @Test
+    fun aControllerOnAnUnusedPortIsTold() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            settings = {
+                File(dataRoot, "gamesettings").mkdirs()
+                File(dataRoot, "gamesettings/SLUS-00001.ini").writeText("[ControllerPorts]\nMultitapMode = Port1Only\n")
+            },
+            onMessage = { _, text -> texts += text },
+            beforeBoot = { NativeLibrary.setControllerPort(PAD, 3) },
+        ) {}
+
+        assertTrue(texts.toString(), "Pad A is on Port 1C, which this game doesn't use." in texts)
+    }
+
+    @Test
+    fun noMessageOnAUsedPort() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(onMessage = { _, text -> texts += text }) {}
+
+        assertTrue(texts.toString(), texts.none { "which this game doesn't use" in it })
+    }
+
+    // A port set to Not Connected has no controller for it either.
+    @Test
+    fun aNotConnectedPortCountsAsUnused() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            onMessage = { _, text -> texts += text },
+            beforeBoot = { NativeLibrary.setControllerPort(PAD, 1) },
+        ) {}
+
+        assertTrue(texts.toString(), "Pad A is on Port 2, which this game doesn't use." in texts)
+    }
+
     // A controller on Port 2 presses Port 2's inputs, and not Port 1's.
     @Test
     fun aControllerOnPort2DrivesPort2() =
@@ -559,6 +596,7 @@ class GameCallsTest {
         onMessage: (key: String, text: String) -> Unit = { _, _ -> },
         onHotkey: (String) -> Unit = {},
         onRumble: (deviceId: Int, large: Float, small: Float) -> Unit = { _, _, _ -> },
+        beforeBoot: () -> Unit = {},
         refreshRate: Float = 0f,
         body: () -> Unit,
     ) {
@@ -616,6 +654,7 @@ class GameCallsTest {
             if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for the pad to connect")
             Thread.sleep(50)
         }
+        beforeBoot()
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f, refreshRate)

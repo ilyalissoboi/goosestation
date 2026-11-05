@@ -99,6 +99,8 @@ static u32 AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad);
 static bool HasDeviceBinding(SettingsInterface& si, u32 index, u32 pad);
 static bool AddControllerToPort(const std::string& identifier);
 static void UpdateSourceControllers();
+static std::string GetPortLabel(u32 pad, const std::array<bool, 2>& multitap);
+static void PostUnusedPortMessages();
 static void MapNewController(const std::string& identifier);
 static bool IsVulkanRenderer(GPURenderer renderer);
 static bool PadHasAnalogButton(SettingsInterface& si, u32 pad);
@@ -2039,14 +2041,60 @@ std::vector<std::pair<u32, std::string>> AndroidHost::GetOfferedPorts()
   for (u32 pad = 0; pad < AndroidInputKeys::NUM_PADS; pad++)
   {
     const auto [port, slot] = Controller::ConvertPadToPortAndSlot(pad);
-    if (slot != 0 && !multitap[port])
-      continue;
-
-    ports.emplace_back(pad, multitap[port] ? fmt::format("Port {}{}", port + 1, static_cast<char>('A' + slot)) :
-                                             fmt::format("Port {}", port + 1));
+    if (slot == 0 || multitap[port])
+      ports.emplace_back(pad, GetPortLabel(pad, multitap));
   }
 
   return ports;
+}
+
+// "Port 1", or "Port 1A" to "Port 1D" for a port with multitap: as a multitap slot always has its letter.
+std::string AndroidHost::GetPortLabel(u32 pad, const std::array<bool, 2>& multitap)
+{
+  const auto [port, slot] = Controller::ConvertPadToPortAndSlot(pad);
+  return (multitap[port] || slot != 0) ? fmt::format("Port {}{}", port + 1, static_cast<char>('A' + slot)) :
+                                         fmt::format("Port {}", port + 1);
+}
+
+// CPU thread, as a game starts: each connected controller whose port this game has no controller on is told so, as it
+// drives nothing. The core's own setup is what counts: a port without a type, or a multitap slot with its port's
+// multitap off.
+void AndroidHost::PostUnusedPortMessages()
+{
+  const auto in_use = [](u32 pad) {
+    if (g_settings.controller_types[pad] == ControllerType::None)
+      return false;
+
+    const auto [port, slot] = Controller::ConvertPadToPortAndSlot(pad);
+    const MultitapMode mode = g_settings.multitap_mode;
+    return slot == 0 || mode == MultitapMode::BothPorts ||
+           mode == ((port == 0) ? MultitapMode::Port1Only : MultitapMode::Port2Only);
+  };
+
+  std::vector<std::pair<u32, std::string>> offered;
+  std::vector<u32> told;
+  for (const ConnectedDevice& device : s_connected_devices)
+  {
+    // Two devices with one descriptor are one controller.
+    if (std::find(told.begin(), told.end(), device.index) != told.end())
+      continue;
+    told.push_back(device.index);
+
+    u32 pad;
+    {
+      const auto lock = Host::GetSettingsLock();
+      pad = GetPadOfIndex(*s_base_settings_interface, device.index);
+    }
+    if (in_use(pad))
+      continue;
+
+    if (offered.empty())
+      offered = GetOfferedPorts();
+    const auto it = std::find_if(offered.begin(), offered.end(), [pad](const auto& entry) { return entry.first == pad; });
+    const std::string label = (it != offered.end()) ? it->second : GetPortLabel(pad, {false, false});
+    Host::AddOSDMessage(fmt::format("{} is on {}, which this game doesn't use.", device.name, label),
+                        Host::OSD_INFO_DURATION);
+  }
 }
 
 float AndroidHost::GetPadBindStateForTest(u32 pad, std::string name)
@@ -2585,6 +2633,7 @@ void Host::OnSystemStarted()
   AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
                                  System::GetGameSerial(), g_settings.start_paused,
                                  g_settings.pause_on_controller_disconnection);
+  AndroidHost::PostUnusedPortMessages();
 }
 
 void Host::OnSystemDestroyed()

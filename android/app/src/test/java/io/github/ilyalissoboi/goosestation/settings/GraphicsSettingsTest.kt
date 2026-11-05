@@ -5,107 +5,93 @@ package io.github.ilyalissoboi.goosestation.settings
 
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GraphicsSettingsTest {
+    private val renderers =
+        listOf(
+            Choice("Automatic", "Automatic"),
+            Choice("Vulkan", "Vulkan"),
+            Choice("OpenGL", "OpenGL"),
+            Choice("Software", "Software"),
+        )
+
     @Test
     fun defaultsWhenMissing() {
-        assertEquals(
-            GraphicsSettings("Automatic", 1, "Auto (Game Native)", false),
-            GraphicsSettings.load(MemoryCoreSettings()),
-        )
+        val values = SettingValues.read(MemoryCoreSettings(), GraphicsSettings.all)
+
+        assertEquals("Automatic", values[GraphicsSettings.RENDERER])
+        assertEquals(1, values[GraphicsSettings.RESOLUTION_SCALE])
+        assertEquals("Auto (Game Native)", values[GraphicsSettings.ASPECT_RATIO])
+        assertEquals(false, values[GraphicsSettings.SHOW_FPS])
     }
 
     @Test
-    fun saveWritesOnlyChanges() {
+    fun everySettingIsSavedUnderItsKey() {
         val store = MemoryCoreSettings()
-        val old = GraphicsSettings.load(store)
+        val old = SettingValues.read(store, GraphicsSettings.all)
 
-        old.copy(resolutionScale = 4).save(store, old)
-
-        assertEquals(mapOf("GPU/ResolutionScale" to "4"), store.values)
-    }
-
-    @Test
-    fun everyFieldIsSavedUnderItsKey() {
-        val store = MemoryCoreSettings()
-        val old = GraphicsSettings.load(store)
-
-        GraphicsSettings("OpenGL", 3, "Stretch To Fill", true).save(store, old)
+        old
+            .with(GraphicsSettings.RENDERER, "Vulkan")
+            .with(GraphicsSettings.RESOLUTION_SCALE, 4)
+            .with(GraphicsSettings.ASPECT_RATIO, "16:9")
+            .with(GraphicsSettings.SHOW_FPS, true)
+            .save(store, old)
 
         assertEquals(
             mapOf(
-                "GPU/Renderer" to "OpenGL",
-                "GPU/ResolutionScale" to "3",
-                "Display/AspectRatio" to "Stretch To Fill",
+                "GPU/Renderer" to "Vulkan",
+                "GPU/ResolutionScale" to "4",
+                "Display/AspectRatio" to "16:9",
                 "Display/ShowFPS" to "true",
             ),
             store.values,
         )
-        assertEquals(GraphicsSettings("OpenGL", 3, "Stretch To Fill", true), GraphicsSettings.load(store))
     }
 
     @Test
-    fun unofferedValuesAreKept() {
-        assertEquals(Choice(12, "12x (from settings.ini)"), GraphicsChoices.scales(12).last())
-        assertEquals(
-            listOf(0, 1, 2, 3, 4, 5, 6, 7, 8),
-            GraphicsChoices.scales(3).map { it.value },
-        )
+    fun renderersAreTheCoresWithTheirNotes() {
+        val choices = GraphicsSettings.renderers(renderers, "Vulkan")
 
-        val renderers = GraphicsChoices.renderers("Software")
-        assertEquals("Software", renderers.last().value)
-        assertTrue(renderers.last().label.endsWith("(from settings.ini)"))
-        assertEquals(listOf("Automatic", "Vulkan", "OpenGL", "Software"), renderers.map { it.value })
+        assertEquals(renderers.map { it.label }, choices.map { it.label })
+        assertEquals("Vulkan where it works well, else OpenGL ES", choices[0].note)
+        assertEquals("OpenGL ES", choices[2].note)
     }
 
     @Test
-    fun anUnofferedScaleGoesInOrder() {
-        assertEquals(listOf(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8), GraphicsChoices.scales(-1).map { it.value })
-    }
-
-    @Test
-    fun offeredLabels() {
+    fun anUnofferedRendererIsKept() {
         assertEquals(
-            listOf("Automatic (Vulkan where it works well)", "Vulkan", "OpenGL ES"),
-            GraphicsChoices.renderers("Vulkan").map { it.label },
-        )
-        assertEquals(
-            listOf("Match the screen", "1x (native)", "2x", "3x", "4x", "5x", "6x", "7x", "8x"),
-            GraphicsChoices.scales(1).map { it.label },
+            Choice("Metal", "Metal (from settings.ini)"),
+            GraphicsSettings.renderers(renderers, "Metal").last(),
         )
     }
 
     @Test
-    fun customAspectIsLeftOut() {
-        val names = listOf("Auto (Game Native)", "Stretch To Fill", "Custom", "4:3", "16:9", "PAR 1:1")
+    fun scalesAreOfferedInOrder() {
+        assertEquals((0..8).toList(), GraphicsSettings.scales(3).map { it.value })
+        assertEquals("Match the screen", GraphicsSettings.scales(1)[0].label)
+        assertEquals("1x (native)", GraphicsSettings.scales(1)[1].label)
+        assertEquals(Choice(12, "12x (from settings.ini)"), GraphicsSettings.scales(12).last())
+        assertEquals(listOf(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8), GraphicsSettings.scales(-1).map { it.value })
+    }
 
-        val choices = GraphicsChoices.aspectRatios(names, "4:3")
+    @Test
+    fun aspectRatiosAreTheCoresWithFriendlyNotes() {
+        val names = listOf("Auto (Game Native)", "Stretch To Fill", "Custom", "4:3", "PAR 1:1").map { Choice(it, it) }
 
-        assertFalse(choices.any { it.value == "Custom" })
-        assertEquals(
-            listOf(
-                Choice("Auto (Game Native)", "The game's own (4:3 for most games)"),
-                Choice("Stretch To Fill", "Stretch to the screen"),
-                Choice("4:3", "4:3"),
-                Choice("16:9", "16:9"),
-                Choice("PAR 1:1", "Square pixels"),
-            ),
-            choices,
-        )
+        val choices = GraphicsSettings.aspectRatios(names, "4:3")
+
+        assertEquals(names.map { it.value }, choices.map { it.value })
+        assertEquals("The game's own (4:3 for most games)", choices[0].note)
+        assertEquals("Stretch to the screen", choices[1].note)
+        assertEquals("Square pixels", choices[4].note)
+        assertEquals(null, choices[3].note)
     }
 
     @Test
     fun anUnofferedAspectIsKept() {
-        val names = listOf("Auto (Game Native)", "Stretch To Fill", "Custom", "4:3")
+        val names = listOf(Choice("4:3", "4:3"))
 
-        val custom = GraphicsChoices.aspectRatios(names, "Custom")
-        val unknown = GraphicsChoices.aspectRatios(names, "5:4")
-
-        assertEquals(Choice("Custom", "Custom (from settings.ini)"), custom.last())
-        assertEquals(listOf("Auto (Game Native)", "Stretch To Fill", "4:3", "Custom"), custom.map { it.value })
-        assertEquals(Choice("5:4", "5:4 (from settings.ini)"), unknown.last())
+        assertEquals(Choice("5:4", "5:4 (from settings.ini)"), GraphicsSettings.aspectRatios(names, "5:4").last())
     }
 }

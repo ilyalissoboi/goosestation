@@ -5,6 +5,9 @@ package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,7 +66,12 @@ class SettingsAccessTest {
 
     @Test
     fun aspectRatioNamesAreDesktops() {
-        val names = NativeLibrary.getAspectRatioNames().toList()
+        val names =
+            NativeLibrary
+                .getSettingNames("DisplayAspectRatio")
+                .toList()
+                .chunked(2)
+                .map { it[0] }
 
         assertTrue(
             names.toString(),
@@ -144,6 +152,9 @@ class SettingsAccessTest {
     }
 
     @Test
+    fun graphicsDefaultsMatchTheCore() = assertDefaultsMatchTheCore(GraphicsSettings.all)
+
+    @Test
     fun defaultsBeforeInitialize() {
         assertEquals(7, NativeLibrary.getIntSetting("GPU", "ResolutionScale", 7))
         assertEquals("Automatic", NativeLibrary.getStringSetting("GPU", "Renderer", "Automatic"))
@@ -166,8 +177,24 @@ class SettingsAccessTest {
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())
 
+    // The core writes every default into a new settings.ini: each page's own defaults must be the same. The keys
+    // adapting a new install's file deletes (foreign_settings.cpp) take the core's default when read instead.
+    private fun assertDefaultsMatchTheCore(settings: List<Setting<*>>) {
+        initialize()
+        val file = readSettings()
+        for (setting in settings) {
+            val name = "${setting.section}/${setting.key}"
+            if (name in ADAPTED_AWAY) continue
+            assertTrue("$name isn't in a new settings.ini", file.value(setting.section, setting.key) != null)
+            assertEquals(name, setting.default, setting.read(NativeCoreSettings))
+        }
+    }
+
     private companion object {
         const val INSTALL_ID = "test-install"
+
+        /** The keys a new install's settings.ini loses as it's adapted: the device-specific ones. */
+        val ADAPTED_AWAY = setOf("GPU/Renderer")
 
         /** Every choice list the bridge names. */
         val KINDS =

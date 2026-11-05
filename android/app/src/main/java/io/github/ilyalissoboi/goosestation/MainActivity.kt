@@ -12,14 +12,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import io.github.ilyalissoboi.goosestation.app.AppController
+import io.github.ilyalissoboi.goosestation.app.CorePage
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.app.SyncBadges
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
@@ -95,20 +98,16 @@ class MainActivity : ComponentActivity() {
                             onOpen = AppController::openSettingsPage,
                             onBack = AppController::closeSettings,
                         )
-                    Screen.Graphics -> {
-                        val graphics = AppController.settingsPages.graphics
-                        if (graphics == null) {
-                            SettingsLoadingPage("Graphics", onBack = AppController::closeSettingsPage)
-                        } else {
+                    Screen.Graphics ->
+                        CorePageRoute(CorePage.Graphics) { values, onChange ->
                             GraphicsScreen(
-                                settings = graphics,
-                                aspectNames = AppController.settingsPages.aspectRatioNames,
+                                values = values,
+                                names = AppController.settingsPages.names,
                                 vulkanFailed = AppController.settingsPages.vulkanFailed,
-                                onChange = AppController.settingsPages::changeGraphics,
+                                onChange = onChange,
                                 onBack = AppController::closeSettingsPage,
                             )
                         }
-                    }
                     Screen.Achievements -> {
                         val page = AppController.achievementsPage
                         val account = page.account
@@ -327,5 +326,19 @@ class MainActivity : ComponentActivity() {
         val controllers = AppController.controllers
         if (controllers != null && controllers.onMotionEvent(event, padInput)) return true
         return super.dispatchGenericMotionEvent(event)
+    }
+}
+
+/** [page] once its values are read ([content], given them and where its changes go), its loading page until then. */
+@Composable
+private fun CorePageRoute(
+    page: CorePage,
+    content: @Composable (SettingValues, (SettingValues) -> Unit) -> Unit,
+) {
+    val values = AppController.settingsPages.values(page)
+    if (values == null) {
+        SettingsLoadingPage(page.title, onBack = AppController::closeSettingsPage)
+    } else {
+        content(values) { AppController.settingsPages.change(page, it) }
     }
 }

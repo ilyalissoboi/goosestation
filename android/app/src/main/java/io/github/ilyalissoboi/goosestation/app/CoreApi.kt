@@ -57,8 +57,6 @@ interface CoreApi {
 
     fun applySettings()
 
-    fun getAspectRatioNames(): List<String>
-
     fun isVulkanFailed(): Boolean
 
     /** The core's choice list [kind] (an enum's name, as [NativeLibrary.getSettingNames] takes it), in its order. */
@@ -137,8 +135,6 @@ object NativeCoreApi : CoreApi {
         NativeLibrary.getControllerIndex(descriptor).takeIf { it >= 0 }
 
     override fun applySettings() = NativeLibrary.applySettings()
-
-    override fun getAspectRatioNames(): List<String> = NativeLibrary.getAspectRatioNames().toList()
 
     override fun isVulkanFailed(): Boolean = NativeLibrary.isVulkanFailed()
 

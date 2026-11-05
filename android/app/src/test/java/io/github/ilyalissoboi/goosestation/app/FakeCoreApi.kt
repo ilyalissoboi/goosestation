@@ -36,7 +36,7 @@ class FakeCoreApi(
     /** Port 1's controller type, as the core names it. */
     var port1Type: String? = "AnalogController"
 
-    /** Runs once, as the next read of the Graphics or the BIOS page reaches the core, as if the user acted meanwhile. */
+    /** Runs once, as the next read of the BIOS page reaches the core, as if the user acted meanwhile. */
     var duringRead: () -> Unit = {}
 
     override fun getPadBindings(descriptor: String): List<PadBinding>? =
@@ -91,12 +91,6 @@ class FakeCoreApi(
 
     override fun applySettings() {
         calls += "applySettings"
-    }
-
-    override fun getAspectRatioNames(): List<String> {
-        calls += "getAspectRatioNames"
-        takeDuringRead()
-        return listOf("Auto (Game Native)", "4:3")
     }
 
     override fun isVulkanFailed(): Boolean = false

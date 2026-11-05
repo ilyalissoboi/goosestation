@@ -266,12 +266,6 @@ object NativeLibrary {
     ): ByteArray?
 
     /**
-     * The names settings.ini gives `[Display] AspectRatio`, in the core's order: desktop's, such as `Auto (Game
-     * Native)`, `Stretch To Fill` and `4:3`. Doesn't need [initialize].
-     */
-    external fun getAspectRatioNames(): Array<String>
-
-    /**
      * Where the memory cards are, relative to the data root: the memory card folder with a trailing `/` (empty if
      * it's the data root itself), then each shared card file elsewhere in the data root: set in settings.ini, in a
      * game's settings in the game settings folder, or open in the running game. Paths outside the data root are left

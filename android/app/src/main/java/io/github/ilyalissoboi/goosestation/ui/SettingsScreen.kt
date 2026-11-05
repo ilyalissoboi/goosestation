@@ -12,17 +12,17 @@ import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 
-/** The settings hub's entries, each a page, in the order the hub lists them; all but Folders need the core. */
+/** The settings hub's entries, each a page, in desktop's order, as the hub lists them; all but Folders need the core. */
 enum class SettingsEntry(
     val label: String,
     val summary: String,
     val needsCore: Boolean = true,
 ) {
-    Controllers("Controllers", "Remap each controller's buttons"),
-    Graphics("Graphics", "Renderer, resolution, aspect ratio, FPS"),
-    Achievements("Achievements", "Sign-in, hardcore mode, messages"),
-    MemoryCards("Memory cards", "Sync your saves with your other devices"),
     Bios("BIOS", "Which BIOS each region uses, fast boot"),
+    Graphics("Graphics", "Renderer, enhancements, display, on-screen display"),
+    Controllers("Controllers", "Remap each controller's buttons"),
+    MemoryCards("Memory cards", "Sync your saves with your other devices"),
+    Achievements("Achievements", "Sign-in, hardcore mode, messages"),
     Folders("Folders", "BIOS, games and data folders", needsCore = false),
 }
 

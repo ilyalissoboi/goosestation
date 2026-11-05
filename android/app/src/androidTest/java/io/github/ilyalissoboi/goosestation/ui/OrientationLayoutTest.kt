@@ -158,7 +158,17 @@ class OrientationLayoutTest {
             mapOf(
                 "Renderer" to "Automatic",
                 "Internal resolution" to "Match the screen",
-                "Aspect ratio" to "The game's own",
+                "Aspect ratio" to "Auto (Game Native)",
+            )
+
+        /** Values from settings.ini that the Graphics page doesn't offer, so each list ends with one. */
+        val GRAPHICS_FROM_FILE =
+            pageValues(
+                GraphicsSettings.all,
+                "GPU/Renderer" to "Metal",
+                "GPU/ResolutionScale" to "12",
+                "Display/AspectRatio" to "21:9",
+                "Display/ShowFPS" to "true",
             )
 
         val CONFIGS = SIZES.flatMap { (name, size) -> listOf(1f, 1.3f).map { Config(name, size, it) } }
@@ -202,9 +212,6 @@ class OrientationLayoutTest {
                     Triple("RDown", "Right Stick Down", "+Axis14"),
                     Triple("RUp", "Right Stick Up", "-Axis14"),
                 ).map { (name, display, binding) -> PadBinding(name, display, PadBindingKind.HalfAxis, binding) }
-
-        val ASPECT_NAMES =
-            listOf("Auto (Game Native)", "Stretch To Fill", "Custom", "4:3", "16:9", "19:9", "20:9", "PAR 1:1")
     }
 
     @get:Rule val rule = createComposeRule()
@@ -955,8 +962,8 @@ class OrientationLayoutTest {
     fun graphicsThroughEachRowsChoices() {
         eachConfig({
             // Values from settings.ini that the page doesn't offer, so each list ends with one.
-            var settings by remember { mutableStateOf(GraphicsSettings("Software", 12, "21:9", showFps = true)) }
-            GraphicsScreen(settings, ASPECT_NAMES, vulkanFailed = true, onChange = { settings = it }, onBack = {})
+            var values by remember { mutableStateOf(GRAPHICS_FROM_FILE) }
+            GraphicsScreen(values, SampleNames.ALL, vulkanFailed = true, onChange = { values = it }, onBack = {})
         }) {
             assertTextsLaidOut()
             assertShows("Vulkan didn't start")
@@ -968,7 +975,7 @@ class OrientationLayoutTest {
             for (
             (row, last) in
             listOf(
-                "Renderer" to "Software (from settings.ini)",
+                "Renderer" to "Metal (from settings.ini)",
                 "Internal resolution" to "12x (from settings.ini)",
                 "Aspect ratio" to "21:9 (from settings.ini)",
             )
@@ -986,14 +993,14 @@ class OrientationLayoutTest {
     @Test
     fun graphicsWithEachListOpen() {
         eachConfig({
-            var settings by remember { mutableStateOf(GraphicsSettings("Software", 12, "21:9", showFps = true)) }
-            GraphicsScreen(settings, ASPECT_NAMES, vulkanFailed = true, onChange = { settings = it }, onBack = {})
+            var values by remember { mutableStateOf(GRAPHICS_FROM_FILE) }
+            GraphicsScreen(values, SampleNames.ALL, vulkanFailed = true, onChange = { values = it }, onBack = {})
         }) {
             // Each row's list, from its first choice to its last (the value from settings.ini), every one in view.
             for (
             (row, last) in
             listOf(
-                "Renderer" to "Software (from settings.ini)",
+                "Renderer" to "Metal (from settings.ini)",
                 "Internal resolution" to "12x (from settings.ini)",
                 "Aspect ratio" to "21:9 (from settings.ini)",
             )

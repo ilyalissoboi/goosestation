@@ -264,8 +264,8 @@ class FocusAuditTest {
     fun graphics() {
         show {
             GraphicsScreen(
-                settings = GraphicsSettings("Automatic", 1, "Auto (Game Native)", false),
-                aspectNames = listOf("Auto (Game Native)", "4:3"),
+                values = pageValues(GraphicsSettings.all),
+                names = SampleNames.ALL,
                 vulkanFailed = false,
                 onChange = {},
                 onBack = {},

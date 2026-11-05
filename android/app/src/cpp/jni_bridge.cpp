@@ -1814,24 +1814,6 @@ NATIVE_LIBRARY_FUNCTION(void, setMemcardSyncPeriodForTest)(JNIEnv*, jobject, jlo
   MemcardSyncBridge::SetPeriodicSyncForTest(static_cast<u32>(std::max<jlong>(ms, 0)));
 }
 
-NATIVE_LIBRARY_FUNCTION(jobjectArray, getAspectRatioNames)(JNIEnv* env, jobject)
-{
-  std::vector<std::string> names;
-  names.reserve(static_cast<size_t>(DisplayAspectRatio::Count));
-  for (u32 i = 0; i < static_cast<u32>(DisplayAspectRatio::Count); i++)
-    names.emplace_back(Settings::GetDisplayAspectRatioName(static_cast<DisplayAspectRatio>(i)));
-
-  // Kotlin takes the array as never null: a failure gives an empty one.
-  jobjectArray result = ToJStringArray(env, names);
-  if (!result)
-  {
-    result = env->NewObjectArray(0, s_string_class, nullptr);
-    ClearException(env);
-  }
-
-  return result;
-}
-
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemoryCardPaths)(JNIEnv* env, jobject)
 {
   const std::optional<std::vector<std::string>> paths = AndroidHost::GetMemoryCardPaths();

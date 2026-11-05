@@ -616,13 +616,14 @@ object AppController : NativeCallbacks {
     val settingsReady get() = ready && !gameActive
 
     /**
-     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. Graphics and BIOS show once their
+     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. A [CorePage] and BIOS show once their
      * settings are read, on [coreDispatcher]; Controllers once its bindings are.
      */
     fun openSettingsPage(entry: SettingsEntry) {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
+        CorePage.of(entry)?.let(settingsPages::load)
         when (entry) {
-            SettingsEntry.Graphics -> settingsPages.loadGraphics()
+            SettingsEntry.Graphics -> {}
             SettingsEntry.Achievements -> achievementsPage.load()
             SettingsEntry.MemoryCards -> {
                 memcardSyncStatus.refresh()

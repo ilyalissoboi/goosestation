@@ -67,7 +67,12 @@ fun GameScreen(
             factory = { context ->
                 SurfaceView(context).apply {
                     keepScreenOn = true
-                    holder.addCallback(SurfaceCallback(context.resources.displayMetrics.density))
+                    holder.addCallback(
+                        SurfaceCallback(context.resources.displayMetrics.density) {
+                            display?.refreshRate
+                                ?: 0f
+                        },
+                    )
                 }
             },
         )
@@ -79,6 +84,8 @@ fun GameScreen(
 // Each call waits until the core has finished with the previous surface, so a destroyed one is never drawn to.
 private class SurfaceCallback(
     private val scale: Float,
+    // The screen's, as the view shows on it now.
+    private val refreshRate: () -> Float,
 ) : SurfaceHolder.Callback {
     override fun surfaceCreated(holder: SurfaceHolder) {
         // surfaceChanged() always follows, with the size.
@@ -90,10 +97,10 @@ private class SurfaceCallback(
         width: Int,
         height: Int,
     ) {
-        NativeLibrary.surfaceChanged(holder.surface, width, height, scale)
+        NativeLibrary.surfaceChanged(holder.surface, width, height, scale, refreshRate())
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        NativeLibrary.surfaceChanged(null, 0, 0, 0.0f)
+        NativeLibrary.surfaceChanged(null, 0, 0, 0.0f, 0.0f)
     }
 }

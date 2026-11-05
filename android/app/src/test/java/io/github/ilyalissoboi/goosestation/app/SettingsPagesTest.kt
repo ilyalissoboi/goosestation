@@ -5,9 +5,11 @@ package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
+import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.SettingsEntry
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -180,6 +182,25 @@ class SettingsPagesTest {
             assertNull(pages.values(CorePage.Graphics))
             runCurrent()
             assertNotNull(pages.values(CorePage.Graphics))
+        }
+
+    @Test
+    fun theRewindEstimateIsReadWithEmulationAndAfterEachChange() =
+        runTest {
+            val pages = pages()
+            pages.load(CorePage.Emulation)
+            runCurrent()
+            assertEquals(RewindUsage(40L * 1_048_576, 20L * 1_048_576), pages.rewindUsage)
+            calls.clear()
+
+            pages.change(
+                CorePage.Emulation,
+                pages.values(CorePage.Emulation)!!.with(EmulationSettings.REWIND_SLOTS, 20),
+            )
+            runCurrent()
+
+            assertEquals(listOf("applySettings", "getRewindMemoryUsage 20"), calls)
+            assertEquals(RewindUsage(80L * 1_048_576, 40L * 1_048_576), pages.rewindUsage)
         }
 
     private fun SettingsPages.graphicsWith(showFps: Boolean) =

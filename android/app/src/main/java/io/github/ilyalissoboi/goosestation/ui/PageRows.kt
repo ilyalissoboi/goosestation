@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.github.ilyalissoboi.goosestation.settings.BoolSetting
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
+import io.github.ilyalissoboi.goosestation.settings.FloatSetting
 import io.github.ilyalissoboi.goosestation.settings.IntSetting
 import io.github.ilyalissoboi.goosestation.settings.NameSetting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -16,6 +17,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.NumberScale
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
+import kotlin.math.roundToInt
 
 // A settings page's rows, each bound to its setting in a page's values: a change comes as the whole values with that
 // setting changed ([onChange]).
@@ -54,6 +56,29 @@ fun Number(
     values[setting],
     scale,
     onChange = { onChange(values.with(setting, it)) },
+    modifier = modifier,
+    note = note,
+)
+
+/**
+ * A [NumberRow] for a float [setting], on [scale] in [units] to the setting's one: 100 for a percentage of a factor
+ * or hundredths of a second, 10 for tenths. A value between the units shows rounded, and is written only once changed.
+ */
+@Composable
+fun Number(
+    values: SettingValues,
+    onChange: (SettingValues) -> Unit,
+    label: String,
+    setting: FloatSetting,
+    scale: NumberScale,
+    units: Int,
+    note: String? = null,
+    modifier: Modifier = Modifier,
+) = NumberRow(
+    label,
+    (values[setting] * units).roundToInt(),
+    scale,
+    onChange = { onChange(values.with(setting, it / units.toFloat())) },
     modifier = modifier,
     note = note,
 )

@@ -89,7 +89,7 @@ static bool InitializeConfig(Error* error);
 static void SetDefaultSettings(SettingsInterface& si);
 static void LoadFolders(SettingsInterface& si);
 static void QueueInputEvent(InputEvent event);
-static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale);
+static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
 static std::optional<u32> FindDescriptorIndex(std::string_view descriptor);
 static void WriteDescriptors(SettingsInterface& si);
 static const Controller::ControllerInfo* GetPort1ControllerInfo(SettingsInterface& si);
@@ -197,6 +197,7 @@ static ANativeWindow* s_window = nullptr;
 static u32 s_window_width = 0;
 static u32 s_window_height = 0;
 static float s_window_scale = 1.0f;
+static float s_window_refresh_rate = 0.0f; // the screen's, in Hz; 0 when the app doesn't know it
 static std::optional<std::string> s_pending_boot_path;
 static AndroidDiscGroups::Game s_pending_game;     // the game the pending boot is for
 static u32 s_pending_playlist_index = 0;          // the pending boot's sub-image, for a playlist
@@ -635,6 +636,18 @@ void AndroidHost::ApplySettings()
     return;
 
   EmuThread::RunOnThread([]() { System::ApplySettings(false); }, true);
+}
+
+float AndroidHost::GetSurfaceRefreshRateForTest()
+{
+  float rate = 0.0f;
+  EmuThread::RunOnThread(
+    [&rate]() {
+      if (g_gpu_device)
+        rate = g_gpu_device->GetWindowInfo().surface_refresh_rate;
+    },
+    true);
+  return rate;
 }
 
 bool AndroidHost::IsVulkanFailed()
@@ -1305,7 +1318,7 @@ void AndroidHost::SaveScreenshot()
     false);
 }
 
-void AndroidHost::SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale)
+void AndroidHost::SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate)
 {
   if (!s_initialized)
   {
@@ -1316,16 +1329,18 @@ void AndroidHost::SurfaceChanged(ANativeWindow* window, s32 width, s32 height, f
   }
 
   // Blocks, so the app's surface outlives the GPU device's use of it.
-  EmuThread::RunOnThread([window, width, height, scale]() { SetWindow(window, width, height, scale); }, true);
+  EmuThread::RunOnThread(
+    [window, width, height, scale, refresh_rate]() { SetWindow(window, width, height, scale, refresh_rate); }, true);
 }
 
-void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float scale)
+void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate)
 {
   if (window)
   {
     s_window_width = static_cast<u32>((width > 0) ? width : ANativeWindow_getWidth(window));
     s_window_height = static_cast<u32>((height > 0) ? height : ANativeWindow_getHeight(window));
     s_window_scale = (scale > 0.0f) ? scale : 1.0f;
+    s_window_refresh_rate = std::max(refresh_rate, 0.0f);
   }
 
   if (window && window == s_window)
@@ -2370,6 +2385,8 @@ std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)
   wi.surface_width = AndroidHost::s_window_width;
   wi.surface_height = AndroidHost::s_window_height;
   wi.surface_scale = AndroidHost::s_window_scale;
+  // Sync to host refresh rate compares this with the game's rate.
+  wi.surface_refresh_rate = AndroidHost::s_window_refresh_rate;
   return wi;
 }
 

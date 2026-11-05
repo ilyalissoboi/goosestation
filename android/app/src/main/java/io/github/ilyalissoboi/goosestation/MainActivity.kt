@@ -29,6 +29,7 @@ import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.ConsoleScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
+import io.github.ilyalissoboi.goosestation.ui.EmulationScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
@@ -109,6 +110,15 @@ class MainActivity : ComponentActivity() {
                             ConsoleScreen(
                                 values,
                                 AppController.settingsPages.names,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    Screen.Emulation ->
+                        CorePageRoute(CorePage.Emulation) { values, onChange ->
+                            EmulationScreen(
+                                values,
+                                AppController.settingsPages.rewindUsage,
                                 onChange,
                                 onBack = AppController::closeSettingsPage,
                             )

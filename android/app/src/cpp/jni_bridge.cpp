@@ -2352,7 +2352,7 @@ NATIVE_LIBRARY_FUNCTION(void, setPaused)(JNIEnv*, jobject, jboolean paused)
 }
 
 NATIVE_LIBRARY_FUNCTION(void, surfaceChanged)(JNIEnv* env, jobject, jobject surface, jint width, jint height,
-                                              jfloat scale)
+                                              jfloat scale, jfloat refresh_rate)
 {
   ANativeWindow* window = nullptr;
   if (surface)
@@ -2363,7 +2363,12 @@ NATIVE_LIBRARY_FUNCTION(void, surfaceChanged)(JNIEnv* env, jobject, jobject surf
       ERROR_LOG("ANativeWindow_fromSurface() failed, treating the surface as destroyed.");
   }
 
-  AndroidHost::SurfaceChanged(window, width, height, scale);
+  AndroidHost::SurfaceChanged(window, width, height, scale, refresh_rate);
+}
+
+NATIVE_LIBRARY_FUNCTION(jfloat, getSurfaceRefreshRateForTest)(JNIEnv*, jobject)
+{
+  return AndroidHost::GetSurfaceRefreshRateForTest();
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, onKey)(JNIEnv*, jobject, jint device_id, jint keycode, jboolean pressed)

@@ -89,6 +89,8 @@ class SettingsScreenTest {
         press(Key.DirectionUp)
         assertFocusedHas("BIOS", "Which BIOS each region uses, fast boot")
         press(Key.DirectionUp)
+        assertFocusedHas("Emulation", "Speed, frame pacing, rewind, run-ahead")
+        press(Key.DirectionUp)
         assertFocusedHas("Console", "Region, CPU, CD-ROM speed")
         press(Key.DirectionUp)
         assertFocusedHas("Interface", "Pausing, resume states, backups")
@@ -98,6 +100,7 @@ class SettingsScreenTest {
         (label, summary) in
         listOf(
             "Console" to "Region, CPU, CD-ROM speed",
+            "Emulation" to "Speed, frame pacing, rewind, run-ahead",
             "BIOS" to "Which BIOS each region uses, fast boot",
             "Graphics" to "Renderer, enhancements, display, on-screen display",
             "Controllers" to "Remap each controller's buttons",

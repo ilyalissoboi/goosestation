@@ -162,7 +162,7 @@ class GameCallsTest {
         initialize()
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, 0f)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
@@ -187,7 +187,7 @@ class GameCallsTest {
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
-            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             NativeLibrary.setCallbacks(null)
             surface.release()
             texture.release()
@@ -269,7 +269,7 @@ class GameCallsTest {
         val padtest = NativeLibrary.getGameList().single()
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, 0f)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(padtest.path, 1, false)
@@ -279,7 +279,7 @@ class GameCallsTest {
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
-            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             NativeLibrary.setCallbacks(null)
             surface.release()
             texture.release()
@@ -389,6 +389,12 @@ class GameCallsTest {
         }
 
     @Test
+    fun theScreensRefreshRateReachesTheCore() =
+        withPadtest(refreshRate = 60f) {
+            assertEquals(60f, NativeLibrary.getSurfaceRefreshRateForTest())
+        }
+
+    @Test
     fun theBootSaysWhatThePauseSettingsAre() {
         var flags: Pair<Boolean, Boolean>? = null
         withPadtest(
@@ -421,6 +427,7 @@ class GameCallsTest {
         settings: () -> Unit = {},
         onStarted: (startPaused: Boolean, pauseOnDisconnect: Boolean) -> Unit = { _, _ -> },
         onMessage: (key: String, text: String) -> Unit = { _, _ -> },
+        refreshRate: Float = 0f,
         body: () -> Unit,
     ) {
         val exe = File(root, "padtest.psexe")
@@ -471,7 +478,7 @@ class GameCallsTest {
         }
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, refreshRate)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
@@ -481,7 +488,7 @@ class GameCallsTest {
         } finally {
             NativeLibrary.shutdownGame()
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
-            NativeLibrary.surfaceChanged(null, 0, 0, 1f)
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             NativeLibrary.setCallbacks(null)
             surface.release()
             texture.release()

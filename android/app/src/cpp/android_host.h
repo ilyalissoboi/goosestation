@@ -196,7 +196,10 @@ void SetPaused(bool paused);
 
 /// A new, resized or destroyed (nullptr) surface. Takes over one reference to the window, and returns once the GPU
 /// device has stopped using the old one.
-void SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale);
+void SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
+
+/// Tests: the refresh rate the running GPU device's window has, 0 without one. On the CPU thread, waiting for it.
+float GetSurfaceRefreshRateForTest();
 
 /// Controller input, from any thread. It's queued and passed to the input source on the CPU thread; events for a
 /// device only count once its connection is queued. Returns whether the key goes to the core: every key but Back and

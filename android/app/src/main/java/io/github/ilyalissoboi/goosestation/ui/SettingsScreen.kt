@@ -20,6 +20,7 @@ enum class SettingsEntry(
 ) {
     Interface("Interface", "Pausing, resume states, backups"),
     Console("Console", "Region, CPU, CD-ROM speed"),
+    Emulation("Emulation", "Speed, frame pacing, rewind, run-ahead"),
     Bios("BIOS", "Which BIOS each region uses, fast boot"),
     Graphics("Graphics", "Renderer, enhancements, display, on-screen display"),
     Controllers("Controllers", "Remap each controller's buttons"),

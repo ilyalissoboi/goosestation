@@ -14,9 +14,11 @@ import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
+import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.SettingsEntry
@@ -31,6 +33,7 @@ enum class CorePage(
 ) {
     Interface(SettingsEntry.Interface),
     Console(SettingsEntry.Console),
+    Emulation(SettingsEntry.Emulation),
     Graphics(SettingsEntry.Graphics),
     ;
 
@@ -42,6 +45,7 @@ enum class CorePage(
             when (this) {
                 Interface -> InterfaceSettings.all
                 Console -> ConsoleSettings.all
+                Emulation -> EmulationSettings.all
                 Graphics -> GraphicsSettings.all
             }
 
@@ -66,6 +70,10 @@ class SettingsPages(
 
     /** The core's choice lists, read with the first page and kept: they don't change. Empty until then. */
     var names by mutableStateOf<CoreNames>(emptyMap())
+        private set
+
+    /** What Emulation's rewind states take, as the core said when that page was last read or changed. */
+    var rewindUsage by mutableStateOf<RewindUsage?>(null)
         private set
 
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
@@ -118,9 +126,21 @@ class SettingsPages(
         shown[page] = new
         val reread = pageReading[page] == true
         pageRead[page] = (pageRead[page] ?: 0) + 1
-        scope.launch(core) {
-            new.save(settings, old)
-            api.applySettings()
+        scope.launch {
+            val usage =
+                withContext(core) {
+                    new.save(settings, old)
+                    api.applySettings()
+                    // The core estimates from the settings it has: these, now applied.
+                    if (page ==
+                        CorePage.Emulation
+                    ) {
+                        api.getRewindMemoryUsage(new[EmulationSettings.REWIND_SLOTS])
+                    } else {
+                        null
+                    }
+                }
+            if (usage != null && new == shown[page]) rewindUsage = usage
         }
         if (reread) read(page)
     }
@@ -169,12 +189,16 @@ class SettingsPages(
                         names = known.ifEmpty { NameList.entries.associateWith { api.getSettingNames(it.kind) } },
                         values = SettingValues.read(settings, page.settings),
                         vulkanFailed = page == CorePage.Graphics && api.isVulkanFailed(),
-                    )
+                    ).let {
+                        if (page != CorePage.Emulation) return@let it
+                        it.copy(rewindUsage = api.getRewindMemoryUsage(it.values[EmulationSettings.REWIND_SLOTS]))
+                    }
                 }
             if (read != pageRead[page]) return@launch
             pageReading[page] = false
             names = loaded.names
             if (page == CorePage.Graphics) vulkanFailed = loaded.vulkanFailed
+            loaded.rewindUsage?.let { rewindUsage = it }
             shown[page] = loaded.values
         }
     }
@@ -200,8 +224,9 @@ class SettingsPages(
 }
 
 /** What a page's read found. */
-private class PageRead(
+private data class PageRead(
     val names: CoreNames,
     val values: SettingValues,
     val vulkanFailed: Boolean,
+    val rewindUsage: RewindUsage? = null,
 )

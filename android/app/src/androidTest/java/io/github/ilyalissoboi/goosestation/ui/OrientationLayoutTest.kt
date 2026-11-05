@@ -89,8 +89,10 @@ import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertTrue
@@ -777,6 +779,51 @@ class OrientationLayoutTest {
                     "Region" to ("Auto-Detect" to "NTSC-U/C (US, Canada)"),
                     "Read speed-up" to ("None (double speed)" to "12x (24x speed)"),
                     "Overclocking percentage" to ("50%" to "400%"),
+                ),
+        )
+
+    @Test
+    fun theEmulationPage() =
+        settingsPageFits(
+            {
+                var values by remember {
+                    mutableStateOf(
+                        pageValues(
+                            EmulationSettings.all,
+                            "Main/EmulationSpeed" to "1.33",
+                            "Display/OptimalFramePacing" to "true",
+                            "Display/PreFrameSleep" to "true",
+                            "Main/RewindEnable" to "true",
+                        ),
+                    )
+                }
+                EmulationScreen(
+                    values,
+                    RewindUsage(40L * 1_048_576, 20L * 1_048_576),
+                    onChange = { values = it },
+                    onBack = {},
+                )
+            },
+            rows =
+                listOf(
+                    "Emulation speed",
+                    "Fast-forward speed",
+                    "Turbo speed",
+                    "VSync",
+                    "Sync to host refresh rate",
+                    "Optimal frame pacing",
+                    "Reduce input latency",
+                    "Frame time buffer",
+                    "Skip duplicate frames",
+                    "Rewind",
+                    "Save frequency",
+                    "Save slots",
+                    "Run-ahead",
+                ),
+            lists =
+                mapOf(
+                    "Emulation speed" to ("Unlimited" to "1000%"),
+                    "Save slots" to ("10 states" to "1000 states"),
                 ),
         )
 

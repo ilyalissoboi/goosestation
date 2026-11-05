@@ -58,6 +58,7 @@ import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
@@ -271,6 +272,12 @@ class FocusAuditTest {
     @Test
     fun consolePage() {
         show { ConsoleScreen(pageValues(ConsoleSettings.all), SampleNames.ALL, onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun emulationPage() {
+        show { EmulationScreen(pageValues(EmulationSettings.all), null, onChange = {}, onBack = {}) }
         rule.assertControllerReady()
     }
 

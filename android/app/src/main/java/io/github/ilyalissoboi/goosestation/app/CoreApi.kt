@@ -11,14 +11,9 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import kotlinx.coroutines.flow.StateFlow
-
-/** What rewind's states take: [ramBytes] of memory and [vramBytes] of video memory. */
-data class RewindUsage(
-    val ramBytes: Long,
-    val vramBytes: Long,
-)
 
 /**
  * The core's calls the settings pages make, as [NativeLibrary] has them ([NativeCoreApi]), so the pages can be tested

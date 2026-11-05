@@ -433,13 +433,20 @@ object NativeLibrary {
 
     external fun setPaused(paused: Boolean)
 
-    /** A new or resized surface, or null when it's destroyed. Returns once the core has stopped using the old one. */
+    /**
+     * A new or resized surface, or null when it's destroyed, on a screen refreshing at [refreshRate] Hz (0 if not
+     * known). Returns once the core has stopped using the old one.
+     */
     external fun surfaceChanged(
         surface: Surface?,
         width: Int,
         height: Int,
         scale: Float,
+        refreshRate: Float,
     )
+
+    /** Tests: the refresh rate the running game's GPU device was given, 0 without one. Waits for the core. */
+    external fun getSurfaceRefreshRateForTest(): Float
 
     /** A controller key; returns whether it went to the emulated pad. */
     external fun onKey(

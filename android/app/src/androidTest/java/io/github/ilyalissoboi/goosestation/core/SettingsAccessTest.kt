@@ -5,10 +5,12 @@ package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
@@ -158,6 +160,12 @@ class SettingsAccessTest {
     fun graphicsDefaultsMatchTheCore() = assertDefaultsMatchTheCore(GraphicsSettings.all)
 
     @Test
+    fun audioDefaultsMatchTheCore() = assertDefaultsMatchTheCore(AudioSettings.all)
+
+    @Test
+    fun memoryCardDefaultsMatchTheCore() = assertDefaultsMatchTheCore(MemoryCardSettings.all)
+
+    @Test
     fun consoleDefaultsMatchTheCore() = assertDefaultsMatchTheCore(ConsoleSettings.all)
 
     @Test
@@ -213,6 +221,9 @@ class SettingsAccessTest {
                 // the denominator (settings.cpp:571-572): a desktop bug, left as it is here. Load's own 4:3 is kept.
                 "Display/CustomAspectRatioNumerator",
                 "Display/CustomAspectRatioDenominator",
+                // Left out while empty (Settings::Save), which is their default: the slot's own shared card.
+                "MemoryCards/Card1Path",
+                "MemoryCards/Card2Path",
             )
 
         /** Every choice list the bridge names. */

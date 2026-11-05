@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosFastBoot
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
 import io.github.ilyalissoboi.goosestation.settings.BiosPage
@@ -17,6 +18,7 @@ import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.settings.Setting
@@ -35,6 +37,10 @@ enum class CorePage(
     Console(SettingsEntry.Console),
     Emulation(SettingsEntry.Emulation),
     Graphics(SettingsEntry.Graphics),
+    Audio(SettingsEntry.Audio),
+
+    /** Memory cards' card slot rows, beside its sync rows. */
+    MemoryCards(SettingsEntry.MemoryCards),
     ;
 
     val title get() = entry.label
@@ -47,6 +53,8 @@ enum class CorePage(
                 Console -> ConsoleSettings.all
                 Emulation -> EmulationSettings.all
                 Graphics -> GraphicsSettings.all
+                Audio -> AudioSettings.all
+                MemoryCards -> MemoryCardSettings.all
             }
 
     companion object {
@@ -74,6 +82,10 @@ class SettingsPages(
 
     /** What Emulation's rewind states take, as the core said when that page was last read or changed. */
     var rewindUsage by mutableStateOf<RewindUsage?>(null)
+        private set
+
+    /** The memory card folder's cards, read with Memory cards' card slots. */
+    var sharedCards by mutableStateOf(emptyList<String>())
         private set
 
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
@@ -190,8 +202,14 @@ class SettingsPages(
                         values = SettingValues.read(settings, page.settings),
                         vulkanFailed = page == CorePage.Graphics && api.isVulkanFailed(),
                     ).let {
-                        if (page != CorePage.Emulation) return@let it
-                        it.copy(rewindUsage = api.getRewindMemoryUsage(it.values[EmulationSettings.REWIND_SLOTS]))
+                        when (page) {
+                            CorePage.Emulation ->
+                                it.copy(
+                                    rewindUsage = api.getRewindMemoryUsage(it.values[EmulationSettings.REWIND_SLOTS]),
+                                )
+                            CorePage.MemoryCards -> it.copy(sharedCards = api.getSharedCardNames())
+                            else -> it
+                        }
                     }
                 }
             if (read != pageRead[page]) return@launch
@@ -199,6 +217,7 @@ class SettingsPages(
             names = loaded.names
             if (page == CorePage.Graphics) vulkanFailed = loaded.vulkanFailed
             loaded.rewindUsage?.let { rewindUsage = it }
+            loaded.sharedCards?.let { sharedCards = it }
             shown[page] = loaded.values
         }
     }
@@ -229,4 +248,5 @@ private data class PageRead(
     val values: SettingValues,
     val vulkanFailed: Boolean,
     val rewindUsage: RewindUsage? = null,
+    val sharedCards: List<String>? = null,
 )

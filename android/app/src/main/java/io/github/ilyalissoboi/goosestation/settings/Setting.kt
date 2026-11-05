@@ -71,3 +71,17 @@ data class NameSetting(
         value: String,
     ) = s.setString(section, key, value)
 }
+
+/** A setting whose value is free text, such as a file name. */
+data class StringSetting(
+    override val section: String,
+    override val key: String,
+    override val default: String,
+) : Setting<String> {
+    override fun read(s: CoreSettings) = s.getString(section, key, default)
+
+    override fun write(
+        s: CoreSettings,
+        value: String,
+    ) = s.setString(section, key, value)
+}

@@ -87,11 +87,13 @@ import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -912,6 +914,27 @@ class OrientationLayoutTest {
         )
 
     @Test
+    fun theAudioPage() =
+        settingsPageFits(
+            {
+                var values by remember { mutableStateOf(pageValues(AudioSettings.all)) }
+                AudioScreen(values, SampleNames.ALL, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Output volume",
+                    "Fast-forward volume",
+                    "Mute",
+                    "Mute CD audio",
+                    "Stretch mode",
+                    "Buffer size",
+                    "Minimal output latency",
+                    "Output latency",
+                ),
+            lists = mapOf("Output volume" to ("0%" to "200%")),
+        )
+
+    @Test
     fun theHubWithTheCoreReady() {
         eachConfig({ SettingsScreen(focusEntry = null, coreReady = true, onOpen = {}, onBack = {}) }) {
             assertTextsLaidOut()
@@ -1106,6 +1129,17 @@ class OrientationLayoutTest {
                 cardsSummary = "12 cards",
                 onManageCards = {},
                 onBack = {},
+                cards =
+                    CardSlots(
+                        pageValues(
+                            MemoryCardSettings.all,
+                            "MemoryCards/Card1Type" to "Shared",
+                            "MemoryCards/Card1Path" to "a_card_with_a_rather_long_name_from_desktop.mcd",
+                        ),
+                        SampleNames.ALL,
+                        listOf("b.mcd"),
+                        onChange = {},
+                    ),
             )
         }) {
             assertTextsLaidOut()
@@ -1113,6 +1147,9 @@ class OrientationLayoutTest {
             assertShows("Remove the passphrase to use it")
             pressUntilFocused(Key.DirectionDown, "2 conflicts")
             assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Shared card 1")
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "One card for all discs of a game")
         }
     }
 

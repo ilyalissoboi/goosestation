@@ -56,11 +56,13 @@ import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
 import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
@@ -425,8 +427,21 @@ class FocusAuditTest {
                 cardsSummary = "12 cards",
                 onManageCards = {},
                 onBack = {},
+                cards =
+                    CardSlots(
+                        pageValues(MemoryCardSettings.all, "MemoryCards/Card1Type" to "Shared"),
+                        SampleNames.ALL,
+                        listOf("a.mcd"),
+                        onChange = {},
+                    ),
             )
         }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun audioPage() {
+        show { AudioScreen(pageValues(AudioSettings.all), SampleNames.ALL, onChange = {}, onBack = {}) }
         rule.assertControllerReady()
     }
 

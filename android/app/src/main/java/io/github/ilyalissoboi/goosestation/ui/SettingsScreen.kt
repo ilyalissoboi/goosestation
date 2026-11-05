@@ -23,8 +23,9 @@ enum class SettingsEntry(
     Emulation("Emulation", "Speed, frame pacing, rewind, run-ahead"),
     Bios("BIOS", "Which BIOS each region uses, fast boot"),
     Graphics("Graphics", "Renderer, enhancements, display, on-screen display"),
+    Audio("Audio", "Volume, latency"),
     Controllers("Controllers", "Remap each controller's buttons"),
-    MemoryCards("Memory cards", "Sync your saves with your other devices"),
+    MemoryCards("Memory cards", "Card types, sync, the card editor"),
     Achievements("Achievements", "Sign-in, hardcore mode, messages"),
     Folders("Folders", "BIOS, games and data folders", needsCore = false),
 }

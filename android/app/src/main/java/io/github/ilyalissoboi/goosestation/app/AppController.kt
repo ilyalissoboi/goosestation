@@ -80,6 +80,7 @@ enum class Screen(
     Console(SettingsEntry.Console),
     Emulation(SettingsEntry.Emulation),
     Graphics(SettingsEntry.Graphics),
+    Audio(SettingsEntry.Audio),
     Achievements(SettingsEntry.Achievements),
     MemoryCards(SettingsEntry.MemoryCards),
     Bios(SettingsEntry.Bios),
@@ -629,7 +630,13 @@ object AppController : NativeCallbacks {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
         CorePage.of(entry)?.let(settingsPages::load)
         when (entry) {
-            SettingsEntry.Interface, SettingsEntry.Console, SettingsEntry.Emulation, SettingsEntry.Graphics -> {}
+            // Read as their CorePage, above.
+            SettingsEntry.Interface,
+            SettingsEntry.Console,
+            SettingsEntry.Emulation,
+            SettingsEntry.Graphics,
+            SettingsEntry.Audio,
+            -> {}
             SettingsEntry.Achievements -> achievementsPage.load()
             SettingsEntry.MemoryCards -> {
                 memcardSyncStatus.refresh()

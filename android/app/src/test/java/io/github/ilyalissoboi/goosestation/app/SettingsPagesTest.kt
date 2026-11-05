@@ -203,6 +203,19 @@ class SettingsPagesTest {
             assertEquals(RewindUsage(80L * 1_048_576, 40L * 1_048_576), pages.rewindUsage)
         }
 
+    @Test
+    fun theSharedCardsAreReadWithMemoryCards() =
+        runTest {
+            val pages = pages()
+            api.sharedCards = listOf("a.mcd", "shared_card_1.mcd")
+
+            pages.load(CorePage.MemoryCards)
+            runCurrent()
+
+            assertEquals(listOf("a.mcd", "shared_card_1.mcd"), pages.sharedCards)
+            assertNotNull(pages.values(CorePage.MemoryCards))
+        }
+
     private fun SettingsPages.graphicsWith(showFps: Boolean) =
         values(CorePage.Graphics)!!.with(GraphicsSettings.SHOW_FPS, showFps)
 }

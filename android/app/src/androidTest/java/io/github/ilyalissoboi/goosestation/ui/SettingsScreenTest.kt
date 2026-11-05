@@ -85,6 +85,8 @@ class SettingsScreenTest {
 
         // From Controllers up to the first entry, then down to the last.
         press(Key.DirectionUp)
+        assertFocusedHas("Audio", "Volume, latency")
+        press(Key.DirectionUp)
         assertFocusedHas("Graphics", "Renderer, enhancements, display, on-screen display")
         press(Key.DirectionUp)
         assertFocusedHas("BIOS", "Which BIOS each region uses, fast boot")
@@ -103,8 +105,9 @@ class SettingsScreenTest {
             "Emulation" to "Speed, frame pacing, rewind, run-ahead",
             "BIOS" to "Which BIOS each region uses, fast boot",
             "Graphics" to "Renderer, enhancements, display, on-screen display",
+            "Audio" to "Volume, latency",
             "Controllers" to "Remap each controller's buttons",
-            "Memory cards" to "Sync your saves with your other devices",
+            "Memory cards" to "Card types, sync, the card editor",
             "Achievements" to "Sign-in, hardcore mode, messages",
             "Folders" to "BIOS, games and data folders",
         )

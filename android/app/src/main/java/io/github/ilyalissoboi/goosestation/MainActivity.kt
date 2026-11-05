@@ -26,7 +26,9 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
+import io.github.ilyalissoboi.goosestation.ui.AudioScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
+import io.github.ilyalissoboi.goosestation.ui.CardSlots
 import io.github.ilyalissoboi.goosestation.ui.ConsoleScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
 import io.github.ilyalissoboi.goosestation.ui.EmulationScreen
@@ -123,6 +125,15 @@ class MainActivity : ComponentActivity() {
                                 onBack = AppController::closeSettingsPage,
                             )
                         }
+                    Screen.Audio ->
+                        CorePageRoute(CorePage.Audio) { values, onChange ->
+                            AudioScreen(
+                                values,
+                                AppController.settingsPages.names,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
                     Screen.Graphics ->
                         CorePageRoute(CorePage.Graphics) { values, onChange ->
                             GraphicsScreen(
@@ -172,6 +183,17 @@ class MainActivity : ComponentActivity() {
                                 cardsSummary = MemcardEditorWords.cardCount(AppController.memcardEditor.cardCount),
                                 onManageCards = AppController::openMemcardEditor,
                                 onBack = AppController::closeSettingsPage,
+                                cards =
+                                    AppController.settingsPages.values(CorePage.MemoryCards)?.let {
+                                        CardSlots(
+                                            it,
+                                            AppController.settingsPages.names,
+                                            AppController.settingsPages.sharedCards,
+                                            onChange = { new ->
+                                                AppController.settingsPages.change(CorePage.MemoryCards, new)
+                                            },
+                                        )
+                                    },
                             )
                         }
                     }

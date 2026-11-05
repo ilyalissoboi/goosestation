@@ -67,15 +67,6 @@ class GraphicsSettingsTest {
     }
 
     @Test
-    fun scalesAreOfferedInOrder() {
-        assertEquals((0..8).toList(), GraphicsSettings.scales(3).map { it.value })
-        assertEquals("Match the screen", GraphicsSettings.scales(1)[0].label)
-        assertEquals("1x (native)", GraphicsSettings.scales(1)[1].label)
-        assertEquals(Choice(12, "12x (from settings.ini)"), GraphicsSettings.scales(12).last())
-        assertEquals(listOf(-1, 0, 1, 2, 3, 4, 5, 6, 7, 8), GraphicsSettings.scales(-1).map { it.value })
-    }
-
-    @Test
     fun aspectRatiosAreTheCoresWithFriendlyNotes() {
         val names = listOf("Auto (Game Native)", "Stretch To Fill", "Custom", "4:3", "PAR 1:1").map { Choice(it, it) }
 
@@ -93,5 +84,61 @@ class GraphicsSettingsTest {
         val names = listOf(Choice("4:3", "4:3"))
 
         assertEquals(Choice("5:4", "5:4 (from settings.ini)"), GraphicsSettings.aspectRatios(names, "5:4").last())
+    }
+
+    private fun values(vararg file: Pair<String, String>) =
+        SettingValues.read(MemoryCoreSettings().apply { values += file }, GraphicsSettings.all)
+
+    @Test
+    fun theSpriteFilterFollowsTheTextureFilter() {
+        assertEquals("Bilinear", GraphicsSettings.spriteFilter(values("GPU/TextureFilter" to "Bilinear")))
+        assertEquals(
+            "Nearest",
+            GraphicsSettings.spriteFilter(
+                values(
+                    "GPU/TextureFilter" to "Bilinear",
+                    "GPU/SpriteTextureFilter" to "Nearest",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun theToleranceIsInHundredths() {
+        assertEquals("Off", GraphicsSettings.TOLERANCES.label(-100))
+        assertEquals("0.25 px", GraphicsSettings.TOLERANCES.label(25))
+        assertEquals(0, GraphicsSettings.TOLERANCES.next(-100, 1))
+        assertEquals(-100, GraphicsSettings.TOLERANCES.next(0, -1))
+        assertEquals(25, GraphicsSettings.TOLERANCES.next(0, 1))
+    }
+
+    @Test
+    fun multisamplingIsOneRowOverTwoKeys() {
+        assertEquals(
+            listOf("Off", "2x MSAA", "4x MSAA", "8x MSAA", "2x SSAA", "4x SSAA", "8x SSAA"),
+            GraphicsSettings.multisampling(1 to false).map { it.label },
+        )
+        assertEquals(
+            Choice(16 to true, "16x SSAA (from settings.ini)"),
+            GraphicsSettings.multisampling(16 to true).last(),
+        )
+        val changed = GraphicsSettings.withMultisampling(values(), 4 to true)
+        assertEquals(4, changed[GraphicsSettings.MULTISAMPLES])
+        assertEquals(true, changed[GraphicsSettings.PER_SAMPLE_SHADING])
+    }
+
+    @Test
+    fun theResolutionRangesToSixteen() {
+        assertEquals("Match the screen", GraphicsSettings.RESOLUTIONS.label(0))
+        assertEquals("1x (native)", GraphicsSettings.RESOLUTIONS.label(1))
+        assertEquals("16x", GraphicsSettings.RESOLUTIONS.label(16))
+        assertEquals(null, GraphicsSettings.RESOLUTIONS.next(16, 1))
+    }
+
+    @Test
+    fun theDepthThresholdHasItsOwnKey() {
+        assertEquals("PGXPDepthClearThreshold", GraphicsSettings.DEPTH_CLEAR_THRESHOLD.key)
+        assertEquals(300f, values()[GraphicsSettings.DEPTH_CLEAR_THRESHOLD])
+        assertEquals(false, values()[GraphicsSettings.PGXP_VERTEX_CACHE])
     }
 }

@@ -3,6 +3,10 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -53,20 +57,28 @@ class GraphicsScreenTest {
         rule.onNode(isFocused()).assert(hasText(text, substring = true))
     }
 
+    private fun focusedHas(text: String) =
+        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+
+    private fun downTo(text: String) {
+        repeat(60) {
+            if (focusedHas(text)) return
+            press(Key.DirectionDown)
+        }
+        throw AssertionError("Down never reached $text")
+    }
+
     @Test
     fun eachRowChangesOnlyItsSetting() {
         show()
 
         assertFocusedHas("Renderer")
         press(Key.DirectionRight)
-        press(Key.DirectionDown)
-        assertFocusedHas("Internal resolution")
+        downTo("Internal resolution")
         press(Key.DirectionRight)
-        press(Key.DirectionDown)
-        assertFocusedHas("Aspect ratio")
+        downTo("Aspect ratio")
         press(Key.DirectionRight)
-        press(Key.DirectionDown)
-        assertFocusedHas("Show FPS")
+        downTo("Show FPS")
         press(Key.ButtonA)
 
         assertEquals(
@@ -78,6 +90,104 @@ class GraphicsScreenTest {
             ),
             changes,
         )
+    }
+
+    @Test
+    fun theSectionsAreInOrder() {
+        show(pageValues(GraphicsSettings.all, "GPU/PGXPEnable" to "true"))
+
+        for (section in listOf(
+            "RENDERING",
+            "ENHANCEMENTS",
+            "PGXP",
+            "DISPLAY",
+        )) {
+            rule.onNodeWithText(section).assertExists()
+        }
+        downTo("Texture filtering")
+        downTo("Geometry correction")
+        downTo("Aspect ratio")
+    }
+
+    @Test
+    fun softwareHidesTheHardwareRows() {
+        show(pageValues(GraphicsSettings.all, "GPU/Renderer" to "Software", "GPU/PGXPEnable" to "true"))
+
+        for (row in listOf(
+            "Internal resolution",
+            "Multisampling",
+            "Texture filtering",
+            "True colour",
+            "Geometry correction",
+            "Threaded presentation",
+        )) {
+            rule.onNodeWithText(row).assertDoesNotExist()
+        }
+        rule.onNodeWithText("Threaded rendering").assertExists()
+        rule.onNodeWithText("Widescreen rendering").assertExists()
+    }
+
+    @Test
+    fun multisamplingWritesBothKeys() {
+        show()
+
+        downTo("Multisampling")
+        press(Key.ButtonA)
+        repeat(5) { press(Key.DirectionDown) }
+        assertFocusedHas("4x SSAA")
+        press(Key.ButtonA)
+
+        assertEquals(
+            start.with(GraphicsSettings.MULTISAMPLES, 4).with(GraphicsSettings.PER_SAMPLE_SHADING, true),
+            changes.single(),
+        )
+    }
+
+    @Test
+    fun pgxpOffHidesItsRowsAndKeepsTheFocus() {
+        rule.setContent {
+            GooseStationTheme {
+                var values by remember { mutableStateOf(pageValues(GraphicsSettings.all, "GPU/PGXPEnable" to "true")) }
+                GraphicsScreen(values, SampleNames.ALL, false, onChange = { values = it }, onBack = {})
+            }
+        }
+        rule.waitForIdle()
+        downTo("Geometry correction")
+        rule.onNodeWithText("Culling correction").assertExists()
+
+        press(Key.ButtonA)
+
+        rule.onNodeWithText("Culling correction").assertDoesNotExist()
+        assertFocusedHas("Geometry correction")
+    }
+
+    @Test
+    fun theDepthThresholdWritesItsOwnKey() {
+        show(pageValues(GraphicsSettings.all, "GPU/PGXPEnable" to "true", "GPU/PGXPDepthBuffer" to "true"))
+
+        downTo("Depth clear threshold")
+        press(Key.DirectionRight)
+
+        assertEquals(
+            pageValues(GraphicsSettings.all, "GPU/PGXPEnable" to "true", "GPU/PGXPDepthBuffer" to "true")
+                .with(GraphicsSettings.DEPTH_CLEAR_THRESHOLD, 310f),
+            changes.single(),
+        )
+    }
+
+    @Test
+    fun theSpriteFilterFollowsTheTextureFilter() {
+        show(pageValues(GraphicsSettings.all, "GPU/TextureFilter" to "Bilinear"))
+
+        downTo("Sprite texture filtering")
+        assertFocusedHas("Bilinear")
+    }
+
+    @Test
+    fun boxDownsamplingHasAScale() {
+        show(pageValues(GraphicsSettings.all, "GPU/DownsampleMode" to "Box"))
+
+        downTo("Downsampling scale")
     }
 
     @Test

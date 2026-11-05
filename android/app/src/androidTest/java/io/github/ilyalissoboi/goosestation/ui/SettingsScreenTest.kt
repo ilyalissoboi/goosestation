@@ -211,8 +211,16 @@ class SettingsScreenTest {
             .onNode(hasText("Higher is sharper and slower. Match the screen picks the highest that fits."))
             .assertDoesNotExist()
 
-        // Renderer, Internal resolution, Aspect ratio, then Show FPS.
-        repeat(3) { press(Key.DirectionDown) }
+        repeat(60) {
+            if (rule
+                    .onAllNodes(
+                        isFocused() and hasText("Show FPS"),
+                    ).fetchSemanticsNodes()
+                    .isEmpty()
+            ) {
+                press(Key.DirectionDown)
+            }
+        }
         assertFocusedHas("Show FPS")
         rule.onNode(isFocused()).assertIsOff()
         press(Key.Enter)

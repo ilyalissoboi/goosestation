@@ -1109,7 +1109,7 @@ class OrientationLayoutTest {
             (row, last) in
             listOf(
                 "Renderer" to "Metal (from settings.ini)",
-                "Internal resolution" to "12x (from settings.ini)",
+                "Internal resolution" to "12x",
                 "Aspect ratio" to "21:9 (from settings.ini)",
             )
             ) {
@@ -1134,7 +1134,7 @@ class OrientationLayoutTest {
             (row, last) in
             listOf(
                 "Renderer" to "Metal (from settings.ini)",
-                "Internal resolution" to "12x (from settings.ini)",
+                "Internal resolution" to "12x",
                 "Aspect ratio" to "21:9 (from settings.ini)",
             )
             ) {

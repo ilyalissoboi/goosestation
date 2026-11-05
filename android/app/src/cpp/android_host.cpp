@@ -1047,8 +1047,9 @@ static std::optional<std::string> RunOnSlot(const std::string& key, s32 slot, co
 
 std::optional<std::string> AndroidHost::SaveState(std::string key, s32 slot)
 {
+  // A slot save keeps the state it replaces as a .bak when asked, as desktop's do; the resume state never does.
   return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
-    return System::SaveState(path.c_str(), error, false);
+    return System::SaveState(path.c_str(), error, g_settings.create_save_state_backups);
   });
 }
 
@@ -2208,8 +2209,10 @@ void Host::OnSystemStarted()
   // A file the library didn't list is keyed by the core's ID for it.
   if (AndroidHost::s_running_game.has_value() && AndroidHost::s_running_game->key.empty())
     AndroidHost::s_running_game->key = System::GetGameSerial();
+  // As the core has them for this game, on the CPU thread: the app opens the menu for these itself.
   AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
-                                 System::GetGameSerial());
+                                 System::GetGameSerial(), g_settings.start_paused,
+                                 g_settings.pause_on_controller_disconnection);
 }
 
 void Host::OnSystemDestroyed()

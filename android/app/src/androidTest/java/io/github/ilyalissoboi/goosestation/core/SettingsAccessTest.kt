@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.core
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
@@ -153,6 +154,9 @@ class SettingsAccessTest {
 
     @Test
     fun graphicsDefaultsMatchTheCore() = assertDefaultsMatchTheCore(GraphicsSettings.all)
+
+    @Test
+    fun interfaceDefaultsMatchTheCore() = assertDefaultsMatchTheCore(InterfaceSettings.all)
 
     @Test
     fun defaultsBeforeInitialize() {

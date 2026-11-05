@@ -296,7 +296,7 @@ void AttachCurrentThreadToJVM(const char* name);
 void DetachCurrentThreadFromJVM();
 
 /// Calls the app's NativeCallbacks, from any thread. Does nothing while the app has registered none.
-void NotifyGameStarted(std::string_view title, std::string_view serial);
+void NotifyGameStarted(std::string_view title, std::string_view serial, bool start_paused, bool pause_on_disconnect);
 void NotifyGameStopped();
 void NotifyError(std::string_view message);
 void NotifyBindingCaptured(std::string_view binding);

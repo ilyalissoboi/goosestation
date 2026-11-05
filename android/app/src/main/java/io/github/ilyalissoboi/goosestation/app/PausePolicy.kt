@@ -25,4 +25,24 @@ object PausePolicy {
             pausedDuringBoot -> false
             else -> null
         }
+
+    /**
+     * Whether a game that has just booted opens its menu: with `[Main] StartPaused` it boots paused, and one left as
+     * it booted ([atBoot] null, [PausePolicy.atBoot]'s) would show a still game with no way on but Back.
+     */
+    fun opensMenuAtBoot(
+        startPaused: Boolean,
+        atBoot: Boolean?,
+    ): Boolean = startPaused && atBoot == null
+
+    /**
+     * Whether a controller going opens the game's menu: with `[Main] PauseOnControllerDisconnection` ([setting]), while
+     * the game runs on the game screen with the menu closed. Every controller drives the game, so each has bindings.
+     */
+    fun pausesOnDisconnect(
+        setting: Boolean,
+        gameRunning: Boolean,
+        onGameScreen: Boolean,
+        promptOpen: Boolean,
+    ): Boolean = setting && gameRunning && onGameScreen && !promptOpen
 }

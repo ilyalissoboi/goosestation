@@ -310,7 +310,8 @@ void AndroidHost::DetachCurrentThreadFromJVM()
   s_attached_env = nullptr;
 }
 
-void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view serial)
+void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view serial, bool start_paused,
+                                    bool pause_on_disconnect)
 {
   ScopedJNIEnv env;
   if (!env)
@@ -324,7 +325,8 @@ void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view ser
   jstring jserial = ToJString(env.get(), serial);
   if (jtitle && jserial)
   {
-    env->CallVoidMethod(callbacks, s_on_game_started, jtitle, jserial);
+    env->CallVoidMethod(callbacks, s_on_game_started, jtitle, jserial, start_paused ? JNI_TRUE : JNI_FALSE,
+                        pause_on_disconnect ? JNI_TRUE : JNI_FALSE);
     ClearException(env.get());
   }
 
@@ -787,7 +789,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_callbacks_class = static_cast<jclass>(env->NewGlobalRef(callbacks_class));
   env->DeleteLocalRef(callbacks_class);
   s_on_game_started =
-    env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;Ljava/lang/String;)V");
+    env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;Ljava/lang/String;ZZ)V");
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");

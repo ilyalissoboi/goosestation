@@ -54,6 +54,9 @@ class ControllerInput(
     /** Called when a controller asks for the game's menu: Mode, or Select and Start held together ([MenuTrigger]). */
     var onMenuRequested: (() -> Unit)? = null
 
+    /** Called with a controller's name once it's gone: the last of its devices was removed. */
+    var onControllerDisconnected: ((name: String) -> Unit)? = null
+
     /**
      * The descriptors of the controllers with a hotkey chord bound (Select + a button), whose Select is held back so
      * the game doesn't see it before the chord completes ([SelectChord]). Set as a game starts, empty without one.
@@ -217,11 +220,12 @@ class ControllerInput(
         // Even one never reported to the core: its motion is remembered all the same.
         axisMemory.forget(deviceId)
         axisHold.forget(deviceId)
-        if (devices.remove(deviceId) == null) return
+        val gone = devices.remove(deviceId) ?: return
         for (keyCode in keys.forget(deviceId)) NativeLibrary.onKey(deviceId, keyCode, false)
         schedule()
         NativeLibrary.onDeviceDisconnected(deviceId)
         publishConnected()
+        if (devices.values.none { it.descriptor == gone.descriptor }) onControllerDisconnected?.invoke(gone.name)
     }
 
     override fun onInputDeviceChanged(deviceId: Int) {}

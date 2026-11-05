@@ -8,10 +8,15 @@ package io.github.ilyalissoboi.goosestation.core
  * UI's: post to the UI thread, and never wait for it (it may be waiting for the core in [NativeLibrary.surfaceChanged]).
  */
 interface NativeCallbacks {
-    /** The game from [NativeLibrary.startGame] booted: its [title], and its [serial] (blank for none). */
+    /**
+     * The game from [NativeLibrary.startGame] booted: its [title], its [serial] (blank for none), and whether it
+     * [startPaused] and pauses when a controller disconnects ([pauseOnDisconnect]), as the core has them for it.
+     */
     fun onGameStarted(
         title: String,
         serial: String,
+        startPaused: Boolean,
+        pauseOnDisconnect: Boolean,
     )
 
     /**

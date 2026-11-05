@@ -89,6 +89,7 @@ import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertTrue
@@ -693,6 +694,52 @@ class OrientationLayoutTest {
 
         override fun cancelReplaceResume() {}
     }
+
+    /**
+     * A settings page at every size: its texts laid out, the focus on [rows]' first on opening, each row reached with
+     * Down in order and scrolled into view, then each of [lists]' rows opened, from its first choice to its last.
+     */
+    private fun settingsPageFits(
+        content: @Composable () -> Unit,
+        rows: List<String>,
+        lists: Map<String, Pair<String, String>> = emptyMap(),
+    ) {
+        eachConfig(content) {
+            assertTextsLaidOut()
+            assertTrue("the page opened on ${focusedText()}", focusedHas(rows.first()))
+            assertFocusedInView()
+            for (row in rows.drop(1)) pressUntilFocused(Key.DirectionDown, row)
+            for ((row, ends) in lists) {
+                pressUntilFocused(Key.DirectionUp, rows.first())
+                pressUntilFocused(Key.DirectionDown, row)
+                press(Key.ButtonA)
+                assertFocusedInView()
+                pressUntilFocused(Key.DirectionUp, ends.first)
+                assertTextsLaidOut()
+                pressUntilFocused(Key.DirectionDown, ends.second)
+                assertTextsLaidOut()
+                press(Key.ButtonB)
+                assertTrue("B didn't close $row's list: the focus is on ${focusedText()}", focusedHas(row))
+            }
+            pressUntilFocused(Key.DirectionUp, rows.first())
+        }
+    }
+
+    @Test
+    fun theInterfacePage() =
+        settingsPageFits(
+            {
+                var values by remember { mutableStateOf(pageValues(InterfaceSettings.all)) }
+                InterfaceScreen(values, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Pause on start",
+                    "Pause when a controller disconnects",
+                    "Save state on exit",
+                    "Create save state backups",
+                ),
+        )
 
     @Test
     fun theHubWithTheCoreReady() {

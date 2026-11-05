@@ -14,6 +14,7 @@ import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -27,6 +28,7 @@ import kotlinx.coroutines.withContext
 enum class CorePage(
     val entry: SettingsEntry,
 ) {
+    Interface(SettingsEntry.Interface),
     Graphics(SettingsEntry.Graphics),
     ;
 
@@ -36,6 +38,7 @@ enum class CorePage(
     val settings: List<Setting<*>>
         get() =
             when (this) {
+                Interface -> InterfaceSettings.all
                 Graphics -> GraphicsSettings.all
             }
 

@@ -76,6 +76,7 @@ enum class Screen(
     Library,
     Settings,
     Controllers(SettingsEntry.Controllers),
+    Interface(SettingsEntry.Interface),
     Graphics(SettingsEntry.Graphics),
     Achievements(SettingsEntry.Achievements),
     MemoryCards(SettingsEntry.MemoryCards),
@@ -392,6 +393,9 @@ object AppController : NativeCallbacks {
      * [onGameStarted] unpauses the game if it may run by then. Reset as the game starts or stops.
      */
     private var pausedDuringBoot = false
+
+    /** The running game pauses into its menu when a controller disconnects: its `[Main] PauseOnControllerDisconnection`. */
+    private var pausesOnDisconnect = false
     var controllers: ControllerInput? = null
         private set
 
@@ -623,7 +627,7 @@ object AppController : NativeCallbacks {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
         CorePage.of(entry)?.let(settingsPages::load)
         when (entry) {
-            SettingsEntry.Graphics -> {}
+            SettingsEntry.Interface, SettingsEntry.Graphics -> {}
             SettingsEntry.Achievements -> achievementsPage.load()
             SettingsEntry.MemoryCards -> {
                 memcardSyncStatus.refresh()
@@ -985,6 +989,13 @@ object AppController : NativeCallbacks {
         gameMenu.opened()
         controllers?.releaseAll()
         pauseGame()
+    }
+
+    // A controller went: with PauseOnControllerDisconnection, the game pauses into its menu, as Back does.
+    private fun controllerDisconnected(name: String) {
+        if (!PausePolicy.pausesOnDisconnect(pausesOnDisconnect, gameRunning, screen == Screen.Game, promptOpen)) return
+        openPrompt()
+        osd.post("$name disconnected")
     }
 
     /** Pauses the game, which writes its memory cards: for the prompt, or the app going to the background. */
@@ -1365,6 +1376,7 @@ object AppController : NativeCallbacks {
         controllers =
             ControllerInput(context).also {
                 it.onMenuRequested = ::openPrompt
+                it.onControllerDisconnected = ::controllerDisconnected
                 it.start()
             }
         return true
@@ -1472,8 +1484,11 @@ object AppController : NativeCallbacks {
     override fun onGameStarted(
         title: String,
         serial: String,
+        startPaused: Boolean,
+        pauseOnDisconnect: Boolean,
     ) {
         mainHandler.post {
+            pausesOnDisconnect = pauseOnDisconnect
             Log.i(TAG, "Game started: $title")
             gameRunning = true
             // The game as the library listed it; one without a key (not in the list) is keyed by the core's ID, as the
@@ -1499,6 +1514,8 @@ object AppController : NativeCallbacks {
             val paused = PausePolicy.atBoot(pausedDuringBoot, PausePolicy.running(resumed, promptOpen))
             pausedDuringBoot = false
             if (screen == Screen.Game && paused != null) NativeLibrary.setPaused(paused)
+            // Booted paused, with nothing on screen to resume from: the game's menu is that.
+            if (screen == Screen.Game && PausePolicy.opensMenuAtBoot(startPaused, paused)) openPrompt()
             // The cards its own settings name are held back from now on, and mirrored.
             scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         }
@@ -1509,6 +1526,7 @@ object AppController : NativeCallbacks {
             Log.i(TAG, "Game stopped.")
             gameRunning = false
             pausedDuringBoot = false
+            pausesOnDisconnect = false
             // Same as on start: release in order with this thread's input.
             controllers?.releaseAll()
             promptOpen = false

@@ -74,6 +74,8 @@ class AchievementsOfflineTest {
                 override fun onGameStarted(
                     title: String,
                     serial: String,
+                    startPaused: Boolean,
+                    pauseOnDisconnect: Boolean,
                 ) = started.countDown()
 
                 override fun onGameStopped() = stopped.countDown()

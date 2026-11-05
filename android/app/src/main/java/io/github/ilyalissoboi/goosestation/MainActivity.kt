@@ -32,6 +32,7 @@ import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
+import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
@@ -98,6 +99,10 @@ class MainActivity : ComponentActivity() {
                             onOpen = AppController::openSettingsPage,
                             onBack = AppController::closeSettings,
                         )
+                    Screen.Interface ->
+                        CorePageRoute(CorePage.Interface) { values, onChange ->
+                            InterfaceScreen(values, onChange, onBack = AppController::closeSettingsPage)
+                        }
                     Screen.Graphics ->
                         CorePageRoute(CorePage.Graphics) { values, onChange ->
                             GraphicsScreen(

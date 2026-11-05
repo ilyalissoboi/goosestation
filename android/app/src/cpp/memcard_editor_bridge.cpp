@@ -91,6 +91,18 @@ std::string SharedPath(std::string_view serial, u32 slot)
   return InMemoryCardFolder(path.empty() ? Settings::GetDefaultSharedMemoryCardName(slot) : std::move(path));
 }
 
+// Whether a playlist's cards are named after its title, as the boot code has it: the game's own settings' value, or
+// else settings.ini's (true by default).
+bool UsePlaylistTitle(std::string_view serial)
+{
+  const bool global = Host::GetBaseBoolSettingValue(SECTION, "UsePlaylistTitle", true);
+  std::string ini_path = System::GetGameSettingsPath(serial);
+  if (!FileSystem::FileExists(ini_path.c_str()))
+    return global;
+  INISettingsInterface ini(std::move(ini_path));
+  return ini.Load() ? ini.GetBoolValue(SECTION, "UsePlaylistTitle", global) : global;
+}
+
 std::string SharedName(const std::string& path, u32 slot)
 {
   if (Path::GetFileName(path) == Settings::GetDefaultSharedMemoryCardName(slot))
@@ -123,7 +135,7 @@ std::string GameCardPath(const GameCard& game, u32 slot, std::vector<std::pair<s
       const std::string database_card = Settings::GetGameMemoryCardPath(Path::SanitizeFileName(entry->title), slot);
       if (const std::optional<std::string> title = AndroidMemcards::PlaylistCardTitle(
             playlist_title, entry->title, FileSystem::FileExists(database_card.c_str()),
-            Host::GetBaseBoolSettingValue(SECTION, "UsePlaylistTitle", true)))
+            UsePlaylistTitle(game.serial)))
       {
         path = Settings::GetGameMemoryCardPath(Path::SanitizeFileName(title.value()), slot);
       }

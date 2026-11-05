@@ -134,6 +134,28 @@ class MemcardEditorListTest {
         assertTrue(card.exists)
     }
 
+    // A playlist named apart from the database boots with a card named after the playlist, unless the game's own
+    // settings say not to: then, as settings.ini can, it uses the database's title.
+    @Test
+    fun aPlaylistNamedApartGetsItsOwnCard() {
+        val card = list(ACE_COMBAT).single { it.kind == MemcardKind.Game }
+
+        assertTrue(card.path, card.at(File(memcards, "My Ace Combat_1.mcd")))
+    }
+
+    @Test
+    fun aGameIniCanTurnThePlaylistTitleOff() {
+        File(core.dataRoot, "gamesettings").mkdirs()
+        File(
+            core.dataRoot,
+            "gamesettings/${ACE_COMBAT.serial}.ini",
+        ).writeText("[MemoryCards]\nUsePlaylistTitle = false\n")
+
+        val card = list(ACE_COMBAT).single { it.kind == MemcardKind.Game }
+
+        assertFalse(card.path, card.at(File(memcards, "My Ace Combat_1.mcd")))
+    }
+
     @Test
     fun gameCardsComeFirstThenSharedThenOthersByName() {
         writeCard(File(memcards, "shared_card_1.mcd"))
@@ -145,5 +167,8 @@ class MemcardEditorListTest {
 
     private companion object {
         val PADTEST = MemcardGame("Pad Test", "HASH-0000000000000001", "/sdcard/GooseTest/games/padtest.psexe", false)
+
+        // A game the database knows (Ace Combat 3, Japan), as a playlist with a name of its own.
+        val ACE_COMBAT = MemcardGame("Ace Combat 3", "SLPS-02020", "/sdcard/GooseTest/games/My Ace Combat.m3u", true)
     }
 }

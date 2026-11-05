@@ -902,7 +902,8 @@ opened during a game, so it never edits a card a game has open.
 
 **Which cards.** One card per library game, at the path the game boots with: `System::GetGameMemoryCardPath` for its
 first disc's serial and path, except a playlist whose file title differs from the database's title, which boots with
-a card named after the playlist (unless the database-title card exists), as the boot code chooses. A game's card that
+a card named after the playlist (unless the database-title card exists, or `[MemoryCards] UsePlaylistTitle` is off in
+the game's own settings or settings.ini), as the boot code chooses. A game's card that
 doesn't exist yet says "No card yet"; Save creates it (formatted). Slot 2 is listed only for a per-game card type
 there. Then the shared cards (when they exist, settings.ini makes the type Shared, or a game's ini does), and the
 other card files: those `Card1Path`/`Card2Path` name, and every `.mcd` in the memory card folder, by name.

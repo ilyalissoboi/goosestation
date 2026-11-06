@@ -539,6 +539,34 @@ class FocusAuditTest {
     }
 
     @Test
+    fun aGamesPostProcessing() {
+        val model =
+            SamplePostProcessing().apply {
+                key = "SLUS-00001"
+                chains = chains + (Chain.Display to chains.getValue(Chain.Display).copy(own = false))
+                stages(Chain.Display, SamplePostProcessing.crtLottes)
+            }
+        show {
+            CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", running = true, false)) {
+                PostProcessingScreen(model, onBack = {})
+            }
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aGamesUseGlobalQuestion() {
+        val model =
+            SamplePostProcessing().apply {
+                key = "SLUS-00001"
+                stages(Chain.Display, SamplePostProcessing.crtLottes)
+                setEnabled(Chain.Display, null)
+            }
+        show { PostProcessingScreen(model, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun postProcessingAdd() {
         val model = SamplePostProcessing().apply { openAdd(Chain.Internal) }
         show { PostProcessingScreen(model, onBack = {}) }

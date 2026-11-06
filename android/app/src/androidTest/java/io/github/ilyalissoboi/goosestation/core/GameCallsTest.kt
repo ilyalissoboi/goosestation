@@ -12,6 +12,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameSettingsPages
 import io.github.ilyalissoboi.goosestation.app.NativeCoreApi
+import io.github.ilyalissoboi.goosestation.app.PostProcessingPage
+import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
@@ -331,6 +333,58 @@ class GameCallsTest {
                     }
                 }
                 withTimeout(5_000) { while (pages.summary?.counts?.get(GamePage.Emulation) != 1) delay(50) }
+            }
+        }
+    }
+
+    // The in-game Settings' Post-processing: the game takes its own chain, and the running game has it at once.
+    @Test
+    fun aChainChangeInTheGameAppliesAtOnce() {
+        withListedPadtest(beforeStart = { padtest -> NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY) }) {
+            runBlocking {
+                NativeLibrary.addPostProcessingStage(null, "PostProcessing", "simple-flip")
+                val pages =
+                    GameSettingsPages(this, Dispatchers.IO, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+                pages.open(GameEntry("", "Pad Test", TEST_KEY, "", 0, 0, null), running = true)
+                pages.openPage(GamePage.PostProcessing)
+                val page = pages.postProcessing
+                withTimeout(10_000) { while (page.chains.isEmpty()) delay(50) }
+                assertFalse(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+
+                page.setEnabled(Chain.Display, true)
+
+                withTimeout(10_000) { while (!NativeLibrary.isPostProcessingActiveForTest("PostProcessing")) delay(50) }
+                // The global chain, copied into the game's file.
+                assertEquals(
+                    listOf("simple-flip"),
+                    page.chains
+                        .getValue(Chain.Display)
+                        .stages
+                        .map { it.shader },
+                )
+                pages.closePage()
+                withTimeout(5_000) { while (pages.summary?.counts?.get(GamePage.PostProcessing) != 1) delay(50) }
+            }
+        }
+    }
+
+    @Test
+    fun reloadInTheGame() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            settings = {
+                NativeLibrary.setBoolSetting("PostProcessing", "Enabled", true)
+                NativeLibrary.addPostProcessingStage(null, "PostProcessing", "simple-flip")
+            },
+            onMessage = { _, text -> texts += text },
+        ) {
+            runBlocking {
+                val page =
+                    PostProcessingPage(this, Dispatchers.IO, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+                page.open(SERIAL, running = true)
+                page.reload()
+                withTimeout(10_000) { while ("Post-processing shaders reloaded." !in texts) delay(50) }
+                page.close()
             }
         }
     }

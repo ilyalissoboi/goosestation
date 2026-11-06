@@ -58,10 +58,21 @@ interface PostProcessingModel {
     /** What the chains page focuses as it comes back: a stage, or one past a chain's last, its Add row. */
     val focus: Pair<Chain, Int>?
 
+    /** The game's chain whose "Use global" asks first, as it has [askingStages] stages to remove. */
+    val asking: Chain?
+
+    val askingStages: Int
+
+    /** Turns [chain] on or off; for a game, null is "Use global", which deletes its chain. */
     fun setEnabled(
         chain: Chain,
-        on: Boolean,
+        on: Boolean?,
     )
+
+    /** Does what [asking] asked: the game's chain goes, and it uses the global one. */
+    fun confirmUseGlobal()
+
+    fun cancelQuestion()
 
     fun openAdd(chain: Chain)
 
@@ -140,6 +151,12 @@ class PostProcessingPage(
     override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
         private set
 
+    override var asking by mutableStateOf<Chain?>(null)
+        private set
+
+    override var askingStages by mutableStateOf(0)
+        private set
+
     // Changes as each read is asked for and each edit is made: a read that comes back after either is dropped.
     private var reads = 0
 
@@ -154,6 +171,7 @@ class PostProcessingPage(
         stage = null
         adding = null
         focus = null
+        asking = null
         read()
     }
 
@@ -164,6 +182,7 @@ class PostProcessingPage(
         stage = null
         adding = null
         focus = null
+        asking = null
         reads++
     }
 
@@ -172,16 +191,56 @@ class PostProcessingPage(
 
     override fun setEnabled(
         chain: Chain,
-        on: Boolean,
+        on: Boolean?,
     ) {
         val view = chains[chain] ?: return
-        chains = chains + (chain to view.copy(enabled = on))
         val key = key
-        edit { settingsFor(key).let { chain.enabled.write(it, on) } }
+        if (on == null) {
+            if (key == null || !view.own) return
+            val stages = view.stages.size
+            if (stages > 0) {
+                asking = chain
+                askingStages = stages
+            } else {
+                useGlobal(chain)
+            }
+            return
+        }
+        chains = chains + (chain to view.copy(enabled = on, own = true))
+        edit {
+            if (key != null) {
+                // The game takes its own chain: the global one, unless its file already has stages of its own.
+                val game = layer(key)
+                if (!game.contains(chain.section, chain.enabled.key) &&
+                    game.getInt(chain.section, STAGE_COUNT, 0) == 0
+                ) {
+                    api.copyPostProcessingChain(key, chain.section)
+                }
+            }
+            chain.enabled.write(settingsFor(key), on)
+        }
     }
 
+    override fun confirmUseGlobal() {
+        val chain = asking ?: return
+        asking = null
+        useGlobal(chain)
+    }
+
+    override fun cancelQuestion() {
+        asking = null
+    }
+
+    private fun useGlobal(chain: Chain) {
+        val key = key ?: return
+        edit { api.clearPostProcessingChain(key, chain.section) }
+    }
+
+    // A game's chain while it uses the global one shows read-only.
+    private fun editable(chain: Chain) = chains[chain]?.own == true
+
     override fun openAdd(chain: Chain) {
-        adding = chain
+        if (editable(chain)) adding = chain
     }
 
     /** Back from the Add page, to its chain's Add row. */
@@ -197,6 +256,7 @@ class PostProcessingPage(
         shader: Shader,
     ) {
         adding = null
+        if (!editable(chain)) return
         val key = key
         edit(after = { focus = chain to ((it[chain]?.stages?.size ?: 1) - 1) }) {
             api.addPostProcessingStage(key, chain.section, shader.name)
@@ -221,6 +281,7 @@ class PostProcessingPage(
         chain: Chain,
         index: Int,
     ) {
+        if (!editable(chain)) return
         stage = null
         focus = chain to index
         val key = key
@@ -233,6 +294,7 @@ class PostProcessingPage(
         index: Int,
         down: Boolean,
     ) {
+        if (!editable(chain)) return
         val count = chains[chain]?.stages?.size ?: return
         val to = if (down) index + 1 else index - 1
         if (to !in 0 until count) return
@@ -248,6 +310,7 @@ class PostProcessingPage(
         option: ShaderOptionInfo,
         values: List<Float>,
     ) {
+        if (!editable(chain)) return
         val view = chains[chain] ?: return
         val stage = view.stages.getOrNull(index) ?: return
         val array = values.toFloatArray()
@@ -343,3 +406,5 @@ fun ShaderOptionInfo.withValue(value: FloatArray) =
         value,
         choices,
     )
+
+private const val STAGE_COUNT = "StageCount"

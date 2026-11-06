@@ -38,6 +38,8 @@ class SamplePostProcessing : PostProcessingModel {
     override var stage by mutableStateOf<Pair<Chain, Int>?>(null)
     override var adding by mutableStateOf<Chain?>(null)
     override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
+    override var asking by mutableStateOf<Chain?>(null)
+    override var askingStages by mutableStateOf(0)
 
     fun stages(
         chain: Chain,
@@ -50,10 +52,28 @@ class SamplePostProcessing : PostProcessingModel {
 
     override fun setEnabled(
         chain: Chain,
-        on: Boolean,
+        on: Boolean?,
     ) {
         calls += "setEnabled $chain $on"
-        chains = chains + (chain to chains.getValue(chain).copy(enabled = on))
+        val view = chains.getValue(chain)
+        if (on == null && view.stages.isNotEmpty()) {
+            asking = chain
+            askingStages = view.stages.size
+            return
+        }
+        chains = chains + (chain to view.copy(enabled = on ?: view.globalEnabled, own = on != null))
+    }
+
+    override fun confirmUseGlobal() {
+        val chain = asking ?: return
+        calls += "useGlobal $chain"
+        asking = null
+        chains = chains + (chain to chains.getValue(chain).copy(own = false, stages = emptyList()))
+    }
+
+    override fun cancelQuestion() {
+        calls += "cancel"
+        asking = null
     }
 
     override fun openAdd(chain: Chain) {

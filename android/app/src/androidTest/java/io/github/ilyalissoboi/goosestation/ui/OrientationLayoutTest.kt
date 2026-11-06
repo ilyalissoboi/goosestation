@@ -974,6 +974,46 @@ class OrientationLayoutTest {
         )
 
     @Test
+    fun aGamesPostProcessing() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            key = "SLUS-00001"
+                            running = true
+                            stages(Chain.Display, SamplePostProcessing.crtLottes)
+                            stages(Chain.Internal, SamplePostProcessing.flip)
+                            chains = chains + (Chain.Internal to chains.getValue(Chain.Internal).copy(own = false))
+                        }
+                    }
+                CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", true, false)) {
+                    PostProcessingScreen(model, onBack = {})
+                }
+            },
+            rows = listOf("Post-processing", "1. crt-lottes", "Add a shader", "Use global (Off)", "Reload shaders"),
+            lists = mapOf("Post-processing" to ("Use global (Off)" to "Off")),
+        )
+
+    @Test
+    fun aGamesUseGlobalQuestion() {
+        eachConfig({
+            val model =
+                remember {
+                    SamplePostProcessing().apply {
+                        key = "SLUS-00001"
+                        stages(Chain.Display, SamplePostProcessing.crtLottes)
+                        setEnabled(Chain.Display, null)
+                    }
+                }
+            UseGlobalChainPanel(model, Chain.Display)
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+        }
+    }
+
+    @Test
     fun thePostProcessingAddPage() =
         settingsPageFits(
             {

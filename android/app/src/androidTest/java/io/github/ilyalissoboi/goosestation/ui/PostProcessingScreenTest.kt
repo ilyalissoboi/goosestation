@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -10,8 +11,10 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,6 +22,8 @@ import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.STAGE_NO_GLES
 import io.github.ilyalissoboi.goosestation.settings.Shader
 import io.github.ilyalissoboi.goosestation.settings.ShaderKind
+import io.github.ilyalissoboi.goosestation.ui.components.GameContext
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -186,6 +191,62 @@ class PostProcessingScreenTest {
         model.running = true
         rule.waitForIdle()
         rule.onNodeWithText("Reload shaders").assertExists()
+    }
+
+    private fun showForAGame() {
+        model.key = "SLUS-00001"
+        rule.setContent {
+            GooseStationTheme {
+                CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", false, false)) {
+                    PostProcessingScreen(model, onBack = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun theGamesChainRowUsesGlobal() {
+        model.chains =
+            model.chains +
+            (Chain.Display to model.chains.getValue(Chain.Display).copy(own = false, globalEnabled = true))
+        model.stages(Chain.Display, SamplePostProcessing.crtLottes)
+        showForAGame()
+
+        rule.onNodeWithText("PAD TEST").assertExists()
+        focused("Use global (On)")
+        rule.onAllNodesWithText(GLOBAL_CHAIN_NOTE, useUnmergedTree = true)[0].assertExists()
+        rule.onNodeWithText("1. crt-lottes").assertIsNotEnabled()
+        press(Key.DirectionRight)
+
+        assertEquals(listOf("setEnabled Display true"), model.calls)
+        focused("On")
+        rule.onNode(isFocused()).assert(hasText(SET_FOR_GAME, substring = true))
+        press(Key.DirectionDown)
+        focused("1. crt-lottes")
+    }
+
+    @Test
+    fun useGlobalAsksFirst() {
+        model.stages(Chain.Display, SamplePostProcessing.crtLottes, SamplePostProcessing.flip)
+        showForAGame()
+
+        // From the game's own Off: Left to On, Left to Use global.
+        press(Key.DirectionLeft)
+        press(Key.DirectionLeft)
+
+        rule.onNodeWithText("Use the global Display chain? This game's 2 shaders are removed.").assertExists()
+        focused("Cancel")
+        press(Key.DirectionCenter)
+        assertEquals("cancel", model.calls.last())
+        // Back on the chain's row, as it was.
+        focused("Post-processing")
+
+        // Cancel left it as it was: On.
+        press(Key.DirectionLeft)
+        rule.onNodeWithText("Use global").performClick()
+        rule.waitForIdle()
+        assertEquals("useGlobal Display", model.calls.last())
     }
 
     @Test

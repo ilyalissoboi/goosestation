@@ -32,13 +32,18 @@ import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
+import io.github.ilyalissoboi.goosestation.ui.components.useGlobalLabel
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 const val POST_PROCESSING_TITLE = "Post-processing"
+
+/** What a game's stages say while it uses the global chain. */
+const val GLOBAL_CHAIN_NOTE = "The global chain: pick On or Off to give this game its own."
 
 private fun Chain.note() =
     when (this) {
@@ -109,31 +114,69 @@ private fun ChainsPage(
         (if (target == null) requester(Chain.Display, -1) else requester(target.first, target.second)).requestFocus()
     }
 
+    // Once a question is gone, the focus goes back to the row that asked it.
+    val asking = model.asking
+    var asked by remember { mutableStateOf<Chain?>(null) }
+    LaunchedEffect(asking) {
+        if (asking != null) {
+            asked = asking
+        } else {
+            asked?.let { requester(it, -1).requestFocus() }
+            asked = null
+        }
+    }
+
+    val game = model.key != null
     SettingsPage(POST_PROCESSING_TITLE, onBack = onBack) {
         for (chain in Chain.entries) {
             val view = chains[chain] ?: continue
             SettingsSection(chain.label)
-            SwitchRow(
-                POST_PROCESSING_TITLE,
-                view.enabled,
-                onToggle = { model.setEnabled(chain, it) },
-                modifier = Modifier.focusRequester(requester(chain, -1)),
-                note = chain.note(),
-            )
+            val switch = Modifier.focusRequester(requester(chain, -1))
+            if (game) {
+                // The chain as a whole uses the global one, or is the game's own.
+                CyclerRow(
+                    POST_PROCESSING_TITLE,
+                    listOf(
+                        Choice<Boolean?>(null, useGlobalLabel(if (view.globalEnabled) "On" else "Off")),
+                        Choice(true, "On"),
+                        Choice(false, "Off"),
+                    ),
+                    if (view.own) view.enabled else null,
+                    onSelect = { model.setEnabled(chain, it) },
+                    modifier = switch,
+                    note = chain.note(),
+                    mark = SET_FOR_GAME.takeIf { view.own },
+                )
+            } else {
+                SwitchRow(
+                    POST_PROCESSING_TITLE,
+                    view.enabled,
+                    onToggle = { model.setEnabled(chain, it) },
+                    modifier = switch,
+                    note = chain.note(),
+                )
+            }
+            // While a game uses the global chain, it shows, read-only.
+            val editable = !game || view.own
             view.stages.forEachIndexed { index, stage ->
                 NavRow(
                     "${index + 1}. ${stage.shader}",
-                    stage.summary(model.gles),
+                    if (editable) stage.summary(model.gles) else GLOBAL_CHAIN_NOTE,
                     onClick = { model.openStage(chain, index) },
                     modifier = Modifier.focusRequester(requester(chain, index)),
+                    enabled = editable,
                 )
             }
             NavRow(
                 "Add a shader",
-                if (model.shaders.isEmpty()) "No shaders found" else "${model.shaders.size} shaders to choose from",
+                when {
+                    !editable -> GLOBAL_CHAIN_NOTE
+                    model.shaders.isEmpty() -> "No shaders found"
+                    else -> "${model.shaders.size} shaders to choose from"
+                },
                 onClick = { model.openAdd(chain) },
                 modifier = Modifier.focusRequester(requester(chain, view.stages.size)),
-                enabled = model.shaders.isNotEmpty(),
+                enabled = editable && model.shaders.isNotEmpty(),
             )
         }
         if (model.running) {
@@ -151,6 +194,43 @@ private fun ChainsPage(
             )
         }
     }
+    model.asking?.let { chain -> UseGlobalChainPanel(model, chain) }
+}
+
+/** What "Use global" asks when the game's [chain] has shaders: over the page, Use global first, Cancel focused. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun UseGlobalChainPanel(
+    model: PostProcessingModel,
+    chain: Chain,
+) {
+    OverlayPanel(onBack = model::cancelQuestion) {
+        val cancel = remember { FocusRequester() }
+        LaunchedEffect(chain) { cancel.requestFocus() }
+        Text(
+            useGlobalQuestion(chain, model.askingStages),
+            style = MaterialTheme.typography.bodyLarge,
+            color = GooseStationTheme.colors.ink,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionButton("Use global", onClick = model::confirmUseGlobal, kind = ButtonKind.Danger)
+            ActionButton(
+                "Cancel",
+                onClick = model::cancelQuestion,
+                modifier = Modifier.focusRequester(cancel),
+                kind = ButtonKind.Ghost,
+            )
+        }
+    }
+}
+
+/** "Use the global Display chain? This game's 3 shaders are removed." */
+fun useGlobalQuestion(
+    chain: Chain,
+    stages: Int,
+): String {
+    val removed = if (stages == 1) "shader is" else "$stages shaders are"
+    return "Use the global ${chain.label} chain? This game's $removed removed."
 }
 
 @Composable

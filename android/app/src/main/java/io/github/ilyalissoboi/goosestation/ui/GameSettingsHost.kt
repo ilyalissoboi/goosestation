@@ -46,6 +46,10 @@ fun GameSettingsHost(
             )
             return@CompositionLocalProvider
         }
+        if (page == GamePage.PostProcessing) {
+            PostProcessingScreen(pages.postProcessing, onBack = pages::closePage)
+            return@CompositionLocalProvider
+        }
         val values = pages.values(page)
         if (values == null) {
             SettingsLoadingPage(page.label, onBack = pages::closePage)
@@ -85,6 +89,8 @@ private fun GamePageScreen(
                 onBack = back,
             ) { AchievementRows(values, onChange, Modifier.focusRequester(first)) }
         }
+        // Shown by GameSettingsHost itself, from its own page.
+        GamePage.PostProcessing -> {}
         GamePage.Controllers ->
             pages.controllers?.let { GameControllersScreen(values, pages.names, it, onChange, back) }
                 ?: SettingsLoadingPage(page.label, onBack = back)

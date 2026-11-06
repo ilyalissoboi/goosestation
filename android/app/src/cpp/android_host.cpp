@@ -2043,7 +2043,13 @@ bool AndroidHost::AddControllerToPort(const std::string& identifier)
     const auto lock = Host::GetSettingsLock();
     SettingsInterface& si = *s_base_settings_interface;
     const u32 pad = GetPadOfIndex(si, index.value());
-    const u32 added = AddDefaultBindings(si, index.value(), pad);
+    u32 added = AddDefaultBindings(si, index.value(), pad);
+    // And, in a game, the type its own settings give the port, so one connected mid-game isn't left unbound.
+    if (System::IsValid())
+    {
+      added += AddDefaultBindings(si, index.value(), pad,
+                                  Controller::GetControllerInfo(g_settings.controller_types[pad]));
+    }
     if (added == 0)
       return true;
 
@@ -2067,10 +2073,57 @@ void AndroidHost::MapNewController(const std::string& identifier)
   // single binding keeps what it has, so a remap survives.
   if (std::find(s_unmapped_indices.begin(), s_unmapped_indices.end(), index.value()) == s_unmapped_indices.end())
   {
-    const auto lock = Host::GetSettingsLock();
-    SettingsInterface& si = *s_base_settings_interface;
-    if (HasDeviceBinding(si, index.value(), GetPadOfIndex(si, index.value())))
+    u32 added = 0;
+    {
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface& si = *s_base_settings_interface;
+      const u32 pad = GetPadOfIndex(si, index.value());
+      if (HasDeviceBinding(si, index.value(), pad))
+      {
+        // In a game whose own settings give the port another type, that type's defaults, when the controller has
+        // none of the inputs only that type has bound (it was off as the game started): one cleared on purpose stays
+        // cleared.
+        const Controller::ControllerInfo* running =
+          System::IsValid() ? Controller::GetControllerInfo(g_settings.controller_types[pad]) : nullptr;
+        const Controller::ControllerInfo* own = GetPadControllerInfo(si, pad);
+        const std::string section = Controller::GetSettingsSection(pad);
+        bool unbound = false;
+        if (running && running != own)
+        {
+          bool any_own_input = false;
+          unbound = true;
+          for (const Controller::ControllerBindingInfo& bi : running->bindings)
+          {
+            if (own && std::any_of(own->bindings.begin(), own->bindings.end(),
+                                   [&bi](const Controller::ControllerBindingInfo& o) {
+                                     return std::string_view(o.name) == bi.name;
+                                   }))
+            {
+              continue;
+            }
+            any_own_input = true;
+            if (AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), bi.name), index.value()))
+              unbound = false;
+          }
+          unbound = unbound && any_own_input;
+        }
+        if (unbound)
+        {
+          added = AddDefaultBindings(si, index.value(), pad, running);
+          Error error;
+          if (added > 0 && !si.Save(&error))
+            ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+        }
+        if (added == 0)
+          return;
+      }
+    }
+    if (added > 0)
+    {
+      INFO_LOG("Added {} bindings for {} for the game's controller type.", added, identifier);
+      System::ReloadInputBindings();
       return;
+    }
   }
 
   // One that's gone again stays unmapped, and gets its defaults when it's back.

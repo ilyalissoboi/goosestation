@@ -333,6 +333,48 @@ class GameCallsTest {
         assertFalse(gameSettings(TEST_KEY).exists())
     }
 
+    // A controller connected during a game whose own file sets the port's type gets that type's defaults too.
+    @Test
+    fun aControllerConnectedInAGameGetsItsTypesDefaults() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText(
+                "[ControllerPorts]\nUseGameSettingsForController = true\n[Pad1]\nType = NeGcon\n",
+            )
+        }) {
+            connectSecondPad()
+
+            val steering = Ini.parse(File(dataRoot, "settings.ini").readText()).values("Pad1", "SteeringLeft")
+            assertTrue("the NeGcon's steering is bound: $steering", steering.any { it.startsWith("Android-") })
+        }
+    }
+
+    // One known from before, with its own bindings, switched on only once the game is under way: the game's type's
+    // defaults too, since it has none of that type's inputs bound.
+    @Test
+    fun aKnownControllerSwitchedOnInAGameGetsItsTypesDefaults() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText(
+                "[ControllerPorts]\nUseGameSettingsForController = true\n[Pad1]\nType = NeGcon\n",
+            )
+            connectSecondPad()
+            NativeLibrary.onDeviceDisconnected(DEVICE_B)
+            Thread.sleep(300)
+        }) {
+            assertEquals(emptyList<String>(), steeringOf())
+
+            connectSecondPad()
+
+            assertTrue(
+                "the NeGcon's steering is bound: ${steeringOf()}",
+                steeringOf().any { it.startsWith("Android-") },
+            )
+        }
+    }
+
+    private fun steeringOf() = Ini.parse(File(dataRoot, "settings.ini").readText()).values("Pad1", "SteeringLeft")
+
     // A desktop file's per-game controllers hold desktop's bindings: its type applies, its bindings don't.
     @Test
     fun aGamesDesktopBindingsDontReplaceAndroids() {

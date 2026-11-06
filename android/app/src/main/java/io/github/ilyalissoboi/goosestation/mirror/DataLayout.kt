@@ -10,7 +10,7 @@ package io.github.ilyalissoboi.goosestation.mirror
  * The layout is the top-level files the core keeps, and every file under its folders: the desktop data folder's
  * (`EmuFolders::SetDefaults`), plus those the core is configured to use inside the data root, and the shared memory
  * card files, once it reports them ([withCorePaths]). Never mirrored, even inside a layout folder: the core's cache,
- * its log, memory card sync's data (`emusync/`) and scratch files, and the core's and the mirror's own temporary
+ * its logs (unless it names them), memory card sync's data (`emusync/`) and scratch files, and the core's and the mirror's own temporary
  * files, which stay on the device ([kept]).
  *
  * [fromCore] says whether the core reported the layout. Before it starts, its settings may name folders the defaults
@@ -62,20 +62,26 @@ class DataLayout private constructor(
         path in files || folders.any { if (it.isEmpty()) '/' !in path else path.startsWith(it) }
 
     /**
-     * The core's own files that stay on the device: its cache, its log, the mirror's temporary files, and the core's
-     * own temporary save states (written to `<name>.sav.XXXXXX`, then renamed over `<name>.sav`). Memory card sync's
-     * data, `emusync/`, which holds this device's sync identity and the storage's key, so a copy elsewhere would give
+     * The core's own files that stay on the device: its cache, its logs (unless the core names them, with Log to file
+     * on), the mirror's temporary files, and the core's own temporary save states (written to `<name>.sav.XXXXXX`,
+     * then renamed over `<name>.sav`). Memory card sync's data, `emusync/`, which holds this device's sync identity and the storage's key, so a copy elsewhere would give
      * it away or make another device this one; and emusync's scratch files beside a card it's writing. And desktop's
      * secrets.ini, which Android neither reads nor writes (its token is in the Keystore): never copied either way.
      */
     private fun kept(path: String) =
-        path == LOG || path == SECRETS || caches.any { path.startsWith(it) } || path.endsWith(TEMP) ||
+        ((path == LOG || path == PREVIOUS_LOG) && path !in files) || path == SECRETS ||
+            caches.any { path.startsWith(it) } ||
+            path.endsWith(TEMP) ||
             path.endsWith(BACKUP) || STATE_TEMP.containsMatchIn(path) || path.startsWith(EMUSYNC) ||
             EMUSYNC_SCRATCH.containsMatchIn(path)
 
     companion object {
-        /** The core's log, rewritten at every start: not worth a copy in the data folder. */
+        /**
+         * The core's log, rewritten at every start, and the last run's, kept by the host as it starts: copied to the
+         * data folder only while the core names them, with Log to file on.
+         */
         private const val LOG = "goosestation.log"
+        private const val PREVIOUS_LOG = "goosestation-previous.log"
         private const val SECRETS = "secrets.ini"
         private const val TEMP = ".goosetmp"
         private const val BACKUP = ".goosebak"

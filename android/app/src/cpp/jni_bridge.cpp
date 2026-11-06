@@ -2035,6 +2035,12 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getDataFolders)(JNIEnv* env, jobject)
   return folders.has_value() ? ToJStringArray(env, folders.value()) : nullptr;
 }
 
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getDataFiles)(JNIEnv* env, jobject)
+{
+  const std::optional<std::vector<std::string>> files = AndroidHost::GetDataFiles();
+  return files.has_value() ? ToNonNullStringArray(env, files.value()) : nullptr;
+}
+
 NATIVE_LIBRARY_FUNCTION(jstring, getCacheFolder)(JNIEnv* env, jobject)
 {
   const std::optional<std::string> folder = AndroidHost::GetCacheFolder();

@@ -696,6 +696,8 @@ object AppController : NativeCallbacks {
         if (page == SettingsEntry.Folders) return closeFolders()
         if (page == SettingsEntry.Controllers) controllersPage.close()
         if (page == SettingsEntry.PostProcessing) postProcessingPage.close()
+        // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before this.
+        if (page == SettingsEntry.Advanced) scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         settingsEntry = page
         screen = Screen.Settings
     }
@@ -1497,7 +1499,8 @@ object AppController : NativeCallbacks {
         val reported = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
         memcardPaths = MemoryCardPaths.merge(reported, memcardPaths)
         val folders = NativeLibrary.getDataFolders() ?: return false
-        val layout = DataLayout.withCorePaths(folders.toList() + memcardPaths, NativeLibrary.getCacheFolder())
+        val files = NativeLibrary.getDataFiles()?.toList().orEmpty()
+        val layout = DataLayout.withCorePaths(folders.toList() + files + memcardPaths, NativeLibrary.getCacheFolder())
         val grew = layout.addsTo(dataLayout)
         // Before a mirror run can start with it.
         if (grew) layoutSettling.unsettle()

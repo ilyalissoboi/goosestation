@@ -151,6 +151,30 @@ class SettingsAccessTest {
         assertEquals(listOf("None", "Error", "Warning", "Info", "Verbose", "Dev", "Debug", "Trace"), names("LogLevel"))
     }
 
+    // The log a run left is kept as the previous one before the core rewrites it, so a crash's log survives.
+    @Test
+    fun theLastRunsLogIsKept() {
+        File(dataRoot, "goosestation.log").writeText("the last run")
+
+        initialize()
+
+        assertEquals("the last run", File(dataRoot, "goosestation-previous.log").readText())
+    }
+
+    @Test
+    fun theLogsAreDataFilesWhileTheLogIsOn() {
+        initialize()
+        assertEquals(emptyList<String>(), NativeLibrary.getDataFiles()!!.toList())
+
+        NativeLibrary.setBoolSetting("Logging", "LogToFile", true)
+        NativeLibrary.applySettings()
+        assertEquals(listOf("goosestation.log", "goosestation-previous.log"), NativeLibrary.getDataFiles()!!.toList())
+
+        NativeLibrary.setBoolSetting("Logging", "LogToFile", false)
+        NativeLibrary.applySettings()
+        assertEquals(emptyList<String>(), NativeLibrary.getDataFiles()!!.toList())
+    }
+
     // No GunCon, Justifier or mouse: they need a pointer Android doesn't have.
     @Test
     fun controllerTypesLeaveOutPointers() {

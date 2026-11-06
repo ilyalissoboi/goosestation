@@ -375,6 +375,12 @@ object NativeLibrary {
     external fun getDataFolders(): Array<String>?
 
     /**
+     * The data root's own files the mirror copies, beside [getDataFolders]'s: `goosestation.log` and the last run's,
+     * `goosestation-previous.log`, while settings.ini's Log to file is on; empty otherwise. Null before [initialize].
+     */
+    external fun getDataFiles(): Array<String>?
+
+    /**
      * The core's cache folder, as [getDataFolders] gives a folder. Null if it's outside the data root, or the data
      * root itself, or before [initialize].
      */

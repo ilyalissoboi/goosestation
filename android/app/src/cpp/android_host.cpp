@@ -230,6 +230,10 @@ static u32 s_binding_capture_id = 0; // changes when a capture starts or is canc
 
 // Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
 static std::atomic_bool s_vulkan_failed{false};
+
+// The core's log in the data root (Settings::UpdateLogSettings), and the last run's, which the host keeps.
+static constexpr const char* LOG_FILE = "goosestation.log";
+static constexpr const char* PREVIOUS_LOG_FILE = "goosestation-previous.log";
 } // namespace AndroidHost
 
 bool Host::StoreMemcardSyncSecret(const char* name, std::string_view value)
@@ -271,6 +275,16 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   EmuFolders::AppRoot = Path::Canonicalize(resources_root);
   EmuFolders::Resources = EmuFolders::AppRoot;
   EmuFolders::DataRoot = Path::Canonicalize(data_root);
+  // The last run's log, kept before the settings' Log to file rewrites it, so a crash's log survives the restart.
+  if (const std::string log = Path::Combine(EmuFolders::DataRoot, LOG_FILE); FileSystem::FileExists(log.c_str()))
+  {
+    Error rename_error;
+    if (!FileSystem::RenamePath(log.c_str(), Path::Combine(EmuFolders::DataRoot, PREVIOUS_LOG_FILE).c_str(),
+                                &rename_error))
+    {
+      WARNING_LOG("Couldn't keep the last run's log: {}", rename_error.GetDescription());
+    }
+  }
   s_bios_dir = Path::Canonicalize(bios_dir);
   s_install_id = std::move(install_id);
   s_device_name = std::move(device_name);
@@ -1307,6 +1321,17 @@ std::optional<std::vector<std::string>> AndroidHost::GetDataFolders()
       folders.push_back(relative->empty() ? std::string() : *relative + '/');
   }
   return folders;
+}
+
+std::optional<std::vector<std::string>> AndroidHost::GetDataFiles()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  const auto lock = Host::GetSettingsLock();
+  if (!s_base_settings_interface->GetBoolValue("Logging", "LogToFile", false))
+    return std::vector<std::string>();
+  return std::vector<std::string>{LOG_FILE, PREVIOUS_LOG_FILE};
 }
 
 std::optional<std::string> AndroidHost::GetCacheFolder()

@@ -154,6 +154,10 @@ std::optional<std::vector<std::string>> GetMemoryCardPaths();
 /// inside the data root. nullopt before Initialize() succeeded.
 std::optional<std::vector<std::string>> GetDataFolders();
 
+/// The data root's own files the mirror copies, beside the layout's: the logs while Log to file is on in settings.ini
+/// (empty otherwise); nullopt before Initialize().
+std::optional<std::vector<std::string>> GetDataFiles();
+
 /// EmuFolders::Cache as GetDataFolders() gives a folder: nullopt if it's outside the data root, or the data root
 /// itself, or before Initialize() succeeded.
 std::optional<std::string> GetCacheFolder();

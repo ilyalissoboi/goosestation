@@ -338,7 +338,17 @@ class FakeCoreApi(
         if (game.values.isEmpty()) gameLayers.remove(key)
     }
 
-    override fun postProcessingUsesOpenGLES() = usesOpenGLES
+    /** The keys whose games' own renderer is OpenGL ES, over [usesOpenGLES]. */
+    var gamesOnOpenGLES = emptySet<String>()
+
+    override fun postProcessingUsesOpenGLES(key: String?) =
+        if (key != null &&
+            key in gamesOnOpenGLES
+        ) {
+            true
+        } else {
+            usesOpenGLES
+        }
 
     override fun reloadPostProcessingShaders(): Boolean {
         calls += "reloadPostProcessingShaders"

@@ -167,7 +167,7 @@ interface CoreApi {
         section: String,
     )
 
-    fun postProcessingUsesOpenGLES(): Boolean
+    fun postProcessingUsesOpenGLES(key: String?): Boolean
 
     /** Reloads the shaders in the running game: false without one, or with no shaders in either chain. */
     fun reloadPostProcessingShaders(): Boolean
@@ -357,7 +357,7 @@ object NativeCoreApi : CoreApi {
         section: String,
     ) = NativeLibrary.clearPostProcessingChain(key, section)
 
-    override fun postProcessingUsesOpenGLES() = NativeLibrary.postProcessingUsesOpenGLES()
+    override fun postProcessingUsesOpenGLES(key: String?) = NativeLibrary.postProcessingUsesOpenGLES(key)
 
     override fun reloadPostProcessingShaders() = NativeLibrary.reloadPostProcessingShaders()
 

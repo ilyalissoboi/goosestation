@@ -213,9 +213,25 @@ class PostProcessingAccessTest {
         initialize()
 
         NativeLibrary.setStringSetting("GPU", "Renderer", "OpenGL")
-        assertTrue(NativeLibrary.postProcessingUsesOpenGLES())
+        assertTrue(NativeLibrary.postProcessingUsesOpenGLES(null))
         NativeLibrary.setStringSetting("GPU", "Renderer", "Vulkan")
-        assertFalse(NativeLibrary.postProcessingUsesOpenGLES())
+        assertFalse(NativeLibrary.postProcessingUsesOpenGLES(null))
+    }
+
+    // A game's own renderer is the one its chain runs on, over settings.ini's.
+    @Test
+    fun aGamesRendererIsItsOwn() {
+        initialize()
+        NativeLibrary.setStringSetting("GPU", "Renderer", "Vulkan")
+
+        NativeLibrary.setGameStringSetting(KEY, "GPU", "Renderer", "OpenGL")
+        assertTrue(NativeLibrary.postProcessingUsesOpenGLES(KEY))
+        assertFalse(NativeLibrary.postProcessingUsesOpenGLES(null))
+        assertFalse(NativeLibrary.postProcessingUsesOpenGLES("SLUS-00002"))
+
+        NativeLibrary.setStringSetting("GPU", "Renderer", "OpenGL")
+        NativeLibrary.setGameStringSetting(KEY, "GPU", "Renderer", "Vulkan")
+        assertFalse(NativeLibrary.postProcessingUsesOpenGLES(KEY))
     }
 
     private fun shaders(): Map<String, String> =

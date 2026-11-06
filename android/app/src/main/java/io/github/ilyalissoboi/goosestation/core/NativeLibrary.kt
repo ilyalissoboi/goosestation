@@ -724,10 +724,11 @@ object NativeLibrary {
     )
 
     /**
-     * Whether post-processing runs on OpenGL ES: in a game, the device it runs on; else the renderer settings.ini
-     * picks, or OpenGL ES once Vulkan has failed in this run.
+     * Whether post-processing runs on OpenGL ES: in a game, the device it runs on; else the renderer the game of [key]
+     * sets in its own file, or settings.ini picks (for null, or a game that sets none), or OpenGL ES once Vulkan has
+     * failed in this run.
      */
-    external fun postProcessingUsesOpenGLES(): Boolean
+    external fun postProcessingUsesOpenGLES(key: String?): Boolean
 
     /** Whether fast memory access can run here: the device's memory pages are no larger than the build's. */
     external fun isFastmemAvailable(): Boolean

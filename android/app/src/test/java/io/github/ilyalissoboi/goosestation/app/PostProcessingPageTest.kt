@@ -177,6 +177,49 @@ class PostProcessingPageTest {
             assertEquals(Chain.Display to 0, page.focus)
         }
 
+    // Before the core answers (a busy dispatcher): the chain already shows the edit, and the focus has its row.
+    @Test
+    fun addRemoveAndMoveShowBeforeTheCoreAnswers() =
+        runTest {
+            api.addPostProcessingStage(null, "PostProcessing", "crt-lottes")
+            val page = page()
+
+            page.add(Chain.Display, Shader("simple-flip", ShaderKind.GLSL))
+            assertEquals(
+                listOf("crt-lottes", "simple-flip"),
+                page.chains
+                    .getValue(Chain.Display)
+                    .stages
+                    .map { it.shader },
+            )
+            assertEquals(Chain.Display to 1, page.focus)
+            runCurrent()
+
+            page.openStage(Chain.Display, 0)
+            page.move(Chain.Display, 0, down = true)
+            assertEquals(
+                listOf("simple-flip", "crt-lottes"),
+                page.chains
+                    .getValue(Chain.Display)
+                    .stages
+                    .map { it.shader },
+            )
+            assertEquals(Chain.Display to 1, page.stage)
+            runCurrent()
+
+            page.remove(Chain.Display, 1)
+            assertEquals(
+                listOf("simple-flip"),
+                page.chains
+                    .getValue(Chain.Display)
+                    .stages
+                    .map { it.shader },
+            )
+            assertEquals(Chain.Display to 1, page.focus)
+            runCurrent()
+            assertEquals(listOf("simple-flip"), stages())
+        }
+
     @Test
     fun anOptionChangeShowsAtOnceAndIsSaved() =
         runTest {

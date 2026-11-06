@@ -28,6 +28,13 @@ class DataLayout private constructor(
     fun mirrored(path: String) = inLayout(path) && !kept(path)
 
     /**
+     * Whether the mirrored file at [path] is only ever sent to the data folder, never taken from it: the core's logs,
+     * this device's own, which desktop sharing the folder (and settings.ini's Log to file) writes under the same name,
+     * and which the core holds open while it runs.
+     */
+    fun sentOnly(path: String) = (path == LOG || path == PREVIOUS_LOG) && mirrored(path)
+
+    /**
      * Whether the working-copy file at [path] is neither mirrored nor the core's: an earlier build copied it in from
      * the data folder, which keeps its own copy.
      */

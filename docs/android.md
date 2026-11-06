@@ -590,7 +590,9 @@ it as.
 
 **Log to file** writes the core's log to `goosestation.log` in the working copy, as desktop writes it in its data
 folder. While it's on, the core names the log, and the log the last run left, as files of the data folder's layout,
-so the mirror copies both to the data folder with its pushes (after a game, and on leaving the app). At each start,
+so the mirror copies both to the data folder with its pushes (after a game, and on leaving the app). They're only
+ever sent: a pull never takes the folder's over them, since desktop sharing the folder (and `settings.ini`'s Log to
+file) writes a `goosestation.log` of its own there, and the core holds this one open. At each start,
 before the core opens the log, the host renames the last run's `goosestation.log` to `goosestation-previous.log`, so
 the log of a run that crashed still reaches the data folder. Off, both stay on the device, as before. Leaving the
 Advanced page has the mirror take the change.
@@ -679,7 +681,7 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
 | "dolphinfx" (`shaders/dolphinfx/**/*.glsl`, loaded as GLSL: this core has no loader of their own) | all run | all run |
 | ReShade (`shaders/reshade/Shaders/**/*.fx`) | all run but `crt/crt-hyllian-sinc` | none compile |
 
-  So under OpenGL ES (the renderer, or Vulkan having failed) no ReShade shader is offered, and a ReShade stage
+  So under OpenGL ES (the renderer, a game's own on its pages, or Vulkan having failed) no ReShade shader is offered, and a ReShade stage
   already in the chain (from desktop, say) says "Doesn't run with OpenGL ES: post-processing stays off while it's in
   the chain.": the core turns the whole chain off with "Failed to compile post-processing shader …". A stage whose
   shader this install hasn't got says "Not found in this install's shaders: …" in the same way. Both can still be

@@ -108,10 +108,11 @@ private fun ChainsPage(
         chain: Chain,
         index: Int,
     ) = requesters.getOrPut(chain to index) { FocusRequester() }
-    val focus = model.focus
-    LaunchedEffect(Unit) {
-        val target = focus?.takeIf { (chain, index) -> index <= (chains[chain]?.stages?.size ?: -1) }
-        (if (target == null) requester(Chain.Display, -1) else requester(target.first, target.second)).requestFocus()
+    // The model's focus, whenever it changes and its row is there (an edit the core answers late moves it); else the
+    // first chain's switch.
+    val focus = model.focus?.takeIf { (chain, index) -> index <= (chains[chain]?.stages?.size ?: -1) }
+    LaunchedEffect(focus) {
+        (if (focus == null) requester(Chain.Display, -1) else requester(focus.first, focus.second)).requestFocus()
     }
 
     // Once a question is gone, the focus goes back to the row that asked it.

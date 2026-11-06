@@ -157,6 +157,19 @@ class PostProcessingGameTest {
             assertFalse(page.chains.getValue(Chain.Display).own)
         }
 
+    // A game whose own file picks OpenGL ES isn't offered ReShade, though settings.ini's renderer is Vulkan.
+    @Test
+    fun aGamesOwnRendererDecidesWhatsOffered() =
+        runTest {
+            api.shaderCatalog = api.shaderCatalog + ("FilmGrain2" to ("ReShade" to emptyList()))
+            api.gamesOnOpenGLES = setOf(KEY)
+
+            val page = page()
+
+            assertTrue(page.gles)
+            assertEquals(listOf("crt-lottes", "simple-flip"), page.shaders.map { it.name })
+        }
+
     private companion object {
         const val KEY = "SLUS-00001"
     }

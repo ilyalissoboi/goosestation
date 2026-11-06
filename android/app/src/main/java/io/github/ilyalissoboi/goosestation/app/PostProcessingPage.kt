@@ -257,10 +257,12 @@ class PostProcessingPage(
     ) {
         adding = null
         if (!editable(chain)) return
+        // Shown at once, its options with the core's answer, so the focus has its row however long that takes.
+        val stages = chains[chain]?.stages ?: return
+        showStages(chain, stages + Stage(shader.name, shader.kind, emptyList()))
+        focus = chain to stages.size
         val key = key
-        edit(after = { focus = chain to ((it[chain]?.stages?.size ?: 1) - 1) }) {
-            api.addPostProcessingStage(key, chain.section, shader.name)
-        }
+        edit { api.addPostProcessingStage(key, chain.section, shader.name) }
     }
 
     override fun openStage(
@@ -282,7 +284,10 @@ class PostProcessingPage(
         index: Int,
     ) {
         if (!editable(chain)) return
+        val stages = chains[chain]?.stages ?: return
+        if (index !in stages.indices) return
         stage = null
+        showStages(chain, stages.filterIndexed { i, _ -> i != index })
         focus = chain to index
         val key = key
         edit { api.removePostProcessingStage(key, chain.section, index) }
@@ -295,9 +300,16 @@ class PostProcessingPage(
         down: Boolean,
     ) {
         if (!editable(chain)) return
-        val count = chains[chain]?.stages?.size ?: return
+        val stages = chains[chain]?.stages ?: return
         val to = if (down) index + 1 else index - 1
-        if (to !in 0 until count) return
+        if (index !in stages.indices || to !in stages.indices) return
+        // Swapped at once, so the stage's page shows its own options while the core saves it.
+        val swapped =
+            stages.toMutableList().apply {
+                this[index] = stages[to]
+                this[to] = stages[index]
+            }
+        showStages(chain, swapped)
         if (stage == chain to index) stage = chain to to
         val key = key
         edit { api.movePostProcessingStage(key, chain.section, index, down) }
@@ -331,6 +343,14 @@ class PostProcessingPage(
         scope.launch(core) { api.reloadPostProcessingShaders() }
     }
 
+    private fun showStages(
+        chain: Chain,
+        stages: List<Stage>,
+    ) {
+        val view = chains[chain] ?: return
+        chains = chains + (chain to view.copy(stages = stages))
+    }
+
     private fun settingsFor(key: String?): CoreSettings = if (key == null) global else layer(key)
 
     // Runs [change] on core, applies it in a running game, then reads the chains it left, and [after] with them.
@@ -360,7 +380,7 @@ class PostProcessingPage(
         scope.launch {
             val loaded =
                 withContext(core) {
-                    val gles = api.postProcessingUsesOpenGLES()
+                    val gles = api.postProcessingUsesOpenGLES(key)
                     val shaders =
                         api.getPostProcessingShaders().mapNotNull { (name, kind) ->
                             ShaderKind.of(kind)?.let { Shader(name, it) }

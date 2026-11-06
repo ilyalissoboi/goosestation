@@ -2969,9 +2969,9 @@ NATIVE_LIBRARY_FUNCTION(jboolean, isFastmemAvailable)(JNIEnv* env, jobject)
   return AndroidHost::IsFastmemAvailable();
 }
 
-NATIVE_LIBRARY_FUNCTION(jboolean, postProcessingUsesOpenGLES)(JNIEnv* env, jobject)
+NATIVE_LIBRARY_FUNCTION(jboolean, postProcessingUsesOpenGLES)(JNIEnv* env, jobject, jstring key)
 {
-  return AndroidHost::PostProcessingUsesOpenGLES();
+  return AndroidHost::PostProcessingUsesOpenGLES(ChainKey(env, key));
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isPostProcessingActiveForTest)(JNIEnv* env, jobject, jstring section)

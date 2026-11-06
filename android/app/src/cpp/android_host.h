@@ -128,8 +128,9 @@ void SetPostProcessingOption(const std::optional<std::string>& key, const char* 
 void CopyPostProcessingChain(const std::string& key, const char* section);
 /// Deletes the game's chain: Enabled, StageCount and the stages.
 void ClearPostProcessingChain(const std::string& key, const char* section);
-/// In a game, whether its device is OpenGL ES; else whether settings.ini's renderer runs on it (or Vulkan failed).
-bool PostProcessingUsesOpenGLES();
+/// In a game, whether its device is OpenGL ES; else whether the renderer runs on it (or Vulkan failed): the key's game
+/// file's renderer, when it sets one, else settings.ini's.
+bool PostProcessingUsesOpenGLES(const std::optional<std::string>& key);
 bool IsPostProcessingActiveForTest(const std::string& section);
 
 /// Whether fastmem can run here: the system's pages are no larger than the build's (else LoadSettings turns it off).

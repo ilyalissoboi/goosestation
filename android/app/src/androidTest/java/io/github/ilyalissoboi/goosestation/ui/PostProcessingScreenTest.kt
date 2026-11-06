@@ -72,6 +72,19 @@ class PostProcessingScreenTest {
         for (section in listOf("DISPLAY", "INTERNAL")) rule.onNodeWithText(section).assertExists()
     }
 
+    // A focus the model sets after the page shows (the core answered late) is taken, once its row is there.
+    @Test
+    fun aLateFocusIsTaken() {
+        show()
+        focused("Post-processing")
+
+        model.stages(Chain.Display, SamplePostProcessing.crtLottes)
+        model.focus = Chain.Display to 0
+        rule.waitForIdle()
+
+        focused("1. crt-lottes")
+    }
+
     @Test
     fun theSwitchTurnsTheChainOn() {
         show()

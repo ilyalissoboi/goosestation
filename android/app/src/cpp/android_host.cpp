@@ -1060,7 +1060,7 @@ void AndroidHost::ClearPostProcessingChain(const std::string& key, const char* s
   EditGameSettings(key, [section](INISettingsInterface& si) { ClearChain(si, section); });
 }
 
-bool AndroidHost::PostProcessingUsesOpenGLES()
+bool AndroidHost::PostProcessingUsesOpenGLES(const std::optional<std::string>& key)
 {
   if (!s_initialized)
     return false;
@@ -1079,14 +1079,17 @@ bool AndroidHost::PostProcessingUsesOpenGLES()
   if (running)
     return gles;
 
-  GPURenderer renderer;
+  // The game's own renderer, when its file sets one, as the core layers it at the game's boot; else settings.ini's.
+  std::string name;
+  if (key.has_value())
+    name = ReadGameSetting(*key, std::string(), [](const INISettingsInterface& si) { return si.GetStringValue("GPU", "Renderer"); });
+  if (name.empty())
   {
     const auto lock = Host::GetSettingsLock();
-    renderer = Settings::ParseRendererName(
-                 AndroidHost::s_base_settings_interface->GetStringValue("GPU", "Renderer", Settings::GetRendererName(Settings::DEFAULT_GPU_RENDERER))
-                   .c_str())
-                 .value_or(Settings::DEFAULT_GPU_RENDERER);
+    name = AndroidHost::s_base_settings_interface->GetStringValue("GPU", "Renderer",
+                                                                  Settings::GetRendererName(Settings::DEFAULT_GPU_RENDERER));
   }
+  const GPURenderer renderer = Settings::ParseRendererName(name.c_str()).value_or(Settings::DEFAULT_GPU_RENDERER);
   // Once Vulkan has failed, every device is OpenGL ES until the app restarts.
   return AndroidHost::s_vulkan_failed.load() || !IsVulkanRenderer(renderer);
 }

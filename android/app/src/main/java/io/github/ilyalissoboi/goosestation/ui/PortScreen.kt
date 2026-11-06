@@ -155,7 +155,11 @@ fun PortScreen(
                 if (bindingsFor != controller.descriptor) {
                     Line("Reading $label's bindings…")
                 } else {
-                    bindings.forEach { binding ->
+                    bindings.forEachIndexed { i, binding ->
+                        // A type a game's own file gives the port: its inputs, after the port's own, under its name.
+                        if (binding.category.isNotEmpty() && binding.category != bindings.getOrNull(i - 1)?.category) {
+                            SettingsSection("${binding.category} (a game's)")
+                        }
                         BindingRow(
                             binding = binding,
                             glyph = glyphs,
@@ -195,42 +199,46 @@ fun PortScreen(
 /** The controller type that's no controller: `ControllerType::None`'s name. */
 private const val NOT_CONNECTED = "None"
 
-/** One of a type's settings, as its kind shows it, its description as its note. */
+/** One of a type's settings, as its kind shows it, its description as its note; on a game's page, a game's row. */
 @Composable
-private fun TypeSettingRow(
+internal fun TypeSettingRow(
     pad: Int,
     s: TypeSetting,
     values: SettingValues,
     onChange: (SettingValues) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val note = s.description.ifEmpty { null }
     when (val setting = PortSettings.setting(pad, s)) {
-        is BoolSetting ->
-            SwitchRow(s.label, values[setting], onToggle = { onChange(values.with(setting, it)) }, note = note)
-        is IntSetting -> {
-            val value = values[setting]
+        is BoolSetting -> Switch(values, onChange, s.label, setting, note, modifier)
+        is IntSetting ->
             if (s.kind == TypeSetting.Kind.IntList) {
-                CyclerRow(
+                Choices(
+                    values,
+                    onChange,
                     s.label,
-                    offered(PortSettings.choices(s), value) { "$it" },
-                    value,
-                    onSelect = { onChange(values.with(setting, it)) },
-                    note = note,
+                    setting,
+                    offered(PortSettings.choices(s), values[setting]) { "$it" },
+                    note,
+                    modifier,
                 )
             } else {
                 PortSettings.scale(s)?.let { scale ->
-                    NumberRow(s.label, value, scale, onChange = { onChange(values.with(setting, it)) }, note = note)
+                    Number(values, onChange, s.label, setting, scale, note, modifier)
                 }
             }
-        }
         is FloatSetting ->
             PortSettings.scale(s)?.let { scale ->
-                NumberRow(
+                GroupNumber(
+                    values,
+                    onChange,
                     s.label,
-                    PortSettings.units(s, values[setting]),
+                    listOf(setting),
                     scale,
-                    onChange = { onChange(values.with(setting, PortSettings.value(s, it))) },
+                    value = { PortSettings.units(s, it[setting]) },
+                    write = { v, units -> v.with(setting, PortSettings.value(s, units)) },
                     note = note,
+                    modifier = modifier,
                 )
             }
         // None of the types the page offers has a text setting.

@@ -119,6 +119,12 @@ data class GameMenuState(
     val achievements: GameAchievements? = null,
     /** The Achievements panel, while it's open. */
     val cheevos: AchievementsPanelState? = null,
+    /** The game's own settings show in the menu's place. */
+    val settings: Boolean = false,
+    /** Back from the game's settings: the menu focuses its Settings row. */
+    val cameFromSettings: Boolean = false,
+    /** The game has a key to keep its own settings under; a PSF has none. */
+    val hasKey: Boolean = true,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -198,6 +204,12 @@ interface GameMenuActions {
 
     /** Back from an open leaderboard to the tab's list. */
     fun closeLeaderboard() {}
+
+    /** Opens the running game's own settings, in the menu's place, once it has booted. */
+    fun openSettings() {}
+
+    /** Back from the game's settings to the menu. */
+    fun closeSettings() {}
 }
 
 /** The save state hotkeys the app runs itself, by the core's names for them ([coreName]). */
@@ -226,6 +238,8 @@ class InGameMenu(
     private val onMessage: (String) -> Unit,
     private val onResume: () -> Unit,
     private val onExit: (resumeError: String?) -> Unit,
+    /** The running game's own settings are to show, or, with null, to go. */
+    private val onSettings: (GameEntry?) -> Unit = {},
 ) : GameMenuActions {
     var state by mutableStateOf(GameMenuState())
         private set
@@ -259,7 +273,7 @@ class InGameMenu(
         panelId++
         running = game
         selectedSlot = null
-        state = GameMenuState(booted = true, discCount = game.discs.size)
+        state = GameMenuState(booted = true, discCount = game.discs.size, hasKey = game.serial.isNotBlank())
         readGameState()
     }
 
@@ -269,6 +283,7 @@ class InGameMenu(
         panelId++
         running = null
         selectedSlot = null
+        if (state.settings) onSettings(null)
         state = GameMenuState()
     }
 
@@ -287,6 +302,8 @@ class InGameMenu(
                 confirmingReset = false,
                 confirmingExit = false,
                 replacingResume = null,
+                settings = false,
+                cameFromSettings = false,
             )
         if (state.booted) readGameState()
     }
@@ -388,7 +405,34 @@ class InGameMenu(
 
     /** Back to the game, unless Exit game is saving the resume state: the game stops once that's done. */
     override fun resume() {
-        if (!state.exiting) onResume()
+        if (state.exiting) return
+        if (state.settings) {
+            state = state.copy(settings = false)
+            onSettings(null)
+        }
+        onResume()
+    }
+
+    override fun openSettings() {
+        val game = running ?: return
+        if (!state.booted || game.serial.isBlank()) return
+        panelId++
+        state =
+            state.copy(
+                slots = null,
+                discs = null,
+                codes = null,
+                cheevos = null,
+                settings = true,
+                cameFromSettings = false,
+            )
+        onSettings(game)
+    }
+
+    override fun closeSettings() {
+        if (!state.settings) return
+        state = state.copy(settings = false, cameFromSettings = true)
+        onSettings(null)
     }
 
     /**

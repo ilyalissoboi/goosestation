@@ -5,15 +5,26 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
+import io.github.ilyalissoboi.goosestation.settings.LayerSettings
 import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 
-/** settings.ini as `section/key` to its text, for the pages' screen tests. */
+/** settings.ini, or a game's file, as `section/key` to its text, for the pages' screen tests. */
 private class FileSettings(
     private val values: Map<String, String>,
-) : CoreSettings {
+) : LayerSettings {
+    override fun contains(
+        section: String,
+        key: String,
+    ) = "$section/$key" in values
+
+    override fun delete(
+        section: String,
+        key: String,
+    ) = error("read only")
+
     override fun getString(
         section: String,
         key: String,
@@ -68,6 +79,13 @@ fun pageValues(
     settings: List<Setting<*>>,
     vararg file: Pair<String, String>,
 ): SettingValues = SettingValues.read(FileSettings(file.toMap()), settings)
+
+/** A game's values for a page's [settings]: settings.ini holding [global], the game's file holding [game]. */
+fun gamePageValues(
+    settings: List<Setting<*>>,
+    global: Map<String, String> = emptyMap(),
+    game: Map<String, String> = emptyMap(),
+): SettingValues = SettingValues.readGame(FileSettings(global), FileSettings(game), settings)
 
 /** A type's settings as the core describes NeGcon's: sixteen floats, the longest Port page. */
 val NEGCON_SETTINGS: List<TypeSetting> =

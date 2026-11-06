@@ -267,6 +267,17 @@ SettingsPage("Graphics", onBack = onBack) {
   screen readers say it and tests check it with `assertIsOn()`.
 - `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.
 - A row's `note` explains a consequence ("Higher is sharper and slower.") or a fallback. Never repeat the label.
+- **Rows for a game** (a page of a game's own settings, its values a game's, `SettingValues.isGame`): the page
+  shows the game's title as an `Eyebrow` over its own, and every row can use the global setting. The shared rows
+  (`Switch`, `Names`, `Number`, `Choices` in `ui/PageRows.kt`) do it themselves: a choice row's first choice is
+  "Use global (<the global value>)", selected while the game's file doesn't set it; an on/off row becomes a
+  `CyclerRow` of "Use global (On)", On and Off; a `NumberRow` (given `global` and `onUseGlobal`) shows "Use global
+  (…)" while it follows it, Right making the global value the game's own and Left from the scale's lowest value going
+  back, with "Use global" first in its list. Choosing it deletes the key. A row the game sets has a mark, "Set for
+  this game" in `label-sm` `beak-ink`, before its note, even when its value is the global one: it no longer follows
+  it. A row that writes several keys uses the global setting as a whole and is marked when the game sets any. In a
+  running game, a setting the core only takes at the next start adds "Applies when the game next starts." to its
+  note (`NextStart`).
 - `TextFieldRow`: a text setting, its label in `label-sm` over a 48 dp `sunken` well with a `line-strong` edge at
   `radius-sm`, the focus ring around the well. Focus doesn't open the keyboard, so a D-pad passes through; A, the
   D-pad centre or a tap open it, and up and down leave the field as on any row. A password is the secure field:
@@ -315,13 +326,22 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   the art loads; then the title (2 lines) and region · play time. Tiles are at least 152 dp wide, 16 dp apart across
   and 24 down.
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.
+- `GameSettingsScreen`: a game's own settings hub, a `SettingsPage` titled "Game settings" under the game's title as
+  an `Eyebrow`: the serial and region in `body` `ink-muted`, what its file sets in `body` `ink`, a `NavRow` per page
+  (its summary the page's count, "2 set for this game", or what's on it), then Copy global settings (`Secondary`)
+  and Clear settings (`Danger`). Each asks in an `OverlayPanel` (`GameQuestionPanel`): the question, then its answer
+  (`Danger`) and Cancel (`Ghost`, focused); the focus goes back to the button once it closes. In a game it takes the
+  menu's place over the paused game.
+- The library's foot: `KeyHints` "A Play" and "Y Game settings", while it has games. Y, or a long press, on a game
+  opens its settings.
 - `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
   edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end, or
   under the label when they don't fit; focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line`
   divider before Reset console, and `KeyHints` at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
   A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Load state; Patch codes (`code`) follows
-  Screenshot, then Achievements (`trophy`, its value the progress, "14 of 40", or why it's off). In hardcore mode,
+  Screenshot, then Achievements (`trophy`, its value the progress, "14 of 40", or why it's off), then Settings
+  (`settings`, the game's own). In hardcore mode,
   Load state, Patch codes and Fast forward are disabled with "Off in hardcore mode" as their value. One side panel
   shows at a time.
   Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),

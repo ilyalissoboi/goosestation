@@ -36,6 +36,7 @@ import io.github.ilyalissoboi.goosestation.ui.EmulationScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
+import io.github.ilyalissoboi.goosestation.ui.GameSettingsHost
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.HotkeysScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
@@ -99,6 +100,13 @@ class MainActivity : ComponentActivity() {
                             indicators = AppController.achievementOverlay.indicators,
                             overlayExpiry = AppController.achievementOverlay.nextExpiry(),
                             onOverlayExpire = AppController.achievementOverlay::expire,
+                            settings = {
+                                GameSettingsHost(
+                                    AppController.gameMenuSettings,
+                                    hardcoreActive = AppController.gameMenu.state.hardcore,
+                                    onBack = AppController.gameMenu::closeSettings,
+                                )
+                            },
                         )
                     Screen.Settings ->
                         SettingsScreen(
@@ -201,6 +209,12 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                    Screen.GameSettings ->
+                        GameSettingsHost(
+                            AppController.gameSettingsPages,
+                            hardcoreActive = false,
+                            onBack = AppController::closeGameSettings,
+                        )
                     Screen.MemcardEditor -> {
                         val editor = AppController.memcardEditor
                         val ui = editor.ui
@@ -391,7 +405,8 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = AppController::openSettings,
                             onRefresh = AppController::refresh,
                             onStartGame = AppController::startGame,
-                            focusPath = AppController.lastGamePath,
+                            onGameSettings = AppController::openGameSettings,
+                            focusPath = AppController.libraryFocus ?: AppController.lastGamePath,
                             focusSettings = AppController.focusSettings,
                             syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),
                             onSyncBadge = AppController::openSyncBadge,

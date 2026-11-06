@@ -44,19 +44,26 @@ internal val covers = CoverLoader((Runtime.getRuntime().maxMemory() / 8).coerceA
 /**
  * A game in the grid: its cover, fitted into a square, or the disc icon, its title and serial there until it has one;
  * then the title and a line of its region and play time under it. Focus rings the cover, so the art stays the hero. A,
- * Enter or a tap call [onClick].
+ * Enter or a tap call [onClick]; a long press, [onLongClick], if any.
  */
 @Composable
 fun GameTile(
     game: GameEntry,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val colors = GooseStationTheme.colors
     var focused by remember { mutableStateOf(false) }
     Column(
         modifier =
-            modifier.focusRing(focusedFill = null, ring = false, onFocusChange = { focused = it }, onClick = onClick),
+            modifier.focusRing(
+                focusedFill = null,
+                ring = false,
+                onFocusChange = { focused = it },
+                onLongClick = onLongClick,
+                onClick = onClick,
+            ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BoxWithConstraints(

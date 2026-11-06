@@ -1364,6 +1364,119 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getSettingNames)(JNIEnv* env, jobject, jst
   return ToNonNullStringArray(env, names);
 }
 
+// A game's own settings, by its key (AndroidHost::GetGameBoolSetting() and the rest).
+
+NATIVE_LIBRARY_FUNCTION(jboolean, hasGameSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name)
+{
+  return AndroidHost::HasGameSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                     FromJString(env, name).c_str()) ?
+           JNI_TRUE :
+           JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, getGameBoolSetting)(JNIEnv* env, jobject, jstring key, jstring section,
+                                                      jstring name, jboolean default_value)
+{
+  return AndroidHost::GetGameBoolSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                         FromJString(env, name).c_str(), default_value == JNI_TRUE) ?
+           JNI_TRUE :
+           JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getGameIntSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name,
+                                                 jint default_value)
+{
+  return AndroidHost::GetGameIntSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                        FromJString(env, name).c_str(), default_value);
+}
+
+NATIVE_LIBRARY_FUNCTION(jfloat, getGameFloatSetting)(JNIEnv* env, jobject, jstring key, jstring section,
+                                                     jstring name, jfloat default_value)
+{
+  return AndroidHost::GetGameFloatSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                          FromJString(env, name).c_str(), default_value);
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getGameStringSetting)(JNIEnv* env, jobject, jstring key, jstring section,
+                                                       jstring name, jstring default_value)
+{
+  return ToJString(env, AndroidHost::GetGameStringSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                                          FromJString(env, name).c_str(),
+                                                          FromJString(env, default_value).c_str()));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setGameBoolSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name,
+                                                  jboolean value)
+{
+  AndroidHost::SetGameBoolSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                  FromJString(env, name).c_str(), value == JNI_TRUE);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setGameIntSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name,
+                                                 jint value)
+{
+  AndroidHost::SetGameIntSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                 FromJString(env, name).c_str(), value);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setGameFloatSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name,
+                                                   jfloat value)
+{
+  AndroidHost::SetGameFloatSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                   FromJString(env, name).c_str(), value);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setGameStringSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name,
+                                                    jstring value)
+{
+  const std::string value_str = value ? FromJString(env, value) : std::string();
+  AndroidHost::SetGameStringSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                    FromJString(env, name).c_str(), value ? value_str.c_str() : nullptr);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, deleteGameSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name)
+{
+  AndroidHost::DeleteGameSetting(FromJString(env, key), FromJString(env, section).c_str(),
+                                 FromJString(env, name).c_str());
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameSettingKeys)(JNIEnv* env, jobject, jstring key)
+{
+  std::vector<std::string> flat;
+  for (auto& [section, name] : AndroidHost::GetGameSettingKeys(FromJString(env, key)))
+  {
+    flat.push_back(std::move(section));
+    flat.push_back(std::move(name));
+  }
+  return ToNonNullStringArray(env, flat);
+}
+
+NATIVE_LIBRARY_FUNCTION(void, copyGlobalSettingsToGame)(JNIEnv* env, jobject, jstring key)
+{
+  AndroidHost::CopyGlobalSettingsToGame(FromJString(env, key));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, clearGameSettings)(JNIEnv* env, jobject, jstring key)
+{
+  AndroidHost::ClearGameSettings(FromJString(env, key));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getGameInputProfile)(JNIEnv* env, jobject, jstring key)
+{
+  const std::optional<std::string> profile = AndroidHost::GetGameInputProfile(FromJString(env, key));
+  return profile.has_value() ? ToJString(env, profile.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, updateGameControllers)(JNIEnv* env, jobject, jstring key)
+{
+  AndroidHost::UpdateGameControllers(FromJString(env, key));
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, applyGameSettings)(JNIEnv* env, jobject, jstring key)
+{
+  return AndroidHost::ApplyGameSettings(FromJString(env, key)) ? JNI_TRUE : JNI_FALSE;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getSharedCardNames)(JNIEnv* env, jobject)
 {
   return ToNonNullStringArray(env, AndroidHost::GetSharedCardNames());
@@ -2603,6 +2716,16 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getOfferedPorts)(JNIEnv* env, jobject)
 NATIVE_LIBRARY_FUNCTION(jfloat, getPadBindStateForTest)(JNIEnv* env, jobject, jint pad, jstring name)
 {
   return (pad >= 0) ? AndroidHost::GetPadBindStateForTest(static_cast<u32>(pad), FromJString(env, name)) : 0.0f;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setListedKeyForTest)(JNIEnv* env, jobject, jstring path, jstring key)
+{
+  AndroidHost::SetListedKeyForTest(FromJString(env, path), FromJString(env, key));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getRunningSettingForTest)(JNIEnv* env, jobject, jstring section, jstring key)
+{
+  return ToJString(env, AndroidHost::GetRunningSettingForTest(FromJString(env, section), FromJString(env, key)));
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getMacroBindings)(JNIEnv* env, jobject, jstring descriptor)

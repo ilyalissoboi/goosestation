@@ -34,6 +34,7 @@ import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
@@ -204,31 +205,65 @@ class CardSlots(
     val onChange: (SettingValues) -> Unit,
 )
 
-/** Each slot's card type, its shared card when the type is Shared, and one card for a game's discs. */
+/**
+ * Each slot's card type, its shared card when the type is Shared, and, with [oneCardRow], one card for a game's discs.
+ * With [first], the first row takes the focus as it shows, as a page's first row does.
+ */
 @Composable
-private fun CardSlotRows(cards: CardSlots) {
+internal fun CardSlotRows(
+    cards: CardSlots,
+    oneCardRow: Boolean = true,
+    first: Boolean = false,
+) {
     val values = cards.values
+    val firstRow = remember { FocusRequester() }
+    if (first) LaunchedEffect(Unit) { firstRow.requestFocus() }
     SettingsSection("Cards")
     for (slot in 1..2) {
-        Names(values, cards.onChange, cards.names, "Card $slot type", MemoryCardSettings.type(slot))
+        Names(
+            values,
+            cards.onChange,
+            cards.names,
+            "Card $slot type",
+            MemoryCardSettings.type(slot),
+            modifier = if (slot == 1) Modifier.focusRequester(firstRow) else Modifier,
+        )
         if (values[MemoryCardSettings.type(slot)] == MemoryCardSettings.SHARED) {
             val path = MemoryCardSettings.path(slot)
-            CyclerRow(
+            Choices(
+                values,
+                cards.onChange,
                 "Shared card $slot",
-                MemoryCardSettings.sharedCards(slot, cards.sharedCards, values[path]),
-                values[path],
-                onSelect = { cards.onChange(values.with(path, it)) },
+                path,
+                MemoryCardSettings.sharedCards(slot, cards.sharedCards, values[path]).let { choices ->
+                    // A game's global card offered too, when the folder hasn't it.
+                    if (values.isGame) {
+                        offeredCard(
+                            choices,
+                            MemoryCardSettings.sharedCards(slot, cards.sharedCards, values.global(path)),
+                        )
+                    } else {
+                        choices
+                    }
+                },
             )
         }
     }
-    Switch(
-        values,
-        cards.onChange,
-        "One card for all discs of a game",
-        MemoryCardSettings.ONE_CARD_PER_GAME,
-        "A multi-disc game keeps its saves on one card.",
-    )
+    if (oneCardRow) {
+        Switch(
+            values,
+            cards.onChange,
+            "One card for all discs of a game",
+            MemoryCardSettings.ONE_CARD_PER_GAME,
+            "A multi-disc game keeps its saves on one card.",
+        )
+    }
 }
+
+private fun offeredCard(
+    choices: List<Choice<String>>,
+    withGlobal: List<Choice<String>>,
+) = choices + withGlobal.filter { global -> choices.none { it.value == global.value } }
 
 private const val SAVED = "Saved"
 private const val NOT_SET = "Not set"

@@ -13,7 +13,6 @@ import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.Hardcore
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
-import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 
@@ -50,11 +49,14 @@ fun ConsoleScreen(
         Names(values, onChange, names, "Execution mode", ConsoleSettings.EXECUTION_MODE)
         Switch(values, onChange, "Overclocking", ConsoleSettings.OVERCLOCK)
         if (values[ConsoleSettings.OVERCLOCK]) {
-            NumberRow(
+            GroupNumber(
+                values,
+                onChange,
                 "Overclocking percentage",
-                percent,
+                listOf(ConsoleSettings.OVERCLOCK_NUMERATOR, ConsoleSettings.OVERCLOCK_DENOMINATOR),
                 ConsoleSettings.OVERCLOCK_PERCENTS,
-                onChange = { onChange(ConsoleSettings.withOverclockPercent(values, it)) },
+                value = ConsoleSettings::overclockPercent,
+                write = ConsoleSettings::withOverclockPercent,
                 note = if (Hardcore.on(values) && percent < 100) "${Hardcore.OFF} below 100%." else null,
             )
         }

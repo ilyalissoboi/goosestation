@@ -36,6 +36,7 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -242,6 +243,28 @@ class PortScreenTest {
     }
 
     // --- The type, its settings and the macros ---
+
+    // A type a game's own file gives the port: its inputs follow the port's own, under the type's name.
+    @Test
+    fun aGamesTypesInputsHaveTheirOwnHeading() {
+        show(
+            type = "AnalogController",
+            bindings = BINDINGS + PadBinding("SteeringLeft", "Steering Left", PadBindingKind.HalfAxis, null, "NeGcon"),
+        )
+
+        rule.onNodeWithText("NeGcon (a game's)", ignoreCase = true).assertExists()
+        assertTrue(
+            "the game's type's heading comes after the port's own inputs",
+            rule
+                .onNodeWithText("NeGcon (a game's)", ignoreCase = true)
+                .fetchSemanticsNode()
+                .boundsInRoot.top >
+                rule
+                    .onNodeWithText("L2")
+                    .fetchSemanticsNode()
+                    .boundsInRoot.top,
+        )
+    }
 
     @Test
     fun withATypeThePageOpensOnIt() {

@@ -98,6 +98,23 @@ interface CoreApi {
     /** What [slots] rewind states take, as the core estimates it at the settings it has now. */
     fun getRewindMemoryUsage(slots: Int): RewindUsage
 
+    // A game's own settings file, by its key ([NativeLibrary.applyGameSettings] and the rest).
+
+    /** Has the running game take its settings again, if it's [key]'s: true then. */
+    fun applyGameSettings(key: String): Boolean
+
+    fun copyGlobalSettingsToGame(key: String)
+
+    fun clearGameSettings(key: String)
+
+    /** The keys [key]'s file sets, as section and name, in its order. */
+    fun getGameSettingKeys(key: String): List<Pair<String, String>>
+
+    fun getGameInputProfile(key: String): String?
+
+    /** [NativeLibrary.updateGameControllers]: after a change to [key]'s controller settings. */
+    fun updateGameControllers(key: String)
+
     fun getBiosImages(): List<BiosImage>
 
     fun getAutoBios(region: String): String?
@@ -214,6 +231,24 @@ object NativeCoreApi : CoreApi {
             .map { Choice(it[0], it[1]) }
 
     override fun getSharedCardNames(): List<String> = NativeLibrary.getSharedCardNames().toList()
+
+    override fun applyGameSettings(key: String) = NativeLibrary.applyGameSettings(key)
+
+    override fun copyGlobalSettingsToGame(key: String) = NativeLibrary.copyGlobalSettingsToGame(key)
+
+    override fun clearGameSettings(key: String) = NativeLibrary.clearGameSettings(key)
+
+    override fun getGameSettingKeys(key: String): List<Pair<String, String>> =
+        NativeLibrary
+            .getGameSettingKeys(key)
+            .toList()
+            .chunked(2)
+            .filter { it.size == 2 }
+            .map { it[0] to it[1] }
+
+    override fun getGameInputProfile(key: String): String? = NativeLibrary.getGameInputProfile(key)
+
+    override fun updateGameControllers(key: String) = NativeLibrary.updateGameControllers(key)
 
     override fun getRewindMemoryUsage(slots: Int): RewindUsage {
         val usage = NativeLibrary.getRewindMemoryUsage(slots)

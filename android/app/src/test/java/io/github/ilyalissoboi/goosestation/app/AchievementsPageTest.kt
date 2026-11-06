@@ -38,10 +38,11 @@ class AchievementsPageTest {
             val page = page()
 
             assertEquals(AchievementsAccount.SIGNED_OUT, page.account!!.state)
-            assertEquals(
-                AchievementsSettings(hardcore = true, messages = true, sounds = false, indicators = true),
-                page.settings,
-            )
+            val loaded = page.settings!!
+            assertEquals(true, loaded[AchievementsSettings.HARDCORE])
+            assertEquals(true, AchievementsSettings.messages(loaded))
+            assertEquals(false, loaded[AchievementsSettings.SOUNDS])
+            assertEquals(true, loaded[AchievementsSettings.OVERLAYS])
         }
 
     @Test
@@ -51,14 +52,16 @@ class AchievementsPageTest {
             settings.setInt("Cheevos", "NotificationsDuration", 12)
             val page = page()
             val loaded = page.settings!!
-            assertEquals(true, loaded.encore)
-            assertEquals(false, loaded.spectator)
-            assertEquals(false, loaded.unofficial)
-            assertEquals(12, loaded.unlockSeconds)
-            assertEquals(10, loaded.leaderboardSeconds)
+            assertEquals(true, loaded[AchievementsSettings.ENCORE])
+            assertEquals(false, loaded[AchievementsSettings.SPECTATOR])
+            assertEquals(false, loaded[AchievementsSettings.UNOFFICIAL])
+            assertEquals(12, loaded[AchievementsSettings.UNLOCK_SECONDS])
+            assertEquals(10, loaded[AchievementsSettings.LEADERBOARD_SECONDS])
             val before = settings.values.toMap()
 
-            page.change(loaded.copy(spectator = true, leaderboardSeconds = 20))
+            page.change(
+                loaded.with(AchievementsSettings.SPECTATOR, true).with(AchievementsSettings.LEADERBOARD_SECONDS, 20),
+            )
             runCurrent()
 
             assertEquals(
@@ -130,7 +133,7 @@ class AchievementsPageTest {
         runTest {
             val page = page()
 
-            page.change(page.settings!!.copy(messages = false))
+            page.change(AchievementsSettings.withMessages(page.settings!!, false))
             runCurrent()
 
             assertFalse(settings.getBool("Cheevos", "Notifications", true))
@@ -143,7 +146,7 @@ class AchievementsPageTest {
         runTest {
             val page = page()
 
-            page.change(page.settings!!.copy(hardcore = true))
+            page.change(page.settings!!.with(AchievementsSettings.HARDCORE, true))
             runCurrent()
 
             assertEquals(mapOf("Cheevos/ChallengeMode" to "true"), settings.values)

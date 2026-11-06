@@ -536,7 +536,7 @@ split into desktop's sections, each under its name in small capitals (a heading,
   catch-up pulls are done, see "The data folder and its mirror"), they're shown disabled, with "Available once
   GooseStation has started.", and the hub's focus starts on Folders.
 - **Settings change only from the library**, never while a game runs, so every change takes effect at the next game
-  start.
+  start. A game's own settings (below) are the exception: the running game's change from its menu.
 - **Each change is saved at once**, to the working copy's `settings.ini`, which the core then applies
   (`System::ApplySettings`); the next push, within 2 s, takes it to the data folder. The pages use desktop's keys and
   values, so the file stays one desktop can read. Only the setting changed is written: opening a page writes nothing.
@@ -637,6 +637,54 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
   on the recompiler.
 - The Port 1 bindings live in this file too, with `[Android] ControllerDescriptors` (see "Controllers"). Leaving
   them out is fine: each controller adds its default bindings the first time it's seen.
+
+### Settings for each game
+
+A game can have settings of its own, over the global ones, as on desktop. They open from its tile: **Y** on a focused
+game in the library (a long press, by touch), which the library's foot says ("A Play · Y Game settings"); and, for the
+running game, from **Settings** in its in-game menu (after Achievements). The library's opens only as the global
+pages do, with no game under way; a file with no key (a PSF) has none, and its menu's Settings says so.
+
+- **The hub** says "Game settings" under the game's title, its serial and region, and what its file sets ("3 settings
+  of its own, and 4 this app doesn't show", or "No settings of its own"): the keys no page shows are desktop's own,
+  or its bindings. Then its pages, in desktop's order, each saying how many it sets: **Console**, **Emulation**,
+  **Graphics** (the on-screen display too, as on Qt), **Audio**, **Controllers**, **Memory cards** (the card types
+  and shared cards; one card for all discs stays global), **Achievements** (the switches and the messages' times).
+  Post-processing and Advanced come with them in stage 4. Interface, BIOS, Folders and the memory card editor are
+  global only, and the in-game Settings never reaches them, nor any global page.
+- **Copy global settings** and **Clear settings** each ask first, in a panel over the hub, Cancel focused. Copy is
+  desktop's: the global settings as `Settings::Save(si, true)` writes them, over the game's own (so it leaves out what
+  desktop keeps global: the on-screen display, the Interface rows, logging). Clear is Big Picture's: the game's file
+  goes, with the keys this app doesn't show. In a running game in hardcore mode both wait until it stops (they
+  rewrite `[Cheevos]`, whose Encore, Spectator and Unofficial modes would end it), saying so.
+- **Every row can use the global setting**: a choice's first value is "Use global (<the global value>)", an on/off
+  row is a choice of "Use global (On)", On and Off, and a number steps from the global value (Right from "Use global"
+  makes the global value the game's own; Left from the lowest value goes back). Choosing "Use global" deletes the key;
+  a file left empty is deleted, and the next push deletes it in the data folder too. A row the game sets says **Set
+  for this game**, even when its value is the global one: it no longer follows it. A row of several keys (overclocking,
+  multisampling, the unlock and leaderboard messages) uses the global setting as a whole.
+- **In the running game** each change is saved and applied straight away (`System::ReloadGameSettings`). Region,
+  8 MB RAM, Preload disc to RAM and Apply image patches say "Applies when the game next starts."; hardcore mode says
+  "Turning it on applies when the game next starts." (turning it off is at once); and while hardcore mode is on,
+  Encore, Spectator and Test unofficial achievements are disabled ("Change it before the game starts: now it would
+  end hardcore mode."), since the core restarts the client for them. B from the hub goes back to the menu, on its
+  Settings row; Mode resumes the game from anywhere in them.
+- **The file** is `gamesettings/<key>.ini`, as desktop finds it for the game's key (`System::GetGameSettingsPath`):
+  for a disc set the database knows, its first serial, shared with desktop. For an M3U or a name group the database
+  doesn't know as a set, Android loads the key's file for every disc of the tile (`System::SetGameSettingsSerial`,
+  Android only), as the tile keeps its saves under one key; desktop reading the same data folder applies it to that
+  disc only, as it would anyway. A file desktop made under another disc's serial of such a group is left alone, and
+  isn't read here.
+- **Controllers for a game**: multitap, each port its multitap offers, with its type and the type's settings. The
+  bindings stay global ("Bindings are the global ones: Settings → Controllers."). Android writes `[ControllerPorts]
+  UseGameSettingsForController = true` while the game sets any of these, with only these keys, and deletes it once it
+  sets none; the core reads a game's controller keys only with it, so the page does too.
+- **What Android ignores in a desktop game file**, in memory only (the file is never rewritten by this, so desktop
+  keeps them; the adapted copy is never saved): its `[PadN]` bindings and macros (a desktop file with per-game controllers holds desktop's whole
+  bindings, `SDL-0/…`), `[InputSources]`, `[Hotkeys]`, a renderer Android doesn't have, BIOS names its BIOS folder
+  hasn't, the BIOS search folder and an absolute memory card folder. The type and the type's settings still apply.
+  A file naming desktop's input profile (`InputProfileName`) uses the global controllers here: its Controllers page
+  says so and can't be changed, since writing `UseGameSettingsForController` would take desktop off the profile.
 
 ### Controllers
 
@@ -776,8 +824,10 @@ changed what it reports) rumbles, at its own strength; if it goes, the next leve
 core repeats a level every half second while it lasts, and the app plays each for a second, so it doesn't gap; a level
 of 0, the menu opening and the game ending stop it. Each controller's strength scales both motors.
 
-**Known limits**: the bindings shown are the port's own type's: the types games' files set for a port (stage 3) aren't
-offered for remapping yet.
+**A type a game sets** for a port (its own Controllers page, below, or a desktop file's) has its inputs listed on the
+Port page after the port's own type's, under the type's name ("NeGcon (a game's)"), to remap them. Each controller on
+that port gets the type's default bindings where it has none, when the game's page sets the type and again as the game
+starts, so a game's type is never left unbound. Reset to defaults gives them back too.
 
 ### The in-game menu
 
@@ -1408,6 +1458,25 @@ them by hand. The emulator's System UI and the app both showed "isn't responding
 loaded from the test runs (load average 28): the app's trace showed its main thread running a layout, not blocked, and
 the page opened at once after a fresh start.
 
+### The settings pages, stage 3: settings for each game (2026-11-06)
+
+On `goose-arm64` (emulator-5554, 2400 x 1080, landscape) with the debug APK of `4b312dbc9`, installed over the existing
+one (data kept), driven by key events. The game was padtest (`HASH-9FDA0E1A56D8DF5B`).
+
+| Check | Result |
+|---|---|
+| The library | Pass. The foot says "A Play · Y Game settings". Y on padtest opened "Game settings" under "PADTEST", "HASH-9FDA0E1A56D8DF5B · PAL", "No settings of its own.", Console focused. |
+| A game's row | Pass. Graphics: every row "Use global (…)"; Right on Internal resolution made 1x the game's own, marked "Set for this game", and the hub then said "1 setting of its own." and Graphics "1 set for this game". `gamesettings/HASH-9FDA0E1A56D8DF5B.ini` had `ResolutionScale`, in the working copy and, after the push, the data folder. |
+| The game's start | Pass. padtest booted with `Loading game settings from 'HASH-9FDA0E1A56D8DF5B.ini'...` and `Resolution Scale: 2`. |
+| In the game | Pass. The menu's Settings row (after Achievements) opened the same hub over the paused game; 3x applied at once ("Resolution scale set to 3x"); Console's Region and 8 MB RAM said "Applies when the game next starts."; Controllers showed "Bindings are the global ones: Settings → Controllers.", Multitap and Port 1's type and settings, each "Use global (…)". Back went to the menu, on Settings. |
+| Use global | Pass. "Use global (1x (native))" first in the list; picked, the file went from the working copy and, with the next push, the data folder; the hub said "No settings of its own."; the running game went back to 1x. |
+| Crashes | None (`adb logcat -b crash -d` empty). |
+
+Before a reboot of the emulator, the mirror's pushes failed for every file ("The data folder created gamesettings as
+gamesettings (1)", and the same for `settings.ini`): the documents provider listed the data folder without files it
+held. After the reboot every push worked. That's the emulator's provider, not the app; the mirror's own rule, the
+folder's side wins, then kept the data folder's copy over a change it hadn't sent.
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -1842,3 +1911,17 @@ adb logcat -v time > thor.log
    - [ ] Multitap **Enable on Port 1 Only**: the ports become 1A to 1D; a controller on 1C starts a game without
      multitap with "<name> is on Port 1C, which this game doesn't use."
    - [ ] A macro (Cross & Circle, Repeats every 5 frames) fires while its trigger is held.
+15. **Settings for each game.** With the build that has them, the Thor's own controls, and a game whose file desktop
+    hasn't touched. Note `gamesettings/` in the data folder before and after.
+   - [ ] **Y** on the game's tile opens "Game settings" with its title and "No settings of its own"; the foot of the
+     library says "Y Game settings".
+   - [ ] Graphics, Internal resolution: Right from "Use global (…)" sets it, the row says "Set for this game", the hub
+     says "1 set for this game", and `gamesettings/<serial>.ini` has `ResolutionScale`. The game starts at it, and
+     another game doesn't.
+   - [ ] In the game, the menu's **Settings**: Internal resolution changed there shows at once over the paused game
+     once resumed; Region says "Applies when the game next starts.". B goes back to the menu on Settings.
+   - [ ] "Use global" on the last row: the hub says "No settings of its own", and the file is gone from the data
+     folder after the next push.
+   - [ ] Controllers for the game: Port 1's type **NeGcon** for this game only: the game sees a NeGcon (its steering
+     works with the Thor's stick), another game a DualShock; the global Port 1 page lists the NeGcon's inputs under
+     "NeGcon (a game's)".

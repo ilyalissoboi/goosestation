@@ -13,6 +13,7 @@ import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
+import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 
@@ -170,6 +171,55 @@ class FakeCoreApi(
     override fun getSettingNames(kind: String): List<Choice<String>> {
         calls += "getSettingNames $kind"
         return names[kind].orEmpty().map { Choice(it, nameLabels[it] ?: it) }
+    }
+
+    /** Each game's own settings, by key: what the game settings calls read and change. */
+    val gameLayers = mutableMapOf<String, MemoryCoreSettings>()
+
+    /** The key whose game is running: [applyGameSettings] is true for it. */
+    var runningKey: String? = null
+
+    /** The input profile each game's file names. */
+    var inputProfiles = emptyMap<String, String>()
+
+    /** What Copy writes into a game's file, as settings.ini would give it. */
+    var copied: Map<Pair<String, String>, String> = emptyMap()
+
+    fun gameLayer(key: String) = gameLayers.getOrPut(key) { MemoryCoreSettings() }
+
+    override fun applyGameSettings(key: String): Boolean {
+        calls += "applyGameSettings $key"
+        return key == runningKey
+    }
+
+    override fun copyGlobalSettingsToGame(key: String) {
+        calls += "copyGlobalSettingsToGame $key"
+        for ((at, value) in copied) gameLayer(key).setString(at.first, at.second, value)
+    }
+
+    override fun clearGameSettings(key: String) {
+        calls += "clearGameSettings $key"
+        gameLayers.remove(key)
+    }
+
+    override fun getGameSettingKeys(key: String): List<Pair<String, String>> = gameLayers[key]?.keys().orEmpty()
+
+    override fun getGameInputProfile(key: String): String? = inputProfiles[key]
+
+    // As the host does: the flag while the file has a controller key, and none once it hasn't.
+    override fun updateGameControllers(key: String) {
+        calls += "updateGameControllers $key"
+        val file = gameLayer(key)
+        val flags = setOf("UseGameSettingsForController", "GameSettingsInitialized")
+        val controllerKeys =
+            file.keys().any { (section, name) ->
+                (section == "ControllerPorts" && name !in flags) || section.matches(Regex("Pad[1-8]"))
+            }
+        if (controllerKeys) {
+            file.setBool("ControllerPorts", "UseGameSettingsForController", true)
+        } else {
+            file.delete("ControllerPorts", "UseGameSettingsForController")
+        }
     }
 
     override fun getSharedCardNames(): List<String> {

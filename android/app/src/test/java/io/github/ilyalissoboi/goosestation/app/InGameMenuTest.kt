@@ -43,6 +43,7 @@ class InGameMenuTest {
                 onMessage = { calls += "message $it" },
                 onResume = { calls += "resume" },
                 onExit = { calls += "exit $it" },
+                onSettings = { calls += "settings ${it?.serial}" },
             )
         if (booted) {
             menu.gameStarted(game(SERIAL))
@@ -1535,4 +1536,83 @@ class InGameMenuTest {
     private companion object {
         const val SERIAL = "SCUS-94900"
     }
+
+    // --- The game's own settings ---
+
+    @Test
+    fun settingsOpenForTheRunningGamesKey() =
+        runTest {
+            val menu = menu()
+
+            menu.openSettings()
+
+            assertTrue(menu.state.settings)
+            assertEquals(listOf("settings $SERIAL"), calls)
+        }
+
+    @Test
+    fun settingsDontOpenBeforeTheBoot() =
+        runTest {
+            val menu = menu(booted = false)
+
+            menu.openSettings()
+
+            assertFalse(menu.state.settings)
+            assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun backFromSettingsIsTheMenuOnItsRow() =
+        runTest {
+            val menu = menu()
+            menu.openSettings()
+            calls.clear()
+
+            menu.closeSettings()
+
+            assertFalse(menu.state.settings)
+            assertTrue(menu.state.cameFromSettings)
+            assertEquals(listOf("settings null"), calls)
+        }
+
+    @Test
+    fun modeResumesFromSettings() =
+        runTest {
+            val menu = menu()
+            menu.openSettings()
+            calls.clear()
+
+            menu.resume()
+
+            assertFalse(menu.state.settings)
+            assertEquals(listOf("settings null", "resume"), calls)
+        }
+
+    // A game with no key (a PSF) keeps no settings of its own, as it keeps no states.
+    @Test
+    fun noSettingsForAGameWithoutAKey() =
+        runTest {
+            val menu = menu(booted = false)
+            menu.gameStarted(game(""))
+            runCurrent()
+            calls.clear()
+
+            menu.openSettings()
+
+            assertFalse(menu.state.hasKey)
+            assertFalse(menu.state.settings)
+            assertFalse(calls.any { it.startsWith("settings") })
+        }
+
+    @Test
+    fun theMenuOpensOnResumeAfterSettings() =
+        runTest {
+            val menu = menu()
+            menu.openSettings()
+            menu.closeSettings()
+
+            menu.opened()
+
+            assertFalse(menu.state.cameFromSettings)
+        }
 }

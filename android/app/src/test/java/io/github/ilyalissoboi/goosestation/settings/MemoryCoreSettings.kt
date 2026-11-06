@@ -3,8 +3,8 @@
 
 package io.github.ilyalissoboi.goosestation.settings
 
-/** [CoreSettings] in a map keyed by `section/key`, each value as settings.ini would hold it. */
-class MemoryCoreSettings : CoreSettings {
+/** [LayerSettings] in a map keyed by `section/key`, each value as settings.ini would hold it, in the order set. */
+class MemoryCoreSettings : LayerSettings {
     val values = mutableMapOf<String, String>()
 
     /** Runs once, as the next value is read, as if the user acted while a page was being read. */
@@ -19,6 +19,21 @@ class MemoryCoreSettings : CoreSettings {
         hook()
         return values["$section/$key"]
     }
+
+    override fun contains(
+        section: String,
+        key: String,
+    ) = "$section/$key" in values
+
+    override fun delete(
+        section: String,
+        key: String,
+    ) {
+        values.remove("$section/$key")
+    }
+
+    /** The keys set, as section and name, in the order set. */
+    fun keys(): List<Pair<String, String>> = values.keys.map { it.substringBefore('/') to it.substringAfter('/') }
 
     override fun getString(
         section: String,

@@ -95,6 +95,9 @@ bool CreateGPUDevice(RenderAPI api, Error* error);
 #ifdef __ANDROID__
 /// The Vulkan device couldn't be created: returns whether to try OpenGL ES instead.
 bool OnVulkanDeviceFailed(const Error& error);
+
+/// A game's own settings were just loaded as its layer: drops, in memory, what can't work on Android.
+void AdaptGameSettingsLayer(SettingsInterface& si);
 #endif
 
 /// Handles fullscreen transitions and such.

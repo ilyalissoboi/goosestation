@@ -21,6 +21,7 @@
 #include "core/settings.h"
 #include "core/system.h"
 
+#include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
 #include "util/gpu_device.h"
@@ -96,6 +97,9 @@ static void WriteDescriptors(SettingsInterface& si);
 static u32 GetPadOfIndex(SettingsInterface& si, u32 index);
 static const Controller::ControllerInfo* GetPadControllerInfo(SettingsInterface& si, u32 pad);
 static u32 AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad);
+static u32 AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad, const Controller::ControllerInfo* info);
+static std::vector<const Controller::ControllerInfo*> GetGameTypes(u32 pad);
+static void AddRunningTypesDefaults();
 static bool HasDeviceBinding(SettingsInterface& si, u32 index, u32 pad);
 static bool AddControllerToPort(const std::string& identifier);
 static void UpdateSourceControllers();
@@ -679,6 +683,280 @@ bool AndroidHost::IsVulkanRenderer(GPURenderer renderer)
   return (Settings::GetRenderAPIForRenderer(renderer) == RenderAPI::Vulkan);
 }
 
+// The game settings files' edits, one at a time, so two never interleave a load and a save.
+static std::mutex s_game_settings_mutex;
+
+static std::string GameSettingsPath(const std::string& key)
+{
+  // EmuFolders::Update() changes the folder under the lock.
+  const auto lock = Host::GetSettingsLock();
+  return System::GetGameSettingsPath(key);
+}
+
+// The key's file as it is now; empty when there's none, or it can't be read.
+static std::unique_ptr<INISettingsInterface> LoadGameSettings(const std::string& key)
+{
+  auto si = std::make_unique<INISettingsInterface>(GameSettingsPath(key));
+  if (FileSystem::FileExists(si->GetFileName().c_str()))
+  {
+    Error error;
+    if (!si->Load(&error))
+      WARNING_LOG("Can't read {}: {}", si->GetFileName(), error.GetDescription());
+  }
+  return si;
+}
+
+// Saves si, or deletes its file once it holds nothing, as desktop does. Takes it: its destructor saves it while it has
+// unsaved changes, which would write an empty file again after the delete.
+static void SaveGameSettings(std::unique_ptr<INISettingsInterface> si)
+{
+  si->RemoveEmptySections();
+  Error error;
+  if (!si->IsEmpty())
+  {
+    FileSystem::EnsureDirectoryExists(std::string(Path::GetDirectory(si->GetFileName())).c_str(), false);
+    if (!si->Save(&error))
+      ERROR_LOG("Failed to save {}: {}", si->GetFileName(), error.GetDescription());
+    return;
+  }
+
+  const std::string path = si->GetFileName();
+  si.reset();
+  if (FileSystem::FileExists(path.c_str()) && !FileSystem::DeleteFile(path.c_str(), &error))
+    ERROR_LOG("Failed to delete {}: {}", path, error.GetDescription());
+}
+
+template<typename T, typename Read>
+static T ReadGameSetting(const std::string& key, T default_value, const Read& read)
+{
+  if (!AndroidHost::s_initialized || key.empty())
+    return default_value;
+
+  std::unique_lock lock(s_game_settings_mutex);
+  const std::unique_ptr<INISettingsInterface> si = LoadGameSettings(key);
+  return read(*si);
+}
+
+template<typename Edit>
+static void EditGameSettings(const std::string& key, const Edit& edit)
+{
+  if (!AndroidHost::s_initialized || key.empty())
+    return;
+
+  std::unique_lock lock(s_game_settings_mutex);
+  std::unique_ptr<INISettingsInterface> si = LoadGameSettings(key);
+  edit(*si);
+  SaveGameSettings(std::move(si));
+}
+
+bool AndroidHost::HasGameSetting(const std::string& key, const char* section, const char* name)
+{
+  return ReadGameSetting(key, false, [&](const INISettingsInterface& si) { return si.ContainsValue(section, name); });
+}
+
+bool AndroidHost::GetGameBoolSetting(const std::string& key, const char* section, const char* name, bool default_value)
+{
+  return ReadGameSetting(key, default_value, [&](const INISettingsInterface& si) {
+    return si.GetBoolValue(section, name, default_value);
+  });
+}
+
+s32 AndroidHost::GetGameIntSetting(const std::string& key, const char* section, const char* name, s32 default_value)
+{
+  return ReadGameSetting(key, default_value, [&](const INISettingsInterface& si) {
+    return si.GetIntValue(section, name, default_value);
+  });
+}
+
+float AndroidHost::GetGameFloatSetting(const std::string& key, const char* section, const char* name,
+                                       float default_value)
+{
+  return ReadGameSetting(key, default_value, [&](const INISettingsInterface& si) {
+    return si.GetFloatValue(section, name, default_value);
+  });
+}
+
+std::string AndroidHost::GetGameStringSetting(const std::string& key, const char* section, const char* name,
+                                              const char* default_value)
+{
+  return ReadGameSetting(key, std::string(default_value), [&](const INISettingsInterface& si) {
+    return si.GetStringValue(section, name, default_value);
+  });
+}
+
+void AndroidHost::SetGameBoolSetting(const std::string& key, const char* section, const char* name, bool value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.SetBoolValue(section, name, value); });
+}
+
+void AndroidHost::SetGameIntSetting(const std::string& key, const char* section, const char* name, s32 value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.SetIntValue(section, name, value); });
+}
+
+void AndroidHost::SetGameFloatSetting(const std::string& key, const char* section, const char* name, float value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.SetFloatValue(section, name, value); });
+}
+
+void AndroidHost::SetGameStringSetting(const std::string& key, const char* section, const char* name,
+                                       const char* value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) {
+    if (value)
+      si.SetStringValue(section, name, value);
+    else
+      si.DeleteValue(section, name);
+  });
+}
+
+void AndroidHost::DeleteGameSetting(const std::string& key, const char* section, const char* name)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.DeleteValue(section, name); });
+}
+
+std::vector<std::pair<std::string, std::string>> AndroidHost::GetGameSettingKeys(const std::string& key)
+{
+  return ReadGameSetting(key, std::vector<std::pair<std::string, std::string>>(), [](const INISettingsInterface& si) {
+    std::vector<std::pair<std::string, std::string>> keys;
+    for (const std::string& section : si.GetSectionList())
+    {
+      for (auto& [name, value] : si.GetKeyValueList(section.c_str()))
+      {
+        // A list's key once, for all its values.
+        if (std::find(keys.begin(), keys.end(), std::pair(section, name)) == keys.end())
+          keys.emplace_back(section, std::move(name));
+      }
+    }
+    return keys;
+  });
+}
+
+void AndroidHost::CopyGlobalSettingsToGame(const std::string& key)
+{
+  EditGameSettings(key, [](INISettingsInterface& si) {
+    Settings global;
+    {
+      const auto lock = Host::GetSettingsLock();
+      global.Load(*AndroidHost::s_base_settings_interface, *AndroidHost::s_base_settings_interface);
+    }
+    global.Save(si, true);
+  });
+}
+
+void AndroidHost::ClearGameSettings(const std::string& key)
+{
+  EditGameSettings(key, [](INISettingsInterface& si) { si.Clear(); });
+}
+
+std::optional<std::string> AndroidHost::GetGameInputProfile(const std::string& key)
+{
+  return ReadGameSetting(key, std::optional<std::string>(), [](const INISettingsInterface& si) {
+    std::optional<std::string> profile;
+    if (!si.GetBoolValue("ControllerPorts", "UseGameSettingsForController", false))
+    {
+      if (std::string name = si.GetStringValue("ControllerPorts", "InputProfileName"); !name.empty())
+        profile = std::move(name);
+    }
+    return profile;
+  });
+}
+
+bool AndroidHost::ApplyGameSettings(const std::string& key)
+{
+  if (!s_initialized || key.empty())
+    return false;
+
+  const std::string path = GameSettingsPath(key);
+  bool applied = false;
+  EmuThread::RunOnThread(
+    [&path, &applied]() {
+      if (!System::IsValid() || !s_running_game.has_value() || GameSettingsPath(s_running_game->key) != path)
+        return;
+
+      System::ReloadGameSettings(false);
+      System::ReloadInputBindings();
+      applied = true;
+    },
+    true);
+  return applied;
+}
+
+void AndroidHost::UpdateGameControllers(const std::string& key)
+{
+  if (!s_initialized || key.empty())
+    return;
+
+  // Its controller settings count while it has any, as Android writes only those (never bindings).
+  EditGameSettings(key, [](INISettingsInterface& si) {
+    if (AndroidGameSettings::HasControllerKeys(si))
+      si.SetBoolValue("ControllerPorts", "UseGameSettingsForController", true);
+    else
+      si.DeleteValue("ControllerPorts", "UseGameSettingsForController");
+  });
+
+  // The types it sets: each controller on such a port gets the type's default bindings where it has none.
+  std::array<const Controller::ControllerInfo*, AndroidInputKeys::NUM_PADS> types = {};
+  ReadGameSetting(key, 0, [&types](const INISettingsInterface& si) {
+    if (!si.GetBoolValue("ControllerPorts", "UseGameSettingsForController", false))
+      return 0;
+    for (u32 pad = 0; pad < types.size(); pad++)
+    {
+      const std::string type = si.GetStringValue(Controller::GetSettingsSection(pad).c_str(), "Type");
+      types[pad] = type.empty() ? nullptr : Controller::GetControllerInfo(type);
+    }
+    return 0;
+  });
+
+  EmuThread::RunOnThread(
+    [&types]() {
+      u32 added = 0;
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        for (u32 index = 0; index < s_descriptors.size(); index++)
+        {
+          const u32 pad = GetPadOfIndex(si, index);
+          added += AddDefaultBindings(si, index, pad, types[pad]);
+        }
+
+        Error error;
+        if (added > 0 && !si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      if (added > 0)
+        System::ReloadInputBindings();
+    },
+    true);
+}
+
+// CPU thread, as a game starts: each connected controller gets the default bindings of its port's type in effect
+// (from the game's own file, maybe from desktop) where it has none, so it's never left unbound.
+void AndroidHost::AddRunningTypesDefaults()
+{
+  u32 added = 0;
+  {
+    const auto lock = Host::GetSettingsLock();
+    SettingsInterface& si = *s_base_settings_interface;
+    for (const ConnectedDevice& device : s_connected_devices)
+    {
+      const u32 pad = GetPadOfIndex(si, device.index);
+      added += AddDefaultBindings(si, device.index, pad, Controller::GetControllerInfo(g_settings.controller_types[pad]));
+    }
+
+    Error error;
+    if (added > 0 && !si.Save(&error))
+      ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+  }
+
+  if (added > 0)
+  {
+    INFO_LOG("Added {} bindings for the game's controller types.", added);
+    System::ReloadInputBindings();
+  }
+}
+
 std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
 {
   if (!s_initialized)
@@ -922,6 +1200,8 @@ void AndroidHost::BootPendingGame()
   s_pending_playlist_index = 0;
   s_running_game = std::move(s_pending_game);
   s_pending_game = {};
+  // Every disc of the library's game takes the game's own settings from one file, under its key, as its states.
+  System::SetGameSettingsSerial(s_running_game->key);
   // Built before the boot, whose UpdateRunningGame() gives it to the core (Host::OnGameChanged()).
   GameCodes::Load(s_running_game.value());
   if (parameters.save_state.empty())
@@ -935,6 +1215,7 @@ void AndroidHost::BootPendingGame()
     ERROR_LOG("Failed to start '{}': {}", s_boot_path, error.GetDescription());
     NotifyError(fmt::format("Failed to start {}: {}", Path::GetFileName(s_boot_path), error.GetDescription()));
     s_running_game.reset();
+    System::SetGameSettingsSerial({});
     NotifyGameStopped();
   }
 }
@@ -1626,7 +1907,11 @@ const Controller::ControllerInfo* AndroidHost::GetPadControllerInfo(SettingsInte
 
 u32 AndroidHost::AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad)
 {
-  const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
+  return AddDefaultBindings(si, index, pad, GetPadControllerInfo(si, pad));
+}
+
+u32 AndroidHost::AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad, const Controller::ControllerInfo* info)
+{
   if (!info)
     return 0;
 
@@ -1758,7 +2043,13 @@ bool AndroidHost::AddControllerToPort(const std::string& identifier)
     const auto lock = Host::GetSettingsLock();
     SettingsInterface& si = *s_base_settings_interface;
     const u32 pad = GetPadOfIndex(si, index.value());
-    const u32 added = AddDefaultBindings(si, index.value(), pad);
+    u32 added = AddDefaultBindings(si, index.value(), pad);
+    // And, in a game, the type its own settings give the port, so one connected mid-game isn't left unbound.
+    if (System::IsValid())
+    {
+      added += AddDefaultBindings(si, index.value(), pad,
+                                  Controller::GetControllerInfo(g_settings.controller_types[pad]));
+    }
     if (added == 0)
       return true;
 
@@ -1782,15 +2073,99 @@ void AndroidHost::MapNewController(const std::string& identifier)
   // single binding keeps what it has, so a remap survives.
   if (std::find(s_unmapped_indices.begin(), s_unmapped_indices.end(), index.value()) == s_unmapped_indices.end())
   {
-    const auto lock = Host::GetSettingsLock();
-    SettingsInterface& si = *s_base_settings_interface;
-    if (HasDeviceBinding(si, index.value(), GetPadOfIndex(si, index.value())))
+    u32 added = 0;
+    {
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface& si = *s_base_settings_interface;
+      const u32 pad = GetPadOfIndex(si, index.value());
+      if (HasDeviceBinding(si, index.value(), pad))
+      {
+        // In a game whose own settings give the port another type, that type's defaults, when the controller has
+        // none of the inputs only that type has bound (it was off as the game started): one cleared on purpose stays
+        // cleared.
+        const Controller::ControllerInfo* running =
+          System::IsValid() ? Controller::GetControllerInfo(g_settings.controller_types[pad]) : nullptr;
+        const Controller::ControllerInfo* own = GetPadControllerInfo(si, pad);
+        const std::string section = Controller::GetSettingsSection(pad);
+        bool unbound = false;
+        if (running && running != own)
+        {
+          bool any_own_input = false;
+          unbound = true;
+          for (const Controller::ControllerBindingInfo& bi : running->bindings)
+          {
+            if (own && std::any_of(own->bindings.begin(), own->bindings.end(),
+                                   [&bi](const Controller::ControllerBindingInfo& o) {
+                                     return std::string_view(o.name) == bi.name;
+                                   }))
+            {
+              continue;
+            }
+            any_own_input = true;
+            if (AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), bi.name), index.value()))
+              unbound = false;
+          }
+          unbound = unbound && any_own_input;
+        }
+        if (unbound)
+        {
+          added = AddDefaultBindings(si, index.value(), pad, running);
+          Error error;
+          if (added > 0 && !si.Save(&error))
+            ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+        }
+        if (added == 0)
+          return;
+      }
+    }
+    if (added > 0)
+    {
+      INFO_LOG("Added {} bindings for {} for the game's controller type.", added, identifier);
+      System::ReloadInputBindings();
       return;
+    }
   }
 
   // One that's gone again stays unmapped, and gets its defaults when it's back.
   if (AddControllerToPort(identifier))
     std::erase(s_unmapped_indices, index.value());
+}
+
+// Calls f with each game's own settings file whose controller settings count ([ControllerPorts]
+// UseGameSettingsForController, as System::GetControllerSettingsLayers() takes them). Not under the settings lock.
+template<typename F>
+static void ForEachControllerGameFile(const F& f)
+{
+  std::string folder;
+  {
+    // The CPU thread changes the folders under it (EmuFolders::Update()).
+    const auto lock = Host::GetSettingsLock();
+    folder = EmuFolders::GameSettings;
+  }
+
+  FileSystem::FindResultsArray files;
+  FileSystem::FindFiles(folder.c_str(), "*.ini", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES, &files);
+  std::sort(files.begin(), files.end(),
+            [](const FILESYSTEM_FIND_DATA& a, const FILESYSTEM_FIND_DATA& b) { return a.FileName < b.FileName; });
+  for (const FILESYSTEM_FIND_DATA& file : files)
+  {
+    INISettingsInterface game(file.FileName);
+    if (game.Load() && game.GetBoolValue("ControllerPorts", "UseGameSettingsForController", false))
+      f(game);
+  }
+}
+
+// The controller types games' own files set for pad, each once, in the files' order. Not under the settings lock.
+std::vector<const Controller::ControllerInfo*> AndroidHost::GetGameTypes(u32 pad)
+{
+  std::vector<const Controller::ControllerInfo*> types;
+  ForEachControllerGameFile([pad, &types](SettingsInterface& game) {
+    const std::string type = game.GetStringValue(Controller::GetSettingsSection(pad).c_str(), "Type");
+    const Controller::ControllerInfo* info = type.empty() ? nullptr : Controller::GetControllerInfo(type);
+    if (info && std::find(types.begin(), types.end(), info) == types.end())
+      types.push_back(info);
+  });
+  return types;
 }
 
 std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(std::string descriptor)
@@ -1805,40 +2180,61 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
       if (!index.has_value())
         return;
 
+      u32 pad;
+      {
+        const auto lock = Host::GetSettingsLock();
+        pad = GetPadOfIndex(*s_base_settings_interface, index.value());
+      }
+      // The types games' own files give the port: their inputs are listed too, after its own type's, to remap them.
+      const std::vector<const Controller::ControllerInfo*> game_types = GetGameTypes(pad);
+
       const auto lock = Host::GetSettingsLock();
       SettingsInterface& si = *s_base_settings_interface;
       result.emplace();
-      const u32 pad = GetPadOfIndex(si, index.value());
       const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
-      if (!info)
-        return;
+      std::vector<const Controller::ControllerInfo*> types;
+      if (info)
+        types.push_back(info);
+      for (const Controller::ControllerInfo* type : game_types)
+      {
+        if (type != info)
+          types.push_back(type);
+      }
 
       const std::string section = Controller::GetSettingsSection(pad);
-      for (const Controller::ControllerBindingInfo& bi : info->bindings)
+      for (const Controller::ControllerInfo* type : types)
       {
-        // A hotkey (GetHotkeyBindings()).
-        if (std::string_view(bi.name) == ANALOG_BUTTON)
-          continue;
-
-        PadBindingKind kind;
-        switch (bi.type)
+        for (const Controller::ControllerBindingInfo& bi : type->bindings)
         {
-          case InputBindingInfo::Type::Button:
-            kind = PadBindingKind::Button;
-            break;
-          case InputBindingInfo::Type::Axis:
-            kind = PadBindingKind::Axis;
-            break;
-          case InputBindingInfo::Type::HalfAxis:
-            kind = PadBindingKind::HalfAxis;
-            break;
-          default:
+          // A hotkey (GetHotkeyBindings()).
+          if (std::string_view(bi.name) == ANALOG_BUTTON)
             continue;
-        }
 
-        result->push_back(PadBinding{bi.name, bi.display_name, kind,
-                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), bi.name),
-                                                                        index.value())});
+          PadBindingKind kind;
+          switch (bi.type)
+          {
+            case InputBindingInfo::Type::Button:
+              kind = PadBindingKind::Button;
+              break;
+            case InputBindingInfo::Type::Axis:
+              kind = PadBindingKind::Axis;
+              break;
+            case InputBindingInfo::Type::HalfAxis:
+              kind = PadBindingKind::HalfAxis;
+              break;
+            default:
+              continue;
+          }
+
+          // One row per [PadN] key: a name another type listed already is that row.
+          if (std::any_of(result->begin(), result->end(), [&bi](const PadBinding& b) { return b.name == bi.name; }))
+            continue;
+
+          result->push_back(PadBinding{
+            bi.name, bi.display_name, kind,
+            AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), bi.name), index.value()),
+            (type == info) ? std::string() : std::string(type->GetDisplayName())});
+        }
       }
     },
     true);
@@ -2015,17 +2411,11 @@ std::vector<std::pair<u32, std::string>> AndroidHost::GetOfferedPorts()
     // The CPU thread changes the folders under it (EmuFolders::Update()).
     const auto lock = Host::GetSettingsLock();
     modes.push_back(s_base_settings_interface->GetStringValue("ControllerPorts", "MultitapMode"));
-    folder = EmuFolders::GameSettings;
   }
 
-  FileSystem::FindResultsArray files;
-  FileSystem::FindFiles(folder.c_str(), "*.ini", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES, &files);
-  for (const FILESYSTEM_FIND_DATA& file : files)
-  {
-    INISettingsInterface game(file.FileName);
-    if (game.Load())
-      modes.push_back(game.GetStringValue("ControllerPorts", "MultitapMode"));
-  }
+  // Only the games' files whose controller settings count, as the core takes them.
+  ForEachControllerGameFile(
+    [&modes](SettingsInterface& game) { modes.push_back(game.GetStringValue("ControllerPorts", "MultitapMode")); });
 
   // By the mode's own name, as Settings::IsPort2MultitapEnabled() reads Port2Only as Port 1's.
   std::array<bool, 2> multitap = {false, false};
@@ -2099,6 +2489,28 @@ void AndroidHost::PostUnusedPortMessages()
     Host::AddOSDMessage(fmt::format("{} is on {}, which this game doesn't use.", device.name, label),
                         Host::OSD_INFO_DURATION);
   }
+}
+
+void AndroidHost::SetListedKeyForTest(std::string path, std::string key)
+{
+  std::unique_lock lock(s_listed_games_mutex);
+  for (AndroidDiscGroups::Game& game : s_listed_games)
+  {
+    if (game.path == path)
+      game.key = key;
+  }
+}
+
+std::string AndroidHost::GetRunningSettingForTest(std::string section, std::string key)
+{
+  std::string value;
+  EmuThread::RunOnThread(
+    [&section, &key, &value]() {
+      if (System::IsValid())
+        value = Host::GetStringSettingValue(section.c_str(), key.c_str(), "");
+    },
+    true);
+  return value;
 }
 
 float AndroidHost::GetPadBindStateForTest(u32 pad, std::string name)
@@ -2214,17 +2626,28 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
         std::erase(s_unmapped_indices, index.value());
       }
 
+      u32 game_pad;
+      {
+        const auto lock = Host::GetSettingsLock();
+        game_pad = GetPadOfIndex(*s_base_settings_interface, index.value());
+      }
+      const std::vector<const Controller::ControllerInfo*> game_types = GetGameTypes(game_pad);
+
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
         // Only what GetPadBindings() and GetMacroBindings() list: a button, an axis or a macro's trigger, never a
-        // pointer or a motor.
+        // pointer or a motor. The port's type's, or a type a game's own file gives it.
         const u32 pad = GetPadOfIndex(si, index.value());
         const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
-        if (!info || (!IsMacroKey(name) && std::none_of(info->bindings.begin(), info->bindings.end(),
-                                                        [&name](const Controller::ControllerBindingInfo& bi) {
-                                                          return name == bi.name && IsPadBindingType(bi.type);
-                                                        })))
+        const auto has_input = [&name](const Controller::ControllerInfo* type) {
+          return type && std::any_of(type->bindings.begin(), type->bindings.end(),
+                                     [&name](const Controller::ControllerBindingInfo& bi) {
+                                       return name == bi.name && IsPadBindingType(bi.type);
+                                     });
+        };
+        if (!info || (!IsMacroKey(name) && !has_input(info) &&
+                      (pad != game_pad || std::none_of(game_types.begin(), game_types.end(), has_input))))
         {
           WARNING_LOG("Port {} has no button or axis '{}', not binding it.", pad + 1, name);
           return;
@@ -2340,6 +2763,13 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
       if (!index.has_value())
         return;
 
+      u32 game_pad;
+      {
+        const auto lock = Host::GetSettingsLock();
+        game_pad = GetPadOfIndex(*s_base_settings_interface, index.value());
+      }
+      const std::vector<const Controller::ControllerInfo*> game_types = GetGameTypes(game_pad);
+
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
@@ -2375,6 +2805,12 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
         }
 
         AddDefaultBindings(si, index.value(), pad);
+        // And those of the types games' own files give the port.
+        if (pad == game_pad)
+        {
+          for (const Controller::ControllerInfo* type : game_types)
+            AddDefaultBindings(si, index.value(), pad, type);
+        }
 
         Error error;
         if (!si.Save(&error))
@@ -2637,7 +3073,32 @@ void Host::OnSystemStarted()
   AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
                                  System::GetGameSerial(), g_settings.start_paused,
                                  g_settings.pause_on_controller_disconnection);
+  AndroidHost::AddRunningTypesDefaults();
   AndroidHost::PostUnusedPortMessages();
+}
+
+void Host::AdaptGameSettingsLayer(SettingsInterface& si)
+{
+  AndroidGameSettings::Usable usable;
+  for (u32 type = 0; type < static_cast<u32>(ControllerType::Count); type++)
+  {
+    if (const Controller::ControllerInfo* info = Controller::GetControllerInfo(static_cast<ControllerType>(type)))
+    {
+      for (const SettingInfo& setting : info->settings)
+        usable.pad_setting_keys.emplace_back(setting.name);
+    }
+  }
+  for (const GPURenderer renderer : {GPURenderer::Automatic, GPURenderer::HardwareVulkan, GPURenderer::HardwareOpenGL,
+                                     GPURenderer::Software})
+  {
+    usable.renderers.emplace_back(Settings::GetRendererName(renderer));
+  }
+  // The CPU thread's, which loads the layer.
+  const std::string bios_dir = EmuFolders::Bios;
+  usable.has_bios = [&bios_dir](std::string_view name) {
+    return FileSystem::FileExists(Path::Combine(bios_dir, name).c_str());
+  };
+  AndroidGameSettings::Adapt(si, usable);
 }
 
 void Host::OnSystemDestroyed()
@@ -2645,6 +3106,7 @@ void Host::OnSystemDestroyed()
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
   AndroidHost::s_running_game.reset();
+  System::SetGameSettingsSerial({});
   GameCodes::Clear();
 
   // Fast forward ends with the game.

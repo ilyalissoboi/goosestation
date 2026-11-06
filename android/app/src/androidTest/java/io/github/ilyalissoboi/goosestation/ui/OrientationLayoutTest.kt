@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -57,8 +58,12 @@ import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
+import io.github.ilyalissoboi.goosestation.app.GameControllers
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.GamePage
+import io.github.ilyalissoboi.goosestation.app.GameQuestion
+import io.github.ilyalissoboi.goosestation.app.GameSummary
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
@@ -98,6 +103,8 @@ import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
+import io.github.ilyalissoboi.goosestation.ui.components.GameContext
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertTrue
@@ -126,6 +133,9 @@ class OrientationLayoutTest {
     }
 
     private companion object {
+        val GAME = GameEntry("/games/padtest.psexe", "Pad Test", "SLUS-00001", "NTSC-U", 0, 0, null)
+        val GAME_SUMMARY = GameSummary(mapOf(GamePage.Graphics to 2), others = 4)
+
         val HOTKEYS =
             listOf(
                 PadBinding(
@@ -959,6 +969,66 @@ class OrientationLayoutTest {
         )
 
     @Test
+    fun aGamesHub() {
+        eachConfig({ GameSettingsScreen(GAME, GAME_SUMMARY, null, null, {}, {}, {}, {}, {}) }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            assertShows("and 4 this app doesn't show")
+            pressUntilFocused(Key.DirectionDown, "Clear settings")
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionUp, "Console")
+        }
+    }
+
+    @Test
+    fun aGamesHubAsksToClear() {
+        eachConfig({ GameQuestionPanel(GameQuestion.Clear, GAME.title, others = 4, onConfirm = {}, onCancel = {}) }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("Cancel"))
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun aGamesGraphicsPageThroughItsRows() {
+        eachConfig({
+            var values by remember {
+                mutableStateOf(gamePageValues(GraphicsSettings.all, game = mapOf("GPU/ResolutionScale" to "4")))
+            }
+            CompositionLocalProvider(LocalGameContext provides GameContext(GAME.title, running = true, false)) {
+                GraphicsScreen(values, SampleNames.ALL, vulkanFailed = false, onChange = { values = it }, onBack = {})
+            }
+        }) {
+            assertTextsLaidOut()
+            assertShows(SET_FOR_GAME)
+            pressUntilFocused(Key.DirectionDown, "VRAM write replacements")
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun aGamesControllersThroughItsRows() {
+        val controllers = GameControllers(listOf(0, 2, 3, 4, 1), mapOf(0 to NEGCON_SETTINGS), null)
+        val settings =
+            listOf(PortSettings.MULTITAP) +
+                controllers.pads.flatMap {
+                    listOf(GameControllers.type(it)) + PortSettings.settings(it, controllers.typeSettings[it].orEmpty())
+                }
+        eachConfig({
+            var values by remember {
+                mutableStateOf(gamePageValues(settings, game = mapOf("ControllerPorts/MultitapMode" to "Port1Only")))
+            }
+            CompositionLocalProvider(LocalGameContext provides GameContext(GAME.title, running = false, false)) {
+                GameControllersScreen(values, SampleNames.ALL, controllers, onChange = { values = it }, onBack = {})
+            }
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            stepToTheEnd(Key.DirectionDown, limit = 40)
+        }
+    }
+
+    @Test
     fun theHubWithTheCoreReady() {
         eachConfig({ SettingsScreen(focusEntry = null, coreReady = true, onOpen = {}, onBack = {}) }) {
             assertTextsLaidOut()
@@ -1182,7 +1252,7 @@ class OrientationLayoutTest {
         eachConfig({
             AchievementsScreen(
                 account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0),
-                settings = AchievementsSettings(hardcore = true, messages = true, sounds = true, indicators = true),
+                settings = pageValues(AchievementsSettings.all, "Cheevos/ChallengeMode" to "true"),
                 signingIn = false,
                 error = "Invalid username/password.",
                 expired = false,
@@ -1209,7 +1279,7 @@ class OrientationLayoutTest {
         eachConfig({
             AchievementsScreen(
                 account = AchievementsAccount(AchievementsAccount.NOT_CONNECTED, "a-rather-long-goose-name", "", 0, 0),
-                settings = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true),
+                settings = pageValues(AchievementsSettings.all),
                 signingIn = false,
                 error = null,
                 expired = false,
@@ -1779,8 +1849,9 @@ class OrientationLayoutTest {
                 focusSettings = true,
             )
         }) {
-            assertTextsLaidOut()
-            for (text in listOf("Library", "Grid", "Settings", "Refresh")) {
+            // The list clips a row it shows only in part, which may meet the button hints under it.
+            assertTextsLaidOut(inView = true)
+            for (text in listOf("Library", "Grid", "Settings", "Refresh", "Game settings")) {
                 rule.onNodeWithText(text, useUnmergedTree = true).assertIsDisplayed()
             }
             assertTrue(focusedHas("Settings"))

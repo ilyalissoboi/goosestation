@@ -76,6 +76,43 @@ bool IsVulkanFailed();
 /// does, then, while a game runs, the cards it has open and the shared card paths its settings give; each if it's set,
 /// elsewhere in the data root and not listed already. Blocks until the CPU thread has read the game's. nullopt before
 /// Initialize() succeeded.
+// A game's own settings: gamesettings/<key>.ini, where the core finds it for key (System::GetGameSettingsPath()), a
+// disc set's first serial for any of its discs. Each runs on the caller's thread; a write saves the file, or deletes it
+// once it's empty. Nothing happens before Initialize() or with a blank key.
+bool HasGameSetting(const std::string& key, const char* section, const char* name);
+bool GetGameBoolSetting(const std::string& key, const char* section, const char* name, bool default_value);
+s32 GetGameIntSetting(const std::string& key, const char* section, const char* name, s32 default_value);
+float GetGameFloatSetting(const std::string& key, const char* section, const char* name, float default_value);
+std::string GetGameStringSetting(const std::string& key, const char* section, const char* name,
+                                 const char* default_value);
+void SetGameBoolSetting(const std::string& key, const char* section, const char* name, bool value);
+void SetGameIntSetting(const std::string& key, const char* section, const char* name, s32 value);
+void SetGameFloatSetting(const std::string& key, const char* section, const char* name, float value);
+/// A null value deletes the key.
+void SetGameStringSetting(const std::string& key, const char* section, const char* name, const char* value);
+void DeleteGameSetting(const std::string& key, const char* section, const char* name);
+
+/// The file's keys, section and name for each, in its order.
+std::vector<std::pair<std::string, std::string>> GetGameSettingKeys(const std::string& key);
+
+/// Desktop's Copy Global Settings: settings.ini's settings, as Settings::Save(si, true) writes them, over the game's.
+void CopyGlobalSettingsToGame(const std::string& key);
+
+/// Desktop's Clear Settings, as Big Picture's: the file goes.
+void ClearGameSettings(const std::string& key);
+
+/// The input profile the file names, when it doesn't use its own controller settings; nullopt otherwise.
+std::optional<std::string> GetGameInputProfile(const std::string& key);
+
+/// When key is the running game's, has the core load its settings again and apply them, and returns true. Waits for
+/// the CPU thread.
+bool ApplyGameSettings(const std::string& key);
+
+/// After a change to key's controller settings: sets [ControllerPorts] UseGameSettingsForController while it has any
+/// and deletes it otherwise, and gives each controller on a port whose type it sets that type's default bindings in
+/// settings.ini where it has none. Waits for the CPU thread.
+void UpdateGameControllers(const std::string& key);
+
 std::optional<std::vector<std::string>> GetMemoryCardPaths();
 
 /// The folders the core keeps its data in, relative to the data root (RelativeToDataRoot()), each with a trailing '/'
@@ -282,6 +319,12 @@ std::vector<std::pair<u32, std::string>> GetOfferedPorts();
 /// For the instrumented tests: the running game's pad's input name's state (Controller::GetBindState()), 0 without a
 /// game or controller there. Runs on the CPU thread and blocks.
 float GetPadBindStateForTest(u32 pad, std::string name);
+
+/// Tests: gives the listed game at [path] the key [key], as if the library had grouped it so.
+void SetListedKeyForTest(std::string path, std::string key);
+
+/// Tests: [section] [key] as the running game has it, its own settings over settings.ini; empty without a game.
+std::string GetRunningSettingForTest(std::string section, std::string key);
 
 /// The controller's place in the descriptor table, as its Android-<index> devices are numbered, which stays the same
 /// from one run to the next; nullopt for one never connected, or before Initialize() succeeded.

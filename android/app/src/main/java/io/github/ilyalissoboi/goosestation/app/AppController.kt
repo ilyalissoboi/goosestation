@@ -35,6 +35,7 @@ import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
+import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
@@ -91,6 +92,9 @@ enum class Screen(
 
     /** The memory card editor, from the Memory cards page. */
     MemcardEditor,
+
+    /** A game's own settings, from its tile in the library. */
+    GameSettings,
     Game,
 }
 
@@ -187,6 +191,17 @@ object AppController : NativeCallbacks {
 
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+
+    /** A game's own settings, from its tile in the library. */
+    val gameSettingsPages =
+        GameSettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+
+    /**
+     * The running game's own settings, from its menu: on the menu's own dispatcher, as its other calls are, so a
+     * library scan never holds them up.
+     */
+    val gameMenuSettings =
+        GameSettingsPages(scope, gameDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
 
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
     val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
@@ -358,6 +373,10 @@ object AppController : NativeCallbacks {
             onMessage = { osd.post(it) },
             onResume = ::resumeFromPrompt,
             onExit = ::exitGame,
+            // The running game's own settings, each change applied straight away.
+            onSettings = { game ->
+                if (game == null) gameMenuSettings.close() else gameMenuSettings.open(game, running = true)
+            },
         )
     }
 
@@ -670,6 +689,28 @@ object AppController : NativeCallbacks {
         if (page == SettingsEntry.Controllers) controllersPage.close()
         settingsEntry = page
         screen = Screen.Settings
+    }
+
+    // --- A game's own settings ---
+
+    /** The game the library focuses next, over the last one launched: the one whose settings were just shown. */
+    var libraryFocus by mutableStateOf<String?>(null)
+        private set
+
+    /** Opens [game]'s own settings, from the library, if the settings can open and it has a key to keep them under. */
+    fun openGameSettings(game: GameEntry) {
+        if (screen != Screen.Library || !settingsReady || game.serial.isBlank()) return
+        gameSettingsPages.open(game, running = false)
+        screen = Screen.GameSettings
+    }
+
+    /** Back to the library, which focuses the game. */
+    fun closeGameSettings() {
+        if (screen != Screen.GameSettings) return
+        libraryFocus = gameSettingsPages.game?.path
+        focusSettings = false
+        gameSettingsPages.close()
+        screen = Screen.Library
     }
 
     // --- The memory card editor ---
@@ -986,6 +1027,7 @@ object AppController : NativeCallbacks {
             return
         }
         lastGamePath = game.path
+        libraryFocus = null
         runningGame = game
         focusSettings = false
         message = null
@@ -1356,6 +1398,11 @@ object AppController : NativeCallbacks {
             }
         refreshed?.let { games = it }
         if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
+        // settings.ini, or a game's own file, pulled from the data folder while that game's pages show.
+        if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) {
+            gameSettingsPages.reloadShown()
+            gameMenuSettings.reloadShown()
+        }
         return Applied(refreshed != null, layoutGrew)
     }
 

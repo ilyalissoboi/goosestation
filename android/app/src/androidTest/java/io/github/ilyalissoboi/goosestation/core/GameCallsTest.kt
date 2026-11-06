@@ -7,8 +7,19 @@ import android.graphics.SurfaceTexture
 import android.os.ParcelFileDescriptor
 import android.view.Surface
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.app.GamePage
+import io.github.ilyalissoboi.goosestation.app.GameSettingsPages
+import io.github.ilyalissoboi.goosestation.app.NativeCoreApi
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
+import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -239,8 +250,227 @@ class GameCallsTest {
         }
     }
 
+    // The library's key for a game, not the disc's serial, names its settings file: one for every disc of a tile.
+    @Test
+    fun theKeysFileIsTheGamesLayer() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText("[Main]\nEmulationSpeed = 2.0\n")
+        }) {
+            assertEquals("2.0", NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed"))
+        }
+    }
+
+    // A change to the running game's file takes effect once applied, without a restart.
+    @Test
+    fun applyReloadsTheRunningGamesLayer() {
+        withListedPadtest(beforeStart = { padtest -> NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY) }) {
+            assertEquals(1f, NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloatOrNull() ?: 1f)
+
+            NativeLibrary.setGameFloatSetting(TEST_KEY, "Main", "EmulationSpeed", 2f)
+
+            assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
+            assertEquals(2f, NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloat())
+            assertFalse(NativeLibrary.applyGameSettings("SLUS-00001"))
+        }
+    }
+
+    // The in-game Settings: a change through the game's pages reaches the running game at once.
+    @Test
+    fun aChangeInTheMenuAppliesAtOnce() {
+        withListedPadtest(beforeStart = { padtest -> NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY) }) {
+            runBlocking {
+                val pages =
+                    GameSettingsPages(this, Dispatchers.IO, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+                pages.open(GameEntry("", "Pad Test", TEST_KEY, "", 0, 0, null), running = true)
+                pages.openPage(GamePage.Emulation)
+                withTimeout(10_000) { while (pages.values(GamePage.Emulation) == null) delay(50) }
+
+                pages.change(
+                    GamePage.Emulation,
+                    pages.values(GamePage.Emulation)!!.with(EmulationSettings.EMULATION_SPEED, 2f),
+                )
+
+                withTimeout(10_000) {
+                    while (NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloatOrNull() != 2f) {
+                        delay(50)
+                    }
+                }
+                withTimeout(5_000) { while (pages.summary?.counts?.get(GamePage.Emulation) != 1) delay(50) }
+            }
+        }
+    }
+
+    // The layer is adapted in memory only: desktop's file stays as it was, through a reload and the game's end.
+    @Test
+    fun aDesktopGameFileIsNeverRewritten() {
+        val desktop =
+            "[ControllerPorts]\nUseGameSettingsForController = true\nInputProfileName = Desk\n" +
+                "[Pad1]\nType = DigitalController\nCross = SDL-0/A\n[Hotkeys]\nFastForward = Keyboard/Tab\n"
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText(desktop)
+        }) {
+            assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
+            assertEquals(desktop, gameSettings(TEST_KEY).readText())
+        }
+        assertEquals(desktop, gameSettings(TEST_KEY).readText())
+    }
+
+    // Clear in a running game: the file goes, and the layer it leaves doesn't write it back.
+    @Test
+    fun clearInARunningGameLeavesNoFile() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText("[Main]\nEmulationSpeed = 2.0\n")
+        }) {
+            NativeLibrary.clearGameSettings(TEST_KEY)
+            assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
+
+            assertFalse(gameSettings(TEST_KEY).exists())
+            assertEquals(1f, NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloatOrNull() ?: 1f)
+        }
+        assertFalse(gameSettings(TEST_KEY).exists())
+    }
+
+    // A controller connected during a game whose own file sets the port's type gets that type's defaults too.
+    @Test
+    fun aControllerConnectedInAGameGetsItsTypesDefaults() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText(
+                "[ControllerPorts]\nUseGameSettingsForController = true\n[Pad1]\nType = NeGcon\n",
+            )
+        }) {
+            connectSecondPad()
+
+            val steering = Ini.parse(File(dataRoot, "settings.ini").readText()).values("Pad1", "SteeringLeft")
+            assertTrue("the NeGcon's steering is bound: $steering", steering.any { it.startsWith("Android-") })
+        }
+    }
+
+    // One known from before, with its own bindings, switched on only once the game is under way: the game's type's
+    // defaults too, since it has none of that type's inputs bound.
+    @Test
+    fun aKnownControllerSwitchedOnInAGameGetsItsTypesDefaults() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText(
+                "[ControllerPorts]\nUseGameSettingsForController = true\n[Pad1]\nType = NeGcon\n",
+            )
+            connectSecondPad()
+            NativeLibrary.onDeviceDisconnected(DEVICE_B)
+            Thread.sleep(300)
+        }) {
+            assertEquals(emptyList<String>(), steeringOf())
+
+            connectSecondPad()
+
+            assertTrue(
+                "the NeGcon's steering is bound: ${steeringOf()}",
+                steeringOf().any { it.startsWith("Android-") },
+            )
+        }
+    }
+
+    private fun steeringOf() = Ini.parse(File(dataRoot, "settings.ini").readText()).values("Pad1", "SteeringLeft")
+
+    // A desktop file's per-game controllers hold desktop's bindings: its type applies, its bindings don't.
+    @Test
+    fun aGamesDesktopBindingsDontReplaceAndroids() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setStringSetting("Pad1", "Cross", "Android-0/Button96")
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText(
+                "[ControllerPorts]\nUseGameSettingsForController = true\n" +
+                    "[Pad1]\nType = DigitalController\nCross = SDL-0/A\n",
+            )
+        }) {
+            assertEquals("Android-0/Button96", NativeLibrary.getRunningSettingForTest("Pad1", "Cross"))
+            assertEquals("DigitalController", NativeLibrary.getRunningSettingForTest("Pad1", "Type"))
+        }
+    }
+
+    // A desktop input profile is desktop's devices: on Android the game keeps settings.ini's bindings.
+    @Test
+    fun anInputProfileIsntLoaded() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setStringSetting("Pad1", "Cross", "Android-0/Button96")
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            File(dataRoot, "inputprofiles").mkdirs()
+            File(dataRoot, "inputprofiles/Desk.ini").writeText("[Pad1]\nCross = SDL-0/A\n")
+            gameSettings(TEST_KEY).writeText("[ControllerPorts]\nInputProfileName = Desk\n")
+        }) {
+            assertEquals("Android-0/Button96", NativeLibrary.getRunningSettingForTest("Pad1", "Cross"))
+        }
+    }
+
+    // An M3U's discs keep the key's file across a disc change, which loads the game's layer again.
+    @LargeTest
+    @Test
+    fun theKeysFileHoldsAcrossADiscChange() {
+        val games = File(root, "games")
+        assumeTrue(
+            "No BIOS or padtest's disc image in /sdcard/GooseTest",
+            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyGlobAsShell("$SDCARD_TESTS/games/Pad*.cue", File(games, "$PAD_TEST_DISC.cue")) &&
+                copyGlobAsShell("$SDCARD_TESTS/games/Pad*.bin", File(games, "$PAD_TEST_DISC.bin")),
+        )
+        File(games, "Pad Test.m3u").writeText("$PAD_TEST_DISC.cue\n$PAD_TEST_DISC.cue\n")
+        val started = CountDownLatch(1)
+        val stopped = CountDownLatch(1)
+        NativeLibrary.setCallbacks(
+            object : NativeCallbacks {
+                override fun onGameStarted(
+                    title: String,
+                    serial: String,
+                    startPaused: Boolean,
+                    pauseOnDisconnect: Boolean,
+                ) = started.countDown()
+
+                override fun onGameStopped() = stopped.countDown()
+
+                override fun onError(message: String) {}
+            },
+        )
+        initialize()
+        NativeLibrary.setGameFolders(arrayOf(games.absolutePath))
+        NativeLibrary.refreshGameList(true)
+        val playlist = NativeLibrary.getGameList().single { it.playlist }
+        NativeLibrary.setListedKeyForTest(playlist.path, TEST_KEY)
+        gameSettings(TEST_KEY).writeText("[Main]\nEmulationSpeed = 2.0\n")
+        val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
+        val surface = Surface(texture)
+        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, 0f)
+        try {
+            TestRenderer.apply()
+            NativeLibrary.startGame(playlist.path, 1, false)
+            assertTrue("the playlist booted", started.await(30, TimeUnit.SECONDS))
+            assertEquals("2.0", NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed"))
+
+            assertNull(NativeLibrary.changeDisc(2))
+            val deadline = System.currentTimeMillis() + 10_000
+            while (NativeLibrary.getCurrentDisc() != 2 && System.currentTimeMillis() < deadline) Thread.sleep(100)
+
+            assertEquals(2, NativeLibrary.getCurrentDisc())
+            assertEquals("2.0", NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed"))
+        } finally {
+            NativeLibrary.shutdownGame()
+            assertTrue("the playlist stopped", stopped.await(30, TimeUnit.SECONDS))
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
+            NativeLibrary.setCallbacks(null)
+            surface.release()
+            texture.release()
+        }
+    }
+
+    private fun gameSettings(key: String) = File(dataRoot, "gamesettings/$key.ini").apply { parentFile!!.mkdirs() }
+
     /** Boots padtest from a games folder, so it's a game the library lists, paused; skipped without the files. */
-    private fun withListedPadtest(body: () -> Unit) {
+    private fun withListedPadtest(
+        beforeStart: (GameEntry) -> Unit = {},
+        body: () -> Unit,
+    ) {
         val games = File(root, "games")
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
@@ -267,6 +497,7 @@ class GameCallsTest {
         NativeLibrary.setGameFolders(arrayOf(games.absolutePath))
         NativeLibrary.refreshGameList(true)
         val padtest = NativeLibrary.getGameList().single()
+        beforeStart(padtest)
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f, 0f)
@@ -692,11 +923,23 @@ class GameCallsTest {
     }
 
     // The test app can't read /sdcard; the shell can. False if there's nothing there.
+    // [path] a glob matching one file, whose name may have spaces: the command is split at spaces with no shell, so it
+    // runs in sh with ${'$'}{IFS} for its space.
+    private fun copyGlobAsShell(
+        path: String,
+        destination: File,
+    ) = copyAsShell("sh -c cat${'$'}{IFS}$path", destination, command = true)
+
     private fun copyAsShell(
         path: String,
         destination: File,
+        command: Boolean = false,
     ): Boolean {
-        val output = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("cat $path")
+        val output =
+            InstrumentationRegistry
+                .getInstrumentation()
+                .uiAutomation
+                .executeShellCommand(if (command) path else "cat $path")
         destination.parentFile!!.mkdirs()
         ParcelFileDescriptor.AutoCloseInputStream(output).use { input ->
             destination.outputStream().use { input.copyTo(it) }
@@ -710,6 +953,10 @@ class GameCallsTest {
         const val PLAYER_CODES = "[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n"
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val PADTEST_SERIAL = "HASH-9FDA0E1A56D8DF5B"
+
+        // A key no disc has, as a tile of grouped discs gets.
+        const val TEST_KEY = "GOOSE-TEST"
+        const val PAD_TEST_DISC = "Pad Test #1 (100%)"
         const val PAD = "pad-a"
         const val DEVICE_ID = 1
         const val SELECT = 109

@@ -24,11 +24,14 @@ import io.github.ilyalissoboi.goosestation.app.AchievementQueueWords
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.NextStart
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
-import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
@@ -54,7 +57,7 @@ const val EXPIRED_NOTE = "Your RetroAchievements sign-in has expired. Sign in ag
 @Composable
 fun AchievementsScreen(
     account: AchievementsAccount,
-    settings: AchievementsSettings,
+    settings: SettingValues,
     signingIn: Boolean,
     error: String?,
     expired: Boolean,
@@ -62,7 +65,7 @@ fun AchievementsScreen(
     queue: AchievementsQueue = AchievementsQueue.NONE,
     onSignIn: (username: String, password: String) -> Unit,
     onSignOut: () -> Unit,
-    onChange: (AchievementsSettings) -> Unit,
+    onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = GooseStationTheme.colors
@@ -150,55 +153,94 @@ fun AchievementsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
-        SwitchRow(
-            "Hardcore mode",
-            settings.hardcore,
-            onToggle = { onChange(settings.copy(hardcore = it)) },
-            note = HARDCORE_NOTE,
+        AchievementRows(settings, onChange)
+    }
+}
+
+private const val MESSAGES = "Unlock and leaderboard messages"
+
+/** What Encore, Spectator and Test unofficial achievements say in a running game while hardcore mode is on. */
+const val HARDCORE_WAIT_NOTE = "Change it before the game starts: now it would end hardcore mode."
+
+/**
+ * The Achievements page's switches and the messages' times while they show, from [values], each change as the whole
+ * values with that setting changed ([onChange]); on a game's page, a game's rows. In a running game (the game page's
+ * [LocalGameContext]), hardcore says when it applies, and while hardcore mode is on, Encore, Spectator and Test
+ * unofficial achievements wait for the next start: changing them now would end it. [firstModifier] is the first row's.
+ */
+@Composable
+fun AchievementRows(
+    values: SettingValues,
+    onChange: (SettingValues) -> Unit,
+    firstModifier: Modifier = Modifier,
+) {
+    val game = LocalGameContext.current
+    val running = game?.running == true
+    val waits = running && game.hardcoreActive
+    Switch(
+        values,
+        onChange,
+        "Hardcore mode",
+        AchievementsSettings.HARDCORE,
+        note = if (running) NextStart.HARDCORE_NOTE else HARDCORE_NOTE,
+        modifier = firstModifier,
+    )
+    // One row for both kinds of message, as one choice on a game's page.
+    val messages = AchievementsSettings.messages(values)
+    if (values.isGame) {
+        GroupChoices(
+            values,
+            onChange,
+            MESSAGES,
+            listOf(AchievementsSettings.NOTIFICATIONS, AchievementsSettings.LEADERBOARD_NOTIFICATIONS),
+            listOf(Choice(true, "On"), Choice(false, "Off")),
+            value = AchievementsSettings::messages,
+            write = AchievementsSettings::withMessages,
         )
-        SwitchRow(
-            "Unlock and leaderboard messages",
-            settings.messages,
-            onToggle = { onChange(settings.copy(messages = it)) },
+    } else {
+        SwitchRow(MESSAGES, messages, onToggle = { onChange(AchievementsSettings.withMessages(values, it)) })
+    }
+    Switch(values, onChange, "Sounds", AchievementsSettings.SOUNDS)
+    Switch(values, onChange, "Live indicators", AchievementsSettings.OVERLAYS)
+    Switch(
+        values,
+        onChange,
+        "Encore mode",
+        AchievementsSettings.ENCORE,
+        note = if (waits) HARDCORE_WAIT_NOTE else "Each session starts as if nothing were unlocked.",
+        enabled = !waits,
+    )
+    Switch(
+        values,
+        onChange,
+        "Spectator mode",
+        AchievementsSettings.SPECTATOR,
+        note = if (waits) HARDCORE_WAIT_NOTE else "Unlocks aren't sent to RetroAchievements.",
+        enabled = !waits,
+    )
+    Switch(
+        values,
+        onChange,
+        "Test unofficial achievements",
+        AchievementsSettings.UNOFFICIAL,
+        note = if (waits) HARDCORE_WAIT_NOTE else "Lists unofficial sets, which aren't tracked.",
+        enabled = !waits,
+    )
+    if (messages) {
+        Number(
+            values,
+            onChange,
+            "Unlock message time",
+            AchievementsSettings.UNLOCK_SECONDS,
+            AchievementsSettings.DURATIONS,
         )
-        SwitchRow("Sounds", settings.sounds, onToggle = { onChange(settings.copy(sounds = it)) })
-        SwitchRow(
-            "Live indicators",
-            settings.indicators,
-            onToggle = { onChange(settings.copy(indicators = it)) },
+        Number(
+            values,
+            onChange,
+            "Leaderboard message time",
+            AchievementsSettings.LEADERBOARD_SECONDS,
+            AchievementsSettings.DURATIONS,
         )
-        SwitchRow(
-            "Encore mode",
-            settings.encore,
-            onToggle = { onChange(settings.copy(encore = it)) },
-            note = "Each session starts as if nothing were unlocked.",
-        )
-        SwitchRow(
-            "Spectator mode",
-            settings.spectator,
-            onToggle = { onChange(settings.copy(spectator = it)) },
-            note = "Unlocks aren't sent to RetroAchievements.",
-        )
-        SwitchRow(
-            "Test unofficial achievements",
-            settings.unofficial,
-            onToggle = { onChange(settings.copy(unofficial = it)) },
-            note = "Lists unofficial sets, which aren't tracked.",
-        )
-        if (settings.messages) {
-            NumberRow(
-                "Unlock message time",
-                settings.unlockSeconds,
-                AchievementsSettings.DURATIONS,
-                onChange = { onChange(settings.copy(unlockSeconds = it)) },
-            )
-            NumberRow(
-                "Leaderboard message time",
-                settings.leaderboardSeconds,
-                AchievementsSettings.DURATIONS,
-                onChange = { onChange(settings.copy(leaderboardSeconds = it)) },
-            )
-        }
     }
 }
 

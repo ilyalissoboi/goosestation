@@ -153,6 +153,8 @@ fun SettingsPage(
                     .padding(horizontal = 32.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // A game's own pages carry its title over theirs.
+            LocalGameContext.current?.let { Eyebrow(it.title) }
             Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
             content()
         }
@@ -200,6 +202,7 @@ fun <T> CyclerRow(
     modifier: Modifier = Modifier,
     note: String? = null,
     enabled: Boolean = true,
+    mark: String? = null,
 ) {
     val index = choices.indexOfFirst { it.value == selected }
     val current = choices.getOrNull(index)
@@ -221,6 +224,7 @@ fun <T> CyclerRow(
         note = note,
         currentNote = current?.note,
         enabled = enabled,
+        mark = mark,
     )
 }
 
@@ -229,8 +233,12 @@ fun <T> CyclerRow(
  * arrows. Left and right step by the scale ([NumberScale.next]), stopping at its ends, on each key-down, so a key held
  * repeats; a tap on an arrow steps its way. Each step calls [onChange]. A, Enter or a tap on the row open the list of
  * the scale's common values ([NumberScale.presets]), with [value] among them when it isn't one, as a [CyclerRow]'s
- * list. A value off the scale shows as itself. [note] goes under the row. Disabled ([enabled] false), it's dimmed and
- * can't take the focus.
+ * list. A value off the scale shows as itself. [note] goes under the row, after its [mark]. Disabled ([enabled]
+ * false), it's dimmed and can't take the focus.
+ *
+ * On a game's page, with the [global] value and [onUseGlobal]: its list starts with "Use global (<global>)", which calls
+ * it, and Left from the scale's lowest value does too. While the row follows the global value ([followsGlobal]), it
+ * shows as that: Right makes the global value the game's own ([onChange] with it), and Left does nothing.
  */
 @Composable
 fun NumberRow(
@@ -241,33 +249,74 @@ fun NumberRow(
     modifier: Modifier = Modifier,
     note: String? = null,
     enabled: Boolean = true,
+    mark: String? = null,
+    global: Int? = null,
+    followsGlobal: Boolean = false,
+    onUseGlobal: (() -> Unit)? = null,
 ) {
     val change by rememberUpdatedState(onChange)
-    // The value last asked for, so a held key's repeats that come before the page shows it step on from it.
-    val latest = remember { intArrayOf(value) }
-    SideEffect { latest[0] = value }
-    val choices = (scale.presets + value).distinct().sorted().map { Choice(it, scale.label(it)) }
+    val useGlobal by rememberUpdatedState(onUseGlobal)
+    // The value last asked for, so a held key's repeats that come before the page shows it step on from it; null while
+    // the row follows the global value.
+    val latest = remember { arrayOf<Int?>(value) }
+    val shownValue: Int? = value.takeUnless { followsGlobal }
+    SideEffect { latest[0] = shownValue }
+    val gameRow = global != null && onUseGlobal != null
+    val globalLabel = useGlobalLabel(scale.label(global ?: value))
+
+    // The step from current (null: the global value) going by: a value, USE_GLOBAL, or null at an end.
+    fun next(
+        current: Int?,
+        by: Int,
+    ): Int? =
+        when {
+            current == null -> if (by > 0) global ?: value else null
+            else -> scale.next(current, by) ?: if (by < 0 && gameRow) USE_GLOBAL else null
+        }
+
+    val choices: List<Choice<Int?>> =
+        (if (gameRow) listOf(Choice<Int?>(null, globalLabel)) else emptyList()) +
+            (scale.presets + listOfNotNull(shownValue)).distinct().sorted().map { Choice<Int?>(it, scale.label(it)) }
     SteppedRow(
         label = label,
-        value = scale.label(value),
-        canStep = { by -> scale.next(latest[0], by) != null },
+        value = if (followsGlobal) globalLabel else scale.label(value),
+        canStep = { by -> next(latest[0], by) != null },
         // The arrows as the value shown has them: a row that hasn't recomposed since a change still draws them right.
-        canStepShown = { by -> scale.next(value, by) != null },
+        canStepShown = { by -> next(shownValue, by) != null },
         onStep = { by ->
-            scale.next(latest[0], by)?.let {
-                latest[0] = it
-                change(it)
+            when (val to = next(latest[0], by)) {
+                null -> {}
+                USE_GLOBAL -> {
+                    latest[0] = null
+                    useGlobal?.invoke()
+                }
+                else -> {
+                    latest[0] = to
+                    change(to)
+                }
             }
         },
         choices = choices,
-        selected = value,
-        onPick = { if (it != value) change(it) },
+        selected = shownValue,
+        onPick = {
+            when {
+                it == null -> if (!followsGlobal) useGlobal?.invoke()
+                it != shownValue -> change(it)
+            }
+        },
         modifier = modifier,
         note = note,
         currentNote = null,
         enabled = enabled,
+        mark = mark,
     )
 }
+
+/** What a row on a game's page shows while it follows the global setting, whose value is [label]. */
+fun useGlobalLabel(label: String) = "Use global ($label)"
+
+// NumberRow's step back to the global value: no scale has it.
+private const val USE_GLOBAL = Int.MIN_VALUE
 
 /**
  * A page's section heading: [title] in the eyebrow style, as desktop names the section. Never a focus stop; read as
@@ -306,6 +355,7 @@ private fun <T> SteppedRow(
     note: String?,
     currentNote: String?,
     enabled: Boolean,
+    mark: String? = null,
 ) {
     val colors = GooseStationTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -388,6 +438,7 @@ private fun <T> SteppedRow(
                 )
             },
         )
+        mark?.let { RowMark(it) }
         note?.let { RowNote(it) }
         if (open) {
             ChoiceList(
@@ -788,6 +839,12 @@ private val STACKED_GAP = 4.dp
 
 /** A value up to this share of the line (one in three) stays beside its label, which wraps instead. */
 private const val SHORT_VALUE_SHARE = 3
+
+/** A row's mark on a game's page, such as "Set for this game": in the beak's ink, so it reads apart from the note. */
+@Composable
+private fun RowMark(text: String) {
+    Text(text, style = MaterialTheme.typography.labelSmall, color = GooseStationTheme.colors.beakInk)
+}
 
 /** A line under a row's label and value, in the row, so it's read with them. */
 @Composable

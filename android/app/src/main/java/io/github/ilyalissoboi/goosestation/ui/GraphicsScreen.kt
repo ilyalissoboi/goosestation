@@ -77,12 +77,14 @@ fun GraphicsScreen(
                     GraphicsSettings.DOWNSAMPLE_SCALES,
                 )
             }
-            val multisampling = GraphicsSettings.multisamplingOf(values)
-            CyclerRow(
+            GroupChoices(
+                values,
+                onChange,
                 "Multisampling",
-                GraphicsSettings.multisampling(multisampling),
-                multisampling,
-                onSelect = { onChange(GraphicsSettings.withMultisampling(values, it)) },
+                listOf(GraphicsSettings.MULTISAMPLES, GraphicsSettings.PER_SAMPLE_SHADING),
+                GraphicsSettings.multisampling(GraphicsSettings.multisamplingOf(values)),
+                value = GraphicsSettings::multisamplingOf,
+                write = GraphicsSettings::withMultisampling,
                 note = "The device's maximum applies.",
             )
         }
@@ -101,12 +103,14 @@ fun GraphicsScreen(
         SettingsSection("Enhancements")
         if (hardware) {
             Names(values, onChange, names, "Texture filtering", GraphicsSettings.TEXTURE_FILTER)
-            val sprites = GraphicsSettings.spriteFilter(values)
-            CyclerRow(
+            GroupChoices(
+                values,
+                onChange,
                 "Sprite texture filtering",
-                offered(names[NameList.TextureFilter].orEmpty(), sprites),
-                sprites,
-                onSelect = { onChange(values.with(GraphicsSettings.SPRITE_TEXTURE_FILTER, it)) },
+                listOf(GraphicsSettings.SPRITE_TEXTURE_FILTER),
+                offered(names[NameList.TextureFilter].orEmpty(), GraphicsSettings.spriteFilter(values)),
+                value = GraphicsSettings::spriteFilter,
+                write = { v, filter -> v.with(GraphicsSettings.SPRITE_TEXTURE_FILTER, filter) },
             )
             Switch(values, onChange, "True colour", GraphicsSettings.TRUE_COLOR, "No dithering, full colour.")
             if (trueColor) {
@@ -201,11 +205,14 @@ fun GraphicsScreen(
                 "Custom ratio height" to GraphicsSettings.CUSTOM_ASPECT_DENOMINATOR,
             )
             ) {
-                NumberRow(
+                GroupNumber(
+                    values,
+                    onChange,
                     label,
-                    values[term].coerceAtLeast(1),
+                    listOf(term),
                     GraphicsSettings.ASPECT_TERMS,
-                    onChange = { onChange(values.with(term, it)) },
+                    value = { it[term].coerceAtLeast(1) },
+                    write = { v, n -> v.with(term, n) },
                 )
             }
         }

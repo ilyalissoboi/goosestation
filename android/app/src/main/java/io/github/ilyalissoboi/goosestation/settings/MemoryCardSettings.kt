@@ -19,6 +19,9 @@ object MemoryCardSettings {
 
     val all: List<Setting<*>> = listOf(CARD1_TYPE, CARD1_PATH, CARD2_TYPE, CARD2_PATH, ONE_CARD_PER_GAME)
 
+    /** A game's own: the card types and shared cards, as desktop's game pages have them (one card stays global). */
+    val GAME: List<Setting<*>> = listOf(CARD1_TYPE, CARD1_PATH, CARD2_TYPE, CARD2_PATH)
+
     /** The core's name for a card the slot's games share. */
     const val SHARED = "Shared"
 

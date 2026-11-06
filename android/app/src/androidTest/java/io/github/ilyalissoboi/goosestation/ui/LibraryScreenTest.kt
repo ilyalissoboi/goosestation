@@ -23,11 +23,13 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
@@ -51,6 +53,7 @@ class LibraryScreenTest {
 
     private lateinit var games: List<GameEntry>
     private val started = mutableListOf<GameEntry>()
+    private val gameSettings = mutableListOf<GameEntry>()
     private var badgeClicks = 0
 
     @Before
@@ -101,6 +104,7 @@ class LibraryScreenTest {
                         onOpenSettings = {},
                         onRefresh = {},
                         onStartGame = { started += it },
+                        onGameSettings = { gameSettings += it },
                         focusPath = focusPath,
                         focusSettings = focusSettings,
                         syncBadge = syncBadge,
@@ -115,6 +119,62 @@ class LibraryScreenTest {
     private fun press(key: Key) {
         rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
+    }
+
+    // --- A game's own settings ---
+
+    @Test
+    fun yOnATileOpensItsSettings() {
+        show(focusPath = entry(2).path)
+
+        press(Key.ButtonY)
+
+        assertEquals(listOf(entry(2)), gameSettings)
+        assertEquals(emptyList<GameEntry>(), started)
+    }
+
+    @Test
+    fun yInTheListOpensItsSettings() {
+        show(gridView = { false }, focusPath = entry(3).path)
+
+        press(Key.ButtonY)
+
+        assertEquals(listOf(entry(3)), gameSettings)
+    }
+
+    @Test
+    fun aLongPressOpensItsSettings() {
+        show()
+
+        rule.onNodeWithText("Game 02").performTouchInput { longClick() }
+        rule.waitForIdle()
+
+        assertEquals(listOf(entry(2)), gameSettings)
+        assertEquals(emptyList<GameEntry>(), started)
+    }
+
+    @Test
+    fun aBlankKeyHasNoGameSettings() {
+        show(games = listOf(entry(1).copy(serial = "")))
+
+        press(Key.ButtonY)
+
+        assertEquals(emptyList<GameEntry>(), gameSettings)
+    }
+
+    @Test
+    fun theFooterSaysYGameSettings() {
+        show()
+
+        rule.onNodeWithText("Game settings", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("Play", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun noFooterWithoutGames() {
+        show(games = emptyList())
+
+        rule.onNodeWithText("Game settings", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

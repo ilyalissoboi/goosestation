@@ -92,6 +92,9 @@ enum class Screen(
 
     /** The memory card editor, from the Memory cards page. */
     MemcardEditor,
+
+    /** A game's own settings, from its tile in the library. */
+    GameSettings,
     Game,
 }
 
@@ -677,6 +680,28 @@ object AppController : NativeCallbacks {
         screen = Screen.Settings
     }
 
+    // --- A game's own settings ---
+
+    /** The game the library focuses next, over the last one launched: the one whose settings were just shown. */
+    var libraryFocus by mutableStateOf<String?>(null)
+        private set
+
+    /** Opens [game]'s own settings, from the library, if the settings can open and it has a key to keep them under. */
+    fun openGameSettings(game: GameEntry) {
+        if (screen != Screen.Library || !settingsReady || game.serial.isBlank()) return
+        gameSettingsPages.open(game, running = false)
+        screen = Screen.GameSettings
+    }
+
+    /** Back to the library, which focuses the game. */
+    fun closeGameSettings() {
+        if (screen != Screen.GameSettings) return
+        libraryFocus = gameSettingsPages.game?.path
+        focusSettings = false
+        gameSettingsPages.close()
+        screen = Screen.Library
+    }
+
     // --- The memory card editor ---
 
     /** Opens the memory card editor, from the Memory cards page, if the settings can open: no game is under way. */
@@ -991,6 +1016,7 @@ object AppController : NativeCallbacks {
             return
         }
         lastGamePath = game.path
+        libraryFocus = null
         runningGame = game
         focusSettings = false
         message = null

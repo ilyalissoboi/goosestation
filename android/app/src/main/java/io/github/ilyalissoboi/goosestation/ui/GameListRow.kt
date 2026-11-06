@@ -51,20 +51,21 @@ internal fun gameDetails(
 
 /**
  * A game in the list: its cover, small, then its title, and its region, serial and play time under it. A, Enter or a
- * tap call [onClick].
+ * tap call [onClick]; a long press, [onLongClick], if any.
  */
 @Composable
 fun GameListRow(
     game: GameEntry,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val colors = GooseStationTheme.colors
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .focusRing(onClick = onClick)
+                .focusRing(onLongClick = onLongClick, onClick = onClick)
                 .padding(start = 8.dp, top = 8.dp, end = 16.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),

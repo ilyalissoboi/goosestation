@@ -36,6 +36,9 @@ object PadGlyphs {
     /** The button that goes back: KEYCODE_BUTTON_B. */
     val back: String = BindingLabels.label("Button97")
 
+    /** The button for an item's options, such as a game's own settings: KEYCODE_BUTTON_Y. */
+    val options: String = BindingLabels.label("Button100")
+
     /** The shoulder buttons that switch a panel's tabs: KEYCODE_BUTTON_L1 and KEYCODE_BUTTON_R1. */
     val previousTab: String = BindingLabels.label("Button102")
     val nextTab: String = BindingLabels.label("Button103")

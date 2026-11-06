@@ -1849,8 +1849,9 @@ class OrientationLayoutTest {
                 focusSettings = true,
             )
         }) {
-            assertTextsLaidOut()
-            for (text in listOf("Library", "Grid", "Settings", "Refresh")) {
+            // The list clips a row it shows only in part, which may meet the button hints under it.
+            assertTextsLaidOut(inView = true)
+            for (text in listOf("Library", "Grid", "Settings", "Refresh", "Game settings")) {
                 rule.onNodeWithText(text, useUnmergedTree = true).assertIsDisplayed()
             }
             assertTrue(focusedHas("Settings"))

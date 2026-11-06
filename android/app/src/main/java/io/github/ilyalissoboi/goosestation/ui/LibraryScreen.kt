@@ -35,14 +35,22 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.onFocusEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.Banner
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
+import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
+import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
+import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.SyncStatusBadge
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseMark
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -56,7 +64,8 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
  *
  * On opening, Settings has focus when [focusSettings] (coming back from the settings), or else the game at
  * [focusPath] (the last one launched), or else the first game; with no games, Settings has it. Toggling the view keeps
- * the focused game. A, Enter or a tap call [onStartGame].
+ * the focused game. A, Enter or a tap call [onStartGame]; Y or a long press open the game's own settings
+ * ([onGameSettings]), for a game with a key (its serial). With games, the foot says so ([KeyHints]).
  */
 @Composable
 fun LibraryScreen(
@@ -73,6 +82,7 @@ fun LibraryScreen(
     focusSettings: Boolean = false,
     syncBadge: SyncBadge? = null,
     onSyncBadge: () -> Unit = {},
+    onGameSettings: (GameEntry) -> Unit = {},
 ) {
     val settings = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
@@ -170,7 +180,13 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     items(games, key = { it.path }) { game ->
-                        GameTile(game, onClick = { onStartGame(game) }, modifier = focus.modifier(game.path))
+                        val settings = gameSettingsOf(game, onGameSettings)
+                        GameTile(
+                            game,
+                            onClick = { onStartGame(game) },
+                            modifier = focus.modifier(game.path).gameSettingsKey(settings),
+                            onLongClick = settings,
+                        )
                     }
                 }
             else ->
@@ -181,12 +197,35 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(games, key = { it.path }) { game ->
-                        GameListRow(game, onClick = { onStartGame(game) }, modifier = focus.modifier(game.path))
+                        val settings = gameSettingsOf(game, onGameSettings)
+                        GameListRow(
+                            game,
+                            onClick = { onStartGame(game) },
+                            modifier = focus.modifier(game.path).gameSettingsKey(settings),
+                            onLongClick = settings,
+                        )
                     }
                 }
         }
+        if (hasGames) {
+            KeyHints(listOf(KeyHint(PadGlyphs.confirm, "Play"), KeyHint(PadGlyphs.options, "Game settings")))
+        }
     }
 }
+
+/** What opens [game]'s own settings, or null for a game with no key to keep them under (a PSF). */
+private fun gameSettingsOf(
+    game: GameEntry,
+    onGameSettings: (GameEntry) -> Unit,
+): (() -> Unit)? = if (game.serial.isBlank()) null else ({ onGameSettings(game) })
+
+/** Y opens the game's own settings ([settings]) on its key-up; without them, Y does nothing here. */
+private fun Modifier.gameSettingsKey(settings: (() -> Unit)?) =
+    onKeyEvent { event ->
+        if (event.key != Key.ButtonY || settings == null) return@onKeyEvent false
+        if (event.type == KeyEventType.KeyUp) settings()
+        true
+    }
 
 /**
  * Which game has focus, by path, and which one is to take it once it's composed: [pending], until anything in the

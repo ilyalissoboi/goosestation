@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -67,7 +68,7 @@ fun Modifier.focusIndicator(
  * Makes an element focusable and clickable for a D-pad: A, Enter, the D-pad centre or a tap call [onClick]. A
  * disabled element can't take focus. While focused it wears the focus ring, unless [ring] is off (the element draws
  * it on a part of itself, told by [onFocusChange]), and [focusedFill] under its content, if any. It's drawn above its
- * siblings while focused, so they don't cover the ring.
+ * siblings while focused, so they don't cover the ring. With [onLongClick], a long press calls it instead.
  */
 @Composable
 fun Modifier.focusRing(
@@ -77,6 +78,7 @@ fun Modifier.focusRing(
     focusedFill: Color? = GooseStationTheme.colors.raised,
     ring: Boolean = true,
     onFocusChange: ((Boolean) -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ): Modifier {
     // From the focus itself, not clickable()'s interactions: focus that comes as the element is composed (Compose
@@ -107,12 +109,25 @@ fun Modifier.focusRing(
         }
         // clickable() only takes focus out of touch mode; screens are focused for a controller from the start.
         .focusProperties { canFocus = enabled }
-        .clickable(
-            interactionSource = null,
-            indication = null,
-            enabled = enabled,
-            role = role,
-            onClick = onClick,
+        .then(
+            if (onLongClick == null) {
+                Modifier.clickable(
+                    interactionSource = null,
+                    indication = null,
+                    enabled = enabled,
+                    role = role,
+                    onClick = onClick,
+                )
+            } else {
+                Modifier.combinedClickable(
+                    interactionSource = null,
+                    indication = null,
+                    enabled = enabled,
+                    role = role,
+                    onLongClick = onLongClick,
+                    onClick = onClick,
+                )
+            },
         ).focusIndicator(focused && ring, focusColor, shape)
         .background(if (focused && focusedFill != null) focusedFill else Color.Transparent, shape)
 }

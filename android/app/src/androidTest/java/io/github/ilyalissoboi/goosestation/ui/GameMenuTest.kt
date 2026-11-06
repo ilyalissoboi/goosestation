@@ -241,6 +241,14 @@ class GameMenuTest {
                 calls += "openLeaderboard $id"
             }
 
+            override fun openSettings() {
+                calls += "openSettings"
+            }
+
+            override fun closeSettings() {
+                calls += "closeSettings"
+            }
+
             override fun closeLeaderboard() {
                 calls += "closeLeaderboard"
                 state = state.copy(cheevos = state.cheevos?.copy(open = null, page = null, pageError = null))
@@ -283,6 +291,7 @@ class GameMenuTest {
                 "Analog mode",
                 "Screenshot",
                 "Patch codes",
+                "Settings",
                 "Reset console",
                 "Exit game",
             )
@@ -290,6 +299,43 @@ class GameMenuTest {
             press(Key.DirectionDown)
             rule.onNode(isFocused() and hasText(label, substring = true)).assertExists()
         }
+    }
+
+    @Test
+    fun settingsRowOpensTheGamesSettings() {
+        state = GameMenuState(booted = true)
+        show()
+
+        repeat(12) {
+            if (!rule
+                    .onAllNodes(
+                        isFocused() and hasText("Settings"),
+                    ).fetchSemanticsNodes()
+                    .isNotEmpty()
+            ) {
+                press(Key.DirectionDown)
+            }
+        }
+        press(Key.ButtonA)
+
+        assertEquals(listOf("openSettings"), calls)
+    }
+
+    @Test
+    fun settingsIsOffUntilTheGameHasBooted() {
+        state = GameMenuState(booted = false)
+        show()
+
+        rule.onNodeWithText("Settings").assertIsNotEnabled()
+    }
+
+    // Back from the game's settings: the menu is composed afresh, and focuses the row it opened them from.
+    @Test
+    fun backFromSettingsFocusesItsRow() {
+        state = GameMenuState(booted = true, cameFromSettings = true)
+        show()
+
+        rule.onNodeWithText("Settings").assertIsFocused()
     }
 
     @Test
@@ -658,6 +704,8 @@ class GameMenuTest {
         press(Key.Enter)
         press(Key.DirectionDown)
         press(Key.Enter)
+        press(Key.DirectionDown)
+        press(Key.Enter)
 
         assertEquals(
             listOf(
@@ -667,6 +715,7 @@ class GameMenuTest {
                 "toggleAnalogMode",
                 "screenshot",
                 "openCodes",
+                "openSettings",
                 "askReset",
                 "exit",
             ),

@@ -9,7 +9,17 @@ import android.view.Surface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.app.GamePage
+import io.github.ilyalissoboi.goosestation.app.GameSettingsPages
+import io.github.ilyalissoboi.goosestation.app.NativeCoreApi
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
+import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -262,6 +272,32 @@ class GameCallsTest {
             assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
             assertEquals(2f, NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloat())
             assertFalse(NativeLibrary.applyGameSettings("SLUS-00001"))
+        }
+    }
+
+    // The in-game Settings: a change through the game's pages reaches the running game at once.
+    @Test
+    fun aChangeInTheMenuAppliesAtOnce() {
+        withListedPadtest(beforeStart = { padtest -> NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY) }) {
+            runBlocking {
+                val pages =
+                    GameSettingsPages(this, Dispatchers.IO, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+                pages.open(GameEntry("", "Pad Test", TEST_KEY, "", 0, 0, null), running = true)
+                pages.openPage(GamePage.Emulation)
+                withTimeout(10_000) { while (pages.values(GamePage.Emulation) == null) delay(50) }
+
+                pages.change(
+                    GamePage.Emulation,
+                    pages.values(GamePage.Emulation)!!.with(EmulationSettings.EMULATION_SPEED, 2f),
+                )
+
+                withTimeout(10_000) {
+                    while (NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloatOrNull() != 2f) {
+                        delay(50)
+                    }
+                }
+                withTimeout(5_000) { while (pages.summary?.counts?.get(GamePage.Emulation) != 1) delay(50) }
+            }
         }
     }
 

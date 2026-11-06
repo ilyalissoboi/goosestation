@@ -233,6 +233,7 @@ private class CameFrom {
     val discRow = FocusRequester()
     val codesRow = FocusRequester()
     val cheevosRow = FocusRequester()
+    val settingsRow = FocusRequester()
     val resetRow = FocusRequester()
     val exitRow = FocusRequester()
     var slots: SlotMode? = null
@@ -259,6 +260,7 @@ private fun MenuPanel(
     val discRow = cameFrom.discRow
     val codesRow = cameFrom.codesRow
     val cheevosRow = cameFrom.cheevosRow
+    val settingsRow = cameFrom.settingsRow
     val resetRow = cameFrom.resetRow
     val exitRow = cameFrom.exitRow
     val booted = state.booted
@@ -272,7 +274,7 @@ private fun MenuPanel(
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
     val asking = state.confirmingReset || state.confirmingExit || state.replacingResume != null
-    LaunchedEffect(openMode, discsOpen, codesOpen, cheevosOpen, asking) {
+    LaunchedEffect(openMode, discsOpen, codesOpen, cheevosOpen, asking, state.cameFromSettings) {
         val from = cameFrom.slots
         when {
             openMode != null || discsOpen || codesOpen || cheevosOpen || asking -> {}
@@ -300,6 +302,8 @@ private fun MenuPanel(
                 cameFrom.exit = false
                 exitRow.requestFocus()
             }
+            // The menu is composed afresh after the game's settings, which took its place.
+            state.cameFromSettings -> settingsRow.requestFocus()
             else -> resume.requestFocus()
         }
     }
@@ -433,6 +437,14 @@ private fun MenuPanel(
                         quiet = quiet,
                     )
                 }
+                MenuItem(
+                    "Settings",
+                    GsIcons.settings,
+                    actions::openSettings,
+                    Modifier.focusRequester(settingsRow),
+                    enabled = booted,
+                    quiet = quiet,
+                )
                 Spacer(
                     Modifier
                         .padding(vertical = 4.dp)

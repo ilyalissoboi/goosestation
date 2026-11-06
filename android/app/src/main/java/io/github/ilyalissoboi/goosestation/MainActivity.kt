@@ -100,6 +100,13 @@ class MainActivity : ComponentActivity() {
                             indicators = AppController.achievementOverlay.indicators,
                             overlayExpiry = AppController.achievementOverlay.nextExpiry(),
                             onOverlayExpire = AppController.achievementOverlay::expire,
+                            settings = {
+                                GameSettingsHost(
+                                    AppController.gameSettingsPages,
+                                    hardcoreActive = AppController.gameMenu.state.hardcore,
+                                    onBack = AppController.gameMenu::closeSettings,
+                                )
+                            },
                         )
                     Screen.Settings ->
                         SettingsScreen(

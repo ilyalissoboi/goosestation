@@ -13,6 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -31,7 +36,9 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
  * only once [NativeLibrary.initialize] has succeeded, since the core ignores a surface before then. Back opens the
  * game's menu ([onOpenMenu]), drawn over the surface from [menu] while [menuOpen], which then takes Back itself; its
  * rows call [actions], and it names the [game], if it's known. The [osd] messages and, while [fastForward], its marker
- * show over the game, under the menu; [onOsdExpire] runs at [osdExpiry].
+ * show over the game, under the menu; [onOsdExpire] runs at [osdExpiry]. While the menu's [GameMenuState.settings],
+ * the game's own settings ([settings]) take the menu's place, over the game, which stays paused under them; Mode
+ * resumes from them as from the menu.
  */
 @Composable
 fun GameScreen(
@@ -49,6 +56,7 @@ fun GameScreen(
     indicators: List<AchievementOverlay.Indicator> = emptyList(),
     overlayExpiry: Long? = null,
     onOverlayExpire: () -> Unit = {},
+    settings: @Composable () -> Unit = {},
 ) {
     BackHandler(enabled = !menuOpen, onBack = onOpenMenu)
 
@@ -77,7 +85,18 @@ fun GameScreen(
             },
         )
         OsdLayer(osd, fastForward, osdExpiry, onOsdExpire, card, indicators, overlayExpiry, onOverlayExpire, badge)
-        if (menuOpen) GameMenu(menu, actions, game, badge = badge)
+        when {
+            menuOpen && menu.settings ->
+                Box(
+                    Modifier.fillMaxSize().onKeyEvent { event ->
+                        // Mode resumes from anywhere in the menu, its settings too, on the key-up.
+                        if (event.key != Key.ButtonMode) return@onKeyEvent false
+                        if (event.type == KeyEventType.KeyUp) actions.resume()
+                        true
+                    },
+                ) { settings() }
+            menuOpen -> GameMenu(menu, actions, game, badge = badge)
+        }
     }
 }
 

@@ -366,6 +366,16 @@ object AppController : NativeCallbacks {
             onMessage = { osd.post(it) },
             onResume = ::resumeFromPrompt,
             onExit = ::exitGame,
+            // The running game's own settings, each change applied straight away.
+            onSettings = { game ->
+                if (game ==
+                    null
+                ) {
+                    gameSettingsPages.close()
+                } else {
+                    gameSettingsPages.open(game, running = true)
+                }
+            },
         )
     }
 

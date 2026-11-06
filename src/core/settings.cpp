@@ -373,7 +373,7 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   {
     // Ignore types when multitap not enabled
     const auto [port, slot] = Controller::ConvertPadToPortAndSlot(i);
-    if (Controller::PadIsMultitapSlot(slot) && !mtap_enabled[port])
+    if (Controller::PortAndSlotIsMultitap(port, slot) && !mtap_enabled[port])
     {
       controller_types[i] = ControllerType::None;
       continue;

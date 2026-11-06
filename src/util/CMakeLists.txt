@@ -40,6 +40,8 @@ add_library(util
   imgui_fullscreen.h
   imgui_manager.cpp
   imgui_manager.h
+  librashader_loader.cpp
+  librashader_loader.h
   ini_settings_interface.cpp
   ini_settings_interface.h
   input_manager.cpp
@@ -80,6 +82,8 @@ add_library(util
 target_precompile_headers(util PRIVATE "pch.h")
 target_include_directories(util PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_include_directories(util PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
+# librashader is loaded at run time; only its header is needed (dep/librashader/README.md).
+target_include_directories(util PUBLIC "${CMAKE_SOURCE_DIR}/dep/librashader/include")
 target_link_libraries(util PUBLIC common simpleini imgui)
 target_link_libraries(util PRIVATE libchdr JPEG::JPEG PNG::PNG WebP::libwebp ZLIB::ZLIB SoundTouch::SoundTouchDLL xxhash Zstd::Zstd reshadefx)
 

@@ -17,6 +17,7 @@
     <ClInclude Include="shadergen.h" />
     <ClInclude Include="imgui_fullscreen.h" />
     <ClInclude Include="imgui_manager.h" />
+    <ClInclude Include="librashader_loader.h" />
     <ClInclude Include="postprocessing.h" />
     <ClInclude Include="postprocessing_shader.h" />
     <ClInclude Include="input_source.h" />
@@ -104,6 +105,7 @@
     <ClCompile Include="shadergen.cpp" />
     <ClCompile Include="imgui_fullscreen.cpp" />
     <ClCompile Include="imgui_manager.cpp" />
+    <ClCompile Include="librashader_loader.cpp" />
     <ClCompile Include="postprocessing.cpp" />
     <ClCompile Include="postprocessing_shader.cpp" />
     <ClCompile Include="platform_misc_win32.cpp" />

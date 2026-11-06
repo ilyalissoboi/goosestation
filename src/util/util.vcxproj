@@ -82,6 +82,7 @@
     <ClInclude Include="cd_subchannel_replacement.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="platform_misc.h" />
+    <ClInclude Include="librashader_loader.h" />
     <ClInclude Include="postprocessing.h" />
     <ClInclude Include="postprocessing_shader.h" />
     <ClInclude Include="postprocessing_shader_fx.h" />
@@ -185,6 +186,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="platform_misc_win32.cpp" />
+    <ClCompile Include="librashader_loader.cpp" />
     <ClCompile Include="postprocessing.cpp" />
     <ClCompile Include="postprocessing_shader.cpp" />
     <ClCompile Include="postprocessing_shader_fx.cpp" />

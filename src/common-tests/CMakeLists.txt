@@ -18,6 +18,7 @@ add_executable(common-tests
   ../util/fallback_fonts.cpp
   file_system_tests.cpp
   gsvector_yuvtorgb_test.cpp
+  librashader_loader_tests.cpp
   memcard_sync_ui_tests.cpp
   ../core/memcard_sync_ui.cpp
   memory_card_helpers_tests.cpp

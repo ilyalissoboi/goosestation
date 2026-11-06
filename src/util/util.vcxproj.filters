@@ -56,6 +56,7 @@
     <ClInclude Include="gpu_texture.h" />
     <ClInclude Include="metal_device.h" />
     <ClInclude Include="postprocessing_shader_glsl.h" />
+    <ClInclude Include="postprocessing_shader_slang.h" />
     <ClInclude Include="d3d11_pipeline.h" />
     <ClInclude Include="d3d11_stream_buffer.h" />
     <ClInclude Include="d3d11_texture.h" />
@@ -141,6 +142,7 @@
     <ClCompile Include="gpu_shader_cache.cpp" />
     <ClCompile Include="gpu_texture.cpp" />
     <ClCompile Include="postprocessing_shader_glsl.cpp" />
+    <ClCompile Include="postprocessing_shader_slang.cpp" />
     <ClCompile Include="d3d11_pipeline.cpp" />
     <ClCompile Include="d3d11_stream_buffer.cpp" />
     <ClCompile Include="d3d11_texture.cpp" />

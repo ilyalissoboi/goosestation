@@ -8,6 +8,8 @@
 #include "postprocessing_shader.h"
 #include "postprocessing_shader_fx.h"
 #include "postprocessing_shader_glsl.h"
+#include "postprocessing_shader_slang.h"
+#include "librashader_loader.h"
 
 // TODO: Remove me
 #include "core/host.h"
@@ -41,6 +43,7 @@ static TinyString GetStageConfigSection(const char* section, u32 index);
 static void CopyStageConfig(SettingsInterface& si, const char* section, u32 old_index, u32 new_index);
 static void SwapStageConfig(SettingsInterface& si, const char* section, u32 lhs_index, u32 rhs_index);
 static std::unique_ptr<Shader> TryLoadingShader(const std::string& shader_name, bool only_config, Error* error);
+static std::unique_ptr<Shader> TryLoadingSlangShader(const std::string& shader_name, bool only_config, Error* error);
 static SettingsInterface& GetLoadSettingsInterface(const char* section);
 
 template<typename T>
@@ -199,6 +202,16 @@ std::vector<std::pair<std::string, std::string>> PostProcessing::GetAvailableSha
     {
       std::string display_name = fmt::format(TRANSLATE_FS("PostProcessing", "{} [ReShade]"), fd.FileName);
       names.emplace_back(std::move(display_name), std::move(fd.FileName));
+    }
+  }
+
+  // Slang presets are listed by name only: a pack has thousands, and loading each would take far too long.
+  if (Librashader::GetAvailability().available)
+  {
+    for (std::string& name : Slang::FindPresets(EmuFolders::Shaders))
+    {
+      std::string display_name = fmt::format(TRANSLATE_FS("PostProcessing", "{} [Slang]"), name);
+      names.emplace_back(std::move(display_name), std::move(name));
     }
   }
 
@@ -699,6 +712,9 @@ bool PostProcessing::ReloadShaders()
 std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingShader(const std::string& shader_name,
                                                                          bool only_config, Error* error)
 {
+  if (Slang::IsPresetName(shader_name))
+    return TryLoadingSlangShader(shader_name, only_config, error);
+
   std::string filename;
   std::optional<std::string> resource_str;
 
@@ -744,6 +760,31 @@ std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingShader(const s
   }
 
   ERROR_LOG("Failed to load shader '{}'", shader_name);
+  return {};
+}
+
+std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingSlangShader(const std::string& shader_name,
+                                                                              bool only_config, Error* error)
+{
+  const Librashader::Availability& avail = Librashader::GetAvailability();
+  if (!avail.available)
+  {
+    Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing",
+                                                     "Slang presets aren't available in this build: {}."),
+                                        avail.reason));
+    return {};
+  }
+
+  const std::string path = Slang::ResolvePresetPath(EmuFolders::Shaders, shader_name);
+  if (path.empty())
+  {
+    Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing", "Slang preset {} isn't in the shaders folder."),
+                                        shader_name));
+    return {};
+  }
+
+  // The stage itself comes with the slang stage (SlangShader).
+  Error::SetString(error, fmt::format("Slang preset {} can't be loaded yet.", shader_name));
   return {};
 }
 

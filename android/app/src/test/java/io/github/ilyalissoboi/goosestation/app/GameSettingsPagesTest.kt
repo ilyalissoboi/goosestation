@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -225,6 +226,87 @@ class GameSettingsPagesTest {
 
             assertNull(pages.game)
             assertNull(pages.values(GamePage.Graphics))
+        }
+
+    // --- Controllers ---
+
+    @Test
+    fun controllerKeysCountOnlyWithTheFlag() =
+        runTest {
+            file.setString("Pad1", "Type", "NeGcon")
+            file.setString("ControllerPorts", "MultitapMode", "Port1Only")
+            assertEquals(0, pages().summary!!.counts[GamePage.Controllers])
+
+            file.setBool("ControllerPorts", "UseGameSettingsForController", true)
+            val summary = pages().summary!!
+
+            assertEquals(2, summary.counts[GamePage.Controllers])
+            assertEquals(0, summary.others)
+        }
+
+    @Test
+    fun aGamesBindingsAreOthersNotItsControllers() =
+        runTest {
+            file.setBool("ControllerPorts", "UseGameSettingsForController", true)
+            file.setString("Pad1", "Cross", "SDL-0/A")
+
+            val summary = pages().summary!!
+
+            assertEquals(0, summary.counts[GamePage.Controllers])
+            assertEquals(1, summary.others)
+        }
+
+    @Test
+    fun theControllersPageOffersTheGamesMultitapsPorts() =
+        runTest {
+            file.setBool("ControllerPorts", "UseGameSettingsForController", true)
+            file.setString("ControllerPorts", "MultitapMode", "Port1Only")
+            val pages = pages()
+
+            pages.openPage(GamePage.Controllers)
+            runCurrent()
+
+            assertEquals(listOf(0, 2, 3, 4, 1), pages.controllers!!.pads)
+            assertTrue(pages.values(GamePage.Controllers)!!.isSet(PortSettings.MULTITAP))
+        }
+
+    @Test
+    fun withoutTheFlagTheControllersFollowGlobal() =
+        runTest {
+            file.setString("ControllerPorts", "MultitapMode", "Port1Only")
+            val pages = pages()
+
+            pages.openPage(GamePage.Controllers)
+            runCurrent()
+
+            assertEquals(listOf(0, 1), pages.controllers!!.pads)
+            assertFalse(pages.values(GamePage.Controllers)!!.isSet(PortSettings.MULTITAP))
+        }
+
+    @Test
+    fun aControllersChangeUpdatesTheFlagAndDefaults() =
+        runTest {
+            val pages = pages(running = true)
+            pages.openPage(GamePage.Controllers)
+            runCurrent()
+            calls.clear()
+
+            pages.change(
+                GamePage.Controllers,
+                pages.values(GamePage.Controllers)!!.with(PortSettings.MULTITAP, "Port1Only"),
+            )
+            runCurrent()
+
+            assertEquals(listOf("updateGameControllers $KEY", "applyGameSettings $KEY"), calls.filter { "Game" in it })
+            assertEquals(listOf(0, 2, 3, 4, 1), pages.controllers!!.pads)
+        }
+
+    @Test
+    fun anInputProfileIsReported() =
+        runTest {
+            api.inputProfiles = mapOf(KEY to "Desk")
+
+            assertEquals("Desk", pages().summary!!.inputProfile)
         }
 
     private companion object {

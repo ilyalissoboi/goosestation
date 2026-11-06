@@ -31,6 +31,7 @@ import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
+import io.github.ilyalissoboi.goosestation.app.GameControllers
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.GamePage
@@ -94,6 +95,17 @@ class FocusAuditTest {
     private companion object {
         val GAME = GameEntry("/games/padtest.psexe", "Pad Test", "SLUS-00001", "NTSC-U", 0, 0, null)
         val GAME_SUMMARY = GameSummary(mapOf(GamePage.Graphics to 2), others = 4)
+        val GAME_CONTROLLERS = GameControllers(listOf(0, 2, 3, 4, 1), mapOf(0 to NEGCON_SETTINGS), null)
+
+        fun gameControllerValues() =
+            gamePageValues(
+                listOf(PortSettings.MULTITAP) +
+                    GAME_CONTROLLERS.pads.flatMap {
+                        listOf(GameControllers.type(it)) +
+                            PortSettings.settings(it, GAME_CONTROLLERS.typeSettings[it].orEmpty())
+                    },
+                game = mapOf("ControllerPorts/MultitapMode" to "Port1Only", "Pad1/Type" to "NeGcon"),
+            )
 
         val GAMES =
             (1..12).map { n ->
@@ -333,6 +345,28 @@ class FocusAuditTest {
 
         // The renderer's choices, Use global first, open under it.
         press(Key.Enter)
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aGamesControllers() {
+        show { GameControllersScreen(gameControllerValues(), SampleNames.ALL, GAME_CONTROLLERS, {}, {}) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aGamesControllersFromAnInputProfile() {
+        show {
+            GameControllersScreen(
+                gameControllerValues(),
+                SampleNames.ALL,
+                GAME_CONTROLLERS.copy(inputProfile = "Desk"),
+                {},
+                {},
+            )
+        }
+
         rule.assertControllerReady()
     }
 

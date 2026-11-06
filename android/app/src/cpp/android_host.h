@@ -108,6 +108,11 @@ std::optional<std::string> GetGameInputProfile(const std::string& key);
 /// the CPU thread.
 bool ApplyGameSettings(const std::string& key);
 
+/// After a change to key's controller settings: sets [ControllerPorts] UseGameSettingsForController while it has any
+/// and deletes it otherwise, and gives each controller on a port whose type it sets that type's default bindings in
+/// settings.ini where it has none. Waits for the CPU thread.
+void UpdateGameControllers(const std::string& key);
+
 std::optional<std::vector<std::string>> GetMemoryCardPaths();
 
 /// The folders the core keeps its data in, relative to the data root (RelativeToDataRoot()), each with a trailing '/'

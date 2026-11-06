@@ -12,7 +12,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameSettingsPages
-import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
@@ -86,19 +85,8 @@ private fun GamePageScreen(
                 onBack = back,
             ) { AchievementRows(values, onChange, Modifier.focusRequester(first)) }
         }
-        GamePage.Controllers -> {
-            val first = remember { FocusRequester() }
-            LaunchedEffect(Unit) { first.requestFocus() }
-            SettingsPage(page.label, onBack = back) {
-                Names(
-                    values,
-                    onChange,
-                    pages.names,
-                    "Multitap",
-                    PortSettings.MULTITAP,
-                    modifier = Modifier.focusRequester(first),
-                )
-            }
-        }
+        GamePage.Controllers ->
+            pages.controllers?.let { GameControllersScreen(values, pages.names, it, onChange, back) }
+                ?: SettingsLoadingPage(page.label, onBack = back)
     }
 }

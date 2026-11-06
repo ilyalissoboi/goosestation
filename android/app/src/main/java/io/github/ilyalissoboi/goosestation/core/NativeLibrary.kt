@@ -187,6 +187,12 @@ object NativeLibrary {
     /** When [key] is the running game's, has the core load its settings again and apply them: true. Waits for it. */
     external fun applyGameSettings(key: String): Boolean
 
+    /**
+     * After a change to [key]'s controller settings: `UseGameSettingsForController` while it has any, and each
+     * controller on a port whose type it sets gets that type's default bindings in settings.ini where it has none.
+     */
+    external fun updateGameControllers(key: String)
+
     /** The card files in the memory card folder (`*.mcd`), by their names there, sorted. Empty before [initialize]. */
     external fun getSharedCardNames(): Array<String>
 

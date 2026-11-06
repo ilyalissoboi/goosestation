@@ -58,6 +58,7 @@ import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
+import io.github.ilyalissoboi.goosestation.app.GameControllers
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.GamePage
@@ -1002,6 +1003,28 @@ class OrientationLayoutTest {
             assertShows(SET_FOR_GAME)
             pressUntilFocused(Key.DirectionDown, "VRAM write replacements")
             assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun aGamesControllersThroughItsRows() {
+        val controllers = GameControllers(listOf(0, 2, 3, 4, 1), mapOf(0 to NEGCON_SETTINGS), null)
+        val settings =
+            listOf(PortSettings.MULTITAP) +
+                controllers.pads.flatMap {
+                    listOf(GameControllers.type(it)) + PortSettings.settings(it, controllers.typeSettings[it].orEmpty())
+                }
+        eachConfig({
+            var values by remember {
+                mutableStateOf(gamePageValues(settings, game = mapOf("ControllerPorts/MultitapMode" to "Port1Only")))
+            }
+            CompositionLocalProvider(LocalGameContext provides GameContext(GAME.title, running = false, false)) {
+                GameControllersScreen(values, SampleNames.ALL, controllers, onChange = { values = it }, onBack = {})
+            }
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            stepToTheEnd(Key.DirectionDown, limit = 40)
         }
     }
 

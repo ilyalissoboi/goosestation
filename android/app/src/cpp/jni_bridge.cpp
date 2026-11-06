@@ -1467,6 +1467,11 @@ NATIVE_LIBRARY_FUNCTION(jstring, getGameInputProfile)(JNIEnv* env, jobject, jstr
   return profile.has_value() ? ToJString(env, profile.value()) : nullptr;
 }
 
+NATIVE_LIBRARY_FUNCTION(void, updateGameControllers)(JNIEnv* env, jobject, jstring key)
+{
+  AndroidHost::UpdateGameControllers(FromJString(env, key));
+}
+
 NATIVE_LIBRARY_FUNCTION(jboolean, applyGameSettings)(JNIEnv* env, jobject, jstring key)
 {
   return AndroidHost::ApplyGameSettings(FromJString(env, key)) ? JNI_TRUE : JNI_FALSE;

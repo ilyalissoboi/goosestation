@@ -206,6 +206,22 @@ class FakeCoreApi(
 
     override fun getGameInputProfile(key: String): String? = inputProfiles[key]
 
+    // As the host does: the flag while the file has a controller key, and none once it hasn't.
+    override fun updateGameControllers(key: String) {
+        calls += "updateGameControllers $key"
+        val file = gameLayer(key)
+        val flags = setOf("UseGameSettingsForController", "GameSettingsInitialized")
+        val controllerKeys =
+            file.keys().any { (section, name) ->
+                (section == "ControllerPorts" && name !in flags) || section.matches(Regex("Pad[1-8]"))
+            }
+        if (controllerKeys) {
+            file.setBool("ControllerPorts", "UseGameSettingsForController", true)
+        } else {
+            file.delete("ControllerPorts", "UseGameSettingsForController")
+        }
+    }
+
     override fun getSharedCardNames(): List<String> {
         calls += "getSharedCardNames"
         return sharedCards

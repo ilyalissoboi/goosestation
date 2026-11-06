@@ -626,7 +626,8 @@ class ControllerBindingsTest {
     @Test
     fun multitapInAGamesFileOffersItsPorts() {
         File(dataRoot, "gamesettings").mkdirs()
-        File(dataRoot, "gamesettings/SLUS-00001.ini").writeText("[ControllerPorts]\nMultitapMode = Port1Only\n")
+        File(dataRoot, "gamesettings/SLUS-00001.ini")
+            .writeText("[ControllerPorts]\nUseGameSettingsForController = true\nMultitapMode = Port1Only\n")
         initialize(null)
 
         assertEquals(
@@ -669,9 +670,85 @@ class ControllerBindingsTest {
         )
     }
 
+    // --- A game's controllers ---
+
+    private fun gameFile(key: String = GAME_KEY) =
+        File(dataRoot, "gamesettings/$key.ini").apply { parentFile!!.mkdirs() }
+
+    // A game's file counts for the controllers only with UseGameSettingsForController, as the core reads it.
+    @Test
+    fun aFileWithoutTheFlagOffersNoMultitap() {
+        gameFile().writeText("[ControllerPorts]\nMultitapMode = Port1Only\n")
+        initialize(null)
+
+        assertEquals(listOf("0", "Port 1", "1", "Port 2"), NativeLibrary.getOfferedPorts().toList())
+    }
+
+    @Test
+    fun aGamesTypeGetsItsDefaults() {
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+        NativeLibrary.setGameStringSetting(GAME_KEY, "Pad1", "Type", "NeGcon")
+
+        NativeLibrary.updateGameControllers(GAME_KEY)
+
+        assertEquals("AnalogController", NativeLibrary.getPortType(0))
+        assertTrue(readSettings().values("Pad1", "SteeringLeft").single().startsWith("Android-0/"))
+        assertEquals("true", Ini.parse(gameFile().readText()).value("ControllerPorts", "UseGameSettingsForController"))
+    }
+
+    @Test
+    fun theFlagFollowsTheKeys() {
+        initialize(null)
+        NativeLibrary.setGameStringSetting(GAME_KEY, "ControllerPorts", "MultitapMode", "Port1Only")
+        NativeLibrary.setGameIntSetting(GAME_KEY, "GPU", "ResolutionScale", 4)
+        NativeLibrary.updateGameControllers(GAME_KEY)
+        assertEquals("true", Ini.parse(gameFile().readText()).value("ControllerPorts", "UseGameSettingsForController"))
+
+        NativeLibrary.deleteGameSetting(GAME_KEY, "ControllerPorts", "MultitapMode")
+        NativeLibrary.updateGameControllers(GAME_KEY)
+
+        assertEquals(
+            emptyList<String>(),
+            Ini.parse(gameFile().readText()).values("ControllerPorts", "UseGameSettingsForController"),
+        )
+        assertEquals("4", Ini.parse(gameFile().readText()).value("GPU", "ResolutionScale"))
+    }
+
+    // Stage 2's known limit: the Port page lists the inputs of a type a game sets for the port too, to remap them.
+    @Test
+    fun thePortPageListsAGamesTypesInputs() {
+        gameFile().writeText("[ControllerPorts]\nUseGameSettingsForController = true\n[Pad1]\nType = NeGcon\n")
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+
+        val bindings = NativeLibrary.getPadBindings("pad-a")!!.toList()
+
+        assertEquals("", bindings.first { it.name == "Cross" }.category)
+        val steering = bindings.single { it.name == "SteeringLeft" }
+        assertEquals("NeGcon", steering.category)
+        // Cross is the port's own type's, listed once.
+        assertEquals(1, bindings.count { it.name == "Cross" })
+
+        NativeLibrary.setPadBinding("pad-a", "SteeringLeft", "+Axis0")
+        assertEquals(listOf("Android-0/+Axis0"), readSettings().values("Pad1", "SteeringLeft"))
+    }
+
+    @Test
+    fun aGamesTypeGetsItsDefaultsOnReset() {
+        gameFile().writeText("[ControllerPorts]\nUseGameSettingsForController = true\n[Pad1]\nType = NeGcon\n")
+        initialize(null)
+        connectNewPad(1, "pad-a", 0)
+
+        NativeLibrary.resetPadBindings("pad-a")
+
+        assertTrue(readSettings().values("Pad1", "SteeringLeft").single().startsWith("Android-0/"))
+    }
+
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())
 
     private companion object {
         const val INSTALL_ID = "test-install"
+        const val GAME_KEY = "SLUS-00001"
     }
 }

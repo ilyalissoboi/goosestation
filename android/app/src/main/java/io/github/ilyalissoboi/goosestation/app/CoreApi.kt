@@ -112,6 +112,9 @@ interface CoreApi {
 
     fun getGameInputProfile(key: String): String?
 
+    /** [NativeLibrary.updateGameControllers]: after a change to [key]'s controller settings. */
+    fun updateGameControllers(key: String)
+
     fun getBiosImages(): List<BiosImage>
 
     fun getAutoBios(region: String): String?
@@ -244,6 +247,8 @@ object NativeCoreApi : CoreApi {
             .map { it[0] to it[1] }
 
     override fun getGameInputProfile(key: String): String? = NativeLibrary.getGameInputProfile(key)
+
+    override fun updateGameControllers(key: String) = NativeLibrary.updateGameControllers(key)
 
     override fun getRewindMemoryUsage(slots: Int): RewindUsage {
         val usage = NativeLibrary.getRewindMemoryUsage(slots)

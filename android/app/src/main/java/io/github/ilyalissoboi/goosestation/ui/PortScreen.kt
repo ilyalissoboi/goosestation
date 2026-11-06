@@ -155,7 +155,11 @@ fun PortScreen(
                 if (bindingsFor != controller.descriptor) {
                     Line("Reading $label's bindings…")
                 } else {
-                    bindings.forEach { binding ->
+                    bindings.forEachIndexed { i, binding ->
+                        // A type a game's own file gives the port: its inputs, after the port's own, under its name.
+                        if (binding.category.isNotEmpty() && binding.category != bindings.getOrNull(i - 1)?.category) {
+                            SettingsSection("${binding.category} (a game's)")
+                        }
                         BindingRow(
                             binding = binding,
                             glyph = glyphs,

@@ -45,5 +45,19 @@ object SampleNames {
                     "Shared" to "Shared Between All Games",
                     "PerGameTitle" to "Separate Card Per Game (Title)",
                 ),
+            NameList.ControllerType to
+                list(
+                    "None" to "Not Connected",
+                    "DigitalController" to "Digital Controller",
+                    "AnalogController" to "Analog Controller (DualShock)",
+                    "NeGcon" to "NeGcon",
+                ),
+            NameList.MultitapMode to
+                list(
+                    "Disabled" to "Disabled",
+                    "Port1Only" to "Enable on Port 1 Only",
+                    "Port2Only" to "Enable on Port 2 Only",
+                    "BothPorts" to "Enable on Ports 1 and 2",
+                ),
         )
 }

@@ -245,6 +245,9 @@ public:
   /// and a stop to the previous target if it changed and is still connected. Nothing without a device on the pad.
   std::vector<Command> SetMotor(u32 pad, u32 motor, float value);
 
+  /// Sets both of pad's motors at once, as SetMotor() does one: one target, one stop for the previous one.
+  std::vector<Command> SetMotors(u32 pad, float large, float small);
+
   /// The device index of the connected controller used last, if any has been used.
   std::optional<u32> GetLastUsedIndex() const;
 
@@ -262,6 +265,7 @@ private:
     std::optional<s32> target;
   };
 
+  std::vector<Command> Route(u32 pad);
   u32 PadOf(u32 index) const;
   float StrengthOf(u32 index) const;
 

@@ -763,6 +763,18 @@ TEST(AndroidInputKeys, RumbleFollowsAPortChange)
   EXPECT_EQ(r.SetMotor(1, 0, 0.5f), (RumbleCommands{{10, 0.5f, 0.0f}}));
 }
 
+// Both motors at once (a DualShock's update): the previous controller is still told to stop when another takes over.
+TEST(AndroidInputKeys, BothMotorsKeepTheStop)
+{
+  RumbleRouter r;
+  r.OnConnected(10, 0);
+  r.OnConnected(11, 1);
+  r.OnInput(10);
+  EXPECT_EQ(r.SetMotors(0, 1.0f, 0.5f), (RumbleCommands{{10, 1.0f, 0.5f}}));
+  r.OnInput(11);
+  EXPECT_EQ(r.SetMotors(0, 0.0f, 0.0f), (RumbleCommands{{10, 0.0f, 0.0f}, {11, 0.0f, 0.0f}}));
+}
+
 TEST(AndroidInputKeys, LastUsedIndex)
 {
   RumbleRouter r;

@@ -306,7 +306,6 @@ void AndroidInputSource::UpdateMotorState(InputBindingKey key, float intensity)
 void AndroidInputSource::UpdateMotorState(InputBindingKey large_key, InputBindingKey small_key, float large_intensity,
                                           float small_intensity)
 {
-  // The router sends both levels each time: the first call's command is overtaken by the second's.
   if (large_key.source_type != InputSourceType::Android || small_key.source_type != InputSourceType::Android ||
       large_key.source_subtype != InputSubclass::ControllerMotor ||
       small_key.source_subtype != InputSubclass::ControllerMotor)
@@ -314,7 +313,14 @@ void AndroidInputSource::UpdateMotorState(InputBindingKey large_key, InputBindin
     return;
   }
 
-  m_rumble.SetMotor(large_key.source_index, large_key.data, large_intensity);
+  // One port's two motors: set together, so a stop for the controller that was rumbling isn't lost between them.
+  if (large_key.source_index == small_key.source_index && large_key.data == 0 && small_key.data == 1)
+  {
+    SendRumble(m_rumble.SetMotors(large_key.source_index, large_intensity, small_intensity));
+    return;
+  }
+
+  SendRumble(m_rumble.SetMotor(large_key.source_index, large_key.data, large_intensity));
   SendRumble(m_rumble.SetMotor(small_key.source_index, small_key.data, small_intensity));
 }
 

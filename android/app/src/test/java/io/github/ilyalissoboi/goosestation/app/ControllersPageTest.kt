@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -369,6 +370,23 @@ class ControllersPageTest {
             val page = openPage()
 
             assertEquals(listOf(0, 2, 1, 6), page.state.offered.map { it.value })
+        }
+
+    // Another port's page never shows with the last port's values, whose settings it doesn't have.
+    @Test
+    fun anotherPortStartsWithNoValues() =
+        runTest {
+            api.typeSettings = mapOf("AnalogController" to listOf(deadzone))
+            val page = openPage()
+            page.openPort(0)
+            runCurrent()
+            assertNotNull(page.state.portValues)
+            page.back()
+
+            page.openPort(1)
+
+            assertNull(page.state.portValues)
+            assertEquals(emptyList<TypeSetting>(), page.state.typeSettings)
         }
 
     @Test

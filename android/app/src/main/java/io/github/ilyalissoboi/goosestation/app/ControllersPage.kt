@@ -135,6 +135,9 @@ class ControllersPage(
     private var portRead = 0
     private var macroRead = 0
 
+    /** The pad [ControllersState.portValues] were read for, while they're shown. */
+    private var valuesPad: Int? = null
+
     /** The core's type and multitap names are shown: set on the main thread, read on [core]. */
     @Volatile private var namesShown = false
 
@@ -343,6 +346,12 @@ class ControllersPage(
     // Reads [pad]'s type and its settings, for its page.
     private fun readPort(pad: Int) {
         val read = ++portRead
+        // Another port's values hold another port's settings: none show until this one's are read. The same port's
+        // stay meanwhile (back from one of its macros), so its page keeps its rows and focus.
+        if (valuesPad != pad) {
+            valuesPad = null
+            state = state.copy(typeSettings = emptyList(), portValues = null)
+        }
         scope.launch {
             val (type, info, values) =
                 withContext(core) {
@@ -353,6 +362,7 @@ class ControllersPage(
                     Triple(type, info, SettingValues.read(settings, PortSettings.settings(pad, info) + macros))
                 }
             if (read != portRead || state.view != ControllersView.Port(pad)) return@launch
+            valuesPad = pad
             state = state.copy(portTypes = state.portTypes + (pad to type), typeSettings = info, portValues = values)
         }
     }

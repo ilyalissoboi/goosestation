@@ -577,12 +577,28 @@ float RumbleRouter::StrengthOf(u32 index) const
 
 std::vector<RumbleRouter::Command> RumbleRouter::SetMotor(u32 pad_index, u32 motor, float value)
 {
-  std::vector<Command> ret;
   if (pad_index >= NUM_PADS || motor > 1)
-    return ret;
+    return {};
 
+  m_pads[pad_index].levels[motor] = value;
+  return Route(pad_index);
+}
+
+std::vector<RumbleRouter::Command> RumbleRouter::SetMotors(u32 pad_index, float large, float small)
+{
+  if (pad_index >= NUM_PADS)
+    return {};
+
+  m_pads[pad_index].levels[0] = large;
+  m_pads[pad_index].levels[1] = small;
+  return Route(pad_index);
+}
+
+// The pad's levels to its target, and a stop to the previous one when it changed.
+std::vector<RumbleRouter::Command> RumbleRouter::Route(u32 pad_index)
+{
+  std::vector<Command> ret;
   Pad& pad = m_pads[pad_index];
-  pad.levels[motor] = value;
 
   // The pad's last-used device, or its first connected one before any is used.
   const Device* target = nullptr;

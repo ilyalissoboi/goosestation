@@ -267,9 +267,17 @@ bool OpenGLTexture::Update(u32 x, u32 y, u32 width, u32 height, const void* data
   if (!sb || map_size > sb->GetChunkSize())
   {
     GL_INS_FMT("Not using PBO for map size {}", map_size);
+
+    // GL pads each row to the unpack alignment (4 by default), so a pitch that isn't a multiple of it, such as an
+    // odd-width 16-bit image's, would be read as a longer one.
+    const u32 alignment = ((pitch % 4) == 0) ? 4 : (((pitch % 2) == 0) ? 2 : 1);
+    if (alignment != 4)
+      glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, pitch / GetPixelSize());
     glTexSubImage2D(target, layer, x, y, width, height, gl_format, gl_type, data);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    if (alignment != 4)
+      glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
   }
   else
   {

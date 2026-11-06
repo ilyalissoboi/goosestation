@@ -506,23 +506,6 @@ class FakeCoreApi(
     }
 }
 
-/** [this] with [value] as its value. */
-fun ShaderOptionInfo.withValue(value: FloatArray) =
-    ShaderOptionInfo(
-        name,
-        uiName,
-        category,
-        tooltip,
-        type,
-        vectorSize,
-        defaultValue,
-        minValue,
-        maxValue,
-        stepValue,
-        value,
-        choices,
-    )
-
 /** A float as the core writes it: no trailing ".0" on a whole number. */
 private fun formatFloat(value: Float) =
     if (value ==

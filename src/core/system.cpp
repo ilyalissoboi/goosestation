@@ -240,6 +240,9 @@ static constexpr u32 MAX_SKIPPED_TIMEOUT_FRAME_COUNT = 1;   // 30fps minimum
 static std::unique_ptr<INISettingsInterface> s_game_settings_interface;
 static std::unique_ptr<INISettingsInterface> s_input_settings_interface;
 static std::string s_input_profile_name;
+#ifdef __ANDROID__
+static std::string s_game_settings_serial;
+#endif
 
 static System::State s_state = System::State::Shutdown;
 static std::atomic_bool s_startup_cancelled{false};
@@ -1381,12 +1384,24 @@ bool System::ReloadGameSettings(bool display_osd_messages)
   return true;
 }
 
+#ifdef __ANDROID__
+void System::SetGameSettingsSerial(std::string serial)
+{
+  s_game_settings_serial = std::move(serial);
+}
+#endif
+
 bool System::UpdateGameSettingsLayer()
 {
   std::unique_ptr<INISettingsInterface> new_interface;
-  if (g_settings.apply_game_settings && !s_running_game_serial.empty())
+#ifdef __ANDROID__
+  const std::string& settings_serial = s_game_settings_serial.empty() ? s_running_game_serial : s_game_settings_serial;
+#else
+  const std::string& settings_serial = s_running_game_serial;
+#endif
+  if (g_settings.apply_game_settings && !settings_serial.empty())
   {
-    std::string filename(GetGameSettingsPath(s_running_game_serial));
+    std::string filename(GetGameSettingsPath(settings_serial));
     if (FileSystem::FileExists(filename.c_str()))
     {
       INFO_LOG("Loading game settings from '{}'...", Path::GetFileName(filename));
@@ -1396,6 +1411,12 @@ bool System::UpdateGameSettingsLayer()
         ERROR_LOG("Failed to parse game settings ini '{}'", new_interface->GetFileName());
         new_interface.reset();
       }
+#ifdef __ANDROID__
+      else
+      {
+        Host::AdaptGameSettingsLayer(*new_interface);
+      }
+#endif
     }
     else
     {

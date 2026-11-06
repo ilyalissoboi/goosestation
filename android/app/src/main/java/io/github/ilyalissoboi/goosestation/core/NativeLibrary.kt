@@ -558,6 +558,18 @@ object NativeLibrary {
      */
     external fun getOfferedPorts(): Array<String>
 
+    /** Tests: gives the listed game at [path] the key [key], as if the library had grouped it so. */
+    external fun setListedKeyForTest(
+        path: String,
+        key: String,
+    )
+
+    /** Tests: [section] [key] as the running game has it, its own settings over settings.ini; empty without a game. */
+    external fun getRunningSettingForTest(
+        section: String,
+        key: String,
+    ): String
+
     /** Tests: the running game's [pad]'s input [name]'s state, 0 without a game or controller. Waits for the core. */
     external fun getPadBindStateForTest(
         pad: Int,

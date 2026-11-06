@@ -142,6 +142,12 @@ DiscRegion GetRegionForPsf(const char* path);
 /// Returns the path for the game settings ini file for the specified serial.
 std::string GetGameSettingsPath(std::string_view game_serial);
 
+#ifdef __ANDROID__
+/// Android: the serial whose game settings file (GetGameSettingsPath()) the running game's layer is, for every disc
+/// of the library's game, while it isn't empty; empty, the running disc's own, as on desktop.
+void SetGameSettingsSerial(std::string serial);
+#endif
+
 /// Returns the path for the input profile ini file with the specified name (may not exist).
 std::string GetInputProfilePath(std::string_view name);
 

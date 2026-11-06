@@ -280,6 +280,8 @@ if(ANDROID)
     aaudio_audio_stream.cpp
     android_disc_groups.cpp
     android_disc_groups.h
+    android_game_settings.cpp
+    android_game_settings.h
     android_memcards.cpp
     android_memcards.h
     android_input_keys.cpp

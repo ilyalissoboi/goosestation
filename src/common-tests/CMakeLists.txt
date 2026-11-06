@@ -5,6 +5,8 @@ add_executable(common-tests
   ../util/android_disc_groups.cpp
   android_memcards_tests.cpp
   ../util/android_memcards.cpp
+  android_game_settings_tests.cpp
+  ../util/android_game_settings.cpp
   android_input_keys_tests.cpp
   ../util/android_input_keys.cpp
   android_patch_codes_tests.cpp

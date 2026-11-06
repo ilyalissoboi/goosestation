@@ -21,6 +21,7 @@
 #include "core/settings.h"
 #include "core/system.h"
 
+#include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
 #include "util/gpu_device.h"
@@ -922,6 +923,8 @@ void AndroidHost::BootPendingGame()
   s_pending_playlist_index = 0;
   s_running_game = std::move(s_pending_game);
   s_pending_game = {};
+  // Every disc of the library's game takes the game's own settings from one file, under its key, as its states.
+  System::SetGameSettingsSerial(s_running_game->key);
   // Built before the boot, whose UpdateRunningGame() gives it to the core (Host::OnGameChanged()).
   GameCodes::Load(s_running_game.value());
   if (parameters.save_state.empty())
@@ -935,6 +938,7 @@ void AndroidHost::BootPendingGame()
     ERROR_LOG("Failed to start '{}': {}", s_boot_path, error.GetDescription());
     NotifyError(fmt::format("Failed to start {}: {}", Path::GetFileName(s_boot_path), error.GetDescription()));
     s_running_game.reset();
+    System::SetGameSettingsSerial({});
     NotifyGameStopped();
   }
 }
@@ -2101,6 +2105,28 @@ void AndroidHost::PostUnusedPortMessages()
   }
 }
 
+void AndroidHost::SetListedKeyForTest(std::string path, std::string key)
+{
+  std::unique_lock lock(s_listed_games_mutex);
+  for (AndroidDiscGroups::Game& game : s_listed_games)
+  {
+    if (game.path == path)
+      game.key = key;
+  }
+}
+
+std::string AndroidHost::GetRunningSettingForTest(std::string section, std::string key)
+{
+  std::string value;
+  EmuThread::RunOnThread(
+    [&section, &key, &value]() {
+      if (System::IsValid())
+        value = Host::GetStringSettingValue(section.c_str(), key.c_str(), "");
+    },
+    true);
+  return value;
+}
+
 float AndroidHost::GetPadBindStateForTest(u32 pad, std::string name)
 {
   float state = 0.0f;
@@ -2640,11 +2666,36 @@ void Host::OnSystemStarted()
   AndroidHost::PostUnusedPortMessages();
 }
 
+void Host::AdaptGameSettingsLayer(SettingsInterface& si)
+{
+  AndroidGameSettings::Usable usable;
+  for (u32 type = 0; type < static_cast<u32>(ControllerType::Count); type++)
+  {
+    if (const Controller::ControllerInfo* info = Controller::GetControllerInfo(static_cast<ControllerType>(type)))
+    {
+      for (const SettingInfo& setting : info->settings)
+        usable.pad_setting_keys.emplace_back(setting.name);
+    }
+  }
+  for (const GPURenderer renderer : {GPURenderer::Automatic, GPURenderer::HardwareVulkan, GPURenderer::HardwareOpenGL,
+                                     GPURenderer::Software})
+  {
+    usable.renderers.emplace_back(Settings::GetRendererName(renderer));
+  }
+  // The CPU thread's, which loads the layer.
+  const std::string bios_dir = EmuFolders::Bios;
+  usable.has_bios = [&bios_dir](std::string_view name) {
+    return FileSystem::FileExists(Path::Combine(bios_dir, name).c_str());
+  };
+  AndroidGameSettings::Adapt(si, usable);
+}
+
 void Host::OnSystemDestroyed()
 {
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
   AndroidHost::s_running_game.reset();
+  System::SetGameSettingsSerial({});
   GameCodes::Clear();
 
   // Fast forward ends with the game.

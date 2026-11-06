@@ -283,6 +283,12 @@ std::vector<std::pair<u32, std::string>> GetOfferedPorts();
 /// game or controller there. Runs on the CPU thread and blocks.
 float GetPadBindStateForTest(u32 pad, std::string name);
 
+/// Tests: gives the listed game at [path] the key [key], as if the library had grouped it so.
+void SetListedKeyForTest(std::string path, std::string key);
+
+/// Tests: [section] [key] as the running game has it, its own settings over settings.ini; empty without a game.
+std::string GetRunningSettingForTest(std::string section, std::string key);
+
 /// The controller's place in the descriptor table, as its Android-<index> devices are numbered, which stays the same
 /// from one run to the next; nullopt for one never connected, or before Initialize() succeeded.
 std::optional<u32> GetControllerIndex(std::string descriptor);

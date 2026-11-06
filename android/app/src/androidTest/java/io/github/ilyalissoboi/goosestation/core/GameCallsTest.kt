@@ -275,6 +275,40 @@ class GameCallsTest {
         }
     }
 
+    @Test
+    fun aGlobalChainRunsInTheGame() =
+        withPadtest(settings = { flipChain(null) }) {
+            assertTrue(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+            assertFalse(NativeLibrary.isPostProcessingActiveForTest("InternalPostProcessing"))
+        }
+
+    // As the core takes a game's chain: whole, once its file says Enabled, and in place of the global one.
+    @Test
+    fun aGamesChainReplacesTheGlobalOne() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            flipChain(null)
+            NativeLibrary.setGameBoolSetting(TEST_KEY, "PostProcessing", "Enabled", false)
+        }) {
+            assertFalse(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+
+            flipChain(TEST_KEY)
+            assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
+
+            assertTrue(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+        }
+    }
+
+    // [key]'s Display chain (settings.ini's for null): on, with simple-flip.
+    private fun flipChain(key: String?) {
+        if (key == null) {
+            NativeLibrary.setBoolSetting("PostProcessing", "Enabled", true)
+        } else {
+            NativeLibrary.setGameBoolSetting(key, "PostProcessing", "Enabled", true)
+        }
+        assertNull(NativeLibrary.addPostProcessingStage(key, "PostProcessing", "simple-flip"))
+    }
+
     // The in-game Settings: a change through the game's pages reaches the running game at once.
     @Test
     fun aChangeInTheMenuAppliesAtOnce() {

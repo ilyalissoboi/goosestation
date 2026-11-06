@@ -4,6 +4,7 @@
 #pragma once
 
 #include "util/android_disc_groups.h"
+#include "util/postprocessing.h"
 
 #include "common/types.h"
 
@@ -100,6 +101,36 @@ void CopyGlobalSettingsToGame(const std::string& key);
 
 /// Desktop's Clear Settings, as Big Picture's: the file goes.
 void ClearGameSettings(const std::string& key);
+
+/// A post-processing chain's stage: its shader's name, the shader's kind ("GLSL" or "ReShade", empty when it isn't
+/// found or doesn't load), and its options with the stage's values.
+struct PostProcessingStage
+{
+  std::string shader;
+  std::string kind;
+  std::vector<PostProcessing::ShaderOption> options;
+};
+
+// The chain calls edit section ("PostProcessing" or "InternalPostProcessing") in settings.ini when key is nullopt,
+// else in the key's game file, through PostProcessing::Config, on the caller's thread.
+
+/// The shaders whose metadata loads, as GetAvailableShaderNames() orders them: each name and its kind.
+std::vector<std::pair<std::string, std::string>> GetPostProcessingShaders();
+std::vector<PostProcessingStage> GetPostProcessingStages(const std::optional<std::string>& key, const char* section);
+/// Empty, or why the shader couldn't be added.
+std::string AddPostProcessingStage(const std::optional<std::string>& key, const char* section,
+                                   const std::string& shader);
+void RemovePostProcessingStage(const std::optional<std::string>& key, const char* section, u32 index);
+void MovePostProcessingStage(const std::optional<std::string>& key, const char* section, u32 index, bool down);
+void SetPostProcessingOption(const std::optional<std::string>& key, const char* section, u32 index,
+                             const std::string& name, std::span<const float> values);
+/// settings.ini's chain (Enabled, StageCount, the stages) over the game's own.
+void CopyPostProcessingChain(const std::string& key, const char* section);
+/// Deletes the game's chain: Enabled, StageCount and the stages.
+void ClearPostProcessingChain(const std::string& key, const char* section);
+/// In a game, whether its device is OpenGL ES; else whether settings.ini's renderer runs on it (or Vulkan failed).
+bool PostProcessingUsesOpenGLES();
+bool IsPostProcessingActiveForTest(const std::string& section);
 
 /// The input profile the file names, when it doesn't use its own controller settings; nullopt otherwise.
 std::optional<std::string> GetGameInputProfile(const std::string& key);

@@ -91,3 +91,12 @@
 # doesn't call; it needs androidx lifecycle-process, which the app doesn't have.
 -dontwarn androidx.lifecycle.ProcessLifecycleOwner
 -dontwarn androidx.lifecycle.ProcessLifecycleOwner$Companion
+
+# jni_bridge.cpp finds these and their constructors by name in JNI_OnLoad, for getPostProcessingStages().
+-keep class io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo {
+    <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, int, int, float[], float[], float[],
+        float[], float[], java.lang.String[]);
+}
+-keep class io.github.ilyalissoboi.goosestation.core.StageInfo {
+    <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo[]);
+}

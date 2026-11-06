@@ -57,6 +57,7 @@
     <ClInclude Include="metal_device.h" />
     <ClInclude Include="postprocessing_shader_glsl.h" />
     <ClInclude Include="postprocessing_shader_slang.h" />
+    <ClInclude Include="postprocessing_slang_picture.h" />
     <ClInclude Include="d3d11_pipeline.h" />
     <ClInclude Include="d3d11_stream_buffer.h" />
     <ClInclude Include="d3d11_texture.h" />

@@ -4,6 +4,7 @@
 #include "util/librashader_loader.h"
 #include "util/postprocessing.h"
 #include "util/postprocessing_shader_slang.h"
+#include "util/postprocessing_slang_picture.h"
 
 #include "core/settings.h"
 
@@ -174,4 +175,36 @@ TEST(SlangNames, AddingAPresetWithoutTheLibrarySaysWhy)
   EXPECT_EQ(error.GetDescription().rfind("Slang presets aren't available in this build: ", 0), 0u)
     << error.GetDescription();
   EXPECT_EQ(PostProcessing::Config::GetStageCount(si, PostProcessing::Config::DISPLAY_CHAIN_SECTION), 0u);
+}
+
+TEST(SlangPicture, NativeSizeIsTheConsolePictureTurnedWithTheDisplay)
+{
+  EXPECT_EQ(NativeSize(320, 240, false), (PictureSize{320, 240}));
+  EXPECT_EQ(NativeSize(320, 240, true), (PictureSize{240, 320}));
+  EXPECT_EQ(NativeSize(0, 240, false), (PictureSize{0, 240}));
+}
+
+TEST(SlangPicture, BoxFactorOnlyForExactIntegerMultiples)
+{
+  EXPECT_EQ(BoxFactor(GSVector4i(0, 0, 1280, 960), {320, 240}), 4u);
+  EXPECT_EQ(BoxFactor(GSVector4i(16, 8, 16 + 640, 8 + 480), {320, 240}), 2u);
+  EXPECT_EQ(BoxFactor(GSVector4i(0, 0, 320, 240), {320, 240}), 0u);
+  EXPECT_EQ(BoxFactor(GSVector4i(0, 0, 1104, 720), {368, 240}), 3u);
+  EXPECT_EQ(BoxFactor(GSVector4i(0, 0, 1000, 750), {320, 240}), 0u);
+  EXPECT_EQ(BoxFactor(GSVector4i(0, 0, 1280, 720), {320, 240}), 0u);
+  EXPECT_EQ(BoxFactor(GSVector4i(0, 0, 640, 480), {0, 0}), 0u);
+}
+
+TEST(SlangPicture, ClampKeepsThePictureOnTheTarget)
+{
+  EXPECT_TRUE(ClampToTarget(GSVector4i(-10, 0, 100, 50), 64, 64).eq(GSVector4i(0, 0, 64, 50)));
+  EXPECT_TRUE(ClampToTarget(GSVector4i(100, 100, 200, 200), 64, 64).rempty());
+}
+
+TEST(SlangPicture, EmptyRectsAndZeroSizesAreNotUsable)
+{
+  EXPECT_FALSE(IsUsable(GSVector4i(0, 0, 0, 0), {320, 240}));
+  EXPECT_FALSE(IsUsable(GSVector4i(0, 0, 64, 64), {0, 240}));
+  EXPECT_FALSE(IsUsable(GSVector4i(10, 10, 5, 20), {320, 240}));
+  EXPECT_TRUE(IsUsable(GSVector4i(0, 0, 64, 64), {320, 240}));
 }

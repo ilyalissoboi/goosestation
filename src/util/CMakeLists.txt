@@ -65,6 +65,7 @@ add_library(util
   postprocessing_shader_glsl.h
   postprocessing_shader_slang.cpp
   postprocessing_shader_slang.h
+  postprocessing_slang_picture.h
   shadergen.cpp
   shadergen.h
   shiftjis.cpp

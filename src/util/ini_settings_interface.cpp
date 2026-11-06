@@ -403,6 +403,18 @@ std::vector<std::pair<std::string, std::string>> INISettingsInterface::GetKeyVal
   return output;
 }
 
+std::vector<std::string> INISettingsInterface::GetSectionList() const
+{
+  std::list<CSimpleIniA::Entry> sections;
+  m_ini.GetAllSections(sections);
+  sections.sort(CSimpleIniA::Entry::LoadOrder());
+
+  std::vector<std::string> output;
+  for (const CSimpleIniA::Entry& section : sections)
+    output.emplace_back(section.pItem);
+  return output;
+}
+
 void INISettingsInterface::SetKeyValueList(const char* section,
                                            const std::vector<std::pair<std::string, std::string>>& items)
 {

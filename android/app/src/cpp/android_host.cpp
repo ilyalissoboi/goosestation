@@ -680,6 +680,205 @@ bool AndroidHost::IsVulkanRenderer(GPURenderer renderer)
   return (Settings::GetRenderAPIForRenderer(renderer) == RenderAPI::Vulkan);
 }
 
+// The game settings files' edits, one at a time, so two never interleave a load and a save.
+static std::mutex s_game_settings_mutex;
+
+static std::string GameSettingsPath(const std::string& key)
+{
+  // EmuFolders::Update() changes the folder under the lock.
+  const auto lock = Host::GetSettingsLock();
+  return System::GetGameSettingsPath(key);
+}
+
+// The key's file as it is now; empty when there's none, or it can't be read.
+static std::unique_ptr<INISettingsInterface> LoadGameSettings(const std::string& key)
+{
+  auto si = std::make_unique<INISettingsInterface>(GameSettingsPath(key));
+  if (FileSystem::FileExists(si->GetFileName().c_str()))
+  {
+    Error error;
+    if (!si->Load(&error))
+      WARNING_LOG("Can't read {}: {}", si->GetFileName(), error.GetDescription());
+  }
+  return si;
+}
+
+// Saves si, or deletes its file once it holds nothing, as desktop does. Takes it: its destructor saves it while it has
+// unsaved changes, which would write an empty file again after the delete.
+static void SaveGameSettings(std::unique_ptr<INISettingsInterface> si)
+{
+  si->RemoveEmptySections();
+  Error error;
+  if (!si->IsEmpty())
+  {
+    FileSystem::EnsureDirectoryExists(std::string(Path::GetDirectory(si->GetFileName())).c_str(), false);
+    if (!si->Save(&error))
+      ERROR_LOG("Failed to save {}: {}", si->GetFileName(), error.GetDescription());
+    return;
+  }
+
+  const std::string path = si->GetFileName();
+  si.reset();
+  if (FileSystem::FileExists(path.c_str()) && !FileSystem::DeleteFile(path.c_str(), &error))
+    ERROR_LOG("Failed to delete {}: {}", path, error.GetDescription());
+}
+
+template<typename T, typename Read>
+static T ReadGameSetting(const std::string& key, T default_value, const Read& read)
+{
+  if (!AndroidHost::s_initialized || key.empty())
+    return default_value;
+
+  std::unique_lock lock(s_game_settings_mutex);
+  const std::unique_ptr<INISettingsInterface> si = LoadGameSettings(key);
+  return read(*si);
+}
+
+template<typename Edit>
+static void EditGameSettings(const std::string& key, const Edit& edit)
+{
+  if (!AndroidHost::s_initialized || key.empty())
+    return;
+
+  std::unique_lock lock(s_game_settings_mutex);
+  std::unique_ptr<INISettingsInterface> si = LoadGameSettings(key);
+  edit(*si);
+  SaveGameSettings(std::move(si));
+}
+
+bool AndroidHost::HasGameSetting(const std::string& key, const char* section, const char* name)
+{
+  return ReadGameSetting(key, false, [&](const INISettingsInterface& si) { return si.ContainsValue(section, name); });
+}
+
+bool AndroidHost::GetGameBoolSetting(const std::string& key, const char* section, const char* name, bool default_value)
+{
+  return ReadGameSetting(key, default_value, [&](const INISettingsInterface& si) {
+    return si.GetBoolValue(section, name, default_value);
+  });
+}
+
+s32 AndroidHost::GetGameIntSetting(const std::string& key, const char* section, const char* name, s32 default_value)
+{
+  return ReadGameSetting(key, default_value, [&](const INISettingsInterface& si) {
+    return si.GetIntValue(section, name, default_value);
+  });
+}
+
+float AndroidHost::GetGameFloatSetting(const std::string& key, const char* section, const char* name,
+                                       float default_value)
+{
+  return ReadGameSetting(key, default_value, [&](const INISettingsInterface& si) {
+    return si.GetFloatValue(section, name, default_value);
+  });
+}
+
+std::string AndroidHost::GetGameStringSetting(const std::string& key, const char* section, const char* name,
+                                              const char* default_value)
+{
+  return ReadGameSetting(key, std::string(default_value), [&](const INISettingsInterface& si) {
+    return si.GetStringValue(section, name, default_value);
+  });
+}
+
+void AndroidHost::SetGameBoolSetting(const std::string& key, const char* section, const char* name, bool value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.SetBoolValue(section, name, value); });
+}
+
+void AndroidHost::SetGameIntSetting(const std::string& key, const char* section, const char* name, s32 value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.SetIntValue(section, name, value); });
+}
+
+void AndroidHost::SetGameFloatSetting(const std::string& key, const char* section, const char* name, float value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.SetFloatValue(section, name, value); });
+}
+
+void AndroidHost::SetGameStringSetting(const std::string& key, const char* section, const char* name,
+                                       const char* value)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) {
+    if (value)
+      si.SetStringValue(section, name, value);
+    else
+      si.DeleteValue(section, name);
+  });
+}
+
+void AndroidHost::DeleteGameSetting(const std::string& key, const char* section, const char* name)
+{
+  EditGameSettings(key, [&](INISettingsInterface& si) { si.DeleteValue(section, name); });
+}
+
+std::vector<std::pair<std::string, std::string>> AndroidHost::GetGameSettingKeys(const std::string& key)
+{
+  return ReadGameSetting(key, std::vector<std::pair<std::string, std::string>>(), [](const INISettingsInterface& si) {
+    std::vector<std::pair<std::string, std::string>> keys;
+    for (const std::string& section : si.GetSectionList())
+    {
+      for (auto& [name, value] : si.GetKeyValueList(section.c_str()))
+      {
+        // A list's key once, for all its values.
+        if (std::find(keys.begin(), keys.end(), std::pair(section, name)) == keys.end())
+          keys.emplace_back(section, std::move(name));
+      }
+    }
+    return keys;
+  });
+}
+
+void AndroidHost::CopyGlobalSettingsToGame(const std::string& key)
+{
+  EditGameSettings(key, [](INISettingsInterface& si) {
+    Settings global;
+    {
+      const auto lock = Host::GetSettingsLock();
+      global.Load(*AndroidHost::s_base_settings_interface, *AndroidHost::s_base_settings_interface);
+    }
+    global.Save(si, true);
+  });
+}
+
+void AndroidHost::ClearGameSettings(const std::string& key)
+{
+  EditGameSettings(key, [](INISettingsInterface& si) { si.Clear(); });
+}
+
+std::optional<std::string> AndroidHost::GetGameInputProfile(const std::string& key)
+{
+  return ReadGameSetting(key, std::optional<std::string>(), [](const INISettingsInterface& si) {
+    std::optional<std::string> profile;
+    if (!si.GetBoolValue("ControllerPorts", "UseGameSettingsForController", false))
+    {
+      if (std::string name = si.GetStringValue("ControllerPorts", "InputProfileName"); !name.empty())
+        profile = std::move(name);
+    }
+    return profile;
+  });
+}
+
+bool AndroidHost::ApplyGameSettings(const std::string& key)
+{
+  if (!s_initialized || key.empty())
+    return false;
+
+  const std::string path = GameSettingsPath(key);
+  bool applied = false;
+  EmuThread::RunOnThread(
+    [&path, &applied]() {
+      if (!System::IsValid() || !s_running_game.has_value() || GameSettingsPath(s_running_game->key) != path)
+        return;
+
+      System::ReloadGameSettings(false);
+      System::ReloadInputBindings();
+      applied = true;
+    },
+    true);
+  return applied;
+}
+
 std::optional<std::vector<std::string>> AndroidHost::GetMemoryCardPaths()
 {
   if (!s_initialized)

@@ -13,6 +13,7 @@ import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
+import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 
@@ -171,6 +172,39 @@ class FakeCoreApi(
         calls += "getSettingNames $kind"
         return names[kind].orEmpty().map { Choice(it, nameLabels[it] ?: it) }
     }
+
+    /** Each game's own settings, by key: what the game settings calls read and change. */
+    val gameLayers = mutableMapOf<String, MemoryCoreSettings>()
+
+    /** The key whose game is running: [applyGameSettings] is true for it. */
+    var runningKey: String? = null
+
+    /** The input profile each game's file names. */
+    var inputProfiles = emptyMap<String, String>()
+
+    /** What Copy writes into a game's file, as settings.ini would give it. */
+    var copied: Map<Pair<String, String>, String> = emptyMap()
+
+    fun gameLayer(key: String) = gameLayers.getOrPut(key) { MemoryCoreSettings() }
+
+    override fun applyGameSettings(key: String): Boolean {
+        calls += "applyGameSettings $key"
+        return key == runningKey
+    }
+
+    override fun copyGlobalSettingsToGame(key: String) {
+        calls += "copyGlobalSettingsToGame $key"
+        for ((at, value) in copied) gameLayer(key).setString(at.first, at.second, value)
+    }
+
+    override fun clearGameSettings(key: String) {
+        calls += "clearGameSettings $key"
+        gameLayers.remove(key)
+    }
+
+    override fun getGameSettingKeys(key: String): List<Pair<String, String>> = gameLayers[key]?.keys().orEmpty()
+
+    override fun getGameInputProfile(key: String): String? = inputProfiles[key]
 
     override fun getSharedCardNames(): List<String> {
         calls += "getSharedCardNames"

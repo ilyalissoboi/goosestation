@@ -55,6 +55,9 @@ public:
   std::vector<std::pair<std::string, std::string>> GetKeyValueList(const char* section) const override;
   void SetKeyValueList(const char* section, const std::vector<std::pair<std::string, std::string>>& items) override;
 
+  /// The sections, in the file's order.
+  std::vector<std::string> GetSectionList() const;
+
   // default parameter overloads
   using SettingsInterface::GetBoolValue;
   using SettingsInterface::GetDoubleValue;

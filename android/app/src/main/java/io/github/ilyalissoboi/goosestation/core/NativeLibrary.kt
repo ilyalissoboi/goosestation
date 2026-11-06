@@ -99,6 +99,94 @@ object NativeLibrary {
      */
     external fun getSettingNames(kind: String): Array<String>
 
+    // A game's own settings, gamesettings/<key>.ini, where the core finds it for [key] (a disc set's first serial for
+    // any of its discs). Each does I/O on the caller's thread; a write saves the file, or deletes it once it's empty.
+    // Nothing happens before [initialize] or with a blank key.
+
+    external fun hasGameSetting(
+        key: String,
+        section: String,
+        name: String,
+    ): Boolean
+
+    external fun getGameBoolSetting(
+        key: String,
+        section: String,
+        name: String,
+        default: Boolean,
+    ): Boolean
+
+    external fun getGameIntSetting(
+        key: String,
+        section: String,
+        name: String,
+        default: Int,
+    ): Int
+
+    external fun getGameFloatSetting(
+        key: String,
+        section: String,
+        name: String,
+        default: Float,
+    ): Float
+
+    external fun getGameStringSetting(
+        key: String,
+        section: String,
+        name: String,
+        default: String,
+    ): String
+
+    external fun setGameBoolSetting(
+        key: String,
+        section: String,
+        name: String,
+        value: Boolean,
+    )
+
+    external fun setGameIntSetting(
+        key: String,
+        section: String,
+        name: String,
+        value: Int,
+    )
+
+    external fun setGameFloatSetting(
+        key: String,
+        section: String,
+        name: String,
+        value: Float,
+    )
+
+    /** Sets [name] to [value], or deletes it if [value] is null. */
+    external fun setGameStringSetting(
+        key: String,
+        section: String,
+        name: String,
+        value: String?,
+    )
+
+    external fun deleteGameSetting(
+        key: String,
+        section: String,
+        name: String,
+    )
+
+    /** The file's keys: section, name, section, name…, in its order. */
+    external fun getGameSettingKeys(key: String): Array<String>
+
+    /** Desktop's Copy Global Settings: settings.ini's, as `Settings::Save(si, true)` writes them, over the game's. */
+    external fun copyGlobalSettingsToGame(key: String)
+
+    /** Desktop's Clear Settings, as Big Picture's: the file goes. */
+    external fun clearGameSettings(key: String)
+
+    /** The input profile the file names, when it doesn't use its own controller settings; else null. */
+    external fun getGameInputProfile(key: String): String?
+
+    /** When [key] is the running game's, has the core load its settings again and apply them: true. Waits for it. */
+    external fun applyGameSettings(key: String): Boolean
+
     /** The card files in the memory card folder (`*.mcd`), by their names there, sorted. Empty before [initialize]. */
     external fun getSharedCardNames(): Array<String>
 

@@ -251,6 +251,20 @@ class GameCallsTest {
         }
     }
 
+    // A change to the running game's file takes effect once applied, without a restart.
+    @Test
+    fun applyReloadsTheRunningGamesLayer() {
+        withListedPadtest(beforeStart = { padtest -> NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY) }) {
+            assertEquals(1f, NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloatOrNull() ?: 1f)
+
+            NativeLibrary.setGameFloatSetting(TEST_KEY, "Main", "EmulationSpeed", 2f)
+
+            assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
+            assertEquals(2f, NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloat())
+            assertFalse(NativeLibrary.applyGameSettings("SLUS-00001"))
+        }
+    }
+
     // A desktop file's per-game controllers hold desktop's bindings: its type applies, its bindings don't.
     @Test
     fun aGamesDesktopBindingsDontReplaceAndroids() {

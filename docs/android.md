@@ -643,7 +643,7 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 A game can have settings of its own, over the global ones, as on desktop. They open from its tile: **Y** on a focused
 game in the library (a long press, by touch), which the library's foot says ("A Play · Y Game settings"); and, for the
 running game, from **Settings** in its in-game menu (after Achievements). The library's opens only as the global
-pages do, with no game under way; a file with no key (a PSF) has none.
+pages do, with no game under way; a file with no key (a PSF) has none, and its menu's Settings says so.
 
 - **The hub** says "Game settings" under the game's title, its serial and region, and what its file sets ("3 settings
   of its own, and 4 this app doesn't show", or "No settings of its own"): the keys no page shows are desktop's own,
@@ -655,7 +655,8 @@ pages do, with no game under way; a file with no key (a PSF) has none.
 - **Copy global settings** and **Clear settings** each ask first, in a panel over the hub, Cancel focused. Copy is
   desktop's: the global settings as `Settings::Save(si, true)` writes them, over the game's own (so it leaves out what
   desktop keeps global: the on-screen display, the Interface rows, logging). Clear is Big Picture's: the game's file
-  goes, with the keys this app doesn't show.
+  goes, with the keys this app doesn't show. In a running game in hardcore mode both wait until it stops (they
+  rewrite `[Cheevos]`, whose Encore, Spectator and Unofficial modes would end it), saying so.
 - **Every row can use the global setting**: a choice's first value is "Use global (<the global value>)", an on/off
   row is a choice of "Use global (On)", On and Off, and a number steps from the global value (Right from "Use global"
   makes the global value the game's own; Left from the lowest value goes back). Choosing "Use global" deletes the key;
@@ -679,7 +680,7 @@ pages do, with no game under way; a file with no key (a PSF) has none.
   UseGameSettingsForController = true` while the game sets any of these, with only these keys, and deletes it once it
   sets none; the core reads a game's controller keys only with it, so the page does too.
 - **What Android ignores in a desktop game file**, in memory only (the file is never rewritten by this, so desktop
-  keeps them): its `[PadN]` bindings and macros (a desktop file with per-game controllers holds desktop's whole
+  keeps them; the adapted copy is never saved): its `[PadN]` bindings and macros (a desktop file with per-game controllers holds desktop's whole
   bindings, `SDL-0/…`), `[InputSources]`, `[Hotkeys]`, a renderer Android doesn't have, BIOS names its BIOS folder
   hasn't, the BIOS search folder and an absolute memory card folder. The type and the type's settings still apply.
   A file naming desktop's input profile (`InputProfileName`) uses the global controllers here: its Controllers page

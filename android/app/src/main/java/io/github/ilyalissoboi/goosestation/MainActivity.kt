@@ -27,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
+import io.github.ilyalissoboi.goosestation.ui.AdvancedScreen
 import io.github.ilyalissoboi.goosestation.ui.AudioScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.CardSlots
@@ -143,6 +144,16 @@ class MainActivity : ComponentActivity() {
                             AppController.postProcessingPage,
                             onBack = AppController::closeSettingsPage,
                         )
+                    Screen.Advanced ->
+                        CorePageRoute(CorePage.Advanced) { values, onChange ->
+                            AdvancedScreen(
+                                values,
+                                AppController.settingsPages.names,
+                                AppController.settingsPages.fastmemAvailable,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
                     Screen.Audio ->
                         CorePageRoute(CorePage.Audio) { values, onChange ->
                             AudioScreen(

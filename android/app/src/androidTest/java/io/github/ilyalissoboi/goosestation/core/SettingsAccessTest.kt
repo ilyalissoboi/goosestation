@@ -133,6 +133,24 @@ class SettingsAccessTest {
         assertEquals(0, NativeLibrary.getSettingNames("NoSuchKind").size)
     }
 
+    @Test
+    fun advancedNameListsAreTheCores() {
+        initialize()
+
+        fun names(kind: String) =
+            NativeLibrary
+                .getSettingNames(kind)
+                .toList()
+                .chunked(2)
+                .map { it[0] }
+        assertEquals(
+            listOf("Uncompressed", "DeflateLow", "DeflateDefault", "DeflateHigh", "ZstLow", "ZstDefault", "ZstHigh"),
+            names("SaveStateCompressionMode"),
+        )
+        assertEquals(listOf("Disabled", "MMap", "LUT"), names("CPUFastmemMode"))
+        assertEquals(listOf("None", "Error", "Warning", "Info", "Verbose", "Dev", "Debug", "Trace"), names("LogLevel"))
+    }
+
     // No GunCon, Justifier or mouse: they need a pointer Android doesn't have.
     @Test
     fun controllerTypesLeaveOutPointers() {
@@ -254,6 +272,9 @@ class SettingsAccessTest {
         /** Every choice list the bridge names. */
         val KINDS =
             listOf(
+                "SaveStateCompressionMode",
+                "CPUFastmemMode",
+                "LogLevel",
                 "ConsoleRegion",
                 "CPUExecutionMode",
                 "GPURenderer",

@@ -86,6 +86,7 @@ enum class Screen(
     PostProcessing(SettingsEntry.PostProcessing),
     Audio(SettingsEntry.Audio),
     Achievements(SettingsEntry.Achievements),
+    Advanced(SettingsEntry.Advanced),
     MemoryCards(SettingsEntry.MemoryCards),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
@@ -673,6 +674,7 @@ object AppController : NativeCallbacks {
             SettingsEntry.Emulation,
             SettingsEntry.Graphics,
             SettingsEntry.Audio,
+            SettingsEntry.Advanced,
             -> {}
             SettingsEntry.Achievements -> achievementsPage.load()
             SettingsEntry.MemoryCards -> {

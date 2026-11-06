@@ -1077,6 +1077,11 @@ bool AndroidHost::PostProcessingUsesOpenGLES()
   return AndroidHost::s_vulkan_failed.load() || !IsVulkanRenderer(renderer);
 }
 
+bool AndroidHost::IsFastmemAvailable()
+{
+  return sysconf(_SC_PAGESIZE) <= static_cast<long>(HOST_PAGE_SIZE);
+}
+
 bool AndroidHost::IsPostProcessingActiveForTest(const std::string& section)
 {
   bool active = false;

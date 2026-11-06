@@ -92,6 +92,7 @@ import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.Chain
@@ -1038,6 +1039,53 @@ class OrientationLayoutTest {
             },
             rows = listOf("Remove", "Screen Warp X", "Tint (Red)", "Tint (Green)", "Curvature", "Mask"),
             lists = mapOf("Mask" to ("Off" to "Aperture")),
+        )
+
+    @Test
+    fun theAdvancedPage() =
+        settingsPageFits(
+            {
+                var values by remember { mutableStateOf(pageValues(AdvancedSettings.all)) }
+                AdvancedScreen(values, SampleNames.ALL, false, onChange = { values = it }, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Log level",
+                    "Log to file",
+                    "Save state compression",
+                    "Load devices from save states",
+                    "CD-ROM region check",
+                    "Allow booting without an SBI file",
+                    "Recompiler memory exceptions",
+                    "Recompiler block linking",
+                ),
+            lists = mapOf("Save state compression" to ("Uncompressed" to "Zstandard (High)")),
+        )
+
+    @Test
+    fun aGamesAdvancedPage() =
+        settingsPageFits(
+            {
+                var values by remember { mutableStateOf(gamePageValues(AdvancedSettings.GAME)) }
+                CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", true, false)) {
+                    AdvancedScreen(values, SampleNames.ALL, true, onChange = { values = it }, onBack = {})
+                }
+            },
+            rows =
+                listOf(
+                    "Save state compression",
+                    "Load devices from save states",
+                    "CD-ROM region check",
+                    "Allow booting without an SBI file",
+                    "Recompiler memory exceptions",
+                    "Recompiler block linking",
+                    "Recompiler fast memory access",
+                ),
+            lists =
+                mapOf(
+                    "Recompiler fast memory access" to
+                        ("Use global (MMap (Hardware, Fastest, 64-Bit Only))" to "LUT (Faster)"),
+                ),
         )
 
     @Test

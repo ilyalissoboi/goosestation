@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
@@ -44,6 +45,7 @@ enum class GamePage(
     Controllers("Controllers", "Multitap, each port's type and its settings"),
     MemoryCards("Memory cards", "Card types and shared cards"),
     Achievements("Achievements", "Hardcore mode, messages"),
+    Advanced("Advanced", "Save states, CD-ROM and CPU tweaks"),
     ;
 
     /** What the page's rows write, counted as the game's own settings. */
@@ -60,6 +62,7 @@ enum class GamePage(
                 PostProcessing -> emptyList()
                 MemoryCards -> MemoryCardSettings.GAME
                 Achievements -> AchievementsSettings.all
+                Advanced -> AdvancedSettings.GAME
             }
 
     /** What the page reads: its rows, and what they depend on, such as whether hardcore mode is on. */
@@ -177,6 +180,10 @@ class GameSettingsPages(
 
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
     var vulkanFailed by mutableStateOf(false)
+        private set
+
+    /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
+    var fastmemAvailable by mutableStateOf(true)
         private set
 
     /** What Emulation's rewind states take, as the core said when that page was last read. */
@@ -398,6 +405,7 @@ class GameSettingsPages(
                         names = known.ifEmpty { NameList.entries.associateWith { api.getSettingNames(it.kind) } },
                         values = controllers?.first ?: SettingValues.readGame(global, layer(key), page.settings),
                         vulkanFailed = page == GamePage.Graphics && api.isVulkanFailed(),
+                        fastmemAvailable = page != GamePage.Advanced || api.isFastmemAvailable(),
                         sharedCards = if (page == GamePage.MemoryCards) api.getSharedCardNames() else null,
                         controllers = controllers?.second,
                     )
@@ -406,6 +414,7 @@ class GameSettingsPages(
             pageReading[page] = false
             names = loaded.names
             if (page == GamePage.Graphics) vulkanFailed = loaded.vulkanFailed
+            if (page == GamePage.Advanced) fastmemAvailable = loaded.fastmemAvailable
             loaded.sharedCards?.let { sharedCards = it }
             loaded.controllers?.let { controllers = it }
             if (page == GamePage.Emulation) {
@@ -420,6 +429,7 @@ class GameSettingsPages(
         val names: CoreNames,
         val values: SettingValues,
         val vulkanFailed: Boolean,
+        val fastmemAvailable: Boolean,
         val sharedCards: List<String>?,
         val controllers: GameControllers? = null,
     )

@@ -1384,6 +1384,24 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getSettingNames)(JNIEnv* env, jobject, jst
      }},
     {"MultitapMode",
      [](auto& n) { AppendSettingNames(n, &Settings::GetMultitapModeName, &Settings::GetMultitapModeDisplayName); }},
+    {"SaveStateCompressionMode",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetSaveStateCompressionModeName,
+                          &Settings::GetSaveStateCompressionModeDisplayName);
+     }},
+    {"CPUFastmemMode",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetCPUFastmemModeName, &Settings::GetCPUFastmemModeDisplayName);
+     }},
+    // LOGLEVEL has no Count of its own.
+    {"LogLevel",
+     [](auto& n) {
+       for (u32 i = 0; i < static_cast<u32>(LOGLEVEL_COUNT); i++)
+       {
+         n.emplace_back(Settings::GetLogLevelName(static_cast<LOGLEVEL>(i)));
+         n.emplace_back(Settings::GetLogLevelDisplayName(static_cast<LOGLEVEL>(i)));
+       }
+     }},
   };
 
   std::vector<std::string> names;
@@ -2938,6 +2956,11 @@ NATIVE_LIBRARY_FUNCTION(void, copyPostProcessingChain)(JNIEnv* env, jobject, jst
 NATIVE_LIBRARY_FUNCTION(void, clearPostProcessingChain)(JNIEnv* env, jobject, jstring key, jstring section)
 {
   AndroidHost::ClearPostProcessingChain(FromJString(env, key), FromJString(env, section).c_str());
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, isFastmemAvailable)(JNIEnv* env, jobject)
+{
+  return AndroidHost::IsFastmemAvailable();
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, postProcessingUsesOpenGLES)(JNIEnv* env, jobject)

@@ -20,15 +20,18 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
+import io.github.ilyalissoboi.goosestation.settings.NextStart
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
@@ -52,13 +55,14 @@ class GamePagesScreenTest {
 
     private fun show(
         start: SettingValues,
+        running: Boolean = false,
         page: @Composable (SettingValues, (SettingValues) -> Unit) -> Unit,
     ) {
         rule.setContent {
             GooseStationTheme {
                 var values by remember { mutableStateOf(start) }
                 shown = values
-                CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", false, false)) {
+                CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", running, false)) {
                     page(values) { values = it }
                 }
             }
@@ -227,5 +231,31 @@ class GamePagesScreenTest {
             }
         }
         assertEveryRowCanUseGlobal(rows())
+    }
+
+    @Test
+    fun aGamesAdvancedHasNoLogging() {
+        show(gamePageValues(AdvancedSettings.GAME)) { values, onChange ->
+            AdvancedScreen(values, SampleNames.ALL, fastmemAvailable = true, onChange = onChange, onBack = {})
+        }
+
+        val rows = rows()
+        assertTrue(rows.toString(), rows.none { "Log level" in it || "Log to file" in it })
+        assertEveryRowCanUseGlobal(rows)
+        rule.onNodeWithText("LOGGING").assertDoesNotExist()
+    }
+
+    @Test
+    fun regionCheckAppliesNextStart() {
+        show(gamePageValues(AdvancedSettings.GAME), running = true) { values, onChange ->
+            AdvancedScreen(values, SampleNames.ALL, fastmemAvailable = true, onChange = onChange, onBack = {})
+        }
+
+        downTo("CD-ROM region check")
+        assertTrue(focusedText(), NextStart.NOTE in focusedText())
+        downTo("Allow booting without an SBI file")
+        assertTrue(focusedText(), NextStart.NOTE in focusedText())
+        downTo("Recompiler block linking")
+        assertTrue(focusedText(), NextStart.NOTE !in focusedText())
     }
 }

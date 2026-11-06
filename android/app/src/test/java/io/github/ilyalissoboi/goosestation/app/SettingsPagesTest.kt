@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
@@ -153,6 +154,43 @@ class SettingsPagesTest {
                 settings.values,
             )
             assertEquals(listOf("applySettings", "applySettings", "applySettings"), calls)
+        }
+
+    @Test
+    fun advancedSavesOnlyWhatChanged() =
+        runTest {
+            val pages = pages()
+            pages.load(CorePage.Advanced)
+            runCurrent()
+            val before = settings.values.toMap()
+            calls.clear()
+
+            pages.change(
+                CorePage.Advanced,
+                pages
+                    .values(CorePage.Advanced)!!
+                    .with(AdvancedSettings.REGION_CHECK, true)
+                    .with(AdvancedSettings.SAVE_STATE_COMPRESSION, "ZstHigh"),
+            )
+            runCurrent()
+
+            assertEquals(
+                before + mapOf("CDROM/RegionCheck" to "true", "Main/SaveStateCompression" to "ZstHigh"),
+                settings.values,
+            )
+            assertEquals(listOf("applySettings"), calls)
+        }
+
+    @Test
+    fun advancedReadsWhetherFastMemoryCanRun() =
+        runTest {
+            api.fastmemAvailable = false
+            val pages = pages()
+
+            pages.load(CorePage.Advanced)
+            runCurrent()
+
+            assertFalse(pages.fastmemAvailable)
         }
 
     @Test

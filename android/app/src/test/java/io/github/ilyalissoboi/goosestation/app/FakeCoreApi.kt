@@ -158,6 +158,10 @@ class FakeCoreApi(
 
     override fun isVulkanFailed(): Boolean = false
 
+    var fastmemAvailable = true
+
+    override fun isFastmemAvailable(): Boolean = fastmemAvailable
+
     /** Each choice list the core names, by kind: its values, each its own label unless [nameLabels] has one. */
     var names = mutableMapOf<String, List<String>>()
 

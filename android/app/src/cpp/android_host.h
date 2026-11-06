@@ -132,6 +132,9 @@ void ClearPostProcessingChain(const std::string& key, const char* section);
 bool PostProcessingUsesOpenGLES();
 bool IsPostProcessingActiveForTest(const std::string& section);
 
+/// Whether fastmem can run here: the system's pages are no larger than the build's (else LoadSettings turns it off).
+bool IsFastmemAvailable();
+
 /// The input profile the file names, when it doesn't use its own controller settings; nullopt otherwise.
 std::optional<std::string> GetGameInputProfile(const std::string& key);
 

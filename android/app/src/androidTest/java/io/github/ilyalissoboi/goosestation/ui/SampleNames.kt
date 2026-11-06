@@ -52,6 +52,19 @@ object SampleNames {
                     "AnalogController" to "Analog Controller (DualShock)",
                     "NeGcon" to "NeGcon",
                 ),
+            NameList.SaveStateCompression to
+                list(
+                    "Uncompressed" to "Uncompressed",
+                    "ZstDefault" to "Zstandard (Default)",
+                    "ZstHigh" to "Zstandard (High)",
+                ),
+            NameList.FastmemMode to
+                list(
+                    "Disabled" to "Disabled (Slowest)",
+                    "MMap" to "MMap (Hardware, Fastest, 64-Bit Only)",
+                    "LUT" to "LUT (Faster)",
+                ),
+            NameList.LogLevel to list("Error" to "Error", "Info" to "Information", "Dev" to "Developer"),
             NameList.MultitapMode to
                 list(
                     "Disabled" to "Disabled",

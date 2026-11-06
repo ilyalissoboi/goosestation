@@ -9,7 +9,15 @@ package io.github.ilyalissoboi.goosestation.settings
  */
 object NextStart {
     val settings: Set<Setting<*>> =
-        setOf(ConsoleSettings.REGION, ConsoleSettings.RAM_8MB, ConsoleSettings.PRELOAD, ConsoleSettings.IMAGE_PATCHES)
+        setOf(
+            ConsoleSettings.REGION,
+            ConsoleSettings.RAM_8MB,
+            ConsoleSettings.PRELOAD,
+            ConsoleSettings.IMAGE_PATCHES,
+            // The BIOS checks the disc's region as it boots it; a missing SBI file is checked at the boot.
+            AdvancedSettings.REGION_CHECK,
+            AdvancedSettings.BOOT_WITHOUT_SBI,
+        )
 
     const val NOTE = "Applies when the game next starts."
 

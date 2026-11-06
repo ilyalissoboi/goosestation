@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosFastBoot
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
@@ -41,6 +42,7 @@ enum class CorePage(
 
     /** Memory cards' card slot rows, beside its sync rows. */
     MemoryCards(SettingsEntry.MemoryCards),
+    Advanced(SettingsEntry.Advanced),
     ;
 
     val title get() = entry.label
@@ -55,6 +57,7 @@ enum class CorePage(
                 Graphics -> GraphicsSettings.all
                 Audio -> AudioSettings.all
                 MemoryCards -> MemoryCardSettings.all
+                Advanced -> AdvancedSettings.all
             }
 
     companion object {
@@ -86,6 +89,10 @@ class SettingsPages(
 
     /** The memory card folder's cards, read with Memory cards' card slots. */
     var sharedCards by mutableStateOf(emptyList<String>())
+        private set
+
+    /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
+    var fastmemAvailable by mutableStateOf(true)
         private set
 
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
@@ -201,6 +208,7 @@ class SettingsPages(
                         names = known.ifEmpty { NameList.entries.associateWith { api.getSettingNames(it.kind) } },
                         values = SettingValues.read(settings, page.settings),
                         vulkanFailed = page == CorePage.Graphics && api.isVulkanFailed(),
+                        fastmemAvailable = page != CorePage.Advanced || api.isFastmemAvailable(),
                     ).let {
                         when (page) {
                             CorePage.Emulation ->
@@ -216,6 +224,7 @@ class SettingsPages(
             pageReading[page] = false
             names = loaded.names
             if (page == CorePage.Graphics) vulkanFailed = loaded.vulkanFailed
+            if (page == CorePage.Advanced) fastmemAvailable = loaded.fastmemAvailable
             loaded.rewindUsage?.let { rewindUsage = it }
             loaded.sharedCards?.let { sharedCards = it }
             shown[page] = loaded.values
@@ -247,6 +256,7 @@ private data class PageRead(
     val names: CoreNames,
     val values: SettingValues,
     val vulkanFailed: Boolean,
+    val fastmemAvailable: Boolean,
     val rewindUsage: RewindUsage? = null,
     val sharedCards: List<String>? = null,
 )

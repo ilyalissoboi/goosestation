@@ -723,6 +723,9 @@ object NativeLibrary {
      */
     external fun postProcessingUsesOpenGLES(): Boolean
 
+    /** Whether fast memory access can run here: the device's memory pages are no larger than the build's. */
+    external fun isFastmemAvailable(): Boolean
+
     /** Tests: whether the running game's chain [section] is on and has stages (`Chain::IsActive`). */
     external fun isPostProcessingActiveForTest(section: String): Boolean
 

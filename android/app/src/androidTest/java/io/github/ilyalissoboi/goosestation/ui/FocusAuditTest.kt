@@ -61,6 +61,7 @@ import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.Chain
@@ -581,6 +582,22 @@ class FocusAuditTest {
                 openStage(Chain.Display, 1)
             }
         show { PostProcessingScreen(model, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun advancedPage() {
+        show { AdvancedScreen(pageValues(AdvancedSettings.all), SampleNames.ALL, false, onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aGamesAdvancedPage() {
+        show {
+            CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", running = true, false)) {
+                AdvancedScreen(gamePageValues(AdvancedSettings.GAME), SampleNames.ALL, true, onChange = {}, onBack = {})
+            }
+        }
         rule.assertControllerReady()
     }
 

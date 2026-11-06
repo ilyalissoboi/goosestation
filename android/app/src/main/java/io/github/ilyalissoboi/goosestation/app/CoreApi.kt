@@ -90,6 +90,9 @@ interface CoreApi {
 
     fun isVulkanFailed(): Boolean
 
+    /** [NativeLibrary.isFastmemAvailable]. */
+    fun isFastmemAvailable(): Boolean
+
     /** The core's choice list [kind] (an enum's name, as [NativeLibrary.getSettingNames] takes it), in its order. */
     fun getSettingNames(kind: String): List<Choice<String>>
 
@@ -275,6 +278,8 @@ object NativeCoreApi : CoreApi {
     override fun applySettings() = NativeLibrary.applySettings()
 
     override fun isVulkanFailed(): Boolean = NativeLibrary.isVulkanFailed()
+
+    override fun isFastmemAvailable(): Boolean = NativeLibrary.isFastmemAvailable()
 
     override fun getSettingNames(kind: String): List<Choice<String>> =
         NativeLibrary

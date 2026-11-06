@@ -73,6 +73,20 @@ class GameSettingsPagesTest {
             assertEquals(0, summary.others)
         }
 
+    // Its logging rows stay global on a game's page: a game's own log level is one the app doesn't show.
+    @Test
+    fun aGamesAdvancedCountsItsRows() =
+        runTest {
+            file.setBool("CDROM", "RegionCheck", true)
+            file.setString("CPU", "FastmemMode", "LUT")
+            file.setString("Logging", "LogLevel", "Dev")
+
+            val summary = pages().summary!!
+
+            assertEquals(2, summary.counts[GamePage.Advanced])
+            assertEquals(1, summary.others)
+        }
+
     @Test
     fun aPageReadsTheGamesValuesOverTheGlobalOnes() =
         runTest {

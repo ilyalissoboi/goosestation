@@ -73,6 +73,7 @@ private fun GamePageScreen(
         GamePage.Emulation -> EmulationScreen(values, pages.rewindUsage, onChange, back)
         GamePage.Graphics -> GraphicsScreen(values, pages.names, pages.vulkanFailed, onChange, back)
         GamePage.Audio -> AudioScreen(values, pages.names, onChange, back)
+        GamePage.Advanced -> AdvancedScreen(values, pages.names, pages.fastmemAvailable, onChange, back)
         GamePage.MemoryCards ->
             SettingsPage(page.label, onBack = back) {
                 CardSlotRows(

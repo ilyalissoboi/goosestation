@@ -29,6 +29,9 @@ enum class NameList(
     /** Every controller type but those that need a pointer (GunCon, Justifier, mouse). */
     ControllerType("ControllerType"),
     MultitapMode("MultitapMode"),
+    SaveStateCompression("SaveStateCompressionMode"),
+    FastmemMode("CPUFastmemMode"),
+    LogLevel("LogLevel"),
 }
 
 /** Each of the core's lists, its choices as the core names them. */

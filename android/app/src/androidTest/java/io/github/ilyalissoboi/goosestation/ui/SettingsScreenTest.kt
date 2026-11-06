@@ -100,6 +100,7 @@ class SettingsScreenTest {
             "Controllers" to "Ports, types, bindings, hotkeys, rumble",
             "Memory cards" to "Card types, sync, the card editor",
             "Achievements" to "Sign-in, hardcore mode, messages",
+            "Advanced" to "Logging, save states, CD-ROM and CPU tweaks",
             "Folders" to "BIOS, games and data folders",
         )
         ) {

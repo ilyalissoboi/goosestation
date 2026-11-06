@@ -692,6 +692,45 @@ class GameCallsTest {
         assertTrue(texts.toString(), "Pad A is on Port 1C, which this game doesn't use." in texts)
     }
 
+    // The core's Reload refused while both chains had shaders, and "reloaded" with none (Chain::HasStages() was
+    // inverted).
+    @Test
+    fun reloadWithStagesInBothChainsReloadsThem() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        var reloaded = false
+        withPadtest(
+            settings = {
+                NativeLibrary.setBoolSetting("PostProcessing", "Enabled", true)
+                NativeLibrary.setIntSetting("PostProcessing", "StageCount", 1)
+                NativeLibrary.setStringSetting("PostProcessing/Stage1", "ShaderName", "simple-flip")
+                NativeLibrary.setBoolSetting("InternalPostProcessing", "Enabled", true)
+                NativeLibrary.setIntSetting("InternalPostProcessing", "StageCount", 1)
+                NativeLibrary.setStringSetting("InternalPostProcessing/Stage1", "ShaderName", "simple-gamma")
+            },
+            onMessage = { _, text -> texts += text },
+        ) {
+            reloaded = NativeLibrary.reloadPostProcessingShaders()
+            Thread.sleep(200)
+        }
+
+        assertTrue(texts.toString(), reloaded)
+        assertTrue(texts.toString(), "Post-processing shaders reloaded." in texts)
+        assertTrue(texts.toString(), texts.none { it == "No post-processing shaders are selected." })
+    }
+
+    @Test
+    fun reloadWithoutStagesSaysSo() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        var reloaded = true
+        withPadtest(onMessage = { _, text -> texts += text }) {
+            reloaded = NativeLibrary.reloadPostProcessingShaders()
+            Thread.sleep(200)
+        }
+
+        assertFalse(texts.toString(), reloaded)
+        assertTrue(texts.toString(), "No post-processing shaders are selected." in texts)
+    }
+
     @Test
     fun noMessageOnAUsedPort() {
         val texts = java.util.Collections.synchronizedList(mutableListOf<String>())

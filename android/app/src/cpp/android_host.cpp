@@ -29,6 +29,7 @@
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
+#include "util/postprocessing.h"
 #include "util/window_info.h"
 
 #include "common/memory_settings_interface.h"
@@ -2499,6 +2500,21 @@ void AndroidHost::SetListedKeyForTest(std::string path, std::string key)
     if (game.path == path)
       game.key = key;
   }
+}
+
+bool AndroidHost::ReloadPostProcessingShaders()
+{
+  if (!s_initialized)
+    return false;
+
+  bool reloaded = false;
+  EmuThread::RunOnThread(
+    [&reloaded]() {
+      if (System::IsValid())
+        reloaded = PostProcessing::ReloadShaders();
+    },
+    true);
+  return reloaded;
 }
 
 std::string AndroidHost::GetRunningSettingForTest(std::string section, std::string key)

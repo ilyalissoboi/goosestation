@@ -658,6 +658,12 @@ object NativeLibrary {
         key: String,
     )
 
+    /**
+     * Reloads the post-processing shaders from their files, in the running game (`PostProcessing::ReloadShaders`, on
+     * the CPU thread, waiting): false without a game, or when no chain has shaders.
+     */
+    external fun reloadPostProcessingShaders(): Boolean
+
     /** Tests: [section] [key] as the running game has it, its own settings over settings.ini; empty without a game. */
     external fun getRunningSettingForTest(
         section: String,

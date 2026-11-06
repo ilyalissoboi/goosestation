@@ -2723,6 +2723,11 @@ NATIVE_LIBRARY_FUNCTION(void, setListedKeyForTest)(JNIEnv* env, jobject, jstring
   AndroidHost::SetListedKeyForTest(FromJString(env, path), FromJString(env, key));
 }
 
+NATIVE_LIBRARY_FUNCTION(jboolean, reloadPostProcessingShaders)(JNIEnv* env, jobject)
+{
+  return AndroidHost::ReloadPostProcessingShaders();
+}
+
 NATIVE_LIBRARY_FUNCTION(jstring, getRunningSettingForTest)(JNIEnv* env, jobject, jstring section, jstring key)
 {
   return ToJString(env, AndroidHost::GetRunningSettingForTest(FromJString(env, section), FromJString(env, key)));

@@ -428,4 +428,7 @@ void NotifyAchievementImage(std::string_view path);
 void NotifyPlaySound(const char* path);
 void NotifyLeaderboard(s32 request, const AchievementsBridge::LeaderboardPage* page, std::string_view error);
 
+/// PostProcessing::ReloadShaders() in the running game, on the CPU thread, waiting; false without a game.
+bool ReloadPostProcessingShaders();
+
 } // namespace AndroidHost

@@ -808,6 +808,25 @@ class GameCallsTest {
         assertTrue(messages.toString(), messages.none { "falling back to software renderer" in it })
     }
 
+    // The software renderer uploads each frame from a buffer whose rows are as wide as the picture: padtest's 317 pixels
+    // of 16-bit colour, 634 bytes. Where the texture can't be mapped (no PBOs: Adreno, Mali, PowerVR, SwiftShader under
+    // ANGLE), OpenGL ES once read those rows as GL's default 4-byte alignment had them, 636 bytes, so each row began a
+    // pixel further on than the one before and the picture was sheared. Switching to software keeps the device, as
+    // the Thor's fallback from the hardware renderer did; the full run's OpenGL ES pass is the one that checks this.
+    @Test
+    fun theSoftwareRendererDrawsWhatTheHardwareOneDoes() =
+        FrameReader(1280, 720).use { frames ->
+            withPadtest(frames = frames) {
+                val hardware = frames.nextFrame()
+                NativeLibrary.setStringSetting("GPU", "Renderer", "Software")
+                NativeLibrary.applySettings()
+                val software = frames.nextFrame()
+
+                val differing = FrameReader.differing(hardware, software)
+                assertTrue("$differing of the pixels differ", differing < 0.01)
+            }
+        }
+
     @Test
     fun theBootSaysWhatThePauseSettingsAre() {
         var flags: Pair<Boolean, Boolean>? = null
@@ -845,6 +864,7 @@ class GameCallsTest {
         onRumble: (deviceId: Int, large: Float, small: Float) -> Unit = { _, _, _ -> },
         beforeBoot: () -> Unit = {},
         refreshRate: Float = 0f,
+        frames: FrameReader? = null,
         body: () -> Unit,
     ) {
         val exe = File(root, "padtest.psexe")
@@ -902,9 +922,9 @@ class GameCallsTest {
             Thread.sleep(50)
         }
         beforeBoot()
-        val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
-        val surface = Surface(texture)
-        NativeLibrary.surfaceChanged(surface, 640, 480, 1f, refreshRate)
+        val texture = if (frames == null) SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) } else null
+        val surface = frames?.surface ?: Surface(texture)
+        NativeLibrary.surfaceChanged(surface, frames?.width ?: 640, frames?.height ?: 480, 1f, refreshRate)
         try {
             TestRenderer.apply()
             NativeLibrary.startGame(exe.absolutePath, 1, false)
@@ -916,8 +936,10 @@ class GameCallsTest {
             assertTrue("padtest stopped", stopped.await(30, TimeUnit.SECONDS))
             NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
             NativeLibrary.setCallbacks(null)
-            surface.release()
-            texture.release()
+            if (texture != null) {
+                surface.release()
+                texture.release()
+            }
         }
     }
 

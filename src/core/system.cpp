@@ -1414,7 +1414,9 @@ bool System::UpdateGameSettingsLayer()
 #ifdef __ANDROID__
       else
       {
+        // In memory only: the file is desktop's too, and must never be saved with these dropped.
         Host::AdaptGameSettingsLayer(*new_interface);
+        new_interface->MarkClean();
       }
 #endif
     }

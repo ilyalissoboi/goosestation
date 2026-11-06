@@ -301,6 +301,38 @@ class GameCallsTest {
         }
     }
 
+    // The layer is adapted in memory only: desktop's file stays as it was, through a reload and the game's end.
+    @Test
+    fun aDesktopGameFileIsNeverRewritten() {
+        val desktop =
+            "[ControllerPorts]\nUseGameSettingsForController = true\nInputProfileName = Desk\n" +
+                "[Pad1]\nType = DigitalController\nCross = SDL-0/A\n[Hotkeys]\nFastForward = Keyboard/Tab\n"
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText(desktop)
+        }) {
+            assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
+            assertEquals(desktop, gameSettings(TEST_KEY).readText())
+        }
+        assertEquals(desktop, gameSettings(TEST_KEY).readText())
+    }
+
+    // Clear in a running game: the file goes, and the layer it leaves doesn't write it back.
+    @Test
+    fun clearInARunningGameLeavesNoFile() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            gameSettings(TEST_KEY).writeText("[Main]\nEmulationSpeed = 2.0\n")
+        }) {
+            NativeLibrary.clearGameSettings(TEST_KEY)
+            assertTrue(NativeLibrary.applyGameSettings(TEST_KEY))
+
+            assertFalse(gameSettings(TEST_KEY).exists())
+            assertEquals(1f, NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed").toFloatOrNull() ?: 1f)
+        }
+        assertFalse(gameSettings(TEST_KEY).exists())
+    }
+
     // A desktop file's per-game controllers hold desktop's bindings: its type applies, its bindings don't.
     @Test
     fun aGamesDesktopBindingsDontReplaceAndroids() {

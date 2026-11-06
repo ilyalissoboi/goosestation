@@ -58,6 +58,9 @@ public:
   /// The sections, in the file's order.
   std::vector<std::string> GetSectionList() const;
 
+  /// Forgets that it has changes not saved: they stay in memory, and nothing saves them, not even its destruction.
+  void MarkClean() { m_dirty = false; }
+
   // default parameter overloads
   using SettingsInterface::GetBoolValue;
   using SettingsInterface::GetDoubleValue;

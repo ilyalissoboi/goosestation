@@ -4,6 +4,7 @@
 #pragma once
 
 #include "util/android_disc_groups.h"
+#include "util/postprocessing.h"
 
 #include "common/types.h"
 
@@ -101,6 +102,40 @@ void CopyGlobalSettingsToGame(const std::string& key);
 /// Desktop's Clear Settings, as Big Picture's: the file goes.
 void ClearGameSettings(const std::string& key);
 
+/// A post-processing chain's stage: its shader's name, the shader's kind ("GLSL" or "ReShade", empty when it isn't
+/// found or doesn't load), and its options with the stage's values.
+struct PostProcessingStage
+{
+  std::string shader;
+  std::string kind;
+  std::vector<PostProcessing::ShaderOption> options;
+};
+
+// The chain calls edit section ("PostProcessing" or "InternalPostProcessing") in settings.ini when key is nullopt,
+// else in the key's game file, through PostProcessing::Config, on the caller's thread.
+
+/// The shaders whose metadata loads, as GetAvailableShaderNames() orders them: each name and its kind.
+std::vector<std::pair<std::string, std::string>> GetPostProcessingShaders();
+std::vector<PostProcessingStage> GetPostProcessingStages(const std::optional<std::string>& key, const char* section);
+/// Empty, or why the shader couldn't be added.
+std::string AddPostProcessingStage(const std::optional<std::string>& key, const char* section,
+                                   const std::string& shader);
+void RemovePostProcessingStage(const std::optional<std::string>& key, const char* section, u32 index);
+void MovePostProcessingStage(const std::optional<std::string>& key, const char* section, u32 index, bool down);
+void SetPostProcessingOption(const std::optional<std::string>& key, const char* section, u32 index,
+                             const std::string& name, std::span<const float> values);
+/// settings.ini's chain (Enabled, StageCount, the stages) over the game's own.
+void CopyPostProcessingChain(const std::string& key, const char* section);
+/// Deletes the game's chain: Enabled, StageCount and the stages.
+void ClearPostProcessingChain(const std::string& key, const char* section);
+/// In a game, whether its device is OpenGL ES; else whether the renderer runs on it (or Vulkan failed): the key's game
+/// file's renderer, when it sets one, else settings.ini's.
+bool PostProcessingUsesOpenGLES(const std::optional<std::string>& key);
+bool IsPostProcessingActiveForTest(const std::string& section);
+
+/// Whether fastmem can run here: the system's pages are no larger than the build's (else LoadSettings turns it off).
+bool IsFastmemAvailable();
+
 /// The input profile the file names, when it doesn't use its own controller settings; nullopt otherwise.
 std::optional<std::string> GetGameInputProfile(const std::string& key);
 
@@ -119,6 +154,10 @@ std::optional<std::vector<std::string>> GetMemoryCardPaths();
 /// (empty if it's the data root): every EmuFolders folder but the cache, in EmuFolders::LoadConfig()'s order, if it's
 /// inside the data root. nullopt before Initialize() succeeded.
 std::optional<std::vector<std::string>> GetDataFolders();
+
+/// The data root's own files the mirror copies, beside the layout's: the logs while Log to file is on in settings.ini
+/// (empty otherwise); nullopt before Initialize().
+std::optional<std::vector<std::string>> GetDataFiles();
 
 /// EmuFolders::Cache as GetDataFolders() gives a folder: nullopt if it's outside the data root, or the data root
 /// itself, or before Initialize() succeeded.
@@ -427,5 +466,8 @@ void NotifyAchievementIndicator(s32 kind, u32 id, bool shown, std::string_view t
 void NotifyAchievementImage(std::string_view path);
 void NotifyPlaySound(const char* path);
 void NotifyLeaderboard(s32 request, const AchievementsBridge::LeaderboardPage* page, std::string_view error);
+
+/// PostProcessing::ReloadShaders() in the running game, on the CPU thread, waiting; false without a game.
+bool ReloadPostProcessingShaders();
 
 } // namespace AndroidHost

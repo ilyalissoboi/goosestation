@@ -56,6 +56,37 @@ class GameSettingsPagesTest {
             assertEquals(1, summary.others)
         }
 
+    // A chain is one row of the page's, whatever keys it has: on/off, the count, each stage's shader and options.
+    @Test
+    fun aChainCountsOnceOnItsPage() =
+        runTest {
+            file.setBool("PostProcessing", "Enabled", true)
+            file.setInt("PostProcessing", "StageCount", 1)
+            file.setString("PostProcessing/Stage1", "ShaderName", "crt-lottes")
+            file.setString("PostProcessing/Stage1", "warpX", "0.05")
+            file.setInt("InternalPostProcessing", "StageCount", 1)
+            file.setString("InternalPostProcessing/Stage1", "ShaderName", "simple-flip")
+
+            val summary = pages().summary!!
+
+            assertEquals(2, summary.counts[GamePage.PostProcessing])
+            assertEquals(0, summary.others)
+        }
+
+    // Its logging rows stay global on a game's page: a game's own log level is one the app doesn't show.
+    @Test
+    fun aGamesAdvancedCountsItsRows() =
+        runTest {
+            file.setBool("CDROM", "RegionCheck", true)
+            file.setString("CPU", "FastmemMode", "LUT")
+            file.setString("Logging", "LogLevel", "Dev")
+
+            val summary = pages().summary!!
+
+            assertEquals(2, summary.counts[GamePage.Advanced])
+            assertEquals(1, summary.others)
+        }
+
     @Test
     fun aPageReadsTheGamesValuesOverTheGlobalOnes() =
         runTest {

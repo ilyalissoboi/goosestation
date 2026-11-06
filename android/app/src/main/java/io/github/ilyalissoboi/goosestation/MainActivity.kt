@@ -27,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
+import io.github.ilyalissoboi.goosestation.ui.AdvancedScreen
 import io.github.ilyalissoboi.goosestation.ui.AudioScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.CardSlots
@@ -45,6 +46,7 @@ import io.github.ilyalissoboi.goosestation.ui.MacroScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.PortScreen
+import io.github.ilyalissoboi.goosestation.ui.PostProcessingScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
@@ -133,6 +135,21 @@ class MainActivity : ComponentActivity() {
                             EmulationScreen(
                                 values,
                                 AppController.settingsPages.rewindUsage,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                            )
+                        }
+                    Screen.PostProcessing ->
+                        PostProcessingScreen(
+                            AppController.postProcessingPage,
+                            onBack = AppController::closeSettingsPage,
+                        )
+                    Screen.Advanced ->
+                        CorePageRoute(CorePage.Advanced) { values, onChange ->
+                            AdvancedScreen(
+                                values,
+                                AppController.settingsPages.names,
+                                AppController.settingsPages.fastmemAvailable,
                                 onChange,
                                 onBack = AppController::closeSettingsPage,
                             )

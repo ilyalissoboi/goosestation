@@ -46,6 +46,10 @@ fun GameSettingsHost(
             )
             return@CompositionLocalProvider
         }
+        if (page == GamePage.PostProcessing) {
+            PostProcessingScreen(pages.postProcessing, onBack = pages::closePage)
+            return@CompositionLocalProvider
+        }
         val values = pages.values(page)
         if (values == null) {
             SettingsLoadingPage(page.label, onBack = pages::closePage)
@@ -69,6 +73,7 @@ private fun GamePageScreen(
         GamePage.Emulation -> EmulationScreen(values, pages.rewindUsage, onChange, back)
         GamePage.Graphics -> GraphicsScreen(values, pages.names, pages.vulkanFailed, onChange, back)
         GamePage.Audio -> AudioScreen(values, pages.names, onChange, back)
+        GamePage.Advanced -> AdvancedScreen(values, pages.names, pages.fastmemAvailable, onChange, back)
         GamePage.MemoryCards ->
             SettingsPage(page.label, onBack = back) {
                 CardSlotRows(
@@ -85,6 +90,8 @@ private fun GamePageScreen(
                 onBack = back,
             ) { AchievementRows(values, onChange, Modifier.focusRequester(first)) }
         }
+        // Shown by GameSettingsHost itself, from its own page.
+        GamePage.PostProcessing -> {}
         GamePage.Controllers ->
             pages.controllers?.let { GameControllersScreen(values, pages.names, it, onChange, back) }
                 ?: SettingsLoadingPage(page.label, onBack = back)

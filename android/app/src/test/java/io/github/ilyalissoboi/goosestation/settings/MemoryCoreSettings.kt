@@ -33,7 +33,8 @@ class MemoryCoreSettings : LayerSettings {
     }
 
     /** The keys set, as section and name, in the order set. */
-    fun keys(): List<Pair<String, String>> = values.keys.map { it.substringBefore('/') to it.substringAfter('/') }
+    fun keys(): List<Pair<String, String>> =
+        values.keys.map { it.substringBeforeLast('/') to it.substringAfterLast('/') }
 
     override fun getString(
         section: String,

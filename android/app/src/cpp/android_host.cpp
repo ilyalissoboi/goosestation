@@ -29,6 +29,7 @@
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
+#include "util/postprocessing.h"
 #include "util/window_info.h"
 
 #include "common/memory_settings_interface.h"
@@ -49,6 +50,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -228,6 +230,10 @@ static u32 s_binding_capture_id = 0; // changes when a capture starts or is canc
 
 // Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
 static std::atomic_bool s_vulkan_failed{false};
+
+// The core's log in the data root (Settings::UpdateLogSettings), and the last run's, which the host keeps.
+static constexpr const char* LOG_FILE = "goosestation.log";
+static constexpr const char* PREVIOUS_LOG_FILE = "goosestation-previous.log";
 } // namespace AndroidHost
 
 bool Host::StoreMemcardSyncSecret(const char* name, std::string_view value)
@@ -269,6 +275,16 @@ bool AndroidHost::Initialize(std::string data_root, std::string resources_root, 
   EmuFolders::AppRoot = Path::Canonicalize(resources_root);
   EmuFolders::Resources = EmuFolders::AppRoot;
   EmuFolders::DataRoot = Path::Canonicalize(data_root);
+  // The last run's log, kept before the settings' Log to file rewrites it, so a crash's log survives the restart.
+  if (const std::string log = Path::Combine(EmuFolders::DataRoot, LOG_FILE); FileSystem::FileExists(log.c_str()))
+  {
+    Error rename_error;
+    if (!FileSystem::RenamePath(log.c_str(), Path::Combine(EmuFolders::DataRoot, PREVIOUS_LOG_FILE).c_str(),
+                                &rename_error))
+    {
+      WARNING_LOG("Couldn't keep the last run's log: {}", rename_error.GetDescription());
+    }
+  }
   s_bios_dir = Path::Canonicalize(bios_dir);
   s_install_id = std::move(install_id);
   s_device_name = std::move(device_name);
@@ -849,6 +865,257 @@ void AndroidHost::ClearGameSettings(const std::string& key)
   EditGameSettings(key, [](INISettingsInterface& si) { si.Clear(); });
 }
 
+// A chain's layer: settings.ini under the settings lock, saved after an edit, or the key's game file.
+template<typename Edit>
+static void EditChainLayer(const std::optional<std::string>& key, const Edit& edit)
+{
+  if (!AndroidHost::s_initialized)
+    return;
+
+  if (key.has_value())
+  {
+    EditGameSettings(*key, [&edit](INISettingsInterface& si) { edit(si); });
+    return;
+  }
+
+  const auto lock = Host::GetSettingsLock();
+  edit(*AndroidHost::s_base_settings_interface);
+  Error error;
+  if (!AndroidHost::s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+}
+
+template<typename T, typename Read>
+static T ReadChainLayer(const std::optional<std::string>& key, T default_value, const Read& read)
+{
+  if (!AndroidHost::s_initialized)
+    return default_value;
+
+  if (key.has_value())
+    return ReadGameSetting(*key, std::move(default_value), [&read](const INISettingsInterface& si) { return read(si); });
+
+  const auto lock = Host::GetSettingsLock();
+  return read(*AndroidHost::s_base_settings_interface);
+}
+
+// The kind of the file PostProcessing::TryLoadingShader() takes for name, in its order: the data folder's ReShade
+// shader, the data folder's GLSL one, then the resources' ReShade shader, else the resources' GLSL one.
+static const char* ShaderKind(const std::string& name)
+{
+  const std::string fx = fmt::format("reshade" FS_OSPATH_SEPARATOR_STR "Shaders" FS_OSPATH_SEPARATOR_STR "{}.fx", name);
+  if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fx).c_str()))
+    return "ReShade";
+  if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fmt::format("{}.glsl", name)).c_str()))
+    return "GLSL";
+  if (FileSystem::FileExists(Path::Combine(EmuFolders::Resources, Path::Combine("shaders", fx)).c_str()))
+    return "ReShade";
+  return "GLSL";
+}
+
+// Whether the shader's metadata loads: Config::AddStage loads it first, and fails when it doesn't.
+static bool ShaderLoads(const std::string& name, Error* error)
+{
+  MemorySettingsInterface scratch;
+  return PostProcessing::Config::AddStage(scratch, PostProcessing::Config::DISPLAY_CHAIN_SECTION, name, error);
+}
+
+std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingShaders()
+{
+  std::vector<std::pair<std::string, std::string>> shaders;
+  if (!s_initialized)
+    return shaders;
+
+  for (const auto& [display_name, name] : PostProcessing::GetAvailableShaderNames())
+  {
+    Error error;
+    if (!ShaderLoads(name, &error))
+    {
+      INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
+      continue;
+    }
+    shaders.emplace_back(name, ShaderKind(name));
+  }
+  return shaders;
+}
+
+std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStages(const std::optional<std::string>& key,
+                                                                                const char* section)
+{
+  return ReadChainLayer(key, std::vector<PostProcessingStage>(), [section](const SettingsInterface& si) {
+    std::vector<PostProcessingStage> stages;
+    const u32 count = PostProcessing::Config::GetStageCount(si, section);
+    for (u32 i = 0; i < count; i++)
+    {
+      PostProcessingStage stage;
+      stage.shader = PostProcessing::Config::GetStageShaderName(si, section, i);
+      if (!stage.shader.empty() && ShaderLoads(stage.shader, nullptr))
+      {
+        stage.kind = ShaderKind(stage.shader);
+        stage.options = PostProcessing::Config::GetStageOptions(si, section, i);
+      }
+      stages.push_back(std::move(stage));
+    }
+    return stages;
+  });
+}
+
+std::string AndroidHost::AddPostProcessingStage(const std::optional<std::string>& key, const char* section,
+                                                const std::string& shader)
+{
+  std::string result = s_initialized ? std::string() : std::string("GooseStation hasn't started.");
+  EditChainLayer(key, [&](SettingsInterface& si) {
+    Error error;
+    if (!PostProcessing::Config::AddStage(si, section, shader, &error))
+    {
+      result = error.GetDescription();
+      if (result.empty())
+        result = fmt::format("The shader '{}' couldn't be loaded.", shader);
+    }
+  });
+  return result;
+}
+
+void AndroidHost::RemovePostProcessingStage(const std::optional<std::string>& key, const char* section, u32 index)
+{
+  EditChainLayer(key, [&](SettingsInterface& si) { PostProcessing::Config::RemoveStage(si, section, index); });
+}
+
+void AndroidHost::MovePostProcessingStage(const std::optional<std::string>& key, const char* section, u32 index,
+                                          bool down)
+{
+  EditChainLayer(key, [&](SettingsInterface& si) {
+    if (down)
+      PostProcessing::Config::MoveStageDown(si, section, index);
+    else
+      PostProcessing::Config::MoveStageUp(si, section, index);
+  });
+}
+
+void AndroidHost::SetPostProcessingOption(const std::optional<std::string>& key, const char* section, u32 index,
+                                          const std::string& name, std::span<const float> values)
+{
+  EditChainLayer(key, [&](SettingsInterface& si) {
+    if (index >= PostProcessing::Config::GetStageCount(si, section))
+      return;
+
+    for (PostProcessing::ShaderOption& option : PostProcessing::Config::GetStageOptions(si, section, index))
+    {
+      if (option.name != name)
+        continue;
+
+      const u32 count = std::min<u32>(option.vector_size, static_cast<u32>(values.size()));
+      for (u32 i = 0; i < count; i++)
+      {
+        if (option.type == PostProcessing::ShaderOption::Type::Float)
+          option.value[i].float_value = values[i];
+        else
+          option.value[i].int_value = static_cast<s32>(std::lround(values[i]));
+      }
+      PostProcessing::Config::SetStageOption(si, section, index, option);
+      return;
+    }
+  });
+}
+
+// Deletes section's chain from si: its stages, StageCount and Enabled.
+static void ClearChain(SettingsInterface& si, const char* section)
+{
+  PostProcessing::Config::ClearStages(si, section);
+  si.DeleteValue(section, "StageCount");
+  si.DeleteValue(section, "Enabled");
+}
+
+void AndroidHost::CopyPostProcessingChain(const std::string& key, const char* section)
+{
+  if (!s_initialized || key.empty())
+    return;
+
+  // settings.ini's chain as key/value lists, read under the settings lock before the game's file is opened.
+  bool enabled;
+  std::vector<std::vector<std::pair<std::string, std::string>>> stages;
+  {
+    const auto lock = Host::GetSettingsLock();
+    const SettingsInterface& si = *AndroidHost::s_base_settings_interface;
+    enabled = si.GetBoolValue(section, "Enabled", false);
+    const u32 count = PostProcessing::Config::GetStageCount(si, section);
+    for (u32 i = 0; i < count; i++)
+      stages.push_back(si.GetKeyValueList(TinyString::from_format("{}/Stage{}", section, i + 1)));
+  }
+
+  EditGameSettings(key, [&](INISettingsInterface& si) {
+    ClearChain(si, section);
+    si.SetBoolValue(section, "Enabled", enabled);
+    if (stages.empty())
+      return;
+    si.SetUIntValue(section, "StageCount", static_cast<u32>(stages.size()));
+    for (size_t i = 0; i < stages.size(); i++)
+    {
+      const TinyString stage_section = TinyString::from_format("{}/Stage{}", section, i + 1);
+      for (const auto& [name, value] : stages[i])
+        si.SetStringValue(stage_section, name.c_str(), value.c_str());
+    }
+  });
+}
+
+void AndroidHost::ClearPostProcessingChain(const std::string& key, const char* section)
+{
+  EditGameSettings(key, [section](INISettingsInterface& si) { ClearChain(si, section); });
+}
+
+bool AndroidHost::PostProcessingUsesOpenGLES(const std::optional<std::string>& key)
+{
+  if (!s_initialized)
+    return false;
+
+  bool running = false;
+  bool gles = false;
+  EmuThread::RunOnThread(
+    [&running, &gles]() {
+      if (System::IsValid() && g_gpu_device)
+      {
+        running = true;
+        gles = (g_gpu_device->GetRenderAPI() == RenderAPI::OpenGLES);
+      }
+    },
+    true);
+  if (running)
+    return gles;
+
+  // The game's own renderer, when its file sets one, as the core layers it at the game's boot; else settings.ini's.
+  std::string name;
+  if (key.has_value())
+    name = ReadGameSetting(*key, std::string(), [](const INISettingsInterface& si) { return si.GetStringValue("GPU", "Renderer"); });
+  if (name.empty())
+  {
+    const auto lock = Host::GetSettingsLock();
+    name = AndroidHost::s_base_settings_interface->GetStringValue("GPU", "Renderer",
+                                                                  Settings::GetRendererName(Settings::DEFAULT_GPU_RENDERER));
+  }
+  const GPURenderer renderer = Settings::ParseRendererName(name.c_str()).value_or(Settings::DEFAULT_GPU_RENDERER);
+  // Once Vulkan has failed, every device is OpenGL ES until the app restarts.
+  return AndroidHost::s_vulkan_failed.load() || !IsVulkanRenderer(renderer);
+}
+
+bool AndroidHost::IsFastmemAvailable()
+{
+  return sysconf(_SC_PAGESIZE) <= static_cast<long>(HOST_PAGE_SIZE);
+}
+
+bool AndroidHost::IsPostProcessingActiveForTest(const std::string& section)
+{
+  bool active = false;
+  EmuThread::RunOnThread(
+    [&section, &active]() {
+      if (System::IsValid())
+      {
+        active = (section == PostProcessing::Config::INTERNAL_CHAIN_SECTION) ? PostProcessing::InternalChain.IsActive() :
+                                                                               PostProcessing::DisplayChain.IsActive();
+      }
+    },
+    true);
+  return active;
+}
+
 std::optional<std::string> AndroidHost::GetGameInputProfile(const std::string& key)
 {
   return ReadGameSetting(key, std::optional<std::string>(), [](const INISettingsInterface& si) {
@@ -1059,6 +1326,17 @@ std::optional<std::vector<std::string>> AndroidHost::GetDataFolders()
       folders.push_back(relative->empty() ? std::string() : *relative + '/');
   }
   return folders;
+}
+
+std::optional<std::vector<std::string>> AndroidHost::GetDataFiles()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  const auto lock = Host::GetSettingsLock();
+  if (!s_base_settings_interface->GetBoolValue("Logging", "LogToFile", false))
+    return std::vector<std::string>();
+  return std::vector<std::string>{LOG_FILE, PREVIOUS_LOG_FILE};
 }
 
 std::optional<std::string> AndroidHost::GetCacheFolder()
@@ -2499,6 +2777,21 @@ void AndroidHost::SetListedKeyForTest(std::string path, std::string key)
     if (game.path == path)
       game.key = key;
   }
+}
+
+bool AndroidHost::ReloadPostProcessingShaders()
+{
+  if (!s_initialized)
+    return false;
+
+  bool reloaded = false;
+  EmuThread::RunOnThread(
+    [&reloaded]() {
+      if (System::IsValid())
+        reloaded = PostProcessing::ReloadShaders();
+    },
+    true);
+  return reloaded;
 }
 
 std::string AndroidHost::GetRunningSettingForTest(std::string section, std::string key)

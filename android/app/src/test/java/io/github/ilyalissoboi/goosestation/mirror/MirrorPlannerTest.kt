@@ -355,4 +355,61 @@ class MirrorPlannerTest {
             assertTrue(it, DataLayout.DEFAULT.mirrored(it))
         }
     }
+
+    // The logs, mirrored with Log to file on: this device's own, sent out, never replaced by the folder's (desktop
+    // writes one of the same name in a shared folder) while the core holds it open.
+    private val logging =
+        DataLayout.withCorePaths(listOf("goosestation.log", "goosestation-previous.log"), cacheFolder = "cache/")
+
+    @Test
+    fun theLogsAreNeverPulled() {
+        val manifest = Manifest(mapOf("goosestation.log" to entry(1, 1)))
+
+        assertEquals(
+            emptyList<MirrorAction>(),
+            MirrorPlanner.pull(
+                mapOf("goosestation.log" to s(5), "goosestation-previous.log" to s(5)),
+                mapOf("goosestation.log" to s(1)),
+                manifest,
+                logging,
+                never,
+            ),
+        )
+    }
+
+    @Test
+    fun aLogIsPushedOverTheFoldersChange() {
+        val manifest = Manifest(mapOf("goosestation.log" to entry(1, 1)))
+
+        assertEquals(
+            listOf(CopyToFolder("goosestation.log")),
+            MirrorPlanner.push(
+                mapOf("goosestation.log" to s(5)),
+                mapOf("goosestation.log" to s(2)),
+                manifest,
+                logging,
+                now,
+                false,
+                never,
+            ),
+        )
+    }
+
+    @Test
+    fun aLogGoneLocallyStaysInTheFolder() {
+        val manifest = Manifest(mapOf("goosestation-previous.log" to entry(1, 1)))
+
+        assertEquals(
+            emptyList<MirrorAction>(),
+            MirrorPlanner.push(
+                mapOf("goosestation-previous.log" to s(1)),
+                emptyMap(),
+                manifest,
+                logging,
+                now,
+                false,
+                never,
+            ),
+        )
+    }
 }

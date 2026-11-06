@@ -95,10 +95,12 @@ class SettingsScreenTest {
             "Emulation" to "Speed, frame pacing, rewind, run-ahead",
             "BIOS" to "Which BIOS each region uses, fast boot",
             "Graphics" to "Renderer, enhancements, display, on-screen display",
+            "Post-processing" to "Shaders over the picture",
             "Audio" to "Volume, latency",
             "Controllers" to "Ports, types, bindings, hotkeys, rumble",
             "Memory cards" to "Card types, sync, the card editor",
             "Achievements" to "Sign-in, hardcore mode, messages",
+            "Advanced" to "Logging, save states, CD-ROM and CPU tweaks",
             "Folders" to "BIOS, games and data folders",
         )
         ) {

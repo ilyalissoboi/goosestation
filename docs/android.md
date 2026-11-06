@@ -504,9 +504,10 @@ by the ones setup picked. That happens once; other settings are kept.
 
 ### Changing settings
 
-**Settings**, in the library's top bar, opens a hub with ten pages, in desktop's order: **Interface**, **Console**,
-**Emulation**, **BIOS**, **Graphics**, **Audio**, **Controllers**, **Memory cards** (see "Memory card sync"),
-**Achievements** (see "RetroAchievements") and **Folders** (the folder settings above). Every page works with a D-pad
+**Settings**, in the library's top bar, opens a hub with twelve pages, in desktop's order: **Interface**, **Console**,
+**Emulation**, **BIOS**, **Graphics**, **Post-processing** (below), **Audio**, **Controllers**, **Memory cards** (see
+"Memory card sync"), **Achievements** (see "RetroAchievements"), **Advanced** and **Folders** (the folder settings
+above). Every page works with a D-pad
 alone, as setup does: the first row is focused when a page opens, A or Enter activates, and B or Back goes back. Back
 from a page focuses its entry in the hub, and Back from the hub focuses **Settings** in the library. A long page is
 split into desktop's sections, each under its name in small capitals (a heading, never a stop for the focus).
@@ -570,6 +571,10 @@ split into desktop's sections, each under its name in small capitals (a heading,
 | Audio | Output | Stretch mode (`[Audio] StretchMode`), buffer size (`BufferMS`, 10–500 ms, 100 on Android), minimal output latency (`OutputLatencyMinimal`) or else output latency (`OutputLatencyMS`, 1–500 ms) |
 | Memory cards | Cards | After Manage cards and sync: card 1 and card 2 type (`[MemoryCards] Card1Type`, `Card2Type`), each Shared slot's card (`Card1Path`, `Card2Path`: "shared_card_<n>.mcd (the default)" (empty, as no key is), then the memory card folder's `.mcd` files), one card for all discs of a game (`UsePlaylistTitle`) |
 | Achievements | | After live indicators: encore mode (`[Cheevos] EncoreMode`), spectator mode (`SpectatorMode`), test unofficial achievements (`UnofficialTestMode`), and while messages show, unlock and leaderboard message time (`NotificationsDuration`, `LeaderboardsDuration`, 3–30 s; the unlock card lasts that long) |
+| Advanced | Logging | Log level (`[Logging] LogLevel`, the core's levels, Information by default; logcat gets the core's messages at that level), log to file (`LogToFile`: `goosestation.log` in the data folder, and the last run's as `goosestation-previous.log`, below) |
+| Advanced | Save states | Save state compression (`[Main] SaveStateCompression`, Zstandard (Default) by default), load devices from save states (`LoadDevicesFromSaveStates`) |
+| Advanced | CD-ROM | CD-ROM region check (`[CDROM] RegionCheck`), allow booting without an SBI file (`AllowBootingWithoutSBIFile`: the core's question about it is answered yes on Android) |
+| Advanced | CPU | Recompiler memory exceptions (`[CPU] RecompilerMemoryExceptions`), block linking (`RecompilerBlockLinking`), fast memory access (`FastmemMode`, MMap by default; disabled, "This device's memory pages are too large for it.", where the host turns it off) |
 | BIOS | | NTSC-U (Americas), NTSC-J (Japan), PAL (Europe) (`[BIOS] PathNTSCU`, `PathNTSCJ`, `PathPAL`): "Automatic: <the image the core picks>" (no key, the default), or "Automatic: none found"; then each image copied from the BIOS folder, by its description, noted "made for <region>" when it's for another region. Fast boot (skip the BIOS intro) (`[BIOS] PatchFastBoot`, on on Android) |
 
 The internal resolution's note, for any value but 1x, says "Higher is sharper and slower. Match the screen picks the
@@ -583,9 +588,18 @@ A new `settings.ini` from the core holds a custom aspect ratio of 4:3 (`CustomAs
 `CustomAspectRatioDenominator = 3`). A file from desktop can still hold a term of 0: the page shows the 1 the core takes
 it as.
 
+**Log to file** writes the core's log to `goosestation.log` in the working copy, as desktop writes it in its data
+folder. While it's on, the core names the log, and the log the last run left, as files of the data folder's layout,
+so the mirror copies both to the data folder with its pushes (after a game, and on leaving the app). They're only
+ever sent: a pull never takes the folder's over them, since desktop sharing the folder (and `settings.ini`'s Log to
+file) writes a `goosestation.log` of its own there, and the core holds this one open. At each start,
+before the core opens the log, the host renames the last run's `goosestation.log` to `goosestation-previous.log`, so
+the log of a run that crashed still reaches the data folder. Off, both stay on the device, as before. Leaving the
+Advanced page has the mirror take the change.
+
 **Every other setting** is changed by editing `settings.ini` in the data folder, on the device or from a computer:
 developer tools (wireframe, the GPU's debug and disable switches, VRAM write dumps, `[Hacks]` but old MDEC routines,
-TTY logging, `[PCDrv]`, the display offsets, the log filter), input profiles, cheats (patch codes cover them), and the
+TTY logging, `[PCDrv]`, the display offsets, the log filter, desktop's other Advanced tweaks), input profiles, cheats (patch codes cover them), and the
 hotkeys the Controllers page leaves out (see "Controllers").
 Then switch to the app, or reopen it: the pull on coming back copies the file in, and the core reloads it, then scans
 the library again. While the app stays in front, the next push (within 2 s) also notices the change and copies it in.
@@ -638,6 +652,51 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 - The Port 1 bindings live in this file too, with `[Android] ControllerDescriptors` (see "Controllers"). Leaving
   them out is fine: each controller adds its default bindings the first time it's seen.
 
+### Post-processing
+
+**Post-processing**, after Graphics in the hub, edits the core's two shader chains, as Qt's two tabs do:
+**Display** (`[PostProcessing]`, over the picture at the screen's resolution) and **Internal**
+(`[InternalPostProcessing]`, at the internal resolution, before the picture is scaled). Each chain has its **On**
+switch (`Enabled`), its stages in order ("1. crt-lottes", with the shader's kind and how many options it has), and
+**Add a shader**. Every edit is the core's own `PostProcessing::Config` call on `settings.ini`, so the keys are
+desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage's options beside it.
+
+- **Add a shader** opens a page listing the shaders that work here, each with its kind: the APK's (the repository's
+  `data/resources/shaders`) and the data folder's `shaders/`, as desktop finds them (`.glsl` files, and ReShade's
+  `.fx` under `shaders/reshade/Shaders`). A shows them as the chain's last stage, and the focus goes to it. A shader
+  whose metadata doesn't load isn't offered.
+- **A stage's page** has **Move up**, **Move down** and **Remove** (no question, as desktop), then the shader's
+  options, as desktop builds them from its metadata: an on/off option is a switch, an option with named values a
+  choice, and a number a row per component ("Tint (Red)", "Tint (Green)"…), stepping by the shader's step (a
+  hundredth of its range without one) and listing its minimum, default, maximum and the quarters between. An option
+  with no name is hidden, as desktop hides it, and the shader's categories are the page's sections. A value off the
+  steps shows as itself. The core writes each value, in its own format.
+- **Reload shaders** shows in a running game's own settings (the global pages are locked while a game runs): the core
+  reads the chains' shader files again, saying "Post-processing shaders reloaded.". Each game's boot loads them anyway.
+- **What runs**, checked on the emulators (padtest at 1280×960, each shader alone):
+
+| Shaders | Vulkan | OpenGL ES |
+| --- | --- | --- |
+| GLSL (`shaders/*.glsl`) | all run | all run |
+| "dolphinfx" (`shaders/dolphinfx/**/*.glsl`, loaded as GLSL: this core has no loader of their own) | all run | all run |
+| ReShade (`shaders/reshade/Shaders/**/*.fx`) | all run but `crt/crt-hyllian-sinc` | none compile |
+
+  So under OpenGL ES (the renderer, a game's own on its pages, or Vulkan having failed) no ReShade shader is offered, and a ReShade stage
+  already in the chain (from desktop, say) says "Doesn't run with OpenGL ES: post-processing stays off while it's in
+  the chain.": the core turns the whole chain off with "Failed to compile post-processing shader …". A stage whose
+  shader this install hasn't got says "Not found in this install's shaders: …" in the same way. Both can still be
+  moved and removed. On the emulator's GPU the slowest shader took 2.2 ms a frame (`edge-smoothing/super-xbr`); under
+  SwiftShader, a CPU renderer, `crt-lottes` halved the frame rate. On the AYN Thor every shader keeps the full frame rate
+  (see "Post-processing on the Thor" under its results).
+- **For a game**, each chain is the game's own or the global one, as the core takes it: the game's file's chain
+  applies, whole, only while the file sets that chain's `Enabled`. Its On row is "Use global (On)", On and Off.
+  Picking On or Off gives the game its own chain: a copy of the global one, unless the file already has stages of its
+  own (as Qt can leave a file). "Use global" deletes the game's chain (`Enabled`, `StageCount`, the stages), asking
+  first when it has shaders ("Use the global Display chain? This game's 3 shaders are removed."). While a chain is the
+  global one, its stages show dimmed, saying "The global chain: pick On or Off to give this game its own." The hub
+  counts each chain the game sets as one. Desktop's Copy global settings doesn't copy the chains, and neither does
+  this app's.
+
 ### Settings for each game
 
 A game can have settings of its own, over the global ones, as on desktop. They open from its tile: **Y** on a focused
@@ -648,10 +707,11 @@ pages do, with no game under way; a file with no key (a PSF) has none, and its m
 - **The hub** says "Game settings" under the game's title, its serial and region, and what its file sets ("3 settings
   of its own, and 4 this app doesn't show", or "No settings of its own"): the keys no page shows are desktop's own,
   or its bindings. Then its pages, in desktop's order, each saying how many it sets: **Console**, **Emulation**,
-  **Graphics** (the on-screen display too, as on Qt), **Audio**, **Controllers**, **Memory cards** (the card types
-  and shared cards; one card for all discs stays global), **Achievements** (the switches and the messages' times).
-  Post-processing and Advanced come with them in stage 4. Interface, BIOS, Folders and the memory card editor are
-  global only, and the in-game Settings never reaches them, nor any global page.
+  **Graphics** (the on-screen display too, as on Qt), **Post-processing** (each chain as a whole, below), **Audio**,
+  **Controllers**, **Memory cards** (the card types and shared cards; one card for all discs stays global),
+  **Achievements** (the switches and the messages' times), **Advanced** (all but logging, which desktop's Copy keeps
+  global). Interface, BIOS, Folders and the memory card editor are global only, and the in-game Settings never
+  reaches them, nor any global page.
 - **Copy global settings** and **Clear settings** each ask first, in a panel over the hub, Cancel focused. Copy is
   desktop's: the global settings as `Settings::Save(si, true)` writes them, over the game's own (so it leaves out what
   desktop keeps global: the on-screen display, the Interface rows, logging). Clear is Big Picture's: the game's file
@@ -1097,6 +1157,13 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
 
 ### Known limits
 
+- **Post-processing:** ReShade (`.fx`) shaders don't compile under OpenGL ES: reshadefx's GLSL generator relies on
+  implicit int-to-float conversions (`float / const int`), which GLSL ES rejects. They aren't offered there.
+  `crt/crt-hyllian-sinc.fx` doesn't load anywhere (desktop too): `data/resources` lacks the
+  `../misc/include/mask.fxh` and `geom.fxh` it includes. Slang presets (roadmap item 17) aren't supported yet.
+- **OpenGL ES with `[GPU] DownsampleMode = Box`** on Adreno (the Thor): the hardware renderer's box downsampling shader
+  doesn't compile, and the core falls back to the software renderer (see "Post-processing on the Thor").
+
 - **Memory card editor:** edits held in memory are lost if Android ends the process while the app is in the
   background, without a notice afterwards. Cards from outside the data folder come in only through Import card, and
   multitap cards aren't shown.
@@ -1477,6 +1544,22 @@ gamesettings (1)", and the same for `settings.ini`): the documents provider list
 held. After the reboot every push worked. That's the emulator's provider, not the app; the mirror's own rule, the
 folder's side wins, then kept the data folder's copy over a change it hadn't sent.
 
+### The settings pages, stage 4: post-processing and Advanced (2026-11-06)
+
+On `goose-arm64` (emulator-5554, 2400 x 1080, landscape) with the debug APK of `4ee90ced9`, installed over the existing
+one (data kept), driven by key events. Its Vulkan device is lavapipe through gfxstream, which the core takes as a
+default renderer ("Allowing Vulkan as default renderer"), so the game ran on Vulkan. The game was padtest.
+
+| Check | Result |
+|---|---|
+| The hub | Pass. Post-processing after Graphics, Advanced before Folders. |
+| The chains | Pass. Display and Internal, each with its switch and "Add a shader: 22 shaders to choose from" (every shipped one but `crt/crt-hyllian-sinc`, ReShade included on Vulkan). The Add page listed each with its kind; A on crt-lottes went back with the focus on "1. crt-lottes", "GLSL · 12 options". |
+| A stage | Pass. "Stage 1: crt-lottes", Move up and Move down disabled, Remove focused; the options as their values (-8, -3, 0.031). Right on Screen Warp X wrote `warpX = 0.04` to the working copy, and the next push to the data folder's `settings.ini`. |
+| In the game | Pass. padtest showed crt-lottes: the curved corners and the scanlines. |
+| The game's page | Pass. From the in-game Settings: "PADTEST" over Post-processing, "Use global (On)", the global stage dimmed with "The global chain: pick On or Off to give this game its own."; Right to Off copied the chain into `gamesettings/HASH-9FDA0E1A56D8DF5B.ini` with `Enabled = false`, marked "Set for this game". Use global asked "Use the global Display chain? This game's shader is removed.", Cancel focused; Use global deleted the file, and the focus came back to the row. Reload shaders: "Post-processing shaders reloaded." |
+| Advanced | Pass. Logging, Save states, CD-ROM and CPU, with the core's names ("Information", "Zstandard (Default)"). Log to file on, then leaving the page: `goosestation.log` in the data folder. After a force-stop and a start, `goosestation-previous.log` there too, and the new `goosestation.log` from the build line on. |
+| Crashes | None (`adb logcat -b crash -d` empty). |
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -1657,6 +1740,54 @@ drove it with the Thor's own controls; the keyboard was also checked over adb.
 | Leaving | Pass. B asked "Save your changes?" with Keep editing focused; Discard went back to Memory cards, Manage cards focused. |
 
 Not checked on the Thor: Save itself (it would have reached the user's other devices; checked on the emulator).
+
+### Post-processing on the Thor (2026-11-06)
+
+The debug APK of `a953a8a9f`, with one extra line (not committed) that logged the core's frame rate and GPU time each
+second, installed over the existing one (data kept); then the plain APK of `a953a8a9f` again. Each shipped shader was
+put alone in padtest's own Display chain from the in-game Settings, by key events, and timed for 5 s (GPU time from
+`[Display] ShowGPU`, set in padtest's file). The picture was 1920x1080; the global settings were the user's
+(`ResolutionScale = 4`, `DownsampleMode = Box`). Afterwards padtest's Clear settings deleted its file, from the working
+copy and, with the next push, the data folder.
+
+| Shader | Vulkan: GPU ms a frame | OpenGL ES: GPU ms a frame |
+| --- | --- | --- |
+| None | 0.57 | 0.09 (the software renderer, below) |
+| `anti-aliasing/fxaa` | 5.49 | not offered |
+| `Cccalibrator` | 0.75 | 1.70 |
+| `crt-lottes` | 5.49 | 5.03 |
+| `CRT-NewPixie` | 3.24 | not offered |
+| `CRTLottes2` | 2.49 | not offered |
+| `Daltonize` | 0.72 | not offered |
+| `Deband` | 2.01 | not offered |
+| `dolphinfx/crt/CRT-HYLLIAN` | 2.06 | 1.70 |
+| `dolphinfx/edge-smoothing/DDT` | 0.85 | 0.43 |
+| `dolphinfx/edge-smoothing/XBR` | 4.43 | 3.99 |
+| `dolphinfx/pixel-art/PIXELLATE` | 1.34 | 0.86 |
+| `edge-smoothing/super-xbr` | 6.54 | not offered |
+| `FilmGrain2` | 3.23 | not offered |
+| `interpolation/bicubic` | 1.29 | not offered |
+| `LUT` | 0.82 | not offered |
+| `misc/multi-LUT` | 0.82 | not offered |
+| `ntsc/ntsc-adaptive-lite` | 5.21 | not offered |
+| `scanlines-abs` | 0.72 | not offered |
+| `simple-brightness` | 0.67 | 0.18 |
+| `simple-flip` | 0.67 | 0.18 |
+| `simple-gamma` | 0.85 | 0.37 |
+| `simple-sharpen` | 0.81 | 0.33 |
+
+- Every shader compiled and kept the full frame rate (59.3 fps; 58.9 for XBR on OpenGL ES): the costliest, super-xbr,
+  takes 6.5 ms of the 16.7 ms a frame has. So none is too slow to offer.
+- Under OpenGL ES (padtest's own `[GPU] Renderer = OpenGL`), Add a shader offered the 10 GLSL shaders only, as on the
+  emulators.
+- **Found, outside post-processing:** with `DownsampleMode = Box`, the hardware renderer doesn't start on the Thor's
+  OpenGL ES: the box downsampling shader defines `FACTOR` as an `int` and compares it with a `uint`, which Adreno's
+  GLSL ES compiler rejects ("no operation '<' exists that takes … 'uint' and … 'const int'"). The core falls back to
+  the software renderer ("Failed to initialize OpenGL renderer, falling back to software renderer"), whose paused
+  picture behind the menu was sheared. Vulkan isn't affected.
+- The pages themselves on the Thor: the game's Post-processing ("Use global (Off)", then On, "Set for this game"), the
+  Add page, a stage's page (Remove focused on a lone stage) and Clear settings' question all worked with key events;
+  the hub counted the chain as one ("3 settings of its own": two in Graphics, one in Post-processing).
 
 ## Checks on the AYN Thor
 

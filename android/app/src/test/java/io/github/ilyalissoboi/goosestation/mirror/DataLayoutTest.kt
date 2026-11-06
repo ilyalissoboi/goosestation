@@ -197,4 +197,28 @@ class DataLayoutTest {
         }
         assertTrue(default.mirrored("memcards/emusync-tmp.mcd"))
     }
+
+    // With Log to file on, the core names its logs: they're mirrored to the data folder then, and only then.
+    @Test
+    fun theLogIsMirroredOnlyWhenTheCoreNamesIt() {
+        assertFalse(DataLayout.DEFAULT.mirrored("goosestation.log"))
+        assertFalse(DataLayout.DEFAULT.mirrored("goosestation-previous.log"))
+        assertFalse(DataLayout.withCorePaths(listOf("memcards/"), cacheFolder = "cache/").mirrored("goosestation.log"))
+
+        val logging =
+            DataLayout.withCorePaths(
+                listOf("memcards/", "goosestation.log", "goosestation-previous.log"),
+                cacheFolder = "cache/",
+            )
+
+        assertTrue(logging.mirrored("goosestation.log"))
+        assertTrue(logging.mirrored("goosestation-previous.log"))
+        assertFalse(logging.stray("goosestation.log"))
+    }
+
+    // The data root itself in the layout (a data folder of the core's own) still leaves the log out while it's off.
+    @Test
+    fun aRootLayoutStillKeepsTheLogUnlessNamed() {
+        assertFalse(DataLayout.withCorePaths(listOf(""), cacheFolder = "cache/").mirrored("goosestation-previous.log"))
+    }
 }

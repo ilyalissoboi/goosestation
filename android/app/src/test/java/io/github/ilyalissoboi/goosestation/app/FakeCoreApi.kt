@@ -9,6 +9,8 @@ import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo
+import io.github.ilyalissoboi.goosestation.core.StageInfo
 import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
@@ -156,6 +158,10 @@ class FakeCoreApi(
 
     override fun isVulkanFailed(): Boolean = false
 
+    var fastmemAvailable = true
+
+    override fun isFastmemAvailable(): Boolean = fastmemAvailable
+
     /** Each choice list the core names, by kind: its values, each its own label unless [nameLabels] has one. */
     var names = mutableMapOf<String, List<String>>()
 
@@ -205,6 +211,187 @@ class FakeCoreApi(
     override fun getGameSettingKeys(key: String): List<Pair<String, String>> = gameLayers[key]?.keys().orEmpty()
 
     override fun getGameInputProfile(key: String): String? = inputProfiles[key]
+
+    /** The shaders this fake has: each name's kind and options, their values the defaults. */
+    var shaderCatalog = mapOf<String, Pair<String, List<ShaderOptionInfo>>>()
+
+    /** settings.ini, for the chain calls with no key: the chains as desktop's keys, options as comma lists. */
+    val globalLayer = MemoryCoreSettings()
+
+    var usesOpenGLES = false
+
+    private fun chainLayer(key: String?) = if (key == null) globalLayer else gameLayer(key)
+
+    private fun stageSection(
+        section: String,
+        index: Int,
+    ) = "$section/Stage${index + 1}"
+
+    override fun getPostProcessingShaders(): List<Pair<String, String>> =
+        shaderCatalog.map { (name, entry) -> name to entry.first }.sortedBy { it.first.lowercase() }
+
+    override fun getPostProcessingStages(
+        key: String?,
+        section: String,
+    ): List<StageInfo> {
+        calls += "getPostProcessingStages $key $section"
+        val layer = if (key == null) globalLayer else gameLayers[key] ?: return emptyList()
+        return (0 until layer.getInt(section, "StageCount", 0)).map { index ->
+            val at = stageSection(section, index)
+            val shader = layer.getString(at, "ShaderName", "")
+            val entry = shaderCatalog[shader]
+            val options =
+                entry?.second.orEmpty().map { option ->
+                    val set = layer.getString(at, option.name, "").takeIf { it.isNotEmpty() }
+                    val value = set?.split(',')?.map { it.trim().toFloat() }?.toFloatArray() ?: option.defaultValue
+                    option.withValue(value)
+                }
+            StageInfo(shader, entry?.first.orEmpty(), options.toTypedArray())
+        }
+    }
+
+    override fun addPostProcessingStage(
+        key: String?,
+        section: String,
+        shader: String,
+    ): String? {
+        calls += "addPostProcessingStage $key $section $shader"
+        if (shader !in shaderCatalog) return "The shader '$shader' couldn't be loaded."
+        val layer = chainLayer(key)
+        val count = layer.getInt(section, "StageCount", 0)
+        layer.setInt(section, "StageCount", count + 1)
+        layer.setString(stageSection(section, count), "ShaderName", shader)
+        return null
+    }
+
+    override fun removePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+    ) {
+        calls += "removePostProcessingStage $key $section $index"
+        val layer = chainLayer(key)
+        val count = layer.getInt(section, "StageCount", 0)
+        if (index !in 0 until count) return
+        for (i in index until count - 1) copyStage(layer, section, i + 1, i)
+        clearStage(layer, section, count - 1)
+        layer.setInt(section, "StageCount", count - 1)
+    }
+
+    override fun movePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+        down: Boolean,
+    ) {
+        calls += "movePostProcessingStage $key $section $index $down"
+        val layer = chainLayer(key)
+        val count = layer.getInt(section, "StageCount", 0)
+        val other = if (down) index + 1 else index - 1
+        if (index !in 0 until count || other !in 0 until count) return
+        val held = stageValues(layer, section, index)
+        copyStage(layer, section, other, index)
+        clearStage(layer, section, other)
+        for ((name, value) in held) layer.setString(stageSection(section, other), name, value)
+    }
+
+    override fun setPostProcessingOption(
+        key: String?,
+        section: String,
+        index: Int,
+        name: String,
+        values: FloatArray,
+    ) {
+        calls += "setPostProcessingOption $key $section $index $name ${values.joinToString(",")}"
+        chainLayer(key).setString(stageSection(section, index), name, values.joinToString(",") { formatFloat(it) })
+    }
+
+    override fun copyPostProcessingChain(
+        key: String,
+        section: String,
+    ) {
+        calls += "copyPostProcessingChain $key $section"
+        val game = gameLayer(key)
+        clearChain(game, section)
+        game.setBool(section, "Enabled", globalLayer.getBool(section, "Enabled", false))
+        val count = globalLayer.getInt(section, "StageCount", 0)
+        if (count == 0) return
+        game.setInt(section, "StageCount", count)
+        for (i in 0 until count) {
+            for ((name, value) in stageValues(
+                globalLayer,
+                section,
+                i,
+            )) {
+                game.setString(stageSection(section, i), name, value)
+            }
+        }
+    }
+
+    override fun clearPostProcessingChain(
+        key: String,
+        section: String,
+    ) {
+        calls += "clearPostProcessingChain $key $section"
+        val game = gameLayers[key] ?: return
+        clearChain(game, section)
+        if (game.values.isEmpty()) gameLayers.remove(key)
+    }
+
+    /** The keys whose games' own renderer is OpenGL ES, over [usesOpenGLES]. */
+    var gamesOnOpenGLES = emptySet<String>()
+
+    override fun postProcessingUsesOpenGLES(key: String?) =
+        if (key != null &&
+            key in gamesOnOpenGLES
+        ) {
+            true
+        } else {
+            usesOpenGLES
+        }
+
+    override fun reloadPostProcessingShaders(): Boolean {
+        calls += "reloadPostProcessingShaders"
+        return runningKey != null
+    }
+
+    private fun stageValues(
+        layer: MemoryCoreSettings,
+        section: String,
+        index: Int,
+    ): List<Pair<String, String>> {
+        val prefix = stageSection(section, index) + "/"
+        return layer.values.filterKeys { it.startsWith(prefix) }.map { (at, value) -> at.removePrefix(prefix) to value }
+    }
+
+    private fun clearStage(
+        layer: MemoryCoreSettings,
+        section: String,
+        index: Int,
+    ) {
+        val prefix = stageSection(section, index) + "/"
+        layer.values.keys.removeAll { it.startsWith(prefix) }
+    }
+
+    private fun copyStage(
+        layer: MemoryCoreSettings,
+        section: String,
+        from: Int,
+        to: Int,
+    ) {
+        val held = stageValues(layer, section, from)
+        clearStage(layer, section, to)
+        for ((name, value) in held) layer.setString(stageSection(section, to), name, value)
+    }
+
+    private fun clearChain(
+        layer: MemoryCoreSettings,
+        section: String,
+    ) {
+        for (i in 0 until layer.getInt(section, "StageCount", 0)) clearStage(layer, section, i)
+        layer.delete(section, "StageCount")
+        layer.delete(section, "Enabled")
+    }
 
     // As the host does: the flag while the file has a controller key, and none once it hasn't.
     override fun updateGameControllers(key: String) {
@@ -332,3 +519,13 @@ class FakeCoreApi(
         const val MIB = 1_048_576L
     }
 }
+
+/** A float as the core writes it: no trailing ".0" on a whole number. */
+private fun formatFloat(value: Float) =
+    if (value ==
+        value.toLong().toFloat()
+    ) {
+        value.toLong().toString()
+    } else {
+        value.toString()
+    }

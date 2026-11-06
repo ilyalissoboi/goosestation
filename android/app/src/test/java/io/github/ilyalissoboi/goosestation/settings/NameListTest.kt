@@ -49,6 +49,9 @@ class NameListTest {
                 "MemoryCardType",
                 "ControllerType",
                 "MultitapMode",
+                "SaveStateCompressionMode",
+                "CPUFastmemMode",
+                "LogLevel",
             ),
             NameList.entries.map { it.kind },
         )

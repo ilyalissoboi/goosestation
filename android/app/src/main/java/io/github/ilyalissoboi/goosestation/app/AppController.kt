@@ -83,8 +83,10 @@ enum class Screen(
     Console(SettingsEntry.Console),
     Emulation(SettingsEntry.Emulation),
     Graphics(SettingsEntry.Graphics),
+    PostProcessing(SettingsEntry.PostProcessing),
     Audio(SettingsEntry.Audio),
     Achievements(SettingsEntry.Achievements),
+    Advanced(SettingsEntry.Advanced),
     MemoryCards(SettingsEntry.MemoryCards),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
@@ -191,6 +193,10 @@ object AppController : NativeCallbacks {
 
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+
+    /** The Post-processing pages' chains, settings.ini's. */
+    val postProcessingPage =
+        PostProcessingPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
 
     /** A game's own settings, from its tile in the library. */
     val gameSettingsPages =
@@ -668,6 +674,7 @@ object AppController : NativeCallbacks {
             SettingsEntry.Emulation,
             SettingsEntry.Graphics,
             SettingsEntry.Audio,
+            SettingsEntry.Advanced,
             -> {}
             SettingsEntry.Achievements -> achievementsPage.load()
             SettingsEntry.MemoryCards -> {
@@ -676,6 +683,7 @@ object AppController : NativeCallbacks {
             }
             SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
+            SettingsEntry.PostProcessing -> postProcessingPage.open(null, running = false)
             SettingsEntry.Folders -> {}
         }
         screen = Screen.entries.first { it.page == entry }
@@ -687,6 +695,9 @@ object AppController : NativeCallbacks {
         // Its own way back, which a data folder change under way keeps from running.
         if (page == SettingsEntry.Folders) return closeFolders()
         if (page == SettingsEntry.Controllers) controllersPage.close()
+        if (page == SettingsEntry.PostProcessing) postProcessingPage.close()
+        // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before this.
+        if (page == SettingsEntry.Advanced) scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         settingsEntry = page
         screen = Screen.Settings
     }
@@ -1398,6 +1409,7 @@ object AppController : NativeCallbacks {
             }
         refreshed?.let { games = it }
         if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
+        if (StartupStep.ReloadSettings in steps && screen == Screen.PostProcessing) postProcessingPage.reread()
         // settings.ini, or a game's own file, pulled from the data folder while that game's pages show.
         if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) {
             gameSettingsPages.reloadShown()
@@ -1487,7 +1499,8 @@ object AppController : NativeCallbacks {
         val reported = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
         memcardPaths = MemoryCardPaths.merge(reported, memcardPaths)
         val folders = NativeLibrary.getDataFolders() ?: return false
-        val layout = DataLayout.withCorePaths(folders.toList() + memcardPaths, NativeLibrary.getCacheFolder())
+        val files = NativeLibrary.getDataFiles()?.toList().orEmpty()
+        val layout = DataLayout.withCorePaths(folders.toList() + files + memcardPaths, NativeLibrary.getCacheFolder())
         val grew = layout.addsTo(dataLayout)
         // Before a mirror run can start with it.
         if (grew) layoutSettling.unsettle()

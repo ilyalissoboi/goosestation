@@ -375,6 +375,12 @@ object NativeLibrary {
     external fun getDataFolders(): Array<String>?
 
     /**
+     * The data root's own files the mirror copies, beside [getDataFolders]'s: `goosestation.log` and the last run's,
+     * `goosestation-previous.log`, while settings.ini's Log to file is on; empty otherwise. Null before [initialize].
+     */
+    external fun getDataFiles(): Array<String>?
+
+    /**
      * The core's cache folder, as [getDataFolders] gives a folder. Null if it's outside the data root, or the data
      * root itself, or before [initialize].
      */
@@ -657,6 +663,84 @@ object NativeLibrary {
         path: String,
         key: String,
     )
+
+    /**
+     * The post-processing shaders this install has (the resources' and the data folder's `shaders/`) whose metadata
+     * loads, sorted as desktop lists them: name, kind ("GLSL" or "ReShade"), name, kind…
+     */
+    external fun getPostProcessingShaders(): Array<String>
+
+    // The post-processing calls below edit a chain ([section]: "PostProcessing" or "InternalPostProcessing") in
+    // settings.ini when [key] is null, else in the game's own file by its key, through the core's
+    // PostProcessing::Config. Each runs on the caller's thread; nothing before [initialize].
+
+    /** The chain's stages, in order, each with its options; null if they couldn't be handed over. */
+    external fun getPostProcessingStages(
+        key: String?,
+        section: String,
+    ): Array<StageInfo>?
+
+    /** Adds [shader] as the chain's last stage; null, or why it couldn't (the shader doesn't load). */
+    external fun addPostProcessingStage(
+        key: String?,
+        section: String,
+        shader: String,
+    ): String?
+
+    /** Removes the stage at [index] (0-based), the later ones moving up with their options. */
+    external fun removePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+    )
+
+    /** Swaps the stage at [index] with the next ([down]) or the one before, each keeping its options. */
+    external fun movePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+        down: Boolean,
+    )
+
+    /** Sets the stage's option [name] to [values] (one per component), written as the core writes it. */
+    external fun setPostProcessingOption(
+        key: String?,
+        section: String,
+        index: Int,
+        name: String,
+        values: FloatArray,
+    )
+
+    /** Copies settings.ini's chain (its Enabled, StageCount and stages) into the game's file, over its own. */
+    external fun copyPostProcessingChain(
+        key: String,
+        section: String,
+    )
+
+    /** Deletes the game's chain: its Enabled, StageCount and stages. The file goes once it's empty. */
+    external fun clearPostProcessingChain(
+        key: String,
+        section: String,
+    )
+
+    /**
+     * Whether post-processing runs on OpenGL ES: in a game, the device it runs on; else the renderer the game of [key]
+     * sets in its own file, or settings.ini picks (for null, or a game that sets none), or OpenGL ES once Vulkan has
+     * failed in this run.
+     */
+    external fun postProcessingUsesOpenGLES(key: String?): Boolean
+
+    /** Whether fast memory access can run here: the device's memory pages are no larger than the build's. */
+    external fun isFastmemAvailable(): Boolean
+
+    /** Tests: whether the running game's chain [section] is on and has stages (`Chain::IsActive`). */
+    external fun isPostProcessingActiveForTest(section: String): Boolean
+
+    /**
+     * Reloads the post-processing shaders from their files, in the running game (`PostProcessing::ReloadShaders`, on
+     * the CPU thread, waiting): false without a game, or when no chain has shaders.
+     */
+    external fun reloadPostProcessingShaders(): Boolean
 
     /** Tests: [section] [key] as the running game has it, its own settings over settings.ini; empty without a game. */
     external fun getRunningSettingForTest(

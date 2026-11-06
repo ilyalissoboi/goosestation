@@ -10,6 +10,7 @@ import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
+import io.github.ilyalissoboi.goosestation.core.StageInfo
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
@@ -89,6 +90,9 @@ interface CoreApi {
 
     fun isVulkanFailed(): Boolean
 
+    /** [NativeLibrary.isFastmemAvailable]. */
+    fun isFastmemAvailable(): Boolean
+
     /** The core's choice list [kind] (an enum's name, as [NativeLibrary.getSettingNames] takes it), in its order. */
     fun getSettingNames(kind: String): List<Choice<String>>
 
@@ -114,6 +118,59 @@ interface CoreApi {
 
     /** [NativeLibrary.updateGameControllers]: after a change to [key]'s controller settings. */
     fun updateGameControllers(key: String)
+
+    // The post-processing chains ([NativeLibrary.getPostProcessingStages] and the rest): [key] null for settings.ini.
+
+    /** The shaders whose metadata loads: each name and its kind ("GLSL" or "ReShade"). */
+    fun getPostProcessingShaders(): List<Pair<String, String>>
+
+    fun getPostProcessingStages(
+        key: String?,
+        section: String,
+    ): List<StageInfo>
+
+    /** Null, or why [shader] couldn't be added. */
+    fun addPostProcessingStage(
+        key: String?,
+        section: String,
+        shader: String,
+    ): String?
+
+    fun removePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+    )
+
+    fun movePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+        down: Boolean,
+    )
+
+    fun setPostProcessingOption(
+        key: String?,
+        section: String,
+        index: Int,
+        name: String,
+        values: FloatArray,
+    )
+
+    fun copyPostProcessingChain(
+        key: String,
+        section: String,
+    )
+
+    fun clearPostProcessingChain(
+        key: String,
+        section: String,
+    )
+
+    fun postProcessingUsesOpenGLES(key: String?): Boolean
+
+    /** Reloads the shaders in the running game: false without one, or with no shaders in either chain. */
+    fun reloadPostProcessingShaders(): Boolean
 
     fun getBiosImages(): List<BiosImage>
 
@@ -222,6 +279,8 @@ object NativeCoreApi : CoreApi {
 
     override fun isVulkanFailed(): Boolean = NativeLibrary.isVulkanFailed()
 
+    override fun isFastmemAvailable(): Boolean = NativeLibrary.isFastmemAvailable()
+
     override fun getSettingNames(kind: String): List<Choice<String>> =
         NativeLibrary
             .getSettingNames(kind)
@@ -247,6 +306,60 @@ object NativeCoreApi : CoreApi {
             .map { it[0] to it[1] }
 
     override fun getGameInputProfile(key: String): String? = NativeLibrary.getGameInputProfile(key)
+
+    override fun getPostProcessingShaders(): List<Pair<String, String>> =
+        NativeLibrary
+            .getPostProcessingShaders()
+            .toList()
+            .chunked(2)
+            .filter { it.size == 2 }
+            .map { it[0] to it[1] }
+
+    override fun getPostProcessingStages(
+        key: String?,
+        section: String,
+    ): List<StageInfo> = NativeLibrary.getPostProcessingStages(key, section)?.toList().orEmpty()
+
+    override fun addPostProcessingStage(
+        key: String?,
+        section: String,
+        shader: String,
+    ) = NativeLibrary.addPostProcessingStage(key, section, shader)
+
+    override fun removePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+    ) = NativeLibrary.removePostProcessingStage(key, section, index)
+
+    override fun movePostProcessingStage(
+        key: String?,
+        section: String,
+        index: Int,
+        down: Boolean,
+    ) = NativeLibrary.movePostProcessingStage(key, section, index, down)
+
+    override fun setPostProcessingOption(
+        key: String?,
+        section: String,
+        index: Int,
+        name: String,
+        values: FloatArray,
+    ) = NativeLibrary.setPostProcessingOption(key, section, index, name, values)
+
+    override fun copyPostProcessingChain(
+        key: String,
+        section: String,
+    ) = NativeLibrary.copyPostProcessingChain(key, section)
+
+    override fun clearPostProcessingChain(
+        key: String,
+        section: String,
+    ) = NativeLibrary.clearPostProcessingChain(key, section)
+
+    override fun postProcessingUsesOpenGLES(key: String?) = NativeLibrary.postProcessingUsesOpenGLES(key)
+
+    override fun reloadPostProcessingShaders() = NativeLibrary.reloadPostProcessingShaders()
 
     override fun updateGameControllers(key: String) = NativeLibrary.updateGameControllers(key)
 

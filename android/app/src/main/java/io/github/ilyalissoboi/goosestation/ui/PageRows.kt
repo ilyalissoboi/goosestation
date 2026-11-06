@@ -152,11 +152,21 @@ fun Names(
     note: String? = null,
     modifier: Modifier = Modifier,
     notes: Map<String, String> = emptyMap(),
+    enabled: Boolean = true,
 ) {
     val choices = names[setting.list].orEmpty().map { it.withNote(notes[it.value]) }
     // A game's own value and the global one are each offered, as themselves, when the core doesn't name them.
     val shown = if (values.isGame) offered(offered(choices, values.global(setting)), values[setting]) else choices
-    Choices(values, onChange, label, setting, offered(shown, values[setting]), note = note, modifier = modifier)
+    Choices(
+        values,
+        onChange,
+        label,
+        setting,
+        offered(shown, values[setting]),
+        note = note,
+        modifier = modifier,
+        enabled = enabled,
+    )
 }
 
 /**

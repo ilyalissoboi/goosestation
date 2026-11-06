@@ -10,7 +10,9 @@ import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
+import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
@@ -38,10 +40,12 @@ enum class GamePage(
     Console("Console", "Region, CPU, CD-ROM speed"),
     Emulation("Emulation", "Speed, frame pacing, rewind, run-ahead"),
     Graphics("Graphics", "Renderer, enhancements, display, on-screen display"),
+    PostProcessing("Post-processing", "Shaders over the picture"),
     Audio("Audio", "Volume, latency"),
     Controllers("Controllers", "Multitap, each port's type and its settings"),
     MemoryCards("Memory cards", "Card types and shared cards"),
     Achievements("Achievements", "Hardcore mode, messages"),
+    Advanced("Advanced", "Save states, CD-ROM and CPU tweaks"),
     ;
 
     /** What the page's rows write, counted as the game's own settings. */
@@ -54,8 +58,11 @@ enum class GamePage(
                 Audio -> AudioSettings.all
                 // Read with its pads' types (readControllers), and counted by them.
                 Controllers -> emptyList()
+                // Its chains, read by its own PostProcessingPage, and counted as one row each.
+                PostProcessing -> emptyList()
                 MemoryCards -> MemoryCardSettings.GAME
                 Achievements -> AchievementsSettings.all
+                Advanced -> AdvancedSettings.GAME
             }
 
     /** What the page reads: its rows, and what they depend on, such as whether hardcore mode is on. */
@@ -175,6 +182,10 @@ class GameSettingsPages(
     var vulkanFailed by mutableStateOf(false)
         private set
 
+    /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
+    var fastmemAvailable by mutableStateOf(true)
+        private set
+
     /** What Emulation's rewind states take, as the core said when that page was last read. */
     var rewindUsage by mutableStateOf<RewindUsage?>(null)
         private set
@@ -182,6 +193,9 @@ class GameSettingsPages(
     /** The Controllers page's pads and their types' settings, as last read; null until read. */
     var controllers by mutableStateOf<GameControllers?>(null)
         private set
+
+    /** The game's Post-processing page, while it shows. */
+    val postProcessing = PostProcessingPage(scope, core, api, global, layer)
 
     private val shown = mutableStateMapOf<GamePage, SettingValues>()
 
@@ -219,12 +233,14 @@ class GameSettingsPages(
         summary = null
         controllers = null
         shown.clear()
+        postProcessing.close()
     }
 
     /** Shows [page], once its values are read. */
     fun openPage(page: GamePage) {
-        if (game == null) return
+        val game = game ?: return
         this.page = page
+        if (page == GamePage.PostProcessing) return postProcessing.open(game.serial, running)
         shown.remove(page)
         read(page)
     }
@@ -233,6 +249,11 @@ class GameSettingsPages(
     fun closePage() {
         cameFrom = page ?: return
         page = null
+        if (cameFrom == GamePage.PostProcessing) {
+            postProcessing.close()
+            // Its edits don't go through change(): the hub's count is read again.
+            readSummary()
+        }
     }
 
     /** Saves [page]'s change to [new], only what changed, then applies it in the running game. */
@@ -294,6 +315,7 @@ class GameSettingsPages(
     fun reloadShown() {
         if (game == null) return
         readSummary()
+        if (page == GamePage.PostProcessing) postProcessing.reread()
         page?.let { if (it in shown) read(it) }
     }
 
@@ -327,15 +349,25 @@ class GameSettingsPages(
             } else {
                 emptySet()
             }
+        // A chain's keys: its own section's, and its stages' ("PostProcessing/Stage1").
+        val chainKeys =
+            Chain.entries.associateWith { chain ->
+                keys
+                    .filter { (section, _) ->
+                        section == chain.section || section.startsWith("${chain.section}/")
+                    }.toSet()
+            }
         val counts =
             GamePage.entries.associateWith { page ->
-                if (page == GamePage.Controllers) {
-                    controllerKeys.size
-                } else {
-                    page.rows.count { (it.section to it.key) in keys }
+                when (page) {
+                    GamePage.Controllers -> controllerKeys.size
+                    GamePage.PostProcessing -> chainKeys.values.count { it.isNotEmpty() }
+                    else -> page.rows.count { (it.section to it.key) in keys }
                 }
             }
-        val shownKeys = GamePage.entries.flatMap { page -> page.rows.map { it.section to it.key } }.toSet()
+        val shownKeys =
+            GamePage.entries.flatMap { page -> page.rows.map { it.section to it.key } }.toSet() +
+                chainKeys.values.flatten()
         val others = keys.count { it !in shownKeys && it !in controllerKeys && it !in FLAGS }
         return GameSummary(counts, others, api.getGameInputProfile(key))
     }
@@ -373,6 +405,7 @@ class GameSettingsPages(
                         names = known.ifEmpty { NameList.entries.associateWith { api.getSettingNames(it.kind) } },
                         values = controllers?.first ?: SettingValues.readGame(global, layer(key), page.settings),
                         vulkanFailed = page == GamePage.Graphics && api.isVulkanFailed(),
+                        fastmemAvailable = page != GamePage.Advanced || api.isFastmemAvailable(),
                         sharedCards = if (page == GamePage.MemoryCards) api.getSharedCardNames() else null,
                         controllers = controllers?.second,
                     )
@@ -381,6 +414,7 @@ class GameSettingsPages(
             pageReading[page] = false
             names = loaded.names
             if (page == GamePage.Graphics) vulkanFailed = loaded.vulkanFailed
+            if (page == GamePage.Advanced) fastmemAvailable = loaded.fastmemAvailable
             loaded.sharedCards?.let { sharedCards = it }
             loaded.controllers?.let { controllers = it }
             if (page == GamePage.Emulation) {
@@ -395,6 +429,7 @@ class GameSettingsPages(
         val names: CoreNames,
         val values: SettingValues,
         val vulkanFailed: Boolean,
+        val fastmemAvailable: Boolean,
         val sharedCards: List<String>?,
         val controllers: GameControllers? = null,
     )

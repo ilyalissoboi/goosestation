@@ -273,7 +273,7 @@ class AchievementsScreenTest {
             GooseStationTheme {
                 var values by remember { mutableStateOf(gamePageValues(AchievementsSettings.all)) }
                 CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", true, hardcoreActive)) {
-                    SettingsPage("Achievements", onBack = {}) { AchievementRows(values) { values = it } }
+                    SettingsPage("Achievements", onBack = {}) { AchievementRows(values, onChange = { values = it }) }
                 }
             }
         }

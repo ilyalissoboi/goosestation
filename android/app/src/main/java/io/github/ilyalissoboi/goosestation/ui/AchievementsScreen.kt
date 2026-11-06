@@ -166,12 +166,13 @@ const val HARDCORE_WAIT_NOTE = "Change it before the game starts: now it would e
  * The Achievements page's switches and the messages' times while they show, from [values], each change as the whole
  * values with that setting changed ([onChange]); on a game's page, a game's rows. In a running game (the game page's
  * [LocalGameContext]), hardcore says when it applies, and while hardcore mode is on, Encore, Spectator and Test
- * unofficial achievements wait for the next start: changing them now would end it.
+ * unofficial achievements wait for the next start: changing them now would end it. [firstModifier] is the first row's.
  */
 @Composable
 fun AchievementRows(
     values: SettingValues,
     onChange: (SettingValues) -> Unit,
+    firstModifier: Modifier = Modifier,
 ) {
     val game = LocalGameContext.current
     val running = game?.running == true
@@ -182,6 +183,7 @@ fun AchievementRows(
         "Hardcore mode",
         AchievementsSettings.HARDCORE,
         note = if (running) NextStart.HARDCORE_NOTE else HARDCORE_NOTE,
+        modifier = firstModifier,
     )
     // One row for both kinds of message, as one choice on a game's page.
     val messages = AchievementsSettings.messages(values)

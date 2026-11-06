@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -59,6 +60,9 @@ import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.GamePage
+import io.github.ilyalissoboi.goosestation.app.GameQuestion
+import io.github.ilyalissoboi.goosestation.app.GameSummary
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
@@ -98,6 +102,8 @@ import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
+import io.github.ilyalissoboi.goosestation.ui.components.GameContext
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertTrue
@@ -126,6 +132,9 @@ class OrientationLayoutTest {
     }
 
     private companion object {
+        val GAME = GameEntry("/games/padtest.psexe", "Pad Test", "SLUS-00001", "NTSC-U", 0, 0, null)
+        val GAME_SUMMARY = GameSummary(mapOf(GamePage.Graphics to 2), others = 4)
+
         val HOTKEYS =
             listOf(
                 PadBinding(
@@ -957,6 +966,44 @@ class OrientationLayoutTest {
                 ),
             lists = mapOf("Output volume" to ("0%" to "200%")),
         )
+
+    @Test
+    fun aGamesHub() {
+        eachConfig({ GameSettingsScreen(GAME, GAME_SUMMARY, null, null, {}, {}, {}, {}, {}) }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+            assertShows("and 4 this app doesn't show")
+            pressUntilFocused(Key.DirectionDown, "Clear settings")
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionUp, "Console")
+        }
+    }
+
+    @Test
+    fun aGamesHubAsksToClear() {
+        eachConfig({ GameQuestionPanel(GameQuestion.Clear, GAME.title, others = 4, onConfirm = {}, onCancel = {}) }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("Cancel"))
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun aGamesGraphicsPageThroughItsRows() {
+        eachConfig({
+            var values by remember {
+                mutableStateOf(gamePageValues(GraphicsSettings.all, game = mapOf("GPU/ResolutionScale" to "4")))
+            }
+            CompositionLocalProvider(LocalGameContext provides GameContext(GAME.title, running = true, false)) {
+                GraphicsScreen(values, SampleNames.ALL, vulkanFailed = false, onChange = { values = it }, onBack = {})
+            }
+        }) {
+            assertTextsLaidOut()
+            assertShows(SET_FOR_GAME)
+            pressUntilFocused(Key.DirectionDown, "VRAM write replacements")
+            assertFocusedInView()
+        }
+    }
 
     @Test
     fun theHubWithTheCoreReady() {

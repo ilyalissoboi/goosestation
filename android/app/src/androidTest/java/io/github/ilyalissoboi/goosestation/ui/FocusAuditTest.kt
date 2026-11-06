@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -32,6 +33,9 @@ import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.GamePage
+import io.github.ilyalissoboi.goosestation.app.GameQuestion
+import io.github.ilyalissoboi.goosestation.app.GameSummary
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
@@ -73,6 +77,8 @@ import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
+import io.github.ilyalissoboi.goosestation.ui.components.GameContext
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertThrows
@@ -86,6 +92,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class FocusAuditTest {
     private companion object {
+        val GAME = GameEntry("/games/padtest.psexe", "Pad Test", "SLUS-00001", "NTSC-U", 0, 0, null)
+        val GAME_SUMMARY = GameSummary(mapOf(GamePage.Graphics to 2), others = 4)
+
         val GAMES =
             (1..12).map { n ->
                 GameEntry(
@@ -283,6 +292,47 @@ class FocusAuditTest {
     @Test
     fun emulationPage() {
         show { EmulationScreen(pageValues(EmulationSettings.all), null, onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameSettingsHub() {
+        show { GameSettingsScreen(GAME, GAME_SUMMARY, null, null, {}, {}, {}, {}, {}) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameSettingsCopyQuestion() {
+        show { GameSettingsScreen(GAME, GAME_SUMMARY, null, GameQuestion.Copy, {}, {}, {}, {}, {}) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameSettingsClearQuestion() {
+        show { GameSettingsScreen(GAME, GAME_SUMMARY, null, GameQuestion.Clear, {}, {}, {}, {}, {}) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aGamesGraphicsPage() {
+        show {
+            CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", running = true, false)) {
+                GraphicsScreen(
+                    values = gamePageValues(GraphicsSettings.all, game = mapOf("GPU/ResolutionScale" to "4")),
+                    names = SampleNames.ALL,
+                    vulkanFailed = false,
+                    onChange = {},
+                    onBack = {},
+                )
+            }
+        }
+        rule.assertControllerReady()
+
+        // The renderer's choices, Use global first, open under it.
+        press(Key.Enter)
         rule.assertControllerReady()
     }
 

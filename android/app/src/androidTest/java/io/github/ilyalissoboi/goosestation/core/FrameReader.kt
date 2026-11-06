@@ -85,7 +85,9 @@ class FrameReader(
             require(a.size == b.size)
             val count =
                 a.indices.count { i ->
-                    (0 until 24 step 8).any { shift -> abs((a[i] ushr shift and 0xFF) - (b[i] ushr shift and 0xFF)) > 48 }
+                    (0 until 24 step 8).any { shift ->
+                        abs((a[i] ushr shift and 0xFF) - (b[i] ushr shift and 0xFF)) > 48
+                    }
                 }
             return count.toDouble() / a.size
         }

@@ -202,6 +202,81 @@ fun <T> Choices(
     )
 }
 
+/**
+ * A [CyclerRow] whose value is made of several [settings] ([value] reads it, [write] writes it), of [choices]. On a
+ * game's page it uses the global setting as a whole: its first choice is "Use global (<the value they give>)",
+ * selected while the game sets none of them, and it's marked when the game sets any.
+ */
+@Composable
+fun <T> GroupChoices(
+    values: SettingValues,
+    onChange: (SettingValues) -> Unit,
+    label: String,
+    settings: List<Setting<*>>,
+    choices: List<Choice<T>>,
+    value: (SettingValues) -> T,
+    write: (SettingValues, T) -> SettingValues,
+    note: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    if (!values.isGame) {
+        return CyclerRow(
+            label,
+            choices,
+            value(values),
+            onSelect = { onChange(write(values, it)) },
+            modifier = modifier,
+            note = note,
+        )
+    }
+    val global = value(values.withGlobal(*settings.toTypedArray()))
+    val globalLabel = choices.firstOrNull { it.value == global }?.label ?: global.toString()
+    val set = settings.any(values::isSet)
+    CyclerRow<T?>(
+        label,
+        listOf(Choice<T?>(null, useGlobalLabel(globalLabel))) + choices.map { Choice<T?>(it.value, it.label, it.note) },
+        if (set) value(values) else null,
+        onSelect = { picked ->
+            @Suppress("UNCHECKED_CAST")
+            onChange(if (picked == null) values.withGlobal(*settings.toTypedArray()) else write(values, picked as T))
+        },
+        modifier = modifier,
+        note = note,
+        mark = gameMark(values, *settings.toTypedArray()),
+    )
+}
+
+/**
+ * A [NumberRow] whose number is made of several [settings] ([value] reads it, [write] writes it), on [scale]. On a
+ * game's page it uses the global setting as a whole, as [GroupChoices] does.
+ */
+@Composable
+fun GroupNumber(
+    values: SettingValues,
+    onChange: (SettingValues) -> Unit,
+    label: String,
+    settings: List<Setting<*>>,
+    scale: NumberScale,
+    value: (SettingValues) -> Int,
+    write: (SettingValues, Int) -> SettingValues,
+    note: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    val all = settings.toTypedArray()
+    NumberRow(
+        label,
+        value(values),
+        scale,
+        onChange = { onChange(write(values, it)) },
+        modifier = modifier,
+        note = note,
+        mark = gameMark(values, *all),
+        global = if (values.isGame) value(values.withGlobal(*all)) else null,
+        followsGlobal = values.isGame && settings.none(values::isSet),
+        onUseGlobal = if (values.isGame) ({ onChange(values.withGlobal(*all)) }) else null,
+    )
+}
+
 private const val ON = "On"
 private const val OFF = "Off"
 

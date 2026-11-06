@@ -63,6 +63,7 @@ import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
@@ -523,6 +524,35 @@ class FocusAuditTest {
                     ),
             )
         }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingChains() {
+        val model =
+            SamplePostProcessing().apply {
+                stages(Chain.Display, SamplePostProcessing.crtLottes, SamplePostProcessing.flip)
+                running = true
+            }
+        show { PostProcessingScreen(model, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingAdd() {
+        val model = SamplePostProcessing().apply { openAdd(Chain.Internal) }
+        show { PostProcessingScreen(model, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingStage() {
+        val model =
+            SamplePostProcessing().apply {
+                stages(Chain.Display, SamplePostProcessing.flip, SamplePostProcessing.everyRow)
+                openStage(Chain.Display, 1)
+            }
+        show { PostProcessingScreen(model, onBack = {}) }
         rule.assertControllerReady()
     }
 

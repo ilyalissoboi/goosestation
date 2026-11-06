@@ -32,6 +32,74 @@ data class ChainView(
     val globalEnabled: Boolean,
 )
 
+/** What the Post-processing pages show and do: [PostProcessingPage]'s, which the pages' tests stand in for. */
+interface PostProcessingModel {
+    /** The game whose chains show; null for settings.ini's. */
+    val key: String?
+
+    /** Whether that game is running: each change applies at once, and its shaders can be reloaded. */
+    val running: Boolean
+
+    /** Each chain, as last read or changed; empty until read. */
+    val chains: Map<Chain, ChainView>
+
+    /** The shaders that can be added: those that load, and can run on [gles]. */
+    val shaders: List<Shader>
+
+    /** Whether post-processing runs on OpenGL ES. */
+    val gles: Boolean
+
+    /** The stage whose page shows. */
+    val stage: Pair<Chain, Int>?
+
+    /** The chain whose Add page shows. */
+    val adding: Chain?
+
+    /** What the chains page focuses as it comes back: a stage, or one past a chain's last, its Add row. */
+    val focus: Pair<Chain, Int>?
+
+    fun setEnabled(
+        chain: Chain,
+        on: Boolean,
+    )
+
+    fun openAdd(chain: Chain)
+
+    fun closeAdd()
+
+    fun add(
+        chain: Chain,
+        shader: Shader,
+    )
+
+    fun openStage(
+        chain: Chain,
+        index: Int,
+    )
+
+    fun closeStage()
+
+    fun remove(
+        chain: Chain,
+        index: Int,
+    )
+
+    fun move(
+        chain: Chain,
+        index: Int,
+        down: Boolean,
+    )
+
+    fun setOption(
+        chain: Chain,
+        index: Int,
+        option: ShaderOptionInfo,
+        values: List<Float>,
+    )
+
+    fun reload()
+}
+
 /**
  * The Post-processing pages: both chains of settings.ini ([key] null) or of a game's file, read and edited through
  * [api] and [global] or [layer] (the game's file) on [core], one call at a time, and applied straight away in a
@@ -44,32 +112,32 @@ class PostProcessingPage(
     private val api: CoreApi,
     private val global: CoreSettings,
     private val layer: (String) -> LayerSettings,
-) {
-    var key by mutableStateOf<String?>(null)
+) : PostProcessingModel {
+    override var key by mutableStateOf<String?>(null)
         private set
 
-    var running by mutableStateOf(false)
+    override var running by mutableStateOf(false)
         private set
 
     /** Each chain, as last read or changed; empty until read. */
-    var chains by mutableStateOf<Map<Chain, ChainView>>(emptyMap())
+    override var chains by mutableStateOf<Map<Chain, ChainView>>(emptyMap())
         private set
 
     /** The shaders that can be added: those that load, and can run on [gles]. */
-    var shaders by mutableStateOf<List<Shader>>(emptyList())
+    override var shaders by mutableStateOf<List<Shader>>(emptyList())
         private set
 
     /** Whether post-processing runs on OpenGL ES, as last read. */
-    var gles by mutableStateOf(false)
+    override var gles by mutableStateOf(false)
         private set
 
-    var stage by mutableStateOf<Pair<Chain, Int>?>(null)
+    override var stage by mutableStateOf<Pair<Chain, Int>?>(null)
         private set
 
-    var adding by mutableStateOf<Chain?>(null)
+    override var adding by mutableStateOf<Chain?>(null)
         private set
 
-    var focus by mutableStateOf<Pair<Chain, Int>?>(null)
+    override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
         private set
 
     // Changes as each read is asked for and each edit is made: a read that comes back after either is dropped.
@@ -102,7 +170,7 @@ class PostProcessingPage(
     /** Reads the chains again, as their file changed under them; the page shown stays. */
     fun reread() = read()
 
-    fun setEnabled(
+    override fun setEnabled(
         chain: Chain,
         on: Boolean,
     ) {
@@ -112,19 +180,19 @@ class PostProcessingPage(
         edit { settingsFor(key).let { chain.enabled.write(it, on) } }
     }
 
-    fun openAdd(chain: Chain) {
+    override fun openAdd(chain: Chain) {
         adding = chain
     }
 
     /** Back from the Add page, to its chain's Add row. */
-    fun closeAdd() {
+    override fun closeAdd() {
         val chain = adding ?: return
         focus = chain to (chains[chain]?.stages?.size ?: 0)
         adding = null
     }
 
     /** Adds [shader] as [chain]'s last stage and goes back, focusing it. */
-    fun add(
+    override fun add(
         chain: Chain,
         shader: Shader,
     ) {
@@ -135,7 +203,7 @@ class PostProcessingPage(
         }
     }
 
-    fun openStage(
+    override fun openStage(
         chain: Chain,
         index: Int,
     ) {
@@ -143,13 +211,13 @@ class PostProcessingPage(
     }
 
     /** Back from a stage's page, to its row. */
-    fun closeStage() {
+    override fun closeStage() {
         focus = stage ?: return
         stage = null
     }
 
     /** Removes the stage and goes back, focusing the one after it (or the chain's Add row). */
-    fun remove(
+    override fun remove(
         chain: Chain,
         index: Int,
     ) {
@@ -160,7 +228,7 @@ class PostProcessingPage(
     }
 
     /** Moves the stage, its page following it. */
-    fun move(
+    override fun move(
         chain: Chain,
         index: Int,
         down: Boolean,
@@ -174,7 +242,7 @@ class PostProcessingPage(
     }
 
     /** Sets the stage's [option] to [values], shown straight away. */
-    fun setOption(
+    override fun setOption(
         chain: Chain,
         index: Int,
         option: ShaderOptionInfo,
@@ -195,7 +263,7 @@ class PostProcessingPage(
     }
 
     /** Has the running game load its shaders again from their files. */
-    fun reload() {
+    override fun reload() {
         if (!running) return
         scope.launch(core) { api.reloadPostProcessingShaders() }
     }

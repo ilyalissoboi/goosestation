@@ -94,6 +94,7 @@ import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
+import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
@@ -945,6 +946,58 @@ class OrientationLayoutTest {
                     "Multisampling" to ("Off" to "8x SSAA"),
                     "Rotation" to ("No Rotation" to "Rotate 90° (Clockwise)"),
                 ),
+        )
+
+    @Test
+    fun thePostProcessingChains() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            stages(Chain.Display, SamplePostProcessing.crtLottes, SamplePostProcessing.flip)
+                            stages(Chain.Internal, SamplePostProcessing.filmGrain)
+                            running = true
+                        }
+                    }
+                PostProcessingScreen(model, onBack = {})
+            },
+            rows =
+                listOf(
+                    "Post-processing",
+                    "1. crt-lottes",
+                    "2. simple-flip",
+                    "Add a shader",
+                    "1. FilmGrain2",
+                    "Reload shaders",
+                ),
+        )
+
+    @Test
+    fun thePostProcessingAddPage() =
+        settingsPageFits(
+            {
+                val model = remember { SamplePostProcessing().apply { openAdd(Chain.Display) } }
+                PostProcessingScreen(model, onBack = {})
+            },
+            rows = listOf("crt-lottes", "FilmGrain2", "simple-flip"),
+        )
+
+    @Test
+    fun aPostProcessingStagesPage() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            stages(Chain.Display, SamplePostProcessing.everyRow)
+                            openStage(Chain.Display, 0)
+                        }
+                    }
+                PostProcessingScreen(model, onBack = {})
+            },
+            rows = listOf("Remove", "Screen Warp X", "Tint (Red)", "Tint (Green)", "Curvature", "Mask"),
+            lists = mapOf("Mask" to ("Off" to "Aperture")),
         )
 
     @Test

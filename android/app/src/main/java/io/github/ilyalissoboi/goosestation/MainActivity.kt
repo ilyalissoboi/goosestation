@@ -45,6 +45,7 @@ import io.github.ilyalissoboi.goosestation.ui.MacroScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.PortScreen
+import io.github.ilyalissoboi.goosestation.ui.PostProcessingScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
@@ -137,6 +138,11 @@ class MainActivity : ComponentActivity() {
                                 onBack = AppController::closeSettingsPage,
                             )
                         }
+                    Screen.PostProcessing ->
+                        PostProcessingScreen(
+                            AppController.postProcessingPage,
+                            onBack = AppController::closeSettingsPage,
+                        )
                     Screen.Audio ->
                         CorePageRoute(CorePage.Audio) { values, onChange ->
                             AudioScreen(

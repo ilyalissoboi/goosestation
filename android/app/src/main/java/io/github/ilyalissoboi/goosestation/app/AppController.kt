@@ -83,6 +83,7 @@ enum class Screen(
     Console(SettingsEntry.Console),
     Emulation(SettingsEntry.Emulation),
     Graphics(SettingsEntry.Graphics),
+    PostProcessing(SettingsEntry.PostProcessing),
     Audio(SettingsEntry.Audio),
     Achievements(SettingsEntry.Achievements),
     MemoryCards(SettingsEntry.MemoryCards),
@@ -191,6 +192,10 @@ object AppController : NativeCallbacks {
 
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+
+    /** The Post-processing pages' chains, settings.ini's. */
+    val postProcessingPage =
+        PostProcessingPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
 
     /** A game's own settings, from its tile in the library. */
     val gameSettingsPages =
@@ -676,6 +681,7 @@ object AppController : NativeCallbacks {
             }
             SettingsEntry.Bios -> settingsPages.loadBios()
             SettingsEntry.Controllers -> controllersPage.open()
+            SettingsEntry.PostProcessing -> postProcessingPage.open(null, running = false)
             SettingsEntry.Folders -> {}
         }
         screen = Screen.entries.first { it.page == entry }
@@ -687,6 +693,7 @@ object AppController : NativeCallbacks {
         // Its own way back, which a data folder change under way keeps from running.
         if (page == SettingsEntry.Folders) return closeFolders()
         if (page == SettingsEntry.Controllers) controllersPage.close()
+        if (page == SettingsEntry.PostProcessing) postProcessingPage.close()
         settingsEntry = page
         screen = Screen.Settings
     }
@@ -1398,6 +1405,7 @@ object AppController : NativeCallbacks {
             }
         refreshed?.let { games = it }
         if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
+        if (StartupStep.ReloadSettings in steps && screen == Screen.PostProcessing) postProcessingPage.reread()
         // settings.ini, or a game's own file, pulled from the data folder while that game's pages show.
         if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) {
             gameSettingsPages.reloadShown()

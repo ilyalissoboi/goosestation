@@ -326,13 +326,22 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   the art loads; then the title (2 lines) and region · play time. Tiles are at least 152 dp wide, 16 dp apart across
   and 24 down.
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.
+- `GameSettingsScreen`: a game's own settings hub, a `SettingsPage` titled "Game settings" under the game's title as
+  an `Eyebrow`: the serial and region in `body` `ink-muted`, what its file sets in `body` `ink`, a `NavRow` per page
+  (its summary the page's count, "2 set for this game", or what's on it), then Copy global settings (`Secondary`)
+  and Clear settings (`Danger`). Each asks in an `OverlayPanel` (`GameQuestionPanel`): the question, then its answer
+  (`Danger`) and Cancel (`Ghost`, focused); the focus goes back to the button once it closes. In a game it takes the
+  menu's place over the paused game.
+- The library's foot: `KeyHints` "A Play" and "Y Game settings", while it has games. Y, or a long press, on a game
+  opens its settings.
 - `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
   edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end, or
   under the label when they don't fit; focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line`
   divider before Reset console, and `KeyHints` at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
   A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Load state; Patch codes (`code`) follows
-  Screenshot, then Achievements (`trophy`, its value the progress, "14 of 40", or why it's off). In hardcore mode,
+  Screenshot, then Achievements (`trophy`, its value the progress, "14 of 40", or why it's off), then Settings
+  (`settings`, the game's own). In hardcore mode,
   Load state, Patch codes and Fast forward are disabled with "Off in hardcore mode" as their value. One side panel
   shows at a time.
   Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),

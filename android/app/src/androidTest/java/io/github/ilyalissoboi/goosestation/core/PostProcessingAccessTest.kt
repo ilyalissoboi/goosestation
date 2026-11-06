@@ -54,6 +54,19 @@ class PostProcessingAccessTest {
         assertEquals("GLSL", shaders()["mine"])
     }
 
+    // As TryLoadingShader() looks: the data folder's .glsl before the resources' .fx, so it's GLSL.
+    @Test
+    fun aUserGlslShadowsAShippedReShadeShader() {
+        val resources = Resources.extract(context)
+        File(dataRoot, "shaders").mkdirs()
+        File(resources, "shaders/simple-flip.glsl").copyTo(File(dataRoot, "shaders/FilmGrain2.glsl"))
+        initialize()
+
+        assertEquals("GLSL", shaders()["FilmGrain2"])
+        NativeLibrary.addPostProcessingStage(null, DISPLAY, "FilmGrain2")
+        assertEquals("GLSL", NativeLibrary.getPostProcessingStages(null, DISPLAY)!![0].kind)
+    }
+
     @Test
     fun addWritesDesktopsKeys() {
         initialize()

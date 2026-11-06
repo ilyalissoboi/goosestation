@@ -898,15 +898,17 @@ static T ReadChainLayer(const std::optional<std::string>& key, T default_value, 
   return read(*AndroidHost::s_base_settings_interface);
 }
 
-// As TryLoadingShader() looks: a ReShade shader of that name first, in the data folder's shaders, then the resources'.
+// The kind of the file PostProcessing::TryLoadingShader() takes for name, in its order: the data folder's ReShade
+// shader, the data folder's GLSL one, then the resources' ReShade shader, else the resources' GLSL one.
 static const char* ShaderKind(const std::string& name)
 {
   const std::string fx = fmt::format("reshade" FS_OSPATH_SEPARATOR_STR "Shaders" FS_OSPATH_SEPARATOR_STR "{}.fx", name);
-  if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fx).c_str()) ||
-      FileSystem::FileExists(Path::Combine(EmuFolders::Resources, Path::Combine("shaders", fx)).c_str()))
-  {
+  if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fx).c_str()))
     return "ReShade";
-  }
+  if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fmt::format("{}.glsl", name)).c_str()))
+    return "GLSL";
+  if (FileSystem::FileExists(Path::Combine(EmuFolders::Resources, Path::Combine("shaders", fx)).c_str()))
+    return "ReShade";
   return "GLSL";
 }
 

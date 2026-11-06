@@ -16,6 +16,8 @@
 #include "core/game_database.h"
 #include "core/game_list.h"
 #include "core/memory_card_image.h"
+#include "core/controller.h"
+#include "core/host.h"
 #include "core/settings.h"
 
 #include "util/audio_stream.h"
@@ -53,6 +55,8 @@ jmethodID s_on_game_started = nullptr;
 jmethodID s_on_game_stopped = nullptr;
 jmethodID s_on_error = nullptr;
 jmethodID s_on_binding_captured = nullptr;
+jmethodID s_on_hotkey = nullptr;
+jmethodID s_on_rumble = nullptr;
 jmethodID s_on_osd_message = nullptr;
 jmethodID s_on_fast_forward_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
@@ -253,16 +257,18 @@ jobjectArray ToPadBindingArray(JNIEnv* env, const std::optional<std::vector<Andr
     jstring name = ToJString(env, binding.name);
     jstring display_name = ToJString(env, binding.display_name);
     jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
+    jstring category = ToJString(env, binding.category);
     jobject entry = nullptr;
-    if (name && display_name && (value || !binding.binding.has_value()))
+    if (name && display_name && category && (value || !binding.binding.has_value()))
     {
       entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
-                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value);
+                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value, category);
       if (ClearException(env))
         entry = nullptr;
     }
 
-    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value)})
+    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value),
+                        static_cast<jobject>(category)})
     {
       if (ref)
         env->DeleteLocalRef(ref);
@@ -350,6 +356,26 @@ void AndroidHost::NotifyError(std::string_view message)
 void AndroidHost::NotifyBindingCaptured(std::string_view binding)
 {
   CallCallback(s_on_binding_captured, binding);
+}
+
+void AndroidHost::NotifyRumble(s32 device_id, float large, float small)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  env->CallVoidMethod(callbacks, s_on_rumble, static_cast<jint>(device_id), large, small);
+  ClearException(env.get());
+  env->DeleteLocalRef(callbacks);
+}
+
+void AndroidHost::NotifyHotkey(std::string_view name)
+{
+  CallCallback(s_on_hotkey, name);
 }
 
 void AndroidHost::NotifyOsdMessage(std::string_view key, std::string_view text, float seconds, const u32* image_pixels,
@@ -793,6 +819,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
   s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
   s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
+  s_on_hotkey = env->GetMethodID(s_callbacks_class, "onHotkey", "(Ljava/lang/String;)V");
+  s_on_rumble = env->GetMethodID(s_callbacks_class, "onRumble", "(IFF)V");
   s_on_osd_message =
     env->GetMethodID(s_callbacks_class, "onOsdMessage",
                      "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
@@ -820,7 +848,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_leaderboard =
     env->GetMethodID(s_callbacks_class, "onLeaderboard",
                      "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_osd_message ||
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey || !s_on_rumble ||
+      !s_on_osd_message ||
       !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
       !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
       !s_on_achievement_notification || !s_on_achievement_toast ||
@@ -974,7 +1003,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_pad_binding_constructor =
     env->GetMethodID(s_pad_binding_class, "<init>",
                      "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;"
-                     "Ljava/lang/String;)V");
+                     "Ljava/lang/String;Ljava/lang/String;)V");
   if (!s_pad_binding_constructor)
   {
     ClearException(env);
@@ -1308,6 +1337,24 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getSettingNames)(JNIEnv* env, jobject, jst
      [](auto& n) { AppendSettingNames(n, &AudioStream::GetStretchModeName, &AudioStream::GetStretchModeDisplayName); }},
     {"MemoryCardType",
      [](auto& n) { AppendSettingNames(n, &Settings::GetMemoryCardTypeName, &Settings::GetMemoryCardTypeDisplayName); }},
+    {"ControllerType",
+     [](auto& n) {
+       // Not those that need a pointer, which Android has none of.
+       for (auto& [name, display_name] : Controller::GetControllerTypeNames())
+       {
+         const Controller::ControllerInfo* info = Controller::GetControllerInfo(name);
+         if (!info || info->type == ControllerType::GunCon || info->type == ControllerType::Justifier ||
+             info->type == ControllerType::PlayStationMouse)
+         {
+           continue;
+         }
+
+         n.push_back(std::move(name));
+         n.push_back(std::move(display_name));
+       }
+     }},
+    {"MultitapMode",
+     [](auto& n) { AppendSettingNames(n, &Settings::GetMultitapModeName, &Settings::GetMultitapModeDisplayName); }},
   };
 
   std::vector<std::string> names;
@@ -2419,10 +2466,148 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstr
   return ToPadBindingArray(env, AndroidHost::GetPadBindings(FromJString(env, descriptor)));
 }
 
-NATIVE_LIBRARY_FUNCTION(jstring, getPort1ControllerType)(JNIEnv* env, jobject)
+NATIVE_LIBRARY_FUNCTION(jstring, getPortType)(JNIEnv* env, jobject, jint pad)
 {
-  const std::optional<std::string> type = AndroidHost::GetPort1ControllerType();
+  if (pad < 0)
+    return nullptr;
+
+  const std::optional<std::string> type = AndroidHost::GetPortType(static_cast<u32>(pad));
   return type.has_value() ? ToJString(env, type.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getRumbleStrength)(JNIEnv* env, jobject, jstring descriptor)
+{
+  const std::optional<u32> percent = AndroidHost::GetRumbleStrength(FromJString(env, descriptor));
+  return percent.has_value() ? static_cast<jint>(percent.value()) : -1;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setRumbleStrength)(JNIEnv* env, jobject, jstring descriptor, jint percent)
+{
+  AndroidHost::SetRumbleStrength(FromJString(env, descriptor), static_cast<u32>(std::clamp<jint>(percent, 0, 100)));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setPadVibrationForTest)(JNIEnv*, jobject, jint pad, jfloat large, jfloat small)
+{
+  if (pad >= 0)
+    AndroidHost::SetPadVibrationForTest(static_cast<u32>(pad), large, small);
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, undoLoadState)(JNIEnv*, jobject)
+{
+  return AndroidHost::UndoLoadState() ? JNI_TRUE : JNI_FALSE;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setPortType)(JNIEnv* env, jobject, jint pad, jstring type)
+{
+  if (pad >= 0)
+    AndroidHost::SetPortType(static_cast<u32>(pad), FromJString(env, type));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getTypeInputs)(JNIEnv* env, jobject, jstring type)
+{
+  // What a macro can press: the type's buttons and axes, never a pointer or a motor.
+  std::vector<std::string> pairs;
+  const Controller::ControllerInfo* info = Controller::GetControllerInfo(FromJString(env, type));
+  for (const Controller::ControllerBindingInfo& bi :
+       info ? info->bindings : std::span<const Controller::ControllerBindingInfo>())
+  {
+    if (bi.type == InputBindingInfo::Type::Button || bi.type == InputBindingInfo::Type::Axis ||
+        bi.type == InputBindingInfo::Type::HalfAxis)
+    {
+      pairs.emplace_back(bi.name);
+      pairs.push_back(Host::TranslateToString(info->name, bi.display_name));
+    }
+  }
+
+  return ToNonNullStringArray(env, pairs);
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getTypeSettings)(JNIEnv* env, jobject, jstring type)
+{
+  // TypeSetting.parse()'s list: 11 strings a setting.
+  std::vector<std::string> flat;
+  const Controller::ControllerInfo* info = Controller::GetControllerInfo(FromJString(env, type));
+  for (const SettingInfo& si : info ? info->settings : std::span<const SettingInfo>())
+  {
+    const char* kind;
+    switch (si.type)
+    {
+      case SettingInfo::Type::Boolean:
+        kind = "Bool";
+        break;
+      case SettingInfo::Type::Integer:
+        kind = "Int";
+        break;
+      case SettingInfo::Type::IntegerList:
+        kind = "IntList";
+        break;
+      case SettingInfo::Type::Float:
+        kind = "Float";
+        break;
+      case SettingInfo::Type::String:
+      case SettingInfo::Type::Path:
+      default:
+        kind = "String";
+        break;
+    }
+
+    std::string options;
+    for (const char** option = si.options; option && *option; option++)
+    {
+      if (!options.empty())
+        options += '\n';
+      options += Host::TranslateToString(info->name, *option);
+    }
+
+    const auto str = [](const char* value) { return std::string(value ? value : ""); };
+    flat.push_back(kind);
+    flat.push_back(str(si.name));
+    flat.push_back(Host::TranslateToString(info->name, si.display_name));
+    flat.push_back(si.description ? Host::TranslateToString(info->name, si.description) : std::string());
+    flat.push_back(str(si.default_value));
+    flat.push_back(str(si.min_value));
+    flat.push_back(str(si.max_value));
+    flat.push_back(str(si.step_value));
+    flat.push_back(str(si.format));
+    flat.push_back(fmt::format("{}", si.multiplier));
+    flat.push_back(std::move(options));
+  }
+
+  return ToNonNullStringArray(env, flat);
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, getControllerPort)(JNIEnv* env, jobject, jstring descriptor)
+{
+  const std::optional<u32> pad = AndroidHost::GetControllerPort(FromJString(env, descriptor));
+  return pad.has_value() ? static_cast<jint>(pad.value()) : -1;
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setControllerPort)(JNIEnv* env, jobject, jstring descriptor, jint pad)
+{
+  if (pad >= 0)
+    AndroidHost::SetControllerPort(FromJString(env, descriptor), static_cast<u32>(pad));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getOfferedPorts)(JNIEnv* env, jobject)
+{
+  std::vector<std::string> pairs;
+  for (auto& [pad, label] : AndroidHost::GetOfferedPorts())
+  {
+    pairs.push_back(std::to_string(pad));
+    pairs.push_back(std::move(label));
+  }
+
+  return ToNonNullStringArray(env, pairs);
+}
+
+NATIVE_LIBRARY_FUNCTION(jfloat, getPadBindStateForTest)(JNIEnv* env, jobject, jint pad, jstring name)
+{
+  return (pad >= 0) ? AndroidHost::GetPadBindStateForTest(static_cast<u32>(pad), FromJString(env, name)) : 0.0f;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getMacroBindings)(JNIEnv* env, jobject, jstring descriptor)
+{
+  return ToPadBindingArray(env, AndroidHost::GetMacroBindings(FromJString(env, descriptor)));
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getHotkeyBindings)(JNIEnv* env, jobject, jstring descriptor)

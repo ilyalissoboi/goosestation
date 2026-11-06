@@ -93,8 +93,11 @@ import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
+import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertTrue
@@ -130,9 +133,30 @@ class OrientationLayoutTest {
                     "Toggle Fast Forward",
                     PadBindingKind.Button,
                     "Button109 & Android-1/Button99",
+                    "General",
                 ),
-                PadBinding("ToggleAnalogMode", "Toggle Analog Mode", PadBindingKind.Button, null),
-                PadBinding("Screenshot", "Save Screenshot", PadBindingKind.Button, "Button109 & Android-1/Button188"),
+                PadBinding(
+                    "Screenshot",
+                    "Save Screenshot",
+                    PadBindingKind.Button,
+                    "Button109 & Android-1/Button188",
+                    "General",
+                ),
+                PadBinding(
+                    "IncreaseResolutionScale",
+                    "Increase Resolution Scale",
+                    PadBindingKind.Button,
+                    null,
+                    "Graphics",
+                ),
+                PadBinding(
+                    "SaveStateAndSelectNextSlot",
+                    "Save State and Select Next Slot",
+                    PadBindingKind.Button,
+                    null,
+                    "Save States",
+                ),
+                PadBinding("ToggleAnalogMode", "Toggle Analog Mode", PadBindingKind.Button, null, "Controller"),
             )
 
         val LONG_GAME =
@@ -1369,12 +1393,12 @@ class OrientationLayoutTest {
     private fun controllersWithTwoPads(glyphs: Boolean) {
         eachConfig({
             var selected by remember { mutableStateOf(LONG_PAD.descriptor) }
-            ControllersScreen(
+            PortScreen(
+                title = "Port 1",
                 controllers = listOf(PAD, LONG_PAD),
                 labels = emptyMap(),
                 selected = selected,
                 bindings = BINDINGS,
-                hotkeys = HOTKEYS,
                 bindingsFor = LONG_PAD.descriptor,
                 capturing = null,
                 secondsLeft = 0,
@@ -1391,7 +1415,6 @@ class OrientationLayoutTest {
             )
         }) {
             assertTextsLaidOut()
-            assertShows("Back, the Mode")
             assertTrue(focusedHas("Controller"))
             assertFocusedInView()
 
@@ -1408,22 +1431,178 @@ class OrientationLayoutTest {
             assertTrue(focusedHas("Clear"))
             assertFocusedInView()
             press(Key.DirectionLeft)
-            pressUntilFocused(Key.DirectionDown, "Analog mode")
-            assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "Reset to defaults")
-            assertShows("Every connected controller drives Port 1")
+            assertTextsLaidOut()
+            assertShows("Each controller on Port 1 keeps its own bindings.")
+        }
+    }
+
+    // The hub with two controllers (one with no motors), multitap on and every port.
+    @Test
+    fun theControllersHub() {
+        eachConfig({
+            ControllersScreen(
+                controllers = listOf(PAD.copy(motors = 2), LONG_PAD),
+                labels = emptyMap(),
+                ports = mapOf(LONG_PAD.descriptor to 4),
+                rumble = emptyMap(),
+                offered =
+                    (0..7).map {
+                        Choice(
+                            it,
+                            listOf(
+                                "Port 1A",
+                                "Port 2A",
+                                "Port 1B",
+                                "Port 1C",
+                                "Port 1D",
+                                "Port 2B",
+                                "Port 2C",
+                                "Port 2D",
+                            )[it],
+                        )
+                    },
+                portTypes = (0..7).associateWith { if (it == 0) "AnalogController" else "NeGconRumble" },
+                typeNames =
+                    listOf(
+                        Choice("AnalogController", "Analog Controller (DualShock)"),
+                        Choice("NeGconRumble", "NeGcon (Rumble)"),
+                    ),
+                multitap = pageValues(listOf(PortSettings.MULTITAP), "ControllerPorts/MultitapMode" to "BothPorts"),
+                multitapNames = listOf(Choice("BothPorts", "Enable on Ports 1 and 2")),
+                onPort = { _, _ -> },
+                onRumble = { _, _ -> },
+                onMultitap = {},
+                onOpenPort = {},
+                onOpenHotkeys = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas(PAD.name))
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Port 2D")
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "Select + a button")
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun theHotkeysPage() {
+        eachConfig({
+            HotkeysScreen(
+                controllers = listOf(PAD, LONG_PAD),
+                labels = emptyMap(),
+                selected = LONG_PAD.descriptor,
+                hotkeys = HOTKEYS,
+                hotkeysFor = LONG_PAD.descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCaptureHotkey = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("Controller"))
+            pressUntilFocused(Key.DirectionDown, "Save State and Select Next Slot")
+            assertFocusedInView()
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "Toggle Analog Mode")
+            assertFocusedInView()
+        }
+    }
+
+    // The longest Port page: NeGcon's sixteen settings, its bindings and macros, reached with the D-pad.
+    @Test
+    fun aPortWithNeGconsSettings() {
+        eachConfig({
+            PortScreen(
+                title = "Port 1A",
+                controllers = listOf(PAD, LONG_PAD),
+                labels = emptyMap(),
+                selected = LONG_PAD.descriptor,
+                bindings = BINDINGS,
+                bindingsFor = LONG_PAD.descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                glyphs = false,
+                type = "NeGcon",
+                typeNames = listOf(Choice("NeGcon", "NeGcon")),
+                typeSettings = NEGCON_SETTINGS,
+                values = portPageValues(NEGCON_SETTINGS, "Pad1/Macro4Binds" to "Cross & Circle & Square & Triangle"),
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("Controller type"))
+            pressUntilFocused(Key.DirectionDown, "L Button Scaling")
+            assertFocusedInView()
+            assertTextsLaidOut()
+            pressUntilFocused(Key.DirectionDown, "Macro 4")
+            assertFocusedInView()
+            assertTextsLaidOut()
+        }
+    }
+
+    @Test
+    fun aMacroPage() {
+        eachConfig({
+            MacroScreen(
+                title = "Macro 2 · Port 2C",
+                pad = 6,
+                macro = 2,
+                controllers = listOf(LONG_PAD),
+                labels = emptyMap(),
+                selected = LONG_PAD.descriptor,
+                triggers = listOf(PadBinding("Macro2", "Macro 2", PadBindingKind.Button, null)),
+                triggersFor = LONG_PAD.descriptor,
+                inputs = BINDINGS,
+                values = pageValues(MacroSettings.settings(6, 2)),
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onChange = {},
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas(LONG_PAD.name))
+            pressUntilFocused(Key.DirectionDown, "Press to toggle")
+            assertFocusedInView()
+            assertTextsLaidOut()
         }
     }
 
     @Test
     fun controllersWithGlyphsAtLargeText() {
         eachConfig({
-            ControllersScreen(
+            PortScreen(
+                title = "Port 1",
                 controllers = listOf(PAD),
                 labels = emptyMap(),
                 selected = PAD.descriptor,
                 bindings = BINDINGS,
-                hotkeys = HOTKEYS,
                 bindingsFor = PAD.descriptor,
                 capturing = null,
                 secondsLeft = 0,
@@ -1464,7 +1643,8 @@ class OrientationLayoutTest {
     private fun onePadThenNone(glyphs: Boolean) {
         val pads = mutableStateOf(listOf(PAD))
         eachConfig({
-            ControllersScreen(
+            PortScreen(
+                title = "Port 1",
                 controllers = pads.value,
                 labels = emptyMap(),
                 selected = pads.value.firstOrNull()?.descriptor,
@@ -1495,7 +1675,7 @@ class OrientationLayoutTest {
             pads.value = emptyList()
             rule.waitForIdle()
             assertTextsLaidOut()
-            assertTrue(focusedHas("Connect a controller"))
+            assertTrue(focusedHas("No controller is on Port 1"))
             assertFocusedInView()
         }
     }
@@ -1509,7 +1689,8 @@ class OrientationLayoutTest {
     private fun capturePrompt(glyphs: Boolean) {
         val capturing: MutableState<String?> = mutableStateOf(null)
         eachConfig({
-            ControllersScreen(
+            PortScreen(
+                title = "Port 1",
                 controllers = listOf(LONG_PAD),
                 labels = emptyMap(),
                 selected = LONG_PAD.descriptor,

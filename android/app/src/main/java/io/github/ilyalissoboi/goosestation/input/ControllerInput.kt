@@ -16,13 +16,18 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
-/** A controller as the Controllers page lists it: its first device ID, its name, and its [descriptor], its key. */
+/**
+ * A controller as the Controllers page lists it: its first device ID, its name, its [descriptor], its key, and how many
+ * [motors] Android can drive on it (0 for none, [DeviceMotors]).
+ */
 data class ConnectedController(
     val deviceId: Int,
     val name: String,
     val descriptor: String,
+    val motors: Int = 0,
 )
 
 /**
@@ -47,6 +52,12 @@ class ControllerInput(
     // For the keys' next deadline: a hold's end, or a late key-up's.
     private val timer = Runnable { onTimer() }
     private val mutableConnected = MutableStateFlow(emptyList<ConnectedController>())
+
+    // Each device's motors, for the rumble's own thread.
+    private val motors = ConcurrentHashMap<Int, Motors>()
+
+    /** The motors of the device with [deviceId], while it's connected; safe on any thread. */
+    fun motorsFor(deviceId: Int): Motors? = motors[deviceId]
 
     /** The controllers reported to the core, one per descriptor (its first device), in the order they connected. */
     override val connected: StateFlow<List<ConnectedController>> = mutableConnected.asStateFlow()
@@ -220,6 +231,7 @@ class ControllerInput(
         // Even one never reported to the core: its motion is remembered all the same.
         axisMemory.forget(deviceId)
         axisHold.forget(deviceId)
+        motors.remove(deviceId)
         val gone = devices.remove(deviceId) ?: return
         for (keyCode in keys.forget(deviceId)) NativeLibrary.onKey(deviceId, keyCode, false)
         schedule()
@@ -241,7 +253,9 @@ class ControllerInput(
     private fun connect(device: InputDevice) {
         if (devices.containsKey(device.id)) return
         val bar = AxisHold.barFor(dpadFlat(device))
-        devices[device.id] = Device(device.name, device.descriptor, FloatArray(AXES.size), bar)
+        val deviceMotors = DeviceMotors(device)
+        motors[device.id] = deviceMotors
+        devices[device.id] = Device(device.name, device.descriptor, FloatArray(AXES.size), bar, deviceMotors.count)
         NativeLibrary.onDeviceConnected(device.id, device.name, device.descriptor)
         publishConnected()
     }
@@ -258,7 +272,7 @@ class ControllerInput(
         mutableConnected.value =
             devices.entries
                 .distinctBy { it.value.descriptor }
-                .map { (id, device) -> ConnectedController(id, device.name, device.descriptor) }
+                .map { (id, device) -> ConnectedController(id, device.name, device.descriptor, device.motors) }
     }
 
     private class Device(
@@ -267,6 +281,7 @@ class ControllerInput(
         override val axes: FloatArray,
         // Where its held stick counts as back at rest (AxisHold.barFor).
         val bar: Float,
+        val motors: Int,
     ) : SentAxes
 
     private companion object {

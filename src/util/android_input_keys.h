@@ -26,6 +26,27 @@ inline constexpr std::string_view DEVICE_PREFIX = "Android-";
 inline constexpr const char* SETTINGS_SECTION = "Android";
 inline constexpr const char* DESCRIPTORS_KEY = "ControllerDescriptors";
 
+/// Lists parallel to ControllerDescriptors, entry n for Android-<n>: its pad number (1 to 8, as [PadN]), and its
+/// rumble strength in percent (0 to 100). A missing or bad entry means Port 1 (pad 0) and 100%.
+inline constexpr const char* PORTS_KEY = "ControllerPorts";
+inline constexpr const char* RUMBLE_KEY = "ControllerRumble";
+
+/// The pads (0 to 7) of NUM_CONTROLLER_AND_CARD_PORTS: [Pad1] to [Pad8].
+inline constexpr u32 NUM_PADS = 8;
+
+/// Android-<index>'s pad, 0-based, from the ControllerPorts list.
+u32 PadForIndex(std::span<const std::string> ports, u32 index);
+
+/// The ControllerPorts list with Android-<index> on pad (0-based); entries before it that are missing become "1".
+std::vector<std::string> SetPadForIndex(std::span<const std::string> ports, u32 index, u32 pad);
+
+/// Android-<index>'s rumble strength in percent, from the ControllerRumble list.
+u32 RumbleForIndex(std::span<const std::string> rumble, u32 index);
+
+/// The ControllerRumble list with Android-<index> at percent (clamped to 100); entries before it that are missing
+/// become "100".
+std::vector<std::string> SetRumbleForIndex(std::span<const std::string> rumble, u32 index, u32 percent);
+
 /// The n of an Android-<n> device name, or nullopt for any other name.
 std::optional<u32> ParseDeviceIndex(std::string_view identifier);
 
@@ -68,6 +89,10 @@ inline constexpr InputSourceType PAD_SOURCE_TYPE = InputSourceType::Android;
 #else
 inline constexpr InputSourceType PAD_SOURCE_TYPE = InputSourceType::Count;
 #endif
+
+/// The key the core's vibration for pad's motor (0 large or single, 1 small) is bound to on Android: the pad, not a
+/// device, as the pad's last-used controller rumbles (RumbleRouter).
+InputBindingKey MakePortMotorKey(u32 pad, u32 motor);
 
 /// The pad input a key stands for, if any. Back and Mode open the menu, so they have none.
 std::optional<GenericInputBinding> GetBindingForKeyCode(s32 keycode);
@@ -187,6 +212,68 @@ private:
   u32 m_device_index;
   std::vector<u32> m_centered_axes;
   bool m_select_chord;
+};
+
+/// Which controller rumbles for each pad, and how hard. Each pad's levels go to its last-used connected controller
+/// (or its first connected one, before any is used), times that controller's strength. A controller that stops being
+/// the target is told to stop.
+class RumbleRouter
+{
+public:
+  struct Command
+  {
+    s32 device_id;
+    float large;
+    float small;
+
+    bool operator==(const Command&) const = default;
+  };
+
+  void OnConnected(s32 device_id, u32 index);
+  void OnDisconnected(s32 device_id);
+
+  /// The device was just used: it's the one its pad's rumble goes to now.
+  void OnInput(s32 device_id);
+
+  /// Each index's pad (0-based); a missing one is pad 0.
+  void SetPads(std::vector<u32> pad_of_index);
+
+  /// Each index's strength, 0 to 1; a missing one is 1.
+  void SetStrengths(std::vector<float> strength_of_index);
+
+  /// Sets pad's motor (0 large or single, 1 small) to value, and returns what to send: the pad's levels to its target,
+  /// and a stop to the previous target if it changed and is still connected. Nothing without a device on the pad.
+  std::vector<Command> SetMotor(u32 pad, u32 motor, float value);
+
+  /// Sets both of pad's motors at once, as SetMotor() does one: one target, one stop for the previous one.
+  std::vector<Command> SetMotors(u32 pad, float large, float small);
+
+  /// The device index of the connected controller used last, if any has been used.
+  std::optional<u32> GetLastUsedIndex() const;
+
+private:
+  struct Device
+  {
+    s32 device_id;
+    u32 index;
+    u64 last_input; // 0 before any
+  };
+
+  struct Pad
+  {
+    float levels[2] = {};
+    std::optional<s32> target;
+  };
+
+  std::vector<Command> Route(u32 pad);
+  u32 PadOf(u32 index) const;
+  float StrengthOf(u32 index) const;
+
+  std::vector<Device> m_devices;
+  std::vector<u32> m_pad_of_index;
+  std::vector<float> m_strength_of_index;
+  Pad m_pads[NUM_PADS];
+  u64 m_input_count = 0;
 };
 
 } // namespace AndroidInputKeys

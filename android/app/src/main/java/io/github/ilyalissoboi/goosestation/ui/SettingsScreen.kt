@@ -24,7 +24,7 @@ enum class SettingsEntry(
     Bios("BIOS", "Which BIOS each region uses, fast boot"),
     Graphics("Graphics", "Renderer, enhancements, display, on-screen display"),
     Audio("Audio", "Volume, latency"),
-    Controllers("Controllers", "Remap each controller's buttons"),
+    Controllers("Controllers", "Ports, types, bindings, hotkeys, rumble"),
     MemoryCards("Memory cards", "Card types, sync, the card editor"),
     Achievements("Achievements", "Sign-in, hardcore mode, messages"),
     Folders("Folders", "BIOS, games and data folders", needsCore = false),

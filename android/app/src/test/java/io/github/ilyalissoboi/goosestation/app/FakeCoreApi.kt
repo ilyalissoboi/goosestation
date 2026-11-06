@@ -12,6 +12,7 @@ import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
+import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 
@@ -34,8 +35,14 @@ class FakeCoreApi(
     /** Each pad's place in the descriptor table, by descriptor; a pad not in it has none. */
     var indices = emptyMap<String, Int>()
 
-    /** Port 1's controller type, as the core names it. */
-    var port1Type: String? = "AnalogController"
+    /** Each controller's pad, by descriptor; one not in it is on Port 1 (pad 0). */
+    var ports = emptyMap<String, Int>()
+
+    /** Each pad's controller type, as the core names it; a pad not in it has none. */
+    var portTypes = mapOf(0 to "AnalogController", 1 to "None")
+
+    /** The ports a controller can be put on. */
+    var offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2"))
 
     /** Runs once, as the next read of the BIOS page reaches the core, as if the user acted meanwhile. */
     var duringRead: () -> Unit = {}
@@ -49,10 +56,62 @@ class FakeCoreApi(
         binding: String?,
     ) {
         calls += "setPadBinding $descriptor $name $binding"
-        bindings[name] = binding
+        if (name in macros) macros[name] = binding else bindings[name] = binding
     }
 
-    override fun getPort1ControllerType(): String? = port1Type
+    override fun getPortType(pad: Int): String? = portTypes[pad]
+
+    override fun getControllerPort(descriptor: String): Int? = ports[descriptor] ?: 0
+
+    override fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    ) {
+        calls += "setControllerPort $descriptor $pad"
+        ports = ports + (descriptor to pad)
+    }
+
+    override fun getOfferedPorts(): List<Choice<Int>> = offered
+
+    /** Each type's settings, as the core would describe them. */
+    var typeSettings = emptyMap<String, List<TypeSetting>>()
+
+    override fun setPortType(
+        pad: Int,
+        type: String,
+    ) {
+        calls += "setPortType $pad $type"
+        portTypes = portTypes + (pad to type)
+    }
+
+    override fun getTypeSettings(type: String): List<TypeSetting> = typeSettings[type].orEmpty()
+
+    /** Each type's inputs, as the core lists them; a type not in it has Cross and Circle. */
+    var typeInputs = emptyMap<String, List<PadBinding>>()
+
+    override fun getTypeInputs(type: String): List<PadBinding> =
+        typeInputs[type] ?: listOf("Cross", "Circle").map { PadBinding(it, it, PadBindingKind.Button, null) }
+
+    /** Each controller's rumble strength, by descriptor; one not in it has 100. */
+    var rumble = emptyMap<String, Int>()
+
+    override fun getRumbleStrength(descriptor: String): Int? = rumble[descriptor] ?: 100
+
+    override fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    ) {
+        calls += "setRumbleStrength $descriptor $percent"
+        rumble = rumble + (descriptor to percent)
+    }
+
+    /** Each macro's trigger, as one controller has it. */
+    val macros = (1..4).associate { "Macro$it" to null as String? }.toMutableMap()
+
+    override fun getMacroBindings(descriptor: String): List<PadBinding>? =
+        macros.map { (name, binding) ->
+            PadBinding(name, name.replace("Macro", "Macro "), PadBindingKind.Button, binding)
+        }
 
     override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
         hotkeys.map { (name, binding) -> PadBinding(name, name, PadBindingKind.Button, binding) }

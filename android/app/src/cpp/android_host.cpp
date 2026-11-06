@@ -46,6 +46,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <memory>
@@ -92,13 +93,18 @@ static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
 static std::optional<u32> FindDescriptorIndex(std::string_view descriptor);
 static void WriteDescriptors(SettingsInterface& si);
-static const Controller::ControllerInfo* GetPort1ControllerInfo(SettingsInterface& si);
-static u32 AddDefaultBindings(SettingsInterface& si, u32 index);
-static bool HasDeviceBinding(SettingsInterface& si, u32 index);
-static bool AddControllerToPort1(const std::string& identifier);
+static u32 GetPadOfIndex(SettingsInterface& si, u32 index);
+static const Controller::ControllerInfo* GetPadControllerInfo(SettingsInterface& si, u32 pad);
+static u32 AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad);
+static bool HasDeviceBinding(SettingsInterface& si, u32 index, u32 pad);
+static bool AddControllerToPort(const std::string& identifier);
+static void UpdateSourceControllers();
+static std::string GetPortLabel(u32 pad, const std::array<bool, 2>& multitap);
+static void PostUnusedPortMessages();
 static void MapNewController(const std::string& identifier);
 static bool IsVulkanRenderer(GPURenderer renderer);
-static bool Port1HasAnalogButton(SettingsInterface& si);
+static bool PadHasAnalogButton(SettingsInterface& si, u32 pad);
+static std::vector<const HotkeyInfo*> GetOfferedHotkeys(SettingsInterface& si, u32 pad);
 static bool MoveAnalogBindings(SettingsInterface& si);
 static void PressAnalogButton();
 
@@ -111,6 +117,8 @@ using AndroidInputKeys::ParseDeviceIndex;
 // Where each controller's device index (Android-<index>) is kept, by its descriptor.
 static constexpr const char* DESCRIPTORS_SECTION = AndroidInputKeys::SETTINGS_SECTION;
 static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY;
+static constexpr const char* PORTS_KEY = AndroidInputKeys::PORTS_KEY;
+static constexpr const char* RUMBLE_KEY = AndroidInputKeys::RUMBLE_KEY;
 
 // The inputs the remap page lists (GetPadBindings()) and edits (SetPadBinding()).
 // The DualShock's Analog button, Port 1's, which the app presses with a hotkey.
@@ -120,8 +128,11 @@ static constexpr std::string_view ANALOG_BUTTON = "Analog";
 // would fire on each of a chord's keys.
 static constexpr std::string_view ANALOG_HOTKEY = "ToggleAnalogMode";
 
-// The hotkeys the Controllers page has, in its order, all in [Hotkeys]: each a Select chord.
-static constexpr std::string_view HOTKEYS[] = {"ToggleFastForward", ANALOG_HOTKEY, "Screenshot"};
+// Hotkeys the Controllers page leaves out: the menu has Change disc and Reset with their questions, and the app has no
+// global slots (the per-slot hotkeys are left out by their prefixes, GetOfferedHotkeys()).
+static constexpr std::string_view LEFT_OUT_HOTKEYS[] = {"ChangeDisc", "Reset"};
+static constexpr std::string_view LEFT_OUT_HOTKEY_PREFIXES[] = {"LoadGameState", "SaveGameState", "LoadGlobalState",
+                                                                "SaveGlobalState"};
 
 static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 {
@@ -495,12 +506,16 @@ void AndroidHost::ReloadSettings()
         bool bound;
         {
           const auto lock = Host::GetSettingsLock();
-          bound = HasDeviceBinding(*s_base_settings_interface, index.value());
+          SettingsInterface& si = *s_base_settings_interface;
+          bound = HasDeviceBinding(si, index.value(), GetPadOfIndex(si, index.value()));
         }
 
         if (!bound)
-          AddControllerToPort1(device.first);
+          AddControllerToPort(device.first);
       }
+
+      // The file can put controllers on other ports.
+      UpdateSourceControllers();
 
       // Update() takes the lock itself, and loads the folders again.
       EmuFolders::Update();
@@ -1492,6 +1507,8 @@ void AndroidHost::ProcessInputQueue()
     {
       for (const ConnectedDevice& device : s_connected_devices)
         source->QueueDeviceConnected(device.device_id, device.index, device.name);
+      source->SetRumbleCallback([](s32 device_id, float large, float small) { NotifyRumble(device_id, large, small); });
+      UpdateSourceControllers();
     }
   }
 
@@ -1590,31 +1607,41 @@ void AndroidHost::WriteDescriptors(SettingsInterface& si)
   si.SetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY, s_descriptors);
 }
 
-const Controller::ControllerInfo* AndroidHost::GetPort1ControllerInfo(SettingsInterface& si)
+// Under the settings lock: Android-<index>'s pad, 0-based ([Android] ControllerPorts).
+u32 AndroidHost::GetPadOfIndex(SettingsInterface& si, u32 index)
 {
-  const std::string section = Controller::GetSettingsSection(0);
-  const std::string type = si.GetStringValue(section.c_str(), "Type", Controller::GetDefaultPadType(0));
+  return AndroidInputKeys::PadForIndex(si.GetStringList(DESCRIPTORS_SECTION, PORTS_KEY), index);
+}
+
+const Controller::ControllerInfo* AndroidHost::GetPadControllerInfo(SettingsInterface& si, u32 pad)
+{
+  const std::string section = Controller::GetSettingsSection(pad);
+  const std::string type = si.GetStringValue(section.c_str(), "Type", Controller::GetDefaultPadType(pad));
   const Controller::ControllerInfo* info = Controller::GetControllerInfo(type);
   if (!info)
-    WARNING_LOG("Port 1 has an unknown controller type '{}'.", type);
+    WARNING_LOG("Port {} has an unknown controller type '{}'.", pad + 1, type);
 
   return info;
 }
 
-u32 AndroidHost::AddDefaultBindings(SettingsInterface& si, u32 index)
+u32 AndroidHost::AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad)
 {
-  const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+  const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
   if (!info)
     return 0;
 
-  // As InputManager::MapController(): the first binding string for each of the pad's inputs, added to the ones there.
-  const std::string section = Controller::GetSettingsSection(0);
+  // As InputManager::MapController(): the first binding string for each of the pad's inputs, for each input the
+  // controller has none for, so its remaps stay as they are.
+  const std::string section = Controller::GetSettingsSection(pad);
   const GenericInputBindingMapping mapping = AndroidInputKeys::GetDefaultMapping(index);
   u32 added = 0;
   for (const Controller::ControllerBindingInfo& bi : info->bindings)
   {
-    if (bi.generic_mapping == GenericInputBinding::Unknown)
+    if (bi.generic_mapping == GenericInputBinding::Unknown ||
+        AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), bi.name), index).has_value())
+    {
       continue;
+    }
 
     const auto it = std::find_if(mapping.begin(), mapping.end(),
                                  [&bi](const auto& entry) { return entry.first == bi.generic_mapping; });
@@ -1625,16 +1652,93 @@ u32 AndroidHost::AddDefaultBindings(SettingsInterface& si, u32 index)
   return added;
 }
 
-bool AndroidHost::HasDeviceBinding(SettingsInterface& si, u32 index)
+bool AndroidHost::HasDeviceBinding(SettingsInterface& si, u32 index, u32 pad)
 {
   std::vector<std::string> bindings;
-  for (auto& [key, value] : si.GetKeyValueList(Controller::GetSettingsSection(0).c_str()))
+  for (auto& [key, value] : si.GetKeyValueList(Controller::GetSettingsSection(pad).c_str()))
     bindings.push_back(std::move(value));
 
   return AndroidInputKeys::GetDeviceBinding(bindings, index).has_value();
 }
 
-bool AndroidHost::AddControllerToPort1(const std::string& identifier)
+// CPU thread: gives the input source each controller's pad and rumble strength.
+void AndroidHost::UpdateSourceControllers()
+{
+  AndroidInputSource* const source =
+    static_cast<AndroidInputSource*>(InputManager::GetInputSourceInterface(InputSourceType::Android));
+  if (!source)
+    return;
+
+  std::vector<u32> pads(s_descriptors.size());
+  std::vector<float> strengths(s_descriptors.size());
+  {
+    const auto lock = Host::GetSettingsLock();
+    SettingsInterface& si = *s_base_settings_interface;
+    const std::vector<std::string> rumble = si.GetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY);
+    for (u32 i = 0; i < pads.size(); i++)
+    {
+      pads[i] = GetPadOfIndex(si, i);
+      strengths[i] = static_cast<float>(AndroidInputKeys::RumbleForIndex(rumble, i)) / 100.0f;
+    }
+  }
+
+  source->SetControllerPads(std::move(pads));
+  source->SetRumbleStrengths(std::move(strengths));
+}
+
+std::optional<u32> AndroidHost::GetRumbleStrength(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<u32> result;
+  EmuThread::RunOnThread(
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      const auto lock = Host::GetSettingsLock();
+      result = AndroidInputKeys::RumbleForIndex(
+        s_base_settings_interface->GetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY), index.value());
+    },
+    true);
+  return result;
+}
+
+void AndroidHost::SetRumbleStrength(std::string descriptor, u32 percent)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor, percent]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        si.SetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY,
+                         AndroidInputKeys::SetRumbleForIndex(si.GetStringList(DESCRIPTORS_SECTION, RUMBLE_KEY),
+                                                             index.value(), percent));
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      UpdateSourceControllers();
+    },
+    true);
+}
+
+void AndroidHost::SetPadVibrationForTest(u32 pad, float large, float small)
+{
+  EmuThread::RunOnThread([pad, large, small]() { InputManager::SetPadVibrationIntensity(pad, large, small); }, true);
+}
+
+bool AndroidHost::AddControllerToPort(const std::string& identifier)
 {
   const std::optional<u32> index = ParseDeviceIndex(identifier);
   if (!index.has_value())
@@ -1648,16 +1752,17 @@ bool AndroidHost::AddControllerToPort1(const std::string& identifier)
     return false;
   }
 
-  // Every controller drives Port 1: its default bindings are added to the ones there, so a pad connected later (a
+  // Its default bindings are added on its port, beside the other controllers' there, so a pad connected later (a
   // Bluetooth pad next to a handheld's own) works too.
   {
     const auto lock = Host::GetSettingsLock();
     SettingsInterface& si = *s_base_settings_interface;
-    const u32 added = AddDefaultBindings(si, index.value());
+    const u32 pad = GetPadOfIndex(si, index.value());
+    const u32 added = AddDefaultBindings(si, index.value(), pad);
     if (added == 0)
       return true;
 
-    INFO_LOG("Added {} bindings for {} to Port 1.", added, identifier);
+    INFO_LOG("Added {} bindings for {} to Port {}.", added, identifier, pad + 1);
     Error error;
     if (!si.Save(&error))
       ERROR_LOG("Failed to save settings: {}", error.GetDescription());
@@ -1673,17 +1778,18 @@ void AndroidHost::MapNewController(const std::string& identifier)
   if (!index.has_value())
     return;
 
-  // A new controller, or one seen before with no binding of its own on Port 1, which would be dead. One with even a
+  // A new controller, or one seen before with no binding of its own on its port, which would be dead. One with even a
   // single binding keeps what it has, so a remap survives.
   if (std::find(s_unmapped_indices.begin(), s_unmapped_indices.end(), index.value()) == s_unmapped_indices.end())
   {
     const auto lock = Host::GetSettingsLock();
-    if (HasDeviceBinding(*s_base_settings_interface, index.value()))
+    SettingsInterface& si = *s_base_settings_interface;
+    if (HasDeviceBinding(si, index.value(), GetPadOfIndex(si, index.value())))
       return;
   }
 
   // One that's gone again stays unmapped, and gets its defaults when it's back.
-  if (AddControllerToPort1(identifier))
+  if (AddControllerToPort(identifier))
     std::erase(s_unmapped_indices, index.value());
 }
 
@@ -1702,11 +1808,12 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
       const auto lock = Host::GetSettingsLock();
       SettingsInterface& si = *s_base_settings_interface;
       result.emplace();
-      const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+      const u32 pad = GetPadOfIndex(si, index.value());
+      const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
       if (!info)
         return;
 
-      const std::string section = Controller::GetSettingsSection(0);
+      const std::string section = Controller::GetSettingsSection(pad);
       for (const Controller::ControllerBindingInfo& bi : info->bindings)
       {
         // A hotkey (GetHotkeyBindings()).
@@ -1738,20 +1845,281 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetPadBindings(
   return result;
 }
 
-std::optional<std::string> AndroidHost::GetPort1ControllerType()
+// The macros' triggers' keys, Macro1 to Macro4 (InputManager::NUM_MACRO_BUTTONS_PER_CONTROLLER).
+static bool IsMacroKey(std::string_view name)
+{
+  for (u32 i = 1; i <= InputManager::NUM_MACRO_BUTTONS_PER_CONTROLLER; i++)
+  {
+    if (name == fmt::format("Macro{}", i))
+      return true;
+  }
+
+  return false;
+}
+
+std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetMacroBindings(std::string descriptor)
 {
   if (!s_initialized)
     return std::nullopt;
 
-  std::optional<std::string> result;
+  std::optional<std::vector<PadBinding>> result;
   EmuThread::RunOnThread(
-    [&result]() {
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
       const auto lock = Host::GetSettingsLock();
-      if (const Controller::ControllerInfo* info = GetPort1ControllerInfo(*s_base_settings_interface))
-        result = info->name;
+      SettingsInterface& si = *s_base_settings_interface;
+      const std::string section = Controller::GetSettingsSection(GetPadOfIndex(si, index.value()));
+      result.emplace();
+      for (u32 i = 1; i <= InputManager::NUM_MACRO_BUTTONS_PER_CONTROLLER; i++)
+      {
+        const std::string key = fmt::format("Macro{}", i);
+        result->push_back(PadBinding{key, fmt::format("Macro {}", i), PadBindingKind::Button,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList(section.c_str(), key.c_str()),
+                                                                        index.value())});
+      }
     },
     true);
   return result;
+}
+
+std::optional<std::string> AndroidHost::GetPortType(u32 pad)
+{
+  if (!s_initialized || pad >= AndroidInputKeys::NUM_PADS)
+    return std::nullopt;
+
+  // The file's, even one the core doesn't know, so the page can show it as it is.
+  const auto lock = Host::GetSettingsLock();
+  return s_base_settings_interface->GetStringValue(Controller::GetSettingsSection(pad).c_str(), "Type",
+                                                   Controller::GetDefaultPadType(pad));
+}
+
+void AndroidHost::SetPortType(u32 pad, std::string type)
+{
+  if (!s_initialized || pad >= AndroidInputKeys::NUM_PADS)
+    return;
+
+  EmuThread::RunOnThread(
+    [pad, &type]() {
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        si.SetStringValue(Controller::GetSettingsSection(pad).c_str(), "Type", type.c_str());
+
+        // The bindings are kept for each type, as its inputs' keys: only the ones a controller has none for get theirs.
+        for (u32 index = 0; index < s_descriptors.size(); index++)
+        {
+          if (GetPadOfIndex(si, index) == pad)
+            AddDefaultBindings(si, index, pad);
+        }
+
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      System::ApplySettings(false);
+    },
+    true);
+}
+
+std::optional<u32> AndroidHost::GetControllerPort(std::string descriptor)
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  std::optional<u32> result;
+  EmuThread::RunOnThread(
+    [&descriptor, &result]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      const auto lock = Host::GetSettingsLock();
+      result = GetPadOfIndex(*s_base_settings_interface, index.value());
+    },
+    true);
+  return result;
+}
+
+void AndroidHost::SetControllerPort(std::string descriptor, u32 pad)
+{
+  if (!s_initialized || pad >= AndroidInputKeys::NUM_PADS)
+    return;
+
+  EmuThread::RunOnThread(
+    [&descriptor, pad]() {
+      const std::optional<u32> index = FindDescriptorIndex(descriptor);
+      if (!index.has_value())
+        return;
+
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface& si = *s_base_settings_interface;
+        const u32 old_pad = GetPadOfIndex(si, index.value());
+        if (old_pad == pad)
+          return;
+
+        // Every key's entry for this controller, macro triggers too, goes to the same key on the new port. Other
+        // sources' and controllers' entries stay where they are, in order.
+        const std::string from = Controller::GetSettingsSection(old_pad);
+        const std::string to = Controller::GetSettingsSection(pad);
+        std::vector<std::string> keys;
+        for (const auto& [key, value] : si.GetKeyValueList(from.c_str()))
+        {
+          if (std::find(keys.begin(), keys.end(), key) == keys.end())
+            keys.push_back(key);
+        }
+
+        for (const std::string& key : keys)
+        {
+          const std::vector<std::string> bindings = si.GetStringList(from.c_str(), key.c_str());
+          const std::optional<std::string> binding = AndroidInputKeys::GetDeviceBinding(bindings, index.value());
+          if (!binding.has_value())
+            continue;
+
+          si.SetStringList(from.c_str(), key.c_str(), AndroidInputKeys::SetDeviceBinding(bindings, index.value(), {}));
+          si.SetStringList(to.c_str(), key.c_str(),
+                           AndroidInputKeys::SetDeviceBinding(si.GetStringList(to.c_str(), key.c_str()), index.value(),
+                                                              binding.value()));
+        }
+
+        si.SetStringList(DESCRIPTORS_SECTION, PORTS_KEY,
+                         AndroidInputKeys::SetPadForIndex(si.GetStringList(DESCRIPTORS_SECTION, PORTS_KEY),
+                                                          index.value(), pad));
+        const u32 added = AddDefaultBindings(si, index.value(), pad);
+        INFO_LOG("Moved {} from Port {} to Port {}, adding {} defaults.", descriptor, old_pad + 1, pad + 1, added);
+
+        Error error;
+        if (!si.Save(&error))
+          ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+      }
+
+      UpdateSourceControllers();
+      System::ReloadInputBindings();
+    },
+    true);
+}
+
+std::vector<std::pair<u32, std::string>> AndroidHost::GetOfferedPorts()
+{
+  if (!s_initialized)
+    return {};
+
+  // Multitap's ports are offered when settings.ini or any game's file turns it on for that port.
+  std::vector<std::string> modes;
+  std::string folder;
+  {
+    // The CPU thread changes the folders under it (EmuFolders::Update()).
+    const auto lock = Host::GetSettingsLock();
+    modes.push_back(s_base_settings_interface->GetStringValue("ControllerPorts", "MultitapMode"));
+    folder = EmuFolders::GameSettings;
+  }
+
+  FileSystem::FindResultsArray files;
+  FileSystem::FindFiles(folder.c_str(), "*.ini", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES, &files);
+  for (const FILESYSTEM_FIND_DATA& file : files)
+  {
+    INISettingsInterface game(file.FileName);
+    if (game.Load())
+      modes.push_back(game.GetStringValue("ControllerPorts", "MultitapMode"));
+  }
+
+  // By the mode's own name, as Settings::IsPort2MultitapEnabled() reads Port2Only as Port 1's.
+  std::array<bool, 2> multitap = {false, false};
+  for (const std::string& name : modes)
+  {
+    const std::optional<MultitapMode> mode = Settings::ParseMultitapModeName(name.c_str());
+    if (!mode.has_value())
+      continue;
+
+    multitap[0] |= (mode == MultitapMode::Port1Only || mode == MultitapMode::BothPorts);
+    multitap[1] |= (mode == MultitapMode::Port2Only || mode == MultitapMode::BothPorts);
+  }
+
+  // Desktop's order: a port's slots together, then the other port's.
+  static constexpr std::array<u32, AndroidInputKeys::NUM_PADS> ORDER = {0, 2, 3, 4, 1, 5, 6, 7};
+  std::vector<std::pair<u32, std::string>> ports;
+  for (const u32 pad : ORDER)
+  {
+    const auto [port, slot] = Controller::ConvertPadToPortAndSlot(pad);
+    if (slot == 0 || multitap[port])
+      ports.emplace_back(pad, GetPortLabel(pad, multitap));
+  }
+
+  return ports;
+}
+
+// "Port 1", or "Port 1A" to "Port 1D" for a port with multitap: as a multitap slot always has its letter.
+std::string AndroidHost::GetPortLabel(u32 pad, const std::array<bool, 2>& multitap)
+{
+  const auto [port, slot] = Controller::ConvertPadToPortAndSlot(pad);
+  return (multitap[port] || slot != 0) ? fmt::format("Port {}{}", port + 1, static_cast<char>('A' + slot)) :
+                                         fmt::format("Port {}", port + 1);
+}
+
+// CPU thread, as a game starts: each connected controller whose port this game has no controller on is told so, as it
+// drives nothing. The core's own setup is what counts: a port without a type, or a multitap slot with its port's
+// multitap off.
+void AndroidHost::PostUnusedPortMessages()
+{
+  const auto in_use = [](u32 pad) {
+    if (g_settings.controller_types[pad] == ControllerType::None)
+      return false;
+
+    const auto [port, slot] = Controller::ConvertPadToPortAndSlot(pad);
+    const MultitapMode mode = g_settings.multitap_mode;
+    return slot == 0 || mode == MultitapMode::BothPorts ||
+           mode == ((port == 0) ? MultitapMode::Port1Only : MultitapMode::Port2Only);
+  };
+
+  std::vector<std::pair<u32, std::string>> offered;
+  std::vector<u32> told;
+  for (const ConnectedDevice& device : s_connected_devices)
+  {
+    // Two devices with one descriptor are one controller.
+    if (std::find(told.begin(), told.end(), device.index) != told.end())
+      continue;
+    told.push_back(device.index);
+
+    u32 pad;
+    {
+      const auto lock = Host::GetSettingsLock();
+      pad = GetPadOfIndex(*s_base_settings_interface, device.index);
+    }
+    if (in_use(pad))
+      continue;
+
+    if (offered.empty())
+      offered = GetOfferedPorts();
+    const auto it = std::find_if(offered.begin(), offered.end(), [pad](const auto& entry) { return entry.first == pad; });
+    const std::string label = (it != offered.end()) ? it->second : GetPortLabel(pad, {false, false});
+    Host::AddOSDMessage(fmt::format("{} is on {}, which this game doesn't use.", device.name, label),
+                        Host::OSD_INFO_DURATION);
+  }
+}
+
+float AndroidHost::GetPadBindStateForTest(u32 pad, std::string name)
+{
+  float state = 0.0f;
+  EmuThread::RunOnThread(
+    [pad, &name, &state]() {
+      const Controller* controller = System::IsValid() ? System::GetController(pad) : nullptr;
+      const Controller::ControllerInfo* info = controller ? Controller::GetControllerInfo(controller->GetType()) : nullptr;
+      if (!info)
+        return;
+
+      // By its bind index, which GetBindState() takes: not its place in the list (Controller::GetBindIndex()).
+      for (const Controller::ControllerBindingInfo& bi : info->bindings)
+      {
+        if (name == bi.name)
+          state = controller->GetBindState(bi.bind_index);
+      }
+    },
+    true);
+  return state;
 }
 
 std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetHotkeyBindings(std::string descriptor)
@@ -1768,17 +2136,13 @@ std::optional<std::vector<AndroidHost::PadBinding>> AndroidHost::GetHotkeyBindin
 
       const auto lock = Host::GetSettingsLock();
       SettingsInterface& si = *s_base_settings_interface;
-      const bool analog = Port1HasAnalogButton(si);
       result.emplace();
-      for (const std::string_view name : HOTKEYS)
+      for (const HotkeyInfo* hotkey : GetOfferedHotkeys(si, GetPadOfIndex(si, index.value())))
       {
-        if (name == ANALOG_HOTKEY && !analog)
-          continue;
-
-        const std::string key(name);
-        result->push_back(PadBinding{key, key, PadBindingKind::Button,
-                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList("Hotkeys", key.c_str()),
-                                                                        index.value())});
+        result->push_back(PadBinding{hotkey->name, hotkey->display_name, PadBindingKind::Button,
+                                     AndroidInputKeys::GetDeviceBinding(si.GetStringList("Hotkeys", hotkey->name),
+                                                                        index.value()),
+                                     hotkey->category});
       }
     },
     true);
@@ -1799,8 +2163,8 @@ void AndroidHost::SetHotkeyBinding(std::string descriptor, std::string name, std
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
-        if (std::find(std::begin(HOTKEYS), std::end(HOTKEYS), name) == std::end(HOTKEYS) ||
-            (name == ANALOG_HOTKEY && !Port1HasAnalogButton(si)))
+        const std::vector<const HotkeyInfo*> offered = GetOfferedHotkeys(si, GetPadOfIndex(si, index.value()));
+        if (std::none_of(offered.begin(), offered.end(), [&name](const HotkeyInfo* hotkey) { return name == hotkey->name; }))
         {
           WARNING_LOG("'{}' isn't a hotkey this pad can have, not binding it.", name);
           return;
@@ -1845,7 +2209,7 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
       // An edit made before a new pad's first mapping: its defaults go on first, so it has them and the edit. The
       // mapping, queued meanwhile, then adds nothing (MapNewController()).
       if (std::find(s_unmapped_indices.begin(), s_unmapped_indices.end(), index.value()) != s_unmapped_indices.end() &&
-          AddControllerToPort1(fmt::format("{}{}", DEVICE_PREFIX, index.value())))
+          AddControllerToPort(fmt::format("{}{}", DEVICE_PREFIX, index.value())))
       {
         std::erase(s_unmapped_indices, index.value());
       }
@@ -1853,21 +2217,23 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
-        // Only what GetPadBindings() lists: a button or an axis, never a pointer or a motor.
-        const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
-        if (!info || std::none_of(info->bindings.begin(), info->bindings.end(),
-                                  [&name](const Controller::ControllerBindingInfo& bi) {
-                                    return name == bi.name && IsPadBindingType(bi.type);
-                                  }))
+        // Only what GetPadBindings() and GetMacroBindings() list: a button, an axis or a macro's trigger, never a
+        // pointer or a motor.
+        const u32 pad = GetPadOfIndex(si, index.value());
+        const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
+        if (!info || (!IsMacroKey(name) && std::none_of(info->bindings.begin(), info->bindings.end(),
+                                                        [&name](const Controller::ControllerBindingInfo& bi) {
+                                                          return name == bi.name && IsPadBindingType(bi.type);
+                                                        })))
         {
-          WARNING_LOG("Port 1 has no button or axis '{}', not binding it.", name);
+          WARNING_LOG("Port {} has no button or axis '{}', not binding it.", pad + 1, name);
           return;
         }
 
         // Its defaults went on above if they could; if not (it's gone again), none come over the edit later.
         std::erase(s_unmapped_indices, index.value());
 
-        const std::string section = Controller::GetSettingsSection(0);
+        const std::string section = Controller::GetSettingsSection(pad);
         si.SetStringList(section.c_str(), name.c_str(),
                          AndroidInputKeys::SetDeviceBinding(si.GetStringList(section.c_str(), name.c_str()),
                                                             index.value(), binding));
@@ -1882,12 +2248,44 @@ void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::s
     true);
 }
 
-// Whether Port 1's controller type has the Analog button (a DualShock), under the settings lock.
-bool AndroidHost::Port1HasAnalogButton(SettingsInterface& si)
+// Whether the pad's controller type has the Analog button (a DualShock), under the settings lock.
+bool AndroidHost::PadHasAnalogButton(SettingsInterface& si, u32 pad)
 {
-  const Controller::ControllerInfo* info = GetPort1ControllerInfo(si);
+  const Controller::ControllerInfo* info = GetPadControllerInfo(si, pad);
   return info && std::any_of(info->bindings.begin(), info->bindings.end(),
                              [](const Controller::ControllerBindingInfo& bi) { return bi.name == ANALOG_BUTTON; });
+}
+
+// The hotkeys the Controllers page offers for a controller on pad, in the core's order, under the settings lock.
+std::vector<const HotkeyInfo*> AndroidHost::GetOfferedHotkeys(SettingsInterface& si, u32 pad)
+{
+  const bool analog = PadHasAnalogButton(si, pad);
+  std::vector<const HotkeyInfo*> offered;
+  for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
+  {
+    const std::string_view name(hotkey->name);
+    if (std::find(std::begin(LEFT_OUT_HOTKEYS), std::end(LEFT_OUT_HOTKEYS), name) != std::end(LEFT_OUT_HOTKEYS) ||
+        std::any_of(std::begin(LEFT_OUT_HOTKEY_PREFIXES), std::end(LEFT_OUT_HOTKEY_PREFIXES),
+                    [&name](std::string_view prefix) { return name.starts_with(prefix); }) ||
+        (name == ANALOG_HOTKEY && !analog))
+    {
+      continue;
+    }
+
+    offered.push_back(hotkey);
+  }
+
+  return offered;
+}
+
+bool AndroidHost::UndoLoadState()
+{
+  if (!s_initialized)
+    return false;
+
+  bool undone = false;
+  EmuThread::RunOnThread([&undone]() { undone = System::IsValid() && System::UndoLoadState(); }, true);
+  return undone;
 }
 
 // Moves [Pad1] Analog's Android bindings (the old Analog Toggle row's) to the analog mode hotkey, under the settings
@@ -1907,10 +2305,21 @@ bool AndroidHost::MoveAnalogBindings(SettingsInterface& si)
   return true;
 }
 
-// CPU thread: presses Port 1's Analog button, as the DualShock's own does, if it's a DualShock.
+// CPU thread: presses the Analog button of the port whose controller fired the chord, as the DualShock's own does, if
+// it's a DualShock.
 void AndroidHost::PressAnalogButton()
 {
-  Controller* controller = System::IsValid() ? System::GetController(0) : nullptr;
+  AndroidInputSource* const source =
+    static_cast<AndroidInputSource*>(InputManager::GetInputSourceInterface(InputSourceType::Android));
+  const std::optional<u32> index = source ? source->GetLastUsedIndex() : std::nullopt;
+  u32 pad = 0;
+  if (index.has_value())
+  {
+    const auto lock = Host::GetSettingsLock();
+    pad = GetPadOfIndex(*s_base_settings_interface, index.value());
+  }
+
+  Controller* controller = System::IsValid() ? System::GetController(pad) : nullptr;
   if (!controller || controller->GetType() != ControllerType::AnalogController)
     return;
 
@@ -1934,7 +2343,8 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
       {
         const auto lock = Host::GetSettingsLock();
         SettingsInterface& si = *s_base_settings_interface;
-        const std::string section = Controller::GetSettingsSection(0);
+        const u32 pad = GetPadOfIndex(si, index.value());
+        const std::string section = Controller::GetSettingsSection(pad);
 
         // Its defaults go on now; the ones a queued first mapping would add are already these.
         std::erase(s_unmapped_indices, index.value());
@@ -1955,17 +2365,16 @@ void AndroidHost::ResetPadBindings(std::string descriptor)
             si.SetStringList(section.c_str(), key.c_str(), kept);
         }
 
-        // Its hotkeys too: unassigned by default.
-        for (const std::string_view name : HOTKEYS)
+        // Its hotkeys too, every one the core has: unassigned by default.
+        for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
         {
-          const std::string key(name);
-          const std::vector<std::string> bindings = si.GetStringList("Hotkeys", key.c_str());
+          const std::vector<std::string> bindings = si.GetStringList("Hotkeys", hotkey->name);
           const std::vector<std::string> kept = AndroidInputKeys::SetDeviceBinding(bindings, index.value(), {});
           if (kept.size() != bindings.size())
-            si.SetStringList("Hotkeys", key.c_str(), kept);
+            si.SetStringList("Hotkeys", hotkey->name, kept);
         }
 
-        AddDefaultBindings(si, index.value());
+        AddDefaultBindings(si, index.value(), pad);
 
         Error error;
         if (!si.Save(&error))
@@ -2228,6 +2637,7 @@ void Host::OnSystemStarted()
   AndroidHost::NotifyGameStarted(title.empty() ? Path::GetFileTitle(AndroidHost::s_boot_path) : title,
                                  System::GetGameSerial(), g_settings.start_paused,
                                  g_settings.pause_on_controller_disconnection);
+  AndroidHost::PostUnusedPortMessages();
 }
 
 void Host::OnSystemDestroyed()
@@ -2461,8 +2871,22 @@ const char* InputManager::ConvertHostKeyboardCodeToIcon(u32 code)
   return nullptr;
 }
 
-// No host hotkeys yet.
+// The save state hotkeys, the core's names (compiled out of its own list on Android): the app saves, loads and picks
+// the slot, as its menu does, under the game's key and with its messages. On the chord's release, as the core's.
+#define APP_STATE_HOTKEY(name, display_name)                                                                           \
+  DEFINE_HOTKEY(name, TRANSLATE_NOOP("Hotkeys", "Save States"), TRANSLATE_NOOP("Hotkeys", display_name),               \
+                [](s32 pressed) {                                                                                      \
+                  if (pressed == 0)                                                                                    \
+                    AndroidHost::NotifyHotkey(name);                                                                   \
+                })
+
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
+APP_STATE_HOTKEY("LoadSelectedSaveState", "Load From Selected Slot")
+APP_STATE_HOTKEY("SaveSelectedSaveState", "Save To Selected Slot")
+APP_STATE_HOTKEY("SelectPreviousSaveStateSlot", "Select Previous Save Slot")
+APP_STATE_HOTKEY("SelectNextSaveStateSlot", "Select Next Save Slot")
+APP_STATE_HOTKEY("SaveStateAndSelectNextSlot", "Save State and Select Next Slot")
+APP_STATE_HOTKEY("UndoLoadState", "Undo Load State")
 // The Controllers page's Analog mode hotkey: the DualShock's Analog button, on the chord's release, as the core's
 // toggles are.
 DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANSLATE_NOOP("Hotkeys", "Toggle Analog Mode"),

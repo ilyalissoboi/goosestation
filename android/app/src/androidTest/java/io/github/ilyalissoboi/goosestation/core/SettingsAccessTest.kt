@@ -133,6 +133,35 @@ class SettingsAccessTest {
         assertEquals(0, NativeLibrary.getSettingNames("NoSuchKind").size)
     }
 
+    // No GunCon, Justifier or mouse: they need a pointer Android doesn't have.
+    @Test
+    fun controllerTypesLeaveOutPointers() {
+        initialize()
+
+        assertEquals(
+            listOf("None", "DigitalController", "AnalogController", "AnalogJoystick", "NeGcon", "NeGconRumble"),
+            NativeLibrary
+                .getSettingNames("ControllerType")
+                .toList()
+                .chunked(2)
+                .map { it[0] },
+        )
+    }
+
+    @Test
+    fun multitapModesAreTheCores() {
+        initialize()
+
+        assertEquals(
+            listOf("Disabled", "Port1Only", "Port2Only", "BothPorts"),
+            NativeLibrary
+                .getSettingNames("MultitapMode")
+                .toList()
+                .chunked(2)
+                .map { it[0] },
+        )
+    }
+
     @Test
     fun sharedCardNamesAreTheCardFolders() {
         initialize()
@@ -241,6 +270,8 @@ class SettingsAccessTest {
                 "DisplayScreenshotFormat",
                 "AudioStretchMode",
                 "MemoryCardType",
+                "ControllerType",
+                "MultitapMode",
             )
     }
 }

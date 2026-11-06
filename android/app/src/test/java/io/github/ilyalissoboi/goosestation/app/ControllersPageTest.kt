@@ -3,7 +3,13 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.FloatSetting
+import io.github.ilyalissoboi.goosestation.settings.MacroSettings
+import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.PortSettings
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -11,6 +17,8 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,9 +28,11 @@ class ControllersPageTest {
     private val calls = mutableListOf<String>()
     private val api = FakeCoreApi(calls)
     private val pads = FakePads(calls)
+    private val settings = MemoryCoreSettings()
 
     private fun TestScope.openPage(): ControllersPage {
-        val page = ControllersPage(backgroundScope, StandardTestDispatcher(testScheduler), api, { pads }, { true })
+        val page =
+            ControllersPage(backgroundScope, StandardTestDispatcher(testScheduler), api, { pads }, { true }, settings)
         page.open()
         runCurrent()
         assertEquals(PAD_A, page.state.selected)
@@ -30,13 +40,365 @@ class ControllersPageTest {
     }
 
     @Test
-    fun thePort1TypeIsReadWithTheBindings() =
+    fun theControllersPortTypeIsReadWithTheBindings() =
         runTest {
-            api.port1Type = "PlayStationMouse"
+            api.ports = mapOf(PAD_A to 1)
+            api.portTypes = mapOf(0 to "AnalogController", 1 to "PlayStationMouse")
 
             val page = openPage()
 
-            assertEquals("PlayStationMouse", page.state.port1Type)
+            assertEquals("PlayStationMouse", page.state.bindingsType)
+        }
+
+    // --- Ports, types, macros and hotkeys ---
+
+    private val deadzone =
+        TypeSetting(
+            TypeSetting.Kind.Float,
+            "AnalogDeadzone",
+            "Analog Deadzone",
+            "",
+            "0.00",
+            "0.00",
+            "1.00",
+            "0.01",
+            "%.0f%%",
+            100f,
+            emptyList(),
+        )
+
+    @Test
+    fun theHubReadsEachControllersPortAndRumble() =
+        runTest {
+            api.ports = mapOf(PAD_A to 1)
+            api.rumble = mapOf(PAD_A to 40)
+            api.names["ControllerType"] = listOf("None", "AnalogController")
+            api.names["MultitapMode"] = listOf("Disabled", "Port1Only")
+
+            val page = openPage()
+
+            assertEquals(mapOf(PAD_A to 1), page.state.ports)
+            assertEquals(mapOf(PAD_A to 40), page.state.rumble)
+            assertEquals(listOf(0, 1), page.state.offered.map { it.value })
+            assertEquals("AnalogController", page.state.portTypes[0])
+            assertEquals("None", page.state.portTypes[1])
+            assertEquals("Disabled", page.state.multitap!![PortSettings.MULTITAP])
+            assertEquals(listOf("None", "AnalogController"), page.state.typeNames.map { it.value })
+            assertEquals(listOf("Disabled", "Port1Only"), page.state.multitapNames.map { it.value })
+        }
+
+    @Test
+    fun theNamesStayAcrossAReopen() =
+        runTest {
+            api.names["ControllerType"] = listOf("None", "AnalogController")
+            val page = openPage()
+
+            page.close()
+            page.open()
+            runCurrent()
+
+            assertEquals(listOf("None", "AnalogController"), page.state.typeNames.map { it.value })
+            assertEquals(1, calls.count { it == "getSettingNames ControllerType" })
+        }
+
+    // Back to the hub focuses the row the page was opened from.
+    @Test
+    fun backSaysWhereItCameFrom() =
+        runTest {
+            val page = openPage()
+            page.openPort(1)
+            page.openMacro(1, 3)
+            runCurrent()
+
+            page.back()
+            assertEquals(ControllersView.Macro(1, 3), page.state.cameFrom)
+            page.back()
+            assertEquals(ControllersView.Port(1), page.state.cameFrom)
+        }
+
+    @Test
+    fun aPortReadsItsMacrosButtons() =
+        runTest {
+            settings.values["Pad1/Macro2Binds"] = "Cross & Circle"
+            val page = openPage()
+
+            page.openPort(0)
+            runCurrent()
+
+            assertEquals("Cross & Circle", page.state.portValues!![MacroSettings.binds(0, 2)])
+            assertEquals("", page.state.portValues!![MacroSettings.binds(0, 1)])
+        }
+
+    @Test
+    fun movingAControllerToPort2ShowsItThere() =
+        runTest {
+            val page = openPage()
+
+            page.setPort(PAD_A, 1)
+            runCurrent()
+            assertEquals(1, page.state.ports[PAD_A])
+            assertTrue("setControllerPort $PAD_A 1" in calls)
+
+            page.openPort(1)
+            runCurrent()
+            assertEquals(ControllersView.Port(1), page.state.view)
+            assertEquals(PAD_A, page.state.selected)
+            assertEquals(PAD_A, page.state.bindingsFor)
+        }
+
+    @Test
+    fun aPortWithNoControllerHasNoSelection() =
+        runTest {
+            val page = openPage()
+
+            page.openPort(1)
+            runCurrent()
+
+            assertNull(page.state.selected)
+            page.capture("Cross")
+            runCurrent()
+            assertNull(page.state.capturing)
+        }
+
+    // Review Focus 1: a controller left on a port nothing offers any more still shows it, noted.
+    @Test
+    fun aPadNotOfferedStillShows() =
+        runTest {
+            api.ports = mapOf(PAD_A to 3)
+
+            val page = openPage()
+
+            val port = page.state.offered.single { it.value == 3 }
+            assertEquals("Port 1C", port.label)
+            assertEquals("No game uses this port", port.note)
+        }
+
+    @Test
+    fun multitapOnReadsTheOfferedPortsAgain() =
+        runTest {
+            val page = openPage()
+            api.offered = listOf(Choice(0, "Port 1A"), Choice(2, "Port 1B"), Choice(1, "Port 2"))
+
+            page.setMultitap(page.state.multitap!!.with(PortSettings.MULTITAP, "Port1Only"))
+            runCurrent()
+
+            assertEquals("Port1Only", settings.values["ControllerPorts/MultitapMode"])
+            assertEquals(listOf("Port 1A", "Port 1B", "Port 2"), page.state.offered.map { it.label })
+        }
+
+    @Test
+    fun aPortReadsItsTypesSettings() =
+        runTest {
+            api.typeSettings = mapOf("AnalogController" to listOf(deadzone))
+            settings.values["Pad1/AnalogDeadzone"] = "0.25"
+            val page = openPage()
+
+            page.openPort(0)
+            runCurrent()
+
+            assertEquals(listOf(deadzone), page.state.typeSettings)
+            assertEquals(0.25f, page.state.portValues!![PortSettings.setting(0, deadzone) as FloatSetting])
+            assertEquals("AnalogController", page.state.bindingsType)
+        }
+
+    @Test
+    fun aTypeChangeReadsItsSettingsAndBindings() =
+        runTest {
+            api.typeSettings = mapOf("AnalogController" to listOf(deadzone))
+            val page = openPage()
+            page.openPort(0)
+            runCurrent()
+
+            page.setType(0, "NeGcon")
+            runCurrent()
+
+            assertTrue("setPortType 0 NeGcon" in calls)
+            assertEquals(emptyList<TypeSetting>(), page.state.typeSettings)
+            assertEquals("NeGcon", page.state.portTypes[0])
+            assertEquals("NeGcon", page.state.bindingsType)
+        }
+
+    @Test
+    fun aPortChangeWritesOnlyWhatChanged() =
+        runTest {
+            api.typeSettings = mapOf("AnalogController" to listOf(deadzone))
+            val page = openPage()
+            page.openPort(0)
+            runCurrent()
+
+            val setting = PortSettings.setting(0, deadzone) as FloatSetting
+            page.changePort(page.state.portValues!!.with(setting, 0.3f))
+            runCurrent()
+
+            assertEquals(mapOf("Pad1/AnalogDeadzone" to "0.3"), settings.values)
+        }
+
+    @Test
+    fun aStaleBindingsReadIsDropped() =
+        runTest {
+            pads.connected.value =
+                listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", PAD_B))
+            api.ports = mapOf(PAD_B to 1)
+            val page = openPage()
+
+            page.openPort(0)
+            page.openPort(1)
+            runCurrent()
+
+            assertEquals(PAD_B, page.state.selected)
+            assertEquals(PAD_B, page.state.bindingsFor)
+        }
+
+    @Test
+    fun backGoesUpOneLevel() =
+        runTest {
+            val page = openPage()
+            page.openPort(0)
+            page.openMacro(0, 2)
+            runCurrent()
+            assertEquals(ControllersView.Macro(0, 2), page.state.view)
+
+            assertTrue(page.back())
+            assertEquals(ControllersView.Port(0), page.state.view)
+            assertTrue(page.back())
+            assertEquals(ControllersView.Hub, page.state.view)
+            assertFalse(page.back())
+        }
+
+    @Test
+    fun aMacroReadsItsSettingsInputsAndTrigger() =
+        runTest {
+            settings.values["Pad1/Macro2Binds"] = "Cross & Circle"
+            api.macros["Macro2"] = "Button99"
+            val page = openPage()
+
+            page.openMacro(0, 2)
+            runCurrent()
+
+            assertEquals("Cross & Circle", page.state.macroValues!![MacroSettings.binds(0, 2)])
+            assertEquals(
+                "Button99",
+                page.state.macros!!
+                    .single { it.name == "Macro2" }
+                    .binding,
+            )
+            assertEquals(listOf("Cross", "Circle"), page.state.macroInputs.map { it.name })
+        }
+
+    @Test
+    fun aMacroTriggerCaptures() =
+        runTest {
+            val page = openPage()
+            page.openMacro(0, 1)
+            runCurrent()
+
+            page.capture("Macro1")
+            runCurrent()
+            page.onBindingCaptured("Button99")
+            runCurrent()
+
+            assertTrue(calls.toString(), "setPadBinding $PAD_A Macro1 Button99" in calls)
+            assertEquals(
+                "Button99",
+                page.state.macros!!
+                    .single { it.name == "Macro1" }
+                    .binding,
+            )
+        }
+
+    @Test
+    fun hotkeysCoverEveryController() =
+        runTest {
+            pads.connected.value =
+                listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", PAD_B))
+            api.ports = mapOf(PAD_B to 1)
+            val page = openPage()
+            page.openPort(0)
+            runCurrent()
+
+            page.openHotkeys()
+            page.select(PAD_B)
+            runCurrent()
+
+            assertEquals(ControllersView.Hotkeys, page.state.view)
+            assertEquals(PAD_B, page.state.selected)
+        }
+
+    // After a move, the controller's bindings are its new port's type's, read again.
+    @Test
+    fun aMoveReadsTheBindingsOfTheNewPortsType() =
+        runTest {
+            api.portTypes = mapOf(0 to "AnalogController", 1 to "NeGcon")
+            val page = openPage()
+            assertEquals("AnalogController", page.state.bindingsType)
+
+            page.setPort(PAD_A, 1)
+            runCurrent()
+
+            assertEquals("NeGcon", page.state.bindingsType)
+        }
+
+    // Two hub reads close together (a controller connecting as the page opens) still give the core's names.
+    @Test
+    fun theNamesSurviveTwoReadsAtOnce() =
+        runTest {
+            api.names["ControllerType"] = listOf("None", "AnalogController")
+            val page =
+                ControllersPage(
+                    backgroundScope,
+                    StandardTestDispatcher(testScheduler),
+                    api,
+                    { pads },
+                    { true },
+                    settings,
+                )
+            page.open()
+            pads.connected.value =
+                listOf(ConnectedController(1, "Pad A", PAD_A), ConnectedController(2, "Pad B", PAD_B))
+            runCurrent()
+
+            assertEquals(listOf("None", "AnalogController"), page.state.typeNames.map { it.value })
+        }
+
+    // The ports offered keep the core's order, a port's slots together; a lost one goes in its place.
+    @Test
+    fun theOfferedOrderIsTheCores() =
+        runTest {
+            api.offered = listOf(Choice(0, "Port 1A"), Choice(2, "Port 1B"), Choice(1, "Port 2"))
+            api.ports = mapOf(PAD_A to 6)
+
+            val page = openPage()
+
+            assertEquals(listOf(0, 2, 1, 6), page.state.offered.map { it.value })
+        }
+
+    // Another port's page never shows with the last port's values, whose settings it doesn't have.
+    @Test
+    fun anotherPortStartsWithNoValues() =
+        runTest {
+            api.typeSettings = mapOf("AnalogController" to listOf(deadzone))
+            val page = openPage()
+            page.openPort(0)
+            runCurrent()
+            assertNotNull(page.state.portValues)
+            page.back()
+
+            page.openPort(1)
+
+            assertNull(page.state.portValues)
+            assertEquals(emptyList<TypeSetting>(), page.state.typeSettings)
+        }
+
+    @Test
+    fun rumbleIsSetPerController() =
+        runTest {
+            val page = openPage()
+
+            page.setRumble(PAD_A, 30)
+            runCurrent()
+
+            assertEquals(30, page.state.rumble[PAD_A])
+            assertTrue("setRumbleStrength $PAD_A 30" in calls)
         }
 
     @Test
@@ -409,5 +771,6 @@ class ControllersPageTest {
 
     private companion object {
         const val PAD_A = "pad-a"
+        const val PAD_B = "pad-b"
     }
 }

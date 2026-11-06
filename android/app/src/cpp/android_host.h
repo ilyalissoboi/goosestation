@@ -225,43 +225,80 @@ enum class PadBindingKind : u8
   HalfAxis,
 };
 
-/// One of Port 1's inputs, and the binding one controller has for it, without its Android-<index>/ prefix (Button96,
-/// +Axis23), if it has one.
+/// One of a port's inputs, or a hotkey, and the binding one controller has for it, without its Android-<index>/
+/// prefix (Button96, +Axis23), if it has one.
 struct PadBinding
 {
-  std::string name;         // the [Pad1] key
+  std::string name;         // the [PadN] or [Hotkeys] key
   std::string display_name; // the core's, untranslated
   PadBindingKind kind;
   std::optional<std::string> binding;
+  std::string category = {}; // a hotkey's, as the core groups them ("General", "Save States")
 };
 
-/// Each controller's own bindings on Port 1, by its descriptor. They run on the CPU thread and block; the two that
+/// Each controller's own bindings on its port, by its descriptor. They run on the CPU thread and block; the two that
 /// change bindings save settings.ini and apply them (System::ReloadInputBindings()). For a descriptor not in the table
 /// (one never connected), or before Initialize() succeeded, they do nothing and GetPadBindings() gives nullopt.
 
-/// Port 1's controller type's buttons and axes (Button, Axis and HalfAxis), in the core's order, each with the
+/// The controller's port's type's buttons and axes (Button, Axis and HalfAxis), in the core's order, each with the
 /// controller's first binding for it.
 std::optional<std::vector<PadBinding>> GetPadBindings(std::string descriptor);
 
-/// Port 1's controller type, as the core names it ([Pad1] Type, or the core's default): nullopt before Initialize()
-/// succeeded, or for a type the core doesn't know. Runs on the CPU thread and blocks.
-std::optional<std::string> GetPort1ControllerType();
+/// The controller's macro triggers on its port, Macro1 to Macro4 ([PadN] MacroK), each its first binding or none.
+/// nullopt as GetPadBindings() gives it. SetPadBinding() sets them, as an input.
+std::optional<std::vector<PadBinding>> GetMacroBindings(std::string descriptor);
+
+/// The controller's rumble strength in percent ([Android] ControllerRumble, 100 when it has none); nullopt as
+/// GetControllerIndex() gives it. Runs on the CPU thread and blocks.
+std::optional<u32> GetRumbleStrength(std::string descriptor);
+
+/// Sets the controller's rumble strength, 0 to 100 percent. Saves and applies it.
+void SetRumbleStrength(std::string descriptor, u32 percent);
+
+/// For the instrumented tests: sets the pad's motors, as a game would (InputManager::SetPadVibrationIntensity()).
+void SetPadVibrationForTest(u32 pad, float large, float small);
+
+/// The pad's controller type as settings.ini has it ([PadN] Type, or the core's default for the pad), even one the
+/// core doesn't know; nullopt before Initialize() succeeded or for a pad past 7. Pads are 0-based: [Pad1] is 0.
+std::optional<std::string> GetPortType(u32 pad);
+
+/// Sets the pad's controller type ([PadN] Type), gives each controller on the pad the type's default binding for each
+/// input it has none for, saves, and applies it.
+void SetPortType(u32 pad, std::string type);
+
+/// The controller's pad ([Android] ControllerPorts, Port 1 when it has none); nullopt as GetControllerIndex() gives
+/// it. Runs on the CPU thread and blocks.
+std::optional<u32> GetControllerPort(std::string descriptor);
+
+/// Puts the controller on pad: each of its own entries in the old [PadN]'s keys (Android-<index>/..., macro triggers
+/// too) moves to the same key of the new one, other sources' and controllers' entries staying where they are, and the
+/// new port's type gets its defaults for each input the controller has none for. Saves and applies it.
+void SetControllerPort(std::string descriptor, u32 pad);
+
+/// The ports a controller can be put on, as (pad, label), in desktop's order (a port's slots together): Ports 1 and 2,
+/// and a port's multitap slots (1A to 1D, 2A to 2D) when settings.ini or any game's file turns multitap on for it.
+std::vector<std::pair<u32, std::string>> GetOfferedPorts();
+
+/// For the instrumented tests: the running game's pad's input name's state (Controller::GetBindState()), 0 without a
+/// game or controller there. Runs on the CPU thread and blocks.
+float GetPadBindStateForTest(u32 pad, std::string name);
 
 /// The controller's place in the descriptor table, as its Android-<index> devices are numbered, which stays the same
 /// from one run to the next; nullopt for one never connected, or before Initialize() succeeded.
 std::optional<u32> GetControllerIndex(std::string descriptor);
 
-/// Replaces the controller's bindings for Port 1's input name with binding, or with none if it's empty. Other
-/// controllers' stay as they are. An input Port 1's type doesn't have is refused.
+/// Replaces the controller's bindings for its port's input name with binding, or with none if it's empty. Other
+/// controllers' stay as they are. An input its port's type doesn't have is refused.
 void SetPadBinding(std::string descriptor, std::string name, std::string binding);
 
-/// Drops the controller's bindings from every [Pad1] key and its hotkeys, then adds its defaults, as a new controller
+/// Drops the controller's bindings from every key of its port's [PadN] and its hotkeys, then adds its defaults, as a new controller
 /// gets them.
 void ResetPadBindings(std::string descriptor);
 
-/// The controller's hotkeys, each a Select chord (Button109 & Android-<index>/Button99) or none: [Hotkeys]
-/// ToggleFastForward, then [Pad1] Analog when Port 1's type has it, then [Hotkeys] Screenshot. nullopt as
-/// GetPadBindings() gives it.
+/// The controller's hotkeys, each a Select chord (Button109 & Android-<index>/Button99) or none: the core's
+/// (InputManager::GetHotkeyList(), in its order, with their categories and names), but Change disc, Reset and the
+/// per-slot save state ones, which the app's menu has or does its own way, and the analog mode hotkey unless the
+/// controller's port's type has the Analog button. nullopt as GetPadBindings() gives it.
 std::optional<std::vector<PadBinding>> GetHotkeyBindings(std::string descriptor);
 
 /// Binds the hotkey name (one GetHotkeyBindings() lists) to Select held with button (Button99) on the controller, or
@@ -311,6 +348,17 @@ void NotifyOsdMessage(std::string_view key, std::string_view text, float seconds
 
 /// Fast forward was turned on or off, by the menu or a hotkey.
 void NotifyFastForwardChanged(bool enabled);
+
+/// The controller device's motors' levels (0 to 1, times its strength), as its port's rumble goes to it: both 0 stop
+/// it. Called on the CPU thread.
+void NotifyRumble(s32 device_id, float large, float small);
+
+/// One of the host's save state hotkeys fired, by its name (SaveSelectedSaveState and so on): the app saves, loads or
+/// picks the slot itself.
+void NotifyHotkey(std::string_view name);
+
+/// Undoes the last state load (System::UndoLoadState()), on the CPU thread, waiting; false when there's none.
+bool UndoLoadState();
 
 /// The RetroAchievements login token changed (nullopt: it's gone). The app stores it before this returns. Called with
 /// the core's settings lock held, on whichever thread saved it.

@@ -200,6 +200,18 @@ interface GameMenuActions {
     fun closeLeaderboard() {}
 }
 
+/** The save state hotkeys the app runs itself, by the core's names for them ([coreName]). */
+enum class StateHotkey(
+    val coreName: String,
+) {
+    Save("SaveSelectedSaveState"),
+    Load("LoadSelectedSaveState"),
+    Previous("SelectPreviousSaveStateSlot"),
+    Next("SelectNextSaveStateSlot"),
+    SaveAndNext("SaveStateAndSelectNextSlot"),
+    Undo("UndoLoadState"),
+}
+
 /**
  * The in-game menu's state and actions, from a game's boot to its end. Main thread only. Its [api] and [lastSlots] calls
  * run on [game], one at a time, never on the main thread. A save or load that works says so ([onMessage]) and goes back
@@ -235,6 +247,9 @@ class InGameMenu(
 
     private val canSave get() = state.booted && !serial.isNullOrBlank()
 
+    /** The save state hotkeys' slot, once one has run in this game: until then, the last slot, or slot 1. */
+    private var selectedSlot: Int? = null
+
     /**
      * [game] booted: its key ([GameEntry.serial], blank for none) keeps its save states. Fast forward is off, and the
      * analog mode is read.
@@ -243,6 +258,7 @@ class InGameMenu(
         gameId++
         panelId++
         running = game
+        selectedSlot = null
         state = GameMenuState(booted = true, discCount = game.discs.size)
         readGameState()
     }
@@ -252,6 +268,7 @@ class InGameMenu(
         gameId++
         panelId++
         running = null
+        selectedSlot = null
         state = GameMenuState()
     }
 
@@ -723,6 +740,8 @@ class InGameMenu(
                 updatePanel(id) { it.copy(busy = false, error = failed(error)) }
                 return@launch
             }
+            // The save state hotkeys' slot follows the menu's too.
+            if (remember) selectedSlot = slot
             if (id == panelId) closeSlots()
             onMessage(done)
             onResume()
@@ -759,6 +778,83 @@ class InGameMenu(
         }
     }
 
+    /**
+     * A save state hotkey, while the game runs: it saves, loads or picks the slot the menu's way (the game's key, the
+     * last slot, the disc read after a load, the same messages), without opening the menu or resuming. Load is refused
+     * in hardcore mode, and a game without a key keeps no states.
+     */
+    fun hotkey(which: StateHotkey) {
+        if (!state.booted) return
+        val key = serial
+        if (key.isNullOrBlank()) return onMessage(NO_STATES)
+        if (which == StateHotkey.Load && state.hardcore) return onMessage(HARDCORE_LOAD)
+        val id = gameId
+        scope.launch {
+            val slot =
+                selectedSlot
+                    ?: withContext(game) { lastSlots.get(key) }?.takeIf { it in 1..SaveSlots.COUNT }
+                    ?: 1
+            if (id != gameId) return@launch
+            when (which) {
+                StateHotkey.Previous -> selectSlot(if (slot == 1) SaveSlots.COUNT else slot - 1)
+                StateHotkey.Next -> selectSlot(slot % SaveSlots.COUNT + 1)
+                StateHotkey.Save -> hotkeyState(id, key, slot, loads = false)
+                StateHotkey.SaveAndNext ->
+                    if (hotkeyState(id, key, slot, loads = false) && id == gameId) {
+                        selectedSlot = slot % SaveSlots.COUNT + 1
+                    }
+                StateHotkey.Load -> hotkeyState(id, key, slot, loads = true)
+                StateHotkey.Undo -> {
+                    val multiDisc = state.discCount > 1
+                    var disc = 0
+                    val undone =
+                        withContext(game) {
+                            api.undoLoadState().also { if (it && multiDisc) disc = readDisc(key) }
+                        }
+                    if (id != gameId) return@launch
+                    if (disc > 0) state = state.copy(disc = disc)
+                    onMessage(if (undone) "Undid the last load" else "No load to undo")
+                }
+            }
+        }
+    }
+
+    private fun selectSlot(slot: Int) {
+        selectedSlot = slot
+        onMessage("Slot $slot selected")
+    }
+
+    /** Saves or [loads] [key]'s [slot] for a hotkey; says how it went, and returns whether it worked. */
+    private suspend fun hotkeyState(
+        id: Int,
+        key: String,
+        slot: Int,
+        loads: Boolean,
+    ): Boolean {
+        val multiDisc = state.discCount > 1
+        var disc = 0
+        val error =
+            withContext(game) {
+                (if (loads) api.loadState(key, slot) else api.saveState(key, slot)).also {
+                    if (it != null) return@also
+                    lastSlots.set(key, slot)
+                    if (loads && multiDisc) disc = readDisc(key)
+                }
+            }
+        if (id != gameId) return false
+        if (disc > 0) state = state.copy(disc = disc)
+        if (error == null) selectedSlot = slot
+        onMessage(
+            when {
+                error == null -> if (loads) "Loaded slot $slot" else "Saved to slot $slot"
+                loads -> "Couldn't load slot $slot: $error"
+                error == CARD_BUSY -> CARD_BUSY_SAVE
+                else -> "Couldn't save to slot $slot: $error"
+            },
+        )
+        return error == null
+    }
+
     /** The disc in the drive (0 if unknown), kept as the game's last disc. Blocks: on [game]. */
     private fun readDisc(key: String): Int {
         val disc = api.getCurrentDisc()
@@ -780,6 +876,10 @@ class InGameMenu(
         const val CARD_BUSY = "Cannot save state while memory card is being saved."
         const val CARD_BUSY_SAVE =
             "The game is still saving to its memory card. Resume it for a moment, then save again."
+
+        /** What the save state hotkeys say for a game without a key, and for Load in hardcore mode. */
+        const val NO_STATES = "This game can't keep save states"
+        const val HARDCORE_LOAD = "Loading a state is off in hardcore mode"
 
         /** Save lists slots 1 to 10; Load lists the saved ones, the resume state first, when there is one. */
         fun entries(

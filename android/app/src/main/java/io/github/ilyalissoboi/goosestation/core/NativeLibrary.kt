@@ -491,10 +491,78 @@ object NativeLibrary {
     external fun getPadBindings(descriptor: String): Array<PadBinding>?
 
     /**
-     * Port 1's controller type, as the core names it (`AnalogController`, `DigitalController`, …): `[Pad1] Type`, or
-     * the core's default. Null before [initialize], or for a type the core doesn't know.
+     * The [pad]'s controller type as settings.ini has it (`AnalogController`, `DigitalController`, …): `[PadN] Type`,
+     * or the core's default for it, even a type the core doesn't know. Pads are 0-based (`[Pad1]` is 0). Null before
+     * [initialize], or for a pad past 7.
      */
-    external fun getPort1ControllerType(): String?
+    external fun getPortType(pad: Int): String?
+
+    /**
+     * Sets [pad]'s controller [type] (`[PadN] Type`), gives each controller on it the type's default bindings where it
+     * has none, and applies it. Waits for the core.
+     */
+    external fun setPortType(
+        pad: Int,
+        type: String,
+    )
+
+    /**
+     * The controller [type]'s buttons and axes, as a macro can press them: name, display name, name, display name…, in
+     * the core's order; empty for an unknown type.
+     */
+    external fun getTypeInputs(type: String): Array<String>
+
+    /** The controller [type]'s settings, as [TypeSetting.parse] reads them; empty for a type with none, or unknown. */
+    external fun getTypeSettings(type: String): Array<String>
+
+    /**
+     * The controller with [descriptor]'s macro triggers on its port, `Macro1` to `Macro4`, each its binding or null;
+     * [setPadBinding] sets them. Null as [getPadBindings] is.
+     */
+    external fun getMacroBindings(descriptor: String): Array<PadBinding>?
+
+    /** The controller with [descriptor]'s rumble strength, in percent (100 by default), or -1 for one never connected. */
+    external fun getRumbleStrength(descriptor: String): Int
+
+    /** Sets the controller with [descriptor]'s rumble strength, 0 to 100 percent. Waits for the core. */
+    external fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    )
+
+    /** Tests: sets [pad]'s motors as a game would (`InputManager::SetPadVibrationIntensity`). Waits for the core. */
+    external fun setPadVibrationForTest(
+        pad: Int,
+        large: Float,
+        small: Float,
+    )
+
+    /** Undoes the running game's last state load; false when there's none to undo. Waits for the core. */
+    external fun undoLoadState(): Boolean
+
+    /** The controller with [descriptor]'s pad (0-based, Port 1 by default), or -1 for one never connected. */
+    external fun getControllerPort(descriptor: String): Int
+
+    /**
+     * Puts the controller with [descriptor] on [pad]: its own bindings move to the new `[PadN]`, other sources' stay,
+     * and the new port's type gets its defaults where it has none. Saved and applied; waits for the core.
+     */
+    external fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    )
+
+    /**
+     * The ports a controller can be put on: pad number, label, pad number, label…, in pad order. Ports 1 and 2, and
+     * multitap's (`Port 1A`…`Port 1D`, `Port 2A`…`Port 2D`) when settings.ini or any game's file turns it on.
+     */
+    external fun getOfferedPorts(): Array<String>
+
+    /** Tests: the running game's [pad]'s input [name]'s state, 0 without a game or controller. Waits for the core. */
+    external fun getPadBindStateForTest(
+        pad: Int,
+        name: String,
+    ): Float
 
     /**
      * The controller with [descriptor]'s place in the table of controllers this install has seen, which stays the same

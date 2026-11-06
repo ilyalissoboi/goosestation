@@ -16,4 +16,6 @@ data class PadBinding(
     val displayName: String,
     val kind: PadBindingKind,
     val binding: String?,
+    /** A hotkey's category, as the core groups them ("General", "Save States"); empty for a pad's input. */
+    val category: String = "",
 )

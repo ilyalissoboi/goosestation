@@ -9,7 +9,9 @@ import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
+import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
+import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -22,7 +24,30 @@ import kotlinx.coroutines.flow.StateFlow
 interface CoreApi {
     fun getPadBindings(descriptor: String): List<PadBinding>?
 
-    fun getPort1ControllerType(): String?
+    /** [NativeLibrary.getPortType]. */
+    fun getPortType(pad: Int): String?
+
+    /** [NativeLibrary.getControllerPort], or null for a controller not in the table. */
+    fun getControllerPort(descriptor: String): Int?
+
+    fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    )
+
+    /** [NativeLibrary.getOfferedPorts]: each port as its pad and label. */
+    fun getOfferedPorts(): List<Choice<Int>>
+
+    fun setPortType(
+        pad: Int,
+        type: String,
+    )
+
+    /** [NativeLibrary.getTypeSettings], parsed. */
+    fun getTypeSettings(type: String): List<TypeSetting>
+
+    /** [NativeLibrary.getTypeInputs]: the type's buttons and axes, unbound, as a macro can press them. */
+    fun getTypeInputs(type: String): List<PadBinding>
 
     fun setPadBinding(
         descriptor: String,
@@ -33,6 +58,16 @@ interface CoreApi {
     fun resetPadBindings(descriptor: String)
 
     fun getHotkeyBindings(descriptor: String): List<PadBinding>?
+
+    fun getMacroBindings(descriptor: String): List<PadBinding>?
+
+    /** [NativeLibrary.getRumbleStrength], or null for a controller not in the table. */
+    fun getRumbleStrength(descriptor: String): Int?
+
+    fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    )
 
     fun setHotkeyBinding(
         descriptor: String,
@@ -100,7 +135,33 @@ object NativeCoreApi : CoreApi {
     override fun getPadBindings(descriptor: String): List<PadBinding>? =
         NativeLibrary.getPadBindings(descriptor)?.toList()
 
-    override fun getPort1ControllerType(): String? = NativeLibrary.getPort1ControllerType()
+    override fun getPortType(pad: Int): String? = NativeLibrary.getPortType(pad)
+
+    override fun getControllerPort(descriptor: String): Int? =
+        NativeLibrary.getControllerPort(descriptor).takeIf { it >= 0 }
+
+    override fun setControllerPort(
+        descriptor: String,
+        pad: Int,
+    ) = NativeLibrary.setControllerPort(descriptor, pad)
+
+    override fun setPortType(
+        pad: Int,
+        type: String,
+    ) = NativeLibrary.setPortType(pad, type)
+
+    override fun getTypeSettings(type: String): List<TypeSetting> =
+        TypeSetting.parse(NativeLibrary.getTypeSettings(type))
+
+    override fun getTypeInputs(type: String): List<PadBinding> =
+        NativeLibrary.getTypeInputs(type).toList().chunked(2).map { (name, display) ->
+            PadBinding(name, display, PadBindingKind.Button, null)
+        }
+
+    override fun getOfferedPorts(): List<Choice<Int>> =
+        NativeLibrary.getOfferedPorts().toList().chunked(2).mapNotNull { (pad, label) ->
+            pad.toIntOrNull()?.let { Choice(it, label) }
+        }
 
     override fun setPadBinding(
         descriptor: String,
@@ -109,6 +170,17 @@ object NativeCoreApi : CoreApi {
     ) = NativeLibrary.setPadBinding(descriptor, name, binding)
 
     override fun resetPadBindings(descriptor: String) = NativeLibrary.resetPadBindings(descriptor)
+
+    override fun getRumbleStrength(descriptor: String): Int? =
+        NativeLibrary.getRumbleStrength(descriptor).takeIf { it >= 0 }
+
+    override fun setRumbleStrength(
+        descriptor: String,
+        percent: Int,
+    ) = NativeLibrary.setRumbleStrength(descriptor, percent)
+
+    override fun getMacroBindings(descriptor: String): List<PadBinding>? =
+        NativeLibrary.getMacroBindings(descriptor)?.toList()
 
     override fun getHotkeyBindings(descriptor: String): List<PadBinding>? =
         NativeLibrary.getHotkeyBindings(descriptor)?.toList()

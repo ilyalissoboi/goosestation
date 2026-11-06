@@ -76,6 +76,9 @@ void AndroidInputSource::Shutdown()
     m_queue.clear();
   }
 
+  // The pads and strengths stay: the host sets them once per source.
+  for (const Device& device : m_devices)
+    m_rumble.OnDisconnected(device.device_id);
   m_devices.clear();
 }
 
@@ -136,6 +139,10 @@ void AndroidInputSource::PollEvents()
           device->state.OnKey(event.code, event.value != 0.0f, m_pad_events);
         else
           device->state.OnAxis(event.code, event.value, m_pad_events);
+
+        // Used: something it reported changed, so a stick resting where it was doesn't count.
+        if (!m_pad_events.empty())
+          m_rumble.OnInput(event.device_id);
         ReportPadEvents(device->index, m_pad_events);
       }
       break;
@@ -198,6 +205,7 @@ void AndroidInputSource::HandleConnected(s32 device_id, u32 index, std::string n
 
   const std::string identifier = fmt::format("Android-{}", index);
   m_devices.push_back(Device{device_id, index, name, {}});
+  m_rumble.OnConnected(device_id, index);
   InputManager::OnInputDeviceConnected(identifier, name);
 }
 
@@ -213,6 +221,7 @@ void AndroidInputSource::HandleDisconnected(s32 device_id)
 
   const u32 index = it->index;
   m_devices.erase(it);
+  m_rumble.OnDisconnected(device_id);
 
   InputBindingKey key = {};
   key.source_type = InputSourceType::Android;
@@ -270,7 +279,7 @@ std::vector<std::pair<std::string, std::string>> AndroidInputSource::EnumerateDe
 
 std::vector<InputBindingKey> AndroidInputSource::EnumerateMotors()
 {
-  // No vibration yet.
+  // The ports' motors are bound by pad, never through the motor keys (InputManager::AddPadBindings()).
   return {};
 }
 
@@ -288,6 +297,60 @@ bool AndroidInputSource::GetGenericBindingMapping(std::string_view device, Gener
 
 void AndroidInputSource::UpdateMotorState(InputBindingKey key, float intensity)
 {
+  if (key.source_type != InputSourceType::Android || key.source_subtype != InputSubclass::ControllerMotor)
+    return;
+
+  SendRumble(m_rumble.SetMotor(key.source_index, key.data, intensity));
+}
+
+void AndroidInputSource::UpdateMotorState(InputBindingKey large_key, InputBindingKey small_key, float large_intensity,
+                                          float small_intensity)
+{
+  if (large_key.source_type != InputSourceType::Android || small_key.source_type != InputSourceType::Android ||
+      large_key.source_subtype != InputSubclass::ControllerMotor ||
+      small_key.source_subtype != InputSubclass::ControllerMotor)
+  {
+    return;
+  }
+
+  // One port's two motors: set together, so a stop for the controller that was rumbling isn't lost between them.
+  if (large_key.source_index == small_key.source_index && large_key.data == 0 && small_key.data == 1)
+  {
+    SendRumble(m_rumble.SetMotors(large_key.source_index, large_intensity, small_intensity));
+    return;
+  }
+
+  SendRumble(m_rumble.SetMotor(large_key.source_index, large_key.data, large_intensity));
+  SendRumble(m_rumble.SetMotor(small_key.source_index, small_key.data, small_intensity));
+}
+
+void AndroidInputSource::SetRumbleCallback(std::function<void(s32 device_id, float large, float small)> callback)
+{
+  m_rumble_callback = std::move(callback);
+}
+
+void AndroidInputSource::SetControllerPads(std::vector<u32> pad_of_index)
+{
+  m_rumble.SetPads(std::move(pad_of_index));
+}
+
+std::optional<u32> AndroidInputSource::GetLastUsedIndex() const
+{
+  return m_rumble.GetLastUsedIndex();
+}
+
+void AndroidInputSource::SetRumbleStrengths(std::vector<float> strength_of_index)
+{
+  m_rumble.SetStrengths(std::move(strength_of_index));
+}
+
+void AndroidInputSource::SendRumble(const std::vector<AndroidInputKeys::RumbleRouter::Command>& commands)
+{
+  if (!m_rumble_callback)
+    return;
+
+  for (const AndroidInputKeys::RumbleRouter::Command& command : commands)
+    m_rumble_callback(command.device_id, command.large, command.small);
 }
 
 std::unique_ptr<InputSource> InputSource::CreateAndroidSource()

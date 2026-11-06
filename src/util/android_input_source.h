@@ -6,6 +6,7 @@
 #include "android_input_keys.h"
 #include "input_source.h"
 
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -38,6 +39,8 @@ public:
   std::vector<InputBindingKey> EnumerateMotors() override;
   bool GetGenericBindingMapping(std::string_view device, GenericInputBindingMapping* mapping) override;
   void UpdateMotorState(InputBindingKey key, float intensity) override;
+  void UpdateMotorState(InputBindingKey large_key, InputBindingKey small_key, float large_intensity,
+                        float small_intensity) override;
 
   void QueueKeyEvent(s32 device_id, s32 keycode, bool pressed);
   void QueueAxisEvent(s32 device_id, s32 axis, float value);
@@ -50,6 +53,21 @@ public:
   /// The axes the device index's controllers have near rest (AndroidInputKeys::GetCenteredAxes()), as far as the
   /// events polled go.
   std::vector<u32> GetCenteredAxes(u32 index) const;
+
+  /// Where a controller's rumble goes: called with its device ID and both motors' levels (0 to 1, a single-motor
+  /// controller takes the larger), as each pad's motors change. A port's motors are bound by pad
+  /// (AndroidInputKeys::MakePortMotorKey()), and go to the pad's last-used controller (AndroidInputKeys::RumbleRouter).
+  void SetRumbleCallback(std::function<void(s32 device_id, float large, float small)> callback);
+
+  /// Each device index's pad, 0-based ([Android] ControllerPorts).
+  void SetControllerPads(std::vector<u32> pad_of_index);
+
+  /// The device index of the connected controller used last, as far as the events polled go: the one whose hotkey
+  /// chord just fired.
+  std::optional<u32> GetLastUsedIndex() const;
+
+  /// Each device index's rumble strength, 0 to 1 ([Android] ControllerRumble).
+  void SetRumbleStrengths(std::vector<float> strength_of_index);
 
 private:
   struct QueuedEvent
@@ -86,6 +104,7 @@ private:
   void HandleDisconnected(s32 device_id);
   void ReleaseAll(Device& device);
   void ReportPadEvents(u32 index, const std::vector<AndroidInputKeys::PadEvent>& events);
+  void SendRumble(const std::vector<AndroidInputKeys::RumbleRouter::Command>& commands);
 
   std::mutex m_queue_mutex;
   std::vector<QueuedEvent> m_queue;
@@ -94,4 +113,6 @@ private:
   std::vector<QueuedEvent> m_polled;
   std::vector<AndroidInputKeys::PadEvent> m_pad_events;
   std::vector<Device> m_devices;
+  AndroidInputKeys::RumbleRouter m_rumble;
+  std::function<void(s32, float, float)> m_rumble_callback;
 };

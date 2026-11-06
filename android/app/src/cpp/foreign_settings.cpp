@@ -113,6 +113,9 @@ bool AndroidHost::AdaptForeignSettings(SettingsInterface& si, std::string_view i
 
   // Its controller indices are another install's: here every controller is new.
   si.DeleteValue(AndroidInputKeys::SETTINGS_SECTION, AndroidInputKeys::DESCRIPTORS_KEY);
+  // By position, as the descriptors: they'd put this install's controllers on the other's ports and strengths.
+  si.DeleteValue(AndroidInputKeys::SETTINGS_SECTION, AndroidInputKeys::PORTS_KEY);
+  si.DeleteValue(AndroidInputKeys::SETTINGS_SECTION, AndroidInputKeys::RUMBLE_KEY);
 
   for (const FolderKey& folder : FOLDER_KEYS)
   {

@@ -353,6 +353,148 @@ class GameCallsTest {
         }
     }
 
+    // The save-state hotkeys are the app's: the chord reaches onHotkey, and the core writes no state of its own.
+    @Test
+    fun aSaveStateHotkeyGoesToTheApp() {
+        val hotkeys = LinkedBlockingQueue<String>()
+        withPadtest(onHotkey = { hotkeys.put(it) }) {
+            NativeLibrary.setHotkeyBinding(PAD, "SaveSelectedSaveState", "Button99")
+            Thread.sleep(500)
+
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+            Thread.sleep(300)
+            NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+
+            assertEquals("SaveSelectedSaveState", hotkeys.poll(3, TimeUnit.SECONDS))
+            Thread.sleep(500)
+            assertEquals(emptyList<String>(), File(dataRoot, "savestates").list().orEmpty().toList())
+        }
+    }
+
+    // A macro presses its buttons while its trigger is held.
+    @Test
+    fun aMacroPressesItsButtons() =
+        withPadtest(settings = { NativeLibrary.setStringSetting("Pad1", "Macro1Binds", "Cross & Circle") }) {
+            NativeLibrary.setPadBinding(PAD, "Macro1", "Button99")
+            Thread.sleep(500)
+
+            NativeLibrary.onKey(DEVICE_ID, X, true)
+            Thread.sleep(300)
+            assertEquals(1f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
+            assertEquals(1f, NativeLibrary.getPadBindStateForTest(0, "Circle"))
+            NativeLibrary.onKey(DEVICE_ID, X, false)
+            Thread.sleep(300)
+            assertEquals(0f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
+        }
+
+    // Review Focus 2: two controllers on Port 1, and the one used last rumbles, at its strength.
+    @Test
+    fun rumbleGoesToTheLastUsedControllerOnItsPort() {
+        val rumbles = LinkedBlockingQueue<Triple<Int, Float, Float>>()
+        withPadtest(onRumble = { id, large, small -> rumbles.put(Triple(id, large, small)) }) {
+            connectSecondPad()
+            NativeLibrary.setRumbleStrength(PAD_B, 50)
+            pressAndRelease(DEVICE_ID)
+            pressAndRelease(DEVICE_B)
+            rumbles.clear()
+
+            NativeLibrary.setPadVibrationForTest(0, 1f, 0.5f)
+
+            assertEquals(Triple(DEVICE_B, 0.5f, 0.25f), rumbles.poll(3, TimeUnit.SECONDS))
+            Thread.sleep(300)
+            assertTrue("only B rumbled: $rumbles", rumbles.none { it.first == DEVICE_ID && it.second > 0f })
+        }
+    }
+
+    @Test
+    fun aControllerOnAnotherPortDoesntRumble() {
+        val rumbles = LinkedBlockingQueue<Triple<Int, Float, Float>>()
+        withPadtest(
+            settings = { NativeLibrary.setStringSetting("Pad2", "Type", "AnalogController") },
+            onRumble = { id, large, small -> rumbles.put(Triple(id, large, small)) },
+        ) {
+            connectSecondPad()
+            NativeLibrary.setControllerPort(PAD, 1)
+            pressAndRelease(DEVICE_B)
+            pressAndRelease(DEVICE_ID)
+            rumbles.clear()
+
+            NativeLibrary.setPadVibrationForTest(0, 1f, 0f)
+
+            assertEquals(Triple(DEVICE_B, 1f, 0f), rumbles.poll(3, TimeUnit.SECONDS))
+            Thread.sleep(300)
+            assertTrue("A is on Port 2: $rumbles", rumbles.none { it.first == DEVICE_ID })
+        }
+    }
+
+    private fun connectSecondPad() {
+        NativeLibrary.onDeviceConnected(DEVICE_B, "Pad B", PAD_B)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (NativeLibrary.getPadBindings(PAD_B) == null) {
+            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for the second pad to connect")
+            Thread.sleep(50)
+        }
+        Thread.sleep(500)
+    }
+
+    private fun pressAndRelease(deviceId: Int) {
+        NativeLibrary.onKey(deviceId, CROSS, true)
+        Thread.sleep(200)
+        NativeLibrary.onKey(deviceId, CROSS, false)
+        Thread.sleep(200)
+    }
+
+    // Review Focus 1: a controller on a port the game doesn't have is told at the start. Multitap is on only in another
+    // game's file, so Port 1C is offered but this game has no multitap.
+    @Test
+    fun aControllerOnAnUnusedPortIsTold() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            settings = {
+                File(dataRoot, "gamesettings").mkdirs()
+                File(dataRoot, "gamesettings/SLUS-00001.ini").writeText("[ControllerPorts]\nMultitapMode = Port1Only\n")
+            },
+            onMessage = { _, text -> texts += text },
+            beforeBoot = { NativeLibrary.setControllerPort(PAD, 3) },
+        ) {}
+
+        assertTrue(texts.toString(), "Pad A is on Port 1C, which this game doesn't use." in texts)
+    }
+
+    @Test
+    fun noMessageOnAUsedPort() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(onMessage = { _, text -> texts += text }) {}
+
+        assertTrue(texts.toString(), texts.none { "which this game doesn't use" in it })
+    }
+
+    // A port set to Not Connected has no controller for it either.
+    @Test
+    fun aNotConnectedPortCountsAsUnused() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            onMessage = { _, text -> texts += text },
+            beforeBoot = { NativeLibrary.setControllerPort(PAD, 1) },
+        ) {}
+
+        assertTrue(texts.toString(), "Pad A is on Port 2, which this game doesn't use." in texts)
+    }
+
+    // A controller on Port 2 presses Port 2's inputs, and not Port 1's.
+    @Test
+    fun aControllerOnPort2DrivesPort2() =
+        withPadtest(settings = { NativeLibrary.setStringSetting("Pad2", "Type", "AnalogController") }) {
+            NativeLibrary.setControllerPort(PAD, 1)
+            Thread.sleep(500)
+
+            NativeLibrary.onKey(DEVICE_ID, CROSS, true)
+            Thread.sleep(300)
+            assertEquals(1f, NativeLibrary.getPadBindStateForTest(1, "Cross"))
+            assertEquals(0f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
+            NativeLibrary.onKey(DEVICE_ID, CROSS, false)
+        }
+
     @Test
     fun aSlotSaveKeepsABackupWhenAsked() =
         withPadtest(settings = { NativeLibrary.setBoolSetting("Main", "CreateSaveStateBackups", true) }) {
@@ -452,6 +594,9 @@ class GameCallsTest {
         settings: () -> Unit = {},
         onStarted: (startPaused: Boolean, pauseOnDisconnect: Boolean) -> Unit = { _, _ -> },
         onMessage: (key: String, text: String) -> Unit = { _, _ -> },
+        onHotkey: (String) -> Unit = {},
+        onRumble: (deviceId: Int, large: Float, small: Float) -> Unit = { _, _, _ -> },
+        beforeBoot: () -> Unit = {},
         refreshRate: Float = 0f,
         body: () -> Unit,
     ) {
@@ -481,6 +626,14 @@ class GameCallsTest {
 
                 override fun onFastForwardChanged(enabled: Boolean) = onFastForward(enabled)
 
+                override fun onHotkey(name: String) = onHotkey.invoke(name)
+
+                override fun onRumble(
+                    deviceId: Int,
+                    large: Float,
+                    small: Float,
+                ) = onRumble.invoke(deviceId, large, small)
+
                 override fun onOsdMessage(
                     key: String,
                     text: String,
@@ -501,6 +654,7 @@ class GameCallsTest {
             if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for the pad to connect")
             Thread.sleep(50)
         }
+        beforeBoot()
         val texture = SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) }
         val surface = Surface(texture)
         NativeLibrary.surfaceChanged(surface, 640, 480, 1f, refreshRate)
@@ -560,5 +714,8 @@ class GameCallsTest {
         const val DEVICE_ID = 1
         const val SELECT = 109
         const val X = 99
+        const val CROSS = 96
+        const val PAD_B = "pad-b"
+        const val DEVICE_B = 2
     }
 }

@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
@@ -25,6 +26,7 @@ import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
+import io.github.ilyalissoboi.goosestation.input.Rumble
 import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
@@ -117,6 +119,13 @@ object AppController : NativeCallbacks {
     private const val COPYING = "Copying your data from the data folder…"
 
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // The controllers' rumble, on a thread of its own, so neither the core nor the UI waits on a vibrator.
+    private val rumble by lazy {
+        val thread = HandlerThread("Rumble").apply { start() }
+        val handler = Handler(thread.looper)
+        Rumble(motorsFor = { controllers?.motorsFor(it) }, post = { handler.post(it) })
+    }
     private val scope = MainScope()
 
     // refreshGameList and reloadSettings never overlap: reloadSettings rewrites the folder paths a scan reads.
@@ -218,7 +227,9 @@ object AppController : NativeCallbacks {
 
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
-        ControllersPage(scope, coreDispatcher, NativeCoreApi, { controllers }, { screen == Screen.Controllers }) {
+        ControllersPage(scope, coreDispatcher, NativeCoreApi, {
+            controllers
+        }, { screen == Screen.Controllers }, NativeCoreSettings) {
             Log.i(TAG, it)
         }
 
@@ -399,7 +410,9 @@ object AppController : NativeCallbacks {
 
     /** The running game pauses into its menu when a controller disconnects: its `[Main] PauseOnControllerDisconnection`. */
     private var pausesOnDisconnect = false
-    var controllers: ControllerInput? = null
+
+    /** The controllers, once the core has started. Set on the main thread; the rumble's thread reads it too. */
+    @Volatile var controllers: ControllerInput? = null
         private set
 
     private val workingCopy get() = File(context.filesDir, "data")
@@ -715,6 +728,11 @@ object AppController : NativeCallbacks {
 
     // --- The Controllers page ([ControllersPage]) ---
 
+    /** Back on the Controllers page: one view up, and out of the page from its hub. */
+    fun controllersBack() {
+        if (!controllersPage.back()) closeSettingsPage()
+    }
+
     fun selectController(descriptor: String) = controllersPage.select(descriptor)
 
     fun captureBinding(name: String) = controllersPage.capture(name)
@@ -997,6 +1015,7 @@ object AppController : NativeCallbacks {
         promptOpen = true
         gameMenu.opened()
         controllers?.releaseAll()
+        rumble.stopAll()
         pauseGame()
     }
 
@@ -1546,6 +1565,7 @@ object AppController : NativeCallbacks {
             achievementOverlay.clear()
             gameMenu.gameStopped()
             controllers?.selectChordDescriptors = emptySet()
+            rumble.stopAll()
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
             if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
@@ -1711,6 +1731,17 @@ object AppController : NativeCallbacks {
 
     override fun onFastForwardChanged(enabled: Boolean) {
         mainHandler.post { gameMenu.fastForwardChanged(enabled) }
+    }
+
+    override fun onRumble(
+        deviceId: Int,
+        large: Float,
+        small: Float,
+    ) = rumble.onRumble(deviceId, large, small)
+
+    override fun onHotkey(name: String) {
+        val hotkey = StateHotkey.entries.firstOrNull { it.coreName == name } ?: return
+        mainHandler.post { gameMenu.hotkey(hotkey) }
     }
 
     override fun onError(message: String) {

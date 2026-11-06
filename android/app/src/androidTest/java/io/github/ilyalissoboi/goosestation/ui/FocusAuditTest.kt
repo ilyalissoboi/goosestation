@@ -62,7 +62,9 @@ import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
+import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
 import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
@@ -70,6 +72,7 @@ import io.github.ilyalissoboi.goosestation.storage.SavedFolders
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertThrows
@@ -516,6 +519,180 @@ class FocusAuditTest {
     }
 
     @Test
+    fun controllersHub() {
+        show {
+            ControllersScreen(
+                controllers = PADS,
+                labels = emptyMap(),
+                ports = emptyMap(),
+                rumble = emptyMap(),
+                offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2")),
+                portTypes = mapOf(0 to "AnalogController", 1 to "None"),
+                typeNames = listOf(Choice("AnalogController", "Analog Controller (DualShock)")),
+                multitap = pageValues(listOf(PortSettings.MULTITAP)),
+                multitapNames = listOf(Choice("Disabled", "Disabled"), Choice("BothPorts", "Enable on Ports 1 and 2")),
+                onPort = { _, _ -> },
+                onRumble = { _, _ -> },
+                onMultitap = {},
+                onOpenPort = {},
+                onOpenHotkeys = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+
+        // A controller's ports, open under its row.
+        press(Key.Enter)
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun controllersHubWithNone() {
+        show {
+            ControllersScreen(
+                controllers = emptyList(),
+                labels = emptyMap(),
+                ports = emptyMap(),
+                rumble = emptyMap(),
+                offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2")),
+                portTypes = emptyMap(),
+                typeNames = emptyList(),
+                multitap = null,
+                multitapNames = emptyList(),
+                onPort = { _, _ -> },
+                onRumble = { _, _ -> },
+                onMultitap = {},
+                onOpenPort = {},
+                onOpenHotkeys = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun hotkeys() {
+        show {
+            HotkeysScreen(
+                controllers = PADS,
+                labels = emptyMap(),
+                selected = PADS.first().descriptor,
+                hotkeys =
+                    listOf(
+                        PadBinding("Rewind", "Rewind", PadBindingKind.Button, null, "System"),
+                        PadBinding("UndoLoadState", "Undo Load State", PadBindingKind.Button, null, "Save States"),
+                    ),
+                hotkeysFor = PADS.first().descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCaptureHotkey = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aPortWithNeGconsSettings() {
+        show {
+            PortScreen(
+                title = "Port 1",
+                controllers = PADS,
+                labels = emptyMap(),
+                selected = PADS.first().descriptor,
+                bindings = BINDINGS,
+                bindingsFor = PADS.first().descriptor,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                glyphs = false,
+                type = "NeGcon",
+                typeNames =
+                    listOf(
+                        Choice("NeGcon", "NeGcon"),
+                        Choice("AnalogController", "Analog Controller (DualShock)"),
+                    ),
+                typeSettings = NEGCON_SETTINGS,
+                values = portPageValues(NEGCON_SETTINGS, "Pad1/Macro1Binds" to "I & II"),
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aPortNotConnected() {
+        show {
+            PortScreen(
+                title = "Port 2",
+                controllers = emptyList(),
+                labels = emptyMap(),
+                selected = null,
+                bindings = emptyList(),
+                bindingsFor = null,
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onReset = {},
+                onBack = {},
+                type = "None",
+                typeNames = listOf(Choice("None", "Not Connected")),
+                values = portPageValues(emptyList()),
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun aMacro() {
+        show {
+            MacroScreen(
+                title = "Macro 1 · Port 1",
+                pad = 0,
+                macro = 1,
+                controllers = PADS,
+                labels = emptyMap(),
+                selected = PADS.first().descriptor,
+                triggers = listOf(PadBinding("Macro1", "Macro 1", PadBindingKind.Button, "Button99")),
+                triggersFor = PADS.first().descriptor,
+                inputs = BINDINGS,
+                values = pageValues(MacroSettings.settings(0, 1), "Pad1/Macro1Binds" to "Cross"),
+                capturing = null,
+                secondsLeft = 0,
+                undoFor = null,
+                onSelect = {},
+                onCapture = {},
+                onCancelCapture = {},
+                onClear = {},
+                onUndo = {},
+                onDropUndo = {},
+                onChange = {},
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenu() {
         show { GameMenu(GameMenuState(booted = true, analogMode = true), NoMenuActions) }
 
@@ -833,7 +1010,8 @@ class FocusAuditTest {
         controllers: List<ConnectedController>,
         glyphs: Boolean = true,
     ) = show {
-        ControllersScreen(
+        PortScreen(
+            title = "Port 1",
             controllers = controllers,
             labels = emptyMap(),
             selected = controllers.firstOrNull()?.descriptor,

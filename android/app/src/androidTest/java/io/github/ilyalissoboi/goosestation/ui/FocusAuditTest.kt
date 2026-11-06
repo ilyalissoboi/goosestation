@@ -453,7 +453,7 @@ class FocusAuditTest {
         show {
             AchievementsScreen(
                 account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0),
-                settings = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true),
+                settings = pageValues(AchievementsSettings.all),
                 signingIn = false,
                 error = null,
                 expired = true,
@@ -473,7 +473,13 @@ class FocusAuditTest {
         show {
             AchievementsScreen(
                 account = AchievementsAccount(AchievementsAccount.SIGNED_IN, "goose", "Goose", 300, 940),
-                settings = AchievementsSettings(hardcore = true, messages = false, sounds = true, indicators = true),
+                settings =
+                    pageValues(
+                        AchievementsSettings.all,
+                        "Cheevos/ChallengeMode" to "true",
+                        "Cheevos/Notifications" to "false",
+                        "Cheevos/LeaderboardNotifications" to "false",
+                    ),
                 signingIn = false,
                 error = null,
                 expired = false,

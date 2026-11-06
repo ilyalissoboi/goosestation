@@ -1182,7 +1182,7 @@ class OrientationLayoutTest {
         eachConfig({
             AchievementsScreen(
                 account = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0),
-                settings = AchievementsSettings(hardcore = true, messages = true, sounds = true, indicators = true),
+                settings = pageValues(AchievementsSettings.all, "Cheevos/ChallengeMode" to "true"),
                 signingIn = false,
                 error = "Invalid username/password.",
                 expired = false,
@@ -1209,7 +1209,7 @@ class OrientationLayoutTest {
         eachConfig({
             AchievementsScreen(
                 account = AchievementsAccount(AchievementsAccount.NOT_CONNECTED, "a-rather-long-goose-name", "", 0, 0),
-                settings = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true),
+                settings = pageValues(AchievementsSettings.all),
                 signingIn = false,
                 error = null,
                 expired = false,

@@ -11,6 +11,7 @@ import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -35,8 +36,8 @@ class AchievementsPage(
     var queue by mutableStateOf(AchievementsQueue.NONE)
         private set
 
-    /** The switches, as last read or changed; null until read. */
-    var settings by mutableStateOf<AchievementsSettings?>(null)
+    /** The switches and times, as last read or changed; null until read. */
+    var settings by mutableStateOf<SettingValues?>(null)
         private set
 
     /** A sign-in is waiting for the server. */
@@ -61,7 +62,7 @@ class AchievementsPage(
         settings = null
         scope.launch {
             val (read, switches) =
-                withContext(core) { readAccount() to AchievementsSettings.load(coreSettings) }
+                withContext(core) { readAccount() to SettingValues.read(coreSettings, AchievementsSettings.all) }
             show(read)
             settings = switches
         }
@@ -104,8 +105,8 @@ class AchievementsPage(
         }
     }
 
-    /** Saves the switches' change to [new], only the fields that changed, then has the core apply it. */
-    fun change(new: AchievementsSettings) {
+    /** Saves the switches' change to [new], only the settings that changed, then has the core apply it. */
+    fun change(new: SettingValues) {
         val old = settings ?: return
         if (new == old) return
         settings = new

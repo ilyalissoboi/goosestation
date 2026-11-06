@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -11,6 +12,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -26,6 +29,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
+import io.github.ilyalissoboi.goosestation.settings.NextStart
+import io.github.ilyalissoboi.goosestation.settings.SettingValues
+import io.github.ilyalissoboi.goosestation.ui.components.GameContext
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,14 +50,14 @@ class AchievementsScreenTest {
         val SIGNED_OUT = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0)
         val SIGNED_IN = AchievementsAccount(AchievementsAccount.SIGNED_IN, "goose", "Goose", 300, 940)
         val NOT_CONNECTED = AchievementsAccount(AchievementsAccount.NOT_CONNECTED, "goose", "", 0, 0)
-        val SWITCHES = AchievementsSettings(hardcore = false, messages = true, sounds = true, indicators = true)
+        val SWITCHES = pageValues(AchievementsSettings.all)
     }
 
     @get:Rule val rule = createComposeRule()
 
     private val signIns = mutableListOf<Pair<String, String>>()
     private var signOuts = 0
-    private val changes = mutableListOf<AchievementsSettings>()
+    private val changes = mutableListOf<SettingValues>()
     private var backs = 0
 
     private fun show(
@@ -174,7 +182,10 @@ class AchievementsScreenTest {
         press(Key.ButtonA)
 
         assertEquals(
-            listOf(SWITCHES.copy(hardcore = true), SWITCHES.copy(hardcore = true, messages = false)),
+            listOf(
+                SWITCHES.with(AchievementsSettings.HARDCORE, true),
+                AchievementsSettings.withMessages(SWITCHES.with(AchievementsSettings.HARDCORE, true), false),
+            ),
             changes,
         )
     }
@@ -241,7 +252,7 @@ class AchievementsScreenTest {
         rule.onNode(isFocused()).assert(hasText("5 s", substring = true))
         press(Key.DirectionRight)
 
-        assertEquals(SWITCHES.copy(unlockSeconds = 6), changes.last())
+        assertEquals(SWITCHES.with(AchievementsSettings.UNLOCK_SECONDS, 6), changes.last())
     }
 
     @Test
@@ -253,5 +264,45 @@ class AchievementsScreenTest {
 
         rule.onNodeWithText("Unlock message time").assertDoesNotExist()
         rule.onNodeWithText("Leaderboard message time").assertDoesNotExist()
+    }
+
+    // A game's rows, in its running game: hardcore says when it applies, and while hardcore is on, the three that
+    // would end it wait for the next start.
+    private fun showGameRows(hardcoreActive: Boolean) {
+        rule.setContent {
+            GooseStationTheme {
+                var values by remember { mutableStateOf(gamePageValues(AchievementsSettings.all)) }
+                CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", true, hardcoreActive)) {
+                    SettingsPage("Achievements", onBack = {}) { AchievementRows(values) { values = it } }
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun inAHardcoreGameEncoreIsDisabled() {
+        showGameRows(hardcoreActive = true)
+
+        for (row in listOf("Encore mode", "Spectator mode", "Test unofficial achievements")) {
+            rule
+                .onNode(
+                    hasText(row, substring = true) and hasText(HARDCORE_WAIT_NOTE, substring = true),
+                ).assertIsNotEnabled()
+        }
+    }
+
+    @Test
+    fun aRunningGamesHardcoreSaysWhenItApplies() {
+        showGameRows(hardcoreActive = false)
+
+        rule
+            .onNode(
+                hasText("Hardcore mode", substring = true) and hasText(NextStart.HARDCORE_NOTE, substring = true),
+            ).assertExists()
+        rule
+            .onNode(
+                hasText("Encore mode", substring = true) and hasText("Use global", substring = true),
+            ).assertIsEnabled()
     }
 }

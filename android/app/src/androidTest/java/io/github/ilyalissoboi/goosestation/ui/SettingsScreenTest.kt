@@ -65,11 +65,12 @@ class SettingsScreenTest {
         texts.forEach { rule.onNode(isFocused()).assert(hasText(it)) }
     }
 
+    // Opened from the library, with no page to come back to: the first entry, as every page opens on its first row.
     @Test
-    fun controllersIsFocusedWithoutAnEntry() {
+    fun theFirstEntryIsFocusedWithoutAnEntry() {
         show(focusEntry = null)
 
-        assertFocusedHas("Controllers", "Ports, types, bindings, hotkeys, rumble")
+        assertFocusedHas("Interface", "Pausing, resume states, backups")
     }
 
     @Test
@@ -83,18 +84,7 @@ class SettingsScreenTest {
     fun theEntriesAreInOrder() {
         show(focusEntry = null)
 
-        // From Controllers up to the first entry, then down to the last.
-        press(Key.DirectionUp)
-        assertFocusedHas("Audio", "Volume, latency")
-        press(Key.DirectionUp)
-        assertFocusedHas("Graphics", "Renderer, enhancements, display, on-screen display")
-        press(Key.DirectionUp)
-        assertFocusedHas("BIOS", "Which BIOS each region uses, fast boot")
-        press(Key.DirectionUp)
-        assertFocusedHas("Emulation", "Speed, frame pacing, rewind, run-ahead")
-        press(Key.DirectionUp)
-        assertFocusedHas("Console", "Region, CPU, CD-ROM speed")
-        press(Key.DirectionUp)
+        // The first entry, where Up stays, then down to the last.
         assertFocusedHas("Interface", "Pausing, resume states, backups")
         press(Key.DirectionUp)
         assertFocusedHas("Interface")

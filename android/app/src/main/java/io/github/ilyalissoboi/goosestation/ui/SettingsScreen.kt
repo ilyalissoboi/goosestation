@@ -36,8 +36,8 @@ const val NEEDS_CORE = "Available once GooseStation has started."
 /**
  * The settings hub: an entry per page, which A, Enter or a tap open ([onOpen]). Until [coreReady] (the core has
  * started, and no game is under way), only Folders can be opened: the others are disabled, and say why. On opening,
- * [focusEntry] has focus, the page just left, or else Controllers, or Folders if it can't be. B or Back go back to the
- * library ([onBack]).
+ * [focusEntry] has focus, the page just left, or else the first entry that can be opened (Interface, or Folders
+ * before the core is ready). B or Back go back to the library ([onBack]).
  */
 @Composable
 fun SettingsScreen(
@@ -50,7 +50,8 @@ fun SettingsScreen(
 
     val requesters = remember { SettingsEntry.entries.associateWith { FocusRequester() } }
     LaunchedEffect(Unit) {
-        val first = listOfNotNull(focusEntry, SettingsEntry.Controllers).firstOrNull(::enabled) ?: SettingsEntry.Folders
+        // The page just left, or else the first entry that can be opened, as every page opens on its first row.
+        val first = focusEntry?.takeIf(::enabled) ?: SettingsEntry.entries.first(::enabled)
         requesters.getValue(first).requestFocus()
     }
 

@@ -686,7 +686,8 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
   the chain.": the core turns the whole chain off with "Failed to compile post-processing shader …". A stage whose
   shader this install hasn't got says "Not found in this install's shaders: …" in the same way. Both can still be
   moved and removed. On the emulator's GPU the slowest shader took 2.2 ms a frame (`edge-smoothing/super-xbr`); under
-  SwiftShader, a CPU renderer, `crt-lottes` halved the frame rate. A real device's speed is still to be measured.
+  SwiftShader, a CPU renderer, `crt-lottes` halved the frame rate. On the AYN Thor every shader keeps the full frame rate
+  (see "Post-processing on the Thor" under its results).
 - **For a game**, each chain is the game's own or the global one, as the core takes it: the game's file's chain
   applies, whole, only while the file sets that chain's `Enabled`. Its On row is "Use global (On)", On and Off.
   Picking On or Off gives the game its own chain: a copy of the global one, unless the file already has stages of its
@@ -1160,6 +1161,8 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
   implicit int-to-float conversions (`float / const int`), which GLSL ES rejects. They aren't offered there.
   `crt/crt-hyllian-sinc.fx` doesn't load anywhere (desktop too): `data/resources` lacks the
   `../misc/include/mask.fxh` and `geom.fxh` it includes. Slang presets (roadmap item 17) aren't supported yet.
+- **OpenGL ES with `[GPU] DownsampleMode = Box`** on Adreno (the Thor): the hardware renderer's box downsampling shader
+  doesn't compile, and the core falls back to the software renderer (see "Post-processing on the Thor").
 
 - **Memory card editor:** edits held in memory are lost if Android ends the process while the app is in the
   background, without a notice afterwards. Cards from outside the data folder come in only through Import card, and
@@ -1737,6 +1740,54 @@ drove it with the Thor's own controls; the keyboard was also checked over adb.
 | Leaving | Pass. B asked "Save your changes?" with Keep editing focused; Discard went back to Memory cards, Manage cards focused. |
 
 Not checked on the Thor: Save itself (it would have reached the user's other devices; checked on the emulator).
+
+### Post-processing on the Thor (2026-11-06)
+
+The debug APK of `a953a8a9f`, with one extra line (not committed) that logged the core's frame rate and GPU time each
+second, installed over the existing one (data kept); then the plain APK of `a953a8a9f` again. Each shipped shader was
+put alone in padtest's own Display chain from the in-game Settings, by key events, and timed for 5 s (GPU time from
+`[Display] ShowGPU`, set in padtest's file). The picture was 1920x1080; the global settings were the user's
+(`ResolutionScale = 4`, `DownsampleMode = Box`). Afterwards padtest's Clear settings deleted its file, from the working
+copy and, with the next push, the data folder.
+
+| Shader | Vulkan: GPU ms a frame | OpenGL ES: GPU ms a frame |
+| --- | --- | --- |
+| None | 0.57 | 0.09 (the software renderer, below) |
+| `anti-aliasing/fxaa` | 5.49 | not offered |
+| `Cccalibrator` | 0.75 | 1.70 |
+| `crt-lottes` | 5.49 | 5.03 |
+| `CRT-NewPixie` | 3.24 | not offered |
+| `CRTLottes2` | 2.49 | not offered |
+| `Daltonize` | 0.72 | not offered |
+| `Deband` | 2.01 | not offered |
+| `dolphinfx/crt/CRT-HYLLIAN` | 2.06 | 1.70 |
+| `dolphinfx/edge-smoothing/DDT` | 0.85 | 0.43 |
+| `dolphinfx/edge-smoothing/XBR` | 4.43 | 3.99 |
+| `dolphinfx/pixel-art/PIXELLATE` | 1.34 | 0.86 |
+| `edge-smoothing/super-xbr` | 6.54 | not offered |
+| `FilmGrain2` | 3.23 | not offered |
+| `interpolation/bicubic` | 1.29 | not offered |
+| `LUT` | 0.82 | not offered |
+| `misc/multi-LUT` | 0.82 | not offered |
+| `ntsc/ntsc-adaptive-lite` | 5.21 | not offered |
+| `scanlines-abs` | 0.72 | not offered |
+| `simple-brightness` | 0.67 | 0.18 |
+| `simple-flip` | 0.67 | 0.18 |
+| `simple-gamma` | 0.85 | 0.37 |
+| `simple-sharpen` | 0.81 | 0.33 |
+
+- Every shader compiled and kept the full frame rate (59.3 fps; 58.9 for XBR on OpenGL ES): the costliest, super-xbr,
+  takes 6.5 ms of the 16.7 ms a frame has. So none is too slow to offer.
+- Under OpenGL ES (padtest's own `[GPU] Renderer = OpenGL`), Add a shader offered the 10 GLSL shaders only, as on the
+  emulators.
+- **Found, outside post-processing:** with `DownsampleMode = Box`, the hardware renderer doesn't start on the Thor's
+  OpenGL ES: the box downsampling shader defines `FACTOR` as an `int` and compares it with a `uint`, which Adreno's
+  GLSL ES compiler rejects ("no operation '<' exists that takes … 'uint' and … 'const int'"). The core falls back to
+  the software renderer ("Failed to initialize OpenGL renderer, falling back to software renderer"), whose paused
+  picture behind the menu was sheared. Vulkan isn't affected.
+- The pages themselves on the Thor: the game's Post-processing ("Use global (Off)", then On, "Set for this game"), the
+  Add page, a stage's page (Remove focused on a lone stage) and Clear settings' question all worked with key events;
+  the hub counted the chain as one ("3 settings of its own": two in Graphics, one in Post-processing).
 
 ## Checks on the AYN Thor
 

@@ -278,6 +278,11 @@ SettingsPage("Graphics", onBack = onBack) {
   it. A row that writes several keys uses the global setting as a whole and is marked when the game sets any. In a
   running game, a setting the core only takes at the next start adds "Applies when the game next starts." to its
   note (`NextStart`).
+- **An ordered list a page edits** (the post-processing chains' stages): each item a `NavRow` numbered in order
+  ("1. crt-lottes"), with an "Add …" `NavRow` after the last, which opens a page of what can be added. An item's page
+  starts with its `ActionButton`s (Move up, Move down, Remove; one that can't act is disabled, and after a move the
+  focus stays on the button pressed while it still can), then its own rows. Remove doesn't ask, as desktop's doesn't;
+  back on the list, the focus is on the item after it, or on "Add …".
 - `TextFieldRow`: a text setting, its label in `label-sm` over a 48 dp `sunken` well with a `line-strong` edge at
   `radius-sm`, the focus ring around the well. Focus doesn't open the keyboard, so a D-pad passes through; A, the
   D-pad centre or a tap open it, and up and down leave the field as on any row. A password is the secure field:

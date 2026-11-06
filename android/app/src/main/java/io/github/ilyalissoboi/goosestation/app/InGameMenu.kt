@@ -123,6 +123,8 @@ data class GameMenuState(
     val settings: Boolean = false,
     /** Back from the game's settings: the menu focuses its Settings row. */
     val cameFromSettings: Boolean = false,
+    /** The game has a key to keep its own settings under; a PSF has none. */
+    val hasKey: Boolean = true,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -271,7 +273,7 @@ class InGameMenu(
         panelId++
         running = game
         selectedSlot = null
-        state = GameMenuState(booted = true, discCount = game.discs.size)
+        state = GameMenuState(booted = true, discCount = game.discs.size, hasKey = game.serial.isNotBlank())
         readGameState()
     }
 
@@ -413,7 +415,7 @@ class InGameMenu(
 
     override fun openSettings() {
         val game = running ?: return
-        if (!state.booted) return
+        if (!state.booted || game.serial.isBlank()) return
         panelId++
         state =
             state.copy(

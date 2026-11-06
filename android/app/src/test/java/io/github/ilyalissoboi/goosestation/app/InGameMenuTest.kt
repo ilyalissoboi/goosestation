@@ -1588,6 +1588,22 @@ class InGameMenuTest {
             assertEquals(listOf("settings null", "resume"), calls)
         }
 
+    // A game with no key (a PSF) keeps no settings of its own, as it keeps no states.
+    @Test
+    fun noSettingsForAGameWithoutAKey() =
+        runTest {
+            val menu = menu(booted = false)
+            menu.gameStarted(game(""))
+            runCurrent()
+            calls.clear()
+
+            menu.openSettings()
+
+            assertFalse(menu.state.hasKey)
+            assertFalse(menu.state.settings)
+            assertFalse(calls.any { it.startsWith("settings") })
+        }
+
     @Test
     fun theMenuOpensOnResumeAfterSettings() =
         runTest {

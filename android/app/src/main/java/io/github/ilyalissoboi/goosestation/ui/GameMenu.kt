@@ -442,7 +442,8 @@ private fun MenuPanel(
                     GsIcons.settings,
                     actions::openSettings,
                     Modifier.focusRequester(settingsRow),
-                    enabled = booted,
+                    enabled = booted && state.hasKey,
+                    value = if (state.hasKey) null else NO_KEY_SETTINGS,
                     quiet = quiet,
                 )
                 Spacer(
@@ -475,6 +476,9 @@ private fun MenuPanel(
 }
 
 private fun onOff(on: Boolean) = if (on) "On" else "Off"
+
+/** Said on Settings for a game with no key (a PSF), which keeps no settings of its own. */
+const val NO_KEY_SETTINGS = "This game has no serial to keep its own under"
 
 /** Said on the rows hardcore mode turns off. */
 const val HARDCORE_OFF = "Off in hardcore mode"

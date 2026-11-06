@@ -329,6 +329,17 @@ class GameMenuTest {
         rule.onNodeWithText("Settings").assertIsNotEnabled()
     }
 
+    @Test
+    fun settingsIsOffForAGameWithoutAKey() {
+        state = GameMenuState(booted = true, hasKey = false)
+        show()
+
+        rule
+            .onNode(
+                hasText("Settings", substring = true) and hasText(NO_KEY_SETTINGS, substring = true),
+            ).assertIsNotEnabled()
+    }
+
     // Back from the game's settings: the menu is composed afresh, and focuses the row it opened them from.
     @Test
     fun backFromSettingsFocusesItsRow() {

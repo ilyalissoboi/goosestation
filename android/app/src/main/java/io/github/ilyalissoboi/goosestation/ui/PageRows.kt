@@ -10,19 +10,52 @@ import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.FloatSetting
 import io.github.ilyalissoboi.goosestation.settings.IntSetting
 import io.github.ilyalissoboi.goosestation.settings.NameSetting
+import io.github.ilyalissoboi.goosestation.settings.NextStart
+import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.NumberScale
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
+import io.github.ilyalissoboi.goosestation.ui.components.useGlobalLabel
 import kotlin.math.roundToInt
 
 // A settings page's rows, each bound to its setting in a page's values: a change comes as the whole values with that
 // setting changed ([onChange]).
+//
+// On a game's page (the values are a game's, SettingValues.isGame), each row can use the global setting: a choice
+// row's first choice is "Use global (<its value>)", an on/off row is a choice of that, On and Off, and a number row
+// steps from the global value. A row the game sets is marked [SET_FOR_GAME]; one a running game only takes at its
+// next start says so ([NextStart]).
 
-/** A [SwitchRow] for [setting]. */
+/** What a row the game's file sets says, on a game's page. */
+const val SET_FOR_GAME = "Set for this game"
+
+/** The mark for a row of [settings] on a game's page: [SET_FOR_GAME] when the game sets any of them. */
+fun gameMark(
+    values: SettingValues,
+    vararg settings: Setting<*>,
+): String? = SET_FOR_GAME.takeIf { settings.any(values::isSet) }
+
+/** [values] following the global setting again for each of [settings]. */
+fun SettingValues.withGlobal(vararg settings: Setting<*>): SettingValues =
+    settings.fold(this) { values, setting -> values.withGlobal(setting) }
+
+/** [note], with what a running game's [setting] says when it only applies at the next start. */
+@Composable
+fun gameNote(
+    setting: Setting<*>,
+    note: String?,
+): String? {
+    val running = LocalGameContext.current?.running == true
+    if (!running || setting !in NextStart.settings) return note
+    return listOfNotNull(note, NextStart.NOTE).joinToString(" ")
+}
+
+/** A [SwitchRow] for [setting]; on a game's page, a choice of the global setting, On and Off. */
 @Composable
 fun Switch(
     values: SettingValues,
@@ -32,14 +65,28 @@ fun Switch(
     note: String? = null,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-) = SwitchRow(
-    label,
-    values[setting],
-    onToggle = { onChange(values.with(setting, it)) },
-    modifier = modifier,
-    note = note,
-    enabled = enabled,
-)
+) {
+    if (!values.isGame) {
+        return SwitchRow(
+            label,
+            values[setting],
+            onToggle = { onChange(values.with(setting, it)) },
+            modifier = modifier,
+            note = note,
+            enabled = enabled,
+        )
+    }
+    Choices(
+        values,
+        onChange,
+        label,
+        setting,
+        listOf(Choice(true, ON), Choice(false, OFF)),
+        note = note,
+        modifier = modifier,
+        enabled = enabled,
+    )
+}
 
 /** A [NumberRow] for [setting], on [scale]. */
 @Composable
@@ -57,7 +104,11 @@ fun Number(
     scale,
     onChange = { onChange(values.with(setting, it)) },
     modifier = modifier,
-    note = note,
+    note = gameNote(setting, note),
+    mark = gameMark(values, setting),
+    global = values.global(setting).takeIf { values.isGame },
+    followsGlobal = values.isGame && !values.isSet(setting),
+    onUseGlobal = if (values.isGame) ({ onChange(values.withGlobal(setting)) }) else null,
 )
 
 /**
@@ -80,7 +131,11 @@ fun Number(
     scale,
     onChange = { onChange(values.with(setting, it / units.toFloat())) },
     modifier = modifier,
-    note = note,
+    note = gameNote(setting, note),
+    mark = gameMark(values, setting),
+    global = (values.global(setting) * units).roundToInt().takeIf { values.isGame },
+    followsGlobal = values.isGame && !values.isSet(setting),
+    onUseGlobal = if (values.isGame) ({ onChange(values.withGlobal(setting)) }) else null,
 )
 
 /**
@@ -97,13 +152,57 @@ fun Names(
     note: String? = null,
     modifier: Modifier = Modifier,
     notes: Map<String, String> = emptyMap(),
-) = CyclerRow(
-    label,
-    offered(names[setting.list].orEmpty().map { it.withNote(notes[it.value]) }, values[setting]),
-    values[setting],
-    onSelect = { onChange(values.with(setting, it)) },
-    modifier = modifier,
-    note = note,
-)
+) {
+    val choices = names[setting.list].orEmpty().map { it.withNote(notes[it.value]) }
+    // A game's own value and the global one are each offered, as themselves, when the core doesn't name them.
+    val shown = if (values.isGame) offered(offered(choices, values.global(setting)), values[setting]) else choices
+    Choices(values, onChange, label, setting, offered(shown, values[setting]), note = note, modifier = modifier)
+}
+
+/**
+ * A [CyclerRow] for [setting], of [choices]. On a game's page its first choice is "Use global (<the global value's
+ * label>)", selected while the game doesn't set it.
+ */
+@Composable
+fun <T> Choices(
+    values: SettingValues,
+    onChange: (SettingValues) -> Unit,
+    label: String,
+    setting: Setting<T>,
+    choices: List<Choice<T>>,
+    note: String? = null,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    if (!values.isGame) {
+        return CyclerRow(
+            label,
+            choices,
+            values[setting],
+            onSelect = { onChange(values.with(setting, it)) },
+            modifier = modifier,
+            note = note,
+            enabled = enabled,
+        )
+    }
+    val global = values.global(setting)
+    val globalLabel = choices.firstOrNull { it.value == global }?.label ?: global.toString()
+    CyclerRow<T?>(
+        label,
+        listOf(Choice<T?>(null, useGlobalLabel(globalLabel))) + choices.map { Choice<T?>(it.value, it.label, it.note) },
+        if (values.isSet(setting)) values[setting] else null,
+        onSelect = { picked ->
+            @Suppress("UNCHECKED_CAST")
+            onChange(if (picked == null) values.withGlobal(setting) else values.with(setting, picked as T))
+        },
+        modifier = modifier,
+        note = gameNote(setting, note),
+        enabled = enabled,
+        mark = gameMark(values, setting),
+    )
+}
+
+private const val ON = "On"
+private const val OFF = "Off"
 
 private fun Choice<String>.withNote(note: String?) = if (note == null) this else copy(note = note)

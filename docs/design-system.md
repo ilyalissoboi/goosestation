@@ -267,6 +267,17 @@ SettingsPage("Graphics", onBack = onBack) {
   screen readers say it and tests check it with `assertIsOn()`.
 - `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.
 - A row's `note` explains a consequence ("Higher is sharper and slower.") or a fallback. Never repeat the label.
+- **Rows for a game** (a page of a game's own settings, its values a game's, `SettingValues.isGame`): the page
+  shows the game's title as an `Eyebrow` over its own, and every row can use the global setting. The shared rows
+  (`Switch`, `Names`, `Number`, `Choices` in `ui/PageRows.kt`) do it themselves: a choice row's first choice is
+  "Use global (<the global value>)", selected while the game's file doesn't set it; an on/off row becomes a
+  `CyclerRow` of "Use global (On)", On and Off; a `NumberRow` (given `global` and `onUseGlobal`) shows "Use global
+  (…)" while it follows it, Right making the global value the game's own and Left from the scale's lowest value going
+  back, with "Use global" first in its list. Choosing it deletes the key. A row the game sets has a mark, "Set for
+  this game" in `label-sm` `beak-ink`, before its note, even when its value is the global one: it no longer follows
+  it. A row that writes several keys uses the global setting as a whole and is marked when the game sets any. In a
+  running game, a setting the core only takes at the next start adds "Applies when the game next starts." to its
+  note (`NextStart`).
 - `TextFieldRow`: a text setting, its label in `label-sm` over a 48 dp `sunken` well with a `line-strong` edge at
   `radius-sm`, the focus ring around the well. Focus doesn't open the keyboard, so a D-pad passes through; A, the
   D-pad centre or a tap open it, and up and down leave the field as on any row. A password is the secure field:

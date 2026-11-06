@@ -1161,8 +1161,6 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
   implicit int-to-float conversions (`float / const int`), which GLSL ES rejects. They aren't offered there.
   `crt/crt-hyllian-sinc.fx` doesn't load anywhere (desktop too): `data/resources` lacks the
   `../misc/include/mask.fxh` and `geom.fxh` it includes. Slang presets (roadmap item 17) aren't supported yet.
-- **OpenGL ES with `[GPU] DownsampleMode = Box`** on Adreno (the Thor): the hardware renderer's box downsampling shader
-  doesn't compile, and the core falls back to the software renderer (see "Post-processing on the Thor").
 
 - **Memory card editor:** edits held in memory are lost if Android ends the process while the app is in the
   background, without a notice afterwards. Cards from outside the data folder come in only through Import card, and
@@ -1784,7 +1782,8 @@ copy and, with the next push, the data folder.
   OpenGL ES: the box downsampling shader defines `FACTOR` as an `int` and compares it with a `uint`, which Adreno's
   GLSL ES compiler rejects ("no operation '<' exists that takes … 'uint' and … 'const int'"). The core falls back to
   the software renderer ("Failed to initialize OpenGL renderer, falling back to software renderer"), whose paused
-  picture behind the menu was sheared. Vulkan isn't affected.
+  picture behind the menu was sheared. Vulkan isn't affected. Both are fixed: the shader since #53 (`FACTOR` is a
+  `uint`), and the sheared picture, a row alignment in OpenGL texture uploads, since #54.
 - The pages themselves on the Thor: the game's Post-processing ("Use global (Off)", then On, "Set for this game"), the
   Add page, a stage's page (Remove focused on a lone stage) and Clear settings' question all worked with key events;
   the hub counted the chain as one ("3 settings of its own": two in Graphics, one in Post-processing).

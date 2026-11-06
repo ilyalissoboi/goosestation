@@ -37,7 +37,8 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
  * ([summary]: how many of its pages' settings, and any it has that no page shows), an entry per page ([onOpen]), each
  * saying how many it sets, then Copy global settings and Clear settings. Each asks first ([onAsk]), in a panel over the
  * hub while [asking]: its answer ([onConfirm]) first, Cancel ([onCancel]) focused; the focus goes back to its button.
- * The first entry, or [focusEntry] (the page just left), is focused on opening. B or Back go back ([onBack]).
+ * In a running game in hardcore mode, Copy and Clear wait for the next start, saying why. The first entry, or
+ * [focusEntry] (the page just left), is focused on opening. B or Back go back ([onBack]).
  */
 @Composable
 fun GameSettingsScreen(
@@ -68,6 +69,8 @@ fun GameSettingsScreen(
         onAsk(question)
     }
     val context = LocalGameContext.current ?: GameContext(game.title, running = false, hardcoreActive = false)
+    // Both write [Cheevos]: in a game in hardcore mode, its Encore, Spectator or Unofficial mode would end it.
+    val wait = context.running && context.hardcoreActive
 
     CompositionLocalProvider(LocalGameContext provides context) {
         SettingsPage("Game settings", onBack = onBack) {
@@ -103,12 +106,22 @@ fun GameSettingsScreen(
                     "Copy global settings",
                     onClick = { ask(GameQuestion.Copy) },
                     modifier = Modifier.focusRequester(buttons.getValue(GameQuestion.Copy)),
+                    enabled = !wait,
                 )
                 ActionButton(
                     "Clear settings",
                     onClick = { ask(GameQuestion.Clear) },
                     modifier = Modifier.focusRequester(buttons.getValue(GameQuestion.Clear)),
+                    enabled = !wait,
                     kind = ButtonKind.Danger,
+                )
+            }
+            if (wait) {
+                Text(
+                    COPY_CLEAR_WAIT_NOTE,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.inkMuted,
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
         }
@@ -152,6 +165,10 @@ fun GameQuestionPanel(
         }
     }
 }
+
+/** What Copy and Clear say in a running game in hardcore mode, where they wait for the next start. */
+const val COPY_CLEAR_WAIT_NOTE =
+    "Copy and Clear wait until the game isn't running: they change achievement modes that would end hardcore mode."
 
 /** What a game's hub says. */
 object GameSettingsWords {

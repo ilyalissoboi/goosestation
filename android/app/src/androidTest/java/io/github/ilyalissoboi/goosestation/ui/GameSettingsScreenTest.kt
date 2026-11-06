@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -10,6 +11,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -22,6 +25,8 @@ import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameQuestion
 import io.github.ilyalissoboi.goosestation.app.GameSummary
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.ui.components.GameContext
+import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -42,24 +47,27 @@ class GameSettingsScreenTest {
     private fun show(
         summary: GameSummary? = SUMMARY,
         focusEntry: GamePage? = null,
+        context: GameContext? = null,
     ) {
         rule.setContent {
             GooseStationTheme {
-                var asking by remember { mutableStateOf<GameQuestion?>(null) }
-                GameSettingsScreen(
-                    game = game,
-                    summary = summary,
-                    focusEntry = focusEntry,
-                    asking = asking,
-                    onOpen = { opened += it },
-                    onAsk = { asking = it },
-                    onConfirm = {
-                        confirmed += asking!!
-                        asking = null
-                    },
-                    onCancel = { asking = null },
-                    onBack = { backs++ },
-                )
+                CompositionLocalProvider(LocalGameContext provides context) {
+                    var asking by remember { mutableStateOf<GameQuestion?>(null) }
+                    GameSettingsScreen(
+                        game = game,
+                        summary = summary,
+                        focusEntry = focusEntry,
+                        asking = asking,
+                        onOpen = { opened += it },
+                        onAsk = { asking = it },
+                        onConfirm = {
+                            confirmed += asking!!
+                            asking = null
+                        },
+                        onCancel = { asking = null },
+                        onBack = { backs++ },
+                    )
+                }
             }
         }
         rule.waitForIdle()
@@ -154,6 +162,24 @@ class GameSettingsScreenTest {
         for (page in listOf("Interface", "BIOS", "Folders", "Manage cards")) {
             rule.onNodeWithText(page).assertDoesNotExist()
         }
+    }
+
+    // Both write [Cheevos], whose Encore, Spectator and Test unofficial modes would end hardcore mode in the game.
+    @Test
+    fun copyAndClearWaitInAHardcoreGame() {
+        show(context = GameContext("Pad Test", running = true, hardcoreActive = true))
+
+        rule.onNodeWithText("Copy global settings").assertIsNotEnabled()
+        rule.onNodeWithText("Clear settings").assertIsNotEnabled()
+        rule.onNodeWithText(COPY_CLEAR_WAIT_NOTE, substring = true).assertExists()
+    }
+
+    @Test
+    fun copyAndClearWorkInAGameWithoutHardcore() {
+        show(context = GameContext("Pad Test", running = true, hardcoreActive = false))
+
+        rule.onNodeWithText("Copy global settings").assertIsEnabled()
+        rule.onNodeWithText(COPY_CLEAR_WAIT_NOTE, substring = true).assertDoesNotExist()
     }
 
     @Test

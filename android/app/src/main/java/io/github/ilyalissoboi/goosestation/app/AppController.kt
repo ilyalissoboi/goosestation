@@ -192,9 +192,16 @@ object AppController : NativeCallbacks {
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
 
-    /** A game's own settings, from its tile or, for the running game, its menu. */
+    /** A game's own settings, from its tile in the library. */
     val gameSettingsPages =
         GameSettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+
+    /**
+     * The running game's own settings, from its menu: on the menu's own dispatcher, as its other calls are, so a
+     * library scan never holds them up.
+     */
+    val gameMenuSettings =
+        GameSettingsPages(scope, gameDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
 
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
     val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
@@ -368,13 +375,7 @@ object AppController : NativeCallbacks {
             onExit = ::exitGame,
             // The running game's own settings, each change applied straight away.
             onSettings = { game ->
-                if (game ==
-                    null
-                ) {
-                    gameSettingsPages.close()
-                } else {
-                    gameSettingsPages.open(game, running = true)
-                }
+                if (game == null) gameMenuSettings.close() else gameMenuSettings.open(game, running = true)
             },
         )
     }
@@ -1398,7 +1399,10 @@ object AppController : NativeCallbacks {
         refreshed?.let { games = it }
         if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
         // settings.ini, or a game's own file, pulled from the data folder while that game's pages show.
-        if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) gameSettingsPages.reloadShown()
+        if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) {
+            gameSettingsPages.reloadShown()
+            gameMenuSettings.reloadShown()
+        }
         return Applied(refreshed != null, layoutGrew)
     }
 

@@ -102,7 +102,7 @@ class MainActivity : ComponentActivity() {
                             onOverlayExpire = AppController.achievementOverlay::expire,
                             settings = {
                                 GameSettingsHost(
-                                    AppController.gameSettingsPages,
+                                    AppController.gameMenuSettings,
                                     hardcoreActive = AppController.gameMenu.state.hardcore,
                                     onBack = AppController.gameMenu::closeSettings,
                                 )

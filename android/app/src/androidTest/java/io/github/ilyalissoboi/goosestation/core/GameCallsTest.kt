@@ -792,6 +792,22 @@ class GameCallsTest {
             assertEquals(60f, NativeLibrary.getSurfaceRefreshRateForTest())
         }
 
+    // Box downsampling's shader once compared a uint with an int, which GLSL ES rejects (the Thor's Adreno, and
+    // SwiftShader under ANGLE): under OpenGL ES the core then fell back to the software renderer.
+    @Test
+    fun boxDownsamplingKeepsTheHardwareRenderer() {
+        val messages = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            settings = {
+                NativeLibrary.setIntSetting("GPU", "ResolutionScale", 4)
+                NativeLibrary.setStringSetting("GPU", "DownsampleMode", "Box")
+            },
+            onMessage = { _, text -> messages += text },
+        ) {}
+
+        assertTrue(messages.toString(), messages.none { "falling back to software renderer" in it })
+    }
+
     @Test
     fun theBootSaysWhatThePauseSettingsAre() {
         var flags: Pair<Boolean, Boolean>? = null

@@ -776,10 +776,8 @@ changed what it reports) rumbles, at its own strength; if it goes, the next leve
 core repeats a level every half second while it lasts, and the app plays each for a second, so it doesn't gap; a level
 of 0, the menu opening and the game ending stop it. Each controller's strength scales both motors.
 
-**Known limits**: the core's multitap code (desktop's too) reads "Port 2 only" as Port 1's in
-`Settings::IsPort2MultitapEnabled` and checks the slot where it means the pad in `Settings::Load`, so under "Port 2
-only" Ports 2C and 2D have no controller; the start message says so. The bindings shown are the port's own type's:
-the types games' files set for a port (stage 3) aren't offered for remapping yet.
+**Known limits**: the bindings shown are the port's own type's: the types games' files set for a port (stage 3) aren't
+offered for remapping yet.
 
 ### The in-game menu
 

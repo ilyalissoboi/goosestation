@@ -1428,6 +1428,8 @@ object AppController : NativeCallbacks {
                     workingCopy.mkdirs()
                     val resources = Resources.extract(context)
                     NativeLibrary.setCallbacks(this@AppController)
+                    // The app's own storage, never the data folder: packs aren't mirrored.
+                    NativeLibrary.setShaderPacksFolder(File(context.filesDir, "shaderpacks").absolutePath)
                     NativeLibrary
                         .initialize(
                             workingCopy.absolutePath,

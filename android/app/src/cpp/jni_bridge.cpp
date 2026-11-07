@@ -1197,6 +1197,11 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 #define NATIVE_LIBRARY_FUNCTION(ret, name) \
   JNIEXPORT ret JNICALL Java_io_github_ilyalissoboi_goosestation_core_NativeLibrary_##name
 
+NATIVE_LIBRARY_FUNCTION(void, setShaderPacksFolder)(JNIEnv* env, jobject, jstring path)
+{
+  AndroidHost::SetShaderPacksFolder(FromJString(env, path));
+}
+
 NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
                                                jstring bios_dir, jstring install_id, jstring achievements_token,
                                                jstring achievements_folder, jstring device_name)

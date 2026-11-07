@@ -61,7 +61,7 @@ private fun Stage.summary(gles: Boolean): String {
             1 -> "1 option"
             else -> "$count options"
         }
-    return "${kind?.name} · $options"
+    return "${kind?.label} · $options"
 }
 
 /**
@@ -245,7 +245,7 @@ private fun AddShaderPage(
         model.shaders.forEachIndexed { index, shader ->
             NavRow(
                 shader.name,
-                shader.kind.name,
+                shader.kind.label,
                 onClick = { model.add(chain, shader) },
                 modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
             )

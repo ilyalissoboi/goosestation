@@ -32,6 +32,10 @@ namespace AndroidHost {
 /// kept in memory only (no secrets.ini), and NotifyAchievementsToken() reports each change the core saves. device_name
 /// is this device's, for memory card sync's DeviceName when it's empty, and in a settings.ini adapted from another
 /// install. Calling it again once it succeeded does nothing and returns true.
+/// Where shader packs are installed (EmuFolders::ShaderPacks): the app's own storage, created if need be. From any
+/// thread, before or after Initialize().
+void SetShaderPacksFolder(std::string path);
+
 bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
                 std::string achievements_token, std::string achievements_folder, std::string device_name,
                 Error* error);
@@ -102,8 +106,8 @@ void CopyGlobalSettingsToGame(const std::string& key);
 /// Desktop's Clear Settings, as Big Picture's: the file goes.
 void ClearGameSettings(const std::string& key);
 
-/// A post-processing chain's stage: its shader's name, the shader's kind ("GLSL" or "ReShade", empty when it isn't
-/// found or doesn't load), and its options with the stage's values.
+/// A post-processing chain's stage: its shader's name, the shader's kind ("GLSL", "dolphinfx", "ReShade" or "Slang",
+/// empty when it isn't found or doesn't load), and its options with the stage's values.
 struct PostProcessingStage
 {
   std::string shader;
@@ -115,7 +119,8 @@ struct PostProcessingStage
 // The chain calls edit section ("PostProcessing" or "InternalPostProcessing") in settings.ini when key is nullopt,
 // else in the key's game file, through PostProcessing::Config, on the caller's thread.
 
-/// The shaders whose metadata loads, as GetAvailableShaderNames() orders them: each name and its kind.
+/// The shaders that can be stages, as GetAvailableShaders() orders them (slang presets unloaded, others only when their
+/// metadata loads): each name and its kind.
 std::vector<std::pair<std::string, std::string>> GetPostProcessingShaders();
 std::vector<PostProcessingStage> GetPostProcessingStages(const std::optional<std::string>& key, const char* section);
 /// Empty, or why the shader couldn't be added.

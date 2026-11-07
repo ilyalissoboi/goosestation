@@ -262,6 +262,15 @@ void Host::OnMemcardSyncChanged()
   AndroidHost::NotifyMemcardSyncChanged();
 }
 
+void AndroidHost::SetShaderPacksFolder(std::string path)
+{
+  EmuFolders::ShaderPacks = Path::Canonicalize(path);
+  Error error;
+  if (!FileSystem::EnsureDirectoryExists(EmuFolders::ShaderPacks.c_str(), true, &error))
+    WARNING_LOG("Couldn't create the shader packs folder {}: {}", EmuFolders::ShaderPacks, error.GetDescription());
+  INFO_LOG("Shader packs Directory: {}", EmuFolders::ShaderPacks);
+}
+
 bool AndroidHost::Initialize(std::string data_root, std::string resources_root, std::string bios_dir,
                              std::string install_id, std::string achievements_token, std::string achievements_folder,
                              std::string device_name, Error* error)
@@ -900,20 +909,25 @@ static T ReadChainLayer(const std::optional<std::string>& key, T default_value, 
 }
 
 // The kind of the file PostProcessing::TryLoadingShader() takes for name, in its order: a slang preset by its name,
-// the data folder's ReShade shader, the data folder's GLSL one, then the resources' ReShade shader, else the resources'
-// GLSL one.
+// then in the data folder's shaders and the app's packs, ReShade before GLSL, then the resources' ReShade shader, else
+// GLSL (dolphinfx when it's under dolphinfx/), as GetAvailableShaders() names them.
 static const char* ShaderKind(const std::string& name)
 {
+  using PostProcessing::ShaderKind;
   if (PostProcessing::Slang::IsPresetName(name))
-    return "Slang";
+    return PostProcessing::GetShaderKindName(ShaderKind::Slang);
   const std::string fx = fmt::format("reshade" FS_OSPATH_SEPARATOR_STR "Shaders" FS_OSPATH_SEPARATOR_STR "{}.fx", name);
-  if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fx).c_str()))
-    return "ReShade";
-  if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fmt::format("{}.glsl", name)).c_str()))
-    return "GLSL";
+  const ShaderKind glsl = name.starts_with("dolphinfx/") ? ShaderKind::DolphinFX : ShaderKind::GLSL;
+  for (const std::string* root : {static_cast<const std::string*>(&EmuFolders::Shaders), &EmuFolders::GetShaderPacksFolder()})
+  {
+    if (FileSystem::FileExists(Path::Combine(*root, fx).c_str()))
+      return PostProcessing::GetShaderKindName(ShaderKind::ReShade);
+    if (FileSystem::FileExists(Path::Combine(*root, fmt::format("{}.glsl", name)).c_str()))
+      return PostProcessing::GetShaderKindName(glsl);
+  }
   if (FileSystem::FileExists(Path::Combine(EmuFolders::Resources, Path::Combine("shaders", fx)).c_str()))
-    return "ReShade";
-  return "GLSL";
+    return PostProcessing::GetShaderKindName(ShaderKind::ReShade);
+  return PostProcessing::GetShaderKindName(glsl);
 }
 
 // Whether the shader's metadata loads: Config::AddStage loads it first, and fails when it doesn't.
@@ -939,7 +953,7 @@ std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingS
       INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
       continue;
     }
-    shaders.emplace_back(name, ShaderKind(name));
+    shaders.emplace_back(name, PostProcessing::GetShaderKindName(available.kind));
   }
   return shaders;
 }

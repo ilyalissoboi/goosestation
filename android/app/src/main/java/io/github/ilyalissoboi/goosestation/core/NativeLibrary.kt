@@ -17,6 +17,12 @@ object NativeLibrary {
     }
 
     /**
+     * Where shader packs are installed: the app's own storage, apart from the data folder (never mirrored). A stage's
+     * name is looked up in the data folder's `shaders/` first, then here. Set before [initialize].
+     */
+    external fun setShaderPacksFolder(path: String)
+
+    /**
      * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
      * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
@@ -665,8 +671,9 @@ object NativeLibrary {
     )
 
     /**
-     * The post-processing shaders this install has (the resources' and the data folder's `shaders/`) whose metadata
-     * loads, sorted as desktop lists them: name, kind ("GLSL" or "ReShade"), name, kind…
+     * The post-processing shaders this install has (the data folder's `shaders/`, the app's packs and the resources';
+     * slang presets by name, the others only when their metadata loads), sorted by their place in the browser: name,
+     * kind ("GLSL", "dolphinfx", "ReShade" or "Slang"), name, kind…
      */
     external fun getPostProcessingShaders(): Array<String>
 

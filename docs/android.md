@@ -1172,9 +1172,9 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
 - **Post-processing:** ReShade (`.fx`) shaders don't compile under OpenGL ES: reshadefx's GLSL generator relies on
   implicit int-to-float conversions (`float / const int`), which GLSL ES rejects. They aren't offered there.
   `crt/crt-hyllian-sinc.fx` doesn't load anywhere (desktop too): `data/resources` lacks the
-  `../misc/include/mask.fxh` and `geom.fxh` it includes. Slang presets run under both renderers (the OpenGL ES spike
-  of 2026-11-07, on SwiftShader); the AYN Thor's Adreno hasn't run one yet. Packs aren't downloaded in the app yet
-  (stage 2 of the slang design).
+  `../misc/include/mask.fxh` and `geom.fxh` it includes. Slang presets run under both renderers, on the emulators
+  and on the AYN Thor's Adreno 740 (see "Slang presets on the Thor"). Packs aren't downloaded in the app yet (stage 2
+  of the slang design).
 
 - **Memory card editor:** edits held in memory are lost if Android ends the process while the app is in the
   background, without a notice afterwards. Cards from outside the data folder come in only through Import card, and
@@ -1583,6 +1583,26 @@ restarted with SwiftShader for OpenGL ES 3.1 through ANGLE), with the debug APK 
 | The picture | Pass, both renderers. padtest with a probe preset (red over the top half of what it draws, blue below) as the Display chain's only stage: the frame's picture red at the top, blue at the bottom ("Slang preset p/probe.slangp loaded."). |
 | Pack presets | Pass, both renderers. libretro's `crt/crt-royale`, `crt/crt-geom`, `crt/crt-guest-advanced` and `ntsc/ntsc-256px-svideo` compile and draw (the native GPU test, offscreen). |
 | The lists | Pass. A preset is listed with kind Slang without being loaded (a file that isn't a preset is listed too, and says why when it's added); its options are its parameters (`TEST_GAIN`, 0 to 2 by 0.1), written as desktop writes them. |
+
+### Slang presets on the Thor (2026-11-07)
+
+The branch's debug APK and its test APK, installed over the existing app (data kept); the app's own APK went back
+afterwards. Nothing touched the data folder: the frame test keeps its data in the app's cache, and the native tests
+ran from `/data/local/tmp`.
+
+| Check | Vulkan | OpenGL ES |
+|---|---|---|
+| The frame test (padtest, the probe preset as the Display chain) | Pass: the picture red at the top, blue at the bottom | Pass, the same ("GL_RENDERER: Adreno (TM) 740") |
+| The native GPU tests (offscreen, read back) | 6/6 | 5/5 (the sixth is Vulkan's) |
+| `crt/crt-royale` | 9.7 ms a frame | 7.3 ms |
+| `crt/crt-geom` | 6.1 ms | 6.7 ms |
+| `crt/crt-guest-advanced` | 11.5 ms | 10.7 ms |
+| `ntsc/ntsc-256px-svideo` | 4.2 ms | 4.2 ms |
+
+The times are a throwaway test's (not committed): padtest's 1280×960 picture scaled to 320×240, the preset drawn at
+1440×1080 into a 1920×1080 target, 120 frames each followed by a one-pixel read back, so each includes a full wait
+for the GPU. All fit a 60 fps frame. No picture was corrupt, so the extra submit after each chain frame ARMSX2
+needed on Adreno isn't needed here.
 
 ## Results on the AYN Thor
 

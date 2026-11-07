@@ -5,9 +5,11 @@
 
 #include "common/types.h"
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 class Error;
 
@@ -61,5 +63,59 @@ bool ParseReleaseJson(std::string_view json, const PackInfo& pack, ResolvedVersi
 /// What to tell the player when a request for the pack ended with status (an HTTP status, or HTTPDownloader's
 /// negative codes, or 0 for a transport failure): checking is the version check, otherwise the download.
 std::string DescribeFailure(bool checking, const PackInfo& pack, s32 status);
+
+/// What a pack's marker (<root>/.shaderpacks/<id>.json) records: exactly the files its install wrote.
+struct InstalledPack
+{
+  std::string id;
+  std::string version; ///< empty while an install is under way or after one that stopped part-way
+  std::string source_url;
+  std::string installed_at; ///< UTC, YYYY-MM-DDTHH:MM:SSZ
+  u64 archive_size = 0;
+  std::vector<std::string> files; ///< relative to the root, '/' separators
+};
+
+std::string GetMarkerPath(std::string_view root, std::string_view id);
+
+/// A marker's contents; nullopt without an id, a version or a file list. Unsafe paths (empty, absolute, '\\', a
+/// drive letter, "." or ".." components) are dropped from the list.
+std::optional<InstalledPack> ParseMarker(std::string_view json);
+std::string FormatMarker(const InstalledPack& pack);
+
+std::optional<InstalledPack> ReadMarker(std::string_view root, std::string_view id);
+bool WriteMarker(std::string_view root, const InstalledPack& pack, Error* error);
+
+/// The order to install the packs in: a missing dependency (one with no marker) first; duplicates and unknown ids
+/// dropped.
+std::vector<std::string> ExpandDependencies(std::string_view root, std::span<const std::string> ids);
+
+/// Deletes the pack's files, except those another marker under root also lists, then the folders left empty under
+/// its install folder (deepest first, the install folder itself last).
+void RemoveFiles(std::string_view root, const InstalledPack& pack);
+
+/// RemoveFiles, then the marker. Fails when the pack isn't installed.
+bool Uninstall(std::string_view root, std::string_view id, Error* error);
+
+enum class PackState
+{
+  NotInstalled,
+  Installed,
+  UpdateAvailable,
+  Incomplete,
+};
+
+struct PackStatus
+{
+  PackState state = PackState::NotInstalled;
+  std::string installed; ///< the installed version, if any
+  std::string latest; ///< the latest version, when the check worked
+  bool checked = false; ///< whether the latest version is known
+};
+
+/// The pack's state from its marker and the version check (nullopt when it hasn't worked).
+PackStatus GetPackStatus(const std::optional<InstalledPack>& installed, const std::optional<ResolvedVersion>& latest);
+
+/// The words every UI shows for the status.
+std::string DescribePackStatus(const PackStatus& status);
 
 } // namespace ShaderPacks

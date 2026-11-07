@@ -7,11 +7,17 @@
 #include "util/http_downloader.h"
 
 #include "common/error.h"
+#include "common/file_system.h"
 #include "common/json_reader.h"
+#include "common/log.h"
+#include "common/path.h"
 
 #include "fmt/format.h"
 
+#include <algorithm>
 #include <array>
+
+Log_SetChannel(ShaderPacks);
 
 namespace ShaderPacks {
 namespace {
@@ -34,6 +40,76 @@ constexpr PackInfo s_packs[] = {
    "zoran123456/lola-retro", VersionSource::LatestRelease, nullptr, "lola-retro-v", nullptr, 1, "lola-retro",
    LOLA_RETRO_SKIP, nullptr},
 };
+
+constexpr const char* MARKER_DIR = ".shaderpacks";
+
+// A relative path a marker may list: no empty, "." or ".." component, not absolute, no '\\' or drive letter.
+bool IsSafeRelativePath(std::string_view path)
+{
+  if (path.empty() || path.front() == '/' || path.find('\\') != std::string_view::npos ||
+      (path.size() >= 2 && path[1] == ':'))
+  {
+    return false;
+  }
+
+  size_t start = 0;
+  while (start <= path.size())
+  {
+    const size_t end = path.find('/', start);
+    const std::string_view part =
+      path.substr(start, (end == std::string_view::npos) ? std::string_view::npos : (end - start));
+    if (part.empty() || part == "." || part == "..")
+      return false;
+    if (end == std::string_view::npos)
+      break;
+    start = end + 1;
+  }
+  return true;
+}
+
+// Every file the markers under root list, but the one for except_id.
+std::vector<std::string> FilesOfOtherPacks(std::string_view root, std::string_view except_id)
+{
+  std::vector<std::string> files;
+  for (const PackInfo& pack : s_packs)
+  {
+    if (except_id == pack.id)
+      continue;
+    if (std::optional<InstalledPack> other = ReadMarker(root, pack.id); other.has_value())
+      files.insert(files.end(), other->files.begin(), other->files.end());
+  }
+  std::sort(files.begin(), files.end());
+  return files;
+}
+
+bool IsEmptyDirectory(const std::string& path)
+{
+  FileSystem::FindResultsArray results;
+  FileSystem::FindFiles(path.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_HIDDEN_FILES,
+                        &results);
+  return results.empty();
+}
+
+// Removes the empty folders below and including dir, deepest first.
+void PruneEmptyDirectories(const std::string& dir)
+{
+  if (!FileSystem::DirectoryExists(dir.c_str()))
+    return;
+
+  FileSystem::FindResultsArray dirs;
+  FileSystem::FindFiles(dir.c_str(), "*",
+                        FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_HIDDEN_FILES, &dirs);
+  std::sort(dirs.begin(), dirs.end(), [](const FILESYSTEM_FIND_DATA& lhs, const FILESYSTEM_FIND_DATA& rhs) {
+    return lhs.FileName.size() > rhs.FileName.size();
+  });
+  for (const FILESYSTEM_FIND_DATA& fd : dirs)
+  {
+    if ((fd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY) && IsEmptyDirectory(fd.FileName))
+      FileSystem::DeleteDirectory(fd.FileName.c_str());
+  }
+  if (IsEmptyDirectory(dir))
+    FileSystem::DeleteDirectory(dir.c_str());
+}
 
 bool IsHex(std::string_view text)
 {
@@ -143,6 +219,192 @@ std::string DescribeFailure(bool checking, const PackInfo& pack, s32 status)
 
   return checking ? fmt::format(TRANSLATE_FS("ShaderPacks", "Checking {} failed (HTTP {})."), pack.name, status) :
                     fmt::format(TRANSLATE_FS("ShaderPacks", "Downloading {} failed (HTTP {})."), pack.name, status);
+}
+
+std::string GetMarkerPath(std::string_view root, std::string_view id)
+{
+  return Path::Combine(Path::Combine(root, MARKER_DIR), fmt::format("{}.json", id));
+}
+
+std::optional<InstalledPack> ParseMarker(std::string_view json)
+{
+  const std::optional<JsonReader::Value> doc = JsonReader::Parse(json);
+  if (!doc.has_value())
+    return std::nullopt;
+
+  const std::optional<std::string> id = doc->StringAt("id");
+  const std::optional<std::string> version = doc->StringAt("version");
+  const JsonReader::Value* files = doc->Find("files");
+  if (!id.has_value() || !version.has_value() || !files || files->type != JsonReader::Value::Type::Array)
+    return std::nullopt;
+
+  InstalledPack pack;
+  pack.id = id.value();
+  pack.version = version.value();
+  pack.source_url = doc->StringAt("source_url").value_or(std::string());
+  pack.installed_at = doc->StringAt("installed_at").value_or(std::string());
+  const std::optional<s64> size = doc->NumberAt("archive_size");
+  pack.archive_size = (size.has_value() && size.value() > 0) ? static_cast<u64>(size.value()) : 0;
+  for (const JsonReader::Value& file : files->items)
+  {
+    if (file.type == JsonReader::Value::Type::String && IsSafeRelativePath(file.string))
+      pack.files.push_back(file.string);
+    else if (file.type == JsonReader::Value::Type::String)
+      WARNING_LOG("Shader pack {}'s marker lists an unsafe path '{}', ignoring it.", pack.id, file.string);
+  }
+  return pack;
+}
+
+std::string FormatMarker(const InstalledPack& pack)
+{
+  std::string out = "{\"id\":";
+  JsonReader::AppendString(&out, pack.id);
+  out += ",\"version\":";
+  JsonReader::AppendString(&out, pack.version);
+  out += ",\"source_url\":";
+  JsonReader::AppendString(&out, pack.source_url);
+  out += ",\"installed_at\":";
+  JsonReader::AppendString(&out, pack.installed_at);
+  out += fmt::format(",\"archive_size\":{},\"files\":[", pack.archive_size);
+  for (size_t i = 0; i < pack.files.size(); i++)
+  {
+    if (i > 0)
+      out += ',';
+    out += "\n";
+    JsonReader::AppendString(&out, pack.files[i]);
+  }
+  out += "]}\n";
+  return out;
+}
+
+std::optional<InstalledPack> ReadMarker(std::string_view root, std::string_view id)
+{
+  const std::string path = GetMarkerPath(root, id);
+  const std::optional<std::string> text = FileSystem::ReadFileToString(path.c_str());
+  if (!text.has_value())
+    return std::nullopt;
+
+  std::optional<InstalledPack> pack = ParseMarker(text.value());
+  if (!pack.has_value() || pack->id != id)
+  {
+    WARNING_LOG("Shader pack marker {} can't be read: the pack counts as not installed.", path);
+    return std::nullopt;
+  }
+  return pack;
+}
+
+bool WriteMarker(std::string_view root, const InstalledPack& pack, Error* error)
+{
+  const std::string dir = Path::Combine(root, MARKER_DIR);
+  if (!FileSystem::EnsureDirectoryExists(dir.c_str(), true, error))
+    return false;
+
+  const std::string text = FormatMarker(pack);
+  return FileSystem::WriteAtomicRenamedFile(GetMarkerPath(root, pack.id), text.data(), text.size(), error);
+}
+
+std::vector<std::string> ExpandDependencies(std::string_view root, std::span<const std::string> ids)
+{
+  std::vector<std::string> order;
+  const auto add = [&order](std::string_view id) {
+    if (std::find(order.begin(), order.end(), id) == order.end())
+      order.emplace_back(id);
+  };
+
+  for (const std::string& id : ids)
+  {
+    const PackInfo* pack = FindPack(id);
+    if (!pack)
+    {
+      WARNING_LOG("Ignoring unknown shader pack '{}'.", id);
+      continue;
+    }
+    if (pack->needs && FindPack(pack->needs) && !ReadMarker(root, pack->needs).has_value())
+      add(pack->needs);
+    add(id);
+  }
+  return order;
+}
+
+void RemoveFiles(std::string_view root, const InstalledPack& pack)
+{
+  const std::vector<std::string> shared = FilesOfOtherPacks(root, pack.id);
+  for (const std::string& file : pack.files)
+  {
+    if (std::binary_search(shared.begin(), shared.end(), file))
+      continue;
+    const std::string path = Path::Combine(root, file);
+    if (FileSystem::FileExists(path.c_str()) && !FileSystem::DeleteFile(path.c_str()))
+      WARNING_LOG("Couldn't delete {}.", path);
+  }
+
+  if (const PackInfo* info = FindPack(pack.id))
+    PruneEmptyDirectories(Path::Combine(root, info->install_dir));
+}
+
+bool Uninstall(std::string_view root, std::string_view id, Error* error)
+{
+  const PackInfo* pack = FindPack(id);
+  if (!pack)
+  {
+    Error::SetStringFmt(error, TRANSLATE_FS("ShaderPacks", "Unknown shader pack '{}'."), id);
+    return false;
+  }
+
+  const std::optional<InstalledPack> installed = ReadMarker(root, id);
+  if (!installed.has_value())
+  {
+    Error::SetStringFmt(error, TRANSLATE_FS("ShaderPacks", "{} isn't installed."), pack->name);
+    return false;
+  }
+
+  RemoveFiles(root, installed.value());
+  const std::string marker = GetMarkerPath(root, id);
+  if (!FileSystem::DeleteFile(marker.c_str(), error))
+    return false;
+
+  INFO_LOG("Removed shader pack {} ({} files).", pack->name, installed->files.size());
+  return true;
+}
+
+PackStatus GetPackStatus(const std::optional<InstalledPack>& installed, const std::optional<ResolvedVersion>& latest)
+{
+  PackStatus status;
+  status.checked = latest.has_value();
+  if (latest.has_value())
+    status.latest = latest->version;
+  if (!installed.has_value())
+  {
+    status.state = PackState::NotInstalled;
+    return status;
+  }
+
+  status.installed = installed->version;
+  if (installed->version.empty())
+    status.state = PackState::Incomplete;
+  else if (latest.has_value() && latest->version != installed->version)
+    status.state = PackState::UpdateAvailable;
+  else
+    status.state = PackState::Installed;
+  return status;
+}
+
+std::string DescribePackStatus(const PackStatus& status)
+{
+  switch (status.state)
+  {
+    case PackState::Incomplete:
+      return TRANSLATE_STR("ShaderPacks", "Incomplete: install it again");
+    case PackState::UpdateAvailable:
+      return fmt::format(TRANSLATE_FS("ShaderPacks", "Update available: {} → {}"), status.installed, status.latest);
+    case PackState::Installed:
+      return status.checked ?
+               fmt::format(TRANSLATE_FS("ShaderPacks", "Installed {}"), status.installed) :
+               fmt::format(TRANSLATE_FS("ShaderPacks", "Installed {} (couldn't check for updates)"), status.installed);
+    case PackState::NotInstalled:
+    default:
+      return TRANSLATE_STR("ShaderPacks", "Not installed");
+  }
 }
 
 } // namespace ShaderPacks

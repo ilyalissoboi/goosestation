@@ -152,6 +152,12 @@ if [ -f "$BUILDDIR/bin/libemusync.so" ]; then
 	cp -a "$BUILDDIR/bin/libemusync.so" "$OUTDIR/usr/bin"
 fi
 
+# Slang presets load librashader with dlopen() too: next to the binary, where the core looks for it first
+# (CMakeModules/Librashader.cmake copies it into the build).
+if [ -f "$BUILDDIR/bin/librashader.so" ]; then
+	cp -a "$BUILDDIR/bin/librashader.so" "$OUTDIR/usr/bin"
+fi
+
 # LinuxDeploy's Qt plugin doesn't deploy Wayland's own plugins, so copy them in. (Since Qt 6.10 the EGL
 # client integration is part of libQt6WaylandClient, which it does deploy.)
 echo "Copying Qt Wayland plugins..."

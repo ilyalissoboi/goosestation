@@ -73,6 +73,11 @@ SHADERC=f60bb80e255144e71776e2ad570d89b78ea2ab4f
 SOUNDTOUCH=463ade388f3a51da078dc9ed062bf28e4ba29da7
 SPIRV_CROSS=vulkan-sdk-1.3.290.0
 
+# Slang presets (dep/librashader/README.md). Built with Rust at the crate's minimum version.
+LIBRASHADER=0.12.1
+LIBRASHADER_COMMIT=07ac790cdb9826f37cf8e1daf5011f03e3c4daa7
+LIBRASHADER_RUST=1.88
+
 mkdir -p deps-build
 cd deps-build
 
@@ -398,6 +403,26 @@ cd "soundtouch-$SOUNDTOUCH"
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -B build -G Ninja
 cmake --build build --parallel
 ninja -C build install
+cd ..
+
+echo "Building librashader..."
+if ! command -v rustup >/dev/null 2>&1; then
+	echo "rustup not found: install Rust from https://rustup.rs" >&2
+	exit 1
+fi
+rustup toolchain install "$LIBRASHADER_RUST" --profile minimal
+rm -fr "librashader-$LIBRASHADER"
+git clone --depth 1 --branch "librashader-v$LIBRASHADER" https://github.com/SnowflakePowered/librashader.git "librashader-$LIBRASHADER"
+cd "librashader-$LIBRASHADER"
+if [ "$(git rev-parse HEAD)" != "$LIBRASHADER_COMMIT" ]; then
+	echo "librashader-v$LIBRASHADER isn't commit $LIBRASHADER_COMMIT" >&2
+	exit 1
+fi
+# Linux's renderers: Vulkan and OpenGL. Never runtime-d3d9. The core loads it by this name.
+RUSTFLAGS="-C link-arg=-Wl,-soname,librashader.so" rustup run "$LIBRASHADER_RUST" cargo build -p librashader-capi \
+	--profile optimized --no-default-features --features runtime-vulkan,runtime-opengl
+mkdir -p "$INSTALLDIR/lib"
+cp target/optimized/liblibrashader_capi.so "$INSTALLDIR/lib/librashader.so"
 cd ..
 
 if [ "$SKIP_CLEANUP" != true ]; then

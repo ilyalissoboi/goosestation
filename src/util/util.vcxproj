@@ -128,12 +128,14 @@
     <ClCompile Include="fallback_fonts.cpp" />
     <ClCompile Include="cd_image_ppf.cpp" />
     <ClCompile Include="d3d11_device.cpp" />
+    <ClCompile Include="d3d11_slang.cpp" />
     <ClCompile Include="d3d11_pipeline.cpp" />
     <ClCompile Include="d3d11_stream_buffer.cpp" />
     <ClCompile Include="d3d11_texture.cpp" />
     <ClCompile Include="d3d12_builders.cpp" />
     <ClCompile Include="d3d12_descriptor_heap_manager.cpp" />
     <ClCompile Include="d3d12_device.cpp" />
+    <ClCompile Include="d3d12_slang.cpp" />
     <ClCompile Include="d3d12_pipeline.cpp" />
     <ClCompile Include="d3d12_stream_buffer.cpp" />
     <ClCompile Include="d3d12_texture.cpp" />

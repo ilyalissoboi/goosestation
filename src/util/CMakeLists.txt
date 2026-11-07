@@ -214,6 +214,7 @@ if(WIN32)
     d3d_common.cpp
     d3d_common.h
     d3d11_device.cpp
+    d3d11_slang.cpp
     d3d11_device.h
     d3d11_pipeline.cpp
     d3d11_pipeline.h
@@ -226,6 +227,7 @@ if(WIN32)
     d3d12_descriptor_heap_manager.cpp
     d3d12_descriptor_heap_manager.h
     d3d12_device.cpp
+    d3d12_slang.cpp
     d3d12_device.h
     d3d12_pipeline.cpp
     d3d12_pipeline.h

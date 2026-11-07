@@ -25,6 +25,8 @@ class D3D11TextureBuffer;
 class D3D11Device final : public GPUDevice
 {
 public:
+  friend class D3D11SlangChain;
+
   template<typename T>
   using ComPtr = Microsoft::WRL::ComPtr<T>;
 
@@ -37,6 +39,13 @@ public:
   ALWAYS_INLINE static D3D_FEATURE_LEVEL GetMaxFeatureLevel() { return GetInstance().m_max_feature_level; }
 
   RenderAPI GetRenderAPI() const override;
+
+  bool SupportsSlangPresets() const override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
+
+  /// After another renderer (librashader) used the context: the next draw re-binds targets, shaders, states, the
+  /// input layout, vertex buffer, textures and samplers; the index buffer is bound again now.
+  void InvalidateCachedState();
 
   bool HasSurface() const override;
 

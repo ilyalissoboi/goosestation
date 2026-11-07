@@ -283,6 +283,10 @@ SettingsPage("Graphics", onBack = onBack) {
   starts with its `ActionButton`s (Move up, Move down, Remove; one that can't act is disabled, and after a move the
   focus stays on the button pressed while it still can), then its own rows. Remove doesn't ask, as desktop's doesn't;
   back on the list, the focus is on the item after it, or on "Add …".
+  When an item has only actions and no rows of its own (the post-processing favourites), A opens an `OverlayPanel`
+  over the list instead, as a memory card save's does: its name and summary, its first action focused, then the
+  rest, Delete (`Danger`) last. A delete there asks first, and a question or a name form takes the panel's place;
+  the list's last row is then the one that adds ("Save as favourite"), and B goes back a step, to the item's row.
 - `TextFieldRow`: a text setting, its label in `label-sm` over a 48 dp `sunken` well with a `line-strong` edge at
   `radius-sm`, the focus ring around the well. Focus doesn't open the keyboard, so a D-pad passes through; A, the
   D-pad centre or a tap open it, and up and down leave the field as on any row. A password is the secure field:

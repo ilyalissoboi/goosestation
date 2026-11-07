@@ -1384,6 +1384,12 @@ bool System::ReloadGameSettings(bool display_osd_messages)
   return true;
 }
 
+std::mutex& System::GetGameSettingsFileMutex()
+{
+  static std::mutex s_mutex;
+  return s_mutex;
+}
+
 std::string System::GetGameSettingsLayerPath()
 {
   return s_game_settings_interface ? s_game_settings_interface->GetFileName() : std::string();

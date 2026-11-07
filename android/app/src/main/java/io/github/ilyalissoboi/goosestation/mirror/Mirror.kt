@@ -113,6 +113,7 @@ class Mirror(
     private val clock: () -> Long,
     private val removeStrays: () -> Boolean = { true },
     private val guard: CopyGuard = CopyGuard.NONE,
+    private val packMarkers: () -> PackMarkers? = { null },
     private val layout: () -> DataLayout,
 ) {
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
@@ -179,6 +180,37 @@ class Mirror(
     }
 
     /**
+     * [layout], keeping out the shader packs a desktop installed in the data folder: each marker the folder has is
+     * read (outside the working copy) and parsed, and its files and the markers are left out of the run.
+     */
+    private fun withPackFiles(layout: DataLayout): DataLayout {
+        val markers = packMarkers() ?: return layout
+        val folder = "${markers.shadersFolder}/.shaderpacks"
+        val files = HashSet<String>()
+        val temp = File(manifestFile.parentFile, "shader-pack-marker.goosetmp")
+        try {
+            for (id in markers.ids) {
+                try {
+                    store.copyFrom("$folder/$id.json", temp)
+                } catch (e: FolderUnreachableException) {
+                    throw e
+                } catch (_: IOException) {
+                    continue
+                }
+                val listed = markers.parse(temp.readText())
+                if (listed == null) {
+                    Log.w(TAG, "Shader pack marker $folder/$id.json can't be read: its files are mirrored.")
+                    continue
+                }
+                listed.mapTo(files) { "${markers.shadersFolder}/$it" }
+            }
+        } finally {
+            temp.delete()
+        }
+        return layout.withPackFiles("$folder/", files)
+    }
+
+    /**
      * One run of the actions [plan] gives; returns the working-copy paths it replaced or deleted, and whether it did
      * every action ([SyncResult.complete]); a closed mirror's run is incomplete, as it does nothing. [deferred] is
      * asked again before each working-copy replace or delete, so a path deferred since the plan was made (a game
@@ -193,10 +225,11 @@ class Mirror(
         // A run never suspends, so on the one-thread dispatcher it can't overlap close().
         if (closed) return SyncResult(emptySet(), complete = false)
         if (held()) return SyncResult(emptySet(), complete = false)
-        val layout = layout()
+        var layout = layout()
         // The listing recovers interrupted replaces first, so a file only a .goosebak holds isn't seen as deleted.
         val listings =
             try {
+                layout = withPackFiles(layout)
                 store.listAll(layout) to LocalTree.list(workingCopy)
             } catch (e: CancellationException) {
                 throw e
@@ -397,3 +430,13 @@ class Mirror(
         const val SAVE_EVERY = 50
     }
 }
+
+/**
+ * Where a desktop keeps its shader packs' markers in the data folder: `<shadersFolder>/.shaderpacks/<id>.json` for
+ * each of [ids], whose file lists (relative to the shaders folder) [parse] reads, null for one it can't.
+ */
+class PackMarkers(
+    val shadersFolder: String,
+    val ids: List<String>,
+    val parse: (String) -> List<String>?,
+)

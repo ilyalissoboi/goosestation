@@ -169,6 +169,10 @@ std::optional<std::vector<std::string>> GetDataFiles();
 /// itself, or before Initialize() succeeded.
 std::optional<std::string> GetCacheFolder();
 
+/// EmuFolders::Shaders relative to the data root, with no trailing '/' ("shaders"): nullopt if it's outside it, or the
+/// data root itself, or before Initialize() succeeded.
+std::optional<std::string> GetShadersFolder();
+
 /// The folder the BIOS images are read from, EmuFolders::Bios: Initialize()'s bios_dir, canonicalized, whatever
 /// settings.ini says. From any thread. nullopt before Initialize() succeeded.
 std::optional<std::string> GetBIOSDirectory();

@@ -839,6 +839,15 @@ object NativeLibrary {
         progress: PackProgress,
     ): Array<String>
 
+    /** The files a shader pack marker ([json]) lists, relative to its shaders folder; null when it can't be read. */
+    external fun shaderPackMarkerFiles(json: String): Array<String>?
+
+    /** The shader packs' ids, as their markers are named. Before [initialize] too. */
+    external fun shaderPackIds(): Array<String>
+
+    /** The core's shaders folder relative to the data root ("shaders"), or null when it's outside it. */
+    external fun getShadersFolder(): String?
+
     /** Removes the pack's files: null when done, else why not. */
     external fun removeShaderPack(id: String): String?
 

@@ -3139,6 +3139,26 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, shaderPacksTestInstall)(JNIEnv* env, jobje
   return ToNonNullStringArray(env, flat);
 }
 
+NATIVE_LIBRARY_FUNCTION(jobjectArray, shaderPackMarkerFiles)(JNIEnv* env, jobject, jstring json)
+{
+  const std::optional<ShaderPacks::InstalledPack> marker = ShaderPacks::ParseMarker(FromJString(env, json));
+  return marker.has_value() ? ToNonNullStringArray(env, marker->files) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, shaderPackIds)(JNIEnv* env, jobject)
+{
+  std::vector<std::string> ids;
+  for (const ShaderPacks::PackInfo& pack : ShaderPacks::GetPacks())
+    ids.emplace_back(pack.id);
+  return ToNonNullStringArray(env, ids);
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getShadersFolder)(JNIEnv* env, jobject)
+{
+  const std::optional<std::string> folder = AndroidHost::GetShadersFolder();
+  return folder.has_value() ? JNIUtil::ToJString(env, folder.value()) : nullptr;
+}
+
 NATIVE_LIBRARY_FUNCTION(jstring, removeShaderPack)(JNIEnv* env, jobject, jstring id)
 {
   Error error;

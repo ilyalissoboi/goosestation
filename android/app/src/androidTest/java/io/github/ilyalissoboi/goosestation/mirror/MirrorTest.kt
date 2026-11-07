@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.mirror
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.storage.TestDocumentsProvider
 import io.github.ilyalissoboi.goosestation.storage.TestTrees
 import kotlinx.coroutines.CoroutineScope
@@ -954,6 +955,70 @@ class MirrorTest {
         assertFalse(pushed.complete)
         assertEquals(setOf("memcards/a.mcd", "settings.ini"), folderNames())
         assertReachable(mirror)
+    }
+
+    // A desktop's libretro pack in the data folder: its marker, a file it lists, and the player's own preset beside it.
+    private val packTree =
+        mapOf(
+            "settings.ini" to INI,
+            "shaders/.shaderpacks/shaders_slang.json" to
+                (
+                    """{"id":"shaders_slang","version":"3685eda59ffd",""" +
+                        """"files":["shaders_slang/crt/a.slangp"]}"""
+                ).toByteArray(),
+            "shaders/shaders_slang/crt/a.slangp" to "pack".toByteArray(),
+            "shaders/shaders_slang/mine.slangp" to "mine".toByteArray(),
+        )
+
+    private val packMarkers =
+        PackMarkers("shaders", listOf("shaders_slang", "retro-crisis-gdv-ntsc", "satpixie-crt", "lola-retro")) {
+            NativeLibrary.shaderPackMarkerFiles(it)?.toList()
+        }
+
+    private fun packMirror() =
+        Mirror(
+            SafFolderStore(context.contentResolver, tree),
+            workingCopy,
+            manifestFile,
+            System::currentTimeMillis,
+            packMarkers = { packMarkers },
+        ) { LAYOUT }
+
+    @Test
+    fun aDesktopPackInTheDataFolderIsNotCopied() {
+        createTree(packTree)
+
+        runBlocking { packMirror().pull(never) }
+
+        assertEquals(setOf("settings.ini", "shaders/shaders_slang/mine.slangp"), localNames())
+        // Nothing is left of the marker's read either.
+        assertTrue(scratch.walk().none { it.name.contains("marker") && it.isFile })
+    }
+
+    @Test
+    fun packFilesAlreadyCopiedAreDropped() {
+        createTree(packTree)
+        // An earlier build pulled the pack in.
+        runBlocking { mirror().pull(never) }
+        assertTrue(local("shaders/shaders_slang/crt/a.slangp").exists())
+
+        runBlocking { packMirror().pull(never) }
+
+        assertFalse(local("shaders/shaders_slang/crt/a.slangp").exists())
+        assertFalse(local("shaders/.shaderpacks/shaders_slang.json").exists())
+        assertTrue(local("shaders/shaders_slang/mine.slangp").exists())
+        // The folder keeps its own.
+        assertTrue(File(folder, "shaders/shaders_slang/crt/a.slangp").exists())
+    }
+
+    @Test
+    fun aMalformedMarkerSkipsNothing() {
+        createTree(packTree + ("shaders/.shaderpacks/shaders_slang.json" to "not json".toByteArray()))
+
+        runBlocking { packMirror().pull(never) }
+
+        assertTrue(local("shaders/shaders_slang/crt/a.slangp").exists())
+        assertFalse(local("shaders/.shaderpacks/shaders_slang.json").exists())
     }
 
     private companion object {

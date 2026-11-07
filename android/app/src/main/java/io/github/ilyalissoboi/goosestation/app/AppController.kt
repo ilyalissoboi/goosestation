@@ -34,6 +34,7 @@ import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
 import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
+import io.github.ilyalissoboi.goosestation.mirror.PackMarkers
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
 import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
@@ -942,7 +943,7 @@ object AppController : NativeCallbacks {
                 try {
                     val store = SafFolderStore(context.contentResolver, candidate.uri)
                     val applied =
-                        DataFolderChange(workingCopy, manifestFile, dataLayout).switchFrom(
+                        DataFolderChange(workingCopy, manifestFile, dataLayout, ::packMarkers).switchFrom(
                             mirror,
                             pushOld = dataGranted,
                             lossAccepted = lossAccepted,
@@ -1284,6 +1285,15 @@ object AppController : NativeCallbacks {
             }
         }
 
+    // A desktop's shader packs in the data folder: the mirror leaves them, and their markers, out. The core names its
+    // shaders folder once it's started; "shaders", its default, before.
+    private val shaderPackIds by lazy { NativeLibrary.shaderPackIds().toList() }
+
+    private fun packMarkers(): PackMarkers? {
+        val shaders = if (coreStarted) NativeLibrary.getShadersFolder() ?: return null else "shaders"
+        return PackMarkers(shaders, shaderPackIds) { NativeLibrary.shaderPackMarkerFiles(it)?.toList() }
+    }
+
     /** A mirror of [data], whose state the app shows from now on. */
     private fun useMirror(data: String) {
         mirrorStateJob?.cancel()
@@ -1296,6 +1306,7 @@ object AppController : NativeCallbacks {
                 System::currentTimeMillis,
                 removeStrays = { layoutSettling.settled },
                 guard = cardGuard,
+                packMarkers = ::packMarkers,
             ) { dataLayout }
         mirror = created
         mirrorStateJob = scope.launch { created.state.collect { mutableMirrorState.value = it } }

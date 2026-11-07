@@ -1352,6 +1352,18 @@ std::optional<std::string> AndroidHost::GetCacheFolder()
   return *relative + '/';
 }
 
+std::optional<std::string> AndroidHost::GetShadersFolder()
+{
+  if (!s_initialized)
+    return std::nullopt;
+
+  const auto lock = Host::GetSettingsLock();
+  const std::optional<std::string> relative = RelativeToDataRoot(EmuFolders::Shaders);
+  if (!relative.has_value() || relative->empty())
+    return std::nullopt;
+  return relative;
+}
+
 // What a load or resume says when the disc a state was saved on isn't in the library.
 static std::string MissingDiscMessage(std::string_view media_path)
 {

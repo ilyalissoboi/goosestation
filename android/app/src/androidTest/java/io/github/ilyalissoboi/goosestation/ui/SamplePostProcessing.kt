@@ -267,6 +267,13 @@ class SamplePostProcessing : PostProcessingModel {
         }
     }
 
+    override fun cancelNaming() {
+        calls += "cancelNaming"
+        val form = naming ?: return
+        naming = null
+        if (form.renaming == null) focusFavourite = favourites.size
+    }
+
     override fun apply(name: String) {
         calls += "apply $name"
         val stages = chains.getValue(Chain.Display).stages.size

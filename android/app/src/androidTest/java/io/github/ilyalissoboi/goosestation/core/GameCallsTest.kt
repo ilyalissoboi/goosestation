@@ -426,6 +426,52 @@ class GameCallsTest {
         }
     }
 
+    // The app's own edits of the game's file and the hotkeys writing its chain take turns: none is lost.
+    @Test
+    fun favouriteHotkeysAndTheAppsEditsTakeTurns() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            flipChain(null)
+            assertNull(NativeLibrary.savePostProcessingFavourite(null, "Flip", false))
+            NativeLibrary.removePostProcessingStage(null, "PostProcessing", 0)
+            assertNull(NativeLibrary.addPostProcessingStage(null, "PostProcessing", "crt-lottes"))
+            assertNull(NativeLibrary.savePostProcessingFavourite(null, "Lottes", false))
+            NativeLibrary.setGameBoolSetting(TEST_KEY, "PostProcessing", "Enabled", true)
+        }) {
+            // The app writes for as long as the hotkeys run, so its edits overlap every hotkey's read and save.
+            val pressing =
+                java.util.concurrent.atomic
+                    .AtomicBoolean(true)
+            val written = AtomicInteger()
+            val writer =
+                Thread {
+                    while (pressing.get()) {
+                        val i = written.get()
+                        NativeLibrary.setGameStringSetting(TEST_KEY, "RaceTest", "Key$i", "$i")
+                        written.incrementAndGet()
+                    }
+                }
+            writer.start()
+            // The game's chain has no stages: the first press applies Flip, then they alternate. An app edit that
+            // read the file before a press wrote it, and saved after, would put the chain before it back.
+            val reverted = mutableListOf<Int>()
+            for (press in 0 until 60) {
+                assertTrue(NativeLibrary.pressHotkeyForTest("NextPostProcessingFavourite"))
+                Thread.sleep(20)
+                val expected = if (press % 2 == 0) "simple-flip" else "crt-lottes"
+                val chain = Ini.parse(gameSettings(TEST_KEY).readText()).value("PostProcessing/Stage1", "ShaderName")
+                if (chain != expected) reverted += press
+            }
+            pressing.set(false)
+            writer.join()
+
+            assertEquals("presses whose chain an app edit put back", emptyList<Int>(), reverted)
+            val game = Ini.parse(gameSettings(TEST_KEY).readText())
+            val lost = (0 until written.get()).filter { game.value("RaceTest", "Key$it") != "$it" }
+            assertEquals("lost edits", emptyList<Int>(), lost)
+        }
+    }
+
     @Test
     fun favouriteHotkeysWithNoneSaySo() {
         val texts = java.util.Collections.synchronizedList(mutableListOf<String>())

@@ -132,12 +132,13 @@ static void HotkeyStepPostProcessingFavourite(bool forward)
   std::optional<std::string> name;
   bool game = false;
   {
+    // The game's file may be written: its edits take turns, the file's lock before the settings lock.
+    const std::unique_lock file_lock(System::GetGameSettingsFileMutex());
     const auto lock = Host::GetSettingsLock();
-    const SettingsInterface* game_layer = Host::Internal::GetGameSettingsLayer();
-    game = game_layer && PostProcessing::Config::HasOwnChain(*game_layer, PostProcessing::Config::DISPLAY_CHAIN_SECTION);
     name = PostProcessing::Favourites::StepChain(EmuFolders::PostProcessing, *Host::Internal::GetBaseSettingsLayer(),
-                                                 game_layer, System::GetGameSettingsLayerPath(),
-                                                 &s_last_postprocessing_favourite, forward, &error);
+                                                 Host::Internal::GetGameSettingsLayer(),
+                                                 System::GetGameSettingsLayerPath(), &s_last_postprocessing_favourite,
+                                                 forward, &game, &error);
   }
 
   std::string message;

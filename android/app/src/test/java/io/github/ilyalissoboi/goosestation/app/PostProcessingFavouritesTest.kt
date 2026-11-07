@@ -224,6 +224,36 @@ class PostProcessingFavouritesTest {
             assertEquals(1, page.focusFavourite)
         }
 
+    // As Big Picture's: cancelling a rename goes back to the favourite's panel; cancelling a save, to its row.
+    @Test
+    fun cancellingARenameGoesBackToThePanel() =
+        runTest {
+            favourites("A", "B")
+            val page = page()
+            page.openFavourite("B")
+            page.startRenaming("B")
+
+            page.cancelNaming()
+
+            assertNull(page.naming)
+            assertEquals("B", page.favourite)
+            assertTrue(calls.none { it.startsWith("renamePostProcessingFavourite") })
+        }
+
+    @Test
+    fun cancellingASaveGoesBackToItsRow() =
+        runTest {
+            favourites("A")
+            val page = page()
+            page.startSaving()
+
+            page.cancelNaming()
+
+            assertNull(page.naming)
+            assertNull(page.favourite)
+            assertEquals(1, page.focusFavourite)
+        }
+
     @Test
     fun aRefusedRenameStaysInTheForm() =
         runTest {

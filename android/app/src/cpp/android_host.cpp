@@ -709,8 +709,8 @@ bool AndroidHost::IsVulkanRenderer(GPURenderer renderer)
   return (Settings::GetRenderAPIForRenderer(renderer) == RenderAPI::Vulkan);
 }
 
-// The game settings files' edits, one at a time, so two never interleave a load and a save.
-static std::mutex s_game_settings_mutex;
+// The game settings files' edits, one at a time (the core's favourite hotkeys among them), so two never interleave a
+// load and a save: System::GetGameSettingsFileMutex(), taken before the settings lock.
 
 static std::string GameSettingsPath(const std::string& key)
 {
@@ -758,7 +758,7 @@ static T ReadGameSetting(const std::string& key, T default_value, const Read& re
   if (!AndroidHost::s_initialized || key.empty())
     return default_value;
 
-  std::unique_lock lock(s_game_settings_mutex);
+  std::unique_lock lock(System::GetGameSettingsFileMutex());
   const std::unique_ptr<INISettingsInterface> si = LoadGameSettings(key);
   return read(*si);
 }
@@ -769,7 +769,7 @@ static void EditGameSettings(const std::string& key, const Edit& edit)
   if (!AndroidHost::s_initialized || key.empty())
     return;
 
-  std::unique_lock lock(s_game_settings_mutex);
+  std::unique_lock lock(System::GetGameSettingsFileMutex());
   std::unique_ptr<INISettingsInterface> si = LoadGameSettings(key);
   edit(*si);
   SaveGameSettings(std::move(si));

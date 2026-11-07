@@ -155,6 +155,7 @@ using ImGuiFullscreen::NavTitle;
 using ImGuiFullscreen::OpenChoiceDialog;
 using ImGuiFullscreen::OpenConfirmMessageDialog;
 using ImGuiFullscreen::OpenFileSelector;
+using ImGuiFullscreen::MenuButtonVerbatim;
 using ImGuiFullscreen::OpenInputStringDialog;
 using ImGuiFullscreen::PopPrimaryColor;
 using ImGuiFullscreen::PushPrimaryColor;
@@ -5766,8 +5767,9 @@ void FullscreenUI::DrawPostProcessingFavourites()
       {
         const Info& info = state.favourites[i];
         ImGui::PushID(static_cast<int>(i));
-        if (MenuButton(SmallString::from_format(ICON_FA_MAGIC " {}", info.name).c_str(),
-                       PostProcessing::Favourites::Summary(info).c_str()))
+        // The name as typed: a "##" in it is text, not an ID.
+        if (MenuButtonVerbatim("##favourite", SmallString::from_format(ICON_FA_MAGIC " {}", info.name),
+                               PostProcessing::Favourites::Summary(info)))
         {
           action = Action::Select;
           action_name = info.name;
@@ -5787,7 +5789,7 @@ void FullscreenUI::DrawPostProcessingFavourites()
     else if (state.view == View::Favourite)
     {
       const size_t index = static_cast<size_t>(selected - state.favourites.begin());
-      MenuButton(selected->name.c_str(), PostProcessing::Favourites::Summary(*selected).c_str(), false);
+      MenuButtonVerbatim("##name", selected->name, PostProcessing::Favourites::Summary(*selected), false);
       if (MenuButton(FSUI_ICONSTR(ICON_FA_CHECK, "Apply"), FSUI_CSTR("Replaces the display chain with this one.")))
         action = Action::Apply;
       if (MenuButton(FSUI_ICONSTR(ICON_FA_KEYBOARD, "Rename"), nullptr, true,
@@ -5857,7 +5859,8 @@ void FullscreenUI::DrawPostProcessingFavourites()
           yes = FSUI_ICONSTR(ICON_FA_TRASH, "Delete");
           break;
       }
-      MenuButton(question.c_str(), nullptr, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+      MenuButtonVerbatim("##question", question, std::string_view(), false,
+                         ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
       if (MenuButton(yes, nullptr, true, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
         action = Action::Confirm;
       if (MenuButton(FSUI_ICONSTR(ICON_FA_TIMES, "Cancel"), nullptr, true,

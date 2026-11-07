@@ -73,12 +73,15 @@ fun FavouriteRows(
     )
 }
 
-/** "Not installed: a, b" when the favourite's shaders aren't all here, else its shaders joined with " · ". */
+/**
+ * "Not installed: a, b" when the favourite's shaders aren't all here, "No shaders" for an empty chain, else its shaders
+ * joined with " · ".
+ */
 fun favouriteSummary(favourite: FavouriteInfo): String =
-    if (favourite.missing.isNotEmpty()) {
-        "Not installed: ${favourite.missing.joinToString(", ")}"
-    } else {
-        favourite.shaders.joinToString(" · ")
+    when {
+        favourite.missing.isNotEmpty() -> "Not installed: ${favourite.missing.joinToString(", ")}"
+        favourite.shaders.isEmpty() -> "No shaders"
+        else -> favourite.shaders.joinToString(" · ")
     }
 
 /** The question [question] asks, in the design's words. */
@@ -96,8 +99,9 @@ fun favouriteQuestionText(question: FavouriteQuestion): String =
 
 /**
  * What shows over the chains page for the favourites, if anything: a question, the name form, or the open
- * favourite's panel (Apply first and focused, Rename…, Move up, Move down, Delete). B drops the question, else closes
- * the panel or the form, back to its row.
+ * favourite's panel (Apply first and focused, Rename…, Move up, Move down, Delete). B drops the question; in the name
+ * form it goes back to the favourite's panel when renaming, else to "Save as favourite"; else it closes the panel, back
+ * to its row.
  */
 @Composable
 fun FavouritePanel(
@@ -112,7 +116,13 @@ fun FavouritePanel(
     val text = remember(naming != null, naming?.renaming) { TextFieldState(naming?.renaming.orEmpty()) }
     if (question == null && naming == null && favourite == null) return
     OverlayPanel(
-        onBack = { if (question != null) model.cancelFavourite() else model.closeFavourite() },
+        onBack = {
+            when {
+                question != null -> model.cancelFavourite()
+                naming != null -> model.cancelNaming()
+                else -> model.closeFavourite()
+            }
+        },
         modifier = modifier,
     ) {
         when {
@@ -181,7 +191,7 @@ private fun NameForm(
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ActionButton(if (naming.renaming == null) "Save" else "Rename", onClick = submit, kind = ButtonKind.Primary)
-        ActionButton("Cancel", onClick = model::closeFavourite, kind = ButtonKind.Ghost)
+        ActionButton("Cancel", onClick = model::cancelNaming, kind = ButtonKind.Ghost)
     }
 }
 

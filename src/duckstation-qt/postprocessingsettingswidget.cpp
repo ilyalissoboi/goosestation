@@ -9,6 +9,7 @@
 #include "settingwidgetbinder.h"
 
 #include "util/postprocessing.h"
+#include "util/postprocessing_favourites.h"
 
 #include "common/error.h"
 
@@ -121,9 +122,38 @@ void PostProcessingChainConfigWidget::updateList()
   updateList(si);
 }
 
+void PostProcessingChainConfigWidget::changeEvent(QEvent* event)
+{
+  QWidget::changeEvent(event);
+  if (event->type() == QEvent::ActivationChange && isActiveWindow())
+    refreshIfChanged();
+}
+
+void PostProcessingChainConfigWidget::refreshIfChanged()
+{
+  // The favourite hotkeys write settings.ini's display chain; a game's window edits its own copy of the game's file.
+  if (m_dialog->isPerGameSettings() || std::string_view(m_section) != PostProcessing::Config::DISPLAY_CHAIN_SECTION)
+    return;
+
+  const auto lock = Host::GetSettingsLock();
+  const SettingsInterface& si = *Host::Internal::GetBaseSettingsLayer();
+  const bool enabled = si.GetBoolValue(m_section, "Enabled", false);
+  if (PostProcessing::Favourites::ChainsEqual(m_shown_chain, si) && enabled == m_shown_enabled)
+    return;
+
+  {
+    QSignalBlocker sb(m_ui.enablePostProcessing);
+    m_ui.enablePostProcessing->setChecked(enabled);
+  }
+  updateList(si);
+}
+
 void PostProcessingChainConfigWidget::updateList(const SettingsInterface& si)
 {
   m_ui.stages->clear();
+  m_shown_chain.Clear();
+  PostProcessing::Config::CopyChain(si, m_shown_chain, m_section);
+  m_shown_enabled = si.GetBoolValue(m_section, "Enabled", false);
 
   const u32 stage_count = PostProcessing::Config::GetStageCount(si, m_section);
 

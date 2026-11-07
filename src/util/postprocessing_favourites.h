@@ -70,14 +70,15 @@ std::optional<std::string> Step(const std::string& folder, const SettingsInterfa
 /// The hotkeys' step: from the running display chain to the next (or previous) favourite, written where that chain
 /// is. That's game_file (loaded afresh, then saved) when game_layer, the game's settings layer, has a display chain of
 /// its own, else base, settings.ini, which also holds the order (the caller saves it). last is the favourite applied
-/// last, and becomes this one. nullopt with no favourites (error untouched) or when writing fails (error set). The
+/// last, and becomes this one. wrote_game_file says which it wrote: the game's file (reload the game's settings) or
+/// settings.ini (save it). nullopt with no favourites (error untouched) or when writing fails (error set). The
 /// caller holds the settings lock.
 std::optional<std::string> StepChain(const std::string& folder, SettingsInterface& base,
                                      const SettingsInterface* game_layer, const std::string& game_file,
-                                     std::string* last, bool forward, Error* error);
+                                     std::string* last, bool forward, bool* wrote_game_file, Error* error);
 
-/// What a favourite's row says under its name: "Not installed: a, b" when shaders are missing, else its shaders
-/// joined with " · ".
+/// What a favourite's row says under its name: "Not installed: a, b" when shaders are missing, "No shaders" for an
+/// empty chain, else its shaders joined with " · ".
 std::string Summary(const Info& info);
 
 } // namespace PostProcessing::Favourites

@@ -9,6 +9,7 @@
 #include "util/image.h"
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -250,6 +251,10 @@ bool ReloadGameSettings(bool display_osd_messages);
 
 /// The file the running game's settings layer was read from; empty without one. CPU thread.
 std::string GetGameSettingsLayerPath();
+
+/// Held while a game settings file is read, edited and saved, so two edits of one file take turns. Taken before the
+/// settings lock when both are held.
+std::mutex& GetGameSettingsFileMutex();
 
 /// Reloads input sources.
 void ReloadInputSources();

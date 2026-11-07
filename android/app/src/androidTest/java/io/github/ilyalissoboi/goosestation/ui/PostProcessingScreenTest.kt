@@ -18,8 +18,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.FavouriteQuestion
 import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.STAGE_NO_GLES
@@ -472,5 +474,24 @@ class PostProcessingScreenTest {
 
         assertEquals("closeFavourite", model.calls.last())
         focused("2. Sharp LCD")
+    }
+
+    // Cancelling "Replace it?" goes back to the form with the name as typed, to change it.
+    @Test
+    fun aReplaceQuestionKeepsTheTypedName() {
+        model.favourites("CRT")
+        show()
+
+        rule.onNodeWithText("Save as favourite").performClick()
+        rule.waitForIdle()
+        rule.onNode(hasSetTextAction()).performTextInput("crt")
+        model.favouriteQuestion = FavouriteQuestion.Replace("CRT", "crt")
+        rule.waitForIdle()
+        rule.onNodeWithText("A favourite named CRT already exists. Replace it?").assertExists()
+
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitForIdle()
+
+        rule.onNode(hasSetTextAction()).assert(hasText("crt"))
     }
 }

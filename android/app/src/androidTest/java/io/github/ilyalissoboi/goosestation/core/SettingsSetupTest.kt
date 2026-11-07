@@ -329,6 +329,7 @@ class SettingsSetupTest {
                 "gamesettings/",
                 "inputprofiles/",
                 "memcards/",
+                "postprocessing/",
                 "savestates/",
                 "screenshots/",
                 "shaders/",

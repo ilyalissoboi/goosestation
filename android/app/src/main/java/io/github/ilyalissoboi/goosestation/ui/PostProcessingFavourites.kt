@@ -100,11 +100,13 @@ fun FavouritePanel(model: PostProcessingModel) {
     val naming = model.naming
     val name = model.favourite
     val favourite = model.favourites.firstOrNull { it.name == name }
+    // The name as typed, here rather than in the form, which a question replaces for a while: it comes back as it was.
+    val text = remember(naming != null, naming?.renaming) { TextFieldState(naming?.renaming.orEmpty()) }
     if (question == null && naming == null && favourite == null) return
     OverlayPanel(onBack = { if (question != null) model.cancelFavourite() else model.closeFavourite() }) {
         when {
             question != null -> QuestionContent(model, question)
-            naming != null -> NameForm(model, naming)
+            naming != null -> NameForm(model, naming, text)
             favourite != null -> FavouriteActions(model, favourite)
         }
     }
@@ -140,15 +142,18 @@ private fun QuestionContent(
     }
 }
 
-/** The name form: its title, the Name field (focused), the core's refusal if any, then Save (or Rename) and Cancel. */
+/**
+ * The name form: its title, the Name field (focused) holding [text], the core's refusal if any, then Save (or Rename)
+ * and Cancel.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NameForm(
     model: PostProcessingModel,
     naming: Naming,
+    text: TextFieldState,
 ) {
     val colors = GooseStationTheme.colors
-    val text = remember(naming.renaming) { TextFieldState(naming.renaming.orEmpty()) }
     val field = remember { FocusRequester() }
     LaunchedEffect(naming.renaming) { field.requestFocus() }
     val submit = { model.submitName(text.text.toString()) }

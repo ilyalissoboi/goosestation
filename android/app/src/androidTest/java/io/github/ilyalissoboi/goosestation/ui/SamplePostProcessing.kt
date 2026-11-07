@@ -42,6 +42,7 @@ class SamplePostProcessing : PostProcessingModel {
     override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
     override var asking by mutableStateOf<Chain?>(null)
     override var askingStages by mutableStateOf(0)
+    override var shown by mutableStateOf(Chain.Display)
     override var packsOpen by mutableStateOf(false)
     override var focusPacks by mutableStateOf(false)
 
@@ -182,6 +183,11 @@ class SamplePostProcessing : PostProcessingModel {
 
     override fun reload() {
         calls += "reload"
+    }
+
+    override fun showChain(chain: Chain) {
+        calls += "showChain $chain"
+        shown = chain
     }
 
     override fun openPacks() {

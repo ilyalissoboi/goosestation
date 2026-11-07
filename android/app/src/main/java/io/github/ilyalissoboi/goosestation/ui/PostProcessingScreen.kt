@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.ChainView
 import io.github.ilyalissoboi.goosestation.app.PostProcessingModel
 import io.github.ilyalissoboi.goosestation.app.ShaderPacksModel
+import io.github.ilyalissoboi.goosestation.app.packProgressText
 import io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.OptionRow
@@ -86,7 +87,6 @@ fun PostProcessingScreen(
     packs: ShaderPacksModel,
     onBack: () -> Unit,
 ) {
-    if (model.packsOpen) return ShaderPacksPage(packs, onBack = model::closePacks)
     val chains = model.chains
     if (chains.isEmpty()) return SettingsLoadingPage(POST_PROCESSING_TITLE, onBack = onBack)
     val adding = model.adding
@@ -103,7 +103,7 @@ fun PostProcessingScreen(
                 StagePage(model, view, stage.second, shown)
             }
         }
-        else -> ChainsPage(model, chains, onBack)
+        else -> ChainsPage(model, packs, chains, onBack)
     }
 }
 
@@ -111,6 +111,7 @@ fun PostProcessingScreen(
 @Composable
 private fun ChainsPage(
     model: PostProcessingModel,
+    packs: ShaderPacksModel,
     chains: Map<Chain, ChainView>,
     onBack: () -> Unit,
 ) {
@@ -121,15 +122,20 @@ private fun ChainsPage(
         chain: Chain,
         index: Int,
     ) = requesters.getOrPut(chain to index) { FocusRequester() }
-    // The model's focus, whenever it changes and its row is there (an edit the core answers late moves it); else the
-    // first chain's switch.
-    val focus = model.focus?.takeIf { (chain, index) -> index <= (chains[chain]?.stages?.size ?: -1) }
+    // The model's focus, whenever it changes and its row is there (an edit the core answers late moves it, and only the
+    // shown chain's rows are); else the Chain switch.
+    val shown = model.shown
+    val focus =
+        model.focus?.takeIf { (chain, index) -> chain == shown && index <= (chains[chain]?.stages?.size ?: -1) }
     val packsRow = remember { FocusRequester() }
+    val chainRow = remember { FocusRequester() }
     LaunchedEffect(focus, model.focusPacks) {
-        when {
-            focus != null -> requester(focus.first, focus.second).requestFocus()
-            model.focusPacks -> packsRow.requestFocus()
-            else -> requester(Chain.Display, -1).requestFocus()
+        runCatching {
+            when {
+                focus != null -> requester(focus.first, focus.second).requestFocus()
+                model.focusPacks -> packsRow.requestFocus()
+                else -> chainRow.requestFocus()
+            }
         }
     }
 
@@ -147,9 +153,19 @@ private fun ChainsPage(
 
     val game = model.key != null
     SettingsPage(POST_PROCESSING_TITLE, onBack = onBack) {
-        for (chain in Chain.entries) {
-            val view = chains[chain] ?: continue
-            SettingsSection(chain.label)
+        // One chain at a time: Display, at the screen's resolution, or Internal, before the picture is scaled.
+        CyclerRow(
+            CHAIN_LABEL,
+            Chain.entries.map { Choice(it, it.label) },
+            shown,
+            onSelect = model::showChain,
+            modifier = Modifier.focusRequester(chainRow),
+            note = shown.note(),
+        )
+        run {
+            val chain = shown
+            val view = chains[chain] ?: return@run
+            SettingsSection("${chain.label} chain")
             val switch = Modifier.focusRequester(requester(chain, -1))
             if (game) {
                 // The chain as a whole uses the global one, or is the game's own.
@@ -163,7 +179,6 @@ private fun ChainsPage(
                     if (view.own) view.enabled else null,
                     onSelect = { model.setEnabled(chain, it) },
                     modifier = switch,
-                    note = chain.note(),
                     mark = SET_FOR_GAME.takeIf { view.own },
                 )
             } else {
@@ -172,7 +187,6 @@ private fun ChainsPage(
                     view.enabled,
                     onToggle = { model.setEnabled(chain, it) },
                     modifier = switch,
-                    note = chain.note(),
                 )
             }
             // While a game uses the global chain, it shows, read-only.
@@ -199,9 +213,15 @@ private fun ChainsPage(
             )
         }
         SettingsSection("Shader packs")
+        // While a pack downloads, its progress shows here too, with the panel closed.
+        val job = packs.job
         NavRow(
-            "Download shader packs",
-            "libretro, Retro Crisis, satpixie and lola-retro: install, update or remove",
+            SHADER_PACKS_TITLE,
+            if (job == null) {
+                "libretro, Retro Crisis, satpixie and lola-retro: install, update or remove"
+            } else {
+                listOf(job.step, packProgressText(job.value, job.range)).filter { it.isNotEmpty() }.joinToString(" ")
+            },
             onClick = model::openPacks,
             modifier = Modifier.focusRequester(packsRow),
         )
@@ -221,6 +241,7 @@ private fun ChainsPage(
         }
     }
     model.asking?.let { chain -> UseGlobalChainPanel(model, chain) }
+    if (model.packsOpen) ShaderPacksPanel(packs, onClose = model::closePacks)
 }
 
 /** What "Use global" asks when the game's [chain] has shaders: over the page, Use global first, Cancel focused. */
@@ -259,6 +280,7 @@ fun useGlobalQuestion(
     return "Use the global ${chain.label} chain? This game's $removed removed."
 }
 
+const val CHAIN_LABEL = "Chain"
 const val BROWSE_SEARCH_LABEL = "Search by path"
 const val BROWSE_NO_MATCHES = "No shader's path has that in it."
 

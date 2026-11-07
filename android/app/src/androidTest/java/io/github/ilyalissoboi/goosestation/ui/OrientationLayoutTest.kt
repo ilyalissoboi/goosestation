@@ -972,13 +972,31 @@ class OrientationLayoutTest {
             },
             rows =
                 listOf(
+                    CHAIN_LABEL,
                     "Post-processing",
                     "1. crt-lottes",
                     "2. simple-flip",
+                    "3. shaders_slang/crt/crt-royale.slangp",
                     "Add a shader",
-                    "1. FilmGrain2",
+                    "Download shader packs",
                     "Reload shaders",
                 ),
+        )
+
+    @Test
+    fun thePostProcessingInternalChain() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            stages(Chain.Internal, SamplePostProcessing.filmGrain)
+                            showChain(Chain.Internal)
+                        }
+                    }
+                PostProcessingScreen(model, model.packs, onBack = {})
+            },
+            rows = listOf(CHAIN_LABEL, "Post-processing", "1. FilmGrain2", "Add a shader", "Download shader packs"),
         )
 
     @Test
@@ -999,7 +1017,15 @@ class OrientationLayoutTest {
                     PostProcessingScreen(model, model.packs, onBack = {})
                 }
             },
-            rows = listOf("Post-processing", "1. crt-lottes", "Add a shader", "Use global (Off)", "Reload shaders"),
+            rows =
+                listOf(
+                    CHAIN_LABEL,
+                    "Post-processing",
+                    "1. crt-lottes",
+                    "Add a shader",
+                    "Download shader packs",
+                    "Reload shaders",
+                ),
             lists = mapOf("Post-processing" to ("Use global (Off)" to "Off")),
         )
 
@@ -1071,26 +1097,21 @@ class OrientationLayoutTest {
         )
 
     @Test
-    fun theShaderPacksPage() =
+    fun theShaderPacksPanel() =
         settingsPageFits(
             {
-                val model = remember { SamplePostProcessing().apply { openPacks() } }
-                PostProcessingScreen(model, model.packs, onBack = {})
+                // The panel alone: the page under its scrim is the chains page's own case.
+                val packs = remember { SampleShaderPacks() }
+                ShaderPacksPanel(packs, onClose = {})
             },
-            rows = listOf("libretro slang shaders", "Retro Crisis GDV-NTSC", "satpixie CRT", "lola-retro"),
+            rows = listOf("libretro slang shaders", "Retro Crisis GDV-NTSC", "satpixie CRT", "lola-retro", "Close"),
         )
 
     @Test
-    fun theShaderPacksPageBusy() =
+    fun theShaderPacksPanelBusy() =
         eachConfig({
-            val model =
-                remember {
-                    SamplePostProcessing().apply {
-                        openPacks()
-                        packs.install("shaders_slang")
-                    }
-                }
-            PostProcessingScreen(model, model.packs, onBack = {})
+            val packs = remember { SampleShaderPacks().apply { install("shaders_slang") } }
+            ShaderPacksPanel(packs, onClose = {})
         }) {
             assertTextsLaidOut()
             assertFocusedInView()

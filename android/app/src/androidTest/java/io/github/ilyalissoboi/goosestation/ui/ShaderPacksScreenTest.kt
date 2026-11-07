@@ -4,9 +4,11 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -45,7 +47,7 @@ class ShaderPacksScreenTest {
     private fun focused(text: String) = rule.onNode(isFocused()).assert(hasText(text, substring = true))
 
     @Test
-    fun theChainsPageOpensThePacks() {
+    fun theChainsPageOpensThePacksInAPanel() {
         show()
         rule.onNodeWithText("Download shader packs").assertExists()
 
@@ -56,26 +58,41 @@ class ShaderPacksScreenTest {
         assertEquals(listOf("open"), packs.calls)
         focused("libretro slang shaders")
         rule.onNodeWithText("Not installed · About libretro slang shaders. · MIT · 52.5 MB").assertExists()
+        // The page is still there, under the panel.
+        rule.onNodeWithText(CHAIN_LABEL).assertExists()
     }
 
     @Test
-    fun aPacksActionsInstallIt() {
+    fun aPacksActionsShowUnderItsRowAndInstallIt() {
         model.openPacks()
         show()
 
         press(Key.DirectionCenter)
         focused("Install")
-        rule.onNodeWithText("The libretro slang shaders come first.").assertDoesNotExist()
         press(Key.DirectionCenter)
 
         assertEquals("install shaders_slang", packs.calls.last())
-        rule.onNodeWithText("Downloading shaders_slang… 5.0 MB").assertExists()
+        // In the panel, and on the page's row under it.
+        rule.onAllNodesWithText("Downloading shaders_slang… 5.0 MB", substring = true).assertCountEquals(2)
+        rule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
         focused("Cancel")
         rule.onAllNodesWithText(SHADER_PACKS_BUSY, substring = true).assertCountEquals(4)
         press(Key.DirectionCenter)
         assertEquals("cancel", packs.calls.last())
         rule.onNodeWithText("Cancelled.").assertExists()
         focused("libretro slang shaders")
+    }
+
+    @Test
+    fun aKnownSizeFillsTheBar() {
+        model.openPacks()
+        packs.job =
+            io.github.ilyalissoboi.goosestation.app
+                .PackJob("lola-retro", false, "Downloading lola-retro…", 50, 200)
+        show()
+
+        rule.onAllNodesWithText("Downloading lola-retro… 25%", substring = true).assertCountEquals(2)
+        rule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo(0.25f, 0f..1f))).assertExists()
     }
 
     @Test
@@ -88,6 +105,9 @@ class ShaderPacksScreenTest {
         focused("Update")
         rule.onNodeWithText("Remove").assertExists()
         rule.onNodeWithText("Install").assertDoesNotExist()
+        press(Key.Back)
+        // Back from a pack's actions: its row.
+        focused("lola-retro")
     }
 
     @Test
@@ -108,13 +128,15 @@ class ShaderPacksScreenTest {
     }
 
     @Test
-    fun backFromThePacksFocusesItsRow() {
+    fun backClosesThePanelToItsRowAndAJobShowsThere() {
         model.openPacks()
+        packs.install("lola-retro")
         show()
 
         press(Key.Back)
 
         assertEquals("closePacks", model.calls.last())
         focused("Download shader packs")
+        rule.onNodeWithText("Downloading lola-retro… 5.0 MB").assertExists()
     }
 }

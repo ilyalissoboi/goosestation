@@ -659,11 +659,12 @@ adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
 
 ### Post-processing
 
-**Post-processing**, after Graphics in the hub, edits the core's two shader chains, as Qt's two tabs do:
-**Display** (`[PostProcessing]`, over the picture at the screen's resolution) and **Internal**
-(`[InternalPostProcessing]`, at the internal resolution, before the picture is scaled). Each chain has its **On**
-switch (`Enabled`), its stages in order ("1. crt-lottes", with the shader's kind and how many options it has), and
-**Add a shader**. Every edit is the core's own `PostProcessing::Config` call on `settings.ini`, so the keys are
+**Post-processing**, after Graphics in the hub, edits the core's two shader chains, as Qt's two tabs do, one at a
+time: its **Chain** switch, first, picks **Display** (`[PostProcessing]`, over the picture at the screen's resolution)
+or **Internal** (`[InternalPostProcessing]`, at the internal resolution, before the picture is scaled), with a line
+saying which is which, and opens on Display each time. Under it, the chosen chain's **On** switch (`Enabled`), its
+stages in order ("1. crt-lottes", with the shader's kind and how many options it has), and **Add a shader**; both
+chains stay in the files as desktop has them. Every edit is the core's own `PostProcessing::Config` call on `settings.ini`, so the keys are
 desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage's options beside it.
 
 - **Add a shader** opens the **shader browser**: a search field, then the shaders that work here by folder, each with
@@ -680,14 +681,16 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
   says why when it's added. A slang stage's options are the preset's parameters, and it shades the game's picture at
   the console's resolution (320×240, say), drawing the result where the picture sits. A stage's name is looked up in
   the data folder's `shaders/` first, then in the app's packs.
-- **Download shader packs**, after the chains, opens the packs page: the four packs of the core's table (libretro's
+- **Download shader packs**, after the chain, opens a panel over the page: the four packs of the core's table (libretro's
   slang shaders, Retro Crisis GDV-NTSC, satpixie CRT and lola-retro), each with its state ("Not installed",
   "Installed …", "Update available: … → …", "Incomplete: install it again"), what it is, its licence and its size,
-  under "Third-party content under its own licences.". Their versions are checked against GitHub when the page opens
+  under "Third-party content under its own licences.". Their versions are checked against GitHub when it opens
   (until a check works: offline, an installed pack says "couldn't check for updates" and can still be removed). A on a
-  pack offers Install, Update or Remove (asking first; removing libretro's warns when Retro Crisis stays). While a job
-  runs its step and progress show ("Downloading libretro slang shaders… 45%"), with Cancel, and the packs say they're
-  busy; it's the app's, so it goes on when the page closes, and the pages read their shaders again when it ends. The
+  pack shows Install, Update or Remove under it (Remove asks first, in the panel; removing libretro's warns when Retro
+  Crisis stays). While a job runs its step and a progress bar show ("Downloading libretro slang shaders… 45%"; a
+  download whose size GitHub doesn't give moves along the bar as it comes), with Cancel, and the packs say they're
+  busy. B closes the panel; the job is the app's, so it goes on, its step shown on the Download shader packs row, and
+  the pages read their shaders again when it ends. The
   core does the work, as desktop's does: dependencies first (Retro Crisis brings libretro's), the archive **streamed
   to a file** through HttpBridge (never held in memory), checked, the previous version's files removed, extracted with
   the path hardening and size caps, and a marker (`.shaderpacks/<id>.json`) listing exactly the files written.

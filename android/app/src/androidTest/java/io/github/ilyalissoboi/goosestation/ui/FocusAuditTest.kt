@@ -547,6 +547,17 @@ class FocusAuditTest {
     }
 
     @Test
+    fun postProcessingInternalChain() {
+        val model =
+            SamplePostProcessing().apply {
+                stages(Chain.Internal, SamplePostProcessing.filmGrain)
+                showChain(Chain.Internal)
+            }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun aGamesPostProcessing() {
         val model =
             SamplePostProcessing().apply {

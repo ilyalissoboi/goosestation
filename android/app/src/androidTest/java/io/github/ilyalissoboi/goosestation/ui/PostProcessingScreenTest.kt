@@ -76,6 +76,11 @@ class PostProcessingScreenTest {
         model.stages(Chain.Internal, SamplePostProcessing.flip)
         show()
 
+        // One chain at a time: the Chain switch first, on Display.
+        focused(CHAIN_LABEL)
+        rule.onNodeWithText("DISPLAY CHAIN").assertExists()
+        rule.onNodeWithText("1. simple-flip").assertDoesNotExist()
+        press(Key.DirectionDown)
         focused("Post-processing")
         press(Key.DirectionDown)
         focused("1. crt-lottes")
@@ -83,17 +88,24 @@ class PostProcessingScreenTest {
         press(Key.DirectionDown)
         focused("Add a shader")
         press(Key.DirectionDown)
-        focused("Post-processing")
-        press(Key.DirectionDown)
+        focused("Download shader packs")
+
+        press(listOf(Key.DirectionUp, Key.DirectionUp, Key.DirectionUp, Key.DirectionUp))
+        focused(CHAIN_LABEL)
+        press(Key.DirectionRight)
+        assertEquals("showChain Internal", model.calls.last())
+        focused(CHAIN_LABEL)
+        rule.onNodeWithText("INTERNAL CHAIN").assertExists()
+        rule.onNodeWithText("1. crt-lottes").assertDoesNotExist()
+        press(listOf(Key.DirectionDown, Key.DirectionDown))
         focused("1. simple-flip")
-        for (section in listOf("DISPLAY", "INTERNAL")) rule.onNodeWithText(section).assertExists()
     }
 
     // A focus the model sets after the page shows (the core answered late) is taken, once its row is there.
     @Test
     fun aLateFocusIsTaken() {
         show()
-        focused("Post-processing")
+        focused(CHAIN_LABEL)
 
         model.stages(Chain.Display, SamplePostProcessing.crtLottes)
         model.focus = Chain.Display to 0
@@ -106,7 +118,7 @@ class PostProcessingScreenTest {
     fun theSwitchTurnsTheChainOn() {
         show()
 
-        press(Key.DirectionCenter)
+        press(listOf(Key.DirectionDown, Key.DirectionCenter))
 
         assertEquals(listOf("setEnabled Display true"), model.calls)
     }
@@ -116,7 +128,7 @@ class PostProcessingScreenTest {
         model.stages(Chain.Display, SamplePostProcessing.crtLottes)
         show()
 
-        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
         rule.onNodeWithText("Add a shader to the Display chain").assertExists()
         // The browser: folders first (a ReShade shader sits under reshade/), then the top's shaders.
         focused("reshade")
@@ -134,7 +146,7 @@ class PostProcessingScreenTest {
     fun backFromAddFocusesItsRow() {
         show()
 
-        press(listOf(Key.DirectionDown, Key.DirectionCenter, Key.Back))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter, Key.Back))
 
         focused("Add a shader")
     }
@@ -144,7 +156,7 @@ class PostProcessingScreenTest {
         model.stages(Chain.Display, SamplePostProcessing.crtLottes, SamplePostProcessing.flip)
         show()
 
-        press(listOf(Key.DirectionDown, Key.DirectionCenter))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
         rule.onNodeWithText("Stage 1: crt-lottes").assertExists()
         rule.onNodeWithText("Move up").assertIsNotEnabled()
         focused("Move down")
@@ -164,7 +176,7 @@ class PostProcessingScreenTest {
         model.stages(Chain.Display, SamplePostProcessing.flip)
         show()
 
-        press(listOf(Key.DirectionDown, Key.DirectionCenter))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
         // A lone stage can't move: Remove has the focus.
         focused("Remove")
         press(Key.DirectionCenter)
@@ -178,7 +190,7 @@ class PostProcessingScreenTest {
         model.stages(Chain.Display, SamplePostProcessing.crtLottes)
         show()
 
-        press(listOf(Key.DirectionDown, Key.DirectionCenter))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
         // Move down and Remove, then the options.
         press(Key.DirectionDown)
         focused("Screen Warp X")
@@ -194,7 +206,7 @@ class PostProcessingScreenTest {
         model.stages(Chain.Display, SamplePostProcessing.crtLottes)
         show()
 
-        press(listOf(Key.DirectionDown, Key.DirectionCenter, Key.DirectionDown, Key.DirectionDown))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter, Key.DirectionDown, Key.DirectionDown))
         focused("Tint (Red)")
         press(Key.DirectionDown)
         focused("Tint (Green)")
@@ -210,7 +222,7 @@ class PostProcessingScreenTest {
         show()
 
         rule.onNodeWithText(STAGE_NO_GLES).assertExists()
-        press(listOf(Key.DirectionDown, Key.DirectionCenter))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
         rule.onNodeWithText(STAGE_NO_GLES).assertExists()
     }
 
@@ -245,6 +257,7 @@ class PostProcessingScreenTest {
         showForAGame()
 
         rule.onNodeWithText("PAD TEST").assertExists()
+        press(Key.DirectionDown)
         focused("Use global (On)")
         rule.onAllNodesWithText(GLOBAL_CHAIN_NOTE, useUnmergedTree = true)[0].assertExists()
         rule.onNodeWithText("1. crt-lottes").assertIsNotEnabled()
@@ -263,6 +276,7 @@ class PostProcessingScreenTest {
         showForAGame()
 
         // From the game's own Off: Left to On, Left to Use global.
+        press(Key.DirectionDown)
         press(Key.DirectionLeft)
         press(Key.DirectionLeft)
 
@@ -285,7 +299,7 @@ class PostProcessingScreenTest {
         model.shaders = listOf(Shader("crt-lottes", ShaderKind.GLSL))
         show()
 
-        press(listOf(Key.DirectionDown, Key.DirectionCenter))
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
 
         focused("crt-lottes")
         rule.onNodeWithText("FilmGrain2").assertDoesNotExist()

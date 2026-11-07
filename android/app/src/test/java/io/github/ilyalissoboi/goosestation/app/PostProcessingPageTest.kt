@@ -430,4 +430,34 @@ class PostProcessingPageTest {
             page.openAdd(Chain.Internal)
             assertEquals("shaders_slang/handheld", page.browseFolder)
         }
+
+    @Test
+    fun thePageShowsOneChainOpeningOnDisplay() =
+        runTest {
+            val page = page()
+            assertEquals(Chain.Display, page.shown)
+
+            page.showChain(Chain.Internal)
+            assertEquals(Chain.Internal, page.shown)
+
+            // Each time the page opens, it's on Display.
+            page.close()
+            page.open(null, running = false)
+            runCurrent()
+            assertEquals(Chain.Display, page.shown)
+        }
+
+    @Test
+    fun backFromAStageKeepsItsChainShown() =
+        runTest {
+            api.addPostProcessingStage(null, "InternalPostProcessing", "simple-flip")
+            val page = page()
+            page.showChain(Chain.Internal)
+            page.openStage(Chain.Internal, 0)
+
+            page.closeStage()
+
+            assertEquals(Chain.Internal, page.shown)
+            assertEquals(Chain.Internal to 0, page.focus)
+        }
 }

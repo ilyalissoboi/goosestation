@@ -44,6 +44,9 @@ interface PostProcessingModel {
     /** Each chain, as last read or changed; empty until read. */
     val chains: Map<Chain, ChainView>
 
+    /** The chain the page shows: Display each time it opens; the Chain switch picks the other. */
+    val shown: Chain
+
     /** The shaders that can be added: those that load, and can run on [gles]. */
     val shaders: List<Shader>
 
@@ -130,6 +133,8 @@ interface PostProcessingModel {
 
     fun reload()
 
+    fun showChain(chain: Chain)
+
     fun openPacks()
 
     /** Back from the shader packs page, to its row. */
@@ -186,6 +191,9 @@ class PostProcessingPage(
     override var asking by mutableStateOf<Chain?>(null)
         private set
 
+    override var shown by mutableStateOf(Chain.Display)
+        private set
+
     override var packsOpen by mutableStateOf(false)
         private set
 
@@ -212,6 +220,7 @@ class PostProcessingPage(
         asking = null
         packsOpen = false
         focusPacks = false
+        shown = Chain.Display
         read()
     }
 
@@ -400,6 +409,10 @@ class PostProcessingPage(
             )
         val key = key
         edit { api.setPostProcessingOption(key, chain.section, index, option.name, array) }
+    }
+
+    override fun showChain(chain: Chain) {
+        shown = chain
     }
 
     override fun openPacks() {

@@ -24,6 +24,16 @@ class DataLayoutTest {
         ).forEach { assertTrue(it, default.mirrored(it)) }
     }
 
+    // The post-processing favourites: one saved display chain in each file, shared with desktop.
+    @Test
+    fun favouritesAreMirrored() {
+        val favourite = "postprocessing/CRT royale + border.ini"
+        assertTrue(default.mirrored(favourite))
+        assertFalse(default.stray(favourite))
+        assertTrue(default.walks("postprocessing"))
+        assertEquals(emptyList<String>(), default.others(listOf("postprocessing" to true)))
+    }
+
     // The RetroAchievements token is in the Keystore on Android: desktop's secrets.ini is its own, never copied in or
     // out, but it's GooseStation's, so it raises no "not GooseStation's" banner.
     @Test

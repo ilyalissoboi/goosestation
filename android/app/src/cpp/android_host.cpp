@@ -1318,9 +1318,9 @@ std::optional<std::vector<std::string>> AndroidHost::GetDataFolders()
   std::vector<std::string> folders;
   for (const std::string* folder :
        {&EmuFolders::Bios, &EmuFolders::Cheats, &EmuFolders::Covers, &EmuFolders::Dumps, &EmuFolders::GameIcons,
-        &EmuFolders::GameSettings, &EmuFolders::InputProfiles, &EmuFolders::MemoryCards, &EmuFolders::SaveStates,
-        &EmuFolders::Screenshots, &EmuFolders::Shaders, &EmuFolders::Textures, &EmuFolders::UserResources,
-        &EmuFolders::Videos})
+        &EmuFolders::GameSettings, &EmuFolders::InputProfiles, &EmuFolders::MemoryCards, &EmuFolders::PostProcessing,
+        &EmuFolders::SaveStates, &EmuFolders::Screenshots, &EmuFolders::Shaders, &EmuFolders::Textures,
+        &EmuFolders::UserResources, &EmuFolders::Videos})
   {
     const std::optional<std::string> relative = RelativeToDataRoot(*folder);
     if (relative.has_value())

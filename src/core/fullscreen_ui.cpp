@@ -434,6 +434,8 @@ static std::vector<std::pair<std::string, bool>> s_game_list_directories_cache;
 static GPUDevice::AdapterInfoList s_graphics_adapter_list_cache;
 static std::vector<std::string> s_fullscreen_mode_list_cache;
 static std::vector<PostProcessingStageInfo> s_postprocessing_stages;
+// The chain the post-processing page edits: the display chain or the internal one.
+static bool s_postprocessing_internal_chain = false;
 static std::vector<const HotkeyInfo*> s_hotkey_list_cache;
 static std::atomic_bool s_settings_changed{false};
 static std::atomic_bool s_game_settings_changed{false};
@@ -2758,6 +2760,7 @@ void FullscreenUI::SwitchToSettings()
   s_game_settings_interface.reset();
 
   PopulateGraphicsAdapterList();
+  s_postprocessing_internal_chain = false;
   PopulatePostProcessingChain(GetEditingSettingsInterface(), PostProcessing::Config::DISPLAY_CHAIN_SECTION);
 
   s_current_main_window = MainWindowType::Settings;
@@ -2769,6 +2772,8 @@ void FullscreenUI::SwitchToGameSettingsForSerial(std::string_view serial)
   s_game_settings_entry.reset();
   s_game_settings_interface = std::make_unique<INISettingsInterface>(System::GetGameSettingsPath(serial));
   s_game_settings_interface->Load();
+  s_postprocessing_internal_chain = false;
+  PopulatePostProcessingChain(s_game_settings_interface.get(), PostProcessing::Config::DISPLAY_CHAIN_SECTION);
   s_current_main_window = MainWindowType::Settings;
   s_settings_page = SettingsPage::Summary;
   QueueResetFocus(FocusResetType::ViewChanged);
@@ -2872,16 +2877,17 @@ void FullscreenUI::DrawSettingsWindow()
       ICON_PF_PICTURE,      ICON_FA_MAGIC,       ICON_PF_SOUND,  ICON_PF_GAMEPAD_ALT,
       ICON_PF_KEYBOARD_ALT, ICON_PF_MEMORY_CARD, ICON_FA_TROPHY, ICON_FA_EXCLAMATION_TRIANGLE};
     static constexpr const char* per_game_icons[] = {ICON_FA_PARAGRAPH,   ICON_FA_HDD,    ICON_FA_COGS,
-                                                     ICON_PF_PICTURE,     ICON_PF_SOUND,  ICON_PF_GAMEPAD_ALT,
-                                                     ICON_PF_MEMORY_CARD, ICON_FA_TROPHY, ICON_FA_EXCLAMATION_TRIANGLE};
+                                                     ICON_PF_PICTURE,     ICON_FA_MAGIC,  ICON_PF_SOUND,
+                                                     ICON_PF_GAMEPAD_ALT, ICON_PF_MEMORY_CARD, ICON_FA_TROPHY,
+                                                     ICON_FA_EXCLAMATION_TRIANGLE};
     static constexpr SettingsPage global_pages[] = {
       SettingsPage::Interface, SettingsPage::Console,        SettingsPage::Emulation,    SettingsPage::BIOS,
       SettingsPage::Display,   SettingsPage::PostProcessing, SettingsPage::Audio,        SettingsPage::Controller,
       SettingsPage::Hotkey,    SettingsPage::MemoryCards,    SettingsPage::Achievements, SettingsPage::Advanced};
     static constexpr SettingsPage per_game_pages[] = {
-      SettingsPage::Summary,     SettingsPage::Console,      SettingsPage::Emulation,
-      SettingsPage::Display,     SettingsPage::Audio,        SettingsPage::Controller,
-      SettingsPage::MemoryCards, SettingsPage::Achievements, SettingsPage::Advanced};
+      SettingsPage::Summary,     SettingsPage::Console,    SettingsPage::Emulation,   SettingsPage::Display,
+      SettingsPage::PostProcessing, SettingsPage::Audio,   SettingsPage::Controller,  SettingsPage::MemoryCards,
+      SettingsPage::Achievements, SettingsPage::Advanced};
     static constexpr std::array<const char*, static_cast<u32>(SettingsPage::Count)> titles = {
       {FSUI_NSTR("Summary"), FSUI_NSTR("Interface Settings"), FSUI_NSTR("Console Settings"),
        FSUI_NSTR("Emulation Settings"), FSUI_NSTR("BIOS Settings"), FSUI_NSTR("Controller Settings"),
@@ -4889,6 +4895,12 @@ void FullscreenUI::DrawDisplaySettingsPage()
   EndMenuButtons();
 }
 
+static const char* GetPostProcessingSection()
+{
+  return FullscreenUI::s_postprocessing_internal_chain ? PostProcessing::Config::INTERNAL_CHAIN_SECTION :
+                                           PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+}
+
 void FullscreenUI::PopulatePostProcessingChain(SettingsInterface* si, const char* section)
 {
   const u32 stages = PostProcessing::Config::GetStageCount(*si, section);
@@ -4914,19 +4926,96 @@ enum
 void FullscreenUI::DrawPostProcessingSettingsPage()
 {
   SettingsInterface* bsi = GetEditingSettingsInterface();
-  static constexpr const char* section = PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+  const bool game_settings = IsEditingGameSettings(bsi);
+  const char* const section = GetPostProcessingSection();
 
   BeginMenuButtons();
 
   MenuHeading(FSUI_CSTR("Controls"));
 
-  DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_MAGIC, "Enable Post Processing"),
-                    FSUI_CSTR("If not enabled, the current post processing chain will be ignored."), "PostProcessing",
-                    "Enabled", false);
+  if (MenuButtonWithValue(FSUI_ICONSTR(ICON_FA_LIST, "Chain"),
+                          FSUI_CSTR("Display applies to the picture at the window's size; Internal at the internal "
+                                    "resolution, before the picture is scaled."),
+                          s_postprocessing_internal_chain ? FSUI_CSTR("Internal") : FSUI_CSTR("Display")))
+  {
+    ImGuiFullscreen::ChoiceDialogOptions options = {{FSUI_STR("Display"), !s_postprocessing_internal_chain},
+                                                    {FSUI_STR("Internal"), s_postprocessing_internal_chain}};
+    OpenChoiceDialog(FSUI_ICONSTR(ICON_FA_LIST, "Chain"), false, std::move(options),
+                     [](s32 index, const std::string& title, bool checked) {
+                       if (index >= 0)
+                       {
+                         s_postprocessing_internal_chain = (index == 1);
+                         PopulatePostProcessingChain(GetEditingSettingsInterface(), GetPostProcessingSection());
+                       }
+                       CloseChoiceDialog();
+                     });
+  }
+
+  // A game's chain is the core's: its own, whole, once its file sets the chain's Enabled; otherwise the global one.
+  if (game_settings)
+  {
+    std::optional<bool> enabled(false);
+    if (!bsi->GetBoolValue(section, "Enabled", &enabled.value()))
+      enabled.reset();
+    const bool had_own = enabled.has_value();
+    if (ThreeWayToggleButton(FSUI_ICONSTR(ICON_FA_MAGIC, "Enable Post Processing"),
+                             FSUI_CSTR("Use Global Setting: the game runs the global chain. On or off: the game has "
+                                       "a chain of its own, starting as a copy of the global one."),
+                             &enabled))
+    {
+      if (!enabled.has_value())
+      {
+        // Back to the global chain: the game's own stages go, after asking when there are any.
+        const auto use_global = [section = std::string(section)]() {
+          SettingsInterface* bsi = GetEditingSettingsInterface();
+          PostProcessing::Config::DeleteChain(*bsi, section.c_str());
+          PopulatePostProcessingChain(bsi, section.c_str());
+          SetSettingsChanged(bsi);
+        };
+        if (PostProcessing::Config::GetStageCount(*bsi, section) > 0)
+        {
+          OpenConfirmMessageDialog(FSUI_ICONSTR(ICON_FA_MAGIC, "Use Global Setting"),
+                                   FSUI_STR("Use the global chain? This game's own stages are removed."),
+                                   [use_global](bool confirmed) {
+                                     if (confirmed)
+                                       use_global();
+                                   });
+        }
+        else
+        {
+          use_global();
+        }
+      }
+      else
+      {
+        if (!had_own && !bsi->ContainsValue(section, "StageCount"))
+        {
+          const auto lock = Host::GetSettingsLock();
+          PostProcessing::Config::CopyChain(*Host::Internal::GetBaseSettingsLayer(), *bsi, section);
+        }
+        bsi->SetBoolValue(section, "Enabled", enabled.value());
+        PopulatePostProcessingChain(bsi, section);
+        SetSettingsChanged(bsi);
+      }
+    }
+
+    if (!bsi->ContainsValue(section, "Enabled"))
+    {
+      MenuHeading(FSUI_CSTR("This game uses the global chain."));
+      EndMenuButtons();
+      return;
+    }
+  }
+  else
+  {
+    DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_MAGIC, "Enable Post Processing"),
+                      FSUI_CSTR("If not enabled, the current post processing chain will be ignored."), section,
+                      "Enabled", false);
+  }
 
   if (MenuButton(FSUI_ICONSTR(ICON_FA_SEARCH, "Reload Shaders"),
                  FSUI_CSTR("Reloads the shaders from disk, applying any changes."),
-                 bsi->GetBoolValue("PostProcessing", "Enabled", false)))
+                 bsi->GetBoolValue(section, "Enabled", false)))
   {
     if (System::IsValid() && PostProcessing::ReloadShaders())
       ShowToast(std::string(), FSUI_STR("Post-processing shaders reloaded."));
@@ -4943,7 +5032,7 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
       options.emplace_back(std::move(display_name), false);
 
     OpenChoiceDialog(FSUI_ICONSTR(ICON_FA_PLUS, "Add Shader"), false, std::move(options),
-                     [shaders = std::move(shaders)](s32 index, const std::string& title, bool checked) {
+                     [shaders = std::move(shaders), section](s32 index, const std::string& title, bool checked) {
                        if (index < 0 || static_cast<u32>(index) >= shaders.size())
                          return;
 
@@ -4973,7 +5062,7 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
     OpenConfirmMessageDialog(
       FSUI_ICONSTR(ICON_FA_TIMES, "Clear Shaders"),
       FSUI_CSTR("Are you sure you want to clear the current post-processing chain? All configuration will be lost."),
-      [](bool confirmed) {
+      [section](bool confirmed) {
         if (!confirmed)
           return;
 

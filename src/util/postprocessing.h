@@ -127,6 +127,12 @@ void MoveStageDown(SettingsInterface& si, const char* section, u32 index);
 void SetStageOption(SettingsInterface& si, const char* section, u32 index, const ShaderOption& option);
 void UnsetStageOption(SettingsInterface& si, const char* section, u32 index, const ShaderOption& option);
 void ClearStages(SettingsInterface& si, const char* section);
+
+/// Replaces to's chain with from's: its Enabled, StageCount and each stage's section (name and options).
+void CopyChain(const SettingsInterface& from, SettingsInterface& to, const char* section);
+
+/// Removes the chain's keys altogether (Enabled, StageCount, every stage), so a game's file has no chain of its own.
+void DeleteChain(SettingsInterface& si, const char* section);
 } // namespace Config
 
 class Chain

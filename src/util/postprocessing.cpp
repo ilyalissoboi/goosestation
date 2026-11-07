@@ -376,6 +376,31 @@ void PostProcessing::Config::ClearStages(SettingsInterface& si, const char* sect
   si.SetUIntValue(section, "StageCount", 0);
 }
 
+void PostProcessing::Config::CopyChain(const SettingsInterface& from, SettingsInterface& to, const char* section)
+{
+  DeleteChain(to, section);
+  to.SetBoolValue(section, "Enabled", from.GetBoolValue(section, "Enabled", false));
+
+  const u32 count = GetStageCount(from, section);
+  if (count == 0)
+    return;
+
+  to.SetUIntValue(section, "StageCount", count);
+  for (u32 i = 0; i < count; i++)
+  {
+    const TinyString stage_section = GetStageConfigSection(section, i);
+    for (const auto& [key, value] : from.GetKeyValueList(stage_section))
+      to.SetStringValue(stage_section, key.c_str(), value.c_str());
+  }
+}
+
+void PostProcessing::Config::DeleteChain(SettingsInterface& si, const char* section)
+{
+  ClearStages(si, section);
+  si.DeleteValue(section, "StageCount");
+  si.DeleteValue(section, "Enabled");
+}
+
 PostProcessing::Chain::Chain(const char* section) : m_section(section)
 {
 }

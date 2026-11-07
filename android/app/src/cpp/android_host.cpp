@@ -1028,48 +1028,24 @@ void AndroidHost::SetPostProcessingOption(const std::optional<std::string>& key,
 }
 
 // Deletes section's chain from si: its stages, StageCount and Enabled.
-static void ClearChain(SettingsInterface& si, const char* section)
-{
-  PostProcessing::Config::ClearStages(si, section);
-  si.DeleteValue(section, "StageCount");
-  si.DeleteValue(section, "Enabled");
-}
-
 void AndroidHost::CopyPostProcessingChain(const std::string& key, const char* section)
 {
   if (!s_initialized || key.empty())
     return;
 
-  // settings.ini's chain as key/value lists, read under the settings lock before the game's file is opened.
-  bool enabled;
-  std::vector<std::vector<std::pair<std::string, std::string>>> stages;
+  // settings.ini's chain, taken under the settings lock before the game's file is opened.
+  MemorySettingsInterface global_chain;
   {
     const auto lock = Host::GetSettingsLock();
-    const SettingsInterface& si = *AndroidHost::s_base_settings_interface;
-    enabled = si.GetBoolValue(section, "Enabled", false);
-    const u32 count = PostProcessing::Config::GetStageCount(si, section);
-    for (u32 i = 0; i < count; i++)
-      stages.push_back(si.GetKeyValueList(TinyString::from_format("{}/Stage{}", section, i + 1)));
+    PostProcessing::Config::CopyChain(*AndroidHost::s_base_settings_interface, global_chain, section);
   }
 
-  EditGameSettings(key, [&](INISettingsInterface& si) {
-    ClearChain(si, section);
-    si.SetBoolValue(section, "Enabled", enabled);
-    if (stages.empty())
-      return;
-    si.SetUIntValue(section, "StageCount", static_cast<u32>(stages.size()));
-    for (size_t i = 0; i < stages.size(); i++)
-    {
-      const TinyString stage_section = TinyString::from_format("{}/Stage{}", section, i + 1);
-      for (const auto& [name, value] : stages[i])
-        si.SetStringValue(stage_section, name.c_str(), value.c_str());
-    }
-  });
+  EditGameSettings(key, [&](INISettingsInterface& si) { PostProcessing::Config::CopyChain(global_chain, si, section); });
 }
 
 void AndroidHost::ClearPostProcessingChain(const std::string& key, const char* section)
 {
-  EditGameSettings(key, [section](INISettingsInterface& si) { ClearChain(si, section); });
+  EditGameSettings(key, [section](INISettingsInterface& si) { PostProcessing::Config::DeleteChain(si, section); });
 }
 
 bool AndroidHost::PostProcessingUsesOpenGLES(const std::optional<std::string>& key)

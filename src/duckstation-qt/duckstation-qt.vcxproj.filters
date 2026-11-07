@@ -44,6 +44,7 @@
     <ClCompile Include="colorpickerbutton.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="setupwizarddialog.cpp" />
+    <ClCompile Include="shaderbrowserdialog.cpp" />
     <ClCompile Include="logwindow.cpp" />
     <ClCompile Include="$(IntDir)moc_aboutdialog.cpp">
       <Filter>moc</Filter>
@@ -162,6 +163,9 @@
     <ClCompile Include="$(IntDir)moc_setupwizarddialog.cpp">
       <Filter>moc</Filter>
     </ClCompile>
+    <ClCompile Include="$(IntDir)moc_shaderbrowserdialog.cpp">
+      <Filter>moc</Filter>
+    </ClCompile>
     <ClCompile Include="graphicssettingswidget.cpp" />
     <ClCompile Include="$(IntDir)moc_graphicssettingswidget.cpp">
       <Filter>moc</Filter>
@@ -238,6 +242,7 @@
     <QtMoc Include="coverdownloaddialog.h" />
     <QtMoc Include="colorpickerbutton.h" />
     <QtMoc Include="setupwizarddialog.h" />
+    <QtMoc Include="shaderbrowserdialog.h" />
     <QtMoc Include="logwindow.h" />
     <QtMoc Include="graphicssettingswidget.h" />
     <QtMoc Include="memoryscannerwindow.h" />

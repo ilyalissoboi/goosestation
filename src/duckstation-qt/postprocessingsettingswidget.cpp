@@ -3,6 +3,7 @@
 
 #include "postprocessingsettingswidget.h"
 #include "qthost.h"
+#include "shaderbrowserdialog.h"
 #include "settingwidgetbinder.h"
 
 #include "util/postprocessing.h"
@@ -159,40 +160,36 @@ void PostProcessingChainConfigWidget::updateButtonsAndConfigPane(std::optional<u
 
 void PostProcessingChainConfigWidget::onAddButtonClicked()
 {
-  QMenu menu;
-
   std::vector<PostProcessing::AvailableShader> shaders = PostProcessing::GetAvailableShaders();
   if (shaders.empty())
   {
-    menu.addAction(tr("No Shaders Available"))->setEnabled(false);
+    QMessageBox::information(this, tr("Add Shader"), tr("No shaders are available."));
+    return;
   }
-  else
+
+  ShaderBrowserDialog browser(this, std::move(shaders), Host::GetBaseStringSettingValue("UI", "ShaderBrowserFolder"));
+  if (browser.exec() != QDialog::Accepted || !browser.selectedShader().has_value())
+    return;
+
+  Host::SetBaseStringSettingValue("UI", "ShaderBrowserFolder", browser.selectedFolder().c_str());
+
+  auto lock = Host::GetSettingsLock();
+  SettingsInterface& si = getSettingsInterfaceToUpdate();
+
+  Error error;
+  if (!PostProcessing::Config::AddStage(si, m_section, browser.selectedShader().value(), &error))
   {
-    for (PostProcessing::AvailableShader& available : shaders)
-    {
-      QAction* action = menu.addAction(QStringLiteral("%1 [%2]").arg(
-        QString::fromStdString(available.name), QString::fromUtf8(PostProcessing::GetShaderKindName(available.kind))));
-      connect(action, &QAction::triggered, [this, shader = std::move(available.name)]() {
-        auto lock = Host::GetSettingsLock();
-        SettingsInterface& si = getSettingsInterfaceToUpdate();
-
-        Error error;
-        if (!PostProcessing::Config::AddStage(si, m_section, shader, &error))
-        {
-          lock.unlock();
-          QMessageBox::critical(this, tr("Error"),
-                                tr("Failed to add shader: %1").arg(QString::fromStdString(error.GetDescription())));
-          return;
-        }
-
-        updateList(si);
-        lock.unlock();
-        commitSettingsUpdate();
-      });
-    }
+    lock.unlock();
+    Host::CommitBaseSettingChanges();
+    QMessageBox::critical(this, tr("Error"),
+                          tr("Failed to add shader: %1").arg(QString::fromStdString(error.GetDescription())));
+    return;
   }
 
-  menu.exec(QCursor::pos());
+  updateList(si);
+  lock.unlock();
+  Host::CommitBaseSettingChanges();
+  commitSettingsUpdate();
 }
 
 void PostProcessingChainConfigWidget::onRemoveButtonClicked()

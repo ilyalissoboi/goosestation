@@ -31,6 +31,9 @@ enum class EntryDisposition
 EntryDisposition TransformEntryName(std::string_view entry, u32 strip, std::span<const char* const> skip,
                                     std::string* relative, Error* error);
 
+/// Whether the file opens as a zip.
+bool IsZip(const std::string& zip_path);
+
 /// The files extraction would write, in order, from the archive's central directory only. Fails when the file isn't
 /// a zip or has a rejected entry.
 bool ListFiles(const std::string& zip_path, u32 strip, std::span<const char* const> skip,

@@ -5,6 +5,7 @@
 
 #include "common/types.h"
 
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -12,6 +13,7 @@
 #include <vector>
 
 class Error;
+class ProgressCallback;
 
 /// Downloads, updates and removes the four RetroArch slang shader packs, adapting the PCSX2 fork's ShaderPacks.
 /// Every function taking a root works under that folder (EmuFolders::GetShaderPacksFolder() in the app, a temporary
@@ -61,7 +63,8 @@ bool ParseBranchJson(std::string_view json, const PackInfo& pack, ResolvedVersio
 bool ParseReleaseJson(std::string_view json, const PackInfo& pack, ResolvedVersion* out, Error* error);
 
 /// What to tell the player when a request for the pack ended with status (an HTTP status, or HTTPDownloader's
-/// negative codes, or 0 for a transport failure): checking is the version check, otherwise the download.
+/// negative codes, 0 for a transport failure, or STATUS_TOO_LARGE): checking is the version check, otherwise the
+/// download.
 std::string DescribeFailure(bool checking, const PackInfo& pack, s32 status);
 
 /// What a pack's marker (<root>/.shaderpacks/<id>.json) records: exactly the files its install wrote.
@@ -117,5 +120,49 @@ PackStatus GetPackStatus(const std::optional<InstalledPack>& installed, const st
 
 /// The words every UI shows for the status.
 std::string DescribePackStatus(const PackStatus& status);
+
+/// The largest archive a download may bring.
+static constexpr u64 MAX_DOWNLOAD_SIZE = 1024ull * 1024 * 1024;
+
+/// A Transport's status for a download that went past its cap.
+static constexpr s32 STATUS_TOO_LARGE = -100;
+
+/// How the packs reach the network: desktop's goes through HTTPDownloader, Android's streams through its own bridge,
+/// and the tests serve canned answers. Each returns the HTTP status, or HTTPDownloader's negative codes (0 for a
+/// transport failure).
+class Transport
+{
+public:
+  virtual ~Transport();
+
+  /// A small answer (GitHub's API), into memory.
+  virtual s32 Get(const std::string& url, std::string* body, ProgressCallback* progress) = 0;
+
+  /// The archive, into the file at path, its size in bytes reported through progress. Past max_size it stops and
+  /// returns STATUS_TOO_LARGE. The file may be left for the caller to delete; error may say what failed.
+  virtual s32 Download(const std::string& url, const std::string& path, u64 max_size, ProgressCallback* progress,
+                       Error* error) = 0;
+};
+
+/// The platform's transport.
+std::unique_ptr<Transport> CreateTransport();
+
+/// Checks the pack's latest version.
+std::optional<ResolvedVersion> ResolveLatest(const PackInfo& pack, Transport& transport, ProgressCallback* progress,
+                                             Error* error);
+
+struct InstallResult
+{
+  std::string id;
+  bool success = false;
+  bool cancelled = false;
+  std::string message; ///< what went wrong, empty on success
+};
+
+/// Installs or updates the packs, dependencies first, under root. For each: check, download to
+/// <root>/.shaderpacks/<id>.zip.part, check the archive, remove the previous version, record the files it will
+/// write (an incomplete marker), extract, record what was written. A cancel stops the rest.
+std::vector<InstallResult> Install(std::string_view root, std::span<const std::string> ids, Transport& transport,
+                                   ProgressCallback* progress);
 
 } // namespace ShaderPacks

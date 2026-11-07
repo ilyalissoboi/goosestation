@@ -2,20 +2,25 @@
 // SPDX-License-Identifier: GPL-3.0
 
 #include "shader_packs.h"
+#include "shader_pack_archive.h"
 
 #include "util/host.h"
 #include "util/http_downloader.h"
+
+#include "core/host.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
 #include "common/json_reader.h"
 #include "common/log.h"
 #include "common/path.h"
+#include "common/progress_callback.h"
 
 #include "fmt/format.h"
 
 #include <algorithm>
 #include <array>
+#include <ctime>
 
 Log_SetChannel(ShaderPacks);
 
@@ -209,6 +214,8 @@ std::string DescribeFailure(bool checking, const PackInfo& pack, s32 status)
       return TRANSLATE_STR("ShaderPacks", "GitHub took too long to answer: try again later.");
     case HTTPDownloader::HTTP_STATUS_CANCELLED:
       return TRANSLATE_STR("ShaderPacks", "Cancelled.");
+    case STATUS_TOO_LARGE:
+      return fmt::format(TRANSLATE_FS("ShaderPacks", "The download for {} is larger than 1 GB."), pack.name);
     default:
       break;
   }
@@ -405,6 +412,291 @@ std::string DescribePackStatus(const PackStatus& status)
     default:
       return TRANSLATE_STR("ShaderPacks", "Not installed");
   }
+}
+
+Transport::~Transport() = default;
+
+namespace {
+
+bool IsCancelled(ProgressCallback* progress)
+{
+  return progress && progress->IsCancelled();
+}
+
+void SetStatus(ProgressCallback* progress, const std::string& text)
+{
+  if (progress)
+    progress->SetStatusText(text);
+}
+
+std::string CurrentTimestamp()
+{
+  const std::time_t now = std::time(nullptr);
+  std::tm tm = {};
+#ifdef _WIN32
+  gmtime_s(&tm, &now);
+#else
+  gmtime_r(&now, &tm);
+#endif
+  return fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
+                     tm.tm_min, tm.tm_sec);
+}
+
+std::vector<std::string> UnderInstallDir(const PackInfo& pack, const std::vector<std::string>& files)
+{
+  std::vector<std::string> out;
+  out.reserve(files.size());
+  for (const std::string& file : files)
+    out.push_back(fmt::format("{}/{}", pack.install_dir, file));
+  return out;
+}
+
+// One pack's install, as Install() describes; result's message and cancelled say how it ended.
+void InstallOne(std::string_view root, const PackInfo& pack, Transport& transport, ProgressCallback* progress,
+                InstallResult* result)
+{
+  Error error;
+
+  SetStatus(progress, fmt::format(TRANSLATE_FS("ShaderPacks", "Checking {}…"), pack.name));
+  const std::optional<ResolvedVersion> version = ResolveLatest(pack, transport, progress, &error);
+  if (!version.has_value())
+  {
+    result->message = error.GetDescription();
+    result->cancelled = IsCancelled(progress);
+    return;
+  }
+
+  const std::string marker_dir = Path::Combine(root, ".shaderpacks");
+  const std::string part = Path::Combine(marker_dir, fmt::format("{}.zip.part", pack.id));
+  if (!FileSystem::EnsureDirectoryExists(marker_dir.c_str(), true, &error))
+  {
+    result->message = error.GetDescription();
+    return;
+  }
+  if (FileSystem::FileExists(part.c_str()))
+    FileSystem::DeleteFile(part.c_str());
+
+  // The part file never outlives this install, however it ends.
+  struct PartFile
+  {
+    const std::string& path;
+    ~PartFile()
+    {
+      if (FileSystem::FileExists(path.c_str()))
+        FileSystem::DeleteFile(path.c_str());
+    }
+  } part_file{part};
+
+  SetStatus(progress, fmt::format(TRANSLATE_FS("ShaderPacks", "Downloading {}…"), pack.name));
+  const s32 status = transport.Download(version->download_url, part, MAX_DOWNLOAD_SIZE, progress, &error);
+  if (status != 200 || IsCancelled(progress))
+  {
+    result->cancelled = (status == HTTPDownloader::HTTP_STATUS_CANCELLED) || IsCancelled(progress);
+    result->message = result->cancelled ? DescribeFailure(false, pack, HTTPDownloader::HTTP_STATUS_CANCELLED) :
+                      error.IsValid()   ? error.GetDescription() :
+                                          DescribeFailure(false, pack, status);
+    return;
+  }
+
+  const s64 archive_size = FileSystem::GetPathFileSize(part.c_str());
+  if (!ShaderPackArchive::IsZip(part))
+  {
+    result->message = fmt::format(TRANSLATE_FS("ShaderPacks", "The download for {} isn't a zip archive."), pack.name);
+    return;
+  }
+
+  // Nothing on disk changes until the archive is known to be good.
+  std::vector<std::string> planned;
+  if (!ShaderPackArchive::ListFiles(part, pack.strip, pack.skip, &planned, &error))
+  {
+    result->message = error.GetDescription();
+    return;
+  }
+
+  if (const std::optional<InstalledPack> previous = ReadMarker(root, pack.id); previous.has_value())
+  {
+    SetStatus(progress, fmt::format(TRANSLATE_FS("ShaderPacks", "Removing the previous {}…"), pack.name));
+    RemoveFiles(root, previous.value());
+  }
+
+  // Recorded before anything lands, with no version: an install that never finishes reads as incomplete, and removing
+  // it deletes whatever it wrote.
+  InstalledPack marker;
+  marker.id = pack.id;
+  marker.source_url = version->download_url;
+  marker.installed_at = CurrentTimestamp();
+  marker.archive_size = (archive_size > 0) ? static_cast<u64>(archive_size) : 0;
+  marker.files = UnderInstallDir(pack, planned);
+  if (!WriteMarker(root, marker, &error))
+  {
+    result->message = error.GetDescription();
+    return;
+  }
+
+  SetStatus(progress, fmt::format(TRANSLATE_FS("ShaderPacks", "Extracting {}…"), pack.name));
+  std::vector<std::string> written;
+  const bool extracted = ShaderPackArchive::Extract(part, Path::Combine(root, pack.install_dir), pack.strip, pack.skip,
+                                                    progress, &written, &error);
+
+  marker.version = extracted ? version->version : std::string();
+  marker.files = UnderInstallDir(pack, written);
+  Error marker_error;
+  if (!WriteMarker(root, marker, &marker_error))
+    WARNING_LOG("Couldn't record shader pack {}: {}", pack.id, marker_error.GetDescription());
+
+  if (!extracted)
+  {
+    result->cancelled = IsCancelled(progress);
+    result->message = error.GetDescription();
+    return;
+  }
+
+  result->success = true;
+  INFO_LOG("Installed shader pack {} {} ({} files).", pack.name, version->version, written.size());
+}
+
+// Forwards to the caller's progress, and cancels the request once it passes the cap.
+class CappedProgress final : public ProgressCallback
+{
+public:
+  CappedProgress(ProgressCallback* inner, u64 cap) : m_inner(inner), m_cap(cap) {}
+
+  bool IsOver() const { return m_over; }
+  bool IsCancelled() const override { return m_over || (m_inner && m_inner->IsCancelled()); }
+  // Only the bytes received count: a backend may give an unknown length as the type's maximum.
+  void SetProgressRange(u32 range) override
+  {
+    if (m_inner)
+      m_inner->SetProgressRange(range);
+  }
+  void SetProgressValue(u32 value) override
+  {
+    m_over = m_over || (value > m_cap);
+    if (m_inner)
+      m_inner->SetProgressValue(value);
+  }
+
+private:
+  ProgressCallback* m_inner;
+  u64 m_cap;
+  bool m_over = false;
+};
+
+// HTTPDownloader holds the body in memory, then it's written out.
+class HTTPTransport final : public Transport
+{
+public:
+  explicit HTTPTransport(std::unique_ptr<HTTPDownloader> http) : m_http(std::move(http)) {}
+
+  s32 Get(const std::string& url, std::string* body, ProgressCallback* progress) override
+  {
+    s32 status = HTTPDownloader::HTTP_STATUS_ERROR;
+    m_http->CreateRequest(
+      url,
+      [&status, body](s32 status_code, const std::string&, HTTPDownloader::Request::Data data) {
+        status = status_code;
+        body->assign(reinterpret_cast<const char*>(data.data()), data.size());
+      },
+      progress);
+    m_http->WaitForAllRequests();
+    return status;
+  }
+
+  s32 Download(const std::string& url, const std::string& path, u64 max_size, ProgressCallback* progress,
+               Error* error) override
+  {
+    CappedProgress capped(progress, max_size);
+    s32 status = HTTPDownloader::HTTP_STATUS_ERROR;
+    HTTPDownloader::Request::Data body;
+    m_http->CreateRequest(
+      url,
+      [&status, &body](s32 status_code, const std::string&, HTTPDownloader::Request::Data data) {
+        status = status_code;
+        body = std::move(data);
+      },
+      &capped);
+    m_http->WaitForAllRequests();
+
+    if (capped.IsOver() || body.size() > max_size)
+      return STATUS_TOO_LARGE;
+    if (status == 200 && !FileSystem::WriteBinaryFile(path.c_str(), body.data(), body.size(), error))
+      return HTTPDownloader::HTTP_STATUS_ERROR;
+    return status;
+  }
+
+private:
+  std::unique_ptr<HTTPDownloader> m_http;
+};
+
+} // namespace
+
+std::unique_ptr<Transport> CreateTransport()
+{
+  std::unique_ptr<HTTPDownloader> http = HTTPDownloader::Create(Host::GetHTTPUserAgent());
+  if (!http)
+    return {};
+  return std::make_unique<HTTPTransport>(std::move(http));
+}
+
+std::optional<ResolvedVersion> ResolveLatest(const PackInfo& pack, Transport& transport, ProgressCallback* progress,
+                                             Error* error)
+{
+  std::string body;
+  const s32 status = transport.Get(GetVersionUrl(pack), &body, progress);
+  if (status != 200 || IsCancelled(progress))
+  {
+    Error::SetString(error, DescribeFailure(true, pack,
+                                            IsCancelled(progress) ? HTTPDownloader::HTTP_STATUS_CANCELLED : status));
+    return std::nullopt;
+  }
+
+  ResolvedVersion version;
+  const bool parsed = (pack.source == VersionSource::BranchHead) ? ParseBranchJson(body, pack, &version, error) :
+                                                                   ParseReleaseJson(body, pack, &version, error);
+  if (!parsed)
+    return std::nullopt;
+  return version;
+}
+
+std::vector<InstallResult> Install(std::string_view root, std::span<const std::string> ids, Transport& transport,
+                                   ProgressCallback* progress)
+{
+  std::vector<InstallResult> results;
+  std::vector<std::string> failed;
+  if (progress)
+    progress->SetCancellable(true);
+
+  for (const std::string& id : ExpandDependencies(root, ids))
+  {
+    const PackInfo* pack = FindPack(id);
+    if (!pack)
+      continue;
+
+    InstallResult& result = results.emplace_back();
+    result.id = id;
+    if (IsCancelled(progress))
+    {
+      result.cancelled = true;
+      result.message = DescribeFailure(false, *pack, HTTPDownloader::HTTP_STATUS_CANCELLED);
+      break;
+    }
+
+    if (pack->needs && std::find(failed.begin(), failed.end(), pack->needs) != failed.end())
+    {
+      const PackInfo* needs = FindPack(pack->needs);
+      result.message =
+        fmt::format(TRANSLATE_FS("ShaderPacks", "Needs {}, which didn't install."), needs ? needs->name : pack->needs);
+      failed.push_back(id);
+      continue;
+    }
+
+    InstallOne(root, *pack, transport, progress, &result);
+    if (result.cancelled)
+      break;
+    if (!result.success)
+      failed.push_back(id);
+  }
+  return results;
 }
 
 } // namespace ShaderPacks

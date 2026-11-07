@@ -82,8 +82,9 @@ size_t HTTPDownloaderCurl::WriteCallback(char* ptr, size_t size, size_t nmemb, v
   if (req->content_length == 0)
   {
     curl_off_t length;
-    if (curl_easy_getinfo(req->handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &length) == CURLE_OK)
-      req->content_length = static_cast<u32>(length);
+    // -1 when the server doesn't say, which would read as 4 GB.
+    if (curl_easy_getinfo(req->handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &length) == CURLE_OK && length > 0)
+      req->content_length = static_cast<u32>(std::min<curl_off_t>(length, UINT32_MAX));
   }
 
   return nmemb;

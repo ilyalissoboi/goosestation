@@ -151,6 +151,11 @@ EntryDisposition TransformEntryName(std::string_view entry, u32 strip, std::span
   return StartsWithSkip(*relative, skip) ? EntryDisposition::Skip : EntryDisposition::Extract;
 }
 
+bool IsZip(const std::string& zip_path)
+{
+  return static_cast<bool>(Open(zip_path, nullptr));
+}
+
 bool ListFiles(const std::string& zip_path, u32 strip, std::span<const char* const> skip,
                std::vector<std::string>* out, Error* error)
 {

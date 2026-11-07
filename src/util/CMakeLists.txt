@@ -104,6 +104,7 @@ if(ENABLE_OPENGL)
     opengl_context.cpp
     opengl_context.h
     opengl_device.cpp
+    opengl_slang.cpp
     opengl_device.h
     opengl_loader.h
     opengl_pipeline.cpp

@@ -25,6 +25,7 @@ class OpenGLDevice final : public GPUDevice
 {
   friend OpenGLTexture;
   friend OpenGLDownloadTexture;
+  friend class OpenGLSlangChain;
 
 public:
   OpenGLDevice();
@@ -64,6 +65,13 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+
+  bool SupportsSlangPresets() const override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
+
+  /// After another renderer (librashader) used the context: re-binds the framebuffer, viewport and scissor, and makes
+  /// the next draw re-apply the pipeline, its state, textures and samplers.
+  void InvalidateCachedState();
   void CopyTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
                          u32 src_x, u32 src_y, u32 src_layer, u32 src_level, u32 width, u32 height) override;
   void ResolveTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,

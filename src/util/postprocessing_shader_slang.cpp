@@ -387,8 +387,6 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
   bool shaded = false;
   if (m_chain && Slang::IsUsable(out_rect, native) && !src_rect.rempty())
   {
-    // Rows are flipped wherever a texture's order differs from the one the renderer's runtime works in.
-    const bool runtime_top_first = !m_chain->ExpectsBottomRowFirst();
     const u32 out_w = static_cast<u32>(out_rect.width()), out_h = static_cast<u32>(out_rect.height());
     if ((!m_native || m_native->GetWidth() != native.width || m_native->GetHeight() != native.height))
     {
@@ -408,7 +406,8 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
       // 1. The picture at the console's resolution, oriented as the renderer's librashader runtime wants it.
       src->MakeReadyForSampling();
       g_gpu_device->SetRenderTarget(m_native.get());
-      const GSVector4 src_uv = TexelRectToUV(src_rect, src, src_top_first != runtime_top_first);
+      // librashader works top row first on every renderer: a texture stored bottom row first is flipped.
+      const GSVector4 src_uv = TexelRectToUV(src_rect, src, !src_top_first);
       const GSVector4i native_rect(0, 0, static_cast<s32>(native.width), static_cast<s32>(native.height));
       const u32 factor = Slang::BoxFactor(src_rect, native);
       GPUPipeline* box = factor ? GetBoxPipeline(factor) : nullptr;
@@ -454,7 +453,7 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
 
   if (shaded)
   {
-    const bool flip = m_chain && (!m_chain->ExpectsBottomRowFirst() != picture.rows_top_first);
+    const bool flip = !picture.rows_top_first;
     DrawTexture(m_output_copy_pipeline.get(), m_result.get(),
                 TexelRectToUV(GSVector4i(0, 0, out_rect.width(), out_rect.height()), m_result.get(), flip), out_rect,
                 false);

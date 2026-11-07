@@ -1232,6 +1232,31 @@ void OpenGLDevice::SetScissor(const GSVector4i rc)
   UpdateScissor();
 }
 
+void OpenGLDevice::InvalidateCachedState()
+{
+  glBindFramebuffer(GL_FRAMEBUFFER, m_current_fbo);
+  glEnable(GL_SCISSOR_TEST);
+  UpdateViewport();
+  UpdateScissor();
+
+  // Uploads assume no unpack buffer and the default pixel store.
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+  glPixelStorei(GL_PACK_ALIGNMENT, 4);
+
+  // Every cached value made to differ, so the next SetPipeline() and SetTextureSampler() apply them all.
+  m_current_pipeline = nullptr;
+  m_last_program = 0;
+  m_last_vao = m_vao_cache.cend();
+  m_last_blend_state.key = ~m_last_blend_state.key;
+  m_last_rasterization_state.key = ~m_last_rasterization_state.key;
+  m_last_depth_state.key = ~m_last_depth_state.key;
+  m_last_texture_unit = ~0u;
+  m_last_samplers.fill({~0u, ~0u});
+  m_last_ssbo = 0;
+}
+
 void OpenGLDevice::UpdateViewport()
 {
   glViewport(m_last_viewport.left, m_last_viewport.top, m_last_viewport.width(), m_last_viewport.height());

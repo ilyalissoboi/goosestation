@@ -120,6 +120,7 @@
     <ClCompile Include="input_source.cpp" />
     <ClCompile Include="cubeb_audio_stream.cpp" />
     <ClCompile Include="opengl_device.cpp" />
+    <ClCompile Include="opengl_slang.cpp" />
     <ClCompile Include="opengl_pipeline.cpp" />
     <ClCompile Include="opengl_stream_buffer.cpp" />
     <ClCompile Include="opengl_texture.cpp" />

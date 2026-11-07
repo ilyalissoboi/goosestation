@@ -454,7 +454,8 @@ protected:
 };
 
 /// A slang preset's librashader filter chain on a device, made by GPUDevice::CreateSlangChain(). Each renderer's glue
-/// implements it; librashader only ever reads and writes the two textures it's given.
+/// implements it; librashader only ever reads and writes the two textures it's given. Every runtime (OpenGL's too)
+/// takes texel row 0 as the picture's top.
 class SlangChain
 {
 public:
@@ -466,10 +467,6 @@ public:
   /// Runs the preset from input (shader-readable) into the whole of output (a render target), which then is
   /// shader-readable again. Leaves the device's cached state invalidated, so the next draw re-binds everything.
   virtual bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) = 0;
-
-  /// Whether librashader's runtime takes texel row 0 as the picture's bottom (OpenGL), so a texture stored top row
-  /// first must be flipped on the way in and out.
-  virtual bool ExpectsBottomRowFirst() const { return false; }
 };
 
 class GPUDevice

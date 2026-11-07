@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
-// The slang stage on a real GPU device, offscreen. Opt-in: GOOSESTATION_GPU_TEST_API=Metal|Vulkan|OpenGL picks the
-// renderer, and GOOSESTATION_LIBRASHADER_PATH the library; without both, every test here is skipped (CI runs none).
+// The slang stage on a real GPU device, offscreen. Opt-in: GOOSESTATION_GPU_TEST_API=Metal|Vulkan|OpenGL|OpenGLES
+// picks the renderer, and GOOSESTATION_LIBRASHADER_PATH the library; without both, every test here is skipped (CI runs
+// none).
 
 #include "util/gpu_device.h"
 #include "util/librashader_loader.h"
@@ -77,6 +78,8 @@ std::optional<RenderAPI> TestAPI()
     return RenderAPI::Vulkan;
   if (std::strcmp(name, "OpenGL") == 0)
     return RenderAPI::OpenGL;
+  if (std::strcmp(name, "OpenGLES") == 0)
+    return RenderAPI::OpenGLES;
   return std::nullopt;
 }
 
@@ -119,7 +122,7 @@ protected:
   {
     const std::optional<RenderAPI> api = TestAPI();
     if (!api.has_value())
-      GTEST_SKIP() << "GOOSESTATION_GPU_TEST_API isn't Metal, Vulkan or OpenGL";
+      GTEST_SKIP() << "GOOSESTATION_GPU_TEST_API isn't Metal, Vulkan, OpenGL or OpenGLES";
     if (!Librashader::GetAvailability().available)
       GTEST_SKIP() << "librashader isn't loadable: " << Librashader::GetAvailability().reason;
 
@@ -296,6 +299,8 @@ TEST_F(SlangGPU, PresetsFromAPackRun)
     m_shader = std::make_unique<PostProcessing::SlangShader>();
     Error error;
     ASSERT_TRUE(m_shader->LoadFromFile(path, path, false, &error)) << error.GetDescription();
+    // librashader's own words when the preset doesn't compile here (the stage only shows them on screen).
+    ASSERT_TRUE(g_gpu_device->CreateSlangChain(path, &error)) << error.GetDescription();
     ASSERT_TRUE(m_shader->CompilePipeline(GPUTexture::Format::RGBA8, WIDTH, HEIGHT, nullptr));
 
     std::vector<u32> out;

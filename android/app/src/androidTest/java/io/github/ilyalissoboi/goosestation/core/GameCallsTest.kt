@@ -301,6 +301,38 @@ class GameCallsTest {
         }
     }
 
+    // A slang stage draws the preset where the picture is, the right way up: the probe paints the top half of what it
+    // draws red and the rest blue. Under Vulkan here; the full run's OpenGL ES pass is the OpenGL ES spike.
+    @Test
+    fun aSlangStageDrawsThePictureTheRightWayUp() =
+        FrameReader(1280, 720).use { frames ->
+            withPadtest(frames = frames, settings = { slangChain() }) {
+                assertTrue(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+                val frame = frames.nextFrame()
+                assertColour("the picture's top", 0xFF0000FF.toInt(), frame[180 * 1280 + 640])
+                assertColour("the picture's bottom", 0xFFFF0000.toInt(), frame[540 * 1280 + 640])
+            }
+        }
+
+    // settings.ini's Display chain: on, with the probe preset, written into the data folder's shaders.
+    private fun slangChain() {
+        val dir = File(dataRoot, "shaders/p").apply { mkdirs() }
+        File(dir, "probe.slangp").writeText("shaders = 1\nshader0 = probe.slang\n")
+        File(dir, "probe.slang").writeText(PROBE_SHADER)
+        NativeLibrary.setBoolSetting("PostProcessing", "Enabled", true)
+        assertNull(NativeLibrary.addPostProcessingStage(null, "PostProcessing", "p/probe.slangp"))
+    }
+
+    // Each of [actual]'s colour channels within 8 of [expected]'s (0xAABBGGRR, as FrameReader gives them).
+    private fun assertColour(
+        what: String,
+        expected: Int,
+        actual: Int,
+    ) {
+        val close = (0 until 24 step 8).all { shift -> abs((expected ushr shift and 0xFF) - (actual ushr shift and 0xFF)) <= 8 }
+        assertTrue("$what: ${Integer.toHexString(actual)}, not ${Integer.toHexString(expected)}", close)
+    }
+
     // [key]'s Display chain (settings.ini's for null): on, with simple-flip.
     private fun flipChain(key: String?) {
         if (key == null) {
@@ -1114,6 +1146,23 @@ class GameCallsTest {
 
     private companion object {
         const val INSTALL_ID = "test-install"
+
+        // A slang shader that ignores its input: red over the top half of what it draws (as slang shaders see it).
+        val PROBE_SHADER =
+            """
+            #version 450
+            layout(std140, set = 0, binding = 0) uniform UBO { mat4 MVP; } global;
+            #pragma stage vertex
+            layout(location = 0) in vec4 Position;
+            layout(location = 1) in vec2 TexCoord;
+            layout(location = 0) out vec2 vTexCoord;
+            void main() { gl_Position = global.MVP * Position; vTexCoord = TexCoord; }
+            #pragma stage fragment
+            layout(location = 0) in vec2 vTexCoord;
+            layout(location = 0) out vec4 FragColor;
+            layout(set = 0, binding = 2) uniform sampler2D Source;
+            void main() { FragColor = (vTexCoord.y < 0.5) ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(0.0, 0.0, 1.0, 1.0); }
+            """.trimIndent() + "\n"
         const val SERIAL = "SLUS-00000"
         const val PLAYER_CODES = "[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n"
         const val SDCARD_TESTS = "/sdcard/GooseTest"

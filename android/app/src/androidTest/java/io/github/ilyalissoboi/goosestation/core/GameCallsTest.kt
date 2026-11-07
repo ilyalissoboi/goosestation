@@ -374,6 +374,36 @@ class GameCallsTest {
         }
     }
 
+    // The hotkey from the pad, as a player presses it: applying reloads the settings, and with them the input bindings,
+    // which the press that fired it is still walking. Twice, so the second press finds its binding again.
+    @Test
+    fun favouriteHotkeysWorkFromThePad() {
+        withPadtest(settings = {
+            flipChain(null)
+            assertNull(NativeLibrary.savePostProcessingFavourite(null, "Flip", false))
+            NativeLibrary.removePostProcessingStage(null, "PostProcessing", 0)
+            assertNull(NativeLibrary.addPostProcessingStage(null, "PostProcessing", "crt-lottes"))
+            assertNull(NativeLibrary.savePostProcessingFavourite(null, "Lottes", false))
+        }) {
+            NativeLibrary.setHotkeyBinding(PAD, "NextPostProcessingFavourite", "Button99")
+            Thread.sleep(500)
+
+            for (expected in listOf("simple-flip", "crt-lottes")) {
+                NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+                Thread.sleep(300)
+                NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+                val deadline = System.currentTimeMillis() + 5_000
+                while (settingsIni().value("PostProcessing/Stage1", "ShaderName") != expected &&
+                    System.currentTimeMillis() < deadline
+                ) {
+                    Thread.sleep(50)
+                }
+                assertEquals(expected, settingsIni().value("PostProcessing/Stage1", "ShaderName"))
+                assertEquals(expected, NativeLibrary.getRunningSettingForTest("PostProcessing/Stage1", "ShaderName"))
+            }
+        }
+    }
+
     // A game with its own display chain: the hotkeys write the game's file, and settings.ini's chain stays.
     @Test
     fun favouriteHotkeysWriteAGamesOwnChain() {

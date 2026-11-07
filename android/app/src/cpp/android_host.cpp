@@ -1184,6 +1184,8 @@ bool AndroidHost::PressHotkeyForTest(const std::string& name)
       }
     },
     true);
+  // What the hotkey queued on the CPU thread (the queue runs in order), done before this returns.
+  EmuThread::RunOnThread([]() {}, true);
   return found;
 }
 

@@ -152,8 +152,8 @@ std::string RenamePostProcessingFavourite(const std::string& from, const std::st
 void MovePostProcessingFavourite(const std::string& name, bool down);
 std::string DeletePostProcessingFavourite(const std::string& name);
 
-/// Tests: presses and releases the core's hotkey name in the running game, on the CPU thread, waiting. False when
-/// there's no such hotkey.
+/// Tests: presses and releases the core's hotkey name in the running game, on the CPU thread, waiting for it and for
+/// what it queued there. False when there's no such hotkey.
 bool PressHotkeyForTest(const std::string& name);
 
 /// Whether fastmem can run here: the system's pages are no larger than the build's (else LoadSettings turns it off).

@@ -125,6 +125,9 @@ static std::string s_last_postprocessing_favourite;
 
 static void HotkeyStepPostProcessingFavourite(bool forward)
 {
+  if (!System::IsValid())
+    return;
+
   Error error;
   std::optional<std::string> name;
   bool game = false;
@@ -476,14 +479,15 @@ DEFINE_HOTKEY("ToggleInternalPostProcessing", TRANSLATE_NOOP("Hotkeys", "Graphic
 
 DEFINE_HOTKEY("NextPostProcessingFavourite", TRANSLATE_NOOP("Hotkeys", "Graphics"),
               TRANSLATE_NOOP("Hotkeys", "Next Post-Processing Favourite"), [](s32 pressed) {
+                // Queued: applying reloads the input bindings, which the press that fired this is still walking.
                 if (!pressed && System::IsValid())
-                  HotkeyStepPostProcessingFavourite(true);
+                  Host::RunOnCPUThread([]() { HotkeyStepPostProcessingFavourite(true); });
               })
 
 DEFINE_HOTKEY("PreviousPostProcessingFavourite", TRANSLATE_NOOP("Hotkeys", "Graphics"),
               TRANSLATE_NOOP("Hotkeys", "Previous Post-Processing Favourite"), [](s32 pressed) {
                 if (!pressed && System::IsValid())
-                  HotkeyStepPostProcessingFavourite(false);
+                  Host::RunOnCPUThread([]() { HotkeyStepPostProcessingFavourite(false); });
               })
 
 DEFINE_HOTKEY("ReloadPostProcessingShaders", TRANSLATE_NOOP("Hotkeys", "Graphics"),

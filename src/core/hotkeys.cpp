@@ -17,6 +17,7 @@
 #include "util/gpu_device.h"
 #include "util/input_manager.h"
 #include "util/postprocessing.h"
+#include "util/postprocessing_favourites.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
@@ -117,6 +118,54 @@ static void HotkeySaveStateSlot(bool global, s32 slot)
       fmt::format(TRANSLATE_FS("OSDMessage", "Failed to save state to slot {0}:\n{1}"), slot, error.GetDescription()),
       Host::OSD_ERROR_DURATION);
   }
+}
+
+// The favourite the hotkeys applied last, so two that are the same chain both come round.
+static std::string s_last_postprocessing_favourite;
+
+static void HotkeyStepPostProcessingFavourite(bool forward)
+{
+  if (!System::IsValid())
+    return;
+
+  Error error;
+  std::optional<std::string> name;
+  bool game = false;
+  {
+    const auto lock = Host::GetSettingsLock();
+    const SettingsInterface* game_layer = Host::Internal::GetGameSettingsLayer();
+    game = game_layer && PostProcessing::Config::HasOwnChain(*game_layer, PostProcessing::Config::DISPLAY_CHAIN_SECTION);
+    name = PostProcessing::Favourites::StepChain(EmuFolders::PostProcessing, *Host::Internal::GetBaseSettingsLayer(),
+                                                 game_layer, System::GetGameSettingsLayerPath(),
+                                                 &s_last_postprocessing_favourite, forward, &error);
+  }
+
+  std::string message;
+  if (name.has_value())
+  {
+    // Written where the running chain is: the game's file, or settings.ini. Applying reloads the chain.
+    if (game)
+    {
+      System::ReloadGameSettings(false);
+    }
+    else
+    {
+      Host::CommitBaseSettingChanges();
+      System::ApplySettings(false);
+    }
+    message = fmt::format(TRANSLATE_FS("OSDMessage", "Post-processing: {}."), *name);
+  }
+  else if (error.IsValid())
+  {
+    message = error.GetDescription();
+  }
+  else
+  {
+    message = TRANSLATE_STR("OSDMessage", "No post-processing favourites are saved.");
+  }
+
+  Host::AddIconOSDMessage("PostProcessingFavourite", ICON_FA_PAINT_ROLLER, std::move(message),
+                          Host::OSD_QUICK_DURATION);
 }
 
 static void HotkeyToggleOSD()
@@ -426,6 +475,19 @@ DEFINE_HOTKEY("ToggleInternalPostProcessing", TRANSLATE_NOOP("Hotkeys", "Graphic
               TRANSLATE_NOOP("Hotkeys", "Toggle Internal Post-Processing"), [](s32 pressed) {
                 if (!pressed && System::IsValid())
                   PostProcessing::InternalChain.Toggle();
+              })
+
+DEFINE_HOTKEY("NextPostProcessingFavourite", TRANSLATE_NOOP("Hotkeys", "Graphics"),
+              TRANSLATE_NOOP("Hotkeys", "Next Post-Processing Favourite"), [](s32 pressed) {
+                // Queued: applying reloads the input bindings, which the press that fired this is still walking.
+                if (!pressed && System::IsValid())
+                  Host::RunOnCPUThread([]() { HotkeyStepPostProcessingFavourite(true); });
+              })
+
+DEFINE_HOTKEY("PreviousPostProcessingFavourite", TRANSLATE_NOOP("Hotkeys", "Graphics"),
+              TRANSLATE_NOOP("Hotkeys", "Previous Post-Processing Favourite"), [](s32 pressed) {
+                if (!pressed && System::IsValid())
+                  Host::RunOnCPUThread([]() { HotkeyStepPostProcessingFavourite(false); });
               })
 
 DEFINE_HOTKEY("ReloadPostProcessingShaders", TRANSLATE_NOOP("Hotkeys", "Graphics"),

@@ -28,6 +28,7 @@ add_executable(common-tests
   ../core/memory_card_image.cpp
   path_tests.cpp
   postprocessing_browser_tests.cpp
+  postprocessing_favourites_tests.cpp
   postprocessing_config_tests.cpp
   postprocessing_slang_gpu_tests.cpp
   postprocessing_slang_tests.cpp

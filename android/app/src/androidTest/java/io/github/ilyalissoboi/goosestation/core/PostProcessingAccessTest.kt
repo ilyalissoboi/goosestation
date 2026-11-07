@@ -373,6 +373,67 @@ class PostProcessingAccessTest {
         assertFalse(NativeLibrary.postProcessingUsesOpenGLES(KEY))
     }
 
+    // Favourites: saved display chains, one file each in the data folder's postprocessing/, in settings.ini's order.
+    @Test
+    fun favouritesRoundTrip() {
+        initialize()
+        assertNull(NativeLibrary.addPostProcessingStage(null, DISPLAY, "crt-lottes"))
+
+        assertNull(NativeLibrary.savePostProcessingFavourite(null, "A", false))
+        assertEquals("A favourite named a already exists.", NativeLibrary.savePostProcessingFavourite(null, "a", false))
+        assertNull(NativeLibrary.savePostProcessingFavourite(null, "B", false))
+        NativeLibrary.movePostProcessingFavourite("B", false)
+        assertNull(NativeLibrary.renamePostProcessingFavourite("A", "C"))
+
+        val favourites = NativeLibrary.getPostProcessingFavourites()!!
+        assertEquals(listOf("B", "C"), favourites.map { it.name })
+        assertEquals(listOf("crt-lottes"), favourites[1].shaders.toList())
+        assertEquals(emptyList<String>(), favourites[1].missing.toList())
+        assertEquals(listOf("B", "C"), settings().values("PostProcessingFavourites", "Order"))
+        assertTrue(File(dataRoot, "postprocessing/C.ini").isFile)
+
+        NativeLibrary.removePostProcessingStage(null, DISPLAY, 0)
+        assertNull(NativeLibrary.applyPostProcessingFavourite(null, "c"))
+        assertEquals("crt-lottes", settings().value("$DISPLAY/Stage1", "ShaderName"))
+        assertEquals("true", settings().value(DISPLAY, "Enabled"))
+
+        // A game with no file of its own gets the favourite as its own chain.
+        assertNull(NativeLibrary.applyPostProcessingFavourite(KEY, "B"))
+        assertEquals("true", gameFile().value(DISPLAY, "Enabled"))
+        assertEquals("crt-lottes", gameFile().value("$DISPLAY/Stage1", "ShaderName"))
+
+        assertNull(NativeLibrary.deletePostProcessingFavourite("B"))
+        assertEquals(listOf("C"), NativeLibrary.getPostProcessingFavourites()!!.map { it.name })
+        assertEquals("There's no favourite named B.", NativeLibrary.applyPostProcessingFavourite(null, "B"))
+    }
+
+    // Saving from a game's page takes the chain the game runs: settings.ini's until it has its own.
+    @Test
+    fun aGameSavesTheChainItRuns() {
+        initialize()
+        assertNull(NativeLibrary.addPostProcessingStage(null, DISPLAY, "crt-lottes"))
+
+        assertNull(NativeLibrary.savePostProcessingFavourite(KEY, "Global", false))
+        NativeLibrary.setGameBoolSetting(KEY, DISPLAY, "Enabled", true)
+        assertNull(NativeLibrary.savePostProcessingFavourite(KEY, "Own", false))
+
+        val favourites = NativeLibrary.getPostProcessingFavourites()!!.associateBy { it.name }
+        assertEquals(listOf("crt-lottes"), favourites.getValue("Global").shaders.toList())
+        assertEquals(emptyList<String>(), favourites.getValue("Own").shaders.toList())
+    }
+
+    @Test
+    fun aMissingShaderIsNamed() {
+        initialize()
+        File(dataRoot, "postprocessing").mkdirs()
+        File(dataRoot, "postprocessing/CRT.ini").writeText(
+            "[PostProcessing]\nEnabled = true\nStageCount = 1\n\n[PostProcessing/Stage1]\nShaderName = gone\n",
+        )
+
+        val favourite = NativeLibrary.getPostProcessingFavourites()!!.single()
+        assertEquals(listOf("gone"), favourite.missing.toList())
+    }
+
     private fun shaders(): Map<String, String> =
         NativeLibrary
             .getPostProcessingShaders()

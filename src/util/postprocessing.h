@@ -116,6 +116,8 @@ static constexpr const char* DISPLAY_CHAIN_SECTION = "PostProcessing";
 static constexpr const char* INTERNAL_CHAIN_SECTION = "InternalPostProcessing";
 
 u32 GetStageCount(const SettingsInterface& si, const char* section);
+/// The section holding the stage's shader name and options: "PostProcessing/Stage1" for the display chain's first.
+std::string GetStageSection(const char* section, u32 index);
 std::string GetStageShaderName(const SettingsInterface& si, const char* section, u32 index);
 std::vector<ShaderOption> GetStageOptions(const SettingsInterface& si, const char* section, u32 index);
 std::vector<ShaderOption> GetShaderOptions(const std::string& shader_name, Error* error);
@@ -133,6 +135,9 @@ void CopyChain(const SettingsInterface& from, SettingsInterface& to, const char*
 
 /// Removes the chain's keys altogether (Enabled, StageCount, every stage), so a game's file has no chain of its own.
 void DeleteChain(SettingsInterface& si, const char* section);
+
+/// Whether si has a chain of its own: it sets the chain's Enabled. A game's layer without one runs the global chain.
+bool HasOwnChain(const SettingsInterface& si, const char* section);
 } // namespace Config
 
 class Chain
@@ -202,6 +207,10 @@ struct AvailableShader
 /// Every shader that can be a stage, from the shaders folder, the shader packs' folder and the resources (a name the
 /// shaders folder has hides the others'), sorted by GetBrowserPath() ignoring case. Reads directory entries only.
 std::vector<AvailableShader> GetAvailableShaders();
+
+/// Whether the file a stage named name would load is there (the shaders folder, the packs' folder, the resources), by
+/// its existence only. A slang preset counts whether or not librashader loads.
+bool IsShaderInstalled(const std::string& name);
 
 /// The kind as the browsers show it: "GLSL", "dolphinfx", "ReShade" or "Slang".
 const char* GetShaderKindName(ShaderKind kind);

@@ -127,6 +127,7 @@ class DataLayout private constructor(
                 "gamesettings",
                 "inputprofiles",
                 "memcards",
+                "postprocessing",
                 "savestates",
                 "screenshots",
                 "shaders",

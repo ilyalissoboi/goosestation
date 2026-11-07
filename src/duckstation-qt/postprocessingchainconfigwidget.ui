@@ -53,6 +53,16 @@
        </property>
       </widget>
      </item>
+     <item>
+      <widget class="QPushButton" name="favourites">
+       <property name="text">
+        <string>&amp;Favourites…</string>
+       </property>
+       <property name="icon">
+        <iconset theme="sparkle-fill"/>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>

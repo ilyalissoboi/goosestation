@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "shader_pack_test_utils.h"
+
 #include "util/postprocessing.h"
 
 #include "common/memory_settings_interface.h"
@@ -69,4 +71,69 @@ TEST(PostProcessingConfig, DeleteChainLeavesNoKeys)
   EXPECT_FALSE(si.ContainsValue(DISPLAY, "StageCount"));
   EXPECT_FALSE(si.ContainsValue("PostProcessing/Stage1", "ShaderName"));
   EXPECT_FALSE(si.ContainsValue("PostProcessing/Stage2", "ShaderName"));
+}
+
+TEST(PostProcessingConfig, HasOwnChainIsEnabledBeingSet)
+{
+  MemorySettingsInterface si;
+  EXPECT_FALSE(Config::HasOwnChain(si, DISPLAY));
+
+  si.SetUIntValue(DISPLAY, "StageCount", 1);
+  EXPECT_FALSE(Config::HasOwnChain(si, DISPLAY));
+
+  si.SetBoolValue(DISPLAY, "Enabled", false);
+  EXPECT_TRUE(Config::HasOwnChain(si, DISPLAY));
+  EXPECT_FALSE(Config::HasOwnChain(si, Config::INTERNAL_CHAIN_SECTION));
+}
+
+TEST(PostProcessingConfig, IsShaderInstalledFindsUserGlsl)
+{
+  const ShaderPackTest::TempDirectory shaders;
+  const ShaderPackTest::ScopedShadersFolder folder(shaders.GetPath());
+  shaders.Write("crt/a.glsl", "void main() {}");
+
+  EXPECT_TRUE(IsShaderInstalled("crt/a"));
+  EXPECT_FALSE(IsShaderInstalled("crt/b"));
+}
+
+TEST(PostProcessingConfig, IsShaderInstalledFindsUserReShade)
+{
+  const ShaderPackTest::TempDirectory shaders;
+  const ShaderPackTest::ScopedShadersFolder folder(shaders.GetPath());
+  shaders.Write("reshade/Shaders/Sharpen.fx", "");
+
+  EXPECT_TRUE(IsShaderInstalled("Sharpen"));
+  EXPECT_FALSE(IsShaderInstalled("Blur"));
+}
+
+TEST(PostProcessingConfig, IsShaderInstalledFindsSlangPreset)
+{
+  const ShaderPackTest::TempDirectory shaders;
+  const ShaderPackTest::ScopedShadersFolder folder(shaders.GetPath());
+  shaders.Write("x/p.slangp", "shaders = 0\n");
+
+  EXPECT_TRUE(IsShaderInstalled("x/p.slangp"));
+  EXPECT_FALSE(IsShaderInstalled("x/q.slangp"));
+}
+
+TEST(PostProcessingConfig, FavouritesFolderIsInTheDataFolder)
+{
+  const ShaderPackTest::TempDirectory data;
+  const std::string old_data = EmuFolders::DataRoot;
+  // As the hosts set it: LoadConfig() resolves each folder's real path.
+  EmuFolders::DataRoot = Path::RealPath(data.GetPath());
+  EmuFolders::SetDefaults();
+  EXPECT_EQ(EmuFolders::PostProcessing, Path::Combine(EmuFolders::DataRoot, "postprocessing"));
+
+  MemorySettingsInterface si;
+  si.SetStringValue("Folders", "PostProcessing", "elsewhere");
+  EmuFolders::LoadConfig(si);
+  EXPECT_TRUE(EmuFolders::PostProcessing.ends_with("elsewhere")) << EmuFolders::PostProcessing;
+
+  MemorySettingsInterface saved;
+  EmuFolders::Save(saved);
+  EXPECT_EQ(saved.GetStringValue("Folders", "PostProcessing"), "elsewhere");
+
+  EmuFolders::DataRoot = old_data;
+  EmuFolders::SetDefaults();
 }

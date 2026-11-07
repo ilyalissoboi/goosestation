@@ -416,8 +416,8 @@ The rules:
 - **Only GooseStation's own data is mirrored.** That is `settings.ini`, `playtime.dat` and
   `custom_properties.ini` at the top of the folder (desktop's `secrets.ini` counts as GooseStation's, so it raises no
   banner, but it's never copied either way: Android keeps its RetroAchievements token in the Keystore), and everything in the desktop data folder's folders: `bios`,
-  `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `savestates`,
-  `screenshots`, `shaders`, `textures`, `resources` and `videos`. Memory card sync's own data, `emusync/`, stays on
+  `cheats`, `covers`, `dump`, `gameicons`, `gamesettings`, `inputprofiles`, `memcards`, `postprocessing` (the
+  post-processing favourites), `savestates`, `screenshots`, `shaders`, `textures`, `resources` and `videos`. Memory card sync's own data, `emusync/`, stays on
   the device, like the cache: it holds this device's sync identity and the storage's key, so it's never copied either
   way, and a copy an earlier build left in the data folder is left alone. A copy an earlier build pulled into the
   working copy is another install's identity, so it's deleted once, before the core first starts
@@ -700,6 +700,26 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
   (through the core's marker parser), and neither those markers nor any file they list is copied either way; copies
   an earlier build pulled in are dropped from the working copy. The player's own shaders beside a pack's are mirrored
   as before.
+- **Favourites**, under the Display chain (the Internal chain has none), are saved display chains, shared with
+  desktop through the data folder: each is a file of its own, `postprocessing/<name>.ini`, holding the chain as
+  `settings.ini` does (`[PostProcessing]` with `Enabled` on, and its `[PostProcessing/StageN]` sections), and their
+  order is `settings.ini`'s `[PostProcessingFavourites] Order` (a file copied in by hand goes after the ordered ones).
+  Each shows numbered in order ("1. CRT royale + border") with its shaders, or "Not installed: …" naming those this
+  install hasn't got (it applies anyway, and the stage then says it isn't found, as any such stage does). **Save as
+  favourite**, after them ("No favourites yet: save the current chain as one." while there are none), asks a name in
+  a panel: a name already taken, ignoring case, asks "A favourite named … already exists. Replace it?" (it keeps its
+  place), and a name the core refuses (empty, a leading dot, or `/ \ : * ? " < > |`) says why in the form. A on a
+  favourite opens its panel: **Apply** (first, focused; over a chain with shaders it asks "Apply …? It replaces the
+  2 shaders in the chain."), **Rename…**, **Move up**, **Move down** and **Delete** (asking first). Questions take the
+  panel's place with Cancel focused; B drops a question, then closes the panel, back to its row. On a game's page,
+  saving takes the chain the game runs (its own, or the global one), and applying gives the game its own display
+  chain. The core's `PostProcessing::Favourites` does the work, as on desktop.
+- **The favourite hotkeys**, **Next Post-Processing Favourite** and **Previous Post-Processing Favourite**, are core
+  hotkeys, so the hotkeys page offers them as Select chords (see "Controllers"). In a game they replace the display
+  chain with the next or previous favourite, wrapping, saying "Post-processing: <name>." ("No post-processing
+  favourites are saved." without any). They write where the running chain is: the game's file when it has a display
+  chain of its own, else `settings.ini`, so the pages show what's on screen. The one after is the next after the last
+  one a hotkey applied while the chain still equals it, else after the first the chain equals, else the first.
 - **A stage's page** has **Move up**, **Move down** and **Remove** (no question, as desktop), then the shader's
   options, as desktop builds them from its metadata: an on/off option is a switch, an option with named values a
   choice, and a number a row per component ("Tint (Red)", "Tint (Green)"…), stepping by the shader's step (a

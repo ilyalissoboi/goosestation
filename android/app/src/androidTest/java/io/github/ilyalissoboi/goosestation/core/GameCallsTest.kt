@@ -347,6 +347,98 @@ class GameCallsTest {
         assertNull(NativeLibrary.addPostProcessingStage(key, "PostProcessing", "simple-flip"))
     }
 
+    // The favourite hotkeys: a game on the global chain steps settings.ini's, wrapping, and says which.
+    @Test
+    fun favouriteHotkeysStepTheGlobalChain() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(
+            settings = {
+                flipChain(null)
+                assertNull(NativeLibrary.savePostProcessingFavourite(null, "Flip", false))
+                NativeLibrary.removePostProcessingStage(null, "PostProcessing", 0)
+                assertNull(NativeLibrary.addPostProcessingStage(null, "PostProcessing", "crt-lottes"))
+                assertNull(NativeLibrary.savePostProcessingFavourite(null, "Lottes", false))
+            },
+            onMessage = { _, text -> texts += text },
+        ) {
+            // Running Lottes, the last: Next wraps to Flip.
+            assertTrue(NativeLibrary.pressHotkeyForTest("NextPostProcessingFavourite"))
+            assertEquals("simple-flip", settingsIni().value("PostProcessing/Stage1", "ShaderName"))
+            assertEquals("simple-flip", NativeLibrary.getRunningSettingForTest("PostProcessing/Stage1", "ShaderName"))
+            assertTrue(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+            runBlocking { withTimeout(10_000) { while ("Post-processing: Flip." !in texts) delay(50) } }
+
+            assertTrue(NativeLibrary.pressHotkeyForTest("PreviousPostProcessingFavourite"))
+            assertEquals("crt-lottes", settingsIni().value("PostProcessing/Stage1", "ShaderName"))
+            runBlocking { withTimeout(10_000) { while ("Post-processing: Lottes." !in texts) delay(50) } }
+        }
+    }
+
+    // The hotkey from the pad, as a player presses it: applying reloads the settings, and with them the input bindings,
+    // which the press that fired it is still walking. Twice, so the second press finds its binding again.
+    @Test
+    fun favouriteHotkeysWorkFromThePad() {
+        withPadtest(settings = {
+            flipChain(null)
+            assertNull(NativeLibrary.savePostProcessingFavourite(null, "Flip", false))
+            NativeLibrary.removePostProcessingStage(null, "PostProcessing", 0)
+            assertNull(NativeLibrary.addPostProcessingStage(null, "PostProcessing", "crt-lottes"))
+            assertNull(NativeLibrary.savePostProcessingFavourite(null, "Lottes", false))
+        }) {
+            NativeLibrary.setHotkeyBinding(PAD, "NextPostProcessingFavourite", "Button99")
+            Thread.sleep(500)
+
+            for (expected in listOf("simple-flip", "crt-lottes")) {
+                NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+                Thread.sleep(300)
+                NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+                val deadline = System.currentTimeMillis() + 5_000
+                while (settingsIni().value("PostProcessing/Stage1", "ShaderName") != expected &&
+                    System.currentTimeMillis() < deadline
+                ) {
+                    Thread.sleep(50)
+                }
+                assertEquals(expected, settingsIni().value("PostProcessing/Stage1", "ShaderName"))
+                assertEquals(expected, NativeLibrary.getRunningSettingForTest("PostProcessing/Stage1", "ShaderName"))
+            }
+        }
+    }
+
+    // A game with its own display chain: the hotkeys write the game's file, and settings.ini's chain stays.
+    @Test
+    fun favouriteHotkeysWriteAGamesOwnChain() {
+        withListedPadtest(beforeStart = { padtest ->
+            NativeLibrary.setListedKeyForTest(padtest.path, TEST_KEY)
+            flipChain(null)
+            assertNull(NativeLibrary.savePostProcessingFavourite(null, "Flip", false))
+            NativeLibrary.removePostProcessingStage(null, "PostProcessing", 0)
+            NativeLibrary.setGameBoolSetting(TEST_KEY, "PostProcessing", "Enabled", false)
+        }) {
+            assertFalse(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+
+            assertTrue(NativeLibrary.pressHotkeyForTest("NextPostProcessingFavourite"))
+
+            val game = Ini.parse(gameSettings(TEST_KEY).readText())
+            assertEquals("true", game.value("PostProcessing", "Enabled"))
+            assertEquals("simple-flip", game.value("PostProcessing/Stage1", "ShaderName"))
+            assertEquals("0", settingsIni().value("PostProcessing", "StageCount"))
+            assertTrue(NativeLibrary.isPostProcessingActiveForTest("PostProcessing"))
+        }
+    }
+
+    @Test
+    fun favouriteHotkeysWithNoneSaySo() {
+        val texts = java.util.Collections.synchronizedList(mutableListOf<String>())
+        withPadtest(onMessage = { _, text -> texts += text }) {
+            assertTrue(NativeLibrary.pressHotkeyForTest("NextPostProcessingFavourite"))
+            runBlocking {
+                withTimeout(10_000) { while ("No post-processing favourites are saved." !in texts) delay(50) }
+            }
+        }
+    }
+
+    private fun settingsIni() = Ini.parse(File(dataRoot, "settings.ini").readText())
+
     // The in-game Settings: a change through the game's pages reaches the running game at once.
     @Test
     fun aChangeInTheMenuAppliesAtOnce() {

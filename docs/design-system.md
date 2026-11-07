@@ -283,6 +283,10 @@ SettingsPage("Graphics", onBack = onBack) {
   starts with its `ActionButton`s (Move up, Move down, Remove; one that can't act is disabled, and after a move the
   focus stays on the button pressed while it still can), then its own rows. Remove doesn't ask, as desktop's doesn't;
   back on the list, the focus is on the item after it, or on "Add …".
+  When an item has only actions and no rows of its own (the post-processing favourites), A opens an `OverlayPanel`
+  over the list instead, as a memory card save's does: its name and summary, its first action focused, then the
+  rest, Delete (`Danger`) last. A delete there asks first, and a question or a name form takes the panel's place;
+  the list's last row is then the one that adds ("Save as favourite"), and B goes back a step, to the item's row.
 - `TextFieldRow`: a text setting, its label in `label-sm` over a 48 dp `sunken` well with a `line-strong` edge at
   `radius-sm`, the focus ring around the well. Focus doesn't open the keyboard, so a D-pad passes through; A, the
   D-pad centre or a tap open it, and up and down leave the field as on any row. A password is the secure field:
@@ -316,7 +320,8 @@ OverlayPanel(onBack = ::close) { Text("Erase every save on Shared card 1?", …)
 
 A small panel over a screen, drawn in the app's window, never a window dialog: a `scrim` over the whole window, past
 the system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, 24 dp
-inside, in the safe area, that scrolls. The focus can't leave it, and the caller focuses what it holds. B and Back
+inside, in the safe area, that scrolls (as little as it must, keeping those 24 dp beside what the focus brings into
+view, so its last button never sits against its edge). The focus can't leave it, and the caller focuses what it holds. B and Back
 call `onBack` on the key-up of a press that began in it. It scrolls the least that shows the focus, not to the middle:
 a focused text field asks to show its cursor as well as itself, which centring can't do. A question in it puts its
 destructive answer first and the focus on the safe one.

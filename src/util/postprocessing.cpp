@@ -302,6 +302,11 @@ void PostProcessing::SwapStageConfig(SettingsInterface& si, const char* section,
     si.SetStringValue(rhs_section, key.c_str(), value.c_str());
 }
 
+std::string PostProcessing::Config::GetStageSection(const char* section, u32 index)
+{
+  return std::string(GetStageConfigSection(section, index).view());
+}
+
 u32 PostProcessing::Config::GetStageCount(const SettingsInterface& si, const char* section)
 {
   return si.GetUIntValue(section, "StageCount", 0u);
@@ -444,6 +449,11 @@ void PostProcessing::Config::DeleteChain(SettingsInterface& si, const char* sect
   ClearStages(si, section);
   si.DeleteValue(section, "StageCount");
   si.DeleteValue(section, "Enabled");
+}
+
+bool PostProcessing::Config::HasOwnChain(const SettingsInterface& si, const char* section)
+{
+  return si.ContainsValue(section, "Enabled");
 }
 
 PostProcessing::Chain::Chain(const char* section) : m_section(section)
@@ -843,6 +853,27 @@ std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingShader(const s
   return {};
 }
 
+bool PostProcessing::IsShaderInstalled(const std::string& name)
+{
+  // The files TryLoadingShader() would open, in its order.
+  if (Slang::IsPresetName(name))
+    return !Slang::FindPreset(name).empty();
+
+  const std::string fx = fmt::format("reshade" FS_OSPATH_SEPARATOR_STR "Shaders" FS_OSPATH_SEPARATOR_STR "{}.fx", name);
+  const std::string glsl = fmt::format("{}.glsl", name);
+  for (const std::string& root : GetUserShaderRoots())
+  {
+    if (FileSystem::FileExists(Path::Combine(root, fx).c_str()) ||
+        FileSystem::FileExists(Path::Combine(root, glsl).c_str()))
+    {
+      return true;
+    }
+  }
+
+  return Host::ResourceFileExists(Path::Combine("shaders", fx), true) ||
+         Host::ResourceFileExists(Path::Combine("shaders", glsl), true);
+}
+
 std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingSlangShader(const std::string& shader_name,
                                                                               bool only_config, Error* error)
 {
@@ -875,7 +906,7 @@ SettingsInterface& PostProcessing::GetLoadSettingsInterface(const char* section)
   // Otherwise, use the base settings.
 
   SettingsInterface* game_si = Host::Internal::GetGameSettingsLayer();
-  if (game_si && game_si->ContainsValue(section, "Enabled"))
+  if (game_si && Config::HasOwnChain(*game_si, section))
     return *game_si;
   else
     return *Host::Internal::GetBaseSettingsLayer();

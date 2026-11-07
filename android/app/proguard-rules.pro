@@ -98,5 +98,10 @@
         float[], float[], java.lang.String[]);
 }
 -keep class io.github.ilyalissoboi.goosestation.core.StageInfo {
-    <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo[]);
+    <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo[],
+        java.lang.String);
+}
+# jni_bridge.cpp finds FavouriteInfo and its constructor by name in JNI_OnLoad, for getPostProcessingFavourites().
+-keep class io.github.ilyalissoboi.goosestation.core.FavouriteInfo {
+    <init>(java.lang.String, java.lang.String[], java.lang.String[]);
 }

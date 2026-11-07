@@ -138,6 +138,16 @@ private fun ChainsPage(
             }
         }
     }
+    // The favourites' rows (one past the last, "Save as favourite"): the model's focus as a panel closes.
+    val favouriteRows = remember { mutableMapOf<Int, FocusRequester>() }
+    val focusFavourite = model.focusFavourite
+    LaunchedEffect(focusFavourite) {
+        if (focusFavourite !=
+            null
+        ) {
+            runCatching { favouriteRows.getOrPut(focusFavourite) { FocusRequester() }.requestFocus() }
+        }
+    }
 
     // Once a question is gone, the focus goes back to the row that asked it.
     val asking = model.asking
@@ -212,6 +222,8 @@ private fun ChainsPage(
                 enabled = editable && model.shaders.isNotEmpty(),
             )
         }
+        // Favourites are saved display chains.
+        if (shown == Chain.Display) FavouriteRows(model) { favouriteRows.getOrPut(it) { FocusRequester() } }
         SettingsSection("Shader packs")
         // While a pack downloads, its progress shows here too, with the panel closed.
         val job = packs.job
@@ -242,6 +254,7 @@ private fun ChainsPage(
     }
     model.asking?.let { chain -> UseGlobalChainPanel(model, chain) }
     if (model.packsOpen) ShaderPacksPanel(packs, onClose = model::closePacks)
+    FavouritePanel(model)
 }
 
 /** What "Use global" asks when the game's [chain] has shaders: over the page, Use global first, Cancel focused. */

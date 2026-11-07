@@ -6,6 +6,8 @@
 // Helpers for the shader pack tests: a temporary folder, and zips written with minizip's writer (no committed
 // binaries).
 
+#include "core/settings.h"
+
 #include "common/file_system.h"
 #include "common/path.h"
 #include "common/progress_callback.h"
@@ -70,6 +72,30 @@ public:
 
 private:
   std::string m_path;
+};
+
+// Points the shaders folder at a temporary one, with no packs folder or resources, for the test's lifetime.
+class ScopedShadersFolder
+{
+public:
+  explicit ScopedShadersFolder(const std::string& shaders)
+    : m_old_shaders(EmuFolders::Shaders), m_old_packs(EmuFolders::ShaderPacks), m_old_resources(EmuFolders::Resources)
+  {
+    EmuFolders::Shaders = shaders;
+    EmuFolders::ShaderPacks.clear();
+    EmuFolders::Resources = Path::Combine(shaders, "no-resources");
+  }
+  ~ScopedShadersFolder()
+  {
+    EmuFolders::Shaders = m_old_shaders;
+    EmuFolders::ShaderPacks = m_old_packs;
+    EmuFolders::Resources = m_old_resources;
+  }
+
+private:
+  std::string m_old_shaders;
+  std::string m_old_packs;
+  std::string m_old_resources;
 };
 
 struct ZipEntry

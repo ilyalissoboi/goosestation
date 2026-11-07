@@ -1815,6 +1815,7 @@ std::string EmuFolders::GameIcons;
 std::string EmuFolders::GameSettings;
 std::string EmuFolders::InputProfiles;
 std::string EmuFolders::MemoryCards;
+std::string EmuFolders::PostProcessing;
 std::string EmuFolders::Resources;
 std::string EmuFolders::SaveStates;
 std::string EmuFolders::Screenshots;
@@ -1835,6 +1836,7 @@ void EmuFolders::SetDefaults()
   GameSettings = Path::Combine(DataRoot, "gamesettings");
   InputProfiles = Path::Combine(DataRoot, "inputprofiles");
   MemoryCards = Path::Combine(DataRoot, "memcards");
+  PostProcessing = Path::Combine(DataRoot, "postprocessing");
   SaveStates = Path::Combine(DataRoot, "savestates");
   Screenshots = Path::Combine(DataRoot, "screenshots");
   Shaders = Path::Combine(DataRoot, "shaders");
@@ -1866,6 +1868,7 @@ void EmuFolders::LoadConfig(SettingsInterface& si)
   GameSettings = LoadPathFromSettings(si, DataRoot, "Folders", "GameSettings", "gamesettings");
   InputProfiles = LoadPathFromSettings(si, DataRoot, "Folders", "InputProfiles", "inputprofiles");
   MemoryCards = LoadPathFromSettings(si, DataRoot, "MemoryCards", "Directory", "memcards");
+  PostProcessing = LoadPathFromSettings(si, DataRoot, "Folders", "PostProcessing", "postprocessing");
   SaveStates = LoadPathFromSettings(si, DataRoot, "Folders", "SaveStates", "savestates");
   Screenshots = LoadPathFromSettings(si, DataRoot, "Folders", "Screenshots", "screenshots");
   Shaders = LoadPathFromSettings(si, DataRoot, "Folders", "Shaders", "shaders");
@@ -1903,6 +1906,7 @@ void EmuFolders::Save(SettingsInterface& si)
   si.SetStringValue("Folders", "GameSettings", Path::MakeRelative(GameSettings, DataRoot).c_str());
   si.SetStringValue("Folders", "InputProfiles", Path::MakeRelative(InputProfiles, DataRoot).c_str());
   si.SetStringValue("MemoryCards", "Directory", Path::MakeRelative(MemoryCards, DataRoot).c_str());
+  si.SetStringValue("Folders", "PostProcessing", Path::MakeRelative(PostProcessing, DataRoot).c_str());
   si.SetStringValue("Folders", "SaveStates", Path::MakeRelative(SaveStates, DataRoot).c_str());
   si.SetStringValue("Folders", "Screenshots", Path::MakeRelative(Screenshots, DataRoot).c_str());
   si.SetStringValue("Folders", "Shaders", Path::MakeRelative(Shaders, DataRoot).c_str());

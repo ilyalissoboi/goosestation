@@ -25,6 +25,7 @@
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
 #include "util/postprocessing.h"
+#include "util/postprocessing_favourites.h"
 #include "util/postprocessing_browser.h"
 
 #include "common/error.h"
@@ -414,6 +415,10 @@ static void OpenShaderPacks();
 static void CloseShaderPacks();
 static void DrawShaderPacks();
 static void StopShaderPackJob();
+static void OpenPostProcessingFavourites();
+static void ClosePostProcessingFavourites();
+static void ReadPostProcessingFavourites();
+static void DrawPostProcessingFavourites();
 static void BeginInputBinding(SettingsInterface* bsi, InputBindingInfo::Type type, std::string_view section,
                               std::string_view key, std::string_view display_name);
 static void DrawInputBindingWindow();
@@ -506,6 +511,36 @@ struct ShaderPacksState
   std::unique_ptr<ShaderPackJob> job;
 };
 static ShaderPacksState s_shader_packs;
+
+// The post-processing favourites (saved display chains), for the page's display chain: a list, a favourite's actions,
+// the name form (saving, or renaming renaming) and a question.
+struct PostProcessingFavouritesState
+{
+  enum class View
+  {
+    List,
+    Favourite,
+    Name,
+    Confirm,
+  };
+  enum class Question
+  {
+    Apply,
+    Replace,
+    Delete,
+  };
+
+  bool open = false;
+  View view = View::List;
+  std::vector<PostProcessing::Favourites::Info> favourites;
+  std::string selected;
+  std::string renaming;
+  std::string name;
+  std::string error;
+  Question question = Question::Apply;
+  u32 stages = 0;
+};
+static PostProcessingFavouritesState s_postprocessing_favourites;
 static std::vector<const HotkeyInfo*> s_hotkey_list_cache;
 static std::atomic_bool s_settings_changed{false};
 static std::atomic_bool s_game_settings_changed{false};
@@ -718,6 +753,7 @@ bool FullscreenUI::AreAnyDialogsOpen()
 {
   return (s_save_state_selector_open || s_about_window_open ||
           s_input_binding_type != InputBindingInfo::Type::Unknown || s_shader_browser.section || s_shader_packs.open ||
+          s_postprocessing_favourites.open ||
           ImGuiFullscreen::IsChoiceDialogOpen() ||
           ImGuiFullscreen::IsFileSelectorOpen());
 }
@@ -858,6 +894,7 @@ void FullscreenUI::Shutdown()
   s_shader_browser = {};
   StopShaderPackJob();
   s_shader_packs = {};
+  s_postprocessing_favourites = {};
   s_fullscreen_mode_list_cache = {};
   s_graphics_adapter_list_cache = {};
   s_hotkey_list_cache = {};
@@ -933,6 +970,9 @@ void FullscreenUI::Render()
 
   if (s_shader_packs.open)
     DrawShaderPacks();
+
+  if (s_postprocessing_favourites.open)
+    DrawPostProcessingFavourites();
 
   ImGuiFullscreen::EndLayout();
 
@@ -5624,6 +5664,442 @@ void FullscreenUI::DrawShaderPacks()
   }
 }
 
+void FullscreenUI::ReadPostProcessingFavourites()
+{
+  const auto lock = Host::GetSettingsLock();
+  s_postprocessing_favourites.favourites =
+    PostProcessing::Favourites::List(EmuFolders::PostProcessing, *Host::Internal::GetBaseSettingsLayer());
+}
+
+void FullscreenUI::OpenPostProcessingFavourites()
+{
+  s_postprocessing_favourites = {};
+  s_postprocessing_favourites.open = true;
+  ReadPostProcessingFavourites();
+  QueueResetFocus(FocusResetType::PopupOpened);
+}
+
+void FullscreenUI::ClosePostProcessingFavourites()
+{
+  s_postprocessing_favourites = {};
+  QueueResetFocus(FocusResetType::PopupClosed);
+}
+
+void FullscreenUI::DrawPostProcessingFavourites()
+{
+  using PostProcessing::Favourites::Info;
+  using View = PostProcessingFavouritesState::View;
+  using Question = PostProcessingFavouritesState::Question;
+  static constexpr const char* DISPLAY = PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+
+  PostProcessingFavouritesState& state = s_postprocessing_favourites;
+  const char* title = FSUI_ICONSTR(ICON_FA_STAR, "Post-Processing Favourites");
+  ImGui::SetNextWindowSize(LayoutScale(1000.0f, 650.0f));
+  ImGui::SetNextWindowPos((ImGui::GetIO().DisplaySize - LayoutScale(0.0f, LAYOUT_FOOTER_HEIGHT)) * 0.5f,
+                          ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+  ImGui::OpenPopup(title);
+
+  ImGui::PushFont(g_large_font);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, LayoutScale(10.0f));
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                      LayoutScale(ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING, ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING));
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+  ImGui::PushStyleColor(ImGuiCol_Text, UIPrimaryTextColor);
+  ImGui::PushStyleColor(ImGuiCol_TitleBg, UIPrimaryDarkColor);
+  ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIPrimaryColor);
+
+  enum class Action
+  {
+    None,
+    Back,
+    Select,
+    StartSaving,
+    StartRenaming,
+    Submit,
+    Apply,
+    MoveUp,
+    MoveDown,
+    AskDelete,
+    Confirm,
+  };
+  Action action = Action::None;
+  std::string action_name;
+
+  const auto selected = std::find_if(state.favourites.begin(), state.favourites.end(),
+                                     [](const Info& info) { return info.name == state.selected; });
+  if (selected == state.favourites.end() && state.view == View::Favourite)
+    state.view = View::List;
+
+  if (ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                                               ImGuiWindowFlags_NoMove))
+  {
+    ImGui::PushStyleColor(ImGuiCol_Text, UIBackgroundTextColor);
+    ResetFocusHere();
+
+    if (state.view == View::Name)
+    {
+      // The name: A starts the host's text entry (Steam's keyboard, say).
+      char name[256];
+      StringUtil::Strlcpy(name, state.name.c_str(), std::size(name));
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+      if (ImGui::InputTextWithHint("##name", FSUI_CSTR("Name"), name, std::size(name)))
+        state.name = name;
+      ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(8.0f));
+    }
+
+    BeginMenuButtons();
+
+    if (state.view == View::List)
+    {
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_SAVE, "Save Current Chain"),
+                     FSUI_CSTR("Saves the display chain as a favourite, under a name.")))
+      {
+        action = Action::StartSaving;
+      }
+
+      if (state.favourites.empty())
+      {
+        MenuButton(FSUI_CSTR("No favourites yet: save the current chain as one."), nullptr, false,
+                   ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+      }
+      for (size_t i = 0; i < state.favourites.size(); i++)
+      {
+        const Info& info = state.favourites[i];
+        ImGui::PushID(static_cast<int>(i));
+        if (MenuButton(SmallString::from_format(ICON_FA_MAGIC " {}", info.name).c_str(),
+                       PostProcessing::Favourites::Summary(info).c_str()))
+        {
+          action = Action::Select;
+          action_name = info.name;
+        }
+        ImGui::PopID();
+      }
+
+      if (!state.error.empty())
+        MenuButton(state.error.c_str(), nullptr, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_WINDOW_CLOSE, "Close"), nullptr, true,
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::Back;
+      }
+    }
+    else if (state.view == View::Favourite)
+    {
+      const size_t index = static_cast<size_t>(selected - state.favourites.begin());
+      MenuButton(selected->name.c_str(), PostProcessing::Favourites::Summary(*selected).c_str(), false);
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_CHECK, "Apply"), FSUI_CSTR("Replaces the display chain with this one.")))
+        action = Action::Apply;
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_KEYBOARD, "Rename"), nullptr, true,
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::StartRenaming;
+      }
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_ARROW_UP, "Move Up"), nullptr, index > 0,
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::MoveUp;
+      }
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_ARROW_DOWN, "Move Down"), nullptr, (index + 1) < state.favourites.size(),
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::MoveDown;
+      }
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_TRASH, "Delete"), nullptr, true,
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::AskDelete;
+      }
+      if (!state.error.empty())
+        MenuButton(state.error.c_str(), nullptr, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_ARROW_LEFT, "Back"), nullptr, true,
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::Back;
+      }
+    }
+    else if (state.view == View::Name)
+    {
+      if (!state.error.empty())
+        MenuButton(state.error.c_str(), nullptr, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+      if (MenuButton(state.renaming.empty() ? FSUI_ICONSTR(ICON_FA_SAVE, "Save") :
+                                              FSUI_ICONSTR(ICON_FA_KEYBOARD, "Rename"),
+                     nullptr, true, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::Submit;
+      }
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_TIMES, "Cancel"), nullptr, true,
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::Back;
+      }
+    }
+    else
+    {
+      std::string question;
+      const char* yes;
+      switch (state.question)
+      {
+        case Question::Apply:
+          question = (state.stages == 1) ?
+                       fmt::format(FSUI_FSTR("Apply {}? It replaces the shader in the chain."), state.selected) :
+                       fmt::format(FSUI_FSTR("Apply {}? It replaces the {} shaders in the chain."), state.selected,
+                                   state.stages);
+          yes = FSUI_ICONSTR(ICON_FA_CHECK, "Apply");
+          break;
+        case Question::Replace:
+          question = fmt::format(FSUI_FSTR("A favourite named {} already exists. Replace it?"), state.selected);
+          yes = FSUI_ICONSTR(ICON_FA_SAVE, "Replace");
+          break;
+        case Question::Delete:
+        default:
+          question = fmt::format(FSUI_FSTR("Delete the favourite {}?"), state.selected);
+          yes = FSUI_ICONSTR(ICON_FA_TRASH, "Delete");
+          break;
+      }
+      MenuButton(question.c_str(), nullptr, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+      if (MenuButton(yes, nullptr, true, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+        action = Action::Confirm;
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_TIMES, "Cancel"), nullptr, true,
+                     ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+      {
+        action = Action::Back;
+      }
+    }
+
+    EndMenuButtons();
+    ImGui::PopStyleColor(1);
+    ImGui::EndPopup();
+  }
+
+  ImGui::PopStyleColor(3);
+  ImGui::PopStyleVar(3);
+  ImGui::PopFont();
+
+  if (IsGamepadInputSource())
+  {
+    SetFullscreenFooterText(std::array{std::make_pair(ICON_PF_XBOX_DPAD_UP_DOWN, FSUI_VSTR("Change Selection")),
+                                       std::make_pair(ICON_PF_BUTTON_A, FSUI_VSTR("Select")),
+                                       std::make_pair(ICON_PF_BUTTON_B, FSUI_VSTR("Back"))});
+  }
+  else
+  {
+    SetFullscreenFooterText(std::array{std::make_pair(ICON_PF_ARROW_UP ICON_PF_ARROW_DOWN, FSUI_VSTR("Change Selection")),
+                                       std::make_pair(ICON_PF_ENTER, FSUI_VSTR("Select")),
+                                       std::make_pair(ICON_PF_ESC, FSUI_VSTR("Back"))});
+  }
+
+  if (action == Action::None && WantsToCloseMenu())
+  {
+    action = Action::Back;
+    ImGuiFullscreen::ResetCloseMenuIfNeeded();
+  }
+
+  const auto show = [](View view) {
+    state.view = view;
+    QueueResetFocus(FocusResetType::Other);
+  };
+  const std::string& folder = EmuFolders::PostProcessing;
+
+  // The popup is drawn after the page, outside the page's hold on the settings. The order is settings.ini's.
+  const auto apply = []() {
+    Error error;
+    bool applied;
+    {
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface* bsi = GetEditingSettingsInterface();
+      applied = PostProcessing::Favourites::Apply(folder, state.selected, *bsi, &error);
+      if (applied)
+      {
+        PopulatePostProcessingChain(bsi, DISPLAY);
+        SetSettingsChanged(bsi);
+      }
+    }
+    if (!applied)
+    {
+      state.error = error.GetDescription();
+      ReadPostProcessingFavourites();
+      return;
+    }
+    ShowToast(std::string(), fmt::format(FSUI_FSTR("Post-processing: {}."), state.selected));
+    ClosePostProcessingFavourites();
+  };
+  const auto save = [&show](bool replace) {
+    Error error;
+    bool saved;
+    {
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface* base = Host::Internal::GetBaseSettingsLayer();
+      SettingsInterface* bsi = GetEditingSettingsInterface();
+      const SettingsInterface& chain =
+        (IsEditingGameSettings(bsi) && !PostProcessing::Config::HasOwnChain(*bsi, DISPLAY)) ? *base : *bsi;
+      saved = PostProcessing::Favourites::Save(folder, *base, state.name, chain, replace, &error);
+    }
+    if (!saved)
+    {
+      state.error = error.GetDescription();
+      show(View::Name);
+      return;
+    }
+    Host::CommitBaseSettingChanges();
+    ReadPostProcessingFavourites();
+    state.error.clear();
+    show(View::List);
+  };
+  const auto edit_order = [](const auto& edit) {
+    Error error;
+    bool done;
+    {
+      const auto lock = Host::GetSettingsLock();
+      done = edit(*Host::Internal::GetBaseSettingsLayer(), &error);
+    }
+    if (done)
+    {
+      Host::CommitBaseSettingChanges();
+      state.error.clear();
+    }
+    else
+    {
+      state.error = error.GetDescription();
+    }
+    ReadPostProcessingFavourites();
+    return done;
+  };
+
+  switch (action)
+  {
+    case Action::Select:
+      state.selected = action_name;
+      state.error.clear();
+      show(View::Favourite);
+      break;
+
+    case Action::StartSaving:
+      state.renaming.clear();
+      state.name.clear();
+      state.error.clear();
+      show(View::Name);
+      break;
+
+    case Action::StartRenaming:
+      state.renaming = state.selected;
+      state.name = state.selected;
+      state.error.clear();
+      show(View::Name);
+      break;
+
+    case Action::Submit:
+    {
+      if (!state.renaming.empty())
+      {
+        std::string trimmed;
+        PostProcessing::Favourites::CheckName(state.name, &trimmed, nullptr);
+        if (edit_order([](SettingsInterface& order, Error* error) {
+              return PostProcessing::Favourites::Rename(EmuFolders::PostProcessing, order, state.renaming, state.name,
+                                                        error);
+            }))
+        {
+          state.selected = trimmed;
+          show(View::Favourite);
+        }
+        break;
+      }
+
+      std::optional<std::string> taken;
+      {
+        const auto lock = Host::GetSettingsLock();
+        taken = PostProcessing::Favourites::Find(folder, *Host::Internal::GetBaseSettingsLayer(), state.name);
+      }
+      if (taken.has_value())
+      {
+        state.selected = *taken;
+        state.question = Question::Replace;
+        show(View::Confirm);
+      }
+      else
+      {
+        save(false);
+      }
+    }
+    break;
+
+    case Action::Apply:
+    {
+      {
+        const auto lock = Host::GetSettingsLock();
+        SettingsInterface* base = Host::Internal::GetBaseSettingsLayer();
+        SettingsInterface* bsi = GetEditingSettingsInterface();
+        const SettingsInterface& running =
+          (IsEditingGameSettings(bsi) && !PostProcessing::Config::HasOwnChain(*bsi, DISPLAY)) ? *base : *bsi;
+        state.stages = PostProcessing::Config::GetStageCount(running, DISPLAY);
+      }
+      if (state.stages > 0)
+      {
+        state.question = Question::Apply;
+        show(View::Confirm);
+      }
+      else
+      {
+        apply();
+      }
+    }
+    break;
+
+    case Action::MoveUp:
+    case Action::MoveDown:
+      edit_order([down = (action == Action::MoveDown)](SettingsInterface& order, Error*) {
+        PostProcessing::Favourites::Move(EmuFolders::PostProcessing, order, state.selected, down);
+        return true;
+      });
+      break;
+
+    case Action::AskDelete:
+      state.question = Question::Delete;
+      show(View::Confirm);
+      break;
+
+    case Action::Confirm:
+      switch (state.question)
+      {
+        case Question::Apply:
+          apply();
+          break;
+        case Question::Replace:
+          save(true);
+          break;
+        case Question::Delete:
+          if (edit_order([](SettingsInterface& order, Error* error) {
+                return PostProcessing::Favourites::Delete(EmuFolders::PostProcessing, order, state.selected, error);
+              }))
+          {
+            show(View::List);
+          }
+          else
+          {
+            show(View::Favourite);
+          }
+          break;
+      }
+      break;
+
+    case Action::Back:
+      state.error.clear();
+      if (state.view == View::List)
+        ClosePostProcessingFavourites();
+      else if (state.view == View::Confirm)
+        show(state.question == Question::Replace ? View::Name : View::Favourite);
+      else if (state.view == View::Name)
+        show(state.renaming.empty() ? View::List : View::Favourite);
+      else
+        show(View::List);
+      break;
+
+    case Action::None:
+    default:
+      break;
+  }
+}
+
 void FullscreenUI::DrawPostProcessingSettingsPage()
 {
   SettingsInterface* bsi = GetEditingSettingsInterface();
@@ -5698,6 +6174,14 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
       }
     }
 
+    // Above the global chain's note: applying a favourite gives the game a chain of its own.
+    if (!s_postprocessing_internal_chain &&
+        MenuButton(FSUI_ICONSTR(ICON_FA_STAR, "Favourites"),
+                   FSUI_CSTR("Saves the chain under a name, or applies a saved one.")))
+    {
+      OpenPostProcessingFavourites();
+    }
+
     if (!bsi->ContainsValue(section, "Enabled"))
     {
       MenuHeading(FSUI_CSTR("This game uses the global chain."));
@@ -5710,6 +6194,13 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
     DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_MAGIC, "Enable Post Processing"),
                       FSUI_CSTR("If not enabled, the current post processing chain will be ignored."), section,
                       "Enabled", false);
+
+    if (!s_postprocessing_internal_chain &&
+        MenuButton(FSUI_ICONSTR(ICON_FA_STAR, "Favourites"),
+                   FSUI_CSTR("Saves the chain under a name, or applies a saved one.")))
+    {
+      OpenPostProcessingFavourites();
+    }
   }
 
   if (MenuButton(FSUI_ICONSTR(ICON_FA_SEARCH, "Reload Shaders"),
@@ -8305,6 +8796,7 @@ TRANSLATE_NOOP("FullscreenUI", "900% [540 FPS (NTSC) / 450 FPS (PAL)]");
 TRANSLATE_NOOP("FullscreenUI", "9x");
 TRANSLATE_NOOP("FullscreenUI", "9x (18x Speed)");
 TRANSLATE_NOOP("FullscreenUI", "9x (for 4K)");
+TRANSLATE_NOOP("FullscreenUI", "A favourite named {} already exists. Replace it?");
 TRANSLATE_NOOP("FullscreenUI", "A resume save state created at %s was found.\n\nDo you want to load this save and continue?");
 TRANSLATE_NOOP("FullscreenUI", "About");
 TRANSLATE_NOOP("FullscreenUI", "About GooseStation");
@@ -8330,7 +8822,10 @@ TRANSLATE_NOOP("FullscreenUI", "Allows loading protected games without subchanne
 TRANSLATE_NOOP("FullscreenUI", "An error occurred while deleting empty game settings:\n{}");
 TRANSLATE_NOOP("FullscreenUI", "An error occurred while saving game settings:\n{}");
 TRANSLATE_NOOP("FullscreenUI", "Applies modern dithering techniques to further smooth out gradients when true color is enabled.");
+TRANSLATE_NOOP("FullscreenUI", "Apply");
 TRANSLATE_NOOP("FullscreenUI", "Apply Image Patches");
+TRANSLATE_NOOP("FullscreenUI", "Apply {}? It replaces the shader in the chain.");
+TRANSLATE_NOOP("FullscreenUI", "Apply {}? It replaces the {} shaders in the chain.");
 TRANSLATE_NOOP("FullscreenUI", "Are you sure you want to clear the current post-processing chain? All configuration will be lost.");
 TRANSLATE_NOOP("FullscreenUI", "Aspect Ratio");
 TRANSLATE_NOOP("FullscreenUI", "Attempts to detect one pixel high/wide lines that rely on non-upscaled rasterization behavior, filling in gaps introduced by upscaling.");
@@ -8431,8 +8926,10 @@ TRANSLATE_NOOP("FullscreenUI", "Default View");
 TRANSLATE_NOOP("FullscreenUI", "Default: Disabled");
 TRANSLATE_NOOP("FullscreenUI", "Default: Enabled");
 TRANSLATE_NOOP("FullscreenUI", "Deinterlacing Mode");
+TRANSLATE_NOOP("FullscreenUI", "Delete");
 TRANSLATE_NOOP("FullscreenUI", "Delete Save");
 TRANSLATE_NOOP("FullscreenUI", "Delete State");
+TRANSLATE_NOOP("FullscreenUI", "Delete the favourite {}?");
 TRANSLATE_NOOP("FullscreenUI", "Deletes the files this pack installed.");
 TRANSLATE_NOOP("FullscreenUI", "Depth Clear Threshold");
 TRANSLATE_NOOP("FullscreenUI", "Desktop Mode");
@@ -8531,6 +9028,7 @@ TRANSLATE_NOOP("FullscreenUI", "Failed to save input profile '{}'.");
 TRANSLATE_NOOP("FullscreenUI", "Fast Boot");
 TRANSLATE_NOOP("FullscreenUI", "Fast Forward Speed");
 TRANSLATE_NOOP("FullscreenUI", "Fast Forward Volume");
+TRANSLATE_NOOP("FullscreenUI", "Favourites");
 TRANSLATE_NOOP("FullscreenUI", "File Size");
 TRANSLATE_NOOP("FullscreenUI", "File Size: %.2f MB");
 TRANSLATE_NOOP("FullscreenUI", "File Title");
@@ -8662,10 +9160,12 @@ TRANSLATE_NOOP("FullscreenUI", "Multitap");
 TRANSLATE_NOOP("FullscreenUI", "Multitap Mode");
 TRANSLATE_NOOP("FullscreenUI", "Mute All Sound");
 TRANSLATE_NOOP("FullscreenUI", "Mute CD Audio");
+TRANSLATE_NOOP("FullscreenUI", "Name");
 TRANSLATE_NOOP("FullscreenUI", "Navigate");
 TRANSLATE_NOOP("FullscreenUI", "No Binding");
 TRANSLATE_NOOP("FullscreenUI", "No Game Selected");
 TRANSLATE_NOOP("FullscreenUI", "No cheats found for {}.");
+TRANSLATE_NOOP("FullscreenUI", "No favourites yet: save the current chain as one.");
 TRANSLATE_NOOP("FullscreenUI", "No input profiles available.");
 TRANSLATE_NOOP("FullscreenUI", "No resume save state found.");
 TRANSLATE_NOOP("FullscreenUI", "No save present in this slot.");
@@ -8717,9 +9217,11 @@ TRANSLATE_NOOP("FullscreenUI", "Perspective Correct Colors");
 TRANSLATE_NOOP("FullscreenUI", "Perspective Correct Textures");
 TRANSLATE_NOOP("FullscreenUI", "Plays sound effects for events such as achievement unlocks and leaderboard submissions.");
 TRANSLATE_NOOP("FullscreenUI", "Port {} Controller Type");
+TRANSLATE_NOOP("FullscreenUI", "Post-Processing Favourites");
 TRANSLATE_NOOP("FullscreenUI", "Post-Processing Settings");
 TRANSLATE_NOOP("FullscreenUI", "Post-processing chain cleared.");
 TRANSLATE_NOOP("FullscreenUI", "Post-processing shaders reloaded.");
+TRANSLATE_NOOP("FullscreenUI", "Post-processing: {}.");
 TRANSLATE_NOOP("FullscreenUI", "Preload Images to RAM");
 TRANSLATE_NOOP("FullscreenUI", "Preload Replacement Textures");
 TRANSLATE_NOOP("FullscreenUI", "Presents frames on a background thread when fast forwarding or vsync is disabled.");
@@ -8753,8 +9255,11 @@ TRANSLATE_NOOP("FullscreenUI", "Removed stage {} ({}).");
 TRANSLATE_NOOP("FullscreenUI", "Removed.");
 TRANSLATE_NOOP("FullscreenUI", "Removes the saved passphrase from this device.");
 TRANSLATE_NOOP("FullscreenUI", "Removes this shader from the chain.");
+TRANSLATE_NOOP("FullscreenUI", "Rename");
 TRANSLATE_NOOP("FullscreenUI", "Renames existing save states when saving to a backup file.");
 TRANSLATE_NOOP("FullscreenUI", "Rendering");
+TRANSLATE_NOOP("FullscreenUI", "Replace");
+TRANSLATE_NOOP("FullscreenUI", "Replaces the display chain with this one.");
 TRANSLATE_NOOP("FullscreenUI", "Replaces these settings with a previously saved input profile.");
 TRANSLATE_NOOP("FullscreenUI", "Rescan All Games");
 TRANSLATE_NOOP("FullscreenUI", "Reset Memory Card Directory");
@@ -8784,6 +9289,8 @@ TRANSLATE_NOOP("FullscreenUI", "Runahead/Rewind");
 TRANSLATE_NOOP("FullscreenUI", "Runs the software renderer in parallel for VRAM readbacks. On some systems, this may result in greater performance.");
 TRANSLATE_NOOP("FullscreenUI", "SDL DualSense Player LED");
 TRANSLATE_NOOP("FullscreenUI", "SDL DualShock 4 / DualSense Enhanced Mode");
+TRANSLATE_NOOP("FullscreenUI", "Save");
+TRANSLATE_NOOP("FullscreenUI", "Save Current Chain");
 TRANSLATE_NOOP("FullscreenUI", "Save Profile");
 TRANSLATE_NOOP("FullscreenUI", "Save Screenshot");
 TRANSLATE_NOOP("FullscreenUI", "Save State");
@@ -8793,6 +9300,8 @@ TRANSLATE_NOOP("FullscreenUI", "Saved");
 TRANSLATE_NOOP("FullscreenUI", "Saved in your system's credential store, not the settings file. Enter a new key to replace it.");
 TRANSLATE_NOOP("FullscreenUI", "Saved {:%c}");
 TRANSLATE_NOOP("FullscreenUI", "Saves state periodically so you can rewind any mistakes while playing.");
+TRANSLATE_NOOP("FullscreenUI", "Saves the chain under a name, or applies a saved one.");
+TRANSLATE_NOOP("FullscreenUI", "Saves the display chain as a favourite, under a name.");
 TRANSLATE_NOOP("FullscreenUI", "Scaled Dithering");
 TRANSLATE_NOOP("FullscreenUI", "Scales internal VRAM resolution by the specified multiplier. Some games require 1x VRAM resolution.");
 TRANSLATE_NOOP("FullscreenUI", "Scales the dithering pattern with the internal rendering resolution, making it less noticeable. Usually safe to enable.");

@@ -567,6 +567,8 @@ extern std::string GameIcons;
 extern std::string GameSettings;
 extern std::string InputProfiles;
 extern std::string MemoryCards;
+/// The post-processing favourites: a saved display chain in each file.
+extern std::string PostProcessing;
 extern std::string Resources;
 extern std::string SaveStates;
 extern std::string Screenshots;

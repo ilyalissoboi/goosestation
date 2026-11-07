@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: (GPL-3.0 OR CC-BY-NC-ND-4.0)
 
 #include "postprocessingsettingswidget.h"
+#include "postprocessingfavouritesdialog.h"
 #include "qthost.h"
 #include "shaderbrowserdialog.h"
 #include "shaderpackdialog.h"
@@ -39,6 +40,9 @@ PostProcessingChainConfigWidget::PostProcessingChainConfigWidget(SettingsWindow*
 
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enablePostProcessing, section, "Enabled", false);
 
+  // Favourites are saved display chains.
+  m_ui.favourites->setVisible(std::string_view(section) == PostProcessing::Config::DISPLAY_CHAIN_SECTION);
+
   updateList();
   updateButtonsAndConfigPane(std::nullopt);
   connectUi();
@@ -69,6 +73,18 @@ void PostProcessingChainConfigWidget::connectUi()
   connect(m_ui.reload, &QPushButton::clicked, this, &PostProcessingChainConfigWidget::onReloadButtonClicked);
   connect(m_ui.downloadPacks, &QPushButton::clicked, this, [this]() {
     ShaderPackDialog dialog(this);
+    dialog.exec();
+  });
+  connect(m_ui.favourites, &QPushButton::clicked, this, [this]() {
+    PostProcessingFavouritesDialog dialog(this, m_dialog->isPerGameSettings() ? m_dialog->getSettingsInterface() : nullptr, [this]() {
+      // Applying turns the chain on.
+      {
+        QSignalBlocker sb(m_ui.enablePostProcessing);
+        m_ui.enablePostProcessing->setCheckState(Qt::Checked);
+      }
+      updateList();
+      commitSettingsUpdate();
+    });
     dialog.exec();
   });
   connect(m_ui.add, &QToolButton::clicked, this, &PostProcessingChainConfigWidget::onAddButtonClicked);

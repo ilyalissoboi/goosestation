@@ -137,6 +137,9 @@ class OrientationLayoutTest {
     }
 
     private companion object {
+        const val LONG_FAVOURITE = "CRT royale + border + scanlines + halation, for the handheld screen"
+        const val BAD_NAME = "A favourite's name can't start with a dot or have / \\ : * ? \" < > | in it."
+
         val GAME = GameEntry("/games/padtest.psexe", "Pad Test", "SLUS-00001", "NTSC-U", 0, 0, null)
         val GAME_SUMMARY = GameSummary(mapOf(GamePage.Graphics to 2), others = 4)
 
@@ -1095,6 +1098,77 @@ class OrientationLayoutTest {
             },
             rows = listOf("Up to shaders_slang", "shaders", "crt-royale", "crt-geom"),
         )
+
+    @Test
+    fun thePostProcessingFavourites() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            stages(Chain.Display, SamplePostProcessing.crtLottes)
+                            favourites(LONG_FAVOURITE, "Sharp LCD", shaders = listOf("crt-lottes", "simple-flip"))
+                        }
+                    }
+                PostProcessingScreen(model, model.packs, onBack = {})
+            },
+            rows = listOf(CHAIN_LABEL, "1. crt-lottes", "1. $LONG_FAVOURITE", "2. Sharp LCD", "Save as favourite"),
+        )
+
+    @Test
+    fun aFavouritesPanel() {
+        eachConfig({
+            val model =
+                remember {
+                    SamplePostProcessing().apply {
+                        favourites(LONG_FAVOURITE, "Sharp LCD")
+                        openFavourite(LONG_FAVOURITE)
+                        favouriteError = "There's no favourite named $LONG_FAVOURITE."
+                    }
+                }
+            FavouritePanel(model)
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun aFavouritesNameForm() {
+        eachConfig({
+            val model =
+                remember {
+                    SamplePostProcessing().apply {
+                        favourites(LONG_FAVOURITE)
+                        startRenaming(LONG_FAVOURITE)
+                        naming = naming?.copy(error = BAD_NAME)
+                    }
+                }
+            FavouritePanel(model)
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun aFavouritesQuestion() {
+        eachConfig({
+            val model =
+                remember {
+                    SamplePostProcessing().apply {
+                        stages(Chain.Display, SamplePostProcessing.crtLottes, SamplePostProcessing.flip)
+                        favourites(LONG_FAVOURITE)
+                        openFavourite(LONG_FAVOURITE)
+                        apply(LONG_FAVOURITE)
+                    }
+                }
+            FavouritePanel(model)
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+        }
+    }
 
     @Test
     fun theShaderPacksPanel() =

@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -349,6 +350,101 @@ class FakeCoreApi(
         } else {
             usesOpenGLES
         }
+
+    /** The favourites, in order: each name and its display chain's stages, each its keys and values. */
+    val favourites = mutableListOf<Pair<String, List<List<Pair<String, String>>>>>()
+
+    /** What the next favourite edit answers instead of doing it, once: the core's refusal. */
+    var favouriteRefusal: String? = null
+
+    private fun favouriteIndex(name: String) =
+        favourites.indexOfFirst { it.first.equals(name.trim(), ignoreCase = true) }
+
+    override fun getPostProcessingFavourites(): List<FavouriteInfo> {
+        calls += "getPostProcessingFavourites"
+        return favourites.map { (name, stages) ->
+            val shaders = stages.mapNotNull { stage -> stage.firstOrNull { it.first == "ShaderName" }?.second }
+            FavouriteInfo(name, shaders.toTypedArray(), shaders.filter { it !in shaderCatalog }.toTypedArray())
+        }
+    }
+
+    private fun refused(): String? = favouriteRefusal?.also { favouriteRefusal = null }
+
+    override fun savePostProcessingFavourite(
+        key: String?,
+        name: String,
+        replace: Boolean,
+    ): String? {
+        calls += "savePostProcessingFavourite $key $name $replace"
+        refused()?.let { return it }
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return "A favourite needs a name."
+        val index = favouriteIndex(trimmed)
+        if (index >= 0 && !replace) return "A favourite named $trimmed already exists."
+        val section = "PostProcessing"
+        val game = key?.let { gameLayers[it] }?.takeIf { it.values.containsKey("$section/Enabled") }
+        val from = game ?: globalLayer
+        val stages = (0 until from.getInt(section, "StageCount", 0)).map { stageValues(from, section, it) }
+        if (index >= 0) favourites[index] = favourites[index].first to stages else favourites += trimmed to stages
+        return null
+    }
+
+    override fun applyPostProcessingFavourite(
+        key: String?,
+        name: String,
+    ): String? {
+        calls += "applyPostProcessingFavourite $key $name"
+        refused()?.let { return it }
+        val index = favouriteIndex(name)
+        if (index < 0) return "There's no favourite named $name."
+        val section = "PostProcessing"
+        val layer = chainLayer(key)
+        clearChain(layer, section)
+        layer.setBool(section, "Enabled", true)
+        val stages = favourites[index].second
+        layer.setInt(section, "StageCount", stages.size)
+        stages.forEachIndexed {
+            i,
+            stage,
+            ->
+            stage.forEach { (k, v) -> layer.setString(stageSection(section, i), k, v) }
+        }
+        return null
+    }
+
+    override fun renamePostProcessingFavourite(
+        from: String,
+        to: String,
+    ): String? {
+        calls += "renamePostProcessingFavourite $from $to"
+        refused()?.let { return it }
+        val index = favouriteIndex(from)
+        if (index < 0) return "There's no favourite named $from."
+        val other = favouriteIndex(to)
+        if (other >= 0 && other != index) return "A favourite named ${to.trim()} already exists."
+        favourites[index] = to.trim() to favourites[index].second
+        return null
+    }
+
+    override fun movePostProcessingFavourite(
+        name: String,
+        down: Boolean,
+    ) {
+        calls += "movePostProcessingFavourite $name $down"
+        val index = favouriteIndex(name)
+        val other = if (down) index + 1 else index - 1
+        if (index < 0 || other !in favourites.indices) return
+        favourites[index] = favourites[other].also { favourites[other] = favourites[index] }
+    }
+
+    override fun deletePostProcessingFavourite(name: String): String? {
+        calls += "deletePostProcessingFavourite $name"
+        refused()?.let { return it }
+        val index = favouriteIndex(name)
+        if (index < 0) return "There's no favourite named $name."
+        favourites.removeAt(index)
+        return null
+    }
 
     override fun reloadPostProcessingShaders(): Boolean {
         calls += "reloadPostProcessingShaders"

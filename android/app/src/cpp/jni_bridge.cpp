@@ -113,6 +113,8 @@ jclass s_shader_option_info_class = nullptr;
 jmethodID s_shader_option_info_constructor = nullptr;
 jclass s_stage_info_class = nullptr;
 jmethodID s_stage_info_constructor = nullptr;
+jclass s_favourite_info_class = nullptr;
+jmethodID s_favourite_info_constructor = nullptr;
 jmethodID s_pad_binding_constructor = nullptr;
 jobject s_pad_binding_kinds[3] = {}; // PadBindingKind's Button, Axis and HalfAxis (global references)
 jclass s_memcard_sync_state_class = nullptr;
@@ -1019,6 +1021,22 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                      "(Ljava/lang/String;Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/ShaderOptionInfo;"
                      "Ljava/lang/String;)V");
   if (!s_shader_option_info_constructor || !s_stage_info_constructor)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+
+  jclass favourite_info_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/FavouriteInfo");
+  if (!favourite_info_class)
+  {
+    ClearException(env);
+    return JNI_ERR;
+  }
+  s_favourite_info_class = static_cast<jclass>(env->NewGlobalRef(favourite_info_class));
+  env->DeleteLocalRef(favourite_info_class);
+  s_favourite_info_constructor =
+    env->GetMethodID(s_favourite_info_class, "<init>", "(Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;)V");
+  if (!s_favourite_info_constructor)
   {
     ClearException(env);
     return JNI_ERR;
@@ -3244,6 +3262,76 @@ NATIVE_LIBRARY_FUNCTION(void, copyPostProcessingChain)(JNIEnv* env, jobject, jst
 NATIVE_LIBRARY_FUNCTION(void, clearPostProcessingChain)(JNIEnv* env, jobject, jstring key, jstring section)
 {
   AndroidHost::ClearPostProcessingChain(FromJString(env, key), FromJString(env, section).c_str());
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, getPostProcessingFavourites)(JNIEnv* env, jobject)
+{
+  const std::vector<PostProcessing::Favourites::Info> favourites = AndroidHost::GetPostProcessingFavourites();
+  jobjectArray result = env->NewObjectArray(static_cast<jsize>(favourites.size()), s_favourite_info_class, nullptr);
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  for (size_t i = 0; i < favourites.size(); i++)
+  {
+    jstring name = ToJString(env, favourites[i].name);
+    jobjectArray shaders = ToNonNullStringArray(env, favourites[i].shaders);
+    jobjectArray missing = ToNonNullStringArray(env, favourites[i].missing);
+    jobject favourite =
+      (name && shaders && missing) ? env->NewObject(s_favourite_info_class, s_favourite_info_constructor, name, shaders,
+                                                    missing) :
+                                     nullptr;
+    env->DeleteLocalRef(name);
+    env->DeleteLocalRef(shaders);
+    env->DeleteLocalRef(missing);
+    if (!favourite)
+    {
+      ClearException(env);
+      return nullptr;
+    }
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), favourite);
+    env->DeleteLocalRef(favourite);
+  }
+  return result;
+}
+
+// Each favourite edit gives null, or the core's message.
+static jstring FavouriteResult(JNIEnv* env, const std::string& error)
+{
+  return error.empty() ? nullptr : ToJString(env, error);
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, savePostProcessingFavourite)(JNIEnv* env, jobject, jstring key, jstring name,
+                                                               jboolean replace)
+{
+  return FavouriteResult(env, AndroidHost::SavePostProcessingFavourite(ChainKey(env, key), FromJString(env, name),
+                                                                       replace));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, applyPostProcessingFavourite)(JNIEnv* env, jobject, jstring key, jstring name)
+{
+  return FavouriteResult(env, AndroidHost::ApplyPostProcessingFavourite(ChainKey(env, key), FromJString(env, name)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, renamePostProcessingFavourite)(JNIEnv* env, jobject, jstring from, jstring to)
+{
+  return FavouriteResult(env, AndroidHost::RenamePostProcessingFavourite(FromJString(env, from), FromJString(env, to)));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, movePostProcessingFavourite)(JNIEnv* env, jobject, jstring name, jboolean down)
+{
+  AndroidHost::MovePostProcessingFavourite(FromJString(env, name), down);
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, deletePostProcessingFavourite)(JNIEnv* env, jobject, jstring name)
+{
+  return FavouriteResult(env, AndroidHost::DeletePostProcessingFavourite(FromJString(env, name)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, pressHotkeyForTest)(JNIEnv* env, jobject, jstring name)
+{
+  return AndroidHost::PressHotkeyForTest(FromJString(env, name));
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isFastmemAvailable)(JNIEnv* env, jobject)

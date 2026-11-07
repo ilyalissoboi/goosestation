@@ -33,6 +33,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
@@ -74,8 +75,11 @@ fun OverlayPanel(
         contentAlignment = Alignment.Center,
     ) {
         // The panel scrolls only as far as it must: a focused text field asks to show its cursor as well as itself, and
-        // the screens' centring can't do both, so it would never settle.
-        CompositionLocalProvider(LocalBringIntoViewSpec provides LeastScrolling) {
+        // the screens' centring can't do both, so it would never settle. What it scrolls to keeps the panel's padding
+        // beside it, so the last button isn't against the panel's edge.
+        val density = LocalDensity.current
+        val scrolling = remember(density) { LeastScrolling(with(density) { PANEL_PADDING.toPx() }) }
+        CompositionLocalProvider(LocalBringIntoViewSpec provides scrolling) {
             Column(
                 modifier =
                     modifier
@@ -85,7 +89,7 @@ fun OverlayPanel(
                         .fillMaxWidth()
                         .background(colors.surface, GsShapes.large)
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
+                        .padding(PANEL_PADDING),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 content = content,
             )
@@ -93,17 +97,24 @@ fun OverlayPanel(
     }
 }
 
-/** Scrolls the least that shows what's asked: nothing if it shows already, else its nearer edge, or its start. */
+private val PANEL_PADDING = 24.dp
+
+/**
+ * Scrolls the least that shows what's asked with [margin] beside it: nothing if that shows already, else its nearer
+ * edge, or its start. The scroll's own bounds stop it short at either end.
+ */
 @OptIn(ExperimentalFoundationApi::class)
-private object LeastScrolling : BringIntoViewSpec {
+private class LeastScrolling(
+    private val margin: Float,
+) : BringIntoViewSpec {
     override fun calculateScrollDistance(
         offset: Float,
         size: Float,
         containerSize: Float,
     ): Float =
         when {
-            offset >= 0f && offset + size <= containerSize -> 0f
-            size > containerSize || offset < 0f -> offset
-            else -> offset + size - containerSize
+            offset >= margin && offset + size + margin <= containerSize -> 0f
+            size + 2 * margin > containerSize || offset < margin -> offset - margin
+            else -> offset + size + margin - containerSize
         }
 }

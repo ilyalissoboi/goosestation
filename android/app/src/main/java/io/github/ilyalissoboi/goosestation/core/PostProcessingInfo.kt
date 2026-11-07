@@ -42,3 +42,13 @@ class StageInfo(
     val options: Array<ShaderOptionInfo>,
     val error: String = "",
 )
+
+/**
+ * A post-processing favourite, a saved display chain (`PostProcessing::Favourites::Info`): its [name], each stage's
+ * [shaders] in order, and those of them that aren't installed here ([missing]).
+ */
+class FavouriteInfo(
+    val name: String,
+    val shaders: Array<String>,
+    val missing: Array<String>,
+)

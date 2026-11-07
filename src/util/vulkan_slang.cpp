@@ -12,6 +12,8 @@
 
 #include "common/error.h"
 
+#include <optional>
+
 class VulkanSlangChain final : public SlangChain
 {
 public:
@@ -28,6 +30,11 @@ private:
   PFN_libra_vk_filter_chain_set_param m_set_param = nullptr;
   PFN_libra_vk_filter_chain_free m_free = nullptr;
   libra_vk_filter_chain_t m_chain = nullptr;
+
+  // The command buffer of the last frame. librashader reuses a frame's temporary objects frames_in_flight frames
+  // later, which is only safe when each command buffer has one frame of the chain (screenshots and video capture
+  // render the display again before it's presented).
+  std::optional<u64> m_last_frame_fence;
 };
 
 VulkanSlangChain::~VulkanSlangChain()
@@ -97,6 +104,9 @@ bool VulkanSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_co
   VulkanTexture* const src = static_cast<VulkanTexture*>(input);
   VulkanTexture* const dst = static_cast<VulkanTexture*>(output);
 
+  if (m_last_frame_fence == dev.GetCurrentFenceCounter())
+    dev.SubmitCommandBuffer(false, "Second slang frame in a command buffer");
+
   // librashader records render passes of its own into our command buffer.
   if (dev.InRenderPass())
     dev.EndRenderPass();
@@ -110,6 +120,7 @@ bool VulkanSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_co
   const libra_viewport_t vp = {0.0f, 0.0f, dst->GetWidth(), dst->GetHeight()};
   const libra_error_t err =
     m_frame(&m_chain, dev.GetCurrentCommandBuffer(), static_cast<size_t>(frame_count), in, out, &vp, nullptr, nullptr);
+  m_last_frame_fence = dev.GetCurrentFenceCounter();
 
   // librashader leaves the output as a colour attachment, with pipelines and descriptor sets of its own bound.
   dst->OverrideImageLayout(VulkanTexture::Layout::ColorAttachment);

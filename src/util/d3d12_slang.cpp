@@ -12,6 +12,8 @@
 
 #include "common/error.h"
 
+#include <optional>
+
 class D3D12SlangChain final : public SlangChain
 {
 public:
@@ -28,6 +30,9 @@ private:
   PFN_libra_d3d12_filter_chain_set_param m_set_param = nullptr;
   PFN_libra_d3d12_filter_chain_free m_free = nullptr;
   libra_d3d12_filter_chain_t m_chain = nullptr;
+
+  // The command list of the last frame: as on Vulkan, each command list may have one frame of the chain only.
+  std::optional<u64> m_last_frame_fence;
 };
 
 D3D12SlangChain::~D3D12SlangChain()
@@ -85,6 +90,9 @@ bool D3D12SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_cou
   D3D12Texture* const src = static_cast<D3D12Texture*>(input);
   D3D12Texture* const dst = static_cast<D3D12Texture*>(output);
 
+  if (m_last_frame_fence == dev.GetCurrentFenceValue())
+    dev.SubmitCommandList(false, "Second slang frame in a command list");
+
   // librashader records render passes of its own: ours must be closed.
   if (dev.InRenderPass())
     dev.EndRenderPass();
@@ -104,6 +112,7 @@ bool D3D12SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_cou
   ID3D12GraphicsCommandList4* const cmdlist = dev.GetCommandList();
   const libra_error_t err =
     m_frame(&m_chain, cmdlist, static_cast<size_t>(frame_count), in, out, &vp, nullptr, nullptr);
+  m_last_frame_fence = dev.GetCurrentFenceValue();
 
   // librashader bound descriptor heaps, a root signature and a pipeline of its own. The device sets its heaps only
   // when a command list starts, so they're bound again here.

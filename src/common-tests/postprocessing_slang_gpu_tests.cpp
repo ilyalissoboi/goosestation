@@ -9,6 +9,9 @@
 #include "util/librashader_loader.h"
 #include "util/postprocessing.h"
 #include "util/postprocessing_shader_slang.h"
+#ifdef ENABLE_VULKAN
+#include "util/vulkan_device.h"
+#endif
 
 #include "core/settings.h"
 
@@ -317,3 +320,26 @@ TEST_F(SlangGPU, PresetsFromAPackRun)
     EXPECT_GT(lit, 0u) << "the preset drew nothing";
   }
 }
+
+#ifdef ENABLE_VULKAN
+// librashader reuses a frame's temporary objects frames_in_flight frames later, so two chain frames may never share a
+// command buffer (a screenshot or video capture renders the display a second time before the frame is presented).
+TEST_F(SlangGPU, ASecondFrameBeforeASubmitSubmitsTheFirst)
+{
+  if (g_gpu_device->GetRenderAPI() != RenderAPI::Vulkan)
+    GTEST_SKIP() << "Vulkan only";
+
+  LoadStage("p/gain.slangp", 2.0f);
+  const std::vector<u32> input = InputPixels();
+  GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
+  GPUTexture* out = Texture(GPUTexture::Type::RenderTarget, nullptr);
+  const GSVector4i full(0, 0, WIDTH, HEIGHT);
+
+  ASSERT_TRUE(m_shader->Apply(tex, nullptr, out, full, WIDTH, HEIGHT, NATIVE_WIDTH, NATIVE_HEIGHT, WIDTH, HEIGHT,
+                              Picture(true)));
+  const u64 before = VulkanDevice::GetInstance().GetCurrentFenceCounter();
+  ASSERT_TRUE(m_shader->Apply(tex, nullptr, out, full, WIDTH, HEIGHT, NATIVE_WIDTH, NATIVE_HEIGHT, WIDTH, HEIGHT,
+                              Picture(true)));
+  EXPECT_GT(VulkanDevice::GetInstance().GetCurrentFenceCounter(), before);
+}
+#endif

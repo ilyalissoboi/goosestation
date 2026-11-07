@@ -966,7 +966,7 @@ class OrientationLayoutTest {
                             running = true
                         }
                     }
-                PostProcessingScreen(model, onBack = {})
+                PostProcessingScreen(model, model.packs, onBack = {})
             },
             rows =
                 listOf(
@@ -994,7 +994,7 @@ class OrientationLayoutTest {
                         }
                     }
                 CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", true, false)) {
-                    PostProcessingScreen(model, onBack = {})
+                    PostProcessingScreen(model, model.packs, onBack = {})
                 }
             },
             rows = listOf("Post-processing", "1. crt-lottes", "Add a shader", "Use global (Off)", "Reload shaders"),
@@ -1024,7 +1024,7 @@ class OrientationLayoutTest {
         settingsPageFits(
             {
                 val model = remember { SamplePostProcessing().apply { openAdd(Chain.Display) } }
-                PostProcessingScreen(model, onBack = {})
+                PostProcessingScreen(model, model.packs, onBack = {})
             },
             rows = listOf("crt-lottes", "FilmGrain2", "simple-flip"),
         )
@@ -1040,11 +1040,37 @@ class OrientationLayoutTest {
                             openStage(Chain.Display, 0)
                         }
                     }
-                PostProcessingScreen(model, onBack = {})
+                PostProcessingScreen(model, model.packs, onBack = {})
             },
             rows = listOf("Remove", "Screen Warp X", "Tint (Red)", "Tint (Green)", "Curvature", "Mask"),
             lists = mapOf("Mask" to ("Off" to "Aperture")),
         )
+
+    @Test
+    fun theShaderPacksPage() =
+        settingsPageFits(
+            {
+                val model = remember { SamplePostProcessing().apply { openPacks() } }
+                PostProcessingScreen(model, model.packs, onBack = {})
+            },
+            rows = listOf("libretro slang shaders", "Retro Crisis GDV-NTSC", "satpixie CRT", "lola-retro"),
+        )
+
+    @Test
+    fun theShaderPacksPageBusy() =
+        eachConfig({
+            val model =
+                remember {
+                    SamplePostProcessing().apply {
+                        openPacks()
+                        packs.install("shaders_slang")
+                    }
+                }
+            PostProcessingScreen(model, model.packs, onBack = {})
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+        }
 
     @Test
     fun theAdvancedPage() =

@@ -58,6 +58,12 @@ interface PostProcessingModel {
     /** What the chains page focuses as it comes back: a stage, or one past a chain's last, its Add row. */
     val focus: Pair<Chain, Int>?
 
+    /** Whether the shader packs page shows. */
+    val packsOpen: Boolean
+
+    /** Whether the chains page focuses its Download shader packs row as it comes back. */
+    val focusPacks: Boolean
+
     /** The game's chain whose "Use global" asks first, as it has [askingStages] stages to remove. */
     val asking: Chain?
 
@@ -109,6 +115,11 @@ interface PostProcessingModel {
     )
 
     fun reload()
+
+    fun openPacks()
+
+    /** Back from the shader packs page, to its row. */
+    fun closePacks()
 }
 
 /**
@@ -154,6 +165,12 @@ class PostProcessingPage(
     override var asking by mutableStateOf<Chain?>(null)
         private set
 
+    override var packsOpen by mutableStateOf(false)
+        private set
+
+    override var focusPacks by mutableStateOf(false)
+        private set
+
     override var askingStages by mutableStateOf(0)
         private set
 
@@ -172,6 +189,8 @@ class PostProcessingPage(
         adding = null
         focus = null
         asking = null
+        packsOpen = false
+        focusPacks = false
         read()
     }
 
@@ -183,6 +202,8 @@ class PostProcessingPage(
         adding = null
         focus = null
         asking = null
+        packsOpen = false
+        focusPacks = false
         reads++
     }
 
@@ -335,6 +356,18 @@ class PostProcessingPage(
             )
         val key = key
         edit { api.setPostProcessingOption(key, chain.section, index, option.name, array) }
+    }
+
+    override fun openPacks() {
+        focusPacks = false
+        packsOpen = true
+    }
+
+    override fun closePacks() {
+        if (!packsOpen) return
+        packsOpen = false
+        focus = null
+        focusPacks = true
     }
 
     /** Has the running game load its shaders again from their files. */

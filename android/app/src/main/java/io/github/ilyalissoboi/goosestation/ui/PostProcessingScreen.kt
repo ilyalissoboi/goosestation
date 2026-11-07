@@ -21,6 +21,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.ChainView
 import io.github.ilyalissoboi.goosestation.app.PostProcessingModel
+import io.github.ilyalissoboi.goosestation.app.ShaderPacksModel
 import io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.OptionRow
@@ -72,8 +73,10 @@ private fun Stage.summary(gles: Boolean): String {
 @Composable
 fun PostProcessingScreen(
     model: PostProcessingModel,
+    packs: ShaderPacksModel,
     onBack: () -> Unit,
 ) {
+    if (model.packsOpen) return ShaderPacksPage(packs, onBack = model::closePacks)
     val chains = model.chains
     if (chains.isEmpty()) return SettingsLoadingPage(POST_PROCESSING_TITLE, onBack = onBack)
     val adding = model.adding
@@ -111,8 +114,13 @@ private fun ChainsPage(
     // The model's focus, whenever it changes and its row is there (an edit the core answers late moves it); else the
     // first chain's switch.
     val focus = model.focus?.takeIf { (chain, index) -> index <= (chains[chain]?.stages?.size ?: -1) }
-    LaunchedEffect(focus) {
-        (if (focus == null) requester(Chain.Display, -1) else requester(focus.first, focus.second)).requestFocus()
+    val packsRow = remember { FocusRequester() }
+    LaunchedEffect(focus, model.focusPacks) {
+        when {
+            focus != null -> requester(focus.first, focus.second).requestFocus()
+            model.focusPacks -> packsRow.requestFocus()
+            else -> requester(Chain.Display, -1).requestFocus()
+        }
     }
 
     // Once a question is gone, the focus goes back to the row that asked it.
@@ -180,6 +188,13 @@ private fun ChainsPage(
                 enabled = editable && model.shaders.isNotEmpty(),
             )
         }
+        SettingsSection("Shader packs")
+        NavRow(
+            "Download shader packs",
+            "libretro, Retro Crisis, satpixie and lola-retro: install, update or remove",
+            onClick = model::openPacks,
+            modifier = Modifier.focusRequester(packsRow),
+        )
         if (model.running) {
             FlowRow(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

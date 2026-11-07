@@ -540,7 +540,7 @@ class FocusAuditTest {
                 )
                 running = true
             }
-        show { PostProcessingScreen(model, onBack = {}) }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
         rule.assertControllerReady()
     }
 
@@ -554,7 +554,7 @@ class FocusAuditTest {
             }
         show {
             CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", running = true, false)) {
-                PostProcessingScreen(model, onBack = {})
+                PostProcessingScreen(model, model.packs, onBack = {})
             }
         }
         rule.assertControllerReady()
@@ -568,14 +568,14 @@ class FocusAuditTest {
                 stages(Chain.Display, SamplePostProcessing.crtLottes)
                 setEnabled(Chain.Display, null)
             }
-        show { PostProcessingScreen(model, onBack = {}) }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
         rule.assertControllerReady()
     }
 
     @Test
     fun postProcessingAdd() {
         val model = SamplePostProcessing().apply { openAdd(Chain.Internal) }
-        show { PostProcessingScreen(model, onBack = {}) }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
         rule.assertControllerReady()
     }
 
@@ -586,7 +586,38 @@ class FocusAuditTest {
                 stages(Chain.Display, SamplePostProcessing.flip, SamplePostProcessing.everyRow)
                 openStage(Chain.Display, 1)
             }
-        show { PostProcessingScreen(model, onBack = {}) }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun shaderPacks() {
+        val model = SamplePostProcessing().apply { openPacks() }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun shaderPacksBusy() {
+        val model = SamplePostProcessing().apply { openPacks() }
+        model.packs.install("shaders_slang")
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun shaderPacksActions() {
+        val model = SamplePostProcessing().apply { openPacks() }
+        model.packs.openActions("lola-retro")
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun shaderPacksRemoveQuestion() {
+        val model = SamplePostProcessing().apply { openPacks() }
+        model.packs.askRemove("satpixie-crt")
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
         rule.assertControllerReady()
     }
 

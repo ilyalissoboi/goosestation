@@ -40,7 +40,15 @@ class PostProcessingScreenTest {
     private val model = SamplePostProcessing()
 
     private fun show() {
-        rule.setContent { GooseStationTheme { PostProcessingScreen(model, onBack = { model.calls += "back" }) } }
+        rule.setContent {
+            GooseStationTheme {
+                PostProcessingScreen(
+                    model,
+                    model.packs,
+                    onBack = { model.calls += "back" },
+                )
+            }
+        }
         rule.waitForIdle()
     }
 
@@ -220,7 +228,7 @@ class PostProcessingScreenTest {
         rule.setContent {
             GooseStationTheme {
                 CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", false, false)) {
-                    PostProcessingScreen(model, onBack = {})
+                    PostProcessingScreen(model, model.packs, onBack = {})
                 }
             }
         }

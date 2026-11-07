@@ -817,6 +817,37 @@ object NativeLibrary {
     /** Ends the capture running, if any, with no report; none arrives once this returns. */
     external fun cancelBindingCapture()
 
+    /** The shader packs, 8 fields each: id, name, description, licence, needs, installed version, incomplete, size. */
+    external fun getShaderPacks(): Array<String>
+
+    /** Each pack's latest version from GitHub, 4 fields each: id, version, worded size, error. Blocks. */
+    external fun checkShaderPacks(progress: PackProgress): Array<String>
+
+    /** Installs [ids] (dependencies first), 4 fields each: id, ok ("1"), cancelled ("1"), message. Blocks. */
+    external fun installShaderPacks(
+        ids: Array<String>,
+        progress: PackProgress,
+    ): Array<String>
+
+    /**
+     * For ShaderPacksInstallTest only: [installShaderPacks] with GitHub's addresses moved to [base] (`/api/…` for
+     * api.github.com, `/gh/…` for github.com), a server on the device.
+     */
+    external fun shaderPacksTestInstall(
+        base: String,
+        ids: Array<String>,
+        progress: PackProgress,
+    ): Array<String>
+
+    /** Removes the pack's files: null when done, else why not. */
+    external fun removeShaderPack(id: String): String?
+
+    /** The pack's state and its words, with [latest] as its latest version (null: unknown). */
+    external fun describeShaderPack(
+        id: String,
+        latest: String?,
+    ): Array<String>
+
     /**
      * A streamed download's progress ([HttpBridge.download]): [done] bytes of [total] (-1 when unknown), for the
      * core's progress callback at [progress]. False once the core has cancelled it.

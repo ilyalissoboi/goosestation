@@ -40,6 +40,8 @@ class SamplePostProcessing : PostProcessingModel {
     override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
     override var asking by mutableStateOf<Chain?>(null)
     override var askingStages by mutableStateOf(0)
+    override var packsOpen by mutableStateOf(false)
+    override var focusPacks by mutableStateOf(false)
 
     fun stages(
         chain: Chain,
@@ -160,6 +162,20 @@ class SamplePostProcessing : PostProcessingModel {
     override fun reload() {
         calls += "reload"
     }
+
+    override fun openPacks() {
+        calls += "openPacks"
+        packsOpen = true
+    }
+
+    override fun closePacks() {
+        calls += "closePacks"
+        packsOpen = false
+        focusPacks = true
+    }
+
+    /** The packs page's model, for the pages that show it. */
+    val packs = SampleShaderPacks()
 
     companion object {
         private fun float(

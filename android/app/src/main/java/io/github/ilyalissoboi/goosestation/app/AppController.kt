@@ -24,6 +24,7 @@ import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.core.NativeShaderPackApi
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.input.Rumble
@@ -208,6 +209,17 @@ object AppController : NativeCallbacks {
      */
     val gameMenuSettings =
         GameSettingsPages(scope, gameDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+
+    /**
+     * The shader packs, from each Post-processing page: the app's, so an install goes on when its page closes. A job
+     * that changed the packs has the pages that show read their shaders again.
+     */
+    val shaderPacks =
+        ShaderPacks(scope, Dispatchers.IO, NativeShaderPackApi) {
+            listOf(postProcessingPage, gameSettingsPages.postProcessing, gameMenuSettings.postProcessing)
+                .filter { it.chains.isNotEmpty() }
+                .forEach { it.reread() }
+        }
 
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
     val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)

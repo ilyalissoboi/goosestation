@@ -378,10 +378,14 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
 
   const bool from_game = (picture.game_texture != nullptr);
   GPUTexture* const src = from_game ? picture.game_texture : input_color;
-  const GSVector4i out_rect = Slang::ClampToTarget(picture.rect, target_width, target_height);
-  const GSVector4i src_rect =
-    from_game ? picture.game_view : Slang::ClampToTarget(picture.rect, src->GetWidth(), src->GetHeight());
-  const Slang::PictureSize native = {picture.native_width, picture.native_height};
+  // Only what the target shows of the picture, cropped rather than squeezed when it's larger than the target
+  // (integer scaling in a small window), so the preset keeps the console's scale.
+  const Slang::VisiblePicture visible =
+    Slang::CropToTarget(picture.rect, from_game ? picture.game_view : picture.rect,
+                        {picture.native_width, picture.native_height}, target_width, target_height);
+  const GSVector4i out_rect = visible.out;
+  const GSVector4i src_rect = visible.src;
+  const Slang::PictureSize native = visible.native;
   const bool src_top_first = from_game || picture.rows_top_first;
 
   bool shaded = false;

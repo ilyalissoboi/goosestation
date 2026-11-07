@@ -4988,11 +4988,9 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
       }
       else
       {
+        // DrawSettingsWindow() holds the settings lock while it draws the page.
         if (!had_own && !bsi->ContainsValue(section, "StageCount"))
-        {
-          const auto lock = Host::GetSettingsLock();
           PostProcessing::Config::CopyChain(*Host::Internal::GetBaseSettingsLayer(), *bsi, section);
-        }
         bsi->SetBoolValue(section, "Enabled", enabled.value());
         PopulatePostProcessingChain(bsi, section);
         SetSettingsChanged(bsi);

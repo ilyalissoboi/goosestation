@@ -22,6 +22,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -280,6 +281,31 @@ TEST_F(SlangGPU, TheGamesOwnFrameIsShadedWhereThePictureGoes)
   EXPECT_EQ(At(out, 2, 2) & 0x00FFFFFFu, 0u) << std::hex << At(out, 2, 2);
   EXPECT_PRED2(Near, At(out, 32, 12), 0xFF000080u) << std::hex << At(out, 32, 12);
   EXPECT_PRED2(Near, At(out, 32, 36), 0xFF800000u) << std::hex << At(out, 32, 36);
+}
+
+TEST_F(SlangGPU, AGamePictureLargerThanTheTargetIsCroppedNotSqueezed)
+{
+  // Integer scaling in a small window: an 80x64 picture from (0, 0) on the 64x48 target, red over its top half.
+  constexpr u32 PW = 80, PH = 64;
+  std::vector<u32> frame(PW * PH);
+  for (u32 y = 0; y < PH; y++)
+    std::fill_n(&frame[y * PW], PW, (y < PH / 2) ? RED_QUARTER : BLUE_QUARTER);
+  std::unique_ptr<GPUTexture> game = g_gpu_device->CreateTexture(PW, PH, 1, 1, 1, GPUTexture::Type::Texture,
+                                                                 GPUTexture::Format::RGBA8, frame.data(), PW * 4);
+
+  LoadStage("p/gain.slangp", 1.0f);
+  PostProcessing::PictureInfo picture;
+  picture.rect = GSVector4i(0, 0, PW, PH);
+  picture.native_width = PW / 2;
+  picture.native_height = PH / 2;
+  picture.game_texture = game.get();
+  picture.game_view = GSVector4i(0, 0, PW, PH);
+  const std::vector<u32> input(WIDTH * HEIGHT, 0xFFFFFFFFu);
+  const std::vector<u32> out = Run(Texture(GPUTexture::Type::Texture, &input), picture);
+
+  // Cropped, target row 28 is the picture's row 28 (red); squeezed, it would be row 37 (blue).
+  EXPECT_PRED2(Near, At(out, 32, 28), RED_QUARTER) << std::hex << At(out, 32, 28);
+  EXPECT_PRED2(Near, At(out, 32, 40), BLUE_QUARTER) << std::hex << At(out, 32, 40);
 }
 
 TEST_F(SlangGPU, PresetsFromAPackRun)

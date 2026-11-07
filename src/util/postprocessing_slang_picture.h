@@ -6,6 +6,7 @@
 #include "common/gsvector.h"
 #include "common/types.h"
 
+#include <algorithm>
 #include <utility>
 
 /// The slang stage's picture maths: what the preset is fed, and where its result goes. No GPU here.
@@ -43,6 +44,45 @@ inline u32 BoxFactor(GSVector4i src, PictureSize native)
 inline GSVector4i ClampToTarget(GSVector4i rect, u32 target_width, u32 target_height)
 {
   return rect.rintersect(GSVector4i(0, 0, static_cast<s32>(target_width), static_cast<s32>(target_height)));
+}
+
+/// The part of a picture the target shows: where it goes (out), the matching part of its source (src) and of the
+/// console's picture (native), so a picture larger than the target (integer scaling in a small window) is cropped,
+/// keeping its scale, rather than squeezed. src covers the whole picture rect, in its own texture's coordinates.
+struct VisiblePicture
+{
+  GSVector4i out;
+  GSVector4i src;
+  PictureSize native;
+};
+
+inline VisiblePicture CropToTarget(GSVector4i picture, GSVector4i src, PictureSize native, u32 target_width,
+                                   u32 target_height)
+{
+  VisiblePicture v;
+  v.out = ClampToTarget(picture, target_width, target_height);
+  v.src = src;
+  v.native = native;
+  if (v.out.rempty() || picture.rempty())
+  {
+    v.out = GSVector4i::zero();
+    return v;
+  }
+  if (v.out.eq(picture))
+    return v;
+
+  const s64 pw = picture.width(), ph = picture.height();
+  const s64 sw = src.width(), sh = src.height();
+  const auto map_x = [&](s32 x) {
+    return static_cast<s32>(src.left + (static_cast<s64>(x - picture.left) * sw) / pw);
+  };
+  const auto map_y = [&](s32 y) {
+    return static_cast<s32>(src.top + (static_cast<s64>(y - picture.top) * sh) / ph);
+  };
+  v.src = GSVector4i(map_x(v.out.left), map_y(v.out.top), map_x(v.out.right), map_y(v.out.bottom));
+  v.native.width = std::max<u32>(1, static_cast<u32>((static_cast<s64>(native.width) * v.out.width()) / pw));
+  v.native.height = std::max<u32>(1, static_cast<u32>((static_cast<s64>(native.height) * v.out.height()) / ph));
+  return v;
 }
 
 /// Whether there's anything to shade: a non-empty rect and a console picture with a size.

@@ -330,3 +330,39 @@ TEST(SlangStage, ChangedOptionsAreMarkedForTheRunningChain)
   shader.LoadOptions(si, "PostProcessing/Stage1");
   EXPECT_EQ(shader.GetParametersToPush(), (std::vector<std::string>{"TEST_GAIN"}));
 }
+
+TEST(SlangPicture, AWholePictureOnTheTargetIsKept)
+{
+  const VisiblePicture v = CropToTarget(GSVector4i(160, 0, 1120, 720), GSVector4i(0, 0, 1280, 960), {320, 240}, 1280,
+                                        720);
+  EXPECT_TRUE(v.out.eq(GSVector4i(160, 0, 1120, 720)));
+  EXPECT_TRUE(v.src.eq(GSVector4i(0, 0, 1280, 960)));
+  EXPECT_EQ(v.native, (PictureSize{320, 240}));
+}
+
+TEST(SlangPicture, APictureLargerThanTheTargetIsCroppedNotSqueezed)
+{
+  // Integer scaling in a small window: a 1280x960 picture centred on a 960x720 target.
+  const VisiblePicture v = CropToTarget(GSVector4i(-160, -120, 1120, 840), GSVector4i(0, 0, 1280, 960), {320, 240},
+                                        960, 720);
+  EXPECT_TRUE(v.out.eq(GSVector4i(0, 0, 960, 720)));
+  EXPECT_TRUE(v.src.eq(GSVector4i(160, 120, 1120, 840)));
+  EXPECT_EQ(v.native, (PictureSize{240, 180}));
+}
+
+TEST(SlangPicture, ASourceInTheTargetsOwnCoordinatesIsCroppedTheSameWay)
+{
+  // After other stages, the stage reads the picture out of its input, which is the target's size.
+  const VisiblePicture v = CropToTarget(GSVector4i(-160, -120, 1120, 840), GSVector4i(-160, -120, 1120, 840),
+                                        {320, 240}, 960, 720);
+  EXPECT_TRUE(v.src.eq(GSVector4i(0, 0, 960, 720)));
+  EXPECT_EQ(v.native, (PictureSize{240, 180}));
+}
+
+TEST(SlangPicture, APictureOffTheTargetHasNothingVisible)
+{
+  const VisiblePicture v = CropToTarget(GSVector4i(2000, 0, 2640, 480), GSVector4i(0, 0, 640, 480), {320, 240}, 1280,
+                                        720);
+  EXPECT_TRUE(v.out.rempty());
+  EXPECT_FALSE(IsUsable(v.out, v.native));
+}

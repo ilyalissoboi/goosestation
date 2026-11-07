@@ -188,6 +188,7 @@ class MetalDevice final : public GPUDevice
 {
   friend MetalTexture;
   friend MetalDownloadTexture;
+  friend class MetalSlangChain;
 
 public:
   ALWAYS_INLINE static MetalDevice& GetInstance() { return *static_cast<MetalDevice*>(g_gpu_device.get()); }
@@ -222,6 +223,9 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+
+  bool SupportsSlangPresets() const override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
   void CopyTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
                          u32 src_x, u32 src_y, u32 src_layer, u32 src_level, u32 width, u32 height) override;
   void ResolveTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,

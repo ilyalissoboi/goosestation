@@ -275,3 +275,40 @@ TEST_F(SlangGPU, TheGamesOwnFrameIsShadedWhereThePictureGoes)
   EXPECT_PRED2(Near, At(out, 32, 12), 0xFF000080u) << std::hex << At(out, 32, 12);
   EXPECT_PRED2(Near, At(out, 32, 36), 0xFF800000u) << std::hex << At(out, 32, 36);
 }
+
+TEST_F(SlangGPU, PresetsFromAPackRun)
+{
+  // GOOSESTATION_GPU_TEST_PRESETS: absolute .slangp paths separated by '|', e.g. from libretro's slang-shaders.
+  const char* list = std::getenv("GOOSESTATION_GPU_TEST_PRESETS");
+  if (!list || !*list)
+    GTEST_SKIP() << "GOOSESTATION_GPU_TEST_PRESETS isn't set";
+
+  const std::vector<u32> input = InputPixels();
+  GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
+  std::string_view rest(list);
+  while (!rest.empty())
+  {
+    const size_t sep = rest.find('|');
+    const std::string path(rest.substr(0, sep));
+    rest = (sep == std::string_view::npos) ? std::string_view() : rest.substr(sep + 1);
+    SCOPED_TRACE(path);
+
+    m_shader = std::make_unique<PostProcessing::SlangShader>();
+    Error error;
+    ASSERT_TRUE(m_shader->LoadFromFile(path, path, false, &error)) << error.GetDescription();
+    ASSERT_TRUE(m_shader->CompilePipeline(GPUTexture::Format::RGBA8, WIDTH, HEIGHT, nullptr));
+
+    std::vector<u32> out;
+    for (int frame = 0; frame < 3; frame++)
+      out = Run(tex, Picture(true));
+
+    EXPECT_EQ(At(out, 2, 2), GREEN);
+    u32 lit = 0;
+    for (s32 y = PICTURE.top; y < PICTURE.bottom; y++)
+    {
+      for (s32 x = PICTURE.left; x < PICTURE.right; x++)
+        lit += (At(out, x, y) & 0x00FFFFFFu) != 0;
+    }
+    EXPECT_GT(lit, 0u) << "the preset drew nothing";
+  }
+}

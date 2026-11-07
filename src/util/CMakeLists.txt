@@ -253,6 +253,7 @@ elseif(APPLE)
   set(MAC_SOURCES
     metal_device.h
     metal_device.mm
+    metal_slang.mm
     metal_layer.h
     metal_stream_buffer.h
     metal_stream_buffer.mm

@@ -48,6 +48,17 @@ const CommonFunctions& Common();
 /// A symbol for a renderer's glue, or null when the library isn't available.
 void* GetSymbol(const char* name);
 
+/// Looks up a renderer's entry point; says which one is missing when it isn't there.
+bool ResolveSymbol(const char* name, void** out, Error* error);
+template<typename T>
+inline bool ResolveSymbol(const char* name, T* out, Error* error)
+{
+  void* ptr = nullptr;
+  const bool ret = ResolveSymbol(name, &ptr, error);
+  *out = reinterpret_cast<T>(ptr);
+  return ret;
+}
+
 /// librashader's text for an error, which is then freed. "unknown librashader error" for null.
 std::string DescribeAndFreeError(libra_error_t error);
 

@@ -158,6 +158,15 @@ void* Librashader::GetSymbol(const char* name)
   return Global().lib.GetSymbolAddress(name);
 }
 
+bool Librashader::ResolveSymbol(const char* name, void** out, Error* error)
+{
+  *out = GetSymbol(name);
+  if (*out)
+    return true;
+  Error::SetString(error, fmt::format("librashader is missing symbol {}", name));
+  return false;
+}
+
 std::string Librashader::DescribeAndFreeError(libra_error_t error)
 {
   if (!error)

@@ -205,6 +205,7 @@
     <ClCompile Include="text_input.cpp" />
     <ClCompile Include="vulkan_builders.cpp" />
     <ClCompile Include="vulkan_device.cpp" />
+    <ClCompile Include="vulkan_slang.cpp" />
     <ClCompile Include="vulkan_loader.cpp" />
     <ClCompile Include="vulkan_pipeline.cpp" />
     <ClCompile Include="vulkan_stream_buffer.cpp" />

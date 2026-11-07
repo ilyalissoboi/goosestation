@@ -222,7 +222,7 @@ bool PostProcessing::SlangShader::CreatePipelines(GPUTexture::Format format)
     return false;
 
   GPUPipeline::GraphicsConfig plconfig;
-  plconfig.layout = GPUPipeline::Layout::SingleTextureAndUBO;
+  plconfig.layout = GPUPipeline::Layout::SingleTextureAndPushConstants;
   plconfig.primitive = GPUPipeline::Primitive::Triangles;
   plconfig.rasterization = GPUPipeline::RasterizationState::GetNoCullState();
   plconfig.depth = GPUPipeline::DepthState::GetNoTestsState();
@@ -266,7 +266,7 @@ GPUPipeline* PostProcessing::SlangShader::GetBoxPipeline(u32 factor)
     return nullptr;
 
   GPUPipeline::GraphicsConfig plconfig;
-  plconfig.layout = GPUPipeline::Layout::SingleTextureAndUBO;
+  plconfig.layout = GPUPipeline::Layout::SingleTextureAndPushConstants;
   plconfig.primitive = GPUPipeline::Primitive::Triangles;
   plconfig.rasterization = GPUPipeline::RasterizationState::GetNoCullState();
   plconfig.depth = GPUPipeline::DepthState::GetNoTestsState();

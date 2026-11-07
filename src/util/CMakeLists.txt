@@ -165,6 +165,7 @@ if(ENABLE_VULKAN)
     vulkan_builders.cpp
     vulkan_builders.h
     vulkan_device.cpp
+    vulkan_slang.cpp
     vulkan_device.h
     vulkan_entry_points.h
     vulkan_entry_points.inl

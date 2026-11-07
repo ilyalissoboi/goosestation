@@ -42,6 +42,7 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="postprocessingfavouritesdialog.cpp" />
     <ClCompile Include="postprocessingsettingswidget.cpp" />
     <ClCompile Include="qtthemes.cpp" />
     <ClCompile Include="qttranslations.cpp" />
@@ -101,6 +102,7 @@
     <QtMoc Include="gamelistrefreshthread.h" />
     <QtMoc Include="gamelistwidget.h" />
     <QtMoc Include="gamesummarywidget.h" />
+    <QtMoc Include="postprocessingfavouritesdialog.h" />
     <QtMoc Include="postprocessingsettingswidget.h" />
     <QtMoc Include="mainwindow.h" />
     <QtMoc Include="qthost.h" />
@@ -258,6 +260,7 @@
     <ClCompile Include="$(IntDir)moc_memorycardeditorwindow.cpp" />
     <ClCompile Include="$(IntDir)moc_memoryscannerwindow.cpp" />
     <ClCompile Include="$(IntDir)moc_memoryviewwidget.cpp" />
+    <ClCompile Include="$(IntDir)moc_postprocessingfavouritesdialog.cpp" />
     <ClCompile Include="$(IntDir)moc_postprocessingsettingswidget.cpp" />
     <ClCompile Include="$(IntDir)moc_selectdiscdialog.cpp" />
     <ClCompile Include="$(IntDir)moc_qthost.cpp" />

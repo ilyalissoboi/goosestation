@@ -151,6 +151,8 @@ set(SRCS
   setupwizarddialog.cpp
   setupwizarddialog.h
   setupwizarddialog.ui
+  postprocessingfavouritesdialog.cpp
+  postprocessingfavouritesdialog.h
   shaderpackdialog.cpp
   shaderpackdialog.h
   shaderbrowserdialog.cpp

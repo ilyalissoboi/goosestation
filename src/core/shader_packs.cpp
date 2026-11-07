@@ -326,8 +326,13 @@ std::vector<std::string> ExpandDependencies(std::string_view root, std::span<con
       WARNING_LOG("Ignoring unknown shader pack '{}'.", id);
       continue;
     }
-    if (pack->needs && FindPack(pack->needs) && !ReadMarker(root, pack->needs).has_value())
-      add(pack->needs);
+    // A dependency that's missing, or installed part-way, is installed (again) first.
+    if (pack->needs && FindPack(pack->needs))
+    {
+      const std::optional<InstalledPack> needed = ReadMarker(root, pack->needs);
+      if (!needed.has_value() || needed->version.empty())
+        add(pack->needs);
+    }
     add(id);
   }
   return order;
@@ -523,24 +528,43 @@ void InstallOne(std::string_view root, const PackInfo& pack, Transport& transpor
     return;
   }
 
-  if (const std::optional<InstalledPack> previous = ReadMarker(root, pack.id); previous.has_value())
-  {
-    SetStatus(progress, fmt::format(TRANSLATE_FS("ShaderPacks", "Removing the previous {}…"), pack.name));
-    RemoveFiles(root, previous.value());
-  }
-
-  // Recorded before anything lands, with no version: an install that never finishes reads as incomplete, and removing
-  // it deletes whatever it wrote.
+  // Recorded before anything changes, with no version: an install that never finishes (the app or the computer gone
+  // mid-way) reads as incomplete, and removing it deletes what it wrote and what's left of the previous version.
+  const std::optional<InstalledPack> previous = ReadMarker(root, pack.id);
   InstalledPack marker;
   marker.id = pack.id;
   marker.source_url = version->download_url;
   marker.installed_at = CurrentTimestamp();
   marker.archive_size = (archive_size > 0) ? static_cast<u64>(archive_size) : 0;
   marker.files = UnderInstallDir(pack, planned);
+  if (previous.has_value())
+  {
+    std::vector<std::string> both = previous->files;
+    both.insert(both.end(), marker.files.begin(), marker.files.end());
+    std::sort(both.begin(), both.end());
+    both.erase(std::unique(both.begin(), both.end()), both.end());
+    marker.files = std::move(both);
+  }
   if (!WriteMarker(root, marker, &error))
   {
     result->message = error.GetDescription();
     return;
+  }
+
+  if (previous.has_value())
+  {
+    SetStatus(progress, fmt::format(TRANSLATE_FS("ShaderPacks", "Removing the previous {}…"), pack.name));
+    // A cancel up to here keeps the previous version as it was.
+    if (IsCancelled(progress))
+    {
+      Error restore_error;
+      if (!WriteMarker(root, previous.value(), &restore_error))
+        WARNING_LOG("Couldn't restore shader pack {}'s marker: {}", pack.id, restore_error.GetDescription());
+      result->cancelled = true;
+      result->message = DescribeFailure(false, pack, HTTPDownloader::HTTP_STATUS_CANCELLED);
+      return;
+    }
+    RemoveFiles(root, previous.value());
   }
 
   SetStatus(progress, fmt::format(TRANSLATE_FS("ShaderPacks", "Extracting {}…"), pack.name));

@@ -88,7 +88,7 @@ std::string FormatMarker(const InstalledPack& pack);
 std::optional<InstalledPack> ReadMarker(std::string_view root, std::string_view id);
 bool WriteMarker(std::string_view root, const InstalledPack& pack, Error* error);
 
-/// The order to install the packs in: a missing dependency (one with no marker) first; duplicates and unknown ids
+/// The order to install the packs in: a dependency that is missing or installed part-way first; duplicates and unknown ids
 /// dropped.
 std::vector<std::string> ExpandDependencies(std::string_view root, std::span<const std::string> ids);
 

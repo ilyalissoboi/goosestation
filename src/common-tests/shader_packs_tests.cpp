@@ -759,3 +759,78 @@ TEST(ShaderPacks, SizesAreWordedForPeople)
   EXPECT_EQ(ShaderPacks::FormatSize(55018852), "52.5 MB");
   EXPECT_EQ(ShaderPacks::FormatSize(1073741824), "1024.0 MB");
 }
+
+// An update cut off while it removes the previous version reads as incomplete, and Remove finds every file.
+TEST(ShaderPacks, TheMarkerBeforeRemovalListsThePreviousFiles)
+{
+  const TempDirectory root, work;
+  FakeTransport transport;
+  ServeLibretroAndCrisis(transport, work);
+  Install(root, MakeInstalled("shaders_slang", "000000000000", {"shaders_slang/old.slang"}));
+
+  class Watcher final : public RecordingProgress
+  {
+  public:
+    explicit Watcher(const TempDirectory& root) : m_root(root) {}
+    std::optional<InstalledPack> seen;
+    void SetStatusText(std::string_view text) override
+    {
+      RecordingProgress::SetStatusText(text);
+      if (text == "Removing the previous libretro slang shaders…")
+        seen = ShaderPacks::ReadMarker(m_root.GetPath(), "shaders_slang");
+    }
+
+  private:
+    const TempDirectory& m_root;
+  };
+
+  Watcher watcher(root);
+  const auto results = InstallIds(root, transport, {"shaders_slang"}, &watcher);
+  ASSERT_TRUE(results[0].success) << results[0].message;
+  ASSERT_TRUE(watcher.seen.has_value());
+  EXPECT_EQ(watcher.seen->version, "");
+  for (const char* file : {"shaders_slang/old.slang", "shaders_slang/crt/a.slangp", "shaders_slang/crt/shaders/a.slang"})
+  {
+    EXPECT_NE(std::find(watcher.seen->files.begin(), watcher.seen->files.end(), file), watcher.seen->files.end())
+      << file;
+  }
+}
+
+TEST(ShaderPacks, CancelJustBeforeRemovalKeepsThePreviousVersion)
+{
+  const TempDirectory root, work;
+  FakeTransport transport;
+  ServeLibretroAndCrisis(transport, work);
+  Install(root, MakeInstalled("shaders_slang", "000000000000", {"shaders_slang/old.slang"}));
+
+  class CancelOnRemoval final : public RecordingProgress
+  {
+  public:
+    void SetStatusText(std::string_view text) override
+    {
+      RecordingProgress::SetStatusText(text);
+      if (text.starts_with("Removing the previous"))
+        Cancel();
+    }
+  };
+
+  CancelOnRemoval progress;
+  const auto results = InstallIds(root, transport, {"shaders_slang"}, &progress);
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_TRUE(results[0].cancelled);
+  EXPECT_TRUE(root.Exists("shaders_slang/old.slang"));
+  EXPECT_FALSE(root.Exists("shaders_slang/crt/a.slangp"));
+  const std::optional<InstalledPack> marker = ShaderPacks::ReadMarker(root.GetPath(), "shaders_slang");
+  ASSERT_TRUE(marker.has_value());
+  EXPECT_EQ(marker->version, "000000000000");
+  EXPECT_EQ(marker->files, (std::vector<std::string>{"shaders_slang/old.slang"}));
+  EXPECT_FALSE(AnyPartFile(root));
+}
+
+TEST(ShaderPacks, AnIncompleteDependencyIsInstalledAgain)
+{
+  const TempDirectory root;
+  Install(root, MakeInstalled("shaders_slang", "", {"shaders_slang/half.slang"}));
+  EXPECT_EQ(ShaderPacks::ExpandDependencies(root.GetPath(), std::vector<std::string>{"retro-crisis-gdv-ntsc"}),
+            (std::vector<std::string>{"shaders_slang", "retro-crisis-gdv-ntsc"}));
+}

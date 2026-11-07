@@ -5084,11 +5084,15 @@ void FullscreenUI::DrawShaderBrowser()
     char search[256];
     StringUtil::Strlcpy(search, state.search.c_str(), std::size(search));
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    // Reached with Up, but not where the focus lands as a folder opens: the first entry is (the field only when
+    // there's none).
+    ImGui::PushItemFlag(ImGuiItemFlags_NoNavDefaultFocus, true);
     if (ImGui::InputTextWithHint("##search", FSUI_CSTR("Search by path, e.g. crt"), search, std::size(search)))
     {
       state.search = search;
       search_edited = true;
     }
+    ImGui::PopItemFlag();
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(8.0f));
 
     BeginMenuButtons();

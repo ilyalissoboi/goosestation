@@ -669,7 +669,13 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
 - **Add a shader** opens a page listing the shaders that work here, each with its kind: the APK's (the repository's
   `data/resources/shaders`) and the data folder's `shaders/`, as desktop finds them (`.glsl` files, and ReShade's
   `.fx` under `shaders/reshade/Shaders`). A shows them as the chain's last stage, and the focus goes to it. A shader
-  whose metadata doesn't load isn't offered.
+  whose metadata doesn't load isn't offered. **Slang presets** (RetroArch's `.slangp`, run by librashader, which the
+  APK carries) are listed too, by their path in the data folder's `shaders/` with the extension
+  (`shaders_slang/crt/crt-royale.slangp`, kind Slang). They're never loaded to list them, since a pack has thousands;
+  one that doesn't load says why when it's added. A slang stage's options are the preset's parameters, and it shades
+  the game's picture at the console's resolution (320×240, say), drawing the result where the picture sits. Until the
+  shader packs come (stage 2 of the slang design), presets are copied into the data folder's `shaders/` by hand, so
+  they go through the mirror like any other file there.
 - **A stage's page** has **Move up**, **Move down** and **Remove** (no question, as desktop), then the shader's
   options, as desktop builds them from its metadata: an on/off option is a switch, an option with named values a
   choice, and a number a row per component ("Tint (Red)", "Tint (Green)"…), stepping by the shader's step (a
@@ -685,6 +691,7 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
 | GLSL (`shaders/*.glsl`) | all run | all run |
 | "dolphinfx" (`shaders/dolphinfx/**/*.glsl`, loaded as GLSL: this core has no loader of their own) | all run | all run |
 | ReShade (`shaders/reshade/Shaders/**/*.fx`) | all run but `crt/crt-hyllian-sinc` | none compile |
+| Slang presets (libretro's `crt-royale`, `crt-geom`, `crt-guest-advanced`, `ntsc-256px-svideo`; 2026-11-07) | all run | all run |
 
   So under OpenGL ES (the renderer, a game's own on its pages, or Vulkan having failed) no ReShade shader is offered, and a ReShade stage
   already in the chain (from desktop, say) says "Doesn't run with OpenGL ES: post-processing stays off while it's in
@@ -1165,7 +1172,9 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
 - **Post-processing:** ReShade (`.fx`) shaders don't compile under OpenGL ES: reshadefx's GLSL generator relies on
   implicit int-to-float conversions (`float / const int`), which GLSL ES rejects. They aren't offered there.
   `crt/crt-hyllian-sinc.fx` doesn't load anywhere (desktop too): `data/resources` lacks the
-  `../misc/include/mask.fxh` and `geom.fxh` it includes. Slang presets (roadmap item 17) aren't supported yet.
+  `../misc/include/mask.fxh` and `geom.fxh` it includes. Slang presets run under both renderers (the OpenGL ES spike
+  of 2026-11-07, on SwiftShader); the AYN Thor's Adreno hasn't run one yet. Packs aren't downloaded in the app yet
+  (stage 2 of the slang design).
 
 - **Memory card editor:** edits held in memory are lost if Android ends the process while the app is in the
   background, without a notice afterwards. Cards from outside the data folder come in only through Import card, and
@@ -1562,6 +1571,18 @@ default renderer ("Allowing Vulkan as default renderer"), so the game ran on Vul
 | The game's page | Pass. From the in-game Settings: "PADTEST" over Post-processing, "Use global (On)", the global stage dimmed with "The global chain: pick On or Off to give this game its own."; Right to Off copied the chain into `gamesettings/HASH-9FDA0E1A56D8DF5B.ini` with `Enabled = false`, marked "Set for this game". Use global asked "Use the global Display chain? This game's shader is removed.", Cancel focused; Use global deleted the file, and the focus came back to the row. Reload shaders: "Post-processing shaders reloaded." |
 | Advanced | Pass. Logging, Save states, CD-ROM and CPU, with the core's names ("Information", "Zstandard (Default)"). Log to file on, then leaving the page: `goosestation.log` in the data folder. After a force-stop and a start, `goosestation-previous.log` there too, and the new `goosestation.log` from the build line on. |
 | Crashes | None (`adb logcat -b crash -d` empty). |
+
+### Slang presets, stage 1 (2026-11-07)
+
+On the test emulators (`goose-test-1`, emulator-5580, the host's GPU, so Vulkan; `goose-test-2`, emulator-5582,
+restarted with SwiftShader for OpenGL ES 3.1 through ANGLE), with the debug APK of the `claude/slang-shaders` branch.
+
+| Check | Result |
+|---|---|
+| The library | Pass. `lib/arm64-v8a/librashader.so` in the APK (SONAME `librashader.so`, no `libc++_shared.so` needed, 16 KiB pages); "librashader loaded from librashader.so (ABI 2, API 5)". |
+| The picture | Pass, both renderers. padtest with a probe preset (red over the top half of what it draws, blue below) as the Display chain's only stage: the frame's picture red at the top, blue at the bottom ("Slang preset p/probe.slangp loaded."). |
+| Pack presets | Pass, both renderers. libretro's `crt/crt-royale`, `crt/crt-geom`, `crt/crt-guest-advanced` and `ntsc/ntsc-256px-svideo` compile and draw (the native GPU test, offscreen). |
+| The lists | Pass. A preset is listed with kind Slang without being loaded (a file that isn't a preset is listed too, and says why when it's added); its options are its parameters (`TEST_GAIN`, 0 to 2 by 0.1), written as desktop writes them. |
 
 ## Results on the AYN Thor
 

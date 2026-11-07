@@ -1575,7 +1575,7 @@ default renderer ("Allowing Vulkan as default renderer"), so the game ran on Vul
 ### Slang presets, stage 1 (2026-11-07)
 
 On the test emulators (`goose-test-1`, emulator-5580, the host's GPU, so Vulkan; `goose-test-2`, emulator-5582,
-restarted with SwiftShader for OpenGL ES 3.1 through ANGLE), with the debug APK of the `claude/slang-shaders` branch.
+restarted with SwiftShader for OpenGL ES 3.1 through ANGLE), with the debug APK of the branch merged as #56.
 
 | Check | Result |
 |---|---|

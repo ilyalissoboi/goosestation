@@ -500,3 +500,55 @@ TEST_F(PostProcessingFavourites, StepChainWithNoFavourites)
   EXPECT_TRUE(last.empty());
   EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "A");
 }
+
+namespace {
+
+// Whether folder tells names apart by case (Linux, Android's storage), unlike macOS's and Windows' usual ones.
+bool IsCaseSensitive(const TempDirectory& dir)
+{
+  dir.Write("case-probe/a", "");
+  return !dir.Exists("case-probe/A");
+}
+
+} // namespace
+
+// Two files whose names differ only in case, copied in by hand where the folder tells them apart: each action takes
+// the one named exactly.
+TEST_F(PostProcessingFavourites, CaseTwinsAreEachTheirOwn)
+{
+  if (!IsCaseSensitive(m_dir))
+    GTEST_SKIP() << "the temporary folder ignores case";
+
+  m_dir.Write("postprocessing/CRT.ini",
+              "[PostProcessing]\nEnabled = true\nStageCount = 1\n\n[PostProcessing/Stage1]\nShaderName = upper\n");
+  m_dir.Write("postprocessing/crt.ini",
+              "[PostProcessing]\nEnabled = true\nStageCount = 1\n\n[PostProcessing/Stage1]\nShaderName = lower\n");
+
+  EXPECT_EQ(Favourites::Find(Folder(), m_order, "crt"), "crt");
+
+  MemorySettingsInterface to;
+  Error error;
+  ASSERT_TRUE(Favourites::Apply(Folder(), "crt", to, &error)) << error.GetDescription();
+  EXPECT_EQ(to.GetStringValue("PostProcessing/Stage1", "ShaderName"), "lower");
+
+  ASSERT_TRUE(Favourites::Delete(Folder(), m_order, "crt", &error)) << error.GetDescription();
+  EXPECT_TRUE(m_dir.Exists("postprocessing/CRT.ini"));
+  EXPECT_FALSE(m_dir.Exists("postprocessing/crt.ini"));
+}
+
+// The second step of a case-only rename failing puts the file back, rather than leaving it hidden.
+TEST_F(PostProcessingFavourites, AFailedCaseOnlyRenameKeepsTheFavourite)
+{
+  if (!IsCaseSensitive(m_dir))
+    GTEST_SKIP() << "the temporary folder ignores case";
+
+  SaveAs("crt");
+  // A folder where the renamed file would go, so that step fails.
+  m_dir.Write("postprocessing/CRT.ini/keep", "");
+
+  Error error;
+  EXPECT_FALSE(Favourites::Rename(Folder(), m_order, "crt", "CRT", &error));
+  EXPECT_EQ(Listed(), std::vector<std::string>{"crt"});
+  EXPECT_TRUE(m_dir.Exists("postprocessing/crt.ini"));
+  EXPECT_FALSE(m_dir.Exists("postprocessing/.CRT.ini.renaming"));
+}

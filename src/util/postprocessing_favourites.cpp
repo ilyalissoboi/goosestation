@@ -56,8 +56,13 @@ static std::vector<std::string> Names(const std::string& folder, const SettingsI
   return names;
 }
 
+// The listed name spelled exactly as name, else one equal to it ignoring case: where a folder tells case apart, two
+// files can differ only in case, and each is its own.
 static std::vector<std::string>::iterator FindName(std::vector<std::string>& names, std::string_view name)
 {
+  const auto exact = std::find(names.begin(), names.end(), name);
+  if (exact != names.end())
+    return exact;
   return std::find_if(names.begin(), names.end(),
                       [name](const std::string& listed) { return StringUtil::EqualNoCase(listed, name); });
 }
@@ -231,7 +236,8 @@ bool PostProcessing::Favourites::Rename(const std::string& folder, SettingsInter
     return true;
 
   const bool case_only = StringUtil::EqualNoCase(*old, trimmed);
-  if (!case_only && FindName(names, trimmed) != names.end())
+  const auto other = FindName(names, trimmed);
+  if (other != names.end() && other != old)
   {
     SetExists(error, trimmed);
     return false;
@@ -245,8 +251,13 @@ bool PostProcessing::Favourites::Rename(const std::string& folder, SettingsInter
   {
     // A filesystem that ignores case sees both names as one file: through a name of its own.
     const std::string temp_path = Path::Combine(folder, fmt::format(".{}.ini.renaming", trimmed));
-    renamed = FileSystem::RenamePath(old_path.c_str(), temp_path.c_str(), &rename_error) &&
-              FileSystem::RenamePath(temp_path.c_str(), new_path.c_str(), &rename_error);
+    renamed = FileSystem::RenamePath(old_path.c_str(), temp_path.c_str(), &rename_error);
+    if (renamed && !FileSystem::RenamePath(temp_path.c_str(), new_path.c_str(), &rename_error))
+    {
+      // Back where it was, rather than hidden under the temporary name.
+      FileSystem::RenamePath(temp_path.c_str(), old_path.c_str());
+      renamed = false;
+    }
   }
   else
   {

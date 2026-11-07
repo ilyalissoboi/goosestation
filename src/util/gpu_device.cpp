@@ -1189,6 +1189,20 @@ void GPUDevice::ThrottlePresentation()
   Common::Timer::SleepUntil(m_last_frame_displayed_time, false);
 }
 
+SlangChain::~SlangChain() = default;
+
+bool GPUDevice::SupportsSlangPresets() const
+{
+  return false;
+}
+
+std::unique_ptr<SlangChain> GPUDevice::CreateSlangChain(const std::string& preset_path, Error* error)
+{
+  Error::SetString(error, fmt::format("Slang presets aren't supported by the {} renderer.",
+                                      RenderAPIToString(GetRenderAPI())));
+  return {};
+}
+
 bool GPUDevice::SetGPUTimingEnabled(bool enabled)
 {
   return false;

@@ -90,6 +90,27 @@ struct ShaderOption
   }
 };
 
+/// Where the game's picture is, for stages that work on the picture rather than the whole target (slang presets).
+struct PictureInfo
+{
+  /// Where the picture sits in the stage's input and output, in device coordinates (flipped for OpenGL's lower-left
+  /// origin, as viewports are).
+  GSVector4i rect = GSVector4i::zero();
+
+  /// The console's picture size: the CRTC's active area, without borders.
+  u32 native_width = 0;
+  u32 native_height = 0;
+
+  /// The game's own frame and its view in texels, for the display chain's first stage only (else null). It's stored
+  /// top row first on every renderer.
+  GPUTexture* game_texture = nullptr;
+  GSVector4i game_view = GSVector4i::zero();
+
+  /// Whether the chain's own textures store the picture's top row first. False only for the display chain on
+  /// OpenGL, whose textures are in the window's (lower-left) orientation.
+  bool rows_top_first = true;
+};
+
 namespace Config {
 static constexpr const char* DISPLAY_CHAIN_SECTION = "PostProcessing";
 static constexpr const char* INTERNAL_CHAIN_SECTION = "InternalPostProcessing";
@@ -122,6 +143,9 @@ public:
   bool IsActive() const;
   bool IsInternalChain() const;
 
+  /// Active, and its first stage reads the game's own frame (PictureInfo::game_texture) rather than its input.
+  bool FirstStageReadsGamePicture() const;
+
   void UpdateSettings(std::unique_lock<std::mutex>& settings_lock);
 
   void LoadStages();
@@ -135,7 +159,7 @@ public:
                     ProgressCallback* progress = nullptr);
 
   bool Apply(GPUTexture* input_color, GPUTexture* input_depth, GPUTexture* final_target, const GSVector4i final_rect,
-             s32 orig_width, s32 orig_height, s32 native_width, s32 native_height);
+             s32 orig_width, s32 orig_height, s32 native_width, s32 native_height, const PictureInfo& picture);
 
 private:
   void ClearStagesWithError(const Error& error);

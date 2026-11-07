@@ -829,6 +829,33 @@ std::string ShaderGen::GenerateFillFragmentShader()
   return ss.str();
 }
 
+std::string ShaderGen::GenerateBoxDownsampleFragmentShader(u32 factor)
+{
+  std::stringstream ss;
+  WriteHeader(ss);
+  // An int, compared with int loop counters: GLSL ES has no implicit int/uint conversions.
+  ss << "#define FACTOR " << static_cast<int>(factor) << "\n";
+  DeclareUniformBuffer(ss, {"float4 u_src_rect", "float4 u_src_texel"}, true);
+  DeclareTexture(ss, "samp0", 0);
+  DeclareFragmentEntryPoint(ss, 0, 1);
+
+  ss << R"(
+{
+  float2 centre = u_src_rect.xy + v_tex0 * u_src_rect.zw;
+  float2 first = centre - u_src_texel.xy * (float(FACTOR - 1) * 0.5);
+  float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+  for (int y = 0; y < FACTOR; y++)
+  {
+    for (int x = 0; x < FACTOR; x++)
+      sum += SAMPLE_TEXTURE(samp0, first + float2(float(x), float(y)) * u_src_texel.xy);
+  }
+  o_col0 = sum / float(FACTOR * FACTOR);
+}
+)";
+
+  return ss.str();
+}
+
 std::string ShaderGen::GenerateCopyFragmentShader()
 {
   std::stringstream ss;

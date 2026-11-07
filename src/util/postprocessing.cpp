@@ -392,6 +392,11 @@ bool PostProcessing::Chain::IsInternalChain() const
   return (this == &InternalChain);
 }
 
+bool PostProcessing::Chain::FirstStageReadsGamePicture() const
+{
+  return IsActive() && m_stages.front()->ReadsGamePicture();
+}
+
 void PostProcessing::Chain::ClearStagesWithError(const Error& error)
 {
   std::string msg = error.GetDescription();
@@ -634,7 +639,7 @@ void PostProcessing::Chain::DestroyTextures()
 
 bool PostProcessing::Chain::Apply(GPUTexture* input_color, GPUTexture* input_depth, GPUTexture* final_target,
                                   GSVector4i final_rect, s32 orig_width, s32 orig_height, s32 native_width,
-                                  s32 native_height)
+                                  s32 native_height, const PictureInfo& picture)
 {
   GL_SCOPE_FMT("{} Apply", m_section);
 
@@ -643,15 +648,18 @@ bool PostProcessing::Chain::Apply(GPUTexture* input_color, GPUTexture* input_dep
   if (input_depth)
     input_depth->MakeReadyForSampling();
 
+  // Only the first stage may read the game's own frame; the stages after it work on what came before.
+  PictureInfo stage_picture = picture;
   for (const std::unique_ptr<Shader>& stage : m_stages)
   {
     const bool is_final = (stage.get() == m_stages.back().get());
 
     if (!stage->Apply(input_color, input_depth, is_final ? final_target : output, final_rect, orig_width, orig_height,
-                      native_width, native_height, m_target_width, m_target_height))
+                      native_width, native_height, m_target_width, m_target_height, stage_picture))
     {
       return false;
     }
+    stage_picture.game_texture = nullptr;
 
     if (!is_final)
     {
@@ -783,9 +791,10 @@ std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingSlangShader(co
     return {};
   }
 
-  // The stage itself comes with the slang stage (SlangShader).
-  Error::SetString(error, fmt::format("Slang preset {} can't be loaded yet.", shader_name));
-  return {};
+  std::unique_ptr<SlangShader> shader = std::make_unique<SlangShader>();
+  if (!shader->LoadFromFile(shader_name, path, only_config, error))
+    return {};
+  return shader;
 }
 
 SettingsInterface& PostProcessing::GetLoadSettingsInterface(const char* section)

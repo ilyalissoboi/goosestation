@@ -17,6 +17,7 @@
     <ClCompile Include="..\util\text_input.cpp" />
     <ClCompile Include="gsvector_yuvtorgb_test.cpp" />
     <ClCompile Include="librashader_loader_tests.cpp" />
+    <ClCompile Include="postprocessing_slang_gpu_tests.cpp" />
     <ClCompile Include="postprocessing_slang_tests.cpp" />
     <ClCompile Include="memcard_sync_ui_tests.cpp" />
     <ClCompile Include="..\core\memcard_sync_ui.cpp" />

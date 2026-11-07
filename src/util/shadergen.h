@@ -32,6 +32,10 @@ public:
   std::string GenerateFillFragmentShader();
   std::string GenerateCopyFragmentShader();
 
+  /// Like the copy shader, but each output pixel averages factor x factor source texels around its centre (sample
+  /// with a nearest sampler). Uniforms: float4 u_src_rect (as the copy's), float4 u_src_texel (xy: one texel in UV).
+  std::string GenerateBoxDownsampleFragmentShader(u32 factor);
+
   std::string GenerateImGuiVertexShader();
   std::string GenerateImGuiFragmentShader();
 

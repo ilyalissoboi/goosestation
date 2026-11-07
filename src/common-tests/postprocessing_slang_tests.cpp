@@ -208,3 +208,125 @@ TEST(SlangPicture, EmptyRectsAndZeroSizesAreNotUsable)
   EXPECT_FALSE(IsUsable(GSVector4i(10, 10, 5, 20), {320, 240}));
   EXPECT_TRUE(IsUsable(GSVector4i(0, 0, 64, 64), {320, 240}));
 }
+
+namespace {
+
+// A preset with two parameters, whose shader is valid GLSL, so it also runs in a real chain (from the PCSX2 fork's
+// tests).
+constexpr const char* TEST_PRESET = "shaders = 1\nshader0 = params.slang\n";
+constexpr const char* TEST_SHADER =
+  "#version 450\n"
+  "#pragma parameter TEST_GAIN \"Test gain\" 1.0 0.0 2.0 0.1\n"
+  "#pragma parameter TEST_FLAG \"Test flag\" 0.0 0.0 1.0 1.0\n"
+  "layout(push_constant) uniform Push { float TEST_GAIN; float TEST_FLAG; } params;\n"
+  "layout(std140, set = 0, binding = 0) uniform UBO { mat4 MVP; } global;\n"
+  "#pragma stage vertex\n"
+  "layout(location = 0) in vec4 Position;\n"
+  "layout(location = 1) in vec2 TexCoord;\n"
+  "layout(location = 0) out vec2 vTexCoord;\n"
+  "void main() { gl_Position = global.MVP * Position; vTexCoord = TexCoord; }\n"
+  "#pragma stage fragment\n"
+  "layout(location = 0) in vec2 vTexCoord;\n"
+  "layout(location = 0) out vec4 FragColor;\n"
+  "layout(set = 0, binding = 2) uniform sampler2D Source;\n"
+  "void main() { FragColor = texture(Source, vTexCoord) * params.TEST_GAIN; }\n";
+
+// The test preset at p/test.slangp in a temporary shaders folder.
+struct TestPresetFolders
+{
+  TempDirectory shaders, resources;
+  ScopedShaderFolders folders{shaders.GetPath(), resources.GetPath()};
+
+  TestPresetFolders()
+  {
+    shaders.Write("p/test.slangp", TEST_PRESET);
+    shaders.Write("p/params.slang", TEST_SHADER);
+  }
+};
+
+#define SKIP_WITHOUT_LIBRASHADER()                                                                                     \
+  if (!Librashader::GetAvailability().available)                                                                      \
+  GTEST_SKIP() << "librashader isn't loadable (" << Librashader::GetAvailability().reason                            \
+               << "); set GOOSESTATION_LIBRASHADER_PATH to run this test"
+
+} // namespace
+
+TEST(SlangStage, OptionsAreThePresetsParameters)
+{
+  SKIP_WITHOUT_LIBRASHADER();
+  const TestPresetFolders f;
+
+  Error error;
+  const std::vector<PostProcessing::ShaderOption> options =
+    PostProcessing::Config::GetShaderOptions("p/test.slangp", &error);
+  ASSERT_EQ(options.size(), 2u) << error.GetDescription();
+
+  EXPECT_EQ(options[0].name, "TEST_GAIN");
+  EXPECT_EQ(options[0].ui_name, "Test gain");
+  EXPECT_EQ(options[0].type, PostProcessing::ShaderOption::Type::Float);
+  EXPECT_EQ(options[0].vector_size, 1u);
+  EXPECT_FLOAT_EQ(options[0].default_value[0].float_value, 1.0f);
+  EXPECT_FLOAT_EQ(options[0].value[0].float_value, 1.0f);
+  EXPECT_FLOAT_EQ(options[0].min_value[0].float_value, 0.0f);
+  EXPECT_FLOAT_EQ(options[0].max_value[0].float_value, 2.0f);
+  EXPECT_FLOAT_EQ(options[0].step_value[0].float_value, 0.1f);
+
+  EXPECT_EQ(options[1].name, "TEST_FLAG");
+  EXPECT_FLOAT_EQ(options[1].default_value[0].float_value, 0.0f);
+  EXPECT_FLOAT_EQ(options[1].max_value[0].float_value, 1.0f);
+  EXPECT_FLOAT_EQ(options[1].step_value[0].float_value, 1.0f);
+}
+
+TEST(SlangStage, StoredOptionsComeBackAsValues)
+{
+  SKIP_WITHOUT_LIBRASHADER();
+  const TestPresetFolders f;
+  const char* section = PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+
+  MemorySettingsInterface si;
+  Error error;
+  ASSERT_TRUE(PostProcessing::Config::AddStage(si, section, "p/test.slangp", &error)) << error.GetDescription();
+  EXPECT_EQ(si.GetStringValue("PostProcessing/Stage1", "ShaderName"), "p/test.slangp");
+
+  std::vector<PostProcessing::ShaderOption> options = PostProcessing::Config::GetStageOptions(si, section, 0);
+  ASSERT_EQ(options.size(), 2u);
+  options[0].value[0].float_value = 1.5f;
+  PostProcessing::Config::SetStageOption(si, section, 0, options[0]);
+  EXPECT_EQ(si.GetStringValue("PostProcessing/Stage1", "TEST_GAIN"), "1.5");
+
+  options = PostProcessing::Config::GetStageOptions(si, section, 0);
+  ASSERT_EQ(options.size(), 2u);
+  EXPECT_FLOAT_EQ(options[0].value[0].float_value, 1.5f);
+  EXPECT_FLOAT_EQ(options[1].value[0].float_value, 0.0f);
+}
+
+TEST(SlangStage, ABrokenPresetFailsWithLibrashadersText)
+{
+  SKIP_WITHOUT_LIBRASHADER();
+  const TestPresetFolders f;
+  f.shaders.Write("p/broken.slangp", "shaders = 1\nshader0 = does_not_exist.slang\n");
+
+  MemorySettingsInterface si;
+  Error error;
+  EXPECT_FALSE(PostProcessing::Config::AddStage(si, PostProcessing::Config::DISPLAY_CHAIN_SECTION, "p/broken.slangp",
+                                                &error));
+  EXPECT_NE(error.GetDescription().find("does_not_exist"), std::string::npos) << error.GetDescription();
+}
+
+TEST(SlangStage, ChangedOptionsAreMarkedForTheRunningChain)
+{
+  SKIP_WITHOUT_LIBRASHADER();
+  const TestPresetFolders f;
+
+  PostProcessing::SlangShader shader;
+  Error error;
+  ASSERT_TRUE(shader.LoadFromFile("p/test.slangp", Path::Combine(f.shaders.GetPath(), "p/test.slangp"), false, &error))
+    << error.GetDescription();
+  EXPECT_TRUE(shader.GetParametersToPush().empty());
+
+  MemorySettingsInterface si;
+  si.SetStringValue("PostProcessing/Stage1", "TEST_GAIN", "1.5");
+  si.SetStringValue("PostProcessing/Stage1", "TEST_FLAG", "0");
+  shader.LoadOptions(si, "PostProcessing/Stage1");
+  EXPECT_EQ(shader.GetParametersToPush(), (std::vector<std::string>{"TEST_GAIN"}));
+}

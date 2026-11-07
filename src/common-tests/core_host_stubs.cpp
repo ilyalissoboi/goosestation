@@ -206,7 +206,8 @@ void Host::OnCoverDownloaderOpenRequested()
 
 std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)
 {
-  return std::nullopt;
+  // Surfaceless, so tests can create a GPU device and render offscreen.
+  return WindowInfo();
 }
 
 void Host::ReleaseRenderWindow()

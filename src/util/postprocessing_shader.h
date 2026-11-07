@@ -39,6 +39,9 @@ public:
   virtual bool IsValid() const = 0;
   virtual bool WantsDepthBuffer() const = 0;
 
+  /// Whether, first in the display chain, the stage reads the game's own frame instead of its input.
+  virtual bool ReadsGamePicture() const { return false; }
+
   std::vector<ShaderOption> TakeOptions();
   void LoadOptions(const SettingsInterface& si, const char* section);
 
@@ -51,7 +54,7 @@ public:
 
   virtual bool Apply(GPUTexture* input_color, GPUTexture* input_depth, GPUTexture* final_target, GSVector4i final_rect,
                      s32 orig_width, s32 orig_height, s32 native_width, s32 native_height, u32 target_width,
-                     u32 target_height) = 0;
+                     u32 target_height, const PictureInfo& picture) = 0;
 
 protected:
   using OptionList = std::vector<ShaderOption>;

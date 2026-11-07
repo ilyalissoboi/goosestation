@@ -1,0 +1,23 @@
+# Slang presets (dep/librashader/README.md): librashader's C API library, built offline with the Rust SDK extension.
+# Its crates come from 28-librashader-cargo-sources.json, generated from the tag's Cargo.lock by flatpak-builder-tools'
+# cargo/flatpak-cargo-generator.py:
+#   python3 flatpak-cargo-generator.py <librashader>/Cargo.lock -o 28-librashader-cargo-sources.json
+name: librashader
+buildsystem: simple
+build-options:
+  append-path: "/usr/lib/sdk/rust-stable/bin"
+  env:
+    CARGO_HOME: "/run/build/librashader/cargo"
+    # The core loads it by this name.
+    RUSTFLAGS: "-C link-arg=-Wl,-soname,librashader.so"
+  strip: true
+build-commands:
+  # Linux's renderers: Vulkan and OpenGL. Never runtime-d3d9.
+  - "cargo --offline build -p librashader-capi --profile optimized --no-default-features --features runtime-vulkan,runtime-opengl"
+  - "install -Dm755 target/optimized/liblibrashader_capi.so /app/lib/librashader.so"
+sources:
+  - type: git
+    url: "https://github.com/SnowflakePowered/librashader.git"
+    tag: "librashader-v0.12.1"
+    commit: "07ac790cdb9826f37cf8e1daf5011f03e3c4daa7"
+  - "28-librashader-cargo-sources.json"

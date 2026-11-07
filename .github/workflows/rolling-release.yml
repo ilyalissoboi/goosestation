@@ -321,7 +321,7 @@ jobs:
         branch: stable
         cache: true
         restore-cache: true
-        cache-key: flatpak-x64-${{ hashFiles('scripts/flatpak/**/*.yaml') }}
+        cache-key: flatpak-x64-${{ hashFiles('scripts/flatpak/**') }}
 
     - name: Upload Flatpak
       uses: actions/upload-artifact@v4.3.3

@@ -4,6 +4,8 @@ runtime-version: "6.11"
 sdk: "org.kde.Sdk"
 sdk-extensions:
   - "org.freedesktop.Sdk.Extension.llvm21"
+  # librashader (modules/28-librashader.yaml) is built with Rust.
+  - "org.freedesktop.Sdk.Extension.rust-stable"
 # FFmpeg comes with the runtime (Freedesktop 25.08), its codecs-extra extension adding the rest.
 
 command: "goosestation-qt"
@@ -36,6 +38,7 @@ modules:
   - "modules/25-discord-rpc.yaml"
   - "modules/26-soundtouch.yaml"
   - "modules/27-lunasvg.yaml"
+  - "modules/28-librashader.yaml"
 
   # Main module.
   - name: goosestation

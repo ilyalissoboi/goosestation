@@ -646,6 +646,51 @@ class FocusAuditTest {
     }
 
     @Test
+    fun postProcessingFavourites() {
+        val model =
+            SamplePostProcessing().apply {
+                stages(Chain.Display, SamplePostProcessing.crtLottes)
+                favourites("CRT royale + border", "Sharp LCD")
+            }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingFavouritePanel() {
+        val model =
+            SamplePostProcessing().apply {
+                favourites("CRT royale + border", "Sharp LCD")
+                openFavourite("Sharp LCD")
+            }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingFavouriteName() {
+        val model =
+            SamplePostProcessing().apply {
+                startSaving()
+                naming = naming?.copy(error = "A favourite needs a name.")
+            }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingFavouriteQuestion() {
+        val model =
+            SamplePostProcessing().apply {
+                favourites("Sharp LCD")
+                openFavourite("Sharp LCD")
+                deleteFavourite("Sharp LCD")
+            }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun shaderPacks() {
         val model = SamplePostProcessing().apply { openPacks() }
         show { PostProcessingScreen(model, model.packs, onBack = {}) }

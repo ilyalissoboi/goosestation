@@ -8,6 +8,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -18,6 +20,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.STAGE_NO_GLES
 import io.github.ilyalissoboi.goosestation.settings.Shader
@@ -88,9 +91,11 @@ class PostProcessingScreenTest {
         press(Key.DirectionDown)
         focused("Add a shader")
         press(Key.DirectionDown)
+        focused("Save as favourite")
+        press(Key.DirectionDown)
         focused("Download shader packs")
 
-        press(listOf(Key.DirectionUp, Key.DirectionUp, Key.DirectionUp, Key.DirectionUp))
+        press(listOf(Key.DirectionUp, Key.DirectionUp, Key.DirectionUp, Key.DirectionUp, Key.DirectionUp))
         focused(CHAIN_LABEL)
         press(Key.DirectionRight)
         assertEquals("showChain Internal", model.calls.last())
@@ -358,5 +363,114 @@ class PostProcessingScreenTest {
         model.search("nothing like it")
         rule.waitForIdle()
         rule.onNodeWithText(BROWSE_NO_MATCHES).assertExists()
+    }
+
+    // Favourites: saved display chains, a section under the Display chain's rows.
+    @Test
+    fun favouritesShowWithTheDisplayChain() {
+        model.favourites("CRT royale + border", "Sharp LCD")
+        show()
+
+        rule.onNodeWithText("FAVOURITES").assertExists()
+        rule.onNodeWithText("1. CRT royale + border").assertExists()
+        rule.onNodeWithText("2. Sharp LCD").assertExists()
+        rule.onNodeWithText("Save as favourite").assertExists()
+
+        press(Key.DirectionRight)
+        rule.onNodeWithText("FAVOURITES").assertDoesNotExist()
+        rule.onNodeWithText("1. CRT royale + border").assertDoesNotExist()
+    }
+
+    @Test
+    fun noFavouritesSaysHowToMakeOne() {
+        show()
+
+        rule.onNodeWithText("No favourites yet: save the current chain as one.").assertExists()
+    }
+
+    @Test
+    fun aMissingShaderSaysWhich() {
+        model.favourites = listOf(FavouriteInfo("CRT", arrayOf("crt-lottes", "gone"), arrayOf("gone")))
+        show()
+
+        rule.onNodeWithText("Not installed: gone").assertExists()
+    }
+
+    @Test
+    fun aFavouriteOpensItsPanelWithApplyFocused() {
+        model.favourites("CRT royale + border", "Sharp LCD")
+        show()
+
+        rule.onNodeWithText("2. Sharp LCD").performClick()
+        rule.waitForIdle()
+
+        assertEquals("openFavourite Sharp LCD", model.calls.last())
+        focused("Apply")
+        press(Key.DirectionDown)
+        focused("Rename…")
+        rule.onNodeWithText("Move down").assertIsNotEnabled()
+        rule.onNodeWithText("Delete").assertExists()
+    }
+
+    @Test
+    fun applyOverStagesAsksWithCancelFocused() {
+        model.stages(Chain.Display, SamplePostProcessing.crtLottes)
+        model.favourites("Sharp LCD")
+        model.openFavourite("Sharp LCD")
+        show()
+
+        rule.onNodeWithText("Apply").performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Apply Sharp LCD? It replaces the shader in the chain.").assertExists()
+        focused("Cancel")
+        press(Key.Back)
+        assertEquals("cancelFavourite", model.calls.last())
+        focused("Apply")
+    }
+
+    @Test
+    fun deleteAsksWithCancelFocused() {
+        model.favourites("CRT", "Sharp LCD")
+        model.openFavourite("Sharp LCD")
+        show()
+
+        rule.onNodeWithText("Delete").performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Delete the favourite Sharp LCD?").assertExists()
+        focused("Cancel")
+    }
+
+    @Test
+    fun savingAsksANameAndShowsARefusal() {
+        model.nameRefusal = "A favourite needs a name."
+        show()
+
+        rule.onNodeWithText("Save as favourite").performClick()
+        rule.waitForIdle()
+
+        assertEquals("startSaving", model.calls.last())
+        rule.onNode(isFocused()).assert(hasSetTextAction().and(hasContentDescription("Name")))
+        rule.onNodeWithText("Save").performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText("A favourite needs a name.").assertExists()
+        press(Key.Back)
+        assertEquals("closeFavourite", model.calls.last())
+        focused("Save as favourite")
+    }
+
+    @Test
+    fun focusComesBackToTheRowAfterThePanelCloses() {
+        model.favourites("CRT", "Sharp LCD")
+        show()
+
+        rule.onNodeWithText("2. Sharp LCD").performClick()
+        rule.waitForIdle()
+        press(Key.Back)
+
+        assertEquals("closeFavourite", model.calls.last())
+        focused("2. Sharp LCD")
     }
 }

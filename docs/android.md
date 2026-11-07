@@ -666,16 +666,37 @@ switch (`Enabled`), its stages in order ("1. crt-lottes", with the shader's kind
 **Add a shader**. Every edit is the core's own `PostProcessing::Config` call on `settings.ini`, so the keys are
 desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage's options beside it.
 
-- **Add a shader** opens a page listing the shaders that work here, each with its kind: the APK's (the repository's
-  `data/resources/shaders`) and the data folder's `shaders/`, as desktop finds them (`.glsl` files, and ReShade's
-  `.fx` under `shaders/reshade/Shaders`). A shows them as the chain's last stage, and the focus goes to it. A shader
-  whose metadata doesn't load isn't offered. **Slang presets** (RetroArch's `.slangp`, run by librashader, which the
-  APK carries) are listed too, by their path in the data folder's `shaders/` with the extension
-  (`shaders_slang/crt/crt-royale.slangp`, kind Slang). They're never loaded to list them, since a pack has thousands;
-  one that doesn't load says why when it's added. A slang stage's options are the preset's parameters, and it shades
-  the game's picture at the console's resolution (320×240, say), drawing the result where the picture sits. Until the
-  shader packs come (stage 2 of the slang design), presets are copied into the data folder's `shaders/` by hand, so
-  they go through the mirror like any other file there.
+- **Add a shader** opens the **shader browser**: a search field, then the shaders that work here by folder, each with
+  its kind: the APK's (the repository's `data/resources/shaders`), the data folder's `shaders/` and the app's own
+  packs (below), as desktop finds them (`.glsl` files, a `dolphinfx/` one being kind dolphinfx; ReShade's `.fx` under
+  `shaders/reshade/Shaders`, shown under `reshade/`). Folders come first, then shaders; A opens a folder or adds a
+  shader as the chain's last stage, and the focus goes to it. B clears a search, then goes up a folder (an "Up to …"
+  row does too), then closes. The search, typed with Android's keyboard (A on the field opens it), lists every shader
+  whose path holds the text, ignoring case, with its folder beside it. The browser opens on the folder of the last
+  shader added (this device's own preference), or the nearest folder still there; its rows are a lazy list, so a
+  pack's thousands of presets cost nothing until they show. A shader whose metadata doesn't load isn't offered.
+  **Slang presets** (RetroArch's `.slangp`, run by librashader, which the APK carries) are listed by their path with
+  the extension (`shaders_slang/crt/crt-royale.slangp`, kind Slang), never loaded to list them; one that doesn't load
+  says why when it's added. A slang stage's options are the preset's parameters, and it shades the game's picture at
+  the console's resolution (320×240, say), drawing the result where the picture sits. A stage's name is looked up in
+  the data folder's `shaders/` first, then in the app's packs.
+- **Download shader packs**, after the chains, opens the packs page: the four packs of the core's table (libretro's
+  slang shaders, Retro Crisis GDV-NTSC, satpixie CRT and lola-retro), each with its state ("Not installed",
+  "Installed …", "Update available: … → …", "Incomplete: install it again"), what it is, its licence and its size,
+  under "Third-party content under its own licences.". Their versions are checked against GitHub when the page opens
+  (until a check works: offline, an installed pack says "couldn't check for updates" and can still be removed). A on a
+  pack offers Install, Update or Remove (asking first; removing libretro's warns when Retro Crisis stays). While a job
+  runs its step and progress show ("Downloading libretro slang shaders… 45%"), with Cancel, and the packs say they're
+  busy; it's the app's, so it goes on when the page closes, and the pages read their shaders again when it ends. The
+  core does the work, as desktop's does: dependencies first (Retro Crisis brings libretro's), the archive **streamed
+  to a file** through HttpBridge (never held in memory), checked, the previous version's files removed, extracted with
+  the path hardening and size caps, and a marker (`.shaderpacks/<id>.json`) listing exactly the files written.
+  **Packs live in the app's own storage** (`files/shaderpacks`), never in the data folder: they're not mirrored, and
+  "use the folder's data" doesn't touch them. Each device has its own.
+- **The mirror leaves a desktop's packs out**: at each run it reads the data folder's `shaders/.shaderpacks/*.json`
+  (through the core's marker parser), and neither those markers nor any file they list is copied either way; copies
+  an earlier build pulled in are dropped from the working copy. The player's own shaders beside a pack's are mirrored
+  as before.
 - **A stage's page** has **Move up**, **Move down** and **Remove** (no question, as desktop), then the shader's
   options, as desktop builds them from its metadata: an on/off option is a switch, an option with named values a
   choice, and a number a row per component ("Tint (Red)", "Tint (Green)"…), stepping by the shader's step (a
@@ -1168,6 +1189,9 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
 (`memory_card_image_tests.cpp`, with the undelete fix), and the playlist rule in `android_memcards_tests.cpp`.
 
 ### Known limits
+
+- A slang preset in the data folder's `shaders/` can't refer to a pack's files by a relative path (`../shaders_slang/…`):
+  Android's packs are in the app's own storage, not beside it. Presets inside a pack refer to each other as usual.
 
 - **Post-processing:** ReShade (`.fx`) shaders don't compile under OpenGL ES: reshadefx's GLSL generator relies on
   implicit int-to-float conversions (`float / const int`), which GLSL ES rejects. They aren't offered there.

@@ -143,19 +143,24 @@ scripts/deps/build-dependencies-android.sh [-skip-download] [-skip-cleanup] [<ou
 ```
 
 It needs `ANDROID_NDK_HOME`, and runs the `cmake` and `ninja` on your `PATH` (Homebrew's, CMake 4.4.0 on
-2026-10-25). The SDK's `cmake;4.1.2` is the one Gradle uses.
+2026-10-25). The SDK's `cmake;4.1.2` is the one Gradle uses. librashader (slang presets) is built with Rust: the
+script needs `rustup` ([rustup.rs](https://rustup.rs)) and installs the toolchain it pins (1.88, with the
+`aarch64-linux-android` target) itself.
 
 The output directory defaults to `~/work/goosestation-deps-android`. The script works in `deps-build/` under the
 current directory and removes it at the end, unless `-skip-cleanup` is given. It takes about 5 minutes on an Apple
 Silicon Mac.
 
 zstd, libpng, libjpeg-turbo, libwebp, FreeType (with HarfBuzz), lunasvg and cpuinfo are built as static libraries,
-linked into `libgoosestation.so`. zlib comes from the NDK. Three libraries are shared, and packaged in the APK:
+linked into `libgoosestation.so`. zlib comes from the NDK. Four libraries are shared, and packaged in the APK:
 
 - `lib/libshaderc_shared.so` and `lib/libspirv-cross-c-shared.so`, which the core loads at run time;
-- `lib/libsoundtouch.so`, SoundTouch's C wrapper, which the core links. Its build has no static option.
+- `lib/libsoundtouch.so`, SoundTouch's C wrapper, which the core links. Its build has no static option;
+- `lib/librashader.so`, librashader 0.12.1 (MPL-2.0) with its Vulkan and OpenGL runtimes, which the core loads at
+  run time for slang presets. It links libc++ statically, so the APK carries no `libc++_shared.so`.
 
-The NDK's CMake platform leaves out SOVERSION, so all three are unversioned, as APKs require. They keep their debug
+The NDK's CMake platform leaves out SOVERSION, so the first three are unversioned, as APKs require; librashader's
+SONAME is set to `librashader.so` by the script. They keep their debug
 information; the Android Gradle Plugin strips them when it packages the APK.
 
 The Gradle build and the scripts below look for the prefix in `~/work/goosestation-deps-android`. If you built it

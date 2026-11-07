@@ -4,8 +4,8 @@
 
 # Builds the core's dependencies for Android (arm64-v8a, API 29) with the NDK. Versions and sources match
 # build-dependencies-linux.sh. Libraries are static, except shaderc and SPIRV-Cross, which the core loads at run time,
-# and SoundTouch's C wrapper, which is always shared. The APK packages them as unversioned shared libraries. See
-# docs/android.md.
+# and SoundTouch's C wrapper, which is always shared, and librashader (slang presets, built with Rust), which the
+# core loads at run time too. The APK packages them as unversioned shared libraries. See docs/android.md.
 
 set -e
 # CMake 4 refuses projects that declare compatibility below 3.5 (soundtouch, ...).
@@ -51,6 +51,11 @@ LUNASVG=9af1ac7b90658a279b372add52d6f77a4ebb482c
 SHADERC=f60bb80e255144e71776e2ad570d89b78ea2ab4f
 SOUNDTOUCH=463ade388f3a51da078dc9ed062bf28e4ba29da7
 SPIRV_CROSS=vulkan-sdk-1.3.290.0
+
+# Slang presets (dep/librashader/README.md). Built with Rust at the crate's minimum version.
+LIBRASHADER=0.12.1
+LIBRASHADER_COMMIT=07ac790cdb9826f37cf8e1daf5011f03e3c4daa7
+LIBRASHADER_RUST=1.88
 
 # Keep pkg-config to the prefix, so no project picks up the host's (Homebrew's) libraries.
 export PKG_CONFIG_LIBDIR="$INSTALLDIR/lib/pkgconfig"
@@ -218,6 +223,37 @@ cd "soundtouch-$SOUNDTOUCH"
 cmake "${CMAKE_COMMON[@]}" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -B build
 cmake --build build --parallel
 ninja -C build install
+cd ..
+
+echo "Building librashader..."
+if ! command -v rustup >/dev/null 2>&1; then
+	echo "rustup not found: install Rust from https://rustup.rs" >&2
+	exit 1
+fi
+rustup toolchain install "$LIBRASHADER_RUST" --profile minimal --target aarch64-linux-android
+rm -fr "librashader-$LIBRASHADER"
+git clone --depth 1 --branch "librashader-v$LIBRASHADER" https://github.com/SnowflakePowered/librashader.git "librashader-$LIBRASHADER"
+cd "librashader-$LIBRASHADER"
+if [ "$(git rev-parse HEAD)" != "$LIBRASHADER_COMMIT" ]; then
+	echo "librashader-v$LIBRASHADER isn't commit $LIBRASHADER_COMMIT" >&2
+	exit 1
+fi
+# The NDK's clang links, and builds the C++ that librashader's crates carry (glslang, SPIRV-Cross). libc++ is linked
+# statically, so the APK needs no libc++_shared.so; only a C ABI crosses into the core. 16 KiB pages, as the core's.
+NDK_BIN="$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin)"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android29-clang"
+export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang"
+export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang++"
+export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
+export CXXSTDLIB_aarch64_linux_android=c++_static
+# libc++_static leaves the C++ ABI (exception types' typeinfo) to libc++abi, and --no-undefined makes a library that
+# would fail to load fail to link instead.
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-C link-arg=-Wl,-soname,librashader.so -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-lc++abi -C link-arg=-Wl,--no-undefined"
+# Vulkan and OpenGL ES, the Android renderers. Never runtime-d3d9.
+rustup run "$LIBRASHADER_RUST" cargo build -p librashader-capi --profile optimized --no-default-features \
+	--features runtime-vulkan,runtime-opengl --target aarch64-linux-android
+mkdir -p "$INSTALLDIR/lib"
+cp target/aarch64-linux-android/optimized/liblibrashader_capi.so "$INSTALLDIR/lib/librashader.so"
 cd ..
 
 if [ "$SKIP_CLEANUP" != true ]; then

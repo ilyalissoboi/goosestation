@@ -309,6 +309,10 @@ bool Host::OnVulkanDeviceFailed(const Error& error)
   return false;
 }
 
+void Host::AdaptGameSettingsLayer(SettingsInterface& si)
+{
+}
+
 std::optional<Host::SaveStateMedia> Host::ResolveSaveStateMedia(std::string_view serial, std::string_view media_path,
                                                                 u32 subimage_index, Error* error)
 {

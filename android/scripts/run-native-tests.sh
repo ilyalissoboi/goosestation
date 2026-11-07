@@ -28,6 +28,7 @@ cmake --build "$ROOT/build-android" --target common-tests
 "$ADB" -s "$SERIAL" shell "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR"
 "$ADB" -s "$SERIAL" push "$ROOT/build-android/bin/common-tests" "$REMOTE_DIR/common-tests"
 "$ADB" -s "$SERIAL" push "$DEPS/lib/libsoundtouch.so" "$REMOTE_DIR/libsoundtouch.so"
+"$ADB" -s "$SERIAL" push "$DEPS/lib/librashader.so" "$REMOTE_DIR/librashader.so"
 
 # adb shell returns the remote command's exit code (protocol v2), so this script's exit code is the tests'.
 ARGS=""
@@ -35,7 +36,7 @@ for arg in "$@"; do
 	ARGS="$ARGS '${arg//\'/\'\\\'\'}'"
 done
 set +e
-"$ADB" -s "$SERIAL" shell "cd $REMOTE_DIR && TMPDIR=$REMOTE_DIR LD_LIBRARY_PATH=$REMOTE_DIR ./common-tests$ARGS"
+"$ADB" -s "$SERIAL" shell "cd $REMOTE_DIR && TMPDIR=$REMOTE_DIR LD_LIBRARY_PATH=$REMOTE_DIR GOOSESTATION_LIBRASHADER_PATH=$REMOTE_DIR/librashader.so ./common-tests$ARGS"
 STATUS=$?
 set -e
 "$ADB" -s "$SERIAL" shell "rm -rf $REMOTE_DIR"

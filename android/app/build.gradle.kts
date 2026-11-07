@@ -23,7 +23,8 @@ val depsPrefix: String =
         ?: "${System.getProperty("user.home")}/work/goosestation-deps-android"
 
 // The dependencies built as shared libraries, which the APK carries next to libgoosestation.so.
-val depsSharedLibraries = listOf("libshaderc_shared.so", "libspirv-cross-c-shared.so", "libsoundtouch.so")
+val depsSharedLibraries =
+    listOf("libshaderc_shared.so", "libspirv-cross-c-shared.so", "libsoundtouch.so", "librashader.so")
 
 // Memory card sync's library, emusync, from its pinned release's Android library (libemusync.so for the APK, and a
 // small Kotlin helper): a copy in dep/emusync/ if there is one (builds without network), else downloaded once into

@@ -24,6 +24,7 @@
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
 #include "util/postprocessing.h"
+#include "util/postprocessing_browser.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
@@ -401,6 +402,10 @@ static void DrawFolderSetting(SettingsInterface* bsi, const char* title, const c
 static void PopulateGraphicsAdapterList();
 static void PopulateGameListDirectoryCache(SettingsInterface* si);
 static void PopulatePostProcessingChain(SettingsInterface* si, const char* section);
+static void OpenShaderBrowser(const char* section);
+static void CloseShaderBrowser();
+static void DrawShaderBrowser();
+static void AddShaderFromBrowser(size_t index);
 static void BeginInputBinding(SettingsInterface* bsi, InputBindingInfo::Type type, std::string_view section,
                               std::string_view key, std::string_view display_name);
 static void DrawInputBindingWindow();
@@ -436,6 +441,17 @@ static std::vector<std::string> s_fullscreen_mode_list_cache;
 static std::vector<PostProcessingStageInfo> s_postprocessing_stages;
 // The chain the post-processing page edits: the display chain or the internal one.
 static bool s_postprocessing_internal_chain = false;
+// Adding a stage: every shader by folder, with a search; open while section isn't null.
+struct ShaderBrowserState
+{
+  const char* section = nullptr;
+  std::vector<PostProcessing::AvailableShader> shaders;
+  std::string folder;
+  std::string search;
+  std::string matched_search; // what matches holds the results for
+  std::vector<size_t> matches;
+};
+static ShaderBrowserState s_shader_browser;
 static std::vector<const HotkeyInfo*> s_hotkey_list_cache;
 static std::atomic_bool s_settings_changed{false};
 static std::atomic_bool s_game_settings_changed{false};
@@ -647,7 +663,8 @@ bool FullscreenUI::HasActiveWindow()
 bool FullscreenUI::AreAnyDialogsOpen()
 {
   return (s_save_state_selector_open || s_about_window_open ||
-          s_input_binding_type != InputBindingInfo::Type::Unknown || ImGuiFullscreen::IsChoiceDialogOpen() ||
+          s_input_binding_type != InputBindingInfo::Type::Unknown || s_shader_browser.section ||
+          ImGuiFullscreen::IsChoiceDialogOpen() ||
           ImGuiFullscreen::IsFileSelectorOpen());
 }
 
@@ -853,6 +870,9 @@ void FullscreenUI::Render()
 
   if (s_input_binding_type != InputBindingInfo::Type::Unknown)
     DrawInputBindingWindow();
+
+  if (s_shader_browser.section)
+    DrawShaderBrowser();
 
   ImGuiFullscreen::EndLayout();
 
@@ -4923,6 +4943,193 @@ enum
   POSTPROCESSING_ACTION_MOVE_DOWN,
 };
 
+void FullscreenUI::OpenShaderBrowser(const char* section)
+{
+  s_shader_browser = {};
+  s_shader_browser.shaders = PostProcessing::GetAvailableShaders();
+  if (s_shader_browser.shaders.empty())
+  {
+    ShowToast(std::string(), FSUI_STR("No shaders are available."));
+    return;
+  }
+  s_shader_browser.section = section;
+  s_shader_browser.folder = PostProcessing::Browser::OpenFolder(
+    s_shader_browser.shaders, Host::GetBaseStringSettingValue("UI", "ShaderBrowserFolder"));
+  QueueResetFocus(FocusResetType::PopupOpened);
+}
+
+void FullscreenUI::CloseShaderBrowser()
+{
+  s_shader_browser = {};
+  QueueResetFocus(FocusResetType::PopupClosed);
+}
+
+void FullscreenUI::AddShaderFromBrowser(size_t index)
+{
+  const PostProcessing::AvailableShader& shader = s_shader_browser.shaders[index];
+  const std::string folder = PostProcessing::Browser::FolderOf(PostProcessing::GetBrowserPath(shader));
+  {
+    // The browser is drawn after the page, outside the page's hold on the settings.
+    const auto lock = Host::GetSettingsLock();
+    SettingsInterface* bsi = GetEditingSettingsInterface();
+    Error error;
+    if (PostProcessing::Config::AddStage(*bsi, s_shader_browser.section, shader.name, &error))
+    {
+      ShowToast(std::string(), fmt::format(FSUI_FSTR("Shader {} added as stage {}."), shader.name,
+                                           PostProcessing::Config::GetStageCount(*bsi, s_shader_browser.section)));
+      PopulatePostProcessingChain(bsi, s_shader_browser.section);
+      SetSettingsChanged(bsi);
+    }
+    else
+    {
+      ShowToast(std::string(), fmt::format(FSUI_FSTR("Failed to load shader {}. It may be invalid.\nError was: {}"),
+                                           shader.name, error.GetDescription()));
+    }
+  }
+
+  Host::SetBaseStringSettingValue("UI", "ShaderBrowserFolder", folder.c_str());
+  Host::CommitBaseSettingChanges();
+  CloseShaderBrowser();
+}
+
+void FullscreenUI::DrawShaderBrowser()
+{
+  ShaderBrowserState& state = s_shader_browser;
+  const char* title = FSUI_ICONSTR(ICON_FA_PLUS, "Add Shader");
+
+  ImGui::SetNextWindowSize(LayoutScale(1000.0f, 650.0f));
+  ImGui::SetNextWindowPos((ImGui::GetIO().DisplaySize - LayoutScale(0.0f, LAYOUT_FOOTER_HEIGHT)) * 0.5f,
+                          ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+  ImGui::OpenPopup(title);
+
+  ImGui::PushFont(g_large_font);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, LayoutScale(10.0f));
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                      LayoutScale(ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING, ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING));
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+  ImGui::PushStyleColor(ImGuiCol_Text, UIPrimaryTextColor);
+  ImGui::PushStyleColor(ImGuiCol_TitleBg, UIPrimaryDarkColor);
+  ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIPrimaryColor);
+
+  std::optional<size_t> chosen;
+  std::optional<std::string> open_folder;
+  bool search_edited = false;
+  if (ImGui::BeginPopupModal(title, nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                                               ImGuiWindowFlags_NoMove))
+  {
+    ImGui::PushStyleColor(ImGuiCol_Text, UIBackgroundTextColor);
+    ResetFocusHere();
+
+    // The search: A starts the host's text entry (Steam's keyboard, say); typing filters by path.
+    char search[256];
+    StringUtil::Strlcpy(search, state.search.c_str(), std::size(search));
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    if (ImGui::InputTextWithHint("##search", FSUI_CSTR("Search by path, e.g. crt"), search, std::size(search)))
+    {
+      state.search = search;
+      search_edited = true;
+    }
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(8.0f));
+
+    BeginMenuButtons();
+    const auto shader_button = [&state, &chosen](size_t index) {
+      const PostProcessing::AvailableShader& shader = state.shaders[index];
+      const std::string folder = PostProcessing::Browser::FolderOf(PostProcessing::GetBrowserPath(shader));
+      const SmallString summary =
+        folder.empty() ? SmallString(PostProcessing::GetShaderKindName(shader.kind)) :
+                         SmallString::from_format("{} · {}", PostProcessing::GetShaderKindName(shader.kind), folder);
+      if (MenuButton(SmallString::from_format(ICON_FA_MAGIC " {}", PostProcessing::Browser::LeafName(shader)).c_str(),
+                     summary.c_str()))
+      {
+        chosen = index;
+      }
+    };
+
+    if (StringUtil::StripWhitespace(state.search).empty())
+    {
+      MenuButton(SmallString::from_format(ICON_FA_FOLDER_OPEN " {}",
+                                          state.folder.empty() ? FSUI_VSTR("All shaders") : std::string_view(state.folder))
+                   .c_str(),
+                 nullptr, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+
+      const PostProcessing::Browser::Listing listing = PostProcessing::Browser::List(state.shaders, state.folder);
+      for (const std::string& child : listing.folders)
+      {
+        if (MenuButton(SmallString::from_format(ICON_FA_FOLDER " {}", child).c_str(), nullptr, true,
+                       ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
+        {
+          open_folder = state.folder.empty() ? child : fmt::format("{}/{}", state.folder, child);
+        }
+      }
+      for (const size_t index : listing.shaders)
+        shader_button(index);
+    }
+    else
+    {
+      if (state.matched_search != state.search)
+      {
+        state.matches = PostProcessing::Browser::Search(state.shaders, state.search);
+        state.matched_search = state.search;
+      }
+      if (state.matches.empty())
+        MenuButton(FSUI_CSTR("No shader's path has that in it."), nullptr, false);
+      for (const size_t index : state.matches)
+        shader_button(index);
+    }
+
+    EndMenuButtons();
+    ImGui::PopStyleColor(1);
+    ImGui::EndPopup();
+  }
+
+  ImGui::PopStyleColor(3);
+  ImGui::PopStyleVar(3);
+  ImGui::PopFont();
+
+  if (IsGamepadInputSource())
+  {
+    SetFullscreenFooterText(std::array{std::make_pair(ICON_PF_XBOX_DPAD_UP_DOWN, FSUI_VSTR("Change Selection")),
+                                       std::make_pair(ICON_PF_BUTTON_A, FSUI_VSTR("Open or Add")),
+                                       std::make_pair(ICON_PF_BUTTON_B, FSUI_VSTR("Back"))});
+  }
+  else
+  {
+    SetFullscreenFooterText(std::array{std::make_pair(ICON_PF_ARROW_UP ICON_PF_ARROW_DOWN, FSUI_VSTR("Change Selection")),
+                                       std::make_pair(ICON_PF_ENTER, FSUI_VSTR("Open or Add")),
+                                       std::make_pair(ICON_PF_ESC, FSUI_VSTR("Back"))});
+  }
+
+  if (chosen.has_value())
+  {
+    AddShaderFromBrowser(chosen.value());
+  }
+  else if (open_folder.has_value())
+  {
+    state.folder = std::move(open_folder.value());
+    QueueResetFocus(FocusResetType::Other);
+  }
+  else if (!search_edited && WantsToCloseMenu())
+  {
+    // B clears a search, then goes up a folder, then closes.
+    if (!state.search.empty())
+    {
+      state.search.clear();
+      state.matched_search.clear();
+      QueueResetFocus(FocusResetType::Other);
+    }
+    else if (!state.folder.empty())
+    {
+      state.folder = PostProcessing::Browser::Parent(state.folder);
+      QueueResetFocus(FocusResetType::Other);
+    }
+    else
+    {
+      CloseShaderBrowser();
+    }
+    ImGuiFullscreen::ResetCloseMenuIfNeeded();
+  }
+}
+
 void FullscreenUI::DrawPostProcessingSettingsPage()
 {
   SettingsInterface* bsi = GetEditingSettingsInterface();
@@ -5022,38 +5229,7 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
   MenuHeading(FSUI_CSTR("Operations"));
 
   if (MenuButton(FSUI_ICONSTR(ICON_FA_PLUS, "Add Shader"), FSUI_CSTR("Adds a new shader to the chain.")))
-  {
-    std::vector<PostProcessing::AvailableShader> shaders = PostProcessing::GetAvailableShaders();
-    ImGuiFullscreen::ChoiceDialogOptions options;
-    options.reserve(shaders.size());
-    for (const PostProcessing::AvailableShader& shader : shaders)
-      options.emplace_back(fmt::format("{} [{}]", shader.name, PostProcessing::GetShaderKindName(shader.kind)), false);
-
-    OpenChoiceDialog(FSUI_ICONSTR(ICON_FA_PLUS, "Add Shader"), false, std::move(options),
-                     [shaders = std::move(shaders), section](s32 index, const std::string& title, bool checked) {
-                       if (index < 0 || static_cast<u32>(index) >= shaders.size())
-                         return;
-
-                       const std::string& shader_name = shaders[index].name;
-                       SettingsInterface* bsi = GetEditingSettingsInterface();
-                       Error error;
-                       if (PostProcessing::Config::AddStage(*bsi, section, shader_name, &error))
-                       {
-                         ShowToast(std::string(), fmt::format(FSUI_FSTR("Shader {} added as stage {}."), title,
-                                                              PostProcessing::Config::GetStageCount(*bsi, section)));
-                         PopulatePostProcessingChain(bsi, section);
-                         SetSettingsChanged(bsi);
-                       }
-                       else
-                       {
-                         ShowToast(std::string(),
-                                   fmt::format(FSUI_FSTR("Failed to load shader {}. It may be invalid.\nError was:"),
-                                               title, error.GetDescription()));
-                       }
-
-                       CloseChoiceDialog();
-                     });
-  }
+    OpenShaderBrowser(section);
 
   if (MenuButton(FSUI_ICONSTR(ICON_FA_TIMES, "Clear Shaders"), FSUI_CSTR("Clears a shader from the chain.")))
   {
@@ -7648,6 +7824,7 @@ TRANSLATE_NOOP("FullscreenUI", "Adjusts the emulation speed so the console's ref
 TRANSLATE_NOOP("FullscreenUI", "Advanced");
 TRANSLATE_NOOP("FullscreenUI", "Advanced Settings");
 TRANSLATE_NOOP("FullscreenUI", "All Time: {}");
+TRANSLATE_NOOP("FullscreenUI", "All shaders");
 TRANSLATE_NOOP("FullscreenUI", "Allow Booting Without SBI File");
 TRANSLATE_NOOP("FullscreenUI", "Allows loading protected games without subchannel information.");
 TRANSLATE_NOOP("FullscreenUI", "An error occurred while deleting empty game settings:\n{}");
@@ -7690,6 +7867,7 @@ TRANSLATE_NOOP("FullscreenUI", "CPU Emulation");
 TRANSLATE_NOOP("FullscreenUI", "CPU Mode");
 TRANSLATE_NOOP("FullscreenUI", "Cancel");
 TRANSLATE_NOOP("FullscreenUI", "Capture");
+TRANSLATE_NOOP("FullscreenUI", "Chain");
 TRANSLATE_NOOP("FullscreenUI", "Change Disc");
 TRANSLATE_NOOP("FullscreenUI", "Change Page");
 TRANSLATE_NOOP("FullscreenUI", "Change Selection");
@@ -7782,7 +7960,9 @@ TRANSLATE_NOOP("FullscreenUI", "Disabled");
 TRANSLATE_NOOP("FullscreenUI", "Disables dithering and uses the full 8 bits per channel of color information.");
 TRANSLATE_NOOP("FullscreenUI", "Disables interlaced rendering and display in the GPU. Some games can render in 480p this way, but others will break.");
 TRANSLATE_NOOP("FullscreenUI", "Disc {} | {}");
+TRANSLATE_NOOP("FullscreenUI", "Display");
 TRANSLATE_NOOP("FullscreenUI", "Display Settings");
+TRANSLATE_NOOP("FullscreenUI", "Display applies to the picture at the window's size; Internal at the internal resolution, before the picture is scaled.");
 TRANSLATE_NOOP("FullscreenUI", "Displays popup messages on events such as achievement unlocks and leaderboard submissions.");
 TRANSLATE_NOOP("FullscreenUI", "Displays popup messages when starting, submitting, or failing a leaderboard challenge.");
 TRANSLATE_NOOP("FullscreenUI", "Double-Click Toggles Fullscreen");
@@ -7839,7 +8019,7 @@ TRANSLATE_NOOP("FullscreenUI", "Failed to copy text to clipboard.");
 TRANSLATE_NOOP("FullscreenUI", "Failed to delete save state.");
 TRANSLATE_NOOP("FullscreenUI", "Failed to delete {}.");
 TRANSLATE_NOOP("FullscreenUI", "Failed to load '{}'.");
-TRANSLATE_NOOP("FullscreenUI", "Failed to load shader {}. It may be invalid.\nError was:");
+TRANSLATE_NOOP("FullscreenUI", "Failed to load shader {}. It may be invalid.\nError was: {}");
 TRANSLATE_NOOP("FullscreenUI", "Failed to save input profile '{}'.");
 TRANSLATE_NOOP("FullscreenUI", "Fast Boot");
 TRANSLATE_NOOP("FullscreenUI", "Fast Forward Speed");
@@ -7906,6 +8086,7 @@ TRANSLATE_NOOP("FullscreenUI", "Input profile '{}' loaded.");
 TRANSLATE_NOOP("FullscreenUI", "Input profile '{}' saved.");
 TRANSLATE_NOOP("FullscreenUI", "Integration");
 TRANSLATE_NOOP("FullscreenUI", "Interface Settings");
+TRANSLATE_NOOP("FullscreenUI", "Internal");
 TRANSLATE_NOOP("FullscreenUI", "Internal Resolution");
 TRANSLATE_NOOP("FullscreenUI", "Keep All From This Device");
 TRANSLATE_NOOP("FullscreenUI", "Keep this device's version of every save above? The other versions stay in the sync history. A card in use gets the chosen saves when the game is closed.");
@@ -7976,6 +8157,8 @@ TRANSLATE_NOOP("FullscreenUI", "No input profiles available.");
 TRANSLATE_NOOP("FullscreenUI", "No resume save state found.");
 TRANSLATE_NOOP("FullscreenUI", "No save present in this slot.");
 TRANSLATE_NOOP("FullscreenUI", "No save states found.");
+TRANSLATE_NOOP("FullscreenUI", "No shader's path has that in it.");
+TRANSLATE_NOOP("FullscreenUI", "No shaders are available.");
 TRANSLATE_NOOP("FullscreenUI", "No, resume the game.");
 TRANSLATE_NOOP("FullscreenUI", "None");
 TRANSLATE_NOOP("FullscreenUI", "None (Double Speed)");
@@ -7990,6 +8173,7 @@ TRANSLATE_NOOP("FullscreenUI", "Off.");
 TRANSLATE_NOOP("FullscreenUI", "On-Screen Display");
 TRANSLATE_NOOP("FullscreenUI", "Open Containing Directory");
 TRANSLATE_NOOP("FullscreenUI", "Open in File Browser");
+TRANSLATE_NOOP("FullscreenUI", "Open or Add");
 TRANSLATE_NOOP("FullscreenUI", "Operations");
 TRANSLATE_NOOP("FullscreenUI", "Optimal Frame Pacing");
 TRANSLATE_NOOP("FullscreenUI", "Optional. Encrypts your saves before they upload.");
@@ -8105,6 +8289,7 @@ TRANSLATE_NOOP("FullscreenUI", "Screenshot Format");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Quality");
 TRANSLATE_NOOP("FullscreenUI", "Screenshot Size");
 TRANSLATE_NOOP("FullscreenUI", "Search Directories");
+TRANSLATE_NOOP("FullscreenUI", "Search by path, e.g. crt");
 TRANSLATE_NOOP("FullscreenUI", "Secret Access Key");
 TRANSLATE_NOOP("FullscreenUI", "Seek Speedup");
 TRANSLATE_NOOP("FullscreenUI", "Select");
@@ -8218,6 +8403,7 @@ TRANSLATE_NOOP("FullscreenUI", "This device's name");
 TRANSLATE_NOOP("FullscreenUI", "This device: {}; other: {}");
 TRANSLATE_NOOP("FullscreenUI", "This game has no achievements.");
 TRANSLATE_NOOP("FullscreenUI", "This game has no leaderboards.");
+TRANSLATE_NOOP("FullscreenUI", "This game uses the global chain.");
 TRANSLATE_NOOP("FullscreenUI", "Threaded Presentation");
 TRANSLATE_NOOP("FullscreenUI", "Threaded Rendering");
 TRANSLATE_NOOP("FullscreenUI", "Time Played");
@@ -8242,10 +8428,12 @@ TRANSLATE_NOOP("FullscreenUI", "Unlimited");
 TRANSLATE_NOOP("FullscreenUI", "Use Blit Swap Chain");
 TRANSLATE_NOOP("FullscreenUI", "Use Debug GPU Device");
 TRANSLATE_NOOP("FullscreenUI", "Use Global Setting");
+TRANSLATE_NOOP("FullscreenUI", "Use Global Setting: the game runs the global chain. On or off: the game has a chain of its own, starting as a copy of the global one.");
 TRANSLATE_NOOP("FullscreenUI", "Use Light Theme");
 TRANSLATE_NOOP("FullscreenUI", "Use Old MDEC Routines");
 TRANSLATE_NOOP("FullscreenUI", "Use Single Card For Multi-Disc Games");
 TRANSLATE_NOOP("FullscreenUI", "Use Software Renderer For Readbacks");
+TRANSLATE_NOOP("FullscreenUI", "Use the global chain? This game's own stages are removed.");
 TRANSLATE_NOOP("FullscreenUI", "Username: {}");
 TRANSLATE_NOOP("FullscreenUI", "Uses PGXP for all instructions, not just memory operations.");
 TRANSLATE_NOOP("FullscreenUI", "Uses a blit presentation model instead of flipping. This may be needed on some systems.");

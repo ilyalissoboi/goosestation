@@ -956,7 +956,12 @@ class OrientationLayoutTest {
                 val model =
                     remember {
                         SamplePostProcessing().apply {
-                            stages(Chain.Display, SamplePostProcessing.crtLottes, SamplePostProcessing.flip)
+                            stages(
+                                Chain.Display,
+                                SamplePostProcessing.crtLottes,
+                                SamplePostProcessing.flip,
+                                SamplePostProcessing.crtRoyale,
+                            )
                             stages(Chain.Internal, SamplePostProcessing.filmGrain)
                             running = true
                         }

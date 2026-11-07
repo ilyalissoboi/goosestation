@@ -42,6 +42,7 @@ class D3D12Device final : public GPUDevice
 public:
   friend D3D12Texture;
   friend D3D12DownloadTexture;
+  friend class D3D12SlangChain;
 
   template<typename T>
   using ComPtr = Microsoft::WRL::ComPtr<T>;
@@ -59,6 +60,9 @@ public:
   ~D3D12Device() override;
 
   RenderAPI GetRenderAPI() const override;
+
+  bool SupportsSlangPresets() const override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
 
   bool HasSurface() const override;
 

@@ -119,6 +119,84 @@ class PostProcessingAccessTest {
         assertEquals(0.0001f, warp.value[0], 0f)
     }
 
+    // A pack has thousands of presets: they're listed by name, never loaded, so one that doesn't parse is listed too.
+    @Test
+    fun aSlangPresetIsListedWithoutLoading() {
+        File(dataRoot, "shaders/p").mkdirs()
+        File(dataRoot, "shaders/p/junk.slangp").writeText("this isn't a preset\n")
+        initialize()
+
+        assertEquals("Slang", shaders()["p/junk.slangp"])
+        assertNotNull(NativeLibrary.addPostProcessingStage(null, DISPLAY, "p/junk.slangp"))
+    }
+
+    @Test
+    fun aSlangStagesOptionsAreItsParameters() {
+        writeTestPreset()
+        initialize()
+
+        assertNull(NativeLibrary.addPostProcessingStage(null, DISPLAY, "p/test.slangp"))
+
+        val stage = NativeLibrary.getPostProcessingStages(null, DISPLAY)!!.single()
+        assertEquals("Slang", stage.kind)
+        val gain = stage.options.first()
+        assertEquals("TEST_GAIN", gain.name)
+        assertEquals("Test gain", gain.uiName)
+        assertEquals(ShaderOptionInfo.FLOAT, gain.type)
+        assertEquals(0f, gain.minValue[0], 0f)
+        assertEquals(2f, gain.maxValue[0], 0f)
+        assertEquals(0.1f, gain.stepValue[0], 1e-6f)
+    }
+
+    @Test
+    fun aSlangParameterIsWrittenInTheCoresFormat() {
+        writeTestPreset()
+        initialize()
+        NativeLibrary.addPostProcessingStage(null, DISPLAY, "p/test.slangp")
+
+        NativeLibrary.setPostProcessingOption(null, DISPLAY, 0, "TEST_GAIN", floatArrayOf(1.5f))
+
+        assertEquals("1.5", settings().value("$DISPLAY/Stage1", "TEST_GAIN"))
+        assertEquals(1.5f, NativeLibrary.getPostProcessingStages(null, DISPLAY)!![0].options[0].value[0], 0f)
+    }
+
+    // A chain from another install names a preset this one lacks: the stage says so, in the core's words.
+    @Test
+    fun aMissingSlangStageSaysWhy() {
+        initialize()
+        NativeLibrary.setStringSetting("$DISPLAY/Stage1", "ShaderName", "shaders_slang/gone.slangp")
+        NativeLibrary.setStringSetting(DISPLAY, "StageCount", "1")
+
+        val stage = NativeLibrary.getPostProcessingStages(null, DISPLAY)!!.single()
+        assertEquals("", stage.kind)
+        assertEquals("Slang preset shaders_slang/gone.slangp isn't in the shaders folder.", stage.error)
+    }
+
+    // The PCSX2 fork's two-parameter preset, whose shader is valid GLSL.
+    private fun writeTestPreset() {
+        val dir = File(dataRoot, "shaders/p").apply { mkdirs() }
+        File(dir, "test.slangp").writeText("shaders = 1\nshader0 = params.slang\n")
+        File(dir, "params.slang").writeText(
+            """
+            #version 450
+            #pragma parameter TEST_GAIN "Test gain" 1.0 0.0 2.0 0.1
+            #pragma parameter TEST_FLAG "Test flag" 0.0 0.0 1.0 1.0
+            layout(push_constant) uniform Push { float TEST_GAIN; float TEST_FLAG; } params;
+            layout(std140, set = 0, binding = 0) uniform UBO { mat4 MVP; } global;
+            #pragma stage vertex
+            layout(location = 0) in vec4 Position;
+            layout(location = 1) in vec2 TexCoord;
+            layout(location = 0) out vec2 vTexCoord;
+            void main() { gl_Position = global.MVP * Position; vTexCoord = TexCoord; }
+            #pragma stage fragment
+            layout(location = 0) in vec2 vTexCoord;
+            layout(location = 0) out vec4 FragColor;
+            layout(set = 0, binding = 2) uniform sampler2D Source;
+            void main() { FragColor = texture(Source, vTexCoord) * params.TEST_GAIN; }
+            """.trimIndent() + "\n",
+        )
+    }
+
     @Test
     fun moveAndRemoveKeepEachStagesOptions() {
         initialize()

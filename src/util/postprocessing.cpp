@@ -8,6 +8,8 @@
 #include "postprocessing_shader.h"
 #include "postprocessing_shader_fx.h"
 #include "postprocessing_shader_glsl.h"
+#include "postprocessing_shader_slang.h"
+#include "librashader_loader.h"
 
 // TODO: Remove me
 #include "core/host.h"
@@ -41,6 +43,7 @@ static TinyString GetStageConfigSection(const char* section, u32 index);
 static void CopyStageConfig(SettingsInterface& si, const char* section, u32 old_index, u32 new_index);
 static void SwapStageConfig(SettingsInterface& si, const char* section, u32 lhs_index, u32 rhs_index);
 static std::unique_ptr<Shader> TryLoadingShader(const std::string& shader_name, bool only_config, Error* error);
+static std::unique_ptr<Shader> TryLoadingSlangShader(const std::string& shader_name, bool only_config, Error* error);
 static SettingsInterface& GetLoadSettingsInterface(const char* section);
 
 template<typename T>
@@ -199,6 +202,16 @@ std::vector<std::pair<std::string, std::string>> PostProcessing::GetAvailableSha
     {
       std::string display_name = fmt::format(TRANSLATE_FS("PostProcessing", "{} [ReShade]"), fd.FileName);
       names.emplace_back(std::move(display_name), std::move(fd.FileName));
+    }
+  }
+
+  // Slang presets are listed by name only: a pack has thousands, and loading each would take far too long.
+  if (Librashader::GetAvailability().available)
+  {
+    for (std::string& name : Slang::FindPresets(EmuFolders::Shaders))
+    {
+      std::string display_name = fmt::format(TRANSLATE_FS("PostProcessing", "{} [Slang]"), name);
+      names.emplace_back(std::move(display_name), std::move(name));
     }
   }
 
@@ -363,6 +376,31 @@ void PostProcessing::Config::ClearStages(SettingsInterface& si, const char* sect
   si.SetUIntValue(section, "StageCount", 0);
 }
 
+void PostProcessing::Config::CopyChain(const SettingsInterface& from, SettingsInterface& to, const char* section)
+{
+  DeleteChain(to, section);
+  to.SetBoolValue(section, "Enabled", from.GetBoolValue(section, "Enabled", false));
+
+  const u32 count = GetStageCount(from, section);
+  if (count == 0)
+    return;
+
+  to.SetUIntValue(section, "StageCount", count);
+  for (u32 i = 0; i < count; i++)
+  {
+    const TinyString stage_section = GetStageConfigSection(section, i);
+    for (const auto& [key, value] : from.GetKeyValueList(stage_section))
+      to.SetStringValue(stage_section, key.c_str(), value.c_str());
+  }
+}
+
+void PostProcessing::Config::DeleteChain(SettingsInterface& si, const char* section)
+{
+  ClearStages(si, section);
+  si.DeleteValue(section, "StageCount");
+  si.DeleteValue(section, "Enabled");
+}
+
 PostProcessing::Chain::Chain(const char* section) : m_section(section)
 {
 }
@@ -377,6 +415,11 @@ bool PostProcessing::Chain::IsActive() const
 bool PostProcessing::Chain::IsInternalChain() const
 {
   return (this == &InternalChain);
+}
+
+bool PostProcessing::Chain::FirstStageReadsGamePicture() const
+{
+  return IsActive() && m_stages.front()->ReadsGamePicture();
 }
 
 void PostProcessing::Chain::ClearStagesWithError(const Error& error)
@@ -621,7 +664,7 @@ void PostProcessing::Chain::DestroyTextures()
 
 bool PostProcessing::Chain::Apply(GPUTexture* input_color, GPUTexture* input_depth, GPUTexture* final_target,
                                   GSVector4i final_rect, s32 orig_width, s32 orig_height, s32 native_width,
-                                  s32 native_height)
+                                  s32 native_height, const PictureInfo& picture)
 {
   GL_SCOPE_FMT("{} Apply", m_section);
 
@@ -630,15 +673,18 @@ bool PostProcessing::Chain::Apply(GPUTexture* input_color, GPUTexture* input_dep
   if (input_depth)
     input_depth->MakeReadyForSampling();
 
+  // Only the first stage may read the game's own frame; the stages after it work on what came before.
+  PictureInfo stage_picture = picture;
   for (const std::unique_ptr<Shader>& stage : m_stages)
   {
     const bool is_final = (stage.get() == m_stages.back().get());
 
     if (!stage->Apply(input_color, input_depth, is_final ? final_target : output, final_rect, orig_width, orig_height,
-                      native_width, native_height, m_target_width, m_target_height))
+                      native_width, native_height, m_target_width, m_target_height, stage_picture))
     {
       return false;
     }
+    stage_picture.game_texture = nullptr;
 
     if (!is_final)
     {
@@ -699,6 +745,9 @@ bool PostProcessing::ReloadShaders()
 std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingShader(const std::string& shader_name,
                                                                          bool only_config, Error* error)
 {
+  if (Slang::IsPresetName(shader_name))
+    return TryLoadingSlangShader(shader_name, only_config, error);
+
   std::string filename;
   std::optional<std::string> resource_str;
 
@@ -745,6 +794,32 @@ std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingShader(const s
 
   ERROR_LOG("Failed to load shader '{}'", shader_name);
   return {};
+}
+
+std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingSlangShader(const std::string& shader_name,
+                                                                              bool only_config, Error* error)
+{
+  const Librashader::Availability& avail = Librashader::GetAvailability();
+  if (!avail.available)
+  {
+    Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing",
+                                                     "Slang presets aren't available in this build: {}."),
+                                        avail.reason));
+    return {};
+  }
+
+  const std::string path = Slang::ResolvePresetPath(EmuFolders::Shaders, shader_name);
+  if (path.empty() || !FileSystem::FileExists(path.c_str()))
+  {
+    Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing", "Slang preset {} isn't in the shaders folder."),
+                                        shader_name));
+    return {};
+  }
+
+  std::unique_ptr<SlangShader> shader = std::make_unique<SlangShader>();
+  if (!shader->LoadFromFile(shader_name, path, only_config, error))
+    return {};
+  return shader;
 }
 
 SettingsInterface& PostProcessing::GetLoadSettingsInterface(const char* section)

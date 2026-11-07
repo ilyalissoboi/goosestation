@@ -111,6 +111,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Recursively include the source tree.
 include(GooseStationDependencies)
 include(EmuSync)
+include(Librashader)
 add_subdirectory(dep)
 add_subdirectory(src)
 

@@ -365,6 +365,29 @@ std::unique_ptr<GPUPipeline> D3D11Device::CreatePipeline(const GPUPipeline::Grap
     primitives[static_cast<u8>(config.primitive)], vertex_stride, config.blend.constant));
 }
 
+void D3D11Device::InvalidateCachedState()
+{
+  m_current_pipeline = nullptr;
+  m_current_render_targets.fill(nullptr);
+  m_num_current_render_targets = 0;
+  m_current_depth_target = nullptr;
+  m_current_render_pass_flags = GPUPipeline::NoRenderPassFlags;
+  m_current_input_layout = nullptr;
+  m_current_vertex_shader = nullptr;
+  m_current_geometry_shader = nullptr;
+  m_current_pixel_shader = nullptr;
+  m_current_rasterizer_state = nullptr;
+  m_current_depth_state = nullptr;
+  m_current_blend_state = nullptr;
+  m_current_primitive_topology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+  m_current_vertex_stride = 0;
+  m_current_textures.fill(nullptr);
+  m_current_samplers.fill(nullptr);
+
+  // Bound once when the device is created.
+  m_context->IASetIndexBuffer(m_index_buffer.GetD3DBuffer(), DXGI_FORMAT_R16_UINT, 0);
+}
+
 void D3D11Device::SetPipeline(GPUPipeline* pipeline)
 {
   if (m_current_pipeline == pipeline)

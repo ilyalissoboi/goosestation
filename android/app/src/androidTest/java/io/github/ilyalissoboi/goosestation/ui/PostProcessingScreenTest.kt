@@ -54,6 +54,15 @@ class PostProcessingScreenTest {
     private fun focused(text: String) = rule.onNode(isFocused()).assert(hasText(text, substring = true))
 
     @Test
+    fun aSlangStageShowsItsKind() {
+        model.stages(Chain.Display, SamplePostProcessing.crtRoyale)
+        show()
+
+        rule.onNodeWithText("1. shaders_slang/crt/crt-royale.slangp").assertExists()
+        rule.onNodeWithText("Slang · 2 options").assertExists()
+    }
+
+    @Test
     fun theChainsPageListsEachChainsStages() {
         model.stages(Chain.Display, SamplePostProcessing.crtLottes)
         model.stages(Chain.Internal, SamplePostProcessing.flip)

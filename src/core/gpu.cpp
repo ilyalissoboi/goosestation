@@ -15,6 +15,7 @@
 #include "util/imgui_manager.h"
 #include "util/media_capture.h"
 #include "util/postprocessing.h"
+#include "util/postprocessing_slang_picture.h"
 #include "util/shadergen.h"
 #include "util/state_wrapper.h"
 
@@ -2008,10 +2009,15 @@ bool GPU::RenderDisplay(GPUTexture* target, const GSVector4i display_rect, const
 
     // Now we can apply the post chain.
     GPUTexture* post_output_texture = PostProcessing::InternalChain.GetOutputTexture();
+    PostProcessing::PictureInfo picture;
+    picture.rect = GSVector4i(0, 0, display_texture_view_width, display_texture_view_height);
+    picture.native_width = m_crtc_state.display_vram_width;
+    picture.native_height = m_crtc_state.display_vram_height;
+    picture.rows_top_first = true; // the display texture's orientation, which the internal chain keeps
     if (PostProcessing::InternalChain.Apply(display_texture, m_display_depth_buffer, post_output_texture,
                                             GSVector4i(0, 0, display_texture_view_width, display_texture_view_height),
                                             display_texture_view_width, display_texture_view_height,
-                                            m_crtc_state.display_width, m_crtc_state.display_height))
+                                            m_crtc_state.display_width, m_crtc_state.display_height, picture))
     {
       display_texture_view_x = 0;
       display_texture_view_y = 0;
@@ -2029,6 +2035,14 @@ bool GPU::RenderDisplay(GPUTexture* target, const GSVector4i display_rect, const
      PostProcessing::DisplayChain.CheckTargets(hdformat, target_width, target_height));
   const GSVector4i real_draw_rect =
     g_gpu_device->UsesLowerLeftOrigin() ? GPUDevice::FlipToLowerLeft(draw_rect, target_height) : draw_rect;
+
+  // A slang stage first in the display chain reads the game's own frame at the console's resolution, rather than
+  // the picture drawn at window size. Rotated, it takes the drawn picture instead, which is already turned.
+  const bool rotated_quarter = (g_settings.display_rotation == DisplayRotation::Rotate90 ||
+                                g_settings.display_rotation == DisplayRotation::Rotate270);
+  const bool chain_reads_game = really_postfx && display_texture &&
+                                g_settings.display_rotation == DisplayRotation::Normal &&
+                                PostProcessing::DisplayChain.FirstStageReadsGamePicture();
   if (really_postfx)
   {
     g_gpu_device->ClearRenderTarget(PostProcessing::DisplayChain.GetInputTexture(), GPUDevice::DEFAULT_CLEAR_COLOR);
@@ -2042,7 +2056,7 @@ bool GPU::RenderDisplay(GPUTexture* target, const GSVector4i display_rect, const
       return false;
   }
 
-  if (display_texture)
+  if (display_texture && !chain_reads_game)
   {
     bool texture_filter_linear = false;
 
@@ -2143,9 +2157,24 @@ bool GPU::RenderDisplay(GPUTexture* target, const GSVector4i display_rect, const
     const s32 orig_width = static_cast<s32>(std::ceil(static_cast<float>(m_crtc_state.display_width) * upscale_x));
     const s32 orig_height = static_cast<s32>(std::ceil(static_cast<float>(m_crtc_state.display_height) * upscale_y));
 
+    PostProcessing::PictureInfo picture;
+    picture.rect = real_draw_rect;
+    const PostProcessing::Slang::PictureSize native = PostProcessing::Slang::NativeSize(
+      m_crtc_state.display_vram_width, m_crtc_state.display_vram_height, rotated_quarter);
+    picture.native_width = native.width;
+    picture.native_height = native.height;
+    if (chain_reads_game)
+    {
+      picture.game_texture = display_texture;
+      picture.game_view = GSVector4i(display_texture_view_x, display_texture_view_y,
+                                     display_texture_view_x + display_texture_view_width,
+                                     display_texture_view_y + display_texture_view_height);
+    }
+    picture.rows_top_first = !g_gpu_device->UsesLowerLeftOrigin();
+
     return PostProcessing::DisplayChain.Apply(PostProcessing::DisplayChain.GetInputTexture(), nullptr, target,
                                               display_rect, orig_width, orig_height, m_crtc_state.display_width,
-                                              m_crtc_state.display_height);
+                                              m_crtc_state.display_height, picture);
   }
   else
     return true;

@@ -36,6 +36,7 @@ class VulkanDevice final : public GPUDevice
 public:
   friend VulkanTexture;
   friend VulkanDownloadTexture;
+  friend class VulkanSlangChain;
 
   enum : u32
   {
@@ -101,6 +102,9 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+
+  bool SupportsSlangPresets() const override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
   void CopyTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
                          u32 src_x, u32 src_y, u32 src_layer, u32 src_level, u32 width, u32 height) override;
   void ResolveTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,

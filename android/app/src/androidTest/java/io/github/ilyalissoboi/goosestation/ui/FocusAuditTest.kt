@@ -532,7 +532,12 @@ class FocusAuditTest {
     fun postProcessingChains() {
         val model =
             SamplePostProcessing().apply {
-                stages(Chain.Display, SamplePostProcessing.crtLottes, SamplePostProcessing.flip)
+                stages(
+                    Chain.Display,
+                    SamplePostProcessing.crtLottes,
+                    SamplePostProcessing.flip,
+                    SamplePostProcessing.crtRoyale,
+                )
                 running = true
             }
         show { PostProcessingScreen(model, onBack = {}) }

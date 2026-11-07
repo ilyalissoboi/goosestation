@@ -40,6 +40,8 @@ add_library(util
   imgui_fullscreen.h
   imgui_manager.cpp
   imgui_manager.h
+  librashader_loader.cpp
+  librashader_loader.h
   ini_settings_interface.cpp
   ini_settings_interface.h
   input_manager.cpp
@@ -61,6 +63,9 @@ add_library(util
   postprocessing_shader_fx.h
   postprocessing_shader_glsl.cpp
   postprocessing_shader_glsl.h
+  postprocessing_shader_slang.cpp
+  postprocessing_shader_slang.h
+  postprocessing_slang_picture.h
   shadergen.cpp
   shadergen.h
   shiftjis.cpp
@@ -80,6 +85,8 @@ add_library(util
 target_precompile_headers(util PRIVATE "pch.h")
 target_include_directories(util PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_include_directories(util PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
+# librashader is loaded at run time; only its header is needed (dep/librashader/README.md).
+target_include_directories(util PUBLIC "${CMAKE_SOURCE_DIR}/dep/librashader/include")
 target_link_libraries(util PUBLIC common simpleini imgui)
 target_link_libraries(util PRIVATE libchdr JPEG::JPEG PNG::PNG WebP::libwebp ZLIB::ZLIB SoundTouch::SoundTouchDLL xxhash Zstd::Zstd reshadefx)
 
@@ -97,6 +104,7 @@ if(ENABLE_OPENGL)
     opengl_context.cpp
     opengl_context.h
     opengl_device.cpp
+    opengl_slang.cpp
     opengl_device.h
     opengl_loader.h
     opengl_pipeline.cpp
@@ -158,6 +166,7 @@ if(ENABLE_VULKAN)
     vulkan_builders.cpp
     vulkan_builders.h
     vulkan_device.cpp
+    vulkan_slang.cpp
     vulkan_device.h
     vulkan_entry_points.h
     vulkan_entry_points.inl
@@ -205,6 +214,7 @@ if(WIN32)
     d3d_common.cpp
     d3d_common.h
     d3d11_device.cpp
+    d3d11_slang.cpp
     d3d11_device.h
     d3d11_pipeline.cpp
     d3d11_pipeline.h
@@ -217,6 +227,7 @@ if(WIN32)
     d3d12_descriptor_heap_manager.cpp
     d3d12_descriptor_heap_manager.h
     d3d12_device.cpp
+    d3d12_slang.cpp
     d3d12_device.h
     d3d12_pipeline.cpp
     d3d12_pipeline.h
@@ -246,6 +257,7 @@ elseif(APPLE)
   set(MAC_SOURCES
     metal_device.h
     metal_device.mm
+    metal_slang.mm
     metal_layer.h
     metal_stream_buffer.h
     metal_stream_buffer.mm

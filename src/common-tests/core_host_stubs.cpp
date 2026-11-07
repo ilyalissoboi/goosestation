@@ -206,7 +206,8 @@ void Host::OnCoverDownloaderOpenRequested()
 
 std::optional<WindowInfo> Host::AcquireRenderWindow(bool recreate_window)
 {
-  return std::nullopt;
+  // Surfaceless, so tests can create a GPU device and render offscreen.
+  return WindowInfo();
 }
 
 void Host::ReleaseRenderWindow()
@@ -306,6 +307,10 @@ std::unique_ptr<HTTPDownloader> HTTPDownloader::Create(std::string user_agent)
 bool Host::OnVulkanDeviceFailed(const Error& error)
 {
   return false;
+}
+
+void Host::AdaptGameSettingsLayer(SettingsInterface& si)
+{
 }
 
 std::optional<Host::SaveStateMedia> Host::ResolveSaveStateMedia(std::string_view serial, std::string_view media_path,

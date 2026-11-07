@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.settings
 
 import io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo
+import io.github.ilyalissoboi.goosestation.core.StageInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -25,6 +26,23 @@ class PostProcessingSettingsTest {
         assertNull(Stage("FilmGrain2", ShaderKind.ReShade, emptyList()).problem(gles = false))
         assertEquals(STAGE_NOT_FOUND, Stage("gone", null, emptyList()).problem(gles = false))
         assertNull(Stage("crt-lottes", ShaderKind.GLSL, emptyList()).problem(gles = true))
+    }
+
+    @Test
+    fun slangPresetsAreOfferedOnOpenGLES() {
+        val slang = Shader("crt/crt-royale.slangp", ShaderKind.Slang)
+
+        assertEquals(listOf(glsl, slang), offered(listOf(glsl, reshade, slang), gles = true))
+        assertNull(Stage("crt/crt-royale.slangp", ShaderKind.Slang, emptyList()).problem(gles = true))
+    }
+
+    @Test
+    fun aStageThatDoesntLoadSaysTheCoresWhy() {
+        val why = "Slang presets aren't available in this build: librashader is missing symbol libra_preset_free."
+        val info = StageInfo("crt/crt-royale.slangp", "", emptyArray(), why)
+
+        assertEquals("$why $STAGE_STAYS_OFF", Stage.of(info).problem(gles = false))
+        assertEquals(STAGE_NOT_FOUND, Stage.of(StageInfo("gone", "", emptyArray(), "")).problem(gles = false))
     }
 
     @Test

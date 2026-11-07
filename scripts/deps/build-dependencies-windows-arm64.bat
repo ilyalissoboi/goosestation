@@ -64,6 +64,13 @@ set SHADERC=f60bb80e255144e71776e2ad570d89b78ea2ab4f
 set SOUNDTOUCH=463ade388f3a51da078dc9ed062bf28e4ba29da7
 set SPIRV_CROSS=vulkan-sdk-1.3.290.0
 
+rem Slang presets (dep\librashader\README.md), built with Rust at the crate's minimum version, and DXC, which
+rem librashader's D3D12 runtime imports when it loads.
+set LIBRASHADER=0.12.1
+set LIBRASHADER_COMMIT=07ac790cdb9826f37cf8e1daf5011f03e3c4daa7
+set LIBRASHADER_RUST=1.88
+set DXC=1.9.2609.5
+
 call :downloadfile "freetype-%FREETYPE%.tar.gz" https://download.sourceforge.net/freetype/freetype-%FREETYPE%.tar.gz 5c3a8e78f7b24c20b25b54ee575d6daa40007a5f4eea2845861c3409b3021747 || goto error
 call :downloadfile "harfbuzz-%HARFBUZZ%.zip" https://github.com/harfbuzz/harfbuzz/archive/refs/tags/%HARFBUZZ%.zip 314acd13d88c24826b88799439da8cd3dbcefd17a08dde9bdfd5ca4c3db62047 || goto error
 call :downloadfile "lpng%LIBPNG%.zip" https://download.sourceforge.net/libpng/lpng1643.zip fc466a1e638e635d6c66363bdf3f38555b81b0141d0b06ba45b49ccca327436d || goto error
@@ -82,6 +89,7 @@ call :downloadfile "cpuinfo-%CPUINFO%.zip" "https://github.com/pytorch/cpuinfo/a
 call :downloadfile "discord-rpc-%DISCORD_RPC%.zip" "https://github.com/stenzek/discord-rpc/archive/%DISCORD_RPC%.zip" 61e185e75d37b360c314125bcdf4697192d15e2d5209db3306ed6cd736d508b3 || goto error
 call :downloadfile "lunasvg-%LUNASVG%.zip" "https://github.com/sammycage/lunasvg/archive/%LUNASVG%.zip" 1425ec2bda0228b73ffdc70b0dc666fc7d2b69c33eec75a35c4421157c0e220c || goto error
 call :downloadfile "shaderc-%SHADERC%.zip" "https://github.com/stenzek/shaderc/archive/%SHADERC%.zip" d24760f3c20a0ca39dfa85b84b6cf65eee077cd168e7aa08502e60c168ef05f6 || goto error
+call :downloadfile "Microsoft.Direct3D.DXC-%DXC%.nupkg" "https://www.nuget.org/api/v2/package/Microsoft.Direct3D.DXC/%DXC%" 73cfa082245918c2cc1ec6740250eb7377e83a757b3b3a3e16e0d71535bfbfc3 || goto error
 call :downloadfile "soundtouch-%SOUNDTOUCH%.zip" "https://github.com/stenzek/soundtouch/archive/%SOUNDTOUCH%.zip" 107a1941181a69abe28018b9ad26fc0218625758ac193bc979abc9e26b7c0c3a || goto error
 
 if not exist SPIRV-Cross\ (
@@ -296,6 +304,25 @@ cmake %ARM64TOOLCHAIN% -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%INSTALLD
 cmake --build build --parallel || goto error
 ninja -C build install || goto error
 cd .. || goto error
+
+echo Building librashader...
+where rustup >nul 2>nul || (echo rustup not found: install Rust from https://rustup.rs & goto error)
+rustup toolchain install %LIBRASHADER_RUST% --profile minimal --target aarch64-pc-windows-msvc || goto error
+rmdir /S /Q "librashader-%LIBRASHADER%"
+git clone --depth 1 --branch "librashader-v%LIBRASHADER%" https://github.com/SnowflakePowered/librashader.git "librashader-%LIBRASHADER%" || goto error
+cd "librashader-%LIBRASHADER%" || goto error
+for /f %%i in ('git rev-parse HEAD') do set "LIBRASHADER_HEAD=%%i"
+if not "%LIBRASHADER_HEAD%"=="%LIBRASHADER_COMMIT%" (echo librashader-v%LIBRASHADER% isn't commit %LIBRASHADER_COMMIT% & goto error)
+rem Windows' renderers: Vulkan, D3D11, D3D12 and OpenGL. Never runtime-d3d9 (it needs D3DX9_43.dll).
+rustup run %LIBRASHADER_RUST% cargo build -p librashader-capi --profile optimized --no-default-features --features runtime-vulkan,runtime-d3d11,runtime-d3d12,runtime-opengl --target aarch64-pc-windows-msvc || goto error
+copy /Y "target\aarch64-pc-windows-msvc\optimized\librashader_capi.dll" "%INSTALLDIR%\bin\librashader.dll" || goto error
+cd .. || goto error
+
+echo Installing DXC...
+rmdir /S /Q "dxc-%DXC%"
+%SEVENZIP% x -o"dxc-%DXC%" "Microsoft.Direct3D.DXC-%DXC%.nupkg" || goto error
+copy /Y "dxc-%DXC%\build\native\bin\arm64\dxcompiler.dll" "%INSTALLDIR%\bin\dxcompiler.dll" || goto error
+copy /Y "dxc-%DXC%\build\native\bin\arm64\dxil.dll" "%INSTALLDIR%\bin\dxil.dll" || goto error
 
 echo Cleaning up...
 cd ..

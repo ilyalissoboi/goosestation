@@ -1013,7 +1013,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                      "[Ljava/lang/String;)V");
   s_stage_info_constructor =
     env->GetMethodID(s_stage_info_class, "<init>",
-                     "(Ljava/lang/String;Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/ShaderOptionInfo;)V");
+                     "(Ljava/lang/String;Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/ShaderOptionInfo;"
+                     "Ljava/lang/String;)V");
   if (!s_shader_option_info_constructor || !s_stage_info_constructor)
   {
     ClearException(env);
@@ -2871,10 +2872,11 @@ static jobject ToStageInfo(JNIEnv* env, const AndroidHost::PostProcessingStage& 
 
   jstring shader = ToJString(env, stage.shader);
   jstring kind = ToJString(env, stage.kind);
+  jstring error = ToJString(env, stage.error);
   jobject result = nullptr;
-  if (shader && kind)
+  if (shader && kind && error)
   {
-    result = env->NewObject(s_stage_info_class, s_stage_info_constructor, shader, kind, option_array);
+    result = env->NewObject(s_stage_info_class, s_stage_info_constructor, shader, kind, option_array, error);
     if (ClearException(env))
       result = nullptr;
   }
@@ -2882,6 +2884,8 @@ static jobject ToStageInfo(JNIEnv* env, const AndroidHost::PostProcessingStage& 
     env->DeleteLocalRef(shader);
   if (kind)
     env->DeleteLocalRef(kind);
+  if (error)
+    env->DeleteLocalRef(error);
   env->DeleteLocalRef(option_array);
   return result;
 }

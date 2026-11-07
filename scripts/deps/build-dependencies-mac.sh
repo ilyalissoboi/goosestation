@@ -60,6 +60,11 @@ SHADERC=f60bb80e255144e71776e2ad570d89b78ea2ab4f
 SOUNDTOUCH=463ade388f3a51da078dc9ed062bf28e4ba29da7
 SPIRV_CROSS=vulkan-sdk-1.3.290.0
 
+# Slang presets (dep/librashader/README.md). Built with Rust at the crate's minimum version.
+LIBRASHADER=0.12.1
+LIBRASHADER_COMMIT=07ac790cdb9826f37cf8e1daf5011f03e3c4daa7
+LIBRASHADER_RUST=1.88
+
 mkdir -p deps-build
 cd deps-build
 
@@ -398,6 +403,31 @@ cd "soundtouch-$SOUNDTOUCH"
 cmake "${CMAKE_COMMON[@]}" "$CMAKE_ARCH_UNIVERSAL" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -B build
 cmake --build build --parallel
 cmake --install build
+cd ..
+
+echo "Building librashader..."
+if ! command -v rustup >/dev/null 2>&1; then
+	echo "rustup not found: install Rust from https://rustup.rs" >&2
+	exit 1
+fi
+rustup toolchain install "$LIBRASHADER_RUST" --profile minimal --target x86_64-apple-darwin,aarch64-apple-darwin
+rm -fr "librashader-$LIBRASHADER"
+git clone --depth 1 --branch "librashader-v$LIBRASHADER" https://github.com/SnowflakePowered/librashader.git "librashader-$LIBRASHADER"
+cd "librashader-$LIBRASHADER"
+if [ "$(git rev-parse HEAD)" != "$LIBRASHADER_COMMIT" ]; then
+	echo "librashader-v$LIBRASHADER isn't commit $LIBRASHADER_COMMIT" >&2
+	exit 1
+fi
+# Only the runtimes macOS has: Vulkan (MoltenVK) and Metal. Never runtime-d3d9.
+for target in x86_64-apple-darwin aarch64-apple-darwin; do
+	rustup run "$LIBRASHADER_RUST" cargo build -p librashader-capi --profile optimized --no-default-features \
+		--features runtime-vulkan,runtime-metal --target "$target"
+done
+lipo -create target/x86_64-apple-darwin/optimized/liblibrashader_capi.dylib \
+	target/aarch64-apple-darwin/optimized/liblibrashader_capi.dylib -output "$INSTALLDIR/lib/librashader.dylib"
+install_name_tool -id @rpath/librashader.dylib "$INSTALLDIR/lib/librashader.dylib"
+# install_name_tool invalidates the linker's signature; arm64 needs one.
+codesign --force --sign - "$INSTALLDIR/lib/librashader.dylib"
 cd ..
 
 echo "Cleaning up..."

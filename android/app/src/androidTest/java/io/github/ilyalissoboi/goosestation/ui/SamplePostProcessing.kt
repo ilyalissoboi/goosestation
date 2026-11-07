@@ -7,8 +7,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.app.ChainView
+import io.github.ilyalissoboi.goosestation.app.FavouriteQuestion
+import io.github.ilyalissoboi.goosestation.app.Naming
 import io.github.ilyalissoboi.goosestation.app.PostProcessingModel
 import io.github.ilyalissoboi.goosestation.app.withValue
+import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
 import io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.Shader
@@ -45,6 +48,23 @@ class SamplePostProcessing : PostProcessingModel {
     override var shown by mutableStateOf(Chain.Display)
     override var packsOpen by mutableStateOf(false)
     override var focusPacks by mutableStateOf(false)
+    override var favourites by mutableStateOf<List<FavouriteInfo>>(emptyList())
+    override var favourite by mutableStateOf<String?>(null)
+    override var naming by mutableStateOf<Naming?>(null)
+    override var favouriteQuestion by mutableStateOf<FavouriteQuestion?>(null)
+    override var favouriteError by mutableStateOf<String?>(null)
+    override var focusFavourite by mutableStateOf<Int?>(null)
+
+    /** What the next name the form submits is refused with, as the core would; null takes it. */
+    var nameRefusal: String? = null
+
+    /** Favourites of each name, each with [shaders], none missing. */
+    fun favourites(
+        vararg names: String,
+        shaders: List<String> = listOf("crt-lottes"),
+    ) {
+        favourites = names.map { FavouriteInfo(it, shaders.toTypedArray(), emptyArray()) }
+    }
 
     fun stages(
         chain: Chain,
@@ -199,6 +219,105 @@ class SamplePostProcessing : PostProcessingModel {
         calls += "closePacks"
         packsOpen = false
         focusPacks = true
+    }
+
+    override fun openFavourite(name: String) {
+        calls += "openFavourite $name"
+        favourite = name
+        focusFavourite = null
+    }
+
+    override fun closeFavourite() {
+        calls += "closeFavourite"
+        val index = favourites.indexOfFirst { it.name == favourite }
+        favourite = null
+        naming = null
+        favouriteQuestion = null
+        favouriteError = null
+        focusFavourite = if (index >= 0) index else favourites.size
+    }
+
+    override fun startSaving() {
+        calls += "startSaving"
+        naming = Naming(renaming = null, error = "")
+    }
+
+    override fun startRenaming(name: String) {
+        calls += "startRenaming $name"
+        favourite = name
+        naming = Naming(renaming = name, error = "")
+    }
+
+    override fun submitName(text: String) {
+        calls += "submitName $text"
+        val form = naming ?: return
+        nameRefusal?.let {
+            naming = form.copy(error = it)
+            nameRefusal = null
+            return
+        }
+        val from = form.renaming
+        naming = null
+        if (from != null) {
+            favourites = favourites.map { if (it.name == from) FavouriteInfo(text, it.shaders, it.missing) else it }
+            favourite = text
+        } else {
+            favourites = favourites + FavouriteInfo(text, arrayOf("crt-lottes"), emptyArray())
+            focusFavourite = favourites.size - 1
+        }
+    }
+
+    override fun apply(name: String) {
+        calls += "apply $name"
+        val stages = chains.getValue(Chain.Display).stages.size
+        if (stages > 0) favouriteQuestion = FavouriteQuestion.Apply(name, stages) else applied(name)
+    }
+
+    private fun applied(name: String) {
+        calls += "applied $name"
+        focusFavourite = favourites.indexOfFirst { it.name == name }
+        favourite = null
+    }
+
+    override fun moveFavourite(
+        name: String,
+        down: Boolean,
+    ) {
+        calls += "moveFavourite $name $down"
+        val index = favourites.indexOfFirst { it.name == name }
+        val to = if (down) index + 1 else index - 1
+        if (index < 0 || to !in favourites.indices) return
+        favourites =
+            favourites.toMutableList().apply {
+                this[index] = favourites[to]
+                this[to] = favourites[index]
+            }
+    }
+
+    override fun deleteFavourite(name: String) {
+        calls += "deleteFavourite $name"
+        favouriteQuestion = FavouriteQuestion.Delete(name)
+    }
+
+    override fun confirmFavourite() {
+        val question = favouriteQuestion ?: return
+        calls += "confirmFavourite"
+        favouriteQuestion = null
+        when (question) {
+            is FavouriteQuestion.Apply -> applied(question.name)
+            is FavouriteQuestion.Replace -> naming = null
+            is FavouriteQuestion.Delete -> {
+                val index = favourites.indexOfFirst { it.name == question.name }
+                favourites = favourites.filterNot { it.name == question.name }
+                favourite = null
+                focusFavourite = index.coerceIn(0, favourites.size)
+            }
+        }
+    }
+
+    override fun cancelFavourite() {
+        calls += "cancelFavourite"
+        favouriteQuestion = null
     }
 
     /** The packs page's model, for the pages that show it. */

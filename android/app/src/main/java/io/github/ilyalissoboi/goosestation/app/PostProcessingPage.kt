@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
 import io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
@@ -32,6 +33,31 @@ data class ChainView(
     val own: Boolean,
     val globalEnabled: Boolean,
 )
+
+/** The favourites' name form: saving the display chain ([renaming] null) or renaming [renaming]; the core's refusal. */
+data class Naming(
+    val renaming: String?,
+    val error: String,
+)
+
+/** What a favourite's panel asks before it acts. */
+sealed interface FavouriteQuestion {
+    /** Applying [name] replaces the display chain's [stages] shaders. */
+    data class Apply(
+        val name: String,
+        val stages: Int,
+    ) : FavouriteQuestion
+
+    /** Saving as [typed] replaces the favourite [name] (the same name, ignoring case). */
+    data class Replace(
+        val name: String,
+        val typed: String,
+    ) : FavouriteQuestion
+
+    data class Delete(
+        val name: String,
+    ) : FavouriteQuestion
+}
 
 /** What the Post-processing pages show and do: [PostProcessingPage]'s, which the pages' tests stand in for. */
 interface PostProcessingModel {
@@ -139,6 +165,54 @@ interface PostProcessingModel {
 
     /** Back from the shader packs page, to its row. */
     fun closePacks()
+
+    /** The favourites, saved display chains, in order, as last read. */
+    val favourites: List<FavouriteInfo>
+
+    /** The favourite whose panel shows. */
+    val favourite: String?
+
+    /** The name form, over the panel (renaming) or on its own (saving). */
+    val naming: Naming?
+
+    /** What the panel or the form asks before it acts. */
+    val favouriteQuestion: FavouriteQuestion?
+
+    /** Why the open favourite's last action failed. */
+    val favouriteError: String?
+
+    /** The favourites row the page focuses as it comes back: a favourite, or one past the last, "Save as favourite". */
+    val focusFavourite: Int?
+
+    fun openFavourite(name: String)
+
+    /** Back from the panel (or the name form), to its row. */
+    fun closeFavourite()
+
+    /** Opens the name form, to save the display chain the page shows. */
+    fun startSaving()
+
+    fun startRenaming(name: String)
+
+    /** The name form's answer: saves (asking first when the name is taken) or renames. */
+    fun submitName(text: String)
+
+    /** Applies [name] to the display chain, asking first when that replaces stages. */
+    fun apply(name: String)
+
+    fun moveFavourite(
+        name: String,
+        down: Boolean,
+    )
+
+    /** Asks, then deletes [name]. */
+    fun deleteFavourite(name: String)
+
+    /** Does what [favouriteQuestion] asked. */
+    fun confirmFavourite()
+
+    /** Drops [favouriteQuestion], back to the panel or the form. */
+    fun cancelFavourite()
 }
 
 /**
@@ -203,6 +277,24 @@ class PostProcessingPage(
     override var askingStages by mutableStateOf(0)
         private set
 
+    override var favourites by mutableStateOf<List<FavouriteInfo>>(emptyList())
+        private set
+
+    override var favourite by mutableStateOf<String?>(null)
+        private set
+
+    override var naming by mutableStateOf<Naming?>(null)
+        private set
+
+    override var favouriteQuestion by mutableStateOf<FavouriteQuestion?>(null)
+        private set
+
+    override var favouriteError by mutableStateOf<String?>(null)
+        private set
+
+    override var focusFavourite by mutableStateOf<Int?>(null)
+        private set
+
     // Changes as each read is asked for and each edit is made: a read that comes back after either is dropped.
     private var reads = 0
 
@@ -221,6 +313,8 @@ class PostProcessingPage(
         packsOpen = false
         focusPacks = false
         shown = Chain.Display
+        forgetFavourite()
+        focusFavourite = null
         read()
     }
 
@@ -234,6 +328,8 @@ class PostProcessingPage(
         asking = null
         packsOpen = false
         focusPacks = false
+        forgetFavourite()
+        focusFavourite = null
         reads++
     }
 
@@ -433,6 +529,154 @@ class PostProcessingPage(
         scope.launch(core) { api.reloadPostProcessingShaders() }
     }
 
+    override fun openFavourite(name: String) {
+        forgetFavourite()
+        focusFavourite = null
+        favourite = name
+    }
+
+    override fun closeFavourite() {
+        val name = favourite
+        val index = favourites.indexOfFirst { it.name == name }
+        forgetFavourite()
+        // From the name form saving, back to "Save as favourite".
+        focusFavourite = if (index >= 0) index else favourites.size
+    }
+
+    override fun startSaving() {
+        forgetFavourite()
+        focusFavourite = null
+        naming = Naming(renaming = null, error = "")
+    }
+
+    override fun startRenaming(name: String) {
+        favourite = name
+        favouriteError = null
+        naming = Naming(renaming = name, error = "")
+    }
+
+    override fun submitName(text: String) {
+        val form = naming ?: return
+        val from = form.renaming
+        if (from != null) {
+            var refusal: String? = null
+            edit(after = {
+                if (refusal != null) {
+                    naming = form.copy(error = refusal.orEmpty())
+                } else {
+                    naming = null
+                    favourite = favourites.firstOrNull { it.name.equals(text.trim(), ignoreCase = true) }?.name
+                }
+            }) { refusal = api.renamePostProcessingFavourite(from, text) }
+            return
+        }
+        val taken = favourites.firstOrNull { it.name.equals(text.trim(), ignoreCase = true) }
+        if (taken != null) {
+            favouriteQuestion = FavouriteQuestion.Replace(taken.name, text)
+        } else {
+            save(text, replace = false)
+        }
+    }
+
+    private fun save(
+        text: String,
+        replace: Boolean,
+    ) {
+        val form = naming ?: return
+        val key = key
+        var refusal: String? = null
+        edit(after = {
+            if (refusal != null) {
+                naming = form.copy(error = refusal.orEmpty())
+            } else {
+                naming = null
+                focusFavourite =
+                    favourites.indexOfFirst { it.name.equals(text.trim(), ignoreCase = true) }.takeIf { it >= 0 }
+            }
+        }) { refusal = api.savePostProcessingFavourite(key, text, replace) }
+    }
+
+    override fun apply(name: String) {
+        // The chain the page shows is the one the game runs: replacing its stages asks first.
+        val stages = chains[Chain.Display]?.stages?.size ?: 0
+        if (stages > 0) {
+            favouriteQuestion = FavouriteQuestion.Apply(name, stages)
+        } else {
+            applyNow(name)
+        }
+    }
+
+    private fun applyNow(name: String) {
+        val key = key
+        var refusal: String? = null
+        edit(after = {
+            if (refusal != null) {
+                favouriteError = refusal
+            } else {
+                val index = favourites.indexOfFirst { it.name == name }
+                forgetFavourite()
+                focusFavourite = index.takeIf { it >= 0 }
+            }
+        }) { refusal = api.applyPostProcessingFavourite(key, name) }
+    }
+
+    override fun moveFavourite(
+        name: String,
+        down: Boolean,
+    ) {
+        val index = favourites.indexOfFirst { it.name == name }
+        val to = if (down) index + 1 else index - 1
+        if (index < 0 || to !in favourites.indices) return
+        // Swapped at once, so the panel stays on it while the core saves the order.
+        favourites =
+            favourites.toMutableList().apply {
+                this[index] = favourites[to]
+                this[to] = favourites[index]
+            }
+        edit { api.movePostProcessingFavourite(name, down) }
+    }
+
+    override fun deleteFavourite(name: String) {
+        favouriteQuestion = FavouriteQuestion.Delete(name)
+    }
+
+    override fun confirmFavourite() {
+        when (val question = favouriteQuestion ?: return) {
+            is FavouriteQuestion.Apply -> {
+                favouriteQuestion = null
+                applyNow(question.name)
+            }
+            is FavouriteQuestion.Replace -> {
+                favouriteQuestion = null
+                save(question.typed, replace = true)
+            }
+            is FavouriteQuestion.Delete -> {
+                favouriteQuestion = null
+                val index = favourites.indexOfFirst { it.name == question.name }
+                var refusal: String? = null
+                edit(after = {
+                    if (refusal != null) {
+                        favouriteError = refusal
+                    } else {
+                        forgetFavourite()
+                        focusFavourite = index.coerceIn(0, favourites.size)
+                    }
+                }) { refusal = api.deletePostProcessingFavourite(question.name) }
+            }
+        }
+    }
+
+    override fun cancelFavourite() {
+        favouriteQuestion = null
+    }
+
+    private fun forgetFavourite() {
+        favourite = null
+        naming = null
+        favouriteQuestion = null
+        favouriteError = null
+    }
+
     private fun showStages(
         chain: Chain,
         stages: List<Stage>,
@@ -452,14 +696,15 @@ class PostProcessingPage(
         val key = key
         val apply = running
         scope.launch {
-            val loaded =
+            val (loaded, saved) =
                 withContext(core) {
                     change()
                     if (apply && key != null) api.applyGameSettings(key)
-                    readChains(key)
+                    readChains(key) to api.getPostProcessingFavourites()
                 }
             if (read != reads) return@launch
             chains = loaded
+            favourites = saved
             after(loaded)
         }
     }
@@ -475,12 +720,13 @@ class PostProcessingPage(
                         api.getPostProcessingShaders().mapNotNull { (name, kind) ->
                             ShaderKind.of(kind)?.let { Shader(name, it) }
                         }
-                    Triple(gles, offered(shaders, gles), readChains(key))
+                    Triple(gles, offered(shaders, gles), readChains(key) to api.getPostProcessingFavourites())
                 }
             if (read != reads) return@launch
             gles = loaded.first
             shaders = loaded.second
-            chains = loaded.third
+            chains = loaded.third.first
+            favourites = loaded.third.second
         }
     }
 

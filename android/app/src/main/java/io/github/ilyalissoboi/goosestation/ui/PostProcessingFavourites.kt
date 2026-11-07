@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,10 +18,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.FavouriteQuestion
@@ -35,6 +39,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import kotlinx.coroutines.launch
 
 const val FAVOURITES_SECTION = "Favourites"
 const val SAVE_FAVOURITE = "Save as favourite"
@@ -95,7 +100,10 @@ fun favouriteQuestionText(question: FavouriteQuestion): String =
  * the panel or the form, back to its row.
  */
 @Composable
-fun FavouritePanel(model: PostProcessingModel) {
+fun FavouritePanel(
+    model: PostProcessingModel,
+    modifier: Modifier = Modifier,
+) {
     val question = model.favouriteQuestion
     val naming = model.naming
     val name = model.favourite
@@ -103,7 +111,10 @@ fun FavouritePanel(model: PostProcessingModel) {
     // The name as typed, here rather than in the form, which a question replaces for a while: it comes back as it was.
     val text = remember(naming != null, naming?.renaming) { TextFieldState(naming?.renaming.orEmpty()) }
     if (question == null && naming == null && favourite == null) return
-    OverlayPanel(onBack = { if (question != null) model.cancelFavourite() else model.closeFavourite() }) {
+    OverlayPanel(
+        onBack = { if (question != null) model.cancelFavourite() else model.closeFavourite() },
+        modifier = modifier,
+    ) {
         when {
             question != null -> QuestionContent(model, question)
             naming != null -> NameForm(model, naming, text)
@@ -198,7 +209,11 @@ private fun FavouriteActions(
             }
         runCatching { buttons.getValue(target).requestFocus() }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // Apply is the first thing that takes focus: as it does, the name over it shows too, so going back up a panel
+    // that scrolls (a short screen) comes back to its top.
+    val header = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    Column(Modifier.bringIntoViewRequester(header), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(favourite.name, style = MaterialTheme.typography.headlineSmall, color = colors.ink)
         Text(favouriteSummary(favourite), style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
     }
@@ -210,7 +225,10 @@ private fun FavouriteActions(
         ActionButton(
             "Apply",
             onClick = { model.apply(favourite.name) },
-            modifier = wide.focusRequester(buttons.getValue(FavouriteButton.Apply)),
+            modifier =
+                wide
+                    .focusRequester(buttons.getValue(FavouriteButton.Apply))
+                    .onFocusChanged { if (it.isFocused) scope.launch { header.bringIntoView() } },
             kind = ButtonKind.Primary,
         )
         ActionButton("Rename…", onClick = { model.startRenaming(favourite.name) }, modifier = wide)

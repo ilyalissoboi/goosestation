@@ -3,23 +3,30 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.FavouriteQuestion
 import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
@@ -493,5 +500,30 @@ class PostProcessingScreenTest {
         rule.waitForIdle()
 
         rule.onNode(hasSetTextAction()).assert(hasText("crt"))
+    }
+
+    // On a short screen (the AYN Thor) the panel scrolls: down to Delete and back up to Apply, the favourite's name
+    // shows again with the panel's padding above it.
+    @Test
+    fun backUpToApplyShowsTheNameWithItsPadding() {
+        model.favourites("CRT royale + border", "Sharp LCD")
+        model.openFavourite("CRT royale + border")
+        rule.setContent {
+            GooseStationTheme {
+                Box(Modifier.size(420.dp, 300.dp)) { FavouritePanel(model, Modifier.testTag("panel")) }
+            }
+        }
+        rule.waitForIdle()
+        focused("Apply")
+
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionDown, Key.DirectionDown))
+        focused("Delete")
+        press(listOf(Key.DirectionUp, Key.DirectionUp, Key.DirectionUp, Key.DirectionUp))
+        focused("Apply")
+
+        val panel = rule.onNodeWithTag("panel").getUnclippedBoundsInRoot()
+        val name = rule.onNodeWithText("CRT royale + border").getUnclippedBoundsInRoot()
+        val gap = name.top - panel.top
+        assertTrue("$gap above the name", gap >= 23.dp)
     }
 }

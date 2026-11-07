@@ -439,7 +439,9 @@ class GameCallsTest {
             NativeLibrary.setGameBoolSetting(TEST_KEY, "PostProcessing", "Enabled", true)
         }) {
             // The app writes for as long as the hotkeys run, so its edits overlap every hotkey's read and save.
-            val pressing = java.util.concurrent.atomic.AtomicBoolean(true)
+            val pressing =
+                java.util.concurrent.atomic
+                    .AtomicBoolean(true)
             val written = AtomicInteger()
             val writer =
                 Thread {

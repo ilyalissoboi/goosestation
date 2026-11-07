@@ -737,6 +737,44 @@ object NativeLibrary {
      */
     external fun postProcessingUsesOpenGLES(key: String?): Boolean
 
+    // The post-processing favourites: saved display chains, one file each in the data folder's postprocessing/, in
+    // settings.ini's order (PostProcessing::Favourites). Each edit gives null, or the core's message.
+
+    /** Every favourite, in order; null if they couldn't be handed over. */
+    external fun getPostProcessingFavourites(): Array<FavouriteInfo>?
+
+    /**
+     * Saves the chain [key]'s game runs (its own display chain, else settings.ini's; settings.ini's for null) as [name].
+     * A taken name (ignoring case) is refused unless [replace].
+     */
+    external fun savePostProcessingFavourite(
+        key: String?,
+        name: String,
+        replace: Boolean,
+    ): String?
+
+    /** Replaces the display chain of settings.ini (null) or of [key]'s file, which then has one of its own. */
+    external fun applyPostProcessingFavourite(
+        key: String?,
+        name: String,
+    ): String?
+
+    external fun renamePostProcessingFavourite(
+        from: String,
+        to: String,
+    ): String?
+
+    /** Moves [name] one place down ([down]) or up the order; nothing at either end. */
+    external fun movePostProcessingFavourite(
+        name: String,
+        down: Boolean,
+    )
+
+    external fun deletePostProcessingFavourite(name: String): String?
+
+    /** Tests: presses and releases the core's hotkey [name] in the running game, waiting; false with no such hotkey. */
+    external fun pressHotkeyForTest(name: String): Boolean
+
     /** Whether fast memory access can run here: the device's memory pages are no larger than the build's. */
     external fun isFastmemAvailable(): Boolean
 

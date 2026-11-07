@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.core.BiosImage
+import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.PadBinding
@@ -171,6 +172,34 @@ interface CoreApi {
 
     /** Reloads the shaders in the running game: false without one, or with no shaders in either chain. */
     fun reloadPostProcessingShaders(): Boolean
+
+    // The post-processing favourites ([NativeLibrary.getPostProcessingFavourites] and the rest): each edit gives null,
+    // or why it couldn't.
+
+    fun getPostProcessingFavourites(): List<FavouriteInfo>
+
+    fun savePostProcessingFavourite(
+        key: String?,
+        name: String,
+        replace: Boolean,
+    ): String?
+
+    fun applyPostProcessingFavourite(
+        key: String?,
+        name: String,
+    ): String?
+
+    fun renamePostProcessingFavourite(
+        from: String,
+        to: String,
+    ): String?
+
+    fun movePostProcessingFavourite(
+        name: String,
+        down: Boolean,
+    )
+
+    fun deletePostProcessingFavourite(name: String): String?
 
     fun getBiosImages(): List<BiosImage>
 
@@ -360,6 +389,32 @@ object NativeCoreApi : CoreApi {
     override fun postProcessingUsesOpenGLES(key: String?) = NativeLibrary.postProcessingUsesOpenGLES(key)
 
     override fun reloadPostProcessingShaders() = NativeLibrary.reloadPostProcessingShaders()
+
+    override fun getPostProcessingFavourites(): List<FavouriteInfo> =
+        NativeLibrary.getPostProcessingFavourites()?.toList().orEmpty()
+
+    override fun savePostProcessingFavourite(
+        key: String?,
+        name: String,
+        replace: Boolean,
+    ) = NativeLibrary.savePostProcessingFavourite(key, name, replace)
+
+    override fun applyPostProcessingFavourite(
+        key: String?,
+        name: String,
+    ) = NativeLibrary.applyPostProcessingFavourite(key, name)
+
+    override fun renamePostProcessingFavourite(
+        from: String,
+        to: String,
+    ) = NativeLibrary.renamePostProcessingFavourite(from, to)
+
+    override fun movePostProcessingFavourite(
+        name: String,
+        down: Boolean,
+    ) = NativeLibrary.movePostProcessingFavourite(name, down)
+
+    override fun deletePostProcessingFavourite(name: String) = NativeLibrary.deletePostProcessingFavourite(name)
 
     override fun updateGameControllers(key: String) = NativeLibrary.updateGameControllers(key)
 

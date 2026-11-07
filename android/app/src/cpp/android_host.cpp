@@ -1063,6 +1063,130 @@ void AndroidHost::ClearPostProcessingChain(const std::string& key, const char* s
   EditGameSettings(key, [section](INISettingsInterface& si) { PostProcessing::Config::DeleteChain(si, section); });
 }
 
+// The favourites' folder, which EmuFolders::Update() changes under the settings lock.
+static std::string FavouritesFolder()
+{
+  const auto lock = Host::GetSettingsLock();
+  return EmuFolders::PostProcessing;
+}
+
+// Runs edit on settings.ini, which holds the favourites' order, under the settings lock, then saves it.
+template<typename Edit>
+static auto EditFavouritesOrder(const Edit& edit)
+{
+  const auto lock = Host::GetSettingsLock();
+  const auto result = edit(EmuFolders::PostProcessing, *AndroidHost::s_base_settings_interface);
+  Error error;
+  if (!AndroidHost::s_base_settings_interface->Save(&error))
+    ERROR_LOG("Failed to save settings: {}", error.GetDescription());
+  return result;
+}
+
+static std::string FailureText(bool done, const Error& error)
+{
+  return done ? std::string() : error.GetDescription();
+}
+
+std::vector<PostProcessing::Favourites::Info> AndroidHost::GetPostProcessingFavourites()
+{
+  if (!s_initialized)
+    return {};
+
+  const auto lock = Host::GetSettingsLock();
+  return PostProcessing::Favourites::List(EmuFolders::PostProcessing, *s_base_settings_interface);
+}
+
+std::string AndroidHost::SavePostProcessingFavourite(const std::optional<std::string>& key, const std::string& name,
+                                                     bool replace)
+{
+  if (!s_initialized)
+    return "GooseStation hasn't started.";
+
+  // The chain the game runs: its file's when it has one of its own, else settings.ini's (taken below, under the lock).
+  static constexpr const char* DISPLAY = PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+  MemorySettingsInterface chain;
+  const bool own = key.has_value() && ReadGameSetting(*key, false, [&chain](const INISettingsInterface& si) {
+                     if (!PostProcessing::Config::HasOwnChain(si, DISPLAY))
+                       return false;
+                     PostProcessing::Config::CopyChain(si, chain, DISPLAY);
+                     return true;
+                   });
+
+  Error error;
+  const bool saved = EditFavouritesOrder([&](const std::string& folder, SettingsInterface& base) {
+    return PostProcessing::Favourites::Save(folder, base, name, own ? chain : base, replace, &error);
+  });
+  return FailureText(saved, error);
+}
+
+std::string AndroidHost::ApplyPostProcessingFavourite(const std::optional<std::string>& key, const std::string& name)
+{
+  if (!s_initialized)
+    return "GooseStation hasn't started.";
+
+  const std::string folder = FavouritesFolder();
+  Error error;
+  bool applied = false;
+  EditChainLayer(key, [&](SettingsInterface& si) {
+    applied = PostProcessing::Favourites::Apply(folder, name, si, &error);
+  });
+  return FailureText(applied, error);
+}
+
+std::string AndroidHost::RenamePostProcessingFavourite(const std::string& from, const std::string& to)
+{
+  if (!s_initialized)
+    return "GooseStation hasn't started.";
+
+  Error error;
+  const bool renamed = EditFavouritesOrder([&](const std::string& folder, SettingsInterface& base) {
+    return PostProcessing::Favourites::Rename(folder, base, from, to, &error);
+  });
+  return FailureText(renamed, error);
+}
+
+void AndroidHost::MovePostProcessingFavourite(const std::string& name, bool down)
+{
+  if (!s_initialized)
+    return;
+
+  EditFavouritesOrder([&](const std::string& folder, SettingsInterface& base) {
+    PostProcessing::Favourites::Move(folder, base, name, down);
+    return true;
+  });
+}
+
+std::string AndroidHost::DeletePostProcessingFavourite(const std::string& name)
+{
+  if (!s_initialized)
+    return "GooseStation hasn't started.";
+
+  Error error;
+  const bool deleted = EditFavouritesOrder([&](const std::string& folder, SettingsInterface& base) {
+    return PostProcessing::Favourites::Delete(folder, base, name, &error);
+  });
+  return FailureText(deleted, error);
+}
+
+bool AndroidHost::PressHotkeyForTest(const std::string& name)
+{
+  bool found = false;
+  EmuThread::RunOnThread(
+    [&name, &found]() {
+      for (const HotkeyInfo* hotkey : InputManager::GetHotkeyList())
+      {
+        if (name != hotkey->name)
+          continue;
+        hotkey->handler(1);
+        hotkey->handler(0);
+        found = true;
+        break;
+      }
+    },
+    true);
+  return found;
+}
+
 bool AndroidHost::PostProcessingUsesOpenGLES(const std::optional<std::string>& key)
 {
   if (!s_initialized)

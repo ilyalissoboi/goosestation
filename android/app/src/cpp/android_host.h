@@ -5,6 +5,7 @@
 
 #include "util/android_disc_groups.h"
 #include "util/postprocessing.h"
+#include "util/postprocessing_favourites.h"
 
 #include "common/types.h"
 
@@ -138,6 +139,22 @@ void ClearPostProcessingChain(const std::string& key, const char* section);
 /// file's renderer, when it sets one, else settings.ini's.
 bool PostProcessingUsesOpenGLES(const std::optional<std::string>& key);
 bool IsPostProcessingActiveForTest(const std::string& section);
+
+// The post-processing favourites: saved display chains in the data folder's postprocessing/, in settings.ini's order
+// (PostProcessing::Favourites). Each failure is the core's message; empty on success. On the caller's thread.
+
+std::vector<PostProcessing::Favourites::Info> GetPostProcessingFavourites();
+/// Saves the chain the key's game runs (its own display chain, else settings.ini's; settings.ini's for nullopt).
+std::string SavePostProcessingFavourite(const std::optional<std::string>& key, const std::string& name, bool replace);
+/// Replaces the display chain of settings.ini (nullopt) or of the key's game file, which then has one of its own.
+std::string ApplyPostProcessingFavourite(const std::optional<std::string>& key, const std::string& name);
+std::string RenamePostProcessingFavourite(const std::string& from, const std::string& to);
+void MovePostProcessingFavourite(const std::string& name, bool down);
+std::string DeletePostProcessingFavourite(const std::string& name);
+
+/// Tests: presses and releases the core's hotkey name in the running game, on the CPU thread, waiting. False when
+/// there's no such hotkey.
+bool PressHotkeyForTest(const std::string& name);
 
 /// Whether fastmem can run here: the system's pages are no larger than the build's (else LoadSettings turns it off).
 bool IsFastmemAvailable();

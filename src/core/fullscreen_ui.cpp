@@ -5102,11 +5102,14 @@ void FullscreenUI::DrawShaderBrowser()
       const SmallString summary =
         folder.empty() ? SmallString(PostProcessing::GetShaderKindName(shader.kind)) :
                          SmallString::from_format("{} · {}", PostProcessing::GetShaderKindName(shader.kind), folder);
+      // A button's ID is its title: shaders of one name in two folders (a search lists both) need their own.
+      ImGui::PushID(static_cast<int>(index));
       if (MenuButton(SmallString::from_format(ICON_FA_MAGIC " {}", PostProcessing::Browser::LeafName(shader)).c_str(),
                      summary.c_str()))
       {
         chosen = index;
       }
+      ImGui::PopID();
     };
 
     if (StringUtil::StripWhitespace(state.search).empty())
@@ -5119,11 +5122,13 @@ void FullscreenUI::DrawShaderBrowser()
       const PostProcessing::Browser::Listing listing = PostProcessing::Browser::List(state.shaders, state.folder);
       for (const std::string& child : listing.folders)
       {
+        ImGui::PushID(child.c_str());
         if (MenuButton(SmallString::from_format(ICON_FA_FOLDER " {}", child).c_str(), nullptr, true,
                        ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
         {
           open_folder = state.folder.empty() ? child : fmt::format("{}/{}", state.folder, child);
         }
+        ImGui::PopID();
       }
       for (const size_t index : listing.shaders)
         shader_button(index);

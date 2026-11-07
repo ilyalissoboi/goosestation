@@ -719,7 +719,11 @@ TEST(ShaderPacks, AnAbortedExtractionIsIncomplete)
   const std::optional<InstalledPack> marker = ShaderPacks::ReadMarker(root.GetPath(), "shaders_slang");
   ASSERT_TRUE(marker.has_value());
   EXPECT_EQ(marker->version, "");
-  EXPECT_EQ(marker->files, (std::vector<std::string>{"shaders_slang/crt/a.slangp"}));
+  // Every planned file, though only the first landed: Remove deletes what's there.
+  EXPECT_EQ(marker->files,
+            (std::vector<std::string>{"shaders_slang/crt/a.slangp", "shaders_slang/crt/shaders/a.slang"}));
+  EXPECT_TRUE(root.Exists("shaders_slang/crt/a.slangp"));
+  EXPECT_FALSE(root.Exists("shaders_slang/crt/shaders/a.slang"));
   EXPECT_EQ(ShaderPacks::GetPackStatus(marker, std::nullopt).state, PackState::Incomplete);
   EXPECT_FALSE(AnyPartFile(root));
 
@@ -833,4 +837,25 @@ TEST(ShaderPacks, AnIncompleteDependencyIsInstalledAgain)
   Install(root, MakeInstalled("shaders_slang", "", {"shaders_slang/half.slang"}));
   EXPECT_EQ(ShaderPacks::ExpandDependencies(root.GetPath(), std::vector<std::string>{"retro-crisis-gdv-ntsc"}),
             (std::vector<std::string>{"shaders_slang", "retro-crisis-gdv-ntsc"}));
+}
+
+// A write that fails part-way (a full disk, say) may leave its file behind: the marker keeps every planned file, so
+// Remove still finds it.
+TEST(ShaderPacks, AFailedWriteKeepsThePlannedFilesInTheMarker)
+{
+  const TempDirectory root, work;
+  FakeTransport transport;
+  ServeLibretroAndCrisis(transport, work);
+  // A folder where the archive's second file goes: its write fails.
+  ASSERT_TRUE(FileSystem::EnsureDirectoryExists(root.Get("shaders_slang/crt/shaders/a.slang").c_str(), true));
+
+  const auto results = InstallIds(root, transport, {"shaders_slang"});
+  ASSERT_EQ(results.size(), 1u);
+  EXPECT_FALSE(results[0].success);
+  EXPECT_FALSE(results[0].cancelled);
+  const std::optional<InstalledPack> marker = ShaderPacks::ReadMarker(root.GetPath(), "shaders_slang");
+  ASSERT_TRUE(marker.has_value());
+  EXPECT_EQ(marker->version, "");
+  EXPECT_EQ(marker->files,
+            (std::vector<std::string>{"shaders_slang/crt/a.slangp", "shaders_slang/crt/shaders/a.slang"}));
 }

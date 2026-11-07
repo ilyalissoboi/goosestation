@@ -572,8 +572,13 @@ void InstallOne(std::string_view root, const PackInfo& pack, Transport& transpor
   const bool extracted = ShaderPackArchive::Extract(part, Path::Combine(root, pack.install_dir), pack.strip, pack.skip,
                                                     progress, &written, &error);
 
-  marker.version = extracted ? version->version : std::string();
-  marker.files = UnderInstallDir(pack, written);
+  // Once finished, exactly what was written. An extraction that stopped keeps every file it planned (and the previous
+  // version's): a write that failed part-way may have left its file, and Remove deletes only what the marker lists.
+  if (extracted)
+  {
+    marker.version = version->version;
+    marker.files = UnderInstallDir(pack, written);
+  }
   Error marker_error;
   if (!WriteMarker(root, marker, &marker_error))
     WARNING_LOG("Couldn't record shader pack {}: {}", pack.id, marker_error.GetDescription());

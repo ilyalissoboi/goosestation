@@ -818,6 +818,16 @@ object NativeLibrary {
     external fun cancelBindingCapture()
 
     /**
+     * A streamed download's progress ([HttpBridge.download]): [done] bytes of [total] (-1 when unknown), for the
+     * core's progress callback at [progress]. False once the core has cancelled it.
+     */
+    external fun downloadProgress(
+        progress: Long,
+        done: Long,
+        total: Long,
+    ): Boolean
+
+    /**
      * [HttpBridge]'s answer to [downloader]'s [request]: its [status] (or [HttpBridge.STATUS_TIMEOUT],
      * [HttpBridge.STATUS_ERROR]), [contentType] and [body]. Any thread.
      */

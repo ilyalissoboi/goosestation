@@ -4,7 +4,9 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import android.util.Log
+import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
@@ -26,6 +28,15 @@ class HttpResult(
 object HttpBridge {
     const val STATUS_TIMEOUT = -2
     const val STATUS_ERROR = -1
+
+    /** A stream stopped by its progress callback (the core's HTTP_STATUS_CANCELLED). */
+    const val STATUS_CANCELLED = -3
+
+    /** A stream past its cap (the core's ShaderPacks::STATUS_TOO_LARGE). */
+    const val STATUS_TOO_LARGE = -100
+
+    // How often a stream reports its progress.
+    private const val PROGRESS_STEP = 64 * 1024
 
     private const val TAG = "GooseStationHttp"
 
@@ -123,6 +134,102 @@ object HttpBridge {
         log("$method $where -> ${result.status}")
         return result
     }
+
+    /**
+     * Streams [url] to the file at [path] on the calling thread (a shader pack's install), reporting each 64 KiB to
+     * the core's progress callback at [progress], which can stop it. The status: 200, the HTTP error, or one of
+     * [STATUS_TIMEOUT], [STATUS_ERROR], [STATUS_CANCELLED], [STATUS_TOO_LARGE]; the file is gone unless it's 200.
+     */
+    @JvmStatic
+    fun download(
+        url: String,
+        path: String,
+        userAgent: String,
+        timeoutMs: Int,
+        maxBytes: Long,
+        progress: Long,
+    ): Int =
+        stream(url, File(path), userAgent, timeoutMs, maxBytes, { done, total ->
+            NativeLibrary.downloadProgress(progress, done, total)
+        })
+
+    /**
+     * A GET of [url] written to [file] as it arrives, never past [maxBytes]. [onProgress] hears the bytes so far and
+     * the length (-1 when the server doesn't say), at the start, each 64 KiB and at the end; false stops it. Each
+     * connect and read waits at most [timeoutMs]. Redirects are followed. The file is deleted unless the status is 200.
+     */
+    internal fun stream(
+        url: String,
+        file: File,
+        userAgent: String,
+        timeoutMs: Int,
+        maxBytes: Long,
+        onProgress: (done: Long, total: Long) -> Boolean,
+        log: (String) -> Unit = ::logRequest,
+    ): Int {
+        val parsed = runCatching { URL(url) }.getOrNull()
+        val where = parsed?.let { "${it.host}${it.path}" } ?: "(bad URL)"
+        val status =
+            when {
+                parsed == null -> STATUS_ERROR
+                !onProgress(0, -1) -> STATUS_CANCELLED
+                else ->
+                    try {
+                        val connection = parsed.openConnection() as HttpURLConnection
+                        try {
+                            connection.connectTimeout = timeoutMs
+                            connection.readTimeout = timeoutMs
+                            connection.instanceFollowRedirects = true
+                            connection.setRequestProperty("User-Agent", userAgent)
+                            val code = connection.responseCode
+                            val total = connection.contentLengthLong
+                            when {
+                                code != 200 -> code
+                                total > maxBytes -> STATUS_TOO_LARGE
+                                else -> copy(connection.inputStream, file, total, maxBytes, onProgress)
+                            }
+                        } finally {
+                            connection.disconnect()
+                        }
+                    } catch (_: SocketTimeoutException) {
+                        STATUS_TIMEOUT
+                    } catch (_: IOException) {
+                        STATUS_ERROR
+                    } catch (_: RuntimeException) {
+                        STATUS_ERROR
+                    }
+            }
+        if (status != 200) file.delete()
+        log("GET $where -> $status")
+        return status
+    }
+
+    private fun copy(
+        input: InputStream,
+        file: File,
+        total: Long,
+        maxBytes: Long,
+        onProgress: (Long, Long) -> Boolean,
+    ): Int =
+        input.use { stream ->
+            file.outputStream().use { out ->
+                val buffer = ByteArray(PROGRESS_STEP)
+                var done = 0L
+                var reported = 0L
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read < 0) break
+                    done += read
+                    if (done > maxBytes) return STATUS_TOO_LARGE
+                    out.write(buffer, 0, read)
+                    if (done - reported >= PROGRESS_STEP) {
+                        reported = done
+                        if (!onProgress(done, total)) return STATUS_CANCELLED
+                    }
+                }
+                if (!onProgress(done, total)) STATUS_CANCELLED else 200
+            }
+        }
 
     private fun logRequest(line: String) {
         Log.i(TAG, line)

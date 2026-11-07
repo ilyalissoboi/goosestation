@@ -147,8 +147,11 @@ public:
                        Error* error) = 0;
 };
 
-/// The platform's transport.
+/// The platform's transport: on desktop CreateHTTPTransport()'s; Android's streams its downloads to the file.
 std::unique_ptr<Transport> CreateTransport();
+
+/// A transport through HTTPDownloader, holding each body in memory; null when no downloader can be made.
+std::unique_ptr<Transport> CreateHTTPTransport();
 
 /// Checks the pack's latest version.
 std::optional<ResolvedVersion> ResolveLatest(const PackInfo& pack, Transport& transport, ProgressCallback* progress,

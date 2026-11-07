@@ -640,13 +640,20 @@ private:
 
 } // namespace
 
-std::unique_ptr<Transport> CreateTransport()
+std::unique_ptr<Transport> CreateHTTPTransport()
 {
   std::unique_ptr<HTTPDownloader> http = HTTPDownloader::Create(Host::GetHTTPUserAgent());
   if (!http)
     return {};
   return std::make_unique<HTTPTransport>(std::move(http));
 }
+
+#ifndef __ANDROID__
+std::unique_ptr<Transport> CreateTransport()
+{
+  return CreateHTTPTransport();
+}
+#endif
 
 std::optional<ResolvedVersion> ResolveLatest(const PackInfo& pack, Transport& transport, ProgressCallback* progress,
                                              Error* error)

@@ -19,6 +19,7 @@ add_library(goosestation SHARED
   game_codes.cpp
   game_codes.h
   http_downloader_android.cpp
+  shader_packs_android.cpp
   http_downloader_android.h
   jni_bridge.cpp
   jni_util.cpp

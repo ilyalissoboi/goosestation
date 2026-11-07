@@ -26,6 +26,7 @@
 #include "common/error.h"
 #include "common/file_system.h"
 #include "common/log.h"
+#include "common/progress_callback.h"
 #include "common/string_util.h"
 
 #include <android/native_window_jni.h>
@@ -1553,6 +1554,17 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getRewindMemoryUsage)(JNIEnv* env, jobject, 
 NATIVE_LIBRARY_FUNCTION(void, applySettings)(JNIEnv*, jobject)
 {
   AndroidHost::ApplySettings();
+}
+
+// A streamed download's progress, for the ProgressCallback at progress: false once it's cancelled.
+NATIVE_LIBRARY_FUNCTION(jboolean, downloadProgress)(JNIEnv*, jobject, jlong progress, jlong done, jlong total)
+{
+  ProgressCallback* callback = reinterpret_cast<ProgressCallback*>(progress);
+  if (!callback)
+    return JNI_TRUE;
+  callback->SetProgressRange((total > 0) ? static_cast<u32>(std::min<jlong>(total, UINT32_MAX)) : 0);
+  callback->SetProgressValue(static_cast<u32>(std::clamp<jlong>(done, 0, UINT32_MAX)));
+  return callback->IsCancelled() ? JNI_FALSE : JNI_TRUE;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, httpDone)(JNIEnv* env, jobject, jlong downloader, jlong request, jint status,

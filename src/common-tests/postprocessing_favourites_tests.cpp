@@ -453,14 +453,17 @@ TEST_F(PostProcessingFavourites, StepChainWritesTheBaseWhenTheGameUsesTheGlobalC
 
   std::string last;
   Error error;
-  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, &game_layer, game_file, &last, true, &error), "B");
+  bool wrote_game = true;
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, &game_layer, game_file, &last, true, &wrote_game, &error), "B");
+  EXPECT_FALSE(wrote_game);
 
   EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "B");
   EXPECT_EQ(last, "B");
   EXPECT_EQ(m_dir.Read("gamesettings/SLUS-00001.ini"), "[Main]\nFoo = 1\n");
 
   // No game at all.
-  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, nullptr, std::string(), &last, true, &error), "C");
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, nullptr, std::string(), &last, true, &wrote_game, &error), "C");
+  EXPECT_FALSE(wrote_game);
   EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "C");
 }
 
@@ -477,8 +480,10 @@ TEST_F(PostProcessingFavourites, StepChainWritesTheGameFileWhenItHasItsOwnChain)
 
   std::string last;
   Error error;
+  bool wrote_game = false;
   // The game runs B's chain (settings.ini's is A's): next is C, into the game's file.
-  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, &game_layer, game_file, &last, true, &error), "C");
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, &game_layer, game_file, &last, true, &wrote_game, &error), "C");
+  EXPECT_TRUE(wrote_game);
   EXPECT_EQ(last, "C");
   INISettingsInterface written(game_file);
   ASSERT_TRUE(written.Load());
@@ -495,7 +500,10 @@ TEST_F(PostProcessingFavourites, StepChainWithNoFavourites)
   WriteChain(m_order, {"A"});
   std::string last;
   Error error;
-  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, nullptr, std::string(), &last, true, &error), std::nullopt);
+  bool wrote_game = true;
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, nullptr, std::string(), &last, true, &wrote_game, &error),
+            std::nullopt);
+  EXPECT_FALSE(wrote_game);
   EXPECT_TRUE(error.GetDescription().empty());
   EXPECT_TRUE(last.empty());
   EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "A");
@@ -551,4 +559,44 @@ TEST_F(PostProcessingFavourites, AFailedCaseOnlyRenameKeepsTheFavourite)
   EXPECT_EQ(Listed(), std::vector<std::string>{"crt"});
   EXPECT_TRUE(m_dir.Exists("postprocessing/crt.ini"));
   EXPECT_FALSE(m_dir.Exists("postprocessing/.CRT.ini.renaming"));
+}
+
+// A favourite copied from Windows, its extension in capitals: listed, applied and deleted as any other.
+TEST_F(PostProcessingFavourites, AnUppercaseExtensionIsAFavourite)
+{
+  m_dir.Write("postprocessing/Upper.INI",
+              "[PostProcessing]\nEnabled = true\nStageCount = 1\n\n[PostProcessing/Stage1]\nShaderName = upper\n");
+
+  EXPECT_EQ(Listed(), std::vector<std::string>{"Upper"});
+  MemorySettingsInterface to;
+  Error error;
+  ASSERT_TRUE(Favourites::Apply(Folder(), "Upper", to, &error)) << error.GetDescription();
+  EXPECT_EQ(to.GetStringValue("PostProcessing/Stage1", "ShaderName"), "upper");
+  ASSERT_TRUE(Favourites::Delete(Folder(), m_order, "Upper", &error)) << error.GetDescription();
+  EXPECT_TRUE(Listed().empty());
+}
+
+// Hidden files (macOS's ._ metadata beside a copied file, say) are never favourites, though Windows lists them.
+TEST_F(PostProcessingFavourites, HiddenFilesAreNotFavourites)
+{
+  SaveAs("CRT");
+  m_dir.Write("postprocessing/._CRT.ini", "binary");
+  m_dir.Write("postprocessing/.hidden.ini", "[PostProcessing]\nEnabled = true\n");
+
+  EXPECT_EQ(Listed(), std::vector<std::string>{"CRT"});
+}
+
+TEST_F(PostProcessingFavourites, MoveTrimsTheName)
+{
+  SaveAs("A");
+  SaveAs("B");
+
+  Favourites::Move(Folder(), m_order, "  B ", false);
+
+  EXPECT_EQ(Listed(), (std::vector<std::string>{"B", "A"}));
+}
+
+TEST(PostProcessingFavouritesSummary, AFavouriteWithNoShadersSaysSo)
+{
+  EXPECT_EQ(Favourites::Summary(Favourites::Info{"Empty", {}, {}}), "No shaders");
 }

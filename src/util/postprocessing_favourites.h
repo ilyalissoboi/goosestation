@@ -55,6 +55,27 @@ void Move(const std::string& folder, SettingsInterface& order, std::string_view 
 
 bool Delete(const std::string& folder, SettingsInterface& order, std::string_view name, Error* error);
 
+/// Replaces to's display chain with the favourite's, on. Nothing else in to changes.
+bool Apply(const std::string& folder, std::string_view name, SettingsInterface& to, Error* error);
+
+/// Whether two layers' display chains are the same: their stages, each one's shader and options, whether or not
+/// either is on.
+bool ChainsEqual(const SettingsInterface& a, const SettingsInterface& b);
+
+/// The favourite after (or before) the one chain is: last, while chain still equals it, else the first that chain
+/// equals. When chain equals none, the first (or the last). Wraps; nullopt with no favourites.
+std::optional<std::string> Step(const std::string& folder, const SettingsInterface& order,
+                                const SettingsInterface& chain, std::string_view last, bool forward);
+
+/// The hotkeys' step: from the running display chain to the next (or previous) favourite, written where that chain
+/// is. That's game_file (loaded afresh, then saved) when game_layer, the game's settings layer, has a display chain of
+/// its own, else base, settings.ini, which also holds the order (the caller saves it). last is the favourite applied
+/// last, and becomes this one. nullopt with no favourites (error untouched) or when writing fails (error set). The
+/// caller holds the settings lock.
+std::optional<std::string> StepChain(const std::string& folder, SettingsInterface& base,
+                                     const SettingsInterface* game_layer, const std::string& game_file,
+                                     std::string* last, bool forward, Error* error);
+
 /// What a favourite's row says under its name: "Not installed: a, b" when shaders are missing, else its shaders
 /// joined with " · ".
 std::string Summary(const Info& info);

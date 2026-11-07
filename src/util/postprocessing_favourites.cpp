@@ -7,6 +7,7 @@
 #include "postprocessing.h"
 
 #include "common/error.h"
+#include "common/memory_settings_interface.h"
 #include "common/file_system.h"
 #include "common/path.h"
 #include "common/string_util.h"
@@ -14,6 +15,7 @@
 #include "fmt/format.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace PostProcessing::Favourites {
 
@@ -73,6 +75,39 @@ static void SetMissing(Error* error, std::string_view name)
 static void SetExists(Error* error, std::string_view name)
 {
   Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing", "A favourite named {} already exists."), name));
+}
+
+// The favourite's file, read; null (error set) when there's no such favourite or it can't be read.
+static std::unique_ptr<INISettingsInterface> LoadFavourite(const std::string& folder, std::string_view name,
+                                                           Error* error)
+{
+  const MemorySettingsInterface no_order;
+  std::vector<std::string> names = Names(folder, no_order);
+  const auto it = FindName(names, StringUtil::StripWhitespace(name));
+  if (it == names.end())
+  {
+    SetMissing(error, name);
+    return {};
+  }
+
+  auto file = std::make_unique<INISettingsInterface>(FilePath(folder, *it));
+  if (!file->Load(error))
+    return {};
+  return file;
+}
+
+// A display chain's stages, each its sorted keys and values.
+static std::vector<std::vector<std::pair<std::string, std::string>>> Stages(const SettingsInterface& si)
+{
+  std::vector<std::vector<std::pair<std::string, std::string>>> stages;
+  const u32 count = Config::GetStageCount(si, DISPLAY);
+  for (u32 i = 0; i < count; i++)
+  {
+    std::vector<std::pair<std::string, std::string>> kvs = si.GetKeyValueList(Config::GetStageSection(DISPLAY, i).c_str());
+    std::sort(kvs.begin(), kvs.end());
+    stages.push_back(std::move(kvs));
+  }
+  return stages;
 }
 
 } // namespace PostProcessing::Favourites
@@ -267,6 +302,93 @@ bool PostProcessing::Favourites::Delete(const std::string& folder, SettingsInter
   names.erase(it);
   WriteOrder(order, names);
   return true;
+}
+
+bool PostProcessing::Favourites::Apply(const std::string& folder, std::string_view name, SettingsInterface& to,
+                                       Error* error)
+{
+  const std::unique_ptr<INISettingsInterface> file = LoadFavourite(folder, name, error);
+  if (!file)
+    return false;
+
+  Config::CopyChain(*file, to, DISPLAY);
+  to.SetBoolValue(DISPLAY, "Enabled", true);
+  return true;
+}
+
+bool PostProcessing::Favourites::ChainsEqual(const SettingsInterface& a, const SettingsInterface& b)
+{
+  return Stages(a) == Stages(b);
+}
+
+std::optional<std::string> PostProcessing::Favourites::Step(const std::string& folder, const SettingsInterface& order,
+                                                            const SettingsInterface& chain, std::string_view last,
+                                                            bool forward)
+{
+  const std::vector<std::string> names = Names(folder, order);
+  if (names.empty())
+    return std::nullopt;
+
+  const auto equals = [&folder, &chain](const std::string& name) {
+    const std::unique_ptr<INISettingsInterface> file = LoadFavourite(folder, name, nullptr);
+    return file && ChainsEqual(*file, chain);
+  };
+
+  const size_t count = names.size();
+  std::optional<size_t> current;
+  for (size_t i = 0; i < count && !last.empty(); i++)
+  {
+    if (StringUtil::EqualNoCase(names[i], last))
+    {
+      if (equals(names[i]))
+        current = i;
+      break;
+    }
+  }
+  for (size_t i = 0; i < count && !current.has_value(); i++)
+  {
+    if (equals(names[i]))
+      current = i;
+  }
+
+  if (!current.has_value())
+    return forward ? names.front() : names.back();
+  return names[forward ? ((*current + 1) % count) : ((*current + count - 1) % count)];
+}
+
+std::optional<std::string> PostProcessing::Favourites::StepChain(const std::string& folder, SettingsInterface& base,
+                                                                 const SettingsInterface* game_layer,
+                                                                 const std::string& game_file, std::string* last,
+                                                                 bool forward, Error* error)
+{
+  const bool game = game_layer && !game_file.empty() && Config::HasOwnChain(*game_layer, DISPLAY);
+  std::optional<std::string> next = Step(folder, base, game ? *game_layer : base, *last, forward);
+  if (!next.has_value())
+    return std::nullopt;
+
+  if (game)
+  {
+    // The file as it is, not the layer, which a host may have adapted in memory.
+    INISettingsInterface file(game_file);
+    if (FileSystem::FileExists(game_file.c_str()) && !file.Load(error))
+      return std::nullopt;
+    if (!Apply(folder, *next, file, error))
+      return std::nullopt;
+    Error save_error;
+    if (!file.Save(&save_error))
+    {
+      Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing", "Couldn't write {}: {}"), game_file,
+                                          save_error.GetDescription()));
+      return std::nullopt;
+    }
+  }
+  else if (!Apply(folder, *next, base, error))
+  {
+    return std::nullopt;
+  }
+
+  *last = *next;
+  return next;
 }
 
 std::string PostProcessing::Favourites::Summary(const Info& info)

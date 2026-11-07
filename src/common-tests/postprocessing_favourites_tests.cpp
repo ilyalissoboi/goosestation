@@ -294,3 +294,209 @@ TEST_F(PostProcessingFavourites, DeleteOfAMissingNameFails)
   EXPECT_FALSE(Favourites::Delete(Folder(), m_order, "x", &error));
   EXPECT_EQ(error.GetDescription(), "There's no favourite named x.");
 }
+
+TEST_F(PostProcessingFavourites, ApplyReplacesTheChainAndEnablesIt)
+{
+  MemorySettingsInterface one;
+  WriteChain(one, {"sharp"});
+  SaveAs("One", &one);
+
+  MemorySettingsInterface to;
+  WriteChain(to, {"a", "b", "c"}, false);
+  to.SetStringValue("PostProcessing/Stage3", "OPT", "2");
+  to.SetBoolValue(Config::INTERNAL_CHAIN_SECTION, "Enabled", true);
+  to.SetUIntValue(Config::INTERNAL_CHAIN_SECTION, "StageCount", 1);
+  to.SetStringValue("InternalPostProcessing/Stage1", "ShaderName", "internal");
+  to.SetIntValue("Main", "Foo", 1);
+
+  Error error;
+  ASSERT_TRUE(Favourites::Apply(Folder(), "one", to, &error)) << error.GetDescription();
+
+  EXPECT_TRUE(to.GetBoolValue(DISPLAY, "Enabled", false));
+  EXPECT_EQ(to.GetUIntValue(DISPLAY, "StageCount", 0u), 1u);
+  EXPECT_EQ(to.GetStringValue("PostProcessing/Stage1", "ShaderName"), "sharp");
+  EXPECT_TRUE(to.GetKeyValueList("PostProcessing/Stage2").empty());
+  EXPECT_TRUE(to.GetKeyValueList("PostProcessing/Stage3").empty());
+  EXPECT_EQ(to.GetStringValue("InternalPostProcessing/Stage1", "ShaderName"), "internal");
+  EXPECT_EQ(to.GetIntValue("Main", "Foo", 0), 1);
+}
+
+TEST_F(PostProcessingFavourites, ApplyOfAMissingNameFails)
+{
+  MemorySettingsInterface to;
+  WriteChain(to, {"a"});
+  Error error;
+  EXPECT_FALSE(Favourites::Apply(Folder(), "Gone", to, &error));
+  EXPECT_EQ(error.GetDescription(), "There's no favourite named Gone.");
+  EXPECT_EQ(to.GetStringValue("PostProcessing/Stage1", "ShaderName"), "a");
+}
+
+TEST_F(PostProcessingFavourites, ApplyKeepsAMissingShader)
+{
+  const TempDirectory shaders;
+  const ShaderPackTest::ScopedShadersFolder scoped(shaders.GetPath());
+  SaveAs("CRT");
+
+  MemorySettingsInterface to;
+  Error error;
+  ASSERT_TRUE(Favourites::Apply(Folder(), "CRT", to, &error)) << error.GetDescription();
+  EXPECT_EQ(to.GetStringValue("PostProcessing/Stage2", "ShaderName"), "crt/crt-royale.slangp");
+}
+
+TEST_F(PostProcessingFavourites, ApplyOfAFileWithoutAChainEmptiesTheChain)
+{
+  m_dir.Write("postprocessing/Empty.ini", "[Main]\nFoo = 1\n");
+  MemorySettingsInterface to;
+  WriteChain(to, {"a"});
+
+  Error error;
+  ASSERT_TRUE(Favourites::Apply(Folder(), "Empty", to, &error)) << error.GetDescription();
+  EXPECT_EQ(Config::GetStageCount(to, DISPLAY), 0u);
+  EXPECT_TRUE(to.GetBoolValue(DISPLAY, "Enabled", false));
+  EXPECT_FALSE(to.ContainsValue("Main", "Foo"));
+}
+
+TEST(PostProcessingFavouritesChains, ChainsEqualIgnoresEnabledAndKeyOrder)
+{
+  MemorySettingsInterface a, b;
+  WriteChain(a, {"x", "y"}, true);
+  b.SetStringValue("PostProcessing/Stage1", "TEST_GAIN", "1.5");
+  b.SetStringValue("PostProcessing/Stage2", "ShaderName", "y");
+  b.SetStringValue("PostProcessing/Stage1", "ShaderName", "x");
+  b.SetUIntValue(DISPLAY, "StageCount", 2);
+  b.SetBoolValue(DISPLAY, "Enabled", false);
+
+  EXPECT_TRUE(Favourites::ChainsEqual(a, b));
+}
+
+TEST(PostProcessingFavouritesChains, ChainsEqualSeesAnOption)
+{
+  MemorySettingsInterface a, b;
+  WriteChain(a, {"x"});
+  WriteChain(b, {"x"});
+  b.SetStringValue("PostProcessing/Stage1", "TEST_GAIN", "2.0");
+  EXPECT_FALSE(Favourites::ChainsEqual(a, b));
+
+  MemorySettingsInterface c;
+  WriteChain(c, {"x", "y"});
+  EXPECT_FALSE(Favourites::ChainsEqual(a, c));
+}
+
+namespace {
+
+// Saves A, B and C, each a chain of its own name (or of shared, for those in same).
+void SaveThree(const std::string& folder, SettingsInterface& order, std::initializer_list<const char*> same = {})
+{
+  for (const char* name : {"A", "B", "C"})
+  {
+    MemorySettingsInterface chain;
+    const bool shared = std::find_if(same.begin(), same.end(), [name](const char* s) {
+                          return std::string_view(s) == name;
+                        }) != same.end();
+    WriteChain(chain, {shared ? "shared" : name});
+    Error error;
+    ASSERT_TRUE(Favourites::Save(folder, order, name, chain, false, &error)) << error.GetDescription();
+  }
+}
+
+MemorySettingsInterface ChainOf(const char* shader)
+{
+  MemorySettingsInterface chain;
+  WriteChain(chain, {shader});
+  return chain;
+}
+
+} // namespace
+
+TEST_F(PostProcessingFavourites, StepWrapsBothWays)
+{
+  SaveThree(Folder(), m_order);
+
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("B"), "", true), "C");
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("B"), "", false), "A");
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("C"), "", true), "A");
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("A"), "", false), "C");
+}
+
+TEST_F(PostProcessingFavourites, StepFromNoMatchGoesToEnds)
+{
+  SaveThree(Folder(), m_order);
+
+  // An edited chain, and a remembered favourite it no longer equals.
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("edited"), "B", true), "A");
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("edited"), "B", false), "C");
+}
+
+TEST_F(PostProcessingFavourites, StepWithNoFavouritesIsNullopt)
+{
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("A"), "", true), std::nullopt);
+}
+
+TEST_F(PostProcessingFavourites, StepComesRoundIdenticalFavourites)
+{
+  SaveThree(Folder(), m_order, {"A", "B"});
+
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("shared"), "", true), "B");
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("shared"), "A", true), "B");
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("shared"), "b", true), "C");
+  EXPECT_EQ(Favourites::Step(Folder(), m_order, ChainOf("shared"), "B", false), "A");
+}
+
+TEST_F(PostProcessingFavourites, StepChainWritesTheBaseWhenTheGameUsesTheGlobalChain)
+{
+  SaveThree(Folder(), m_order);
+  WriteChain(m_order, {"A"});
+  const std::string game_file = m_dir.Get("gamesettings/SLUS-00001.ini");
+  m_dir.Write("gamesettings/SLUS-00001.ini", "[Main]\nFoo = 1\n");
+  INISettingsInterface game_layer(game_file);
+  ASSERT_TRUE(game_layer.Load());
+
+  std::string last;
+  Error error;
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, &game_layer, game_file, &last, true, &error), "B");
+
+  EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "B");
+  EXPECT_EQ(last, "B");
+  EXPECT_EQ(m_dir.Read("gamesettings/SLUS-00001.ini"), "[Main]\nFoo = 1\n");
+
+  // No game at all.
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, nullptr, std::string(), &last, true, &error), "C");
+  EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "C");
+}
+
+TEST_F(PostProcessingFavourites, StepChainWritesTheGameFileWhenItHasItsOwnChain)
+{
+  SaveThree(Folder(), m_order);
+  WriteChain(m_order, {"A"});
+  const std::string game_file = m_dir.Get("gamesettings/SLUS-00001.ini");
+  m_dir.Write("gamesettings/SLUS-00001.ini",
+              "[Main]\nFoo = 1\n\n[PostProcessing]\nEnabled = false\nStageCount = 1\n\n"
+              "[PostProcessing/Stage1]\nShaderName = B\nTEST_GAIN = 1.5\n\n[InternalPostProcessing]\nEnabled = true\n");
+  INISettingsInterface game_layer(game_file);
+  ASSERT_TRUE(game_layer.Load());
+
+  std::string last;
+  Error error;
+  // The game runs B's chain (settings.ini's is A's): next is C, into the game's file.
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, &game_layer, game_file, &last, true, &error), "C");
+  EXPECT_EQ(last, "C");
+  INISettingsInterface written(game_file);
+  ASSERT_TRUE(written.Load());
+  EXPECT_EQ(written.GetIntValue("Main", "Foo", 0), 1);
+  EXPECT_TRUE(written.GetBoolValue(Config::INTERNAL_CHAIN_SECTION, "Enabled", false));
+  EXPECT_TRUE(written.GetBoolValue(DISPLAY, "Enabled", false));
+  EXPECT_EQ(written.GetUIntValue(DISPLAY, "StageCount", 0u), 1u);
+  EXPECT_EQ(written.GetStringValue("PostProcessing/Stage1", "ShaderName"), "C");
+  EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "A");
+}
+
+TEST_F(PostProcessingFavourites, StepChainWithNoFavourites)
+{
+  WriteChain(m_order, {"A"});
+  std::string last;
+  Error error;
+  EXPECT_EQ(Favourites::StepChain(Folder(), m_order, nullptr, std::string(), &last, true, &error), std::nullopt);
+  EXPECT_TRUE(error.GetDescription().empty());
+  EXPECT_TRUE(last.empty());
+  EXPECT_EQ(m_order.GetStringValue("PostProcessing/Stage1", "ShaderName"), "A");
+}

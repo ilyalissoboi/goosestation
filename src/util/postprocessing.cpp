@@ -302,6 +302,11 @@ void PostProcessing::SwapStageConfig(SettingsInterface& si, const char* section,
     si.SetStringValue(rhs_section, key.c_str(), value.c_str());
 }
 
+std::string PostProcessing::Config::GetStageSection(const char* section, u32 index)
+{
+  return std::string(GetStageConfigSection(section, index).view());
+}
+
 u32 PostProcessing::Config::GetStageCount(const SettingsInterface& si, const char* section)
 {
   return si.GetUIntValue(section, "StageCount", 0u);

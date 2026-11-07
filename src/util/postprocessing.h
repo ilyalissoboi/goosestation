@@ -116,6 +116,8 @@ static constexpr const char* DISPLAY_CHAIN_SECTION = "PostProcessing";
 static constexpr const char* INTERNAL_CHAIN_SECTION = "InternalPostProcessing";
 
 u32 GetStageCount(const SettingsInterface& si, const char* section);
+/// The section holding the stage's shader name and options: "PostProcessing/Stage1" for the display chain's first.
+std::string GetStageSection(const char* section, u32 index);
 std::string GetStageShaderName(const SettingsInterface& si, const char* section, u32 index);
 std::vector<ShaderOption> GetStageOptions(const SettingsInterface& si, const char* section, u32 index);
 std::vector<ShaderOption> GetShaderOptions(const std::string& shader_name, Error* error);

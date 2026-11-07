@@ -784,7 +784,7 @@ std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingSlangShader(co
   }
 
   const std::string path = Slang::ResolvePresetPath(EmuFolders::Shaders, shader_name);
-  if (path.empty())
+  if (path.empty() || !FileSystem::FileExists(path.c_str()))
   {
     Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing", "Slang preset {} isn't in the shaders folder."),
                                         shader_name));

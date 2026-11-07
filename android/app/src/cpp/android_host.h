@@ -109,6 +109,7 @@ struct PostProcessingStage
   std::string shader;
   std::string kind;
   std::vector<PostProcessing::ShaderOption> options;
+  std::string error; // why it doesn't load, when the core said
 };
 
 // The chain calls edit section ("PostProcessing" or "InternalPostProcessing") in settings.ini when key is nullopt,

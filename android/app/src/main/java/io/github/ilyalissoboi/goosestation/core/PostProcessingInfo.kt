@@ -32,12 +32,13 @@ class ShaderOptionInfo(
 }
 
 /**
- * A stage of a post-processing chain: its [shader]'s name, as `ShaderName` has it, the shader's [kind] ("GLSL" or
- * "ReShade"; empty when this install has no shader by that name, or it doesn't load) and its [options], with the
- * stage's values over the shader's defaults.
+ * A stage of a post-processing chain: its [shader]'s name, as `ShaderName` has it, the shader's [kind] ("GLSL",
+ * "ReShade" or "Slang"; empty when this install has no shader by that name, or it doesn't load), its [options], with
+ * the stage's values over the shader's defaults, and when it doesn't load, the core's [error] if it gave one.
  */
 class StageInfo(
     val shader: String,
     val kind: String,
     val options: Array<ShaderOptionInfo>,
+    val error: String = "",
 )

@@ -87,6 +87,27 @@ class PostProcessingPageTest {
         }
 
     @Test
+    fun aSlangPresetIsOfferedAndAddedWithItsKind() =
+        runTest {
+            api.shaderCatalog += "crt/crt-royale.slangp" to ("Slang" to listOf(warp))
+            api.usesOpenGLES = true
+
+            val page = page()
+            assertTrue(Shader("crt/crt-royale.slangp", ShaderKind.Slang) in page.shaders)
+
+            page.add(Chain.Display, Shader("crt/crt-royale.slangp", ShaderKind.Slang))
+            runCurrent()
+            assertEquals(
+                ShaderKind.Slang,
+                page.chains
+                    .getValue(Chain.Display)
+                    .stages
+                    .single()
+                    .kind,
+            )
+        }
+
+    @Test
     fun theSwitchWritesEnabled() =
         runTest {
             val page = page()

@@ -329,7 +329,11 @@ class GameCallsTest {
         expected: Int,
         actual: Int,
     ) {
-        val close = (0 until 24 step 8).all { shift -> abs((expected ushr shift and 0xFF) - (actual ushr shift and 0xFF)) <= 8 }
+        val close =
+            (0 until 24 step 8).all { shift ->
+                abs((expected ushr shift and 0xFF) - (actual ushr shift and 0xFF)) <=
+                    8
+            }
         assertTrue("$what: ${Integer.toHexString(actual)}, not ${Integer.toHexString(expected)}", close)
     }
 

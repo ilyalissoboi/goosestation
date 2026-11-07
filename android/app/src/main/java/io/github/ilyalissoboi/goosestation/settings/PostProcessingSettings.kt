@@ -29,6 +29,9 @@ enum class Chain(
 enum class ShaderKind {
     GLSL,
     ReShade,
+
+    /** A RetroArch preset (.slangp), run by librashader; listed by name, never loaded until it's added. */
+    Slang,
     ;
 
     companion object {
@@ -43,25 +46,31 @@ data class Shader(
     val kind: ShaderKind,
 )
 
+const val STAGE_STAYS_OFF = "Post-processing stays off while it's in the chain."
 const val STAGE_NOT_FOUND = "Not found in this install's shaders: post-processing stays off while it's in the chain."
 const val STAGE_NO_GLES = "Doesn't run with OpenGL ES: post-processing stays off while it's in the chain."
 
-/** A chain's stage: its [shader]'s name, the shader's [kind] (null when it isn't found) and its [options]. */
+/**
+ * A chain's stage: its [shader]'s name, the shader's [kind] (null when it doesn't load), its [options], and the core's
+ * [error] when it said why it doesn't load (slang presets do: no library, not in the folder, librashader's text).
+ */
 data class Stage(
     val shader: String,
     val kind: ShaderKind?,
     val options: List<ShaderOptionInfo>,
+    val error: String = "",
 ) {
     /** Why the stage can't run, which turns the whole chain off in the core; null when it can. */
     fun problem(gles: Boolean): String? =
         when {
+            kind == null && error.isNotEmpty() -> "$error $STAGE_STAYS_OFF"
             kind == null -> STAGE_NOT_FOUND
             kind == ShaderKind.ReShade && gles -> STAGE_NO_GLES
             else -> null
         }
 
     companion object {
-        fun of(info: StageInfo) = Stage(info.shader, ShaderKind.of(info.kind), info.options.toList())
+        fun of(info: StageInfo) = Stage(info.shader, ShaderKind.of(info.kind), info.options.toList(), info.error)
     }
 }
 

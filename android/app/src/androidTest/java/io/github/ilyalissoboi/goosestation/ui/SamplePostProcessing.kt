@@ -232,6 +232,17 @@ class SamplePostProcessing : PostProcessingModel {
                         ),
                     ),
             )
+
+        /** A slang preset, by its path in the shaders folder: its options are the preset's parameters. */
+        val crtRoyale =
+            Stage(
+                "shaders_slang/crt/crt-royale.slangp",
+                ShaderKind.Slang,
+                listOf(
+                    float("crt_gamma", "Simulated CRT gamma", 1, 1f, 5f, 0.025f, 2.5f),
+                    float("mask_type", "Mask type", 1, 0f, 2f, 1f, 1f),
+                ),
+            )
         val flip = Stage("simple-flip", ShaderKind.GLSL, emptyList())
         val filmGrain = Stage("FilmGrain2", ShaderKind.ReShade, emptyList())
     }

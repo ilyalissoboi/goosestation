@@ -30,6 +30,7 @@
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
 #include "util/postprocessing.h"
+#include "util/postprocessing_shader_slang.h"
 #include "util/window_info.h"
 
 #include "common/memory_settings_interface.h"
@@ -898,10 +899,13 @@ static T ReadChainLayer(const std::optional<std::string>& key, T default_value, 
   return read(*AndroidHost::s_base_settings_interface);
 }
 
-// The kind of the file PostProcessing::TryLoadingShader() takes for name, in its order: the data folder's ReShade
-// shader, the data folder's GLSL one, then the resources' ReShade shader, else the resources' GLSL one.
+// The kind of the file PostProcessing::TryLoadingShader() takes for name, in its order: a slang preset by its name,
+// the data folder's ReShade shader, the data folder's GLSL one, then the resources' ReShade shader, else the resources'
+// GLSL one.
 static const char* ShaderKind(const std::string& name)
 {
+  if (PostProcessing::Slang::IsPresetName(name))
+    return "Slang";
   const std::string fx = fmt::format("reshade" FS_OSPATH_SEPARATOR_STR "Shaders" FS_OSPATH_SEPARATOR_STR "{}.fx", name);
   if (FileSystem::FileExists(Path::Combine(EmuFolders::Shaders, fx).c_str()))
     return "ReShade";
@@ -927,8 +931,9 @@ std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingS
 
   for (const auto& [display_name, name] : PostProcessing::GetAvailableShaderNames())
   {
+    // A pack has thousands of slang presets: they're offered by name, and one that doesn't load says so when added.
     Error error;
-    if (!ShaderLoads(name, &error))
+    if (!PostProcessing::Slang::IsPresetName(name) && !ShaderLoads(name, &error))
     {
       INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
       continue;
@@ -948,10 +953,15 @@ std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStag
     {
       PostProcessingStage stage;
       stage.shader = PostProcessing::Config::GetStageShaderName(si, section, i);
-      if (!stage.shader.empty() && ShaderLoads(stage.shader, nullptr))
+      Error error;
+      if (!stage.shader.empty() && ShaderLoads(stage.shader, &error))
       {
         stage.kind = ShaderKind(stage.shader);
         stage.options = PostProcessing::Config::GetStageOptions(si, section, i);
+      }
+      else
+      {
+        stage.error = error.GetDescription();
       }
       stages.push_back(std::move(stage));
     }

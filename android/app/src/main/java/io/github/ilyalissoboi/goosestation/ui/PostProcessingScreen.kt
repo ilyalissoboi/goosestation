@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,9 +19,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.ChainView
 import io.github.ilyalissoboi.goosestation.app.PostProcessingModel
@@ -25,12 +32,14 @@ import io.github.ilyalissoboi.goosestation.app.ShaderPacksModel
 import io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.OptionRow
+import io.github.ilyalissoboi.goosestation.settings.ShaderBrowser
 import io.github.ilyalissoboi.goosestation.settings.Stage
 import io.github.ilyalissoboi.goosestation.settings.optionRows
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
+import io.github.ilyalissoboi.goosestation.ui.components.LazySettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
@@ -38,6 +47,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
+import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
 import io.github.ilyalissoboi.goosestation.ui.components.useGlobalLabel
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
@@ -82,7 +92,7 @@ fun PostProcessingScreen(
     val adding = model.adding
     val stage = model.stage
     when {
-        adding != null -> AddShaderPage(model, adding)
+        adding != null -> BrowsePage(model, adding)
         stage != null -> {
             val view = chains[stage.first]
             val shown = view?.stages?.getOrNull(stage.second)
@@ -249,21 +259,134 @@ fun useGlobalQuestion(
     return "Use the global ${chain.label} chain? This game's $removed removed."
 }
 
+const val BROWSE_SEARCH_LABEL = "Search by path"
+const val BROWSE_NO_MATCHES = "No shader's path has that in it."
+
+/**
+ * The shader browser, adding to [chain]: a search field, then the folder's folders and shaders (with "Up" below the
+ * top), or every shader whose path holds the search. A opens a folder or adds a shader; B clears the search, goes up,
+ * then closes. The focus goes to the first entry as each folder opens.
+ */
 @Composable
-private fun AddShaderPage(
+private fun BrowsePage(
     model: PostProcessingModel,
     chain: Chain,
 ) {
+    val folder = model.browseFolder
+    val searching = model.browseSearch.isNotBlank()
+    val search = rememberTextFieldState(model.browseSearch)
+    // Typing searches; a search the page clears (B) clears the field.
+    LaunchedEffect(search) { snapshotFlow { search.text.toString() }.collect { model.search(it) } }
+    LaunchedEffect(model.browseSearch) {
+        if (search.text.toString() != model.browseSearch) search.setTextAndPlaceCursorAtEnd(model.browseSearch)
+    }
+    val list = rememberLazyListState()
     val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
-    SettingsPage("Add a shader to the ${chain.label} chain", onBack = model::closeAdd) {
-        model.shaders.forEachIndexed { index, shader ->
-            NavRow(
-                shader.name,
-                shader.kind.label,
-                onClick = { model.add(chain, shader) },
-                modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+    val field = remember { FocusRequester() }
+    // The first entry as each folder opens; the search field as a search starts, as the rows it had go.
+    LaunchedEffect(folder, searching) {
+        list.scrollToItem(0)
+        if (searching) {
+            runCatching { field.requestFocus() }
+            return@LaunchedEffect
+        }
+        // On a short screen the first entry may sit below the list's first page, not composed yet: it's scrolled to.
+        // The list's items: the title, the search, then the entries.
+        withFrameNanos {}
+        if (runCatching { first.requestFocus() }.getOrDefault(false) != true) {
+            list.scrollToItem(2)
+            withFrameNanos {}
+            runCatching { first.requestFocus() }
+        }
+    }
+
+    val listing = remember(model.shaders, folder) { ShaderBrowser.list(model.shaders, folder) }
+    val matches =
+        remember(model.shaders, model.browseSearch) { ShaderBrowser.search(model.shaders, model.browseSearch) }
+    LazySettingsPage(
+        "Add a shader to the ${chain.label} chain",
+        onBack = model::browseBack,
+        state = list,
+        subtitle =
+            if (searching) {
+                "Every shader whose path holds “${model.browseSearch.trim()}”"
+            } else {
+                folder.ifEmpty {
+                    "All shaders"
+                }
+            },
+    ) {
+        item(key = "search") {
+            TextFieldRow(
+                BROWSE_SEARCH_LABEL,
+                search,
+                modifier = Modifier.focusRequester(field),
+                imeAction = ImeAction.Done,
+                onDone = {},
             )
+        }
+        if (searching) {
+            if (matches.isEmpty()) {
+                item(key = "none") {
+                    Text(
+                        BROWSE_NO_MATCHES,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GooseStationTheme.colors.inkMuted,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
+            items(matches, key = { "match:${it.name}" }) { shader ->
+                val at = ShaderBrowser.folderOf(shader)
+                NavRow(
+                    ShaderBrowser.leaf(shader),
+                    if (at.isEmpty()) shader.kind.label else "${shader.kind.label} · $at",
+                    onClick = { model.add(chain, shader) },
+                )
+            }
+        } else {
+            var firstRow = true
+
+            fun firstOne(): Modifier =
+                if (firstRow) {
+                    firstRow = false
+                    Modifier.focusRequester(first)
+                } else {
+                    Modifier
+                }
+            if (folder.isNotEmpty()) {
+                val modifier = firstOne()
+                item(key = "up") {
+                    NavRow(
+                        "Up to ${ShaderBrowser.parent(folder).ifEmpty { "all shaders" }}",
+                        null,
+                        onClick = model::browseBack,
+                        modifier = modifier,
+                    )
+                }
+            }
+            for (child in listing.folders) {
+                val modifier = firstOne()
+                item(key = "folder:$child") {
+                    NavRow(
+                        child,
+                        "Folder",
+                        onClick = { model.browseInto(if (folder.isEmpty()) child else "$folder/$child") },
+                        modifier = modifier,
+                    )
+                }
+            }
+            for (shader in listing.shaders) {
+                val modifier = firstOne()
+                item(key = "shader:${shader.name}") {
+                    NavRow(
+                        ShaderBrowser.leaf(shader),
+                        shader.kind.label,
+                        onClick = { model.add(chain, shader) },
+                        modifier = modifier,
+                    )
+                }
+            }
         }
     }
 }

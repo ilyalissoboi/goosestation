@@ -72,6 +72,8 @@ import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
+import io.github.ilyalissoboi.goosestation.settings.Shader
+import io.github.ilyalissoboi.goosestation.settings.ShaderKind
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.DataFolderContents
 import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
@@ -587,6 +589,48 @@ class FocusAuditTest {
                 openStage(Chain.Display, 1)
             }
         show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    private fun browsing() =
+        SamplePostProcessing().apply {
+            shaders =
+                listOf(
+                    Shader("crt-lottes", ShaderKind.GLSL),
+                    Shader("shaders_slang/crt/crt-royale.slangp", ShaderKind.Slang),
+                )
+            openAdd(Chain.Display)
+        }
+
+    @Test
+    fun postProcessingBrowseTop() {
+        val model = browsing()
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingBrowseFolder() {
+        val model = browsing().apply { browseInto("shaders_slang/crt") }
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingBrowseSearch() {
+        val model = browsing()
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        model.search("royale")
+        rule.waitForIdle()
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun postProcessingBrowseNoMatches() {
+        val model = browsing()
+        show { PostProcessingScreen(model, model.packs, onBack = {}) }
+        model.search("nothing like it")
+        rule.waitForIdle()
         rule.assertControllerReady()
     }
 

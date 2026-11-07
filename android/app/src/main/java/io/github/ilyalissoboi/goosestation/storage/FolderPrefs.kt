@@ -88,6 +88,13 @@ class FolderPrefs(
     fun saveBiosImages(images: List<String>): Boolean =
         store.putString(BIOS_IMAGES, images.joinToString("\n").ifEmpty { null })
 
+    /** The folder the shader browser opens on: the last shader added's ("" for the top). This device's own. */
+    fun shaderBrowserFolder(): String = store.getString(SHADER_BROWSER_FOLDER).orEmpty()
+
+    fun setShaderBrowserFolder(folder: String) {
+        store.putString(SHADER_BROWSER_FOLDER, folder.ifEmpty { null })
+    }
+
     /** Made on the first call, then kept, so the core can tell its own settings.ini from one copied from elsewhere. */
     fun installId(): String {
         store.getString(INSTALL_ID)?.let { return it }
@@ -97,6 +104,7 @@ class FolderPrefs(
     }
 
     private companion object {
+        const val SHADER_BROWSER_FOLDER = "shaderBrowserFolder"
         const val BIOS = "bios"
         const val GAMES = "games"
         const val DATA = "data"

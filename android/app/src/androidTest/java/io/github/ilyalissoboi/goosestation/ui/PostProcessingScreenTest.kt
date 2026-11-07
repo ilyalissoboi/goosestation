@@ -118,9 +118,10 @@ class PostProcessingScreenTest {
 
         press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
         rule.onNodeWithText("Add a shader to the Display chain").assertExists()
-        focused("crt-lottes")
+        // The browser: folders first (a ReShade shader sits under reshade/), then the top's shaders.
+        focused("reshade")
         press(Key.DirectionDown)
-        focused("FilmGrain2")
+        focused("crt-lottes")
         press(Key.DirectionDown)
         focused("simple-flip")
         press(Key.DirectionCenter)
@@ -288,5 +289,60 @@ class PostProcessingScreenTest {
 
         focused("crt-lottes")
         rule.onNodeWithText("FilmGrain2").assertDoesNotExist()
+    }
+
+    @Test
+    fun theBrowserOpensFoldersWithAAndGoesUpWithB() {
+        model.shaders =
+            listOf(
+                Shader("crt-lottes", ShaderKind.GLSL),
+                Shader("shaders_slang/crt/crt-royale.slangp", ShaderKind.Slang),
+                Shader("shaders_slang/crt/crt-geom.slangp", ShaderKind.Slang),
+            )
+        model.openAdd(Chain.Display)
+        show()
+
+        focused("shaders_slang")
+        press(Key.DirectionCenter)
+        rule.onNodeWithText("shaders_slang").assertExists()
+        focused("Up to all shaders")
+        press(Key.DirectionDown)
+        focused("crt")
+        press(Key.DirectionCenter)
+        focused("Up to shaders_slang")
+        press(Key.DirectionDown)
+        focused("crt-royale")
+        press(Key.DirectionDown)
+        focused("crt-geom")
+        press(Key.Back)
+        assertEquals("shaders_slang", model.browseFolder)
+        focused("Up to all shaders")
+        press(Key.Back)
+        press(Key.Back)
+        assertTrue(model.calls.toString(), model.adding == null)
+    }
+
+    @Test
+    fun aSearchListsEveryMatchWithItsFolder() {
+        model.shaders =
+            listOf(
+                Shader("crt-lottes", ShaderKind.GLSL),
+                Shader("shaders_slang/crt/crt-royale.slangp", ShaderKind.Slang),
+                Shader("shaders_slang/handheld/lcd.slangp", ShaderKind.Slang),
+            )
+        model.openAdd(Chain.Display)
+        show()
+
+        model.search("ROYALE")
+        rule.waitForIdle()
+
+        rule.onNodeWithText("crt-royale").assertExists()
+        rule.onNodeWithText("Slang · shaders_slang/crt").assertExists()
+        rule.onNodeWithText("lcd").assertDoesNotExist()
+        rule.onNodeWithText("crt-lottes").assertDoesNotExist()
+
+        model.search("nothing like it")
+        rule.waitForIdle()
+        rule.onNodeWithText(BROWSE_NO_MATCHES).assertExists()
     }
 }

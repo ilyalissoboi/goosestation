@@ -31,15 +31,18 @@ class PostProcessingPageTest {
         }
     private val global = api.globalLayer
 
+    private val lastFolder = MemoryShaderFolder()
+
     private fun TestScope.page(
         key: String? = null,
         running: Boolean = false,
-    ) = PostProcessingPage(backgroundScope, StandardTestDispatcher(testScheduler), api, global) { api.gameLayer(it) }
-        .also {
-            it.open(key, running)
-            runCurrent()
-            calls.clear()
-        }
+    ) = PostProcessingPage(backgroundScope, StandardTestDispatcher(testScheduler), api, global, lastFolder) {
+        api.gameLayer(it)
+    }.also {
+        it.open(key, running)
+        runCurrent()
+        calls.clear()
+    }
 
     private fun stages(chain: Chain = Chain.Display) =
         api.getPostProcessingStages(null, chain.section).map { it.shader }.also { calls.clear() }
@@ -363,4 +366,68 @@ class PostProcessingPageTest {
                 emptyArray(),
             )
     }
+
+    private val browsable =
+        mapOf(
+            "crt-lottes" to ("GLSL" to emptyList<ShaderOptionInfo>()),
+            "shaders_slang/crt/crt-royale.slangp" to ("Slang" to emptyList()),
+            "shaders_slang/crt/ntsc/ntsc.slangp" to ("Slang" to emptyList()),
+            "shaders_slang/handheld/lcd.slangp" to ("Slang" to emptyList()),
+        )
+
+    @Test
+    fun theBrowserOpensOnTheLastFolder() =
+        runTest {
+            api.shaderCatalog = browsable
+            lastFolder.set("shaders_slang/crt")
+            val page = page()
+
+            page.openAdd(Chain.Display)
+            assertEquals("shaders_slang/crt", page.browseFolder)
+            assertEquals("", page.browseSearch)
+
+            // A folder that's gone opens its nearest one that's there.
+            page.closeAdd()
+            lastFolder.set("shaders_slang/gone/deeper")
+            page.openAdd(Chain.Display)
+            assertEquals("shaders_slang", page.browseFolder)
+        }
+
+    @Test
+    fun backClearsTheSearchThenGoesUpThenCloses() =
+        runTest {
+            api.shaderCatalog = browsable
+            val page = page()
+            page.openAdd(Chain.Display)
+            assertEquals("", page.browseFolder)
+            page.browseInto("shaders_slang")
+            page.browseInto("shaders_slang/crt")
+            page.search("royale")
+            assertEquals("royale", page.browseSearch)
+
+            page.browseBack()
+            assertEquals("", page.browseSearch)
+            assertEquals("shaders_slang/crt", page.browseFolder)
+            page.browseBack()
+            assertEquals("shaders_slang", page.browseFolder)
+            page.browseBack()
+            assertEquals("", page.browseFolder)
+            assertEquals(Chain.Display, page.adding)
+            page.browseBack()
+            assertNull(page.adding)
+        }
+
+    @Test
+    fun addingRemembersTheFolder() =
+        runTest {
+            api.shaderCatalog = browsable
+            val page = page()
+            page.openAdd(Chain.Internal)
+            page.add(Chain.Internal, Shader("shaders_slang/handheld/lcd.slangp", ShaderKind.Slang))
+            runCurrent()
+
+            assertEquals("shaders_slang/handheld", lastFolder.get())
+            page.openAdd(Chain.Internal)
+            assertEquals("shaders_slang/handheld", page.browseFolder)
+        }
 }

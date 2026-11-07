@@ -195,20 +195,48 @@ object AppController : NativeCallbacks {
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
 
+    // Where the shader browser opens, kept in this device's preferences (read once they're there).
+    private val shaderFolder =
+        object : ShaderFolderMemory {
+            override fun get() = if (::prefs.isInitialized) prefs.shaderBrowserFolder() else ""
+
+            override fun set(folder: String) {
+                if (::prefs.isInitialized) prefs.setShaderBrowserFolder(folder)
+            }
+        }
+
     /** The Post-processing pages' chains, settings.ini's. */
     val postProcessingPage =
-        PostProcessingPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+        PostProcessingPage(
+            scope,
+            coreDispatcher,
+            NativeCoreApi,
+            NativeCoreSettings,
+            shaderFolder,
+        ) { GameCoreSettings(it) }
 
     /** A game's own settings, from its tile in the library. */
     val gameSettingsPages =
-        GameSettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+        GameSettingsPages(
+            scope,
+            coreDispatcher,
+            NativeCoreApi,
+            NativeCoreSettings,
+            shaderFolder,
+        ) { GameCoreSettings(it) }
 
     /**
      * The running game's own settings, from its menu: on the menu's own dispatcher, as its other calls are, so a
      * library scan never holds them up.
      */
     val gameMenuSettings =
-        GameSettingsPages(scope, gameDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+        GameSettingsPages(
+            scope,
+            gameDispatcher,
+            NativeCoreApi,
+            NativeCoreSettings,
+            shaderFolder,
+        ) { GameCoreSettings(it) }
 
     /**
      * The shader packs, from each Post-processing page: the app's, so an install goes on when its page closes. A job

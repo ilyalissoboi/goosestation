@@ -37,6 +37,8 @@ class SamplePostProcessing : PostProcessingModel {
     override var gles by mutableStateOf(false)
     override var stage by mutableStateOf<Pair<Chain, Int>?>(null)
     override var adding by mutableStateOf<Chain?>(null)
+    override var browseFolder by mutableStateOf("")
+    override var browseSearch by mutableStateOf("")
     override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
     override var asking by mutableStateOf<Chain?>(null)
     override var askingStages by mutableStateOf(0)
@@ -79,7 +81,26 @@ class SamplePostProcessing : PostProcessingModel {
     }
 
     override fun openAdd(chain: Chain) {
+        browseFolder = ""
+        browseSearch = ""
         adding = chain
+    }
+
+    override fun browseInto(folder: String) {
+        browseFolder = folder
+        browseSearch = ""
+    }
+
+    override fun browseBack() {
+        when {
+            browseSearch.isNotEmpty() -> browseSearch = ""
+            browseFolder.isNotEmpty() -> browseFolder = browseFolder.substringBeforeLast('/', "")
+            else -> closeAdd()
+        }
+    }
+
+    override fun search(text: String) {
+        browseSearch = text
     }
 
     override fun closeAdd() {

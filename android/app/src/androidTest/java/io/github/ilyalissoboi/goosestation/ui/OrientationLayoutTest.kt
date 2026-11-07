@@ -104,6 +104,8 @@ import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
+import io.github.ilyalissoboi.goosestation.settings.Shader
+import io.github.ilyalissoboi.goosestation.settings.ShaderKind
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
@@ -1026,7 +1028,7 @@ class OrientationLayoutTest {
                 val model = remember { SamplePostProcessing().apply { openAdd(Chain.Display) } }
                 PostProcessingScreen(model, model.packs, onBack = {})
             },
-            rows = listOf("crt-lottes", "FilmGrain2", "simple-flip"),
+            rows = listOf("reshade", "crt-lottes", "simple-flip"),
         )
 
     @Test
@@ -1044,6 +1046,28 @@ class OrientationLayoutTest {
             },
             rows = listOf("Remove", "Screen Warp X", "Tint (Red)", "Tint (Green)", "Curvature", "Mask"),
             lists = mapOf("Mask" to ("Off" to "Aperture")),
+        )
+
+    @Test
+    fun theShaderBrowserInAFolder() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            shaders =
+                                listOf(
+                                    Shader("shaders_slang/crt/crt-royale.slangp", ShaderKind.Slang),
+                                    Shader("shaders_slang/crt/crt-geom.slangp", ShaderKind.Slang),
+                                    Shader("shaders_slang/crt/shaders/x.slangp", ShaderKind.Slang),
+                                )
+                            openAdd(Chain.Display)
+                            browseInto("shaders_slang/crt")
+                        }
+                    }
+                PostProcessingScreen(model, model.packs, onBack = {})
+            },
+            rows = listOf("Up to shaders_slang", "shaders", "crt-royale", "crt-geom"),
         )
 
     @Test

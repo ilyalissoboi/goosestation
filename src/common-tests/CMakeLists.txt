@@ -33,6 +33,7 @@ add_executable(common-tests
   postprocessing_slang_tests.cpp
   rectangle_tests.cpp
   settings_multitap_tests.cpp
+  shader_pack_archive_tests.cpp
   shader_packs_tests.cpp
   shiftjis_tests.cpp
   ../util/shiftjis.cpp
@@ -59,4 +60,4 @@ if(ANDROID)
   target_link_libraries(common-tests PRIVATE imgui)
 endif()
 
-target_link_libraries(common-tests PRIVATE core scmversion common rcheevos gtest gtest_main)
+target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip gtest gtest_main)

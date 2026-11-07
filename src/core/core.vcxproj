@@ -65,6 +65,7 @@
     <ClCompile Include="mdec.cpp" />
     <ClCompile Include="memcard_sync.cpp" />
     <ClCompile Include="memcard_sync_ui.cpp" />
+    <ClCompile Include="shader_pack_archive.cpp" />
     <ClCompile Include="shader_packs.cpp" />
     <ClCompile Include="memory_card.cpp" />
     <ClCompile Include="memory_card_helpers.cpp" />
@@ -151,6 +152,7 @@
     <ClInclude Include="mdec.h" />
     <ClInclude Include="memcard_sync.h" />
     <ClInclude Include="memcard_sync_ui.h" />
+    <ClInclude Include="shader_pack_archive.h" />
     <ClInclude Include="shader_packs.h" />
     <ClInclude Include="memory_card.h" />
     <ClInclude Include="memory_card_helpers.h" />
@@ -181,6 +183,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\dep\imgui\imgui.vcxproj">
       <Project>{bb08260f-6fbc-46af-8924-090ee71360c6}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\dep\minizip\minizip.vcxproj">
+      <Project>{8bda439c-6358-45fb-9994-2ff083babe06}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\dep\rainterface\rainterface.vcxproj" Condition="'$(Platform)'!='ARM64'">
       <Project>{e4357877-d459-45c7-b8f6-dcbb587bb528}</Project>

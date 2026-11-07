@@ -18,6 +18,7 @@
     <ClCompile Include="mdec.cpp" />
     <ClCompile Include="memcard_sync.cpp" />
     <ClCompile Include="memcard_sync_ui.cpp" />
+    <ClCompile Include="shader_pack_archive.cpp" />
     <ClCompile Include="shader_packs.cpp" />
     <ClCompile Include="memory_card.cpp" />
     <ClCompile Include="settings.cpp" />
@@ -95,6 +96,7 @@
     <ClInclude Include="mdec.h" />
     <ClInclude Include="memcard_sync.h" />
     <ClInclude Include="memcard_sync_ui.h" />
+    <ClInclude Include="shader_pack_archive.h" />
     <ClInclude Include="shader_packs.h" />
     <ClInclude Include="memory_card.h" />
     <ClInclude Include="settings.h" />

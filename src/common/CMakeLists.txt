@@ -28,6 +28,8 @@ add_library(common
   intrin.h
   hash_combine.h
   heap_array.h
+  json_reader.cpp
+  json_reader.h
   heterogeneous_containers.h
   layered_settings_interface.cpp
   layered_settings_interface.h

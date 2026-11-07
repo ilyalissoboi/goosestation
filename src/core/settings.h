@@ -571,6 +571,9 @@ extern std::string Resources;
 extern std::string SaveStates;
 extern std::string Screenshots;
 extern std::string Shaders;
+/// Where shader packs are installed, set by a host that keeps them apart from the data folder (Android, its own
+/// storage). Empty means the shaders folder; read it through GetShaderPacksFolder().
+extern std::string ShaderPacks;
 extern std::string Textures;
 extern std::string UserResources;
 extern std::string Videos;
@@ -583,6 +586,9 @@ void Save(SettingsInterface& si);
 
 /// Updates the variables in the EmuFolders namespace, reloading subsystems if needed.
 void Update();
+
+/// The shader packs' folder: ShaderPacks, or the shaders folder when no host set one.
+const std::string& GetShaderPacksFolder();
 
 /// Returns the path to a resource file, allowing the user to override it.
 std::string GetOverridableResourcePath(std::string_view name);

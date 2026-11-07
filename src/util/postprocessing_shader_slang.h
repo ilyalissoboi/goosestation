@@ -23,6 +23,10 @@ bool IsPresetName(std::string_view name);
 /// component, so a stage name never reaches outside the folder. '\' is taken as '/'.
 std::string ResolvePresetPath(std::string_view shaders_root, std::string_view name);
 
+/// The preset's absolute path: in the shaders folder if it's there, else in the shader packs' folder; empty when it's
+/// in neither or the name isn't safe (see ResolvePresetPath).
+std::string FindPreset(std::string_view name);
+
 /// Every preset under the folder, relative with '/' separators, sorted. Skips anything under "__MACOSX" and files or
 /// folders whose names start with '.'. Reads directory entries only, never a preset.
 std::vector<std::string> FindPresets(std::string_view shaders_root);

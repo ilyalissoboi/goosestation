@@ -161,17 +161,18 @@ void PostProcessingChainConfigWidget::onAddButtonClicked()
 {
   QMenu menu;
 
-  const std::vector<std::pair<std::string, std::string>> shaders = PostProcessing::GetAvailableShaderNames();
+  std::vector<PostProcessing::AvailableShader> shaders = PostProcessing::GetAvailableShaders();
   if (shaders.empty())
   {
     menu.addAction(tr("No Shaders Available"))->setEnabled(false);
   }
   else
   {
-    for (auto& [display_name, name] : shaders)
+    for (PostProcessing::AvailableShader& available : shaders)
     {
-      QAction* action = menu.addAction(QString::fromStdString(display_name));
-      connect(action, &QAction::triggered, [this, shader = std::move(name)]() {
+      QAction* action = menu.addAction(QStringLiteral("%1 [%2]").arg(
+        QString::fromStdString(available.name), QString::fromUtf8(PostProcessing::GetShaderKindName(available.kind))));
+      connect(action, &QAction::triggered, [this, shader = std::move(available.name)]() {
         auto lock = Host::GetSettingsLock();
         SettingsInterface& si = getSettingsInterfaceToUpdate();
 

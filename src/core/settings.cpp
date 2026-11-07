@@ -1819,6 +1819,7 @@ std::string EmuFolders::Resources;
 std::string EmuFolders::SaveStates;
 std::string EmuFolders::Screenshots;
 std::string EmuFolders::Shaders;
+std::string EmuFolders::ShaderPacks;
 std::string EmuFolders::Textures;
 std::string EmuFolders::UserResources;
 std::string EmuFolders::Videos;
@@ -1958,6 +1959,11 @@ bool EmuFolders::EnsureFoldersExist()
   result = FileSystem::EnsureDirectoryExists(UserResources.c_str(), false) && result;
   result = FileSystem::EnsureDirectoryExists(Videos.c_str(), false) && result;
   return result;
+}
+
+const std::string& EmuFolders::GetShaderPacksFolder()
+{
+  return ShaderPacks.empty() ? Shaders : ShaderPacks;
 }
 
 std::string EmuFolders::GetOverridableResourcePath(std::string_view name)

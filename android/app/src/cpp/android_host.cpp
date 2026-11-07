@@ -929,8 +929,9 @@ std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingS
   if (!s_initialized)
     return shaders;
 
-  for (const auto& [display_name, name] : PostProcessing::GetAvailableShaderNames())
+  for (const PostProcessing::AvailableShader& available : PostProcessing::GetAvailableShaders())
   {
+    const std::string& name = available.name;
     // A pack has thousands of slang presets: they're offered by name, and one that doesn't load says so when added.
     Error error;
     if (!PostProcessing::Slang::IsPresetName(name) && !ShaderLoads(name, &error))

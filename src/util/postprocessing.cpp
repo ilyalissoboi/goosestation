@@ -28,6 +28,8 @@
 #include "common/timer.h"
 #include "fmt/format.h"
 
+#include <unordered_set>
+
 Log_SetChannel(PostProcessing);
 
 // TODO: ProgressCallbacks for shader compiling, it can be a bit slow.
@@ -144,23 +146,21 @@ TinyString PostProcessing::ValueToString(ShaderOption::Type type, u32 vector_siz
   return ret;
 }
 
-std::vector<std::pair<std::string, std::string>> PostProcessing::GetAvailableShaderNames()
+namespace PostProcessing {
+namespace {
+
+// The file names (relative, '/' separators, extension dropped) of every file matching pattern under root, sorted.
+std::vector<std::string> FindShaderFiles(const std::string& root, const char* pattern)
 {
-  std::vector<std::pair<std::string, std::string>> names;
-
   FileSystem::FindResultsArray results;
-  FileSystem::FindFiles(Path::Combine(EmuFolders::Resources, "shaders").c_str(), "*.glsl",
+  FileSystem::FindFiles(root.c_str(), pattern,
                         FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_RELATIVE_PATHS, &results);
-  FileSystem::FindFiles(EmuFolders::Shaders.c_str(), "*.glsl",
-                        FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_RELATIVE_PATHS |
-                          FILESYSTEM_FIND_KEEP_ARRAY,
-                        &results);
-  std::sort(results.begin(), results.end(),
-            [](const auto& lhs, const auto& rhs) { return lhs.FileName < rhs.FileName; });
 
+  std::vector<std::string> names;
+  names.reserve(results.size());
   for (FILESYSTEM_FIND_DATA& fd : results)
   {
-    size_t pos = fd.FileName.rfind('.');
+    const size_t pos = fd.FileName.rfind('.');
     if (pos != std::string::npos && pos > 0)
       fd.FileName.erase(pos);
 
@@ -169,58 +169,103 @@ std::vector<std::pair<std::string, std::string>> PostProcessing::GetAvailableSha
     StringUtil::ReplaceAll(&fd.FileName, '\\', '/');
 #endif
 
-    if (std::none_of(names.begin(), names.end(), [&fd](const auto& other) { return fd.FileName == other.second; }))
-    {
-      std::string display_name = fmt::format(TRANSLATE_FS("PostProcessing", "{} [GLSL]"), fd.FileName);
-      names.emplace_back(std::move(display_name), std::move(fd.FileName));
-    }
+    names.push_back(std::move(fd.FileName));
   }
+  std::sort(names.begin(), names.end());
+  return names;
+}
 
-  FileSystem::FindFiles(Path::Combine(EmuFolders::Shaders, "reshade" FS_OSPATH_SEPARATOR_STR "Shaders").c_str(), "*.fx",
-                        FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_RELATIVE_PATHS, &results);
-  FileSystem::FindFiles(
-    Path::Combine(EmuFolders::Resources, "shaders" FS_OSPATH_SEPARATOR_STR "reshade" FS_OSPATH_SEPARATOR_STR "Shaders")
-      .c_str(),
-    "*.fx",
-    FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_RELATIVE_PATHS | FILESYSTEM_FIND_KEEP_ARRAY,
-    &results);
-  std::sort(results.begin(), results.end(),
-            [](const auto& lhs, const auto& rhs) { return lhs.FileName < rhs.FileName; });
+// The folders shaders are looked up in, the shaders folder first: the packs' folder only when it's another one.
+std::vector<std::string> GetUserShaderRoots()
+{
+  std::vector<std::string> roots{EmuFolders::Shaders};
+  if (EmuFolders::GetShaderPacksFolder() != EmuFolders::Shaders)
+    roots.push_back(EmuFolders::GetShaderPacksFolder());
+  return roots;
+}
 
-  for (FILESYSTEM_FIND_DATA& fd : results)
+} // namespace
+} // namespace PostProcessing
+
+std::vector<PostProcessing::AvailableShader> PostProcessing::GetAvailableShaders()
+{
+  std::vector<AvailableShader> shaders;
+  std::unordered_set<std::string> seen;
+  const auto add = [&shaders, &seen](std::string name, ShaderKind kind) {
+    if (seen.insert(name).second)
+      shaders.push_back(AvailableShader{std::move(name), kind});
+  };
+
+  const std::vector<std::string> roots = GetUserShaderRoots();
+  const std::string resources = Path::Combine(EmuFolders::Resources, "shaders");
+  constexpr const char* reshade_dir = "reshade" FS_OSPATH_SEPARATOR_STR "Shaders";
+
+  for (const std::string& root : roots)
   {
-    size_t pos = fd.FileName.rfind('.');
-    if (pos != std::string::npos && pos > 0)
-      fd.FileName.erase(pos);
-
-#ifdef _WIN32
-    // swap any backslashes for forward slashes so the config is cross-platform
-    StringUtil::ReplaceAll(&fd.FileName, '\\', '/');
-#endif
-
-    if (std::none_of(names.begin(), names.end(), [&fd](const auto& other) { return fd.FileName == other.second; }))
+    for (std::string& name : FindShaderFiles(root, "*.glsl"))
     {
-      std::string display_name = fmt::format(TRANSLATE_FS("PostProcessing", "{} [ReShade]"), fd.FileName);
-      names.emplace_back(std::move(display_name), std::move(fd.FileName));
+      const ShaderKind kind = name.starts_with("dolphinfx/") ? ShaderKind::DolphinFX : ShaderKind::GLSL;
+      add(std::move(name), kind);
     }
   }
+  for (std::string& name : FindShaderFiles(resources, "*.glsl"))
+  {
+    const ShaderKind kind = name.starts_with("dolphinfx/") ? ShaderKind::DolphinFX : ShaderKind::GLSL;
+    add(std::move(name), kind);
+  }
+
+  for (const std::string& root : roots)
+  {
+    for (std::string& name : FindShaderFiles(Path::Combine(root, reshade_dir), "*.fx"))
+      add(std::move(name), ShaderKind::ReShade);
+  }
+  for (std::string& name : FindShaderFiles(Path::Combine(resources, reshade_dir), "*.fx"))
+    add(std::move(name), ShaderKind::ReShade);
 
   // Slang presets are listed by name only: a pack has thousands, and loading each would take far too long.
   if (Librashader::GetAvailability().available)
   {
-    for (std::string& name : Slang::FindPresets(EmuFolders::Shaders))
+    for (const std::string& root : roots)
     {
-      std::string display_name = fmt::format(TRANSLATE_FS("PostProcessing", "{} [Slang]"), name);
-      names.emplace_back(std::move(display_name), std::move(name));
+      for (std::string& name : Slang::FindPresets(root))
+        add(std::move(name), ShaderKind::Slang);
     }
   }
 
-  std::sort(names.begin(), names.end(),
-            [](const std::pair<std::string, std::string>& lhs, const std::pair<std::string, std::string>& rhs) {
-              return (StringUtil::Strcasecmp(lhs.first.c_str(), rhs.first.c_str()) < 0);
-            });
+  std::vector<std::pair<std::string, size_t>> order;
+  order.reserve(shaders.size());
+  for (size_t i = 0; i < shaders.size(); i++)
+    order.emplace_back(GetBrowserPath(shaders[i]), i);
+  std::stable_sort(order.begin(), order.end(), [](const auto& lhs, const auto& rhs) {
+    return (StringUtil::Strcasecmp(lhs.first.c_str(), rhs.first.c_str()) < 0);
+  });
 
-  return names;
+  std::vector<AvailableShader> sorted;
+  sorted.reserve(shaders.size());
+  for (const auto& [path, index] : order)
+    sorted.push_back(std::move(shaders[index]));
+  return sorted;
+}
+
+const char* PostProcessing::GetShaderKindName(ShaderKind kind)
+{
+  switch (kind)
+  {
+    case ShaderKind::DolphinFX:
+      return "dolphinfx";
+    case ShaderKind::ReShade:
+      return "ReShade";
+    case ShaderKind::Slang:
+      return "Slang";
+    case ShaderKind::GLSL:
+    default:
+      return "GLSL";
+  }
+}
+
+std::string PostProcessing::GetBrowserPath(const AvailableShader& shader)
+{
+  return (shader.kind == ShaderKind::ReShade) ? ("reshade/" + shader.name) : shader.name;
 }
 
 TinyString PostProcessing::GetStageConfigSection(const char* section, u32 index)
@@ -751,23 +796,25 @@ std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingShader(const s
   std::string filename;
   std::optional<std::string> resource_str;
 
-  // Try reshade first.
-  filename = Path::Combine(
-    EmuFolders::Shaders,
-    fmt::format("reshade" FS_OSPATH_SEPARATOR_STR "Shaders" FS_OSPATH_SEPARATOR_STR "{}.fx", shader_name));
-  if (FileSystem::FileExists(filename.c_str()))
+  // The shaders folder, then the packs' folder: ReShade first, then GLSL, in each.
+  for (const std::string& root : GetUserShaderRoots())
   {
-    std::unique_ptr<ReShadeFXShader> shader = std::make_unique<ReShadeFXShader>();
-    if (shader->LoadFromFile(std::string(shader_name), filename.c_str(), only_config, error))
-      return shader;
-  }
+    filename = Path::Combine(
+      root, fmt::format("reshade" FS_OSPATH_SEPARATOR_STR "Shaders" FS_OSPATH_SEPARATOR_STR "{}.fx", shader_name));
+    if (FileSystem::FileExists(filename.c_str()))
+    {
+      std::unique_ptr<ReShadeFXShader> shader = std::make_unique<ReShadeFXShader>();
+      if (shader->LoadFromFile(std::string(shader_name), filename.c_str(), only_config, error))
+        return shader;
+    }
 
-  filename = Path::Combine(EmuFolders::Shaders, fmt::format("{}.glsl", shader_name));
-  if (FileSystem::FileExists(filename.c_str()))
-  {
-    std::unique_ptr<GLSLShader> shader = std::make_unique<GLSLShader>();
-    if (shader->LoadFromFile(std::string(shader_name), filename.c_str(), error))
-      return shader;
+    filename = Path::Combine(root, fmt::format("{}.glsl", shader_name));
+    if (FileSystem::FileExists(filename.c_str()))
+    {
+      std::unique_ptr<GLSLShader> shader = std::make_unique<GLSLShader>();
+      if (shader->LoadFromFile(std::string(shader_name), filename.c_str(), error))
+        return shader;
+    }
   }
 
   filename =
@@ -808,8 +855,8 @@ std::unique_ptr<PostProcessing::Shader> PostProcessing::TryLoadingSlangShader(co
     return {};
   }
 
-  const std::string path = Slang::ResolvePresetPath(EmuFolders::Shaders, shader_name);
-  if (path.empty() || !FileSystem::FileExists(path.c_str()))
+  const std::string path = Slang::FindPreset(shader_name);
+  if (path.empty())
   {
     Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing", "Slang preset {} isn't in the shaders folder."),
                                         shader_name));

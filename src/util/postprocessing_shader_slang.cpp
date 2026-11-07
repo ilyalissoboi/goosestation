@@ -9,6 +9,8 @@
 #include "postprocessing_slang_picture.h"
 #include "shadergen.h"
 
+#include "core/settings.h"
+
 #include "IconsFontAwesome5.h"
 #include "common/error.h"
 #include "common/file_system.h"
@@ -67,6 +69,17 @@ std::string PostProcessing::Slang::ResolvePresetPath(std::string_view shaders_ro
   }
 
   return Path::Combine(shaders_root, relative);
+}
+
+std::string PostProcessing::Slang::FindPreset(std::string_view name)
+{
+  for (const std::string* root : {static_cast<const std::string*>(&EmuFolders::Shaders), &EmuFolders::GetShaderPacksFolder()})
+  {
+    std::string path = ResolvePresetPath(*root, name);
+    if (!path.empty() && FileSystem::FileExists(path.c_str()))
+      return path;
+  }
+  return {};
 }
 
 std::vector<std::string> PostProcessing::Slang::FindPresets(std::string_view shaders_root)

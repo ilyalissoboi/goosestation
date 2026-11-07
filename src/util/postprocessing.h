@@ -184,8 +184,30 @@ private:
   std::unique_ptr<GPUTexture> m_output_texture;
 };
 
-// [display_name, filename]
-std::vector<std::pair<std::string, std::string>> GetAvailableShaderNames();
+enum class ShaderKind : u8
+{
+  GLSL,
+  DolphinFX, ///< A GLSL shader under dolphinfx/, loaded as GLSL.
+  ReShade,
+  Slang,
+};
+
+/// A shader that can be a stage: its stage name and its kind.
+struct AvailableShader
+{
+  std::string name;
+  ShaderKind kind;
+};
+
+/// Every shader that can be a stage, from the shaders folder, the shader packs' folder and the resources (a name the
+/// shaders folder has hides the others'), sorted by GetBrowserPath() ignoring case. Reads directory entries only.
+std::vector<AvailableShader> GetAvailableShaders();
+
+/// The kind as the browsers show it: "GLSL", "dolphinfx", "ReShade" or "Slang".
+const char* GetShaderKindName(ShaderKind kind);
+
+/// Where the shader sits in the browser's tree: "reshade/<name>" for a ReShade shader, otherwise its name.
+std::string GetBrowserPath(const AvailableShader& shader);
 
 void Initialize();
 

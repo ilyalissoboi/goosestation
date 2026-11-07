@@ -4,6 +4,7 @@
 #include "postprocessingsettingswidget.h"
 #include "qthost.h"
 #include "shaderbrowserdialog.h"
+#include "shaderpackdialog.h"
 #include "settingwidgetbinder.h"
 
 #include "util/postprocessing.h"
@@ -66,6 +67,10 @@ void PostProcessingChainConfigWidget::commitSettingsUpdate()
 void PostProcessingChainConfigWidget::connectUi()
 {
   connect(m_ui.reload, &QPushButton::clicked, this, &PostProcessingChainConfigWidget::onReloadButtonClicked);
+  connect(m_ui.downloadPacks, &QPushButton::clicked, this, [this]() {
+    ShaderPackDialog dialog(this);
+    dialog.exec();
+  });
   connect(m_ui.add, &QToolButton::clicked, this, &PostProcessingChainConfigWidget::onAddButtonClicked);
   connect(m_ui.remove, &QToolButton::clicked, this, &PostProcessingChainConfigWidget::onRemoveButtonClicked);
   connect(m_ui.clear, &QToolButton::clicked, this, &PostProcessingChainConfigWidget::onClearButtonClicked);

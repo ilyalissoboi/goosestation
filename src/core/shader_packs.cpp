@@ -396,6 +396,16 @@ PackStatus GetPackStatus(const std::optional<InstalledPack>& installed, const st
   return status;
 }
 
+std::string FormatSize(u64 bytes)
+{
+  constexpr u64 MB = 1024 * 1024;
+  if (bytes == 0)
+    return {};
+  if (bytes < MB)
+    return fmt::format(TRANSLATE_FS("ShaderPacks", "{} KB"), (bytes + 1023) / 1024);
+  return fmt::format(TRANSLATE_FS("ShaderPacks", "{:.1f} MB"), static_cast<double>(bytes) / static_cast<double>(MB));
+}
+
 std::string DescribePackStatus(const PackStatus& status)
 {
   switch (status.state)

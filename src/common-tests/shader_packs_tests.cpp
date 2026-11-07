@@ -749,3 +749,13 @@ TEST(ShaderPacks, LolaRetroSkipsHdr)
   EXPECT_EQ(ShaderPacks::ReadMarker(root.GetPath(), "lola-retro")->files,
             (std::vector<std::string>{"lola-retro/curved/a.slangp", "lola-retro/shaders/crt.slang"}));
 }
+
+TEST(ShaderPacks, SizesAreWordedForPeople)
+{
+  EXPECT_EQ(ShaderPacks::FormatSize(0), "");
+  EXPECT_EQ(ShaderPacks::FormatSize(512), "1 KB");
+  EXPECT_EQ(ShaderPacks::FormatSize(48424), "48 KB");
+  EXPECT_EQ(ShaderPacks::FormatSize(370341), "362 KB");
+  EXPECT_EQ(ShaderPacks::FormatSize(55018852), "52.5 MB");
+  EXPECT_EQ(ShaderPacks::FormatSize(1073741824), "1024.0 MB");
+}

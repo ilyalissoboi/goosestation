@@ -121,6 +121,9 @@ PackStatus GetPackStatus(const std::optional<InstalledPack>& installed, const st
 /// The words every UI shows for the status.
 std::string DescribePackStatus(const PackStatus& status);
 
+/// A size as the UIs show it: "48 KB" below a megabyte (rounded up), "52.5 MB" from one; empty for 0 (unknown).
+std::string FormatSize(u64 bytes);
+
 /// The largest archive a download may bring.
 static constexpr u64 MAX_DOWNLOAD_SIZE = 1024ull * 1024 * 1024;
 

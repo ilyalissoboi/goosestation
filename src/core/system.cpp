@@ -1384,6 +1384,11 @@ bool System::ReloadGameSettings(bool display_osd_messages)
   return true;
 }
 
+std::string System::GetGameSettingsLayerPath()
+{
+  return s_game_settings_interface ? s_game_settings_interface->GetFileName() : std::string();
+}
+
 #ifdef __ANDROID__
 void System::SetGameSettingsSerial(std::string serial)
 {

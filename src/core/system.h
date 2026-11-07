@@ -248,6 +248,9 @@ void ApplySettings(bool display_osd_messages);
 /// Reloads game specific settings, and applys any changes present.
 bool ReloadGameSettings(bool display_osd_messages);
 
+/// The file the running game's settings layer was read from; empty without one. CPU thread.
+std::string GetGameSettingsLayerPath();
+
 /// Reloads input sources.
 void ReloadInputSources();
 

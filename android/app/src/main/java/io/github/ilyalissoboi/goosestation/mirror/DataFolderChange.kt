@@ -28,6 +28,8 @@ class DataFolderChange(
     private val workingCopy: File,
     private val manifestFile: File,
     private val layout: DataLayout,
+    // A desktop's shader packs in the new folder, which its pull leaves out.
+    private val packMarkers: () -> PackMarkers? = { null },
 ) {
     /**
      * The change from the [old] folder's mirror (null if there's none), up to the save and the restart: a forced push
@@ -110,7 +112,8 @@ class DataFolderChange(
             if (child.name == CACHE) continue
             if (!child.deleteRecursively()) throw IOException("Can't delete $child")
         }
-        Mirror(store, workingCopy, manifestFile, System::currentTimeMillis) { layout }.pull { false }
+        Mirror(store, workingCopy, manifestFile, System::currentTimeMillis, packMarkers = packMarkers) { layout }
+            .pull { false }
     }
 
     private fun writeManifest(manifest: Manifest) = LocalTree.copyIn(manifest.encode().byteInputStream(), manifestFile)

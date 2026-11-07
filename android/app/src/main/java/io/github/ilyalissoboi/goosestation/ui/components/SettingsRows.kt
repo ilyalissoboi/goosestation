@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -160,6 +165,63 @@ fun SettingsPage(
         }
     }
 }
+
+/**
+ * A [SettingsPage] whose rows are composed as they scroll into view, for a list that can run to thousands (the shader
+ * browser): [title], [subtitle] if any, then [content]'s items. B or Back go back ([onBack]). Rows keep their focus
+ * ring's margin inside the list. It has no choice lists.
+ */
+@Composable
+fun LazySettingsPage(
+    title: String,
+    onBack: () -> Unit,
+    state: LazyListState = rememberLazyListState(),
+    subtitle: String? = null,
+    content: LazyListScope.() -> Unit,
+) {
+    BackHandler(onBack = onBack)
+    val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .safeDrawingPadding()
+                // B, and a Back key reaching Compose, go to the back handlers, the innermost enabled one first.
+                .onPreviewKeyEvent { event ->
+                    if (event.key != Key.Back && event.key != Key.ButtonB) return@onPreviewKeyEvent false
+                    if (event.type == KeyEventType.KeyUp) dispatcher?.onBackPressed() ?: onBack()
+                    true
+                }.padding(horizontal = 28.dp, vertical = 16.dp),
+    ) {
+        val game = LocalGameContext.current
+        // The title scrolls with the rows, as on every settings page, so a short screen keeps its height for them.
+        LazyColumn(
+            state = state,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item(key = LAZY_PAGE_HEADER) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    game?.let { Eyebrow(it.title) }
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    subtitle?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = GooseStationTheme.colors.inkMuted)
+                    }
+                }
+            }
+            content()
+        }
+    }
+}
+
+/** The key of a [LazySettingsPage]'s first item, its title: the page's own items come after it. */
+const val LAZY_PAGE_HEADER = "page-header"
 
 /**
  * A [SettingsPage] for the moment its settings take to read: [title] and a line saying so. The line holds the focus,

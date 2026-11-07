@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
                             settings = {
                                 GameSettingsHost(
                                     AppController.gameMenuSettings,
+                                    AppController.shaderPacks,
                                     hardcoreActive = AppController.gameMenu.state.hardcore,
                                     onBack = AppController.gameMenu::closeSettings,
                                 )
@@ -142,6 +143,7 @@ class MainActivity : ComponentActivity() {
                     Screen.PostProcessing ->
                         PostProcessingScreen(
                             AppController.postProcessingPage,
+                            AppController.shaderPacks,
                             onBack = AppController::closeSettingsPage,
                         )
                     Screen.Advanced ->
@@ -229,6 +231,7 @@ class MainActivity : ComponentActivity() {
                     Screen.GameSettings ->
                         GameSettingsHost(
                             AppController.gameSettingsPages,
+                            AppController.shaderPacks,
                             hardcoreActive = false,
                             onBack = AppController::closeGameSettings,
                         )

@@ -5,6 +5,7 @@
 #include "jni_util.h"
 
 #include "common/log.h"
+#include "common/progress_callback.h"
 #include "common/timer.h"
 
 #include <algorithm>
@@ -19,6 +20,7 @@ namespace {
 jclass s_bridge_class = nullptr;
 jmethodID s_start = nullptr;
 jmethodID s_cancel = nullptr;
+jmethodID s_download = nullptr;
 
 constexpr const char* BRIDGE_CLASS = "io/github/ilyalissoboi/goosestation/core/HttpBridge";
 
@@ -53,7 +55,9 @@ bool HTTPDownloaderAndroid::LoadJNIReferences(JNIEnv* env)
   // A failed lookup leaves an exception pending, so the first one to fail ends the chain.
   const bool found =
     (s_start = env->GetStaticMethodID(bridge_class, "start", "(JJLjava/lang/String;[BLjava/lang/String;I)V")) &&
-    (s_cancel = env->GetStaticMethodID(bridge_class, "cancel", "(JJ)V"));
+    (s_cancel = env->GetStaticMethodID(bridge_class, "cancel", "(JJ)V")) &&
+    (s_download = env->GetStaticMethodID(bridge_class, "download",
+                                         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IJJ)I"));
   JNIUtil::ClearException(env);
 
   if (found)
@@ -130,6 +134,35 @@ void HTTPDownloaderAndroid::InternalPollRequests()
     req->data = std::move(result.body);
     req->state.store(Request::State::Complete);
   }
+}
+
+s32 HTTPDownloaderAndroid::StreamToFile(const std::string& url, const std::string& path, const std::string& user_agent,
+                                        u32 timeout_ms, u64 max_bytes, ProgressCallback* progress)
+{
+  ScopedJNIEnv env;
+  if (!env || !s_download)
+    return HTTP_STATUS_ERROR;
+
+  jstring jurl = JNIUtil::ToJString(env.get(), url);
+  jstring jpath = JNIUtil::ToJString(env.get(), path);
+  jstring jagent = JNIUtil::ToJString(env.get(), user_agent);
+  s32 status = HTTP_STATUS_ERROR;
+  if (jurl && jpath && jagent)
+  {
+    // The bridge hands the progress back to NativeLibrary.downloadProgress() by its address.
+    status = env->CallStaticIntMethod(s_bridge_class, s_download, jurl, jpath, jagent, static_cast<jint>(timeout_ms),
+                                      static_cast<jlong>(std::min<u64>(max_bytes, INT64_MAX)),
+                                      reinterpret_cast<jlong>(progress));
+    if (JNIUtil::ClearException(env.get()))
+      status = HTTP_STATUS_ERROR;
+  }
+  if (jagent)
+    env->DeleteLocalRef(jagent);
+  if (jpath)
+    env->DeleteLocalRef(jpath);
+  if (jurl)
+    env->DeleteLocalRef(jurl);
+  return status;
 }
 
 bool HTTPDownloaderAndroid::StartRequest(HTTPDownloader::Request* req)

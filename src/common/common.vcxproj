@@ -22,6 +22,7 @@
     <ClInclude Include="gsvector_sse.h" />
     <ClInclude Include="hash_combine.h" />
     <ClInclude Include="heap_array.h" />
+    <ClInclude Include="json_reader.h" />
     <ClInclude Include="intrin.h" />
     <ClInclude Include="layered_settings_interface.h" />
     <ClInclude Include="log.h" />
@@ -55,6 +56,7 @@
     <ClCompile Include="fastjmp.cpp" />
     <ClCompile Include="file_system.cpp" />
     <ClCompile Include="gsvector.cpp" />
+    <ClCompile Include="json_reader.cpp" />
     <ClCompile Include="layered_settings_interface.cpp" />
     <ClCompile Include="log.cpp" />
     <ClCompile Include="memmap.cpp" />

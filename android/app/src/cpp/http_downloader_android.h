@@ -5,6 +5,8 @@
 
 #include "util/http_downloader.h"
 
+class ProgressCallback;
+
 #include <jni.h>
 
 #include <mutex>
@@ -21,6 +23,12 @@ public:
 
   /// Caches HttpBridge's class and methods. Called by JNI_OnLoad.
   static bool LoadJNIReferences(JNIEnv* env);
+
+  /// Streams url to the file at path on the calling thread, through HttpBridge.download: progress gets the bytes
+  /// received (and the length, when known) and stops it when cancelled. The status, or HTTP_STATUS_ERROR when the
+  /// bridge can't be reached. The file may be left behind on a failure.
+  static s32 StreamToFile(const std::string& url, const std::string& path, const std::string& user_agent,
+                          u32 timeout_ms, u64 max_bytes, ProgressCallback* progress);
 
   /// HttpBridge's answer for request [request] of downloader [downloader] (their ids, never reused), from any thread.
   /// A downloader that's gone, or a request it no longer has, is ignored.

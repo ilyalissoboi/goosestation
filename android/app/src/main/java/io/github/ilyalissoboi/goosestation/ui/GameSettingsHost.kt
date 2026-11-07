@@ -12,6 +12,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameSettingsPages
+import io.github.ilyalissoboi.goosestation.app.ShaderPacksModel
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
@@ -26,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 @Composable
 fun GameSettingsHost(
     pages: GameSettingsPages,
+    packs: ShaderPacksModel,
     hardcoreActive: Boolean,
     onBack: () -> Unit,
 ) {
@@ -47,7 +49,7 @@ fun GameSettingsHost(
             return@CompositionLocalProvider
         }
         if (page == GamePage.PostProcessing) {
-            PostProcessingScreen(pages.postProcessing, onBack = pages::closePage)
+            PostProcessingScreen(pages.postProcessing, packs, onBack = pages::closePage)
             return@CompositionLocalProvider
         }
         val values = pages.values(page)

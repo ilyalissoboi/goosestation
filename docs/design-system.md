@@ -321,6 +321,18 @@ call `onBack` on the key-up of a press that began in it. It scrolls the least th
 a focused text field asks to show its cursor as well as itself, which centring can't do. A question in it puts its
 destructive answer first and the focus on the safe one.
 
+### `ProgressBar` (`ProgressBar.kt`)
+
+```kotlin
+ProgressBar(fraction = done.toFloat() / total)          // how far a job has gone
+ProgressBar(fraction = null, phase = bytes % sweep / sweep) // its length unknown: a third of a bar, moved by the job
+```
+
+A 6 dp `beak` bar on `sunken`, `radius-sm`, the full width it's given, for a job with a step to say: it goes under the
+step's line ("Downloading lola-retro… 45%"), with the job's Cancel after it. While the job's size isn't known, a third
+of a bar sits at `phase` along it, which the caller moves as the job does (the bytes so far, say), never on a clock: a
+screen with one still settles, and the tests can wait for it. Never focusable; TalkBack reads it as a progress bar.
+
 ### `Eyebrow` (`Eyebrow.kt`)
 
 A small capitalised label over what it names: "Paused" over a game's title, "Step 1 of 3" over a setup step.
@@ -508,6 +520,6 @@ See [docs/android.md](android.md) for running them.
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
 Android; a badge for region;
-progress bars; on-screen touch controls; the
+on-screen touch controls; the
 desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

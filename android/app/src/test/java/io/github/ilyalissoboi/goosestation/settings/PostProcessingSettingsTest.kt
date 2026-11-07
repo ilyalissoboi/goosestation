@@ -190,4 +190,13 @@ class PostProcessingSettingsTest {
         FloatArray(size) { value },
         choices,
     )
+
+    @Test
+    fun dolphinfxIsAKindOfItsOwn() {
+        assertEquals(ShaderKind.DolphinFX, ShaderKind.of("dolphinfx"))
+        assertEquals("dolphinfx", ShaderKind.DolphinFX.label)
+        assertEquals(ShaderKind.GLSL, ShaderKind.of("GLSL"))
+        assertEquals("ReShade", ShaderKind.ReShade.label)
+        assertEquals(null, ShaderKind.of("DolphinFX"))
+    }
 }

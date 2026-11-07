@@ -52,10 +52,14 @@
     <ClCompile Include="selectdiscdialog.cpp" />
     <ClCompile Include="settingswindow.cpp" />
     <ClCompile Include="setupwizarddialog.cpp" />
+    <ClCompile Include="shaderpackdialog.cpp" />
+    <ClCompile Include="shaderbrowserdialog.cpp" />
     <ClCompile Include="vcruntimecheck.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="setupwizarddialog.h" />
+    <QtMoc Include="shaderpackdialog.h" />
+    <QtMoc Include="shaderbrowserdialog.h" />
     <QtMoc Include="aboutdialog.h" />
     <QtMoc Include="audiosettingswidget.h" />
     <QtMoc Include="biossettingswidget.h" />
@@ -260,6 +264,8 @@
     <ClCompile Include="$(IntDir)moc_qtprogresscallback.cpp" />
     <ClCompile Include="$(IntDir)moc_settingswindow.cpp" />
     <ClCompile Include="$(IntDir)moc_setupwizarddialog.cpp" />
+    <ClCompile Include="$(IntDir)moc_shaderpackdialog.cpp" />
+    <ClCompile Include="$(IntDir)moc_shaderbrowserdialog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="qt5.natvis" />

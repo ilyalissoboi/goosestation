@@ -5,6 +5,7 @@
     <ClInclude Include="types.h" />
     <ClInclude Include="fifo_queue.h" />
     <ClInclude Include="heap_array.h" />
+    <ClInclude Include="json_reader.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="small_string.h" />
     <ClInclude Include="timer.h" />
@@ -64,6 +65,7 @@
     </ClCompile>
     <ClCompile Include="crash_handler.cpp" />
     <ClCompile Include="error.cpp" />
+    <ClCompile Include="json_reader.cpp" />
     <ClCompile Include="layered_settings_interface.cpp" />
     <ClCompile Include="memory_settings_interface.cpp" />
     <ClCompile Include="threading.cpp" />

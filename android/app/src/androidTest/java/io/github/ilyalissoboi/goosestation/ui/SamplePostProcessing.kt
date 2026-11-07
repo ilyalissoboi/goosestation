@@ -37,9 +37,14 @@ class SamplePostProcessing : PostProcessingModel {
     override var gles by mutableStateOf(false)
     override var stage by mutableStateOf<Pair<Chain, Int>?>(null)
     override var adding by mutableStateOf<Chain?>(null)
+    override var browseFolder by mutableStateOf("")
+    override var browseSearch by mutableStateOf("")
     override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
     override var asking by mutableStateOf<Chain?>(null)
     override var askingStages by mutableStateOf(0)
+    override var shown by mutableStateOf(Chain.Display)
+    override var packsOpen by mutableStateOf(false)
+    override var focusPacks by mutableStateOf(false)
 
     fun stages(
         chain: Chain,
@@ -77,7 +82,26 @@ class SamplePostProcessing : PostProcessingModel {
     }
 
     override fun openAdd(chain: Chain) {
+        browseFolder = ""
+        browseSearch = ""
         adding = chain
+    }
+
+    override fun browseInto(folder: String) {
+        browseFolder = folder
+        browseSearch = ""
+    }
+
+    override fun browseBack() {
+        when {
+            browseSearch.isNotEmpty() -> browseSearch = ""
+            browseFolder.isNotEmpty() -> browseFolder = browseFolder.substringBeforeLast('/', "")
+            else -> closeAdd()
+        }
+    }
+
+    override fun search(text: String) {
+        browseSearch = text
     }
 
     override fun closeAdd() {
@@ -160,6 +184,25 @@ class SamplePostProcessing : PostProcessingModel {
     override fun reload() {
         calls += "reload"
     }
+
+    override fun showChain(chain: Chain) {
+        calls += "showChain $chain"
+        shown = chain
+    }
+
+    override fun openPacks() {
+        calls += "openPacks"
+        packsOpen = true
+    }
+
+    override fun closePacks() {
+        calls += "closePacks"
+        packsOpen = false
+        focusPacks = true
+    }
+
+    /** The packs page's model, for the pages that show it. */
+    val packs = SampleShaderPacks()
 
     companion object {
         private fun float(

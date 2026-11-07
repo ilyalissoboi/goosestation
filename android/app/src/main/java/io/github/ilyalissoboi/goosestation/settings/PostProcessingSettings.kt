@@ -25,18 +25,23 @@ enum class Chain(
     val enabled get() = BoolSetting(section, "Enabled", false)
 }
 
-/** A shader's kind, as the bridge names it: which of the core's loaders reads it. */
-enum class ShaderKind {
-    GLSL,
-    ReShade,
+/** A shader's kind, by the [label] the bridge and the browser give it: which of the core's loaders reads it. */
+enum class ShaderKind(
+    val label: String,
+) {
+    GLSL("GLSL"),
+
+    /** A GLSL shader under dolphinfx/, loaded as GLSL. */
+    DolphinFX("dolphinfx"),
+    ReShade("ReShade"),
 
     /** A RetroArch preset (.slangp), run by librashader; listed by name, never loaded until it's added. */
-    Slang,
+    Slang("Slang"),
     ;
 
     companion object {
-        /** The kind the bridge names [kind], or null for one it couldn't load. */
-        fun of(kind: String) = entries.firstOrNull { it.name == kind }
+        /** The kind the bridge labels [kind], or null for one it couldn't load. */
+        fun of(kind: String) = entries.firstOrNull { it.label == kind }
     }
 }
 

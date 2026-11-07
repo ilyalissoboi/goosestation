@@ -23,6 +23,7 @@ class PostProcessingAccessTest {
     private val root = File(context.cacheDir, "post-processing-access")
     private val dataRoot = File(root, "data")
     private val biosDir = File(root, "bios")
+    private val packsRoot = File(root, "shaderpacks")
 
     @Before
     fun setUp() {
@@ -38,7 +39,7 @@ class PostProcessingAccessTest {
         val shaders = shaders()
 
         assertEquals("GLSL", shaders["crt-lottes"])
-        assertEquals("GLSL", shaders["dolphinfx/edge-smoothing/XBR"])
+        assertEquals("dolphinfx", shaders["dolphinfx/edge-smoothing/XBR"])
         assertEquals("ReShade", shaders["FilmGrain2"])
         // Its includes aren't in the resources: its metadata doesn't load.
         assertFalse(shaders.toString(), "crt/crt-hyllian-sinc" in shaders)
@@ -172,9 +173,56 @@ class PostProcessingAccessTest {
         assertEquals("Slang preset shaders_slang/gone.slangp isn't in the shaders folder.", stage.error)
     }
 
+    // Packs live in the app's own storage, apart from the data folder: listed and loaded from there.
+    @Test
+    fun presetsInTheAppsPacksAreListedAndLoad() {
+        writeTestPreset(File(packsRoot, "packs/p"))
+        NativeLibrary.setShaderPacksFolder(packsRoot.absolutePath)
+        initialize()
+
+        assertEquals("Slang", shaders()["packs/p/test.slangp"])
+        assertNull(NativeLibrary.addPostProcessingStage(null, DISPLAY, "packs/p/test.slangp"))
+        val stage = NativeLibrary.getPostProcessingStages(null, DISPLAY)!!.single()
+        assertEquals("Slang", stage.kind)
+        assertEquals("", stage.error)
+    }
+
+    @Test
+    fun aGlslShaderInTheAppsPacksLoads() {
+        val resources = Resources.extract(context)
+        packsRoot.mkdirs()
+        File(resources, "shaders/simple-flip.glsl").copyTo(File(packsRoot, "packonly.glsl"))
+        NativeLibrary.setShaderPacksFolder(packsRoot.absolutePath)
+        initialize()
+
+        assertEquals("GLSL", shaders()["packonly"])
+        assertNull(NativeLibrary.addPostProcessingStage(null, DISPLAY, "packonly"))
+        assertEquals("GLSL", NativeLibrary.getPostProcessingStages(null, DISPLAY)!![0].kind)
+    }
+
+    // A stage's name is looked up in the data folder's shaders/ first: its preset loads, the pack's broken one isn't read.
+    @Test
+    fun theDataFoldersPresetWinsOverThePacks() {
+        writeTestPreset()
+        File(packsRoot, "p").mkdirs()
+        File(packsRoot, "p/test.slangp").writeText("this isn't a preset\n")
+        NativeLibrary.setShaderPacksFolder(packsRoot.absolutePath)
+        initialize()
+
+        assertEquals(
+            1,
+            NativeLibrary
+                .getPostProcessingShaders()
+                .toList()
+                .chunked(2)
+                .count { it[0] == "p/test.slangp" },
+        )
+        assertNull(NativeLibrary.addPostProcessingStage(null, DISPLAY, "p/test.slangp"))
+    }
+
     // The PCSX2 fork's two-parameter preset, whose shader is valid GLSL.
-    private fun writeTestPreset() {
-        val dir = File(dataRoot, "shaders/p").apply { mkdirs() }
+    private fun writeTestPreset(dir: File = File(dataRoot, "shaders/p")) {
+        dir.mkdirs()
         File(dir, "test.slangp").writeText("shaders = 1\nshader0 = params.slang\n")
         File(dir, "params.slang").writeText(
             """

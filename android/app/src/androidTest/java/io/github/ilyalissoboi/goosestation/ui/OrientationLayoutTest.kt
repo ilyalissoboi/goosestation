@@ -104,6 +104,8 @@ import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
+import io.github.ilyalissoboi.goosestation.settings.Shader
+import io.github.ilyalissoboi.goosestation.settings.ShaderKind
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
@@ -966,17 +968,35 @@ class OrientationLayoutTest {
                             running = true
                         }
                     }
-                PostProcessingScreen(model, onBack = {})
+                PostProcessingScreen(model, model.packs, onBack = {})
             },
             rows =
                 listOf(
+                    CHAIN_LABEL,
                     "Post-processing",
                     "1. crt-lottes",
                     "2. simple-flip",
+                    "3. shaders_slang/crt/crt-royale.slangp",
                     "Add a shader",
-                    "1. FilmGrain2",
+                    "Download shader packs",
                     "Reload shaders",
                 ),
+        )
+
+    @Test
+    fun thePostProcessingInternalChain() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            stages(Chain.Internal, SamplePostProcessing.filmGrain)
+                            showChain(Chain.Internal)
+                        }
+                    }
+                PostProcessingScreen(model, model.packs, onBack = {})
+            },
+            rows = listOf(CHAIN_LABEL, "Post-processing", "1. FilmGrain2", "Add a shader", "Download shader packs"),
         )
 
     @Test
@@ -994,10 +1014,18 @@ class OrientationLayoutTest {
                         }
                     }
                 CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", true, false)) {
-                    PostProcessingScreen(model, onBack = {})
+                    PostProcessingScreen(model, model.packs, onBack = {})
                 }
             },
-            rows = listOf("Post-processing", "1. crt-lottes", "Add a shader", "Use global (Off)", "Reload shaders"),
+            rows =
+                listOf(
+                    CHAIN_LABEL,
+                    "Post-processing",
+                    "1. crt-lottes",
+                    "Add a shader",
+                    "Download shader packs",
+                    "Reload shaders",
+                ),
             lists = mapOf("Post-processing" to ("Use global (Off)" to "Off")),
         )
 
@@ -1024,9 +1052,9 @@ class OrientationLayoutTest {
         settingsPageFits(
             {
                 val model = remember { SamplePostProcessing().apply { openAdd(Chain.Display) } }
-                PostProcessingScreen(model, onBack = {})
+                PostProcessingScreen(model, model.packs, onBack = {})
             },
-            rows = listOf("crt-lottes", "FilmGrain2", "simple-flip"),
+            rows = listOf("reshade", "crt-lottes", "simple-flip"),
         )
 
     @Test
@@ -1040,11 +1068,54 @@ class OrientationLayoutTest {
                             openStage(Chain.Display, 0)
                         }
                     }
-                PostProcessingScreen(model, onBack = {})
+                PostProcessingScreen(model, model.packs, onBack = {})
             },
             rows = listOf("Remove", "Screen Warp X", "Tint (Red)", "Tint (Green)", "Curvature", "Mask"),
             lists = mapOf("Mask" to ("Off" to "Aperture")),
         )
+
+    @Test
+    fun theShaderBrowserInAFolder() =
+        settingsPageFits(
+            {
+                val model =
+                    remember {
+                        SamplePostProcessing().apply {
+                            shaders =
+                                listOf(
+                                    Shader("shaders_slang/crt/crt-royale.slangp", ShaderKind.Slang),
+                                    Shader("shaders_slang/crt/crt-geom.slangp", ShaderKind.Slang),
+                                    Shader("shaders_slang/crt/shaders/x.slangp", ShaderKind.Slang),
+                                )
+                            openAdd(Chain.Display)
+                            browseInto("shaders_slang/crt")
+                        }
+                    }
+                PostProcessingScreen(model, model.packs, onBack = {})
+            },
+            rows = listOf("Up to shaders_slang", "shaders", "crt-royale", "crt-geom"),
+        )
+
+    @Test
+    fun theShaderPacksPanel() =
+        settingsPageFits(
+            {
+                // The panel alone: the page under its scrim is the chains page's own case.
+                val packs = remember { SampleShaderPacks() }
+                ShaderPacksPanel(packs, onClose = {})
+            },
+            rows = listOf("libretro slang shaders", "Retro Crisis GDV-NTSC", "satpixie CRT", "lola-retro", "Close"),
+        )
+
+    @Test
+    fun theShaderPacksPanelBusy() =
+        eachConfig({
+            val packs = remember { SampleShaderPacks().apply { install("shaders_slang") } }
+            ShaderPacksPanel(packs, onClose = {})
+        }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+        }
 
     @Test
     fun theAdvancedPage() =

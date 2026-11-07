@@ -112,6 +112,10 @@ add_library(core
   settings.cpp
   settings.h
   shader_cache_version.h
+  shader_pack_archive.cpp
+  shader_pack_archive.h
+  shader_packs.cpp
+  shader_packs.h
   sio.cpp
   sio.h
   spu.cpp
@@ -148,7 +152,7 @@ target_include_directories(core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
 # Memory card sync loads emusync at run time; it builds against the vendored header only.
 target_include_directories(core PRIVATE "${CMAKE_SOURCE_DIR}/dep/emusync/include")
 target_link_libraries(core PUBLIC Threads::Threads common util)
-target_link_libraries(core PRIVATE xxhash imgui rapidyaml rcheevos cpuinfo::cpuinfo ZLIB::ZLIB Zstd::Zstd)
+target_link_libraries(core PRIVATE xxhash imgui minizip rapidyaml rcheevos cpuinfo::cpuinfo ZLIB::ZLIB Zstd::Zstd)
 
 if(CPU_ARCH_X64)
   target_compile_definitions(core PUBLIC "ENABLE_RECOMPILER=1" "ENABLE_NEWREC=1" "ENABLE_MMAP_FASTMEM=1")

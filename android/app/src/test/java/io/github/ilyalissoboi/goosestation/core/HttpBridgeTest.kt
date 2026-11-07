@@ -9,9 +9,14 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import kotlin.random.Random
 
 class HttpBridgeTest {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).also { it.start() }
@@ -22,8 +27,38 @@ class HttpBridgeTest {
     private var userAgent: String? = null
     private var body = ""
 
+    @get:Rule
+    val temp = TemporaryFolder()
+
     @After
     fun stop() = server.stop(0)
+
+    // Serves bytes at path, with their length unless chunked; stalls for stallMs after the first half.
+    private fun serveBytes(
+        path: String,
+        bytes: ByteArray,
+        chunked: Boolean = false,
+        stallMs: Long = 0,
+    ) {
+        server.createContext(path) { exchange: HttpExchange ->
+            userAgent = exchange.requestHeaders.getFirst("User-Agent")
+            exchange.sendResponseHeaders(200, if (chunked) 0 else bytes.size.toLong())
+            exchange.responseBody.use {
+                it.write(bytes, 0, bytes.size / 2)
+                it.flush()
+                if (stallMs > 0) Thread.sleep(stallMs)
+                it.write(bytes, bytes.size / 2, bytes.size - bytes.size / 2)
+            }
+        }
+    }
+
+    private fun stream(
+        path: String,
+        file: File,
+        maxBytes: Long = Long.MAX_VALUE,
+        timeoutMs: Int = 5000,
+        onProgress: (Long, Long) -> Boolean = { _, _ -> true },
+    ) = HttpBridge.stream("$base$path", file, "GooseStation test", timeoutMs, maxBytes, onProgress, log = {})
 
     private fun serve(
         path: String,
@@ -106,5 +141,98 @@ class HttpBridgeTest {
         for (secret in listOf("fake-token-1", "not-a-real-password", "r=")) {
             assertFalse(lines.any { secret in it })
         }
+    }
+
+    @Test
+    fun aStreamWritesTheBodyToTheFile() {
+        val bytes = Random(17).nextBytes(1024 * 1024)
+        serveBytes("/pack.zip", bytes)
+        val file = File(temp.root, "pack.zip.part")
+        val progress = mutableListOf<Pair<Long, Long>>()
+
+        val status =
+            stream("/pack.zip", file) { done, total ->
+                progress += done to total
+                true
+            }
+
+        assertEquals(200, status)
+        assertArrayEquals(bytes, file.readBytes())
+        assertEquals(1024L * 1024 to 1024L * 1024, progress.last())
+        // At most one report each 64 KiB, and one at the end.
+        assertTrue(progress.toString(), progress.size <= 1024 / 64 + 2)
+        assertEquals("GooseStation test", userAgent)
+    }
+
+    @Test
+    fun aStreamOfUnknownLengthSaysSo() {
+        serveBytes("/chunked.zip", ByteArray(200_000) { 7 }, chunked = true)
+        val file = File(temp.root, "chunked.zip.part")
+        var last = 0L to 0L
+
+        assertEquals(
+            200,
+            stream("/chunked.zip", file) { done, total ->
+                last = done to total
+                true
+            },
+        )
+        assertEquals(200_000L to -1L, last)
+        assertEquals(200_000L, file.length())
+    }
+
+    // GitHub's release downloads answer with a redirect to where the file is.
+    @Test
+    fun aStreamFollowsARedirect() {
+        serveBytes("/real.zip", "zip".encodeToByteArray())
+        server.createContext("/moved.zip") { exchange: HttpExchange ->
+            exchange.responseHeaders.add("Location", "$base/real.zip")
+            exchange.sendResponseHeaders(302, -1)
+            exchange.close()
+        }
+        val file = File(temp.root, "moved.zip.part")
+
+        assertEquals(200, stream("/moved.zip", file))
+        assertEquals("zip", file.readText())
+    }
+
+    @Test
+    fun aCancelledStreamDeletesTheFile() {
+        serveBytes("/pack.zip", ByteArray(1024 * 1024))
+        val file = File(temp.root, "pack.zip.part")
+
+        val status = stream("/pack.zip", file) { done, _ -> done == 0L }
+
+        assertEquals(HttpBridge.STATUS_CANCELLED, status)
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun aStreamPastTheCapStopsAndDeletesTheFile() {
+        serveBytes("/big.zip", ByteArray(1024 * 1024))
+        serveBytes("/big-chunked.zip", ByteArray(1024 * 1024), chunked = true)
+        for (path in listOf("/big.zip", "/big-chunked.zip")) {
+            val file = File(temp.root, "big.zip.part")
+            assertEquals(path, HttpBridge.STATUS_TOO_LARGE, stream(path, file, maxBytes = 100_000))
+            assertFalse(path, file.exists())
+        }
+    }
+
+    @Test
+    fun aStreamOfAnErrorStatusWritesNothing() {
+        serve("/missing.zip", 404, "text/plain", "nope")
+        val file = File(temp.root, "missing.zip.part")
+
+        assertEquals(404, stream("/missing.zip", file))
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun aStalledStreamTimesOut() {
+        serveBytes("/stall.zip", ByteArray(64 * 1024), stallMs = 2000)
+        val file = File(temp.root, "stall.zip.part")
+
+        assertEquals(HttpBridge.STATUS_TIMEOUT, stream("/stall.zip", file, timeoutMs = 300))
+        assertFalse(file.exists())
     }
 }

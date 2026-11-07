@@ -17,6 +17,12 @@ object NativeLibrary {
     }
 
     /**
+     * Where shader packs are installed: the app's own storage, apart from the data folder (never mirrored). A stage's
+     * name is looked up in the data folder's `shaders/` first, then here. Set before [initialize].
+     */
+    external fun setShaderPacksFolder(path: String)
+
+    /**
      * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
      * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in
@@ -665,8 +671,9 @@ object NativeLibrary {
     )
 
     /**
-     * The post-processing shaders this install has (the resources' and the data folder's `shaders/`) whose metadata
-     * loads, sorted as desktop lists them: name, kind ("GLSL" or "ReShade"), name, kind…
+     * The post-processing shaders this install has (the data folder's `shaders/`, the app's packs and the resources';
+     * slang presets by name, the others only when their metadata loads), sorted by their place in the browser: name,
+     * kind ("GLSL", "dolphinfx", "ReShade" or "Slang"), name, kind…
      */
     external fun getPostProcessingShaders(): Array<String>
 
@@ -809,6 +816,56 @@ object NativeLibrary {
 
     /** Ends the capture running, if any, with no report; none arrives once this returns. */
     external fun cancelBindingCapture()
+
+    /** The shader packs, 8 fields each: id, name, description, licence, needs, installed version, incomplete, size. */
+    external fun getShaderPacks(): Array<String>
+
+    /** Each pack's latest version from GitHub, 4 fields each: id, version, worded size, error. Blocks. */
+    external fun checkShaderPacks(progress: PackProgress): Array<String>
+
+    /** Installs [ids] (dependencies first), 4 fields each: id, ok ("1"), cancelled ("1"), message. Blocks. */
+    external fun installShaderPacks(
+        ids: Array<String>,
+        progress: PackProgress,
+    ): Array<String>
+
+    /**
+     * For ShaderPacksInstallTest only: [installShaderPacks] with GitHub's addresses moved to [base] (`/api/…` for
+     * api.github.com, `/gh/…` for github.com), a server on the device.
+     */
+    external fun shaderPacksTestInstall(
+        base: String,
+        ids: Array<String>,
+        progress: PackProgress,
+    ): Array<String>
+
+    /** The files a shader pack marker ([json]) lists, relative to its shaders folder; null when it can't be read. */
+    external fun shaderPackMarkerFiles(json: String): Array<String>?
+
+    /** The shader packs' ids, as their markers are named. Before [initialize] too. */
+    external fun shaderPackIds(): Array<String>
+
+    /** The core's shaders folder relative to the data root ("shaders"), or null when it's outside it. */
+    external fun getShadersFolder(): String?
+
+    /** Removes the pack's files: null when done, else why not. */
+    external fun removeShaderPack(id: String): String?
+
+    /** The pack's state and its words, with [latest] as its latest version (null: unknown). */
+    external fun describeShaderPack(
+        id: String,
+        latest: String?,
+    ): Array<String>
+
+    /**
+     * A streamed download's progress ([HttpBridge.download]): [done] bytes of [total] (-1 when unknown), for the
+     * core's progress callback at [progress]. False once the core has cancelled it.
+     */
+    external fun downloadProgress(
+        progress: Long,
+        done: Long,
+        total: Long,
+    ): Boolean
 
     /**
      * [HttpBridge]'s answer to [downloader]'s [request]: its [status] (or [HttpBridge.STATUS_TIMEOUT],

@@ -18,6 +18,7 @@ add_executable(common-tests
   ../util/fallback_fonts.cpp
   file_system_tests.cpp
   gsvector_yuvtorgb_test.cpp
+  json_reader_tests.cpp
   librashader_loader_tests.cpp
   memcard_sync_ui_tests.cpp
   ../core/memcard_sync_ui.cpp
@@ -26,11 +27,14 @@ add_executable(common-tests
   memory_card_image_tests.cpp
   ../core/memory_card_image.cpp
   path_tests.cpp
+  postprocessing_browser_tests.cpp
   postprocessing_config_tests.cpp
   postprocessing_slang_gpu_tests.cpp
   postprocessing_slang_tests.cpp
   rectangle_tests.cpp
   settings_multitap_tests.cpp
+  shader_pack_archive_tests.cpp
+  shader_packs_tests.cpp
   shiftjis_tests.cpp
   ../util/shiftjis.cpp
   string_tests.cpp
@@ -56,4 +60,4 @@ if(ANDROID)
   target_link_libraries(common-tests PRIVATE imgui)
 endif()
 
-target_link_libraries(common-tests PRIVATE core scmversion common rcheevos gtest gtest_main)
+target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip gtest gtest_main)

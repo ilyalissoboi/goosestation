@@ -412,4 +412,26 @@ class MirrorPlannerTest {
             ),
         )
     }
+
+    @Test
+    fun listedPackFilesAreNeitherPulledNorPushed() {
+        val layout = DataLayout.DEFAULT.withPackFiles("shaders/.shaderpacks/", setOf("shaders/shaders_slang/a.slang"))
+        val folder =
+            mapOf(
+                "shaders/shaders_slang/a.slang" to s(1),
+                "shaders/.shaderpacks/shaders_slang.json" to s(1),
+                "shaders/mine.glsl" to s(1),
+            )
+        assertEquals(
+            listOf("shaders/mine.glsl"),
+            MirrorPlanner.pull(folder, emptyMap(), none, layout, never).map { it.path },
+        )
+        val local = mapOf("shaders/shaders_slang/a.slang" to s(2))
+        assertEquals(
+            emptyList<String>(),
+            MirrorPlanner.push(emptyMap(), local, none, layout, now, false, never).map {
+                it.path
+            },
+        )
+    }
 }

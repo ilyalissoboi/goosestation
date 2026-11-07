@@ -151,6 +151,10 @@ set(SRCS
   setupwizarddialog.cpp
   setupwizarddialog.h
   setupwizarddialog.ui
+  shaderpackdialog.cpp
+  shaderpackdialog.h
+  shaderbrowserdialog.cpp
+  shaderbrowserdialog.h
 )
 
 set(TS_FILES

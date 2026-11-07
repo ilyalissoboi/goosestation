@@ -23,9 +23,12 @@ class DataLayout private constructor(
     // Each ends in '/'.
     private val caches: Set<String>,
     val fromCore: Boolean,
+    // A desktop's shader packs: its markers' folder (ending in '/'), and the files they list.
+    private val packMarkers: String? = null,
+    private val packFiles: Set<String> = emptySet(),
 ) {
     /** Whether the file at [path] is mirrored. */
-    fun mirrored(path: String) = inLayout(path) && !kept(path)
+    fun mirrored(path: String) = inLayout(path) && !kept(path) && !packed(path)
 
     /**
      * Whether the mirrored file at [path] is only ever sent to the data folder, never taken from it: the core's logs,
@@ -38,7 +41,19 @@ class DataLayout private constructor(
      * Whether the working-copy file at [path] is neither mirrored nor the core's: an earlier build copied it in from
      * the data folder, which keeps its own copy.
      */
-    fun stray(path: String) = !inLayout(path) && !kept(path)
+    fun stray(path: String) = (!inLayout(path) || packed(path)) && !kept(path)
+
+    /**
+     * This layout, keeping a desktop's shader packs out of the mirror: every file in [markers] (the data folder's
+     * `<shaders>/.shaderpacks/`, ending in `/`) and every one of [files] they list. They're strays: a pack lives on
+     * each device on its own, and copies an earlier build pulled in are dropped. Android installs its own elsewhere.
+     */
+    fun withPackFiles(
+        markers: String,
+        files: Set<String>,
+    ) = DataLayout(folders, this.files, caches, fromCore, markers, files)
+
+    private fun packed(path: String) = (packMarkers != null && path.startsWith(packMarkers)) || path in packFiles
 
     /**
      * Whether a listing goes into [folder] (no trailing `/`): it's in a layout folder, or holds one, or a layout file.

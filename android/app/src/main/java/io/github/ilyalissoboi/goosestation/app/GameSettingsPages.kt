@@ -144,6 +144,7 @@ class GameSettingsPages(
     private val core: CoroutineDispatcher,
     private val api: CoreApi,
     private val global: CoreSettings,
+    private val shaderFolder: ShaderFolderMemory = MemoryShaderFolder(),
     private val layer: (String) -> LayerSettings,
 ) {
     /** The game whose settings show; null while none do. */
@@ -195,7 +196,7 @@ class GameSettingsPages(
         private set
 
     /** The game's Post-processing page, while it shows. */
-    val postProcessing = PostProcessingPage(scope, core, api, global, layer)
+    val postProcessing = PostProcessingPage(scope, core, api, global, shaderFolder, layer)
 
     private val shown = mutableStateMapOf<GamePage, SettingValues>()
 

@@ -11,6 +11,7 @@ import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.LayerSettings
 import io.github.ilyalissoboi.goosestation.settings.Shader
+import io.github.ilyalissoboi.goosestation.settings.ShaderBrowser
 import io.github.ilyalissoboi.goosestation.settings.ShaderKind
 import io.github.ilyalissoboi.goosestation.settings.Stage
 import io.github.ilyalissoboi.goosestation.settings.offered
@@ -43,6 +44,9 @@ interface PostProcessingModel {
     /** Each chain, as last read or changed; empty until read. */
     val chains: Map<Chain, ChainView>
 
+    /** The chain the page shows: Display each time it opens; the Chain switch picks the other. */
+    val shown: Chain
+
     /** The shaders that can be added: those that load, and can run on [gles]. */
     val shaders: List<Shader>
 
@@ -52,11 +56,23 @@ interface PostProcessingModel {
     /** The stage whose page shows. */
     val stage: Pair<Chain, Int>?
 
-    /** The chain whose Add page shows. */
+    /** The chain whose Add page (the shader browser) shows. */
     val adding: Chain?
+
+    /** The folder the browser shows ("" for the top). */
+    val browseFolder: String
+
+    /** The browser's search: while it's not blank, the matches show instead of the folder. */
+    val browseSearch: String
 
     /** What the chains page focuses as it comes back: a stage, or one past a chain's last, its Add row. */
     val focus: Pair<Chain, Int>?
+
+    /** Whether the shader packs page shows. */
+    val packsOpen: Boolean
+
+    /** Whether the chains page focuses its Download shader packs row as it comes back. */
+    val focusPacks: Boolean
 
     /** The game's chain whose "Use global" asks first, as it has [askingStages] stages to remove. */
     val asking: Chain?
@@ -77,6 +93,13 @@ interface PostProcessingModel {
     fun openAdd(chain: Chain)
 
     fun closeAdd()
+
+    fun browseInto(folder: String)
+
+    /** B in the browser: clears the search, else goes up a folder, else closes it. */
+    fun browseBack()
+
+    fun search(text: String)
 
     fun add(
         chain: Chain,
@@ -109,6 +132,13 @@ interface PostProcessingModel {
     )
 
     fun reload()
+
+    fun showChain(chain: Chain)
+
+    fun openPacks()
+
+    /** Back from the shader packs page, to its row. */
+    fun closePacks()
 }
 
 /**
@@ -122,6 +152,7 @@ class PostProcessingPage(
     private val core: CoroutineDispatcher,
     private val api: CoreApi,
     private val global: CoreSettings,
+    private val lastFolder: ShaderFolderMemory = MemoryShaderFolder(),
     private val layer: (String) -> LayerSettings,
 ) : PostProcessingModel {
     override var key by mutableStateOf<String?>(null)
@@ -148,10 +179,25 @@ class PostProcessingPage(
     override var adding by mutableStateOf<Chain?>(null)
         private set
 
+    override var browseFolder by mutableStateOf("")
+        private set
+
+    override var browseSearch by mutableStateOf("")
+        private set
+
     override var focus by mutableStateOf<Pair<Chain, Int>?>(null)
         private set
 
     override var asking by mutableStateOf<Chain?>(null)
+        private set
+
+    override var shown by mutableStateOf(Chain.Display)
+        private set
+
+    override var packsOpen by mutableStateOf(false)
+        private set
+
+    override var focusPacks by mutableStateOf(false)
         private set
 
     override var askingStages by mutableStateOf(0)
@@ -172,6 +218,9 @@ class PostProcessingPage(
         adding = null
         focus = null
         asking = null
+        packsOpen = false
+        focusPacks = false
+        shown = Chain.Display
         read()
     }
 
@@ -183,6 +232,8 @@ class PostProcessingPage(
         adding = null
         focus = null
         asking = null
+        packsOpen = false
+        focusPacks = false
         reads++
     }
 
@@ -240,7 +291,29 @@ class PostProcessingPage(
     private fun editable(chain: Chain) = chains[chain]?.own == true
 
     override fun openAdd(chain: Chain) {
-        if (editable(chain)) adding = chain
+        if (!editable(chain)) return
+        browseFolder = ShaderBrowser.open(shaders, lastFolder.get())
+        browseSearch = ""
+        adding = chain
+    }
+
+    override fun browseInto(folder: String) {
+        if (adding == null) return
+        browseFolder = folder
+        browseSearch = ""
+    }
+
+    override fun browseBack() {
+        when {
+            adding == null -> return
+            browseSearch.isNotEmpty() -> browseSearch = ""
+            browseFolder.isNotEmpty() -> browseFolder = ShaderBrowser.parent(browseFolder)
+            else -> closeAdd()
+        }
+    }
+
+    override fun search(text: String) {
+        if (adding != null) browseSearch = text
     }
 
     /** Back from the Add page, to its chain's Add row. */
@@ -257,6 +330,7 @@ class PostProcessingPage(
     ) {
         adding = null
         if (!editable(chain)) return
+        lastFolder.set(ShaderBrowser.folderOf(shader))
         // Shown at once, its options with the core's answer, so the focus has its row however long that takes.
         val stages = chains[chain]?.stages ?: return
         showStages(chain, stages + Stage(shader.name, shader.kind, emptyList()))
@@ -335,6 +409,22 @@ class PostProcessingPage(
             )
         val key = key
         edit { api.setPostProcessingOption(key, chain.section, index, option.name, array) }
+    }
+
+    override fun showChain(chain: Chain) {
+        shown = chain
+    }
+
+    override fun openPacks() {
+        focusPacks = false
+        packsOpen = true
+    }
+
+    override fun closePacks() {
+        if (!packsOpen) return
+        packsOpen = false
+        focus = null
+        focusPacks = true
     }
 
     /** Has the running game load its shaders again from their files. */
@@ -428,3 +518,21 @@ fun ShaderOptionInfo.withValue(value: FloatArray) =
     )
 
 private const val STAGE_COUNT = "StageCount"
+
+/** Where the shader browser opens: the folder of the last shader added. */
+interface ShaderFolderMemory {
+    fun get(): String
+
+    fun set(folder: String)
+}
+
+/** A [ShaderFolderMemory] for this run only. */
+class MemoryShaderFolder : ShaderFolderMemory {
+    private var folder = ""
+
+    override fun get() = folder
+
+    override fun set(folder: String) {
+        this.folder = folder
+    }
+}

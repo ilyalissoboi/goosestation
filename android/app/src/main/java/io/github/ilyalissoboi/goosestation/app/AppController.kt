@@ -24,6 +24,7 @@ import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.core.NativeShaderPackApi
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.input.Rumble
@@ -33,6 +34,7 @@ import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
 import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
+import io.github.ilyalissoboi.goosestation.mirror.PackMarkers
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
 import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
@@ -194,20 +196,59 @@ object AppController : NativeCallbacks {
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
 
+    // Where the shader browser opens, kept in this device's preferences (read once they're there).
+    private val shaderFolder =
+        object : ShaderFolderMemory {
+            override fun get() = if (::prefs.isInitialized) prefs.shaderBrowserFolder() else ""
+
+            override fun set(folder: String) {
+                if (::prefs.isInitialized) prefs.setShaderBrowserFolder(folder)
+            }
+        }
+
     /** The Post-processing pages' chains, settings.ini's. */
     val postProcessingPage =
-        PostProcessingPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+        PostProcessingPage(
+            scope,
+            coreDispatcher,
+            NativeCoreApi,
+            NativeCoreSettings,
+            shaderFolder,
+        ) { GameCoreSettings(it) }
 
     /** A game's own settings, from its tile in the library. */
     val gameSettingsPages =
-        GameSettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+        GameSettingsPages(
+            scope,
+            coreDispatcher,
+            NativeCoreApi,
+            NativeCoreSettings,
+            shaderFolder,
+        ) { GameCoreSettings(it) }
 
     /**
      * The running game's own settings, from its menu: on the menu's own dispatcher, as its other calls are, so a
      * library scan never holds them up.
      */
     val gameMenuSettings =
-        GameSettingsPages(scope, gameDispatcher, NativeCoreApi, NativeCoreSettings) { GameCoreSettings(it) }
+        GameSettingsPages(
+            scope,
+            gameDispatcher,
+            NativeCoreApi,
+            NativeCoreSettings,
+            shaderFolder,
+        ) { GameCoreSettings(it) }
+
+    /**
+     * The shader packs, from each Post-processing page: the app's, so an install goes on when its page closes. A job
+     * that changed the packs has the pages that show read their shaders again.
+     */
+    val shaderPacks =
+        ShaderPacks(scope, Dispatchers.IO, NativeShaderPackApi) {
+            listOf(postProcessingPage, gameSettingsPages.postProcessing, gameMenuSettings.postProcessing)
+                .filter { it.chains.isNotEmpty() }
+                .forEach { it.reread() }
+        }
 
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
     val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
@@ -902,7 +943,7 @@ object AppController : NativeCallbacks {
                 try {
                     val store = SafFolderStore(context.contentResolver, candidate.uri)
                     val applied =
-                        DataFolderChange(workingCopy, manifestFile, dataLayout).switchFrom(
+                        DataFolderChange(workingCopy, manifestFile, dataLayout, ::packMarkers).switchFrom(
                             mirror,
                             pushOld = dataGranted,
                             lossAccepted = lossAccepted,
@@ -1244,6 +1285,15 @@ object AppController : NativeCallbacks {
             }
         }
 
+    // A desktop's shader packs in the data folder: the mirror leaves them, and their markers, out. The core names its
+    // shaders folder once it's started; "shaders", its default, before.
+    private val shaderPackIds by lazy { NativeLibrary.shaderPackIds().toList() }
+
+    private fun packMarkers(): PackMarkers? {
+        val shaders = if (coreStarted) NativeLibrary.getShadersFolder() ?: return null else "shaders"
+        return PackMarkers(shaders, shaderPackIds) { NativeLibrary.shaderPackMarkerFiles(it)?.toList() }
+    }
+
     /** A mirror of [data], whose state the app shows from now on. */
     private fun useMirror(data: String) {
         mirrorStateJob?.cancel()
@@ -1256,6 +1306,7 @@ object AppController : NativeCallbacks {
                 System::currentTimeMillis,
                 removeStrays = { layoutSettling.settled },
                 guard = cardGuard,
+                packMarkers = ::packMarkers,
             ) { dataLayout }
         mirror = created
         mirrorStateJob = scope.launch { created.state.collect { mutableMirrorState.value = it } }
@@ -1428,6 +1479,8 @@ object AppController : NativeCallbacks {
                     workingCopy.mkdirs()
                     val resources = Resources.extract(context)
                     NativeLibrary.setCallbacks(this@AppController)
+                    // The app's own storage, never the data folder: packs aren't mirrored.
+                    NativeLibrary.setShaderPacksFolder(File(context.filesDir, "shaderpacks").absolutePath)
                     NativeLibrary
                         .initialize(
                             workingCopy.absolutePath,

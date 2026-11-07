@@ -121,7 +121,7 @@ interface CoreApi {
 
     // The post-processing chains ([NativeLibrary.getPostProcessingStages] and the rest): [key] null for settings.ini.
 
-    /** The shaders whose metadata loads: each name and its kind ("GLSL" or "ReShade"). */
+    /** The shaders that can be stages: each name and its kind ("GLSL", "dolphinfx", "ReShade" or "Slang"). */
     fun getPostProcessingShaders(): List<Pair<String, String>>
 
     fun getPostProcessingStages(

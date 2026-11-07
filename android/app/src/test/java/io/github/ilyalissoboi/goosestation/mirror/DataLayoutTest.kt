@@ -221,4 +221,36 @@ class DataLayoutTest {
     fun aRootLayoutStillKeepsTheLogUnlessNamed() {
         assertFalse(DataLayout.withCorePaths(listOf(""), cacheFolder = "cache/").mirrored("goosestation-previous.log"))
     }
+
+    // A desktop's shader packs stay on the desktop: the files its markers list, and the markers, never come through.
+    @Test
+    fun packFilesAndMarkersAreNeitherMirroredNorKept() {
+        val layout =
+            DataLayout
+                .withCorePaths(listOf("shaders/"), null)
+                .withPackFiles("shaders/.shaderpacks/", setOf("shaders/shaders_slang/crt/a.slangp"))
+
+        for (path in listOf("shaders/.shaderpacks/shaders_slang.json", "shaders/shaders_slang/crt/a.slangp")) {
+            assertFalse(path, layout.mirrored(path))
+            assertTrue(path, layout.stray(path))
+        }
+        assertTrue(layout.mirrored("shaders/shaders_slang/mine.slangp"))
+        assertTrue(layout.mirrored("shaders/crt-lottes.glsl"))
+        assertFalse(layout.stray("shaders/shaders_slang/mine.slangp"))
+        // Still walked: the player's own shaders sit beside a pack's.
+        assertTrue(layout.walks("shaders/shaders_slang"))
+        assertTrue(layout.fromCore)
+    }
+
+    @Test
+    fun withoutMarkersNothingChanges() {
+        val layout =
+            DataLayout
+                .withCorePaths(
+                    listOf("shaders/"),
+                    null,
+                ).withPackFiles("shaders/.shaderpacks/", emptySet())
+        assertTrue(layout.mirrored("shaders/shaders_slang/crt/a.slangp"))
+        assertFalse(layout.mirrored("shaders/.shaderpacks/shaders_slang.json"))
+    }
 }

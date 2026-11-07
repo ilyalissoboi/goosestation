@@ -43,6 +43,16 @@
        </property>
       </widget>
      </item>
+     <item>
+      <widget class="QPushButton" name="downloadPacks">
+       <property name="text">
+        <string>&amp;Download Shader Packs…</string>
+       </property>
+       <property name="icon">
+        <iconset theme="download-line"/>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>

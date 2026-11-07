@@ -33,6 +33,7 @@ add_executable(common-tests
   postprocessing_slang_tests.cpp
   rectangle_tests.cpp
   settings_multitap_tests.cpp
+  shader_packs_tests.cpp
   shiftjis_tests.cpp
   ../util/shiftjis.cpp
   string_tests.cpp

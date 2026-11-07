@@ -112,6 +112,8 @@ add_library(core
   settings.cpp
   settings.h
   shader_cache_version.h
+  shader_packs.cpp
+  shader_packs.h
   sio.cpp
   sio.h
   spu.cpp

@@ -320,7 +320,8 @@ OverlayPanel(onBack = ::close) { Text("Erase every save on Shared card 1?", …)
 
 A small panel over a screen, drawn in the app's window, never a window dialog: a `scrim` over the whole window, past
 the system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, 24 dp
-inside, in the safe area, that scrolls. The focus can't leave it, and the caller focuses what it holds. B and Back
+inside, in the safe area, that scrolls (as little as it must, keeping those 24 dp beside what the focus brings into
+view, so its last button never sits against its edge). The focus can't leave it, and the caller focuses what it holds. B and Back
 call `onBack` on the key-up of a press that began in it. It scrolls the least that shows the focus, not to the middle:
 a focused text field asks to show its cursor as well as itself, which centring can't do. A question in it puts its
 destructive answer first and the focus on the safe one.

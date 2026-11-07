@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,16 +15,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
@@ -117,5 +122,33 @@ class OverlayPanelTest {
         rule.waitForIdle()
 
         assertEquals(0, underClicks)
+    }
+
+    // A panel taller than the screen scrolls: its last button, focused, shows with the panel's padding under it, not
+    // against its edge (the AYN Thor's favourite panel, Delete last).
+    @Test
+    fun theLastButtonShowsWithThePaddingUnderIt() {
+        rule.setContent {
+            GooseStationTheme {
+                Box(Modifier.size(420.dp, 320.dp)) {
+                    OverlayPanel(onBack = {}, modifier = Modifier.testTag("panel")) {
+                        val first = remember { FocusRequester() }
+                        LaunchedEffect(Unit) { first.requestFocus() }
+                        ActionButton("Button 1", onClick = {}, modifier = Modifier.focusRequester(first))
+                        (2..7).forEach { ActionButton("Button $it", onClick = {}) }
+                        ActionButton("Last", onClick = {})
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        // Down to the last, as the D-pad goes.
+        repeat(7) { press(Key.DirectionDown) }
+        assertTrue(focusedHas("Last"))
+
+        val panel = rule.onNodeWithTag("panel").getUnclippedBoundsInRoot()
+        val last = rule.onNodeWithText("Last").getUnclippedBoundsInRoot()
+        val gap = panel.bottom - last.bottom
+        assertTrue("$gap under the last button", gap >= 23.dp)
     }
 }

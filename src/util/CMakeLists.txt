@@ -65,6 +65,8 @@ add_library(util
   postprocessing_shader_glsl.h
   postprocessing_browser.cpp
   postprocessing_browser.h
+  postprocessing_favourites.cpp
+  postprocessing_favourites.h
   postprocessing_shader_slang.cpp
   postprocessing_shader_slang.h
   postprocessing_slang_picture.h

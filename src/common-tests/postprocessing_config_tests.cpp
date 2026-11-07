@@ -5,8 +5,6 @@
 
 #include "util/postprocessing.h"
 
-#include "core/settings.h"
-
 #include "common/memory_settings_interface.h"
 
 #include "fmt/format.h"
@@ -29,30 +27,6 @@ void WriteChain(SettingsInterface& si, std::initializer_list<const char*> names)
     si.SetStringValue(fmt::format("PostProcessing/Stage{}", i++).c_str(), "ShaderName", name);
   si.SetStringValue("PostProcessing/Stage1", "TEST_GAIN", "1.5");
 }
-
-// Points the shaders folder at a temporary one, with no packs folder or resources, for the test's lifetime.
-class ScopedShadersFolder
-{
-public:
-  explicit ScopedShadersFolder(const std::string& shaders)
-    : m_old_shaders(EmuFolders::Shaders), m_old_packs(EmuFolders::ShaderPacks), m_old_resources(EmuFolders::Resources)
-  {
-    EmuFolders::Shaders = shaders;
-    EmuFolders::ShaderPacks.clear();
-    EmuFolders::Resources = Path::Combine(shaders, "no-resources");
-  }
-  ~ScopedShadersFolder()
-  {
-    EmuFolders::Shaders = m_old_shaders;
-    EmuFolders::ShaderPacks = m_old_packs;
-    EmuFolders::Resources = m_old_resources;
-  }
-
-private:
-  std::string m_old_shaders;
-  std::string m_old_packs;
-  std::string m_old_resources;
-};
 
 } // namespace
 
@@ -115,7 +89,7 @@ TEST(PostProcessingConfig, HasOwnChainIsEnabledBeingSet)
 TEST(PostProcessingConfig, IsShaderInstalledFindsUserGlsl)
 {
   const ShaderPackTest::TempDirectory shaders;
-  const ScopedShadersFolder folder(shaders.GetPath());
+  const ShaderPackTest::ScopedShadersFolder folder(shaders.GetPath());
   shaders.Write("crt/a.glsl", "void main() {}");
 
   EXPECT_TRUE(IsShaderInstalled("crt/a"));
@@ -125,7 +99,7 @@ TEST(PostProcessingConfig, IsShaderInstalledFindsUserGlsl)
 TEST(PostProcessingConfig, IsShaderInstalledFindsUserReShade)
 {
   const ShaderPackTest::TempDirectory shaders;
-  const ScopedShadersFolder folder(shaders.GetPath());
+  const ShaderPackTest::ScopedShadersFolder folder(shaders.GetPath());
   shaders.Write("reshade/Shaders/Sharpen.fx", "");
 
   EXPECT_TRUE(IsShaderInstalled("Sharpen"));
@@ -135,7 +109,7 @@ TEST(PostProcessingConfig, IsShaderInstalledFindsUserReShade)
 TEST(PostProcessingConfig, IsShaderInstalledFindsSlangPreset)
 {
   const ShaderPackTest::TempDirectory shaders;
-  const ScopedShadersFolder folder(shaders.GetPath());
+  const ShaderPackTest::ScopedShadersFolder folder(shaders.GetPath());
   shaders.Write("x/p.slangp", "shaders = 0\n");
 
   EXPECT_TRUE(IsShaderInstalled("x/p.slangp"));

@@ -38,4 +38,19 @@ object LibraryWords {
             // An acronym keeps its capitals.
             else -> if (words.startsWith("PSF")) words else words.replaceFirstChar { it.lowercase() }
         }
+
+    /**
+     * The line under the top bar: how many games there are, or how many of them match while [searching], then the
+     * sort: "48 games · Title, A–Z", "2 of 48 games · Title, A–Z".
+     */
+    fun countLine(
+        shown: Int,
+        total: Int,
+        searching: Boolean,
+        sort: LibrarySort,
+    ): String {
+        val games = if (total == 1) "1 game" else "$total games"
+        val count = if (searching) "$shown of $games" else games
+        return "$count · ${sortName(sort.key)}, ${shortDirection(sort)}"
+    }
 }

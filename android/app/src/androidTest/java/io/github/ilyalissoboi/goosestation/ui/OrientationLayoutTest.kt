@@ -2288,7 +2288,8 @@ class OrientationLayoutTest {
             }
             val sort = bounds(rule.onNodeWithContentDescription("Sort: Title"))
             val field = bounds(rule.onNode(hasSetTextAction()))
-            val wide = config.size.width >= 960.dp && config.fontScale == 1f
+            // One row on the Thor at text 1.0× (640 dp) and wider; the field under the buttons at 1.3× there.
+            val wide = config.size.width >= 640.dp && config.fontScale == 1f
             val narrow = config.size.width < 640.dp || (config.size.width == 640.dp && config.fontScale > 1f)
             if (wide) assertTrue("the field ${field.describe()} isn't beside Sort", field.top < sort.bottom)
             if (narrow) assertTrue("the field ${field.describe()} isn't under Sort", field.top >= sort.bottom)

@@ -40,8 +40,11 @@ import kotlin.math.max
 /** The room between the bar's parts. */
 private val GAP = 8.dp
 
-/** The least width the search field takes beside the title and buttons; with less, it goes under them. */
-private val SEARCH_MIN = 160.dp
+/**
+ * The least width the search field takes beside the title and buttons, at text 1.0×, growing with the text it holds;
+ * with less, it goes under them.
+ */
+private val SEARCH_MIN = 144.dp
 
 /** How the library's top bar lays out its title, search field, sync badge and buttons. */
 enum class BarLayout {
@@ -55,14 +58,18 @@ enum class BarLayout {
     Stacked,
 }
 
-/** Which [BarLayout] a bar [width] wide takes, for a [title] and [trailing] (the badge and buttons) that wide. */
+/**
+ * Which [BarLayout] a bar [width] wide takes, for a [title] and [trailing] (the badge and buttons) that wide, with
+ * text at [fontScale].
+ */
 fun barLayout(
     width: Dp,
     title: Dp,
     trailing: Dp,
+    fontScale: Float = 1f,
 ): BarLayout =
     when {
-        title + GAP + SEARCH_MIN + GAP + trailing <= width -> BarLayout.OneRow
+        title + GAP + SEARCH_MIN * fontScale + GAP + trailing <= width -> BarLayout.OneRow
         title + GAP + trailing <= width -> BarLayout.SearchBelow
         else -> BarLayout.Stacked
     }
@@ -176,7 +183,7 @@ fun LibraryTopBar(
         val badge = badgeM.measure(loose)
         val buttons = buttonsM.measure(loose)
         val trailing = (if (badge.width > 0) badge.width + gap else 0) + buttons.width
-        val layout = barLayout(width.toDp(), title.width.toDp(), trailing.toDp())
+        val layout = barLayout(width.toDp(), title.width.toDp(), trailing.toDp(), fontScale)
         val strip = stripM.measure(Constraints.fixedWidth(width))
 
         fun Placeable.PlacementScope.centred(

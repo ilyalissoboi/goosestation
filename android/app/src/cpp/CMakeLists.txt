@@ -20,6 +20,8 @@ add_library(goosestation SHARED
   game_codes.h
   http_downloader_android.cpp
   shader_packs_android.cpp
+  touch_pad.cpp
+  touch_pad.h
   http_downloader_android.h
   jni_bridge.cpp
   jni_util.cpp

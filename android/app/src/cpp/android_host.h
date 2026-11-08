@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "touch_pad.h"
+
 #include "util/android_disc_groups.h"
 #include "util/postprocessing.h"
 #include "util/postprocessing_favourites.h"
@@ -435,7 +437,16 @@ void QueueReleaseAllInputs();
 /// call, so the app's thread isn't held up by a boot.
 void BootPendingGame();
 
-/// CPU thread: passes the queued input to the Android input source.
+/// The app's on-screen touch pad holds state now: Port 1's controller is given it at the CPU thread's next pass of
+/// the input queue (ProcessInputQueue()), after the events queued before it. From any thread; dropped until the CPU
+/// thread runs, and forgotten when a game ends.
+void QueueTouchPad(const TouchPad::State& state);
+
+/// While top, the picture is drawn at the top of the screen ([Display] Alignment as LeftOrTop, never saved), for the
+/// touch pad under it in portrait; false gives it back its setting. Queues and returns.
+void SetPictureAtTop(bool top);
+
+/// CPU thread: passes the queued input to the Android input source, and the touch pad's state to Port 1.
 void ProcessInputQueue();
 
 // Implemented by jni_bridge.cpp.
@@ -457,6 +468,10 @@ void NotifyOsdMessage(std::string_view key, std::string_view text, float seconds
 
 /// Fast forward was turned on or off, by the menu or a hotkey.
 void NotifyFastForwardChanged(bool enabled);
+
+/// Port 1's kind for the touch pad (TouchPad::KindOf()), at a game's first frame and as it changes; -1 once the game
+/// ends. Called on the CPU thread.
+void NotifyPadKindChanged(s32 kind);
 
 /// The controller device's motors' levels (0 to 1, times its strength), as its port's rumble goes to it: both 0 stop
 /// it. Called on the CPU thread.

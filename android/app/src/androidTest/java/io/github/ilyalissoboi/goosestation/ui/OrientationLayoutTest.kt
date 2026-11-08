@@ -50,7 +50,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.unit.width
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
@@ -91,6 +93,7 @@ import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.input.TouchLayout
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
@@ -111,6 +114,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -220,6 +224,18 @@ class OrientationLayoutTest {
 
         val CONFIGS = SIZES.flatMap { (name, size) -> listOf(1f, 1.3f).map { Config(name, size, it) } }
 
+        /** The touch controls' screens: phones and tablets, landscape and portrait. */
+        val TOUCH_CONFIGS =
+            listOf(
+                "landscape 800x360" to DpSize(800.dp, 360.dp),
+                "landscape 640x360" to DpSize(640.dp, 360.dp),
+                "landscape 960x540" to DpSize(960.dp, 540.dp),
+                "tablet landscape 1280x800" to DpSize(1280.dp, 800.dp),
+                "portrait 360x800" to DpSize(360.dp, 800.dp),
+                "portrait 411x891" to DpSize(411.dp, 891.dp),
+                "tablet portrait 800x1280" to DpSize(800.dp, 1280.dp),
+            ).flatMap { (name, size) -> listOf(1f, 1.3f).map { Config(name, size, it) } }
+
         val PAD = ConnectedController(deviceId = 5, name = "Goose Virtual Pad", descriptor = "pad-a")
         val LONG_PAD =
             ConnectedController(
@@ -268,6 +284,7 @@ class OrientationLayoutTest {
     /** Shows [content] at each of [CONFIGS] in turn, composed afresh, and runs [check] on it. */
     private fun eachConfig(
         content: @Composable () -> Unit,
+        configs: List<Config> = CONFIGS,
         check: (Config) -> Unit,
     ) {
         rule.setContent {
@@ -283,7 +300,7 @@ class OrientationLayoutTest {
                 }
             }
         }
-        for (each in CONFIGS) {
+        for (each in configs) {
             config.value = each
             rule.waitForIdle()
             try {
@@ -1842,10 +1859,54 @@ class OrientationLayoutTest {
             assertTextsLaidOut()
             assertTrue(focusedHas(PAD.name))
             assertFocusedInView()
+            // The touch controls' rows, their notes too.
+            pressUntilFocused(Key.DirectionDown, "Vibration")
+            assertTextsLaidOut()
+            assertFocusedInView()
             pressUntilFocused(Key.DirectionDown, "Port 2D")
             assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "Select + a button")
             assertFocusedInView()
+        }
+    }
+
+    @Test
+    fun theTouchControls() = touchControls(sticks = false)
+
+    @Test
+    fun theTouchControlsWithSticks() = touchControls(sticks = true)
+
+    // Every control where its layout puts it and on the screen, its label laid out whole.
+    private fun touchControls(sticks: Boolean) {
+        eachConfig({ TouchOverlay(sticks, 100, 100, {}, null, {}) }, TOUCH_CONFIGS) {
+            val screen = rule.onNodeWithTag(SCREEN).fetchSemanticsNode().boxInRoot()
+            val layout = TouchLayout.of(screen.width.value, screen.height.value, sticks, 1f)
+            val tagged =
+                rule
+                    .onAllNodes(
+                        SemanticsMatcher("a touch control") {
+                            it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("touch-") == true
+                        },
+                        useUnmergedTree = true,
+                    ).fetchSemanticsNodes()
+                    .associateBy { it.config[SemanticsProperties.TestTag] }
+            for (control in layout.controls) {
+                val box = tagged["touch-${control.id}"]?.boxInRoot() ?: throw AssertionError("No ${control.id}")
+                assertTrue("${control.id} ${box.describe()} off ${screen.describe()}", screen.contains(box))
+                val drawn = control.drawn
+                for (
+                (what, expected, actual) in
+                listOf(
+                    Triple("left", drawn.left, (box.left - screen.left).value),
+                    Triple("top", drawn.top, (box.top - screen.top).value),
+                    Triple("width", drawn.width, box.width.value),
+                    Triple("height", drawn.height, box.height.value),
+                )
+                ) {
+                    assertEquals("${control.id} $what", expected, actual, 1f)
+                }
+            }
+            assertTextsLaidOut()
         }
     }
 

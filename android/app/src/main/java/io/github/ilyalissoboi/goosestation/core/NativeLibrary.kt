@@ -534,6 +534,27 @@ object NativeLibrary {
     /** Presses Port 1's Analog button, as the DualShock's own does. */
     external fun toggleAnalogMode()
 
+    /**
+     * What the on-screen touch pad holds: its [buttons] (`TouchButton.bit`s) and both sticks, x and y each -1 to 1, y
+     * down. Port 1's controller takes them as its inputs of the same generic names (D-pad, face buttons, Select,
+     * Start, shoulders, L3, R3, the sticks' half axes), with no bindings and nothing written: the latest state is
+     * applied at the core's next pass of its input, after the events sent before it. Any thread; never waits. Nothing
+     * while no game runs, and it's forgotten when a game ends.
+     */
+    external fun setTouchPad(
+        buttons: Int,
+        leftX: Float,
+        leftY: Float,
+        rightX: Float,
+        rightY: Float,
+    )
+
+    /**
+     * While [top], the picture sits at the top of the screen (`[Display] Alignment` taken as LeftOrTop, never
+     * written), for the touch pad under it in portrait; false gives it back its setting. Doesn't wait.
+     */
+    external fun setPictureAtTop(top: Boolean)
+
     /** Saves a screenshot of the game to the screenshots folder. */
     external fun saveScreenshot()
 

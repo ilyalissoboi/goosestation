@@ -27,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.NativeShaderPackApi
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
+import io.github.ilyalissoboi.goosestation.input.PadKind
 import io.github.ilyalissoboi.goosestation.input.Rumble
 import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
@@ -429,6 +430,16 @@ object AppController : NativeCallbacks {
 
     /** What the app keeps per game on this device: its last slot, last disc, and so on. */
     private val gamePrefs by lazy { SharedPreferencesStore(context, "game") }
+
+    /** The on-screen touch controls' settings, on this device, and Port 1's kind for them in the running game. */
+    val touchControls by lazy {
+        TouchControls(
+            TouchPrefs(SharedPreferencesStore(context, "touch")),
+            { controllers?.connected?.value?.size ?: 0 },
+        ) {
+            osd.post(it)
+        }
+    }
     private val gameRecords by lazy { GameRecords(gamePrefs) }
     private val lastSlots by lazy { LastSlots(gamePrefs) }
 
@@ -1637,6 +1648,7 @@ object AppController : NativeCallbacks {
             val started = runningGame ?: GameEntry("", title, serial, "", 0, 0, null)
             gameMenu.gameStarted(if (started.serial.isBlank()) started.copy(serial = serial) else started)
             unreachableSaid = false
+            touchControls.gameStarted()
             if (signInExpired) {
                 signInExpired = false
                 // With what it keeps for when the player signs in again.
@@ -1844,6 +1856,10 @@ object AppController : NativeCallbacks {
 
     override fun onFastForwardChanged(enabled: Boolean) {
         mainHandler.post { gameMenu.fastForwardChanged(enabled) }
+    }
+
+    override fun onPadKindChanged(kind: Int) {
+        mainHandler.post { touchControls.kind = PadKind.fromCore(kind) }
     }
 
     override fun onRumble(

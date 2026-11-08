@@ -19,6 +19,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import io.github.ilyalissoboi.goosestation.app.ControllersView
+import io.github.ilyalissoboi.goosestation.app.TouchMode
+import io.github.ilyalissoboi.goosestation.app.TouchSettings
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -32,6 +34,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.NumberScale
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 
 /** What the Back key, Mode, and Select + Start do in a game, whatever the mapping. */
@@ -42,10 +45,26 @@ private const val MENU_TRIGGERS =
 /** A controller's rumble strength: 0 to 100% by 10%. */
 val RUMBLE_SCALE: NumberScale = NumberScale.Range(0, 100, 10, listOf(0, 25, 50, 75, 100)) { "$it%" }
 
+/** The touch controls' Size: 80 to 130% by 5%. */
+val TOUCH_SIZE_SCALE: NumberScale =
+    TouchSettings.SIZES.let { NumberScale.Range(it.first, it.last, it.step, listOf(80, 100, 130)) { "$it%" } }
+
+/** The touch controls' Opacity: 25 to 100% by 5%. */
+val TOUCH_OPACITY_SCALE: NumberScale =
+    TouchSettings.OPACITIES.let { NumberScale.Range(it.first, it.last, it.step, listOf(25, 50, 75, 100)) { "$it%" } }
+
+private val TOUCH_MODES =
+    listOf(
+        Choice(TouchMode.Automatic, "Automatic"),
+        Choice(TouchMode.Always, "Always"),
+        Choice(TouchMode.Off, "Off"),
+    )
+
 /**
  * The Controllers page's hub: the menu triggers; then each of the [controllers] (named by its [labels] entry, or its
  * name) with its port among [offered] ([ports], set with [onPort]) and its rumble strength ([rumble], [onRumble]), or a
- * line when Android can drive none of its motors; then Multitap ([multitap], among [multitapNames], [onMultitap]), a
+ * line when Android can drive none of its motors; then the on-screen touch controls' settings ([touch], changed with
+ * [onTouch]): when they show, their size and opacity, and the press tick; then Multitap ([multitap], among [multitapNames], [onMultitap]), a
  * row per offered port with its type ([portTypes], named by [typeNames]) and the controllers on it, which opens its
  * page ([onOpenPort]), and Hotkeys ([onOpenHotkeys]). The focus starts on the first row, or on the row of the view
  * Back came from ([cameFrom]). B or Back go back ([onBack]).
@@ -68,6 +87,8 @@ fun ControllersScreen(
     onOpenHotkeys: () -> Unit,
     onBack: () -> Unit,
     cameFrom: ControllersView? = null,
+    touch: TouchSettings = TouchSettings(),
+    onTouch: (TouchSettings) -> Unit = {},
 ) {
     val first = remember { FocusRequester() }
     val portRows = remember { mutableMapOf<Int, FocusRequester>() }
@@ -120,6 +141,23 @@ fun ControllersScreen(
                     Line("$name has no motors Android can drive, so it doesn't rumble.")
                 }
             }
+
+            SettingsSection("Touch controls")
+            CyclerRow(
+                "Touch controls",
+                TOUCH_MODES,
+                touch.mode,
+                onSelect = { onTouch(touch.copy(mode = it)) },
+                note = "Automatic shows them in a game while no controller is connected.",
+            )
+            NumberRow("Size", touch.size, TOUCH_SIZE_SCALE, onChange = { onTouch(touch.copy(size = it)) })
+            NumberRow("Opacity", touch.opacity, TOUCH_OPACITY_SCALE, onChange = { onTouch(touch.copy(opacity = it)) })
+            SwitchRow(
+                "Vibration",
+                touch.vibration,
+                onToggle = { onTouch(touch.copy(vibration = it)) },
+                note = "A short tick on each press.",
+            )
 
             SettingsSection("Ports")
             if (multitap != null) {

@@ -15,6 +15,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CorePage
@@ -22,7 +23,9 @@ import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.app.SyncBadges
+import io.github.ilyalissoboi.goosestation.app.TouchVisibility
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
@@ -52,7 +55,9 @@ import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
+import io.github.ilyalissoboi.goosestation.ui.deviceTicker
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
@@ -86,7 +91,10 @@ class MainActivity : ComponentActivity() {
                             releaseFolder = AppController::releaseFolder,
                             onFinish = AppController::finishSetup,
                         )
-                    Screen.Game ->
+                    Screen.Game -> {
+                        val touch = AppController.touchControls
+                        val pads by (AppController.controllers?.connected ?: NO_CONTROLLERS).collectAsState()
+                        val ticker = remember { deviceTicker(applicationContext) }
                         GameScreen(
                             menuOpen = AppController.promptOpen,
                             onOpenMenu = AppController::openPrompt,
@@ -110,7 +118,22 @@ class MainActivity : ComponentActivity() {
                                     onBack = AppController.gameMenu::closeSettings,
                                 )
                             },
+                            touch = TouchVisibility.of(touch.settings, pads.size, true, false, touch.kind),
+                            touchSettings = touch.settings,
+                            touchSink = {
+                                NativeLibrary.setTouchPad(
+                                    it.buttons,
+                                    it.leftX,
+                                    it.leftY,
+                                    it.rightX,
+                                    it.rightY,
+                                )
+                            },
+                            ticker = ticker.takeIf { touch.settings.vibration },
+                            onPictureAtTop = NativeLibrary::setPictureAtTop,
+                            touchKey = touch.releases,
                         )
+                    }
                     Screen.Settings ->
                         SettingsScreen(
                             focusEntry = AppController.settingsEntry,
@@ -297,6 +320,8 @@ class MainActivity : ComponentActivity() {
                                     onOpenHotkeys = page::openHotkeys,
                                     onBack = AppController::controllersBack,
                                     cameFrom = state.cameFrom,
+                                    touch = AppController.touchControls.settings,
+                                    onTouch = { AppController.touchControls.settings = it },
                                 )
                             is ControllersView.Port -> {
                                 val bindings = state.bindings
@@ -463,6 +488,7 @@ class MainActivity : ComponentActivity() {
         AppController.resumed = false
         if (inGame) {
             AppController.controllers?.releaseAll()
+            AppController.touchControls.release()
             AppController.pauseGame()
         }
         super.onPause()
@@ -476,7 +502,10 @@ class MainActivity : ComponentActivity() {
     // Losing focus (the notification shade, a dialog) sends a cancelled key-up for held keys, but nothing for axes.
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus && inGame) AppController.controllers?.releaseAll()
+        if (!hasFocus && inGame) {
+            AppController.controllers?.releaseAll()
+            AppController.touchControls.release()
+        }
     }
 
     override fun onDestroy() {
@@ -516,3 +545,6 @@ private fun CorePageRoute(
         content(values) { AppController.settingsPages.change(page, it) }
     }
 }
+
+// The connected controllers before the core has started: none.
+private val NO_CONTROLLERS = MutableStateFlow(emptyList<ConnectedController>())

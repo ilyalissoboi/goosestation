@@ -91,7 +91,8 @@ has) and **Light** (for the desktop app, later). Values are in `tokens.json`; th
 | `danger` / `danger-soft` | `#ff6b81` / `#3d1820` | `#b01e3a` / `#f9dde2` | Failed, or destroys something. |
 | `ps-triangle`, `ps-circle`, `ps-cross`, `ps-square` | `#3fd6a6`, `#ff6b6b`, `#7aa7ff`, `#f28ad6` | `#0b7a5a`, `#c42b2b`, `#2b57c4`, `#a8338e` | The PlayStation face symbols in pad glyphs only, 3:1 or more on `sunken`. |
 | `scrim` | 72% black | 48% ink | Dims what's under a dialog or the pause menu. |
-| `viewport`, `osd`, `osd-ink`, `touch*` | | | Over the game picture: the same in both themes. |
+| `viewport`, `osd`, `osd-ink` | | | Over the game picture: the same in both themes. |
+| `touch`, `touch-pressed`, `touch-line` | 14%, 34% and 40% `ink` | the same | The on-screen touch controls over the game: a button's fill at rest, held, and its edge and labels. |
 
 Rules:
 
@@ -425,6 +426,34 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   `radius-sm`: a leaderboard timer in `mono`, a challenge's 32 dp badge, the progress pop-up's badge and count for 3 s.
   The indicators hide while the menu is open.
 
+### `TouchOverlay` (`ui/TouchOverlay.kt`)
+
+The on-screen PS1 pad over a running game, for a phone or tablet with no controller: the D-pad, the face diamond, L1,
+L2, R1, R2, Select, Start and a menu button, and the two sticks with L3 and R3 when Port 1 is analog. Where each sits
+is `TouchLayout` (`input/`), from the agreed mockups
+([docs/superpowers/specs/2026-11-08-android-touch-controls-mockup.html](superpowers/specs/2026-11-08-android-touch-controls-mockup.html)):
+in landscape in the bars beside the picture, in portrait under the picture, which moves to the top.
+
+- **Shapes:** octagons for the face buttons, sticks (ring and knob), the menu button, L3 and R3; `radius-md` tabs for
+  the D-pad's arms, the shoulders, Select and Start. Fills `touch` at rest and `touch-pressed` held, a 1.5 dp
+  `touch-line` edge; labels (L1, SELECT, …) in `labelMedium` and `touch-line`; the D-pad's arrowheads and the menu's
+  `GsIcons.pause` in `touch-line`. The player's Opacity setting fades all of it.
+- **Face buttons:** a symmetric diamond, four buttons of one size at one distance from its centre, mirrored by the
+  D-pad on the other side at the same height. Their glyphs are `PsGlyph`'s face symbols without plates, in their
+  `ps-*` colours, each scaled to one drawn size (40% of the button, stroke included, at one stroke weight) and
+  centred in its button (`TouchGlyphs`); never font characters.
+- **Size:** `touch-button`, 50 dp, is a face button at Size 100% in the phone layout (the D-pad's arms 40 by 54).
+  The layout grows with the screen and the Size setting, and shrinks as far as it must: **every touch area is at least
+  48 dp each way** and none overlaps another's, even where the drawn shape is smaller (a shoulder's area runs into
+  the gaps around it). Where the bars beside the picture are too narrow, the controls are drawn over the picture.
+  The D-pad and the face diamond reach the screen's edges, so they're kept from Android's edge gestures
+  (`systemGestureExclusion`): a thumb sliding inward plays, rather than going Back.
+- **Touch only:** it shows only in a game, never under the menu, and in Automatic only while no controller is
+  connected, so the controller-first rules hold everywhere else. Nothing in it is focusable or `clickable`, and
+  screen readers don't hear it. It never covers the app's own screens, which keep their own touch handling.
+- Tests: `TouchLayoutTest` (sizes, overlaps, symmetry over phones and tablets), `TouchGlyphsTest`, `TouchOverlayTest`
+  (injected touches), `OrientationLayoutTest.theTouchControls`.
+
 ### `GooseMark` (`ui/theme/GooseMark.kt`)
 
 The goose mark, drawn in code from `logos/goose-mark.svg`'s polygons. Full colour, for dark grounds only. It sits
@@ -524,7 +553,6 @@ See [docs/android.md](android.md) for running them.
 ## Not built yet
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
-Android; a badge for region;
-on-screen touch controls; the
+Android; a badge for region; the
 desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

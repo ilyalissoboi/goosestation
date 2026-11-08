@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -16,11 +17,14 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.ControllersView
+import io.github.ilyalissoboi.goosestation.app.TouchMode
+import io.github.ilyalissoboi.goosestation.app.TouchSettings
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,6 +62,8 @@ class ControllersScreenTest {
                     onOpenHotkeys = { calls += "hotkeys" },
                     onBack = { calls += "back" },
                     cameFrom = cameFrom,
+                    touch = TouchSettings(),
+                    onTouch = { calls += "touch $it" },
                 )
             }
         }
@@ -71,6 +77,45 @@ class ControllersScreenTest {
 
     private fun assertFocusedHas(vararg texts: String) {
         texts.forEach { rule.onNode(isFocused()).assert(hasText(it, substring = true)) }
+    }
+
+    @Test
+    fun touchRowsChangeTheSettings() {
+        show()
+        repeat(2) { press(Key.DirectionDown) }
+        assertFocusedHas("Touch controls", "Automatic")
+        rule.onNodeWithText("Automatic shows them in a game while no controller is connected.").assertExists()
+        press(Key.DirectionRight)
+        press(Key.DirectionDown)
+        assertFocusedHas("Size", "100%")
+        press(Key.DirectionRight)
+        press(Key.DirectionDown)
+        assertFocusedHas("Opacity", "100%")
+        press(Key.DirectionLeft)
+        press(Key.DirectionDown)
+        assertFocusedHas("Vibration")
+        rule.onNodeWithText("A short tick on each press.").assertExists()
+        press(Key.Enter)
+
+        assertEquals(
+            listOf(
+                "touch ${TouchSettings(mode = TouchMode.Always)}",
+                "touch ${TouchSettings(size = 105)}",
+                "touch ${TouchSettings(opacity = 95)}",
+                "touch ${TouchSettings(vibration = false)}",
+            ),
+            calls,
+        )
+    }
+
+    @Test
+    fun touchSectionComesBeforePorts() {
+        show(controllers = emptyList())
+
+        // Section titles show in capitals (Eyebrow).
+        val touch = rule.onNodeWithText("TOUCH CONTROLS", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val ports = rule.onNodeWithText("PORTS", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertTrue(touch.top < ports.top)
     }
 
     @Test
@@ -129,7 +174,7 @@ class ControllersScreenTest {
 
         rule.onNodeWithText("Analog Controller (DualShock) · Test Pad").performScrollTo()
         rule.onNodeWithText("Not Connected · No controller").performScrollTo()
-        repeat(3) { press(Key.DirectionDown) }
+        repeat(7) { press(Key.DirectionDown) }
         assertFocusedHas("Port 1", "Analog Controller")
         press(Key.Enter)
 
@@ -139,7 +184,7 @@ class ControllersScreenTest {
     @Test
     fun multitapOffersTheCoresModes() {
         show()
-        repeat(2) { press(Key.DirectionDown) }
+        repeat(6) { press(Key.DirectionDown) }
         assertFocusedHas("Multitap", "Disabled")
 
         press(Key.DirectionRight)

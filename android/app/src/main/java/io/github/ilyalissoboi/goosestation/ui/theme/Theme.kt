@@ -60,6 +60,11 @@ data class GsColors(
     // Over the game picture, whatever the theme: an on-screen message's ground, at 82%, and its text.
     val osd: Color = Color(0xD10A0C10),
     val osdInk: Color = Color(0xFFF3F1EC),
+    // An on-screen touch button over the game, whatever the theme: its fill at rest (14% ink), held (34%), and its
+    // outline and labels (40%).
+    val touch: Color = Color(0x24F3F1EC),
+    val touchPressed: Color = Color(0x57F3F1EC),
+    val touchLine: Color = Color(0x66F3F1EC),
     // A PlayStation face button's symbol in a pad glyph, tuned to 3:1 or more on sunken.
     val psTriangle: Color = Color(0xFF3FD6A6),
     val psCircle: Color = Color(0xFFFF6B6B),

@@ -50,6 +50,10 @@ public:
   /// Lets go of everything every device holds, after the events queued before it.
   void QueueReleaseAll();
 
+  /// Reports again everything every device holds, as polled so far (PadState::GetHeld()), so a pad input something
+  /// else just let go of (the app's touch pad) is held again where a controller still holds it. CPU thread.
+  void ReportHeld();
+
   /// The axes the device index's controllers have near rest (AndroidInputKeys::GetCenteredAxes()), as far as the
   /// events polled go.
   std::vector<u32> GetCenteredAxes(u32 index) const;

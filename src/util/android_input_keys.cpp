@@ -369,6 +369,15 @@ void PadState::ReleaseAll(std::vector<PadEvent>& events)
   m_reported.clear();
 }
 
+void PadState::GetHeld(std::vector<PadEvent>& events) const
+{
+  for (const auto& [input, reported] : m_reported)
+  {
+    if (reported.value != 0.0f)
+      events.push_back(PadEvent{input.first, input.second, reported.value, reported.binding});
+  }
+}
+
 std::vector<u32> PadState::GetCenteredAxes() const
 {
   // The core's value for an axis Android gave only at 0 is 0, as Report() passes no first value of 0 on.

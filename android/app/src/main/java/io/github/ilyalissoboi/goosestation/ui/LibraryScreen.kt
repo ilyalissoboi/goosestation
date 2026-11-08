@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -21,6 +20,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,8 +31,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -41,9 +42,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.library.LibrarySort
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.Banner
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
@@ -53,15 +56,15 @@ import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
-import io.github.ilyalissoboi.goosestation.ui.components.SyncStatusBadge
-import io.github.ilyalissoboi.goosestation.ui.theme.GooseMark
+import io.github.ilyalissoboi.goosestation.ui.components.rememberSearchFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 
 /**
- * The games, as a cover grid ([gridView]) or a list, under a top bar of the goose and "Library", then memory card
- * sync's badge while sync is on ([syncBadge]; [onSyncBadge]), Grid/List ([onToggleView]), Settings ([onOpenSettings])
- * and Refresh ([onRefresh]). [banners] and [message] sit under the bar:
+ * The games, as a cover grid ([gridView]) or a list, under the [LibraryTopBar]: the goose and "Library", the
+ * [search] field, memory card sync's badge while sync is on ([syncBadge]; [onSyncBadge]), then icon buttons for the
+ * [sort] ([onSort]), the view ([onToggleView]), Refresh ([onRefresh]) and Settings ([onOpenSettings]). [banners] and
+ * [message] sit under the bar:
  * prompts to pick a folder again, the latest error ([isError]), or what the app is doing.
  *
  * On opening, Settings has focus when [focusSettings] (coming back from the settings), or else the game at
@@ -87,8 +90,14 @@ fun LibraryScreen(
     onSyncBadge: () -> Unit = {},
     onGameSettings: (GameEntry) -> Unit = {},
     onSaves: (GameEntry) -> Unit = {},
+    sort: LibrarySort = LibrarySort(),
+    onSort: (LibrarySort) -> Unit = {},
+    search: TextFieldState = rememberTextFieldState(),
 ) {
     val settings = remember { FocusRequester() }
+    val sortButton = remember { FocusRequester() }
+    val searchFocus = rememberSearchFocus()
+    val focusManager = LocalFocusManager.current
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     val focus = remember { GameFocus() }
@@ -126,42 +135,24 @@ fun LibraryScreen(
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // The buttons go under the name when they don't fit beside it, on a narrow screen or with large text.
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            // Room between the title and the buttons when they wrap under it.
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GooseMark(Modifier.size(36.dp))
-                Text(
-                    "Library",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                syncBadge?.let { SyncStatusBadge(it, onClick = onSyncBadge) }
-                ActionButton(
-                    if (gridView) "List" else "Grid",
-                    onClick = onToggleView,
-                    icon = if (gridView) GsIcons.list else GsIcons.grid,
-                )
-                ActionButton(
-                    "Settings",
-                    onClick = onOpenSettings,
-                    modifier = Modifier.focusRequester(settings),
-                    icon = GsIcons.settings,
-                )
-                ActionButton("Refresh", onClick = onRefresh, icon = GsIcons.sync)
-            }
-        }
+        LibraryTopBar(
+            gridView = gridView,
+            sort = sort,
+            syncBadge = syncBadge,
+            search = search,
+            searchFocus = searchFocus,
+            sortButton = sortButton,
+            settingsButton = settings,
+            onSort = {},
+            onOrder = {},
+            onToggleView = onToggleView,
+            onRefresh = onRefresh,
+            onOpenSettings = onOpenSettings,
+            onSyncBadge = onSyncBadge,
+            onSearchDown = { focusManager.moveFocus(FocusDirection.Down) },
+            onSearchKeyboardClosed = {},
+            onFocusArea = {},
+        )
 
         banners.forEach { Banner(it) }
         if (message != null) MessageBar(message, isError)

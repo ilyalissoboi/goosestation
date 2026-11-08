@@ -18,15 +18,21 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -40,6 +46,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.ui.components.ACTION_LABEL
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -87,6 +94,11 @@ class LibraryScreenTest {
 
     private fun entry(n: Int) = games[n - 1]
 
+    private companion object {
+        /** The top bar's buttons, by their labels, in grid mode with the default sort. */
+        val BUTTONS = listOf("Sort: Title", "Order: A to Z", "Show as a list", "Refresh the library", "Settings")
+    }
+
     // Two columns of tiles (150 dp or more each), whatever the device: at most 460 dp, less the padding and insets.
     private fun show(
         games: List<GameEntry> = this.games,
@@ -121,6 +133,9 @@ class LibraryScreenTest {
         }
         rule.waitForIdle()
     }
+
+    private fun focusedHas(text: String) =
+        rule.onAllNodes(isFocused() and hasText(text)).fetchSemanticsNodes().isNotEmpty()
 
     private fun press(key: Key) {
         rule.onRoot().performKeyInput { pressKey(key) }
@@ -316,7 +331,7 @@ class LibraryScreenTest {
     fun theToggleButtonHandsTheFocusToTheGame() {
         var grid by mutableStateOf(true)
         show(gridView = { grid }, focusPath = entry(25).path, onToggleView = { grid = !grid })
-        rule.onNodeWithText("List").requestFocus()
+        rule.onNodeWithContentDescription("Show as a list").requestFocus()
 
         press(Key.Enter)
 
@@ -325,12 +340,43 @@ class LibraryScreenTest {
     }
 
     @Test
-    fun upFromTheFirstRowReachesTheTopBar() {
+    fun upFromTheFirstGameReachesTheSearchThenTheButtons() {
         show()
 
         press(Key.DirectionUp)
+        rule.onNode(hasSetTextAction()).assertIsFocused()
 
-        rule.onNode(isFocused()).assert(hasText("List") or hasText("Settings") or hasText("Refresh"))
+        press(Key.DirectionUp)
+        rule
+            .onNode(isFocused())
+            .assert(BUTTONS.map { hasContentDescription(it) }.reduce { a, b -> a or b })
+    }
+
+    // --- The top bar ---
+
+    @Test
+    fun theButtonsAreIconsNamedByTheirLabels() {
+        show()
+
+        for (name in BUTTONS) {
+            rule.onNodeWithContentDescription(name).assertWidthIsEqualTo(48.dp).assertHeightIsEqualTo(48.dp)
+        }
+        rule.onNodeWithContentDescription("Show as a grid").assertDoesNotExist()
+    }
+
+    @Test
+    fun theViewButtonShowsTheGridInListMode() {
+        show(gridView = { false })
+
+        rule.onNodeWithContentDescription("Show as a grid").assertExists()
+        rule.onNodeWithContentDescription("Show as a list").assertDoesNotExist()
+    }
+
+    @Test
+    fun aFocusedButtonShowsItsLabel() {
+        show(focusSettings = true)
+
+        rule.onNodeWithTag(ACTION_LABEL, useUnmergedTree = true).assertTextEquals("Settings")
     }
 
     @Test
@@ -350,14 +396,14 @@ class LibraryScreenTest {
         show(games = emptyList())
 
         rule.onNodeWithText("No games found in your games folders.").assertExists()
-        rule.onNodeWithText("Settings").assertIsFocused()
+        rule.onNodeWithContentDescription("Settings").assertIsFocused()
     }
 
     @Test
     fun comingBackFromTheSettingsFocusesSettings() {
         show(focusPath = entry(25).path, focusSettings = true)
 
-        rule.onNodeWithText("Settings").assertIsFocused()
+        rule.onNodeWithContentDescription("Settings").assertIsFocused()
     }
 
     @Test
@@ -383,8 +429,7 @@ class LibraryScreenTest {
                 }
             }
             LaunchedEffect(Unit) {
-                // List (the view toggle), then Settings.
-                focusManager.moveFocus(FocusDirection.Next)
+                // Sort, first in the bar by place: at this width the buttons are over the search field.
                 focusManager.moveFocus(FocusDirection.Next)
             }
         }
@@ -394,7 +439,7 @@ class LibraryScreenTest {
         rule.waitForIdle()
 
         rule.onNodeWithText("Game 30").assertExists()
-        rule.onNodeWithText("Settings").assertIsFocused()
+        rule.onNodeWithContentDescription("Sort: Title").assertIsFocused()
     }
 
     @Test
@@ -417,9 +462,9 @@ class LibraryScreenTest {
     fun badgeIsFocusableAndOpens() {
         show(syncBadge = SyncBadge.Synced, focusSettings = true)
 
-        // Left of Grid/List, which is left of Settings.
-        press(Key.DirectionLeft)
-        press(Key.DirectionLeft)
+        // Left of the five buttons, Settings the last; or beside the title, over them, on a narrow screen.
+        repeat(5) { if (!focusedHas("Synced")) press(Key.DirectionLeft) }
+        if (!focusedHas("Synced")) press(Key.DirectionUp)
         rule.onNode(isFocused()).assert(hasText("Synced"))
         press(Key.ButtonA)
 

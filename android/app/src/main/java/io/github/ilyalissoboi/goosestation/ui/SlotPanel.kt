@@ -113,8 +113,12 @@ fun SaveSlotPanel(
     // The slot to focus once the question about replacing it is answered.
     var returnTo by remember { mutableStateOf<Int?>(null) }
     val asking = panel.replacing != null || panel.deleting != null || panel.switching != null
+    // Which rows the list has (not what they show, which a picture read changes): a read after a delete, without the
+    // focused row, gives the focus on.
+    val rowIds = (entries.orEmpty() + others).map { Triple(it.shared, it.owner, it.slot) }
     LaunchedEffect(
         entries == null,
+        rowIds,
         panel.replacing,
         panel.deleting,
         panel.switching,

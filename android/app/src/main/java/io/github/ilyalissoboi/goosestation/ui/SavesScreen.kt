@@ -95,7 +95,10 @@ fun SavesScreen(
     val listed = entries.orEmpty() + others
     var titleFocused by remember { mutableStateOf(false) }
 
-    LaunchedEffect(entries == null, page.tab, page.deleting, page.focusRow, switches) {
+    // Which rows the page has (not what they show, which a picture read changes): a read after a delete, without the
+    // focused row, gives the focus on.
+    val rowIds = listed.map { Triple(it.shared, it.owner, it.slot) }
+    LaunchedEffect(entries == null, rowIds, page.tab, page.deleting, page.focusRow, switches) {
         if (page.deleting != null) return@LaunchedEffect
         val target =
             page.focusRow?.let { focus -> listed.firstOrNull { SaveLists.sameRow(it, focus) } } ?: listed.firstOrNull()

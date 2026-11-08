@@ -1,0 +1,98 @@
+<style>
+  .ph { position: relative; background: #000; border-radius: 18px; overflow: hidden; border: 6px solid #22262e; box-sizing: content-box; }
+  .pic { position: absolute; background: linear-gradient(160deg,#2b4f8a,#132544 60%,#3a1d10); display:flex; align-items:center; justify-content:center; color:#cfd8e6; font: 600 13px sans-serif; }
+  .t { position: absolute; display: grid; place-items: center; background: rgba(243,241,236,.14); border: 1.5px solid rgba(243,241,236,.4); color: rgba(243,241,236,.85); font: 700 13px sans-serif; box-sizing: border-box; }
+  .c { border-radius: 50%; }
+  .r { border-radius: 10px; }
+  .p { background: rgba(243,241,236,.34); }
+  .t svg { width: 22px; height: 22px; display: block; }
+  .sm svg { width: 19px; height: 19px; }
+  .stick { border-radius: 50%; background: rgba(243,241,236,.08); border: 1.5px solid rgba(243,241,236,.4); position:absolute; }
+  .stick::after { content:""; position:absolute; left:30%; top:30%; width:40%; height:40%; border-radius:50%; background: rgba(243,241,236,.3); }
+  .cap { font-size: 12px; color: #888; margin: 6px 0 22px; max-width: 760px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="g-tri" viewBox="0 0 20 20"><path d="M10 2.5 L18 16.5 L2 16.5 Z" fill="none" stroke="#5fd3a8" stroke-width="2.4" stroke-linejoin="round"/></symbol>
+    <symbol id="g-cir" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke="#ff7a7a" stroke-width="2.4"/></symbol>
+    <symbol id="g-x" viewBox="0 0 20 20"><path d="M3.5 3.5 L16.5 16.5 M16.5 3.5 L3.5 16.5" stroke="#7ea6ff" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="g-sq" viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="1" fill="none" stroke="#f08bd8" stroke-width="2.4"/></symbol>
+  </defs>
+</svg>
+
+<h2>Default touch layouts, v3: symmetric face buttons, one glyph size</h2>
+<p class="subtitle">The four face buttons now form an exact diamond (same size, same spacing on every side, the same distance from the screen edge as the D-pad), and every glyph is drawn in the same box at the same stroke weight, so ✕ ○ △ □ read as the same size. The D-pad mirrors the face buttons on the other side. Cross is shown pressed.</p>
+
+<h3>Landscape phone (about 800 × 370 dp), digital game</h3>
+<div class="ph" style="width:800px;height:370px">
+  <div class="pic" style="left:153px;top:0;width:494px;height:370px">game picture, 4:3</div>
+  <div class="t r" style="left:12px;top:14px;width:88px;height:34px">L2</div>
+  <div class="t r" style="left:12px;top:54px;width:88px;height:34px">L1</div>
+  <div class="t r" style="left:700px;top:14px;width:88px;height:34px">R2</div>
+  <div class="t r" style="left:700px;top:54px;width:88px;height:34px">R1</div>
+  <!-- D-pad: centre (78, 220) -->
+  <div class="t r" style="left:58px;top:146px;width:40px;height:54px">▲</div>
+  <div class="t r" style="left:58px;top:240px;width:40px;height:54px">▼</div>
+  <div class="t r" style="left:4px;top:200px;width:54px;height:40px">◀</div>
+  <div class="t r" style="left:98px;top:200px;width:54px;height:40px">▶</div>
+  <!-- face: centre (722, 220), 50 px buttons, 50 px from centre -->
+  <div class="t c" style="left:697px;top:145px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-tri"/></svg></div>
+  <div class="t c p" style="left:697px;top:245px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-x"/></svg></div>
+  <div class="t c" style="left:647px;top:195px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-sq"/></svg></div>
+  <div class="t c" style="left:747px;top:195px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-cir"/></svg></div>
+  <div class="t r" style="left:330px;top:332px;width:64px;height:26px;font-size:11px">SELECT</div>
+  <div class="t r" style="left:406px;top:332px;width:64px;height:26px;font-size:11px">START</div>
+  <div class="t c" style="left:380px;top:8px;width:40px;height:40px;font-size:16px">☰</div>
+</div>
+<div class="cap">D-pad and face buttons at the same height, each centred in its bar beside the picture.</div>
+
+<h3>Landscape phone, DualShock in analog mode</h3>
+<div class="ph" style="width:800px;height:370px">
+  <div class="pic" style="left:153px;top:0;width:494px;height:370px">game picture, 4:3</div>
+  <div class="t r" style="left:12px;top:14px;width:88px;height:34px">L2</div>
+  <div class="t r" style="left:12px;top:54px;width:88px;height:34px">L1</div>
+  <div class="t r" style="left:700px;top:14px;width:88px;height:34px">R2</div>
+  <div class="t r" style="left:700px;top:54px;width:88px;height:34px">R1</div>
+  <!-- D-pad: centre (78, 160) -->
+  <div class="t r" style="left:60px;top:100px;width:36px;height:46px">▲</div>
+  <div class="t r" style="left:60px;top:174px;width:36px;height:46px">▼</div>
+  <div class="t r" style="left:18px;top:142px;width:46px;height:36px">◀</div>
+  <div class="t r" style="left:92px;top:142px;width:46px;height:36px">▶</div>
+  <!-- face: centre (722, 160), 44 px buttons, 42 px from centre -->
+  <div class="t c sm" style="left:700px;top:96px;width:44px;height:44px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-tri"/></svg></div>
+  <div class="t c sm" style="left:700px;top:180px;width:44px;height:44px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-x"/></svg></div>
+  <div class="t c sm" style="left:658px;top:138px;width:44px;height:44px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-sq"/></svg></div>
+  <div class="t c sm" style="left:742px;top:138px;width:44px;height:44px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-cir"/></svg></div>
+  <div class="stick" style="left:150px;top:236px;width:116px;height:116px"></div>
+  <div class="stick" style="left:534px;top:236px;width:116px;height:116px"></div>
+  <div class="t r" style="left:330px;top:332px;width:64px;height:26px;font-size:11px">SELECT</div>
+  <div class="t r" style="left:406px;top:332px;width:64px;height:26px;font-size:11px">START</div>
+  <div class="t c" style="left:380px;top:8px;width:40px;height:40px;font-size:16px">☰</div>
+</div>
+<div class="cap">Both clusters move up and shrink by the same amount; the sticks mirror each other at the bottom, reaching faintly over the picture's lower corners.</div>
+
+<h3>Portrait phone (about 360 × 780 dp)</h3>
+<div class="ph" style="width:360px;height:780px">
+  <div class="pic" style="left:0;top:40px;width:360px;height:270px">game picture, 4:3</div>
+  <div class="t c" style="left:160px;top:330px;width:40px;height:40px;font-size:16px">☰</div>
+  <div class="t r" style="left:12px;top:330px;width:66px;height:32px">L2</div>
+  <div class="t r" style="left:84px;top:330px;width:66px;height:32px">L1</div>
+  <div class="t r" style="left:210px;top:330px;width:66px;height:32px">R1</div>
+  <div class="t r" style="left:282px;top:330px;width:66px;height:32px">R2</div>
+  <!-- D-pad: centre (90, 480) -->
+  <div class="t r" style="left:70px;top:406px;width:40px;height:54px">▲</div>
+  <div class="t r" style="left:70px;top:500px;width:40px;height:54px">▼</div>
+  <div class="t r" style="left:16px;top:460px;width:54px;height:40px">◀</div>
+  <div class="t r" style="left:110px;top:460px;width:54px;height:40px">▶</div>
+  <!-- face: centre (270, 480), 50 px, 50 from centre -->
+  <div class="t c" style="left:245px;top:405px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-tri"/></svg></div>
+  <div class="t c" style="left:245px;top:505px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-x"/></svg></div>
+  <div class="t c" style="left:195px;top:455px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-sq"/></svg></div>
+  <div class="t c" style="left:295px;top:455px;width:50px;height:50px"><svg viewBox="0 0 20 20"><use width="20" height="20" href="#g-cir"/></svg></div>
+  <div class="stick" style="left:35px;top:592px;width:110px;height:110px"></div>
+  <div class="stick" style="left:215px;top:592px;width:110px;height:110px"></div>
+  <div class="t r" style="left:114px;top:730px;width:62px;height:26px;font-size:11px">SELECT</div>
+  <div class="t r" style="left:184px;top:730px;width:62px;height:26px;font-size:11px">START</div>
+</div>
+<div class="cap">The D-pad and face buttons mirror each other around the middle; the shoulders run L2 L1 · R1 R2 from the outside in.</div>

@@ -838,6 +838,8 @@ ignores `[Android]`, as before.
   doesn't rumble."
 - **Ports**: **Multitap** (`[ControllerPorts] MultitapMode`, the core's modes), then a row per port offered, with its
   type and the controllers on it ("Analog Controller (DualShock) · Wireless Controller"), which opens its page.
+- **Touch controls**: when the on-screen touch controls show, their **Size** and **Opacity**, and **Vibration** (see
+  "Touch controls" below).
 - **Hotkeys**, which opens the hotkeys page.
 - Back from a port's page, or the hotkeys, focuses its row on the hub, and Back from the hub leaves the page.
 
@@ -944,6 +946,38 @@ of 0, the menu opening and the game ending stop it. Each controller's strength s
 Port page after the port's own type's, under the type's name ("NeGcon (a game's)"), to remap them. Each controller on
 that port gets the type's default bindings where it has none, when the game's page sets the type and again as the game
 starts, so a game's type is never left unbound. Reset to defaults gives them back too.
+
+### Touch controls
+
+Phones and tablets with no controller play with an on-screen PS1 pad over the game. **Settings** → **Controllers** →
+**Touch controls** picks when it shows: **Automatic** (the default) shows it in a game while no controller is
+connected, built-in pads included, so the Thor and anyone with a gamepad never see it; it hides as one connects and
+comes back when the last one goes. **Always** shows it with controllers too (for a device that reports a pad nobody
+holds), and **Off** never. **Size** (80 to 130%), **Opacity** (25 to 100%) and **Vibration** (a short tick on each
+press, on by default) are kept for this device only, in the app's own preferences (`touch`), never `settings.ini`.
+
+- **What's on it:** the D-pad, the four face buttons, L1, L2, R1, R2, Select, Start and a menu button (it opens the
+  game's menu as Back does). The two sticks, with L3 and R3 above them, show only while Port 1 is a DualShock in
+  analog mode, or an analog joystick, and appear and go as the mode changes (the Analog mode hotkey or menu entry,
+  or the game). Port 1 as any other type (a NeGcon, GunCon, Justifier, the mouse, or nothing) gets no touch controls,
+  and the game's start says once "Touch controls work with a digital pad or an analog controller on Port 1."
+- **Where:** in landscape, in the bars beside the 4:3 picture, the shoulders in the top corners, Select and Start at
+  the bottom middle, the menu at the top middle; with sticks, the D-pad and face buttons move up and shrink, and the
+  sticks reach over the picture's lower corners. Where the bars are narrower than the controls, they're drawn over
+  the picture. In portrait (where Android lets the app turn: screens 600 dp wide and up, split-screen, freeform), the
+  picture moves to the top while they're on, and the pad sits under it; it goes back where `[Display] Alignment`
+  puts it when they're off. The controls grow with the screen and the Size setting, up to 1.4 times the phone
+  layout, and shrink as far as they must for every touch area to stay at least 48 dp and clear of the others.
+- **How they work:** everything stays where it's drawn. A thumb slides from one face button to the next, or rests
+  between two and presses both; the D-pad takes diagonals and keeps steering as the thumb slides. The shoulders,
+  Select, Start, L3 and R3 hold until the finger lifts. A stick follows the thumb within its ring, full at the edge,
+  and springs back on release. Each finger is tracked on its own. Lifting every finger, a touch the system cancels
+  (the notification shade, a gesture), going to the background, the window losing focus, the menu opening and a
+  controller connecting in Automatic let go of everything.
+- **What it drives:** Port 1, straight to its controller's inputs (`NativeLibrary.setTouchPad`), with fixed
+  buttons that the Controllers page doesn't list or remap, and nothing written to `settings.ini`. Stick values go
+  through Port 1's Analog Sensitivity and dead zone, as any controller's do. A game's rumble never plays on the
+  device's own vibrator: only the press tick uses it.
 
 ### The in-game menu
 
@@ -1650,6 +1684,26 @@ The times are a throwaway test's (not committed): padtest's 1280×960 picture sc
 1440×1080 into a 1920×1080 target, 120 frames each followed by a one-pixel read back, so each includes a full wait
 for the GPU. All fit a 60 fps frame. No picture was corrupt, so the extra submit after each chain frame ARMSX2
 needed on Adreno isn't needed here.
+
+### Touch controls (2026-11-08)
+
+On `goose-test-1` (emulator-5580, a 1080x2400 phone at 420 dpi, landscape), the debug APK, set up by touch through the
+folder picker, padtest, no controller connected. The tests: `TouchLayoutTest`, `TouchTrackerTest`, `TouchGlyphsTest`
+and `TouchControlsTest` (JVM); `TouchOverlayTest`, `GameScreenTouchTest`, `ControllersScreenTest`,
+`OrientationLayoutTest.theTouchControls` and `theTouchControlsWithSticks`, and the touch tests in `GameCallsTest`
+(instrumented).
+
+| Check | Result |
+|---|---|
+| The overlay in a game | Pass. With sticks, as padtest turns analog mode on: shoulders in the corners, D-pad and face diamond beside the picture, sticks over its lower corners, L3 and R3 above them. |
+| Cross | Pass. Held, padtest's Cross lit, and the overlay's Cross drew pressed. |
+| The left stick | Pass. Dragged up-right, padtest read X 117, Y -122; released, -1 and -1 (the core's centre, 127, as any controller at rest). |
+| The menu button | Pass. Opened the menu; Resume by touch went back to the game. |
+| Portrait | Not seen here: with the density at 280 (617 dp wide) Android letterboxed the landscape-locked app into a 617x463 dp landscape box instead of turning it, and the controls overlapped the near-4:3 picture there, as they should. Portrait's layout, the picture at the top and its centring again are the tests'. |
+
+Not checkable on the emulator: Automatic hiding as a real controller connects (the emulator has no non-virtual pad),
+and the press tick (no vibrator); `TouchControlsTest`, `GameScreenTouchTest` and `TouchOverlayTest` cover them. A
+phone with no controller, and a tablet in portrait, are the user's check.
 
 ## Results on the AYN Thor
 

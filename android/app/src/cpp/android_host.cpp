@@ -136,11 +136,9 @@ static constexpr std::string_view ANALOG_BUTTON = "Analog";
 // would fire on each of a chord's keys.
 static constexpr std::string_view ANALOG_HOTKEY = "ToggleAnalogMode";
 
-// Hotkeys the Controllers page leaves out: the menu has Change disc and Reset with their questions, and the app has no
-// global slots (the per-slot hotkeys are left out by their prefixes, GetOfferedHotkeys()).
+// Hotkeys the Controllers page leaves out: the menu has Change disc and Reset with their questions. The core's
+// per-slot and global-slot hotkeys aren't built on Android (hotkeys.cpp): the app's own save path has the slots.
 static constexpr std::string_view LEFT_OUT_HOTKEYS[] = {"ChangeDisc", "Reset"};
-static constexpr std::string_view LEFT_OUT_HOTKEY_PREFIXES[] = {"LoadGameState", "SaveGameState", "LoadGlobalState",
-                                                                "SaveGlobalState"};
 
 static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 {
@@ -3189,8 +3187,6 @@ std::vector<const HotkeyInfo*> AndroidHost::GetOfferedHotkeys(SettingsInterface&
   {
     const std::string_view name(hotkey->name);
     if (std::find(std::begin(LEFT_OUT_HOTKEYS), std::end(LEFT_OUT_HOTKEYS), name) != std::end(LEFT_OUT_HOTKEYS) ||
-        std::any_of(std::begin(LEFT_OUT_HOTKEY_PREFIXES), std::end(LEFT_OUT_HOTKEY_PREFIXES),
-                    [&name](std::string_view prefix) { return name.starts_with(prefix); }) ||
         (name == ANALOG_HOTKEY && !analog))
     {
       continue;
@@ -3207,9 +3203,26 @@ bool AndroidHost::UndoLoadState()
   if (!s_initialized)
     return false;
 
+  // An undo is a load, which hardcore mode allows none of; the core doesn't refuse it.
   bool undone = false;
-  EmuThread::RunOnThread([&undone]() { undone = System::IsValid() && System::UndoLoadState(); }, true);
+  EmuThread::RunOnThread(
+    [&undone]() {
+      undone = System::IsValid() && !Achievements::IsHardcoreModeActive() && System::UndoLoadState();
+    },
+    true);
   return undone;
+}
+
+bool AndroidHost::CanUndoLoadState()
+{
+  if (!s_initialized)
+    return false;
+
+  bool can = false;
+  EmuThread::RunOnThread(
+    [&can]() { can = System::IsValid() && !Achievements::IsHardcoreModeActive() && System::CanUndoLoadState(); },
+    true);
+  return can;
 }
 
 // Moves [Pad1] Analog's Android bindings (the old Analog Toggle row's) to the analog mode hotkey, under the settings

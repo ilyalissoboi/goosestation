@@ -664,8 +664,11 @@ object NativeLibrary {
         small: Float,
     )
 
-    /** Undoes the running game's last state load; false when there's none to undo. Waits for the core. */
+    /** Undoes the running game's last state load; false when there's none to undo, or in hardcore mode. Waits for the core. */
     external fun undoLoadState(): Boolean
+
+    /** Whether the running game has a state load to undo; never in hardcore mode. Waits for the core. */
+    external fun canUndoLoadState(): Boolean
 
     /** The controller with [descriptor]'s pad (0-based, Port 1 by default), or -1 for one never connected. */
     external fun getControllerPort(descriptor: String): Int

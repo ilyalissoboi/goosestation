@@ -371,11 +371,15 @@ void Host::OnAchievementsRefreshed()
 
 void Host::OnAchievementsHardcoreModeChanged(bool enabled)
 {
-  // No patch code applies in hardcore mode; the player's switches come back with it off.
+  // No patch code applies in hardcore mode, nor an undo of a load; the player's switches come back with it off.
   if (enabled)
   {
     if (!System::IsShutdown())
+    {
       System::SetCheatList(nullptr);
+      // Undo load is a load, which hardcore mode allows none of: the state from before is dropped.
+      System::ClearUndoLoadState();
+    }
   }
   else
   {

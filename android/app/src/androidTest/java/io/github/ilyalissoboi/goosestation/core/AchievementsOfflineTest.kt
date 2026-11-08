@@ -21,6 +21,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -312,6 +313,43 @@ class AchievementsOfflineTest {
             Thread.sleep(2000)
             assertFalse("casual after the reset", NativeLibrary.isHardcoreActive())
             assertTrue("still offline", NativeLibrary.getGameAchievements().offline)
+        }
+    }
+
+    // Undo load is a load: off in hardcore, natively too.
+    @Test
+    fun undoIsRefusedInHardcore() {
+        initialize(HARDCORE_SETTINGS)
+        playing(disc) {
+            assertTrue("hardcore online", NativeLibrary.isHardcoreActive())
+            assertFalse(NativeLibrary.canUndoLoadState())
+            assertFalse(NativeLibrary.undoLoadState())
+        }
+    }
+
+    // Turning hardcore on drops the undo state the casual game had: it would be a load in hardcore.
+    @Test
+    fun turningHardcoreOnDropsTheUndoState() {
+        initialize(SIGNED_IN_SETTINGS)
+        playing(disc) {
+            assertFalse("casual", NativeLibrary.isHardcoreActive())
+            assertNull(NativeLibrary.saveState(UNDO_KEY, 1))
+            assertNull(NativeLibrary.loadState(UNDO_KEY, 1))
+            assertTrue("an undo state", NativeLibrary.canUndoLoadState())
+
+            // Hardcore mode comes on at the next reset, which keeps the undo state.
+            NativeLibrary.setBoolSetting("Cheevos", "ChallengeMode", true)
+            NativeLibrary.applySettings()
+            NativeLibrary.resetGame()
+            waitFor("hardcore", 30) { NativeLibrary.isHardcoreActive() }
+            assertFalse(NativeLibrary.canUndoLoadState())
+
+            // Gone, not only hidden: with hardcore off again, there's still nothing to undo.
+            NativeLibrary.setBoolSetting("Cheevos", "ChallengeMode", false)
+            NativeLibrary.applySettings()
+            waitFor("casual") { !NativeLibrary.isHardcoreActive() }
+            assertFalse("the undo state is gone", NativeLibrary.canUndoLoadState())
+            assertFalse(NativeLibrary.undoLoadState())
         }
     }
 
@@ -629,6 +667,9 @@ class AchievementsOfflineTest {
 
     private companion object {
         const val INSTALL_ID = "test-install"
+
+        /** The key the undo tests save their state under. */
+        const val UNDO_KEY = "UNDO-TEST"
 
         /** An achievement other than [ACHIEVEMENT_ID], which the fake awards too: for a second record. */
         const val OWN_ID = 102

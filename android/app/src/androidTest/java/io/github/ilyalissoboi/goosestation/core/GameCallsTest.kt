@@ -865,6 +865,31 @@ class GameCallsTest {
         }
     }
 
+    // The core's per-slot and global-slot hotkeys aren't built on Android: they'd save under the disc's serial.
+    @Test
+    fun theCoresSlotHotkeysAreGone() =
+        withPadtest {
+            assertFalse(NativeLibrary.pressHotkeyForTest("SaveGameState1"))
+            assertFalse(NativeLibrary.pressHotkeyForTest("SaveGlobalState1"))
+            assertFalse(NativeLibrary.pressHotkeyForTest("LoadGameState1"))
+            assertFalse(NativeLibrary.pressHotkeyForTest("LoadGlobalState1"))
+            // The app's own are there: the check finds hotkeys at all.
+            assertTrue(NativeLibrary.pressHotkeyForTest("SelectNextSaveStateSlot"))
+            assertEquals(emptyList<String>(), states.list().orEmpty().toList())
+        }
+
+    // A load leaves an undo state, which the undo uses up.
+    @Test
+    fun undoFollowsALoad() =
+        withPadtest {
+            assertFalse(NativeLibrary.canUndoLoadState())
+            assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 1))
+            assertNull(NativeLibrary.loadState(PADTEST_SERIAL, 1))
+            assertTrue(NativeLibrary.canUndoLoadState())
+            assertTrue(NativeLibrary.undoLoadState())
+            assertFalse(NativeLibrary.canUndoLoadState())
+        }
+
     // A macro presses its buttons while its trigger is held.
     @Test
     fun aMacroPressesItsButtons() =

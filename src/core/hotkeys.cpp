@@ -64,6 +64,8 @@ static void HotkeyModifyResolutionScale(s32 increment)
   }
 }
 
+// Android: the app's save path has the slots, under the game's key; these would key states by the disc's serial.
+#ifndef __ANDROID__
 static void HotkeyLoadStateSlot(bool global, s32 slot)
 {
   if (!System::IsValid())
@@ -119,6 +121,8 @@ static void HotkeySaveStateSlot(bool global, s32 slot)
       Host::OSD_ERROR_DURATION);
   }
 }
+
+#endif
 
 // The favourite the hotkeys applied last, so two that are the same chain both come round.
 static std::string s_last_postprocessing_favourite;
@@ -690,6 +694,8 @@ DEFINE_HOTKEY("UndoLoadState", TRANSLATE_NOOP("Hotkeys", "Save States"), TRANSLA
               })
 #endif
 
+// Android: the app's save path has the slots, under the game's key (HotkeyLoadStateSlot()).
+#ifndef __ANDROID__
 #define MAKE_LOAD_STATE_HOTKEY(global, slot, name)                                                                     \
   DEFINE_HOTKEY(global ? "LoadGameState" #slot : "LoadGlobalState" #slot, TRANSLATE_NOOP("Hotkeys", "Save States"),    \
                 name, [](s32 pressed) {                                                                                \
@@ -749,5 +755,6 @@ MAKE_SAVE_STATE_HOTKEY(true, 10, TRANSLATE_NOOP("Hotkeys", "Save Global State 10
 
 #undef MAKE_SAVE_STATE_HOTKEY
 #undef MAKE_LOAD_STATE_HOTKEY
+#endif
 
 END_HOTKEY_LIST()

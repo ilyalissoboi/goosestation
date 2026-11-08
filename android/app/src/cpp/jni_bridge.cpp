@@ -2729,6 +2729,11 @@ NATIVE_LIBRARY_FUNCTION(jboolean, undoLoadState)(JNIEnv*, jobject)
   return AndroidHost::UndoLoadState() ? JNI_TRUE : JNI_FALSE;
 }
 
+NATIVE_LIBRARY_FUNCTION(jboolean, canUndoLoadState)(JNIEnv*, jobject)
+{
+  return AndroidHost::CanUndoLoadState() ? JNI_TRUE : JNI_FALSE;
+}
+
 NATIVE_LIBRARY_FUNCTION(void, setPortType)(JNIEnv* env, jobject, jint pad, jstring type)
 {
   if (pad >= 0)

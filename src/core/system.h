@@ -381,6 +381,11 @@ std::optional<ExtendedSaveStateInfo> GetUndoSaveStateInfo();
 /// Undoes a load state, i.e. restores the state prior to the load.
 bool UndoLoadState();
 
+#ifdef __ANDROID__
+/// Android: drops the undo load state, so there's none to undo (hardcore mode turned on, say).
+void ClearUndoLoadState();
+#endif
+
 /// Returns a list of save states for the specified game code.
 std::vector<SaveStateInfo> GetAvailableSaveStates(const char* serial);
 

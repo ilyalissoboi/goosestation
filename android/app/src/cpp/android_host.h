@@ -481,8 +481,12 @@ void NotifyRumble(s32 device_id, float large, float small);
 /// picks the slot itself.
 void NotifyHotkey(std::string_view name);
 
-/// Undoes the last state load (System::UndoLoadState()), on the CPU thread, waiting; false when there's none.
+/// Undoes the last state load (System::UndoLoadState()), on the CPU thread, waiting; false when there's none, or in
+/// hardcore mode.
 bool UndoLoadState();
+
+/// Whether there's a load to undo in the running game, waiting for the CPU thread; never in hardcore mode.
+bool CanUndoLoadState();
 
 /// The RetroAchievements login token changed (nullopt: it's gone). The app stores it before this returns. Called with
 /// the core's settings lock held, on whichever thread saved it.

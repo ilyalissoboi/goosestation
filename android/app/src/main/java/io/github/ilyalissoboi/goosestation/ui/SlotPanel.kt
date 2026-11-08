@@ -38,6 +38,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -46,6 +47,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
+import io.github.ilyalissoboi.goosestation.app.SaveLists
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
@@ -112,18 +114,27 @@ fun SaveSlotPanel(
 
     // The slot to focus once the question about replacing it is answered.
     var returnTo by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(entries == null, panel.replacing, panel.tab, switches) {
+    val asking = panel.replacing != null || panel.deleting != null
+    LaunchedEffect(entries == null, panel.replacing, panel.deleting, panel.focusRow, panel.tab, switches) {
         val replacing = panel.replacing
         when {
-            // The question focuses its Cancel.
+            // A question focuses its Cancel.
             replacing != null -> returnTo = replacing
+            panel.deleting != null -> {}
             entries == null -> title.requestFocus()
             else -> {
                 val wanted = returnTo ?: if (sharedTab) panel.sharedFocus else panel.focus
                 returnTo = null
+                // A row the menu names (after a delete) comes first, whichever list has it.
+                val named =
+                    panel.focusRow?.let { focus ->
+                        (entries + others).firstOrNull {
+                            it.slot == focus.slot && it.owner == focus.owner && it.shared == focus.shared
+                        }
+                    }
                 val target =
-                    entries.firstOrNull { it.slot == wanted && pickable(it) } ?: entries.firstOrNull(::pickable)
-                        ?: others.firstOrNull()
+                    named?.takeIf(::pickable) ?: entries.firstOrNull { it.slot == wanted && pickable(it) }
+                        ?: entries.firstOrNull(::pickable) ?: others.firstOrNull()
                 (target?.let { row(it) } ?: title).requestFocus()
             }
         }
@@ -134,7 +145,7 @@ fun SaveSlotPanel(
             modifier
                 .onPreviewKeyEvent { event ->
                     if (event.key != Key.ButtonL1 && event.key != Key.ButtonR1) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp && panel.replacing == null && !panel.busy) switchTab()
+                    if (event.type == KeyEventType.KeyUp && !asking && !panel.busy) switchTab()
                     true
                 }.focusProperties {
                     // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
@@ -145,8 +156,7 @@ fun SaveSlotPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Focusable while nothing else in the panel can take the focus, so it stays in the panel and B reaches it.
-        val nothingToFocus =
-            panel.replacing == null && (entries == null || entries.none(::pickable)) && others.isEmpty()
+        val nothingToFocus = !asking && (entries == null || entries.none(::pickable)) && others.isEmpty()
         Text(
             if (saving) "Save state" else "Load state",
             style = MaterialTheme.typography.headlineSmall,
@@ -174,11 +184,21 @@ fun SaveSlotPanel(
                 PanelTabs(
                     listOf("This game", "Shared"),
                     current = if (sharedTab) 1 else 0,
-                    onSelect = { if (it != panel.tab.ordinal && panel.replacing == null && !panel.busy) switchTab() },
+                    onSelect = { if (it != panel.tab.ordinal && !asking && !panel.busy) switchTab() },
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
                 val replacing = panel.replacing
-                if (replacing != null) {
+                val deleting = panel.deleting
+                // Load's rows: X or a long press asks before deleting the save.
+                val delete: ((SlotEntry) -> Unit)? = if (saving) null else actions::askDelete
+                if (deleting != null) {
+                    Question(
+                        SaveLists.deleteQuestion(deleting),
+                        "Delete",
+                        onConfirm = actions::confirmDelete,
+                        onCancel = actions::cancelDelete,
+                    )
+                } else if (replacing != null) {
                     Question(
                         "Replace the save in ${if (sharedTab) "shared slot" else "slot"} $replacing?",
                         "Replace",
@@ -202,6 +222,7 @@ fun SaveSlotPanel(
                                 }
                             },
                             modifier = Modifier.focusRequester(row(entry)),
+                            onDelete = delete?.takeIf { entry.savedAt != null }?.let { { it(entry) } },
                         )
                     }
                     if (others.isNotEmpty()) {
@@ -214,6 +235,7 @@ fun SaveSlotPanel(
                                 enabled = true,
                                 onClick = { actions.pickOther(entry.owner.orEmpty(), entry.slot) },
                                 modifier = Modifier.focusRequester(row(entry)),
+                                onDelete = delete?.let { { it(entry) } },
                             )
                         }
                     }
@@ -221,8 +243,9 @@ fun SaveSlotPanel(
             }
         }
         KeyHints(
-            listOf(
+            listOfNotNull(
                 KeyHint(PadGlyphs.confirm, if (saving) "Save" else "Load"),
+                if (saving) null else KeyHint(PadGlyphs.action, "Delete"),
                 KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Switch"),
                 KeyHint(PadGlyphs.back, "Back"),
             ),
@@ -242,7 +265,7 @@ internal const val SLOT_PICTURE = "slotPicture"
 /**
  * A slot: its screenshot (or the memory card icon), its name, the game a shared slot holds, Saved or Empty, and when it
  * was saved. The picture is 112 × 84 dp, or 64 × 48 dp in a row under 240 dp wide, so the words beside it fit at a large
- * text size. A [short] row, in a short list, is compact whatever its width: the small picture, the game on one line, and
+ * text size. X or a long press call [onDelete], when it has one. A [short] row, in a short list, is compact whatever its width: the small picture, the game on one line, and
  * the time on Saved's line, so it fits the list's height.
  */
 @Composable
@@ -253,6 +276,7 @@ private fun SlotRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     short: Boolean = false,
+    onDelete: (() -> Unit)? = null,
 ) {
     val colors = GooseStationTheme.colors
     val savedAt = entry.savedAt
@@ -260,7 +284,12 @@ private fun SlotRow(
         modifier =
             modifier
                 .fillMaxWidth()
-                .focusRing(enabled = enabled, role = Role.Button, onClick = onClick)
+                .onKeyEvent { event ->
+                    // X deletes, on its key-up; without [onDelete], X does nothing here.
+                    if (event.key != Key.ButtonX || onDelete == null) return@onKeyEvent false
+                    if (event.type == KeyEventType.KeyUp) onDelete()
+                    true
+                }.focusRing(enabled = enabled, role = Role.Button, onLongClick = onDelete, onClick = onClick)
                 .padding(8.dp),
     ) {
         val compact = short || maxWidth < 240.dp

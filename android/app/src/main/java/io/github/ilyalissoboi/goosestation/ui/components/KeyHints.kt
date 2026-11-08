@@ -36,6 +36,9 @@ object PadGlyphs {
     /** The button that goes back: KEYCODE_BUTTON_B. */
     val back: String = BindingLabels.label("Button97")
 
+    /** The button for an item's second action, such as Delete or a game's Saves: KEYCODE_BUTTON_X. */
+    val action: String = BindingLabels.label("Button99")
+
     /** The button for an item's options, such as a game's own settings: KEYCODE_BUTTON_Y. */
     val options: String = BindingLabels.label("Button100")
 

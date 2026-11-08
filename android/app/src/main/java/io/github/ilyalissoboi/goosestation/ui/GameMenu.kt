@@ -103,6 +103,7 @@ fun GameMenu(
     BackHandler {
         val shown = current
         when {
+            shown.slots?.deleting != null -> actions.cancelDelete()
             shown.slots?.replacing != null -> actions.cancelReplace()
             shown.slots != null -> {
                 (if (shown.slots.mode == SlotMode.Save) cameFrom.saveRow else cameFrom.loadRow).requestFocus()
@@ -137,6 +138,7 @@ fun GameMenu(
         listOf(
             state.slots?.mode,
             state.slots?.replacing,
+            state.slots?.deleting,
             state.discs != null,
             state.codes != null,
             state.cheevos != null,

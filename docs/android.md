@@ -1025,6 +1025,13 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   states of its own." In a list under 150 dp tall (a handheld's at large text), the rows are compact: the small
   picture, the game on one line, and the time on Saved's line.
 
+  **Delete.** In Load, X on a row (or a long press, by touch) asks in the panel: "Delete the save in slot 3?" (or
+  "Delete the save in shared slot 3?", "Delete your resume state?", "Delete disc 2's save in slot 3?"), Delete and
+  Cancel, Cancel focused (`KeyHints` "X Delete"). Delete removes that save, the one the question named whatever the
+  list has done since, with the `.bak` a save kept of it (Settings → Emulation's save state backups), and the panel
+  stays open on the row after it. The deletion reaches the data folder through the mirror, as any change does. Save
+  has no Delete: it replaces. Saves have no names, as on desktop, which names them only by slot.
+
   **One set of states per game.** States made before discs were grouped (part 1 kept them under each disc's serial)
   are moved under the game's key the first time the game is played on this device, before it asks to resume: the
   newest state keeps each place, the others take the lowest free slots, and nothing is overwritten. The move is

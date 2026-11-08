@@ -1063,6 +1063,19 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuDeleteQuestion() {
+        val entries = listOf(SlotEntry(1, 1_700_000_000L), SlotEntry(3, 1_700_000_000L))
+        show {
+            GameMenu(
+                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1])),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuLoadWithOtherSaves() {
         val entries = listOf(SlotEntry(1, 1_700_000_000L, disc = 1))
         val others = listOf(SlotEntry(3, 1_700_000_000L, owner = "SLPS-02021", disc = 2))

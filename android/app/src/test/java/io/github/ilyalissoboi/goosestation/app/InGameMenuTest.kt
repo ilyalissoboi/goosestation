@@ -1802,4 +1802,118 @@ class InGameMenuTest {
             assertTrue(calls.none { it.startsWith("loadSharedState") })
             assertEquals("Couldn't read that save.", menu.slots().error)
         }
+
+    // --- Delete ---
+
+    private val acDiscs =
+        listOf(
+            GameDisc("content://games/ac3 (disc 1).chd", "SLPS-02020", "AC3 (Disc 1)", 1),
+            GameDisc("content://games/ac3 (disc 2).chd", "SLPS-02021", "AC3 (Disc 2)", 2),
+        )
+
+    private suspend fun TestScope.loadPanel(menu: InGameMenu) {
+        menu.openSlots(SlotMode.Load)
+        runCurrent()
+        calls.clear()
+    }
+
+    @Test
+    fun xAsksBeforeDeleting() =
+        runTest {
+            api.times[3] = 300
+            val menu = menu()
+            loadPanel(menu)
+
+            menu.askDelete(menu.entries().single())
+            assertEquals(SlotEntry(3, 300L), menu.slots().deleting)
+            assertEquals(emptyList<String>(), calls)
+
+            menu.cancelDelete()
+            assertNull(menu.slots().deleting)
+            assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun saveDoesntDelete() =
+        runTest {
+            api.times[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            assertNull(menu.slots().deleting)
+        }
+
+    @Test
+    fun aDeleteRemovesTheSaveItAskedAbout() =
+        runTest {
+            api.times[3] = 300
+            api.times[5] = 500
+            val menu = menu()
+            loadPanel(menu)
+
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            // A save comes in under the question (desktop's, through the data folder): the delete is still slot 3's.
+            api.times[2] = 200
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("deleteState $SERIAL 3", calls.first())
+            assertNull(menu.slots().deleting)
+            assertEquals(listOf(2, 5), menu.entries().map { it.slot })
+            // The panel stays open, on the next row.
+            assertEquals(5, menu.slots().focusRow?.slot)
+            assertTrue(calls.none { it == "resume" })
+        }
+
+    @Test
+    fun deletingAnOtherDiscsSaveUsesItsSerial() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(4 to 400L)
+            val menu = menu(booted = false)
+            menu.gameStarted(game("SLPS-02020").copy(discs = acDiscs))
+            runCurrent()
+            loadPanel(menu)
+
+            menu.askDelete(menu.slots().others.single())
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("deleteState SLPS-02021 4", calls.first())
+            assertEquals(emptyList<SlotEntry>(), menu.slots().others)
+        }
+
+    @Test
+    fun deletingASharedSlot() =
+        runTest {
+            api.sharedTimes[6] = 600
+            val menu = menu()
+            loadPanel(menu)
+            menu.switchTab()
+
+            menu.askDelete(menu.slots().shared!!.single())
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("deleteState shared 6", calls.first())
+            assertEquals(emptyList<SlotEntry>(), menu.slots().shared)
+            assertEquals(SlotTab.Shared, menu.slots().tab)
+        }
+
+    @Test
+    fun aFailedDeleteSaysWhy() =
+        runTest {
+            api.times[3] = 300
+            api.deleteError = "Permission denied."
+            val menu = menu()
+            loadPanel(menu)
+
+            menu.askDelete(menu.entries().single())
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("Couldn't delete that save: Permission denied.", menu.slots().error)
+            assertEquals(listOf(3), menu.entries().map { it.slot })
+        }
 }

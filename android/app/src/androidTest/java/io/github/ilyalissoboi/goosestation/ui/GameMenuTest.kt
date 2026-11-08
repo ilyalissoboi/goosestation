@@ -37,11 +37,13 @@ import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
@@ -72,6 +74,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -248,6 +251,21 @@ class GameMenuTest {
 
             override fun pickShared(slot: Int) {
                 calls += "pickShared $slot"
+            }
+
+            override fun askDelete(entry: SlotEntry) {
+                calls += "askDelete ${entry.slot}"
+                state = state.copy(slots = state.slots?.copy(deleting = entry))
+            }
+
+            override fun confirmDelete() {
+                calls += "confirmDelete"
+            }
+
+            override fun cancelDelete() {
+                calls += "cancelDelete"
+                val slots = state.slots
+                state = state.copy(slots = slots?.copy(deleting = null, focusRow = slots.deleting))
             }
 
             override fun openLeaderboard(id: Int) {
@@ -881,6 +899,80 @@ class GameMenuTest {
         rule.onNodeWithText("No saves yet for this game.").assertDoesNotExist()
         // The panel holds the focus all the same, so B and the tabs still reach it.
         rule.onNode(isFocused()).assertExists()
+    }
+
+    @Test
+    fun xOnARowAsksWithCancelFocused() {
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+            )
+        show()
+        rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertExists()
+
+        press(Key.ButtonX)
+
+        assertEquals(listOf("askDelete 2"), calls)
+        rule.onNodeWithText("Delete the save in slot 2?").assertExists()
+        rule.onNode(isFocused() and hasText("Cancel")).assertExists()
+        press(Key.DirectionLeft)
+        rule.onNode(isFocused() and hasText("Delete")).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("askDelete 2", "confirmDelete"), calls)
+    }
+
+    @Test
+    fun saveHasNoDelete() {
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(2), focus = 2))
+        show()
+        rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertDoesNotExist()
+
+        press(Key.ButtonX)
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    @Test
+    fun afterADeleteTheNextRowIsFocused() {
+        val rows = saved(2, 5, 7).filter { it.savedAt != null }
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[1]))
+        show()
+
+        // The core's list comes back without slot 5, the row after it named.
+        state = state.copy(slots = SlotPanel(SlotMode.Load, rows - rows[1], focus = 2, focusRow = rows[2]))
+        rule.waitForIdle()
+
+        rule.onNode(isFocused() and hasText("Slot 7", substring = true)).assertExists()
+    }
+
+    @Test
+    fun aLongPressAsksToo() {
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+            )
+        show()
+
+        rule.onNode(hasText("Slot 5", substring = true) and hasClickAction()).performTouchInput { longClick() }
+        rule.waitForIdle()
+
+        assertEquals(listOf("askDelete 5"), calls)
+    }
+
+    @Test
+    fun bCancelsTheDelete() {
+        val rows = saved(2, 5).filter { it.savedAt != null }
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2))
+        show()
+        press(Key.DirectionDown)
+        press(Key.ButtonX)
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("askDelete 5", "cancelDelete"), calls)
+        assertNotNull(state.slots)
+        rule.onNode(isFocused() and hasText("Slot 5", substring = true)).assertExists()
     }
 
     @Test

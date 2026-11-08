@@ -303,6 +303,7 @@ The button-hint footer: each button's glyph in a key chip (`key` type, a `line-s
 action it takes, in a row that wraps on a narrow screen. It goes at the foot of a panel, such as the pause menu.
 
 - Name the buttons with `PadGlyphs`, which labels them as the Controllers page does ("A" for `BUTTON_A`).
+- X (`PadGlyphs.action`) is an item's second action: Delete on a save, Saves on a game's tile.
 - Actions are short verbs, in sentence case: Select, Back, Save.
 - It takes no input: nothing in it is focusable, and each hint reads as "A: Select".
 - `KeyChip` is the chip alone, for a glyph shown elsewhere, such as `PanelTabs`.
@@ -380,7 +381,8 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   its scroll, so a short screen keeps the rows its height; a shared row names the game it holds under the slot's name,
   in `body` `ink`, two lines at most. In a list under 150 dp tall, rows are compact (the 64 x 48 dp picture, the game
   on one line, the time on Saved's line). Replacing a save asks in the
-  panel, as the menu does. The focus can't leave the panel.
+  panel, as the menu does, and so does deleting one in Load (X, or a long press: the question, Delete `Danger`, Cancel
+  `Ghost` focused); after a delete the focus goes to the next row. The focus can't leave the panel.
 - `DiscPanel`: Change disc, a side panel framed as `SaveSlotPanel`: a 48 dp row per disc, "Disc N" in `label` with the
   disc's title (or its serial) under it in `body-sm` `ink-muted`; the disc in the drive on `beak-soft` with "Current"
   at its end, and focused as it opens. A `Danger` notice says why a disc didn't go in. `KeyHints`: A Insert, B Back.

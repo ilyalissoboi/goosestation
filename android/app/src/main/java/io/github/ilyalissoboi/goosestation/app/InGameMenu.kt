@@ -42,7 +42,8 @@ data class SlotEntry(
  * the slot it asks to replace, if any ([replacing], in the open [tab]), whether a save or load is under way ([busy]),
  * and the last one's failure, as shown ([error]). In Load, [others] are the states still filed under the game's other
  * discs. The Shared tab lists the [shared] slots (null while they're read), focusing [sharedFocus]. A game without a
- * key ([hasKey] false) has no slots of its own: it opens on Shared.
+ * key ([hasKey] false) has no slots of its own: it opens on Shared. In Load, [deleting] is the save it asks to delete,
+ * and [focusRow], when set, the row to focus (the one after a deleted save), before [focus] and [sharedFocus].
  */
 data class SlotPanel(
     val mode: SlotMode,
@@ -56,6 +57,8 @@ data class SlotPanel(
     val shared: List<SlotEntry>? = null,
     val sharedFocus: Int? = null,
     val hasKey: Boolean = true,
+    val deleting: SlotEntry? = null,
+    val focusRow: SlotEntry? = null,
 )
 
 /**
@@ -210,6 +213,14 @@ interface GameMenuActions {
     /** Saves to or loads shared slot [slot], as the slot panel's mode says. */
     fun pickShared(slot: Int) {}
 
+    /** X or a long press on a Load row: asks before deleting [entry]'s save. */
+    fun askDelete(entry: SlotEntry) {}
+
+    /** Deletes the save asked about, staying in the panel. */
+    fun confirmDelete() {}
+
+    fun cancelDelete() {}
+
     /** Opens leaderboard [id] in the Leaderboards tab, fetching its entries. */
     fun openLeaderboard(id: Int) {}
 
@@ -351,7 +362,7 @@ class InGameMenu(
 
     override fun switchTab() {
         state.slots?.let { slots ->
-            if (slots.busy || slots.replacing != null) return
+            if (slots.busy || slots.replacing != null || slots.deleting != null) return
             val tab = if (slots.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
             state = state.copy(slots = slots.copy(tab = tab, error = null))
             return
@@ -519,6 +530,20 @@ class InGameMenu(
                 codes = null,
                 confirmingReset = false,
             )
+        readSlots(id, mode)
+    }
+
+    /**
+     * Reads slot panel [id]'s lists, the game's own, its other discs' and the shared ones, then each saved row's picture
+     * (and a shared slot's game), the open tab's first. With [focusRow], that row is to take the focus.
+     */
+    private fun readSlots(
+        id: Int,
+        mode: SlotMode,
+        focusRow: SlotEntry? = null,
+    ) {
+        val serial = serial ?: return
+        val hasKey = serial.isNotBlank()
         val discs = running?.discs.orEmpty()
         val multiDisc = discs.size > 1
         val path = running?.path.orEmpty()
@@ -536,16 +561,62 @@ class InGameMenu(
                     others = others,
                     shared = shared,
                     sharedFocus = SaveLists.focus(mode, shared, null),
+                    focusRow = focusRow,
                 )
             }
-            // Each saved row's picture (and a shared slot's game), the open tab's first.
             val own = entries.filter { it.savedAt != null } + others
             val sharedSaved = shared.filter { it.savedAt != null }
+            val tab = state.slots?.tab ?: SlotTab.ThisGame
             for (entry in if (tab == SlotTab.Shared) sharedSaved + own else own + sharedSaved) {
                 val read = reader.preview(entry, serial, path, multiDisc) ?: continue
                 if (id != panelId) return@launch
                 updatePanel(id) { panel -> panel.withRow(read) }
             }
+        }
+    }
+
+    override fun askDelete(entry: SlotEntry) {
+        val panel = state.slots ?: return
+        val key = serial ?: return
+        if (panel.mode != SlotMode.Load || panel.busy || panel.replacing != null || panel.deleting != null) return
+        val rows = panel.entries.orEmpty() + panel.others + panel.shared.orEmpty()
+        if (rows.none { it.ref(key) == entry.ref(key) && it.savedAt != null }) return
+        state = state.copy(slots = panel.copy(deleting = entry, error = null))
+    }
+
+    override fun cancelDelete() {
+        val panel = state.slots ?: return
+        state = state.copy(slots = panel.copy(deleting = null, focusRow = panel.deleting))
+    }
+
+    /**
+     * Deletes the save asked about, by the state the question named (not whichever row has the focus now), then reads
+     * the lists again; the row after it in its list takes the focus, else the one before.
+     */
+    override fun confirmDelete() {
+        val panel = state.slots ?: return
+        val entry = panel.deleting ?: return
+        val key = serial ?: return
+        val id = panelId
+        val ref = entry.ref(key)
+        val list =
+            when {
+                entry.shared -> panel.shared.orEmpty()
+                entry.owner != null -> panel.others
+                else -> panel.entries.orEmpty()
+            }.filter { it.savedAt != null }
+        val at = list.indexOfFirst { it.ref(key) == ref }
+        val next = list.getOrNull(at + 1) ?: list.getOrNull(at - 1)
+        updatePanel(id) { it.copy(deleting = null, busy = true, error = null) }
+        scope.launch {
+            val error = withContext(game) { api.deleteState(ref) }
+            if (id != panelId) return@launch
+            if (error != null) {
+                updatePanel(id) { it.copy(busy = false, error = "Couldn't delete that save: $error", focusRow = entry) }
+                return@launch
+            }
+            updatePanel(id) { it.copy(busy = false) }
+            readSlots(id, panel.mode, next)
         }
     }
 
@@ -556,7 +627,11 @@ class InGameMenu(
 
     override fun pickSlot(slot: Int) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.replacing != null || panel.tab != SlotTab.ThisGame || !panel.hasKey) return
+        if (panel.busy || panel.replacing != null || panel.deleting != null || panel.tab != SlotTab.ThisGame ||
+            !panel.hasKey
+        ) {
+            return
+        }
         val entry = panel.entries?.firstOrNull { it.slot == slot } ?: return
         val saved = entry.savedAt != null
         when {
@@ -568,7 +643,7 @@ class InGameMenu(
 
     override fun pickShared(slot: Int) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.replacing != null || panel.tab != SlotTab.Shared) return
+        if (panel.busy || panel.replacing != null || panel.deleting != null || panel.tab != SlotTab.Shared) return
         val entry = panel.shared?.firstOrNull { it.slot == slot } ?: return
         val saved = entry.savedAt != null
         when {
@@ -624,7 +699,7 @@ class InGameMenu(
         slot: Int,
     ) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.others.none { it.owner == serial && it.slot == slot }) return
+        if (panel.busy || panel.deleting != null || panel.others.none { it.owner == serial && it.slot == slot }) return
         val disc = running?.discs?.firstOrNull { it.serial == serial }?.number
         val what = if (slot == SaveSlots.RESUME) "resume state" else "slot $slot"
         run(

@@ -114,6 +114,7 @@ static bool PadHasAnalogButton(SettingsInterface& si, u32 pad);
 static std::vector<const HotkeyInfo*> GetOfferedHotkeys(SettingsInterface& si, u32 pad);
 static bool MoveAnalogBindings(SettingsInterface& si);
 static void PressAnalogButton();
+static void ApplyTouchPad();
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
@@ -200,6 +201,7 @@ static std::mutex s_input_mutex;
 static std::vector<InputEvent> s_input_queue;
 static std::vector<s32> s_queued_device_ids; // connected as far as the queue goes, for QueueKeyEvent()'s result
 static bool s_accept_input_events = false;   // key and axis events are dropped until the CPU thread runs
+static std::optional<TouchPad::State> s_touch_queued; // the touch pad's latest state, until the CPU thread takes it
 
 // Each controller's descriptor, at its device index: [Android] ControllerDescriptors. It's only ever appended to, so a
 // controller's index never changes in this process, and its bindings stay its own. InitializeConfig() seeds it before
@@ -227,6 +229,11 @@ static std::string s_boot_path;
 static bool s_game_started = false;
 static bool s_fastmem_override_logged = false;
 static bool s_fast_forward_reported = false; // as the app was last told, CPU thread
+static TouchPad::State s_touch_state;   // what the touch pad holds, as far as the CPU thread has it
+static TouchPad::State s_touch_applied; // what Port 1's controller was last given of it
+static s32 s_pad_kind_reported = -1;    // Port 1's kind, as the app was last told, CPU thread
+static bool s_picture_at_top = false;   // SetPictureAtTop(), CPU thread
+static DisplayAlignment s_loaded_display_alignment = Settings::DEFAULT_DISPLAY_ALIGNMENT; // the setting's own value
 static u32 s_binding_capture_id = 0; // changes when a capture starts or is cancelled, so a stale report is dropped
 
 // Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
@@ -2191,6 +2198,58 @@ void AndroidHost::QueueInputEvent(InputEvent event)
     EmuThread::Wake();
 }
 
+void AndroidHost::QueueTouchPad(const TouchPad::State& state)
+{
+  bool wake;
+  {
+    std::unique_lock lock(s_input_mutex);
+    if (!s_accept_input_events)
+      return;
+
+    // Only the latest matters: a state still queued is replaced, and its wake is still to come.
+    wake = !s_touch_queued.has_value() && s_input_queue.empty();
+    s_touch_queued = state;
+  }
+
+  if (wake)
+    EmuThread::Wake();
+}
+
+void AndroidHost::SetPictureAtTop(bool top)
+{
+  if (!s_initialized)
+    return;
+
+  EmuThread::RunOnThread(
+    [top]() {
+      s_picture_at_top = top;
+      g_settings.display_alignment = top ? DisplayAlignment::LeftOrTop : s_loaded_display_alignment;
+    },
+    false);
+}
+
+// CPU thread: gives Port 1's controller what the touch pad holds. While it holds anything, its inputs are set again
+// each pass, so a controller the core made anew (a type change) takes them too.
+void AndroidHost::ApplyTouchPad()
+{
+  Controller* const controller = System::IsValid() ? System::GetController(0) : nullptr;
+  if (!controller)
+  {
+    s_touch_applied = {};
+    return;
+  }
+
+  if (s_touch_state != s_touch_applied)
+  {
+    TouchPad::Apply(*controller, s_touch_applied, s_touch_state);
+    s_touch_applied = s_touch_state;
+  }
+  else if (s_touch_state != TouchPad::State{})
+  {
+    TouchPad::Reassert(*controller, s_touch_state);
+  }
+}
+
 void AndroidHost::ProcessInputQueue()
 {
   // Give the source every connected device whenever it's created, so none is lost: one connected before it existed
@@ -2212,8 +2271,11 @@ void AndroidHost::ProcessInputQueue()
 
   {
     std::unique_lock lock(s_input_mutex);
-    if (s_input_queue.empty())
-      return;
+    if (s_touch_queued.has_value())
+    {
+      s_touch_state = s_touch_queued.value();
+      s_touch_queued.reset();
+    }
 
     s_input_events.swap(s_input_queue);
   }
@@ -2289,6 +2351,7 @@ void AndroidHost::ProcessInputQueue()
   }
 
   s_input_events.clear();
+  ApplyTouchPad();
 }
 
 std::optional<u32> AndroidHost::FindDescriptorIndex(std::string_view descriptor)
@@ -3333,6 +3396,12 @@ void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& loc
   // status icons would show the same things twice.
   g_settings.display_show_status_indicators = false;
 
+  // The touch pad in portrait puts the picture at the top while it shows (SetPictureAtTop()); the setting is kept for
+  // when it goes, and never written.
+  AndroidHost::s_loaded_display_alignment = g_settings.display_alignment;
+  if (AndroidHost::s_picture_at_top)
+    g_settings.display_alignment = DisplayAlignment::LeftOrTop;
+
   // The host owns each game's patch code list and gives it to the core itself (GameCodes), and the core applies
   // whatever list it's given. With this on, the core would also load each disc's own .cht file as it starts, and drop
   // the list when the setting changes. It's never written back: desktop keeps its own setting in a shared settings.ini.
@@ -3541,6 +3610,19 @@ void Host::OnSystemDestroyed()
   System::SetGameSettingsSerial({});
   GameCodes::Clear();
 
+  // So do the touch pad's, and the app hears Port 1's kind is gone.
+  {
+    std::unique_lock lock(AndroidHost::s_input_mutex);
+    AndroidHost::s_touch_queued.reset();
+  }
+  AndroidHost::s_touch_state = {};
+  AndroidHost::s_touch_applied = {};
+  if (AndroidHost::s_pad_kind_reported != -1)
+  {
+    AndroidHost::s_pad_kind_reported = -1;
+    AndroidHost::NotifyPadKindChanged(-1);
+  }
+
   // Fast forward ends with the game.
   if (AndroidHost::s_fast_forward_reported)
   {
@@ -3633,6 +3715,14 @@ void Host::FrameDone()
   {
     AndroidHost::s_fast_forward_reported = fast_forward;
     AndroidHost::NotifyFastForwardChanged(fast_forward);
+  }
+
+  // The touch pad shows Port 1 as it is: sticks in analog mode (the Analog button, the game, a type change).
+  const s32 kind = TouchPad::KindOf(System::GetController(0));
+  if (kind != AndroidHost::s_pad_kind_reported)
+  {
+    AndroidHost::s_pad_kind_reported = kind;
+    AndroidHost::NotifyPadKindChanged(kind);
   }
 }
 

@@ -13,6 +13,7 @@ import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameSettingsPages
 import io.github.ilyalissoboi.goosestation.app.NativeCoreApi
 import io.github.ilyalissoboi.goosestation.app.PostProcessingPage
+import io.github.ilyalissoboi.goosestation.input.TouchButton
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
@@ -1163,6 +1164,7 @@ class GameCallsTest {
         onMessage: (key: String, text: String) -> Unit = { _, _ -> },
         onHotkey: (String) -> Unit = {},
         onRumble: (deviceId: Int, large: Float, small: Float) -> Unit = { _, _, _ -> },
+        onPadKind: (Int) -> Unit = {},
         beforeBoot: () -> Unit = {},
         refreshRate: Float = 0f,
         frames: FrameReader? = null,
@@ -1195,6 +1197,8 @@ class GameCallsTest {
                 override fun onFastForwardChanged(enabled: Boolean) = onFastForward(enabled)
 
                 override fun onHotkey(name: String) = onHotkey.invoke(name)
+
+                override fun onPadKindChanged(kind: Int) = onPadKind(kind)
 
                 override fun onRumble(
                     deviceId: Int,
@@ -1241,6 +1245,137 @@ class GameCallsTest {
                 surface.release()
                 texture.release()
             }
+        }
+    }
+
+    // The touch pad drives Port 1 directly: its buttons, as the core's generic inputs.
+    @Test
+    fun touchButtonsReachPortOne() =
+        withPadtest {
+            NativeLibrary.setTouchPad(TouchButton.Cross.bit or TouchButton.L1.bit or TouchButton.Up.bit, 0f, 0f, 0f, 0f)
+            awaitBind("Cross", 1f)
+            assertEquals(1f, bind("L1"))
+            assertEquals(1f, bind("Up"))
+            assertEquals(0f, bind("Circle"))
+            assertEquals(0f, bind("Start"))
+            NativeLibrary.setTouchPad(0, 0f, 0f, 0f, 0f)
+            awaitBind("Cross", 0f)
+            assertEquals(0f, bind("L1"))
+            assertEquals(0f, bind("Up"))
+        }
+
+    @Test
+    fun aTouchStickReachesPortOneInAnalogMode() {
+        val kinds = LinkedBlockingQueue<Int>()
+        withPadtest(onPadKind = { kinds.add(it) }) {
+            // padtest puts the DualShock in analog mode itself (and locks it there).
+            assertEquals(listOf(1, 2), kinds.nextKinds(2))
+            NativeLibrary.setTouchPad(0, 1f, 0f, 0f, -0.5f)
+            awaitBind("LRight", null)
+            assertEquals(0f, bind("LLeft"))
+            assertTrue(bind("RUp") > 0f)
+            assertEquals(0f, bind("RDown"))
+            NativeLibrary.setTouchPad(0, 0f, 0f, 0f, 0f)
+            awaitBind("LRight", 0f)
+            assertEquals(0f, bind("RUp"))
+        }
+    }
+
+    // Port 1's kind, reported as it changes: digital at the first frame, analog once padtest turns analog mode on
+    // (the Analog button can't be tried here: padtest locks the mode), -1 when the game ends.
+    @Test
+    fun theKindFollowsAnalogMode() {
+        val kinds = LinkedBlockingQueue<Int>()
+        withPadtest(onPadKind = { kinds.add(it) }) {
+            assertEquals(listOf(1, 2), kinds.nextKinds(2))
+        }
+        assertEquals("the game's end", listOf(-1), kinds.nextKinds(1))
+    }
+
+    @Test
+    fun anotherTypeIsUnsupported() {
+        val kinds = LinkedBlockingQueue<Int>()
+        withPadtest(onPadKind = { kinds.add(it) }) {
+            assertEquals(listOf(1, 2), kinds.nextKinds(2))
+            NativeLibrary.setPortType(0, "NeGcon")
+            assertEquals(0, kinds.poll(5, TimeUnit.SECONDS))
+            NativeLibrary.setPortType(0, "AnalogJoystick")
+            assertEquals(2, kinds.poll(5, TimeUnit.SECONDS))
+        }
+    }
+
+    // The core makes Port 1's controller anew when its type changes: what the touch pad holds goes on holding.
+    @Test
+    fun aNewControllerGetsTheHeldState() =
+        withPadtest {
+            NativeLibrary.setTouchPad(TouchButton.Cross.bit, 0f, 0f, 0f, 0f)
+            awaitBind("Cross", 1f)
+            NativeLibrary.setPortType(0, "DigitalController")
+            awaitBind("Cross", 1f)
+            assertEquals(0f, bind("Circle"))
+            NativeLibrary.setTouchPad(0, 0f, 0f, 0f, 0f)
+            awaitBind("Cross", 0f)
+        }
+
+    @Test
+    fun aNewGameStartsWithNothingHeld() {
+        val kinds = LinkedBlockingQueue<Int>()
+        withPadtest(onPadKind = { kinds.add(it) }) {
+            NativeLibrary.setTouchPad(TouchButton.Cross.bit, 0f, 0f, 0f, 0f)
+            awaitBind("Cross", 1f)
+            assertEquals(listOf(1, 2), kinds.nextKinds(2))
+        }
+        assertEquals("the first game's end", listOf(-1), kinds.nextKinds(1))
+        withPadtest(onPadKind = { kinds.add(it) }) {
+            assertEquals("the second game's first frame", listOf(1), kinds.nextKinds(1))
+            Thread.sleep(200)
+            assertEquals(0f, bind("Cross"))
+        }
+    }
+
+    // While the touch pad shows in portrait, the picture sits at the top of the screen, whatever settings.ini says.
+    @Test
+    fun thePictureGoesToTheTop() =
+        FrameReader(360, 800).use { frames ->
+            withPadtest(frames = frames) {
+                val before = settingsIni().values("Display", "Alignment")
+                // A 4:3 picture is 270 rows tall here: centred, it starts at row 265.
+                assertTrue("centred", litRows(frames.nextFrame()).first >= 200)
+                NativeLibrary.setPictureAtTop(true)
+                frames.nextFrame()
+                val top = litRows(frames.nextFrame())
+                assertTrue("at the top: $top", top.first < 60 && top.last < 300)
+                NativeLibrary.setPictureAtTop(false)
+                frames.nextFrame()
+                assertTrue("centred again", litRows(frames.nextFrame()).first >= 200)
+                assertEquals(before, settingsIni().values("Display", "Alignment"))
+            }
+        }
+
+    // The first and last rows of a 360-wide frame with anything brighter than near-black in them.
+    private fun litRows(frame: IntArray): IntRange {
+        val rows = (0 until frame.size / 360).filter { y -> (0 until 360).any { x -> bright(frame[y * 360 + x]) } }
+        return if (rows.isEmpty()) IntRange.EMPTY else rows.first()..rows.last()
+    }
+
+    private fun bright(pixel: Int) = maxOf(pixel and 0xFF, (pixel shr 8) and 0xFF, (pixel shr 16) and 0xFF) > 24
+
+    private fun bind(name: String) = NativeLibrary.getPadBindStateForTest(0, name)
+
+    // The next [count] kinds reported, as many as come within 5 seconds each.
+    private fun LinkedBlockingQueue<Int>.nextKinds(count: Int) = List(count) { poll(5, TimeUnit.SECONDS) }
+
+    // Waits for Port 1's [name] to be [value], or above 0 for null.
+    private fun awaitBind(
+        name: String,
+        value: Float?,
+    ) {
+        val deadline = System.nanoTime() + 3_000_000_000L
+        while (true) {
+            val now = bind(name)
+            if (if (value == null) now > 0f else now == value) return
+            if (System.nanoTime() > deadline) throw AssertionError("Port 1's $name is $now, not ${value ?: "pushed"}")
+            Thread.sleep(20)
         }
     }
 

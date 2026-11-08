@@ -66,6 +66,13 @@ interface NativeCallbacks {
     fun onFastForwardChanged(enabled: Boolean) {}
 
     /**
+     * Port 1's [kind] for the touch pad, as the game's first frame finds it and whenever it changes (the Analog button,
+     * the game, a type change): 0 unsupported (no pad, or not a digital pad, DualShock or analog joystick), 1 digital
+     * (a DualShock in digital mode too), 2 analog; -1 once the game ends. From the core's thread.
+     */
+    fun onPadKindChanged(kind: Int) {}
+
+    /**
      * The RetroAchievements login token changed: a sign-in's new [token], or null when it's gone (signed out, or
      * rejected). Keep it before returning: the core keeps it in memory only.
      */

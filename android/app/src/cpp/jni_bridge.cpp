@@ -63,6 +63,7 @@ jmethodID s_on_hotkey = nullptr;
 jmethodID s_on_rumble = nullptr;
 jmethodID s_on_osd_message = nullptr;
 jmethodID s_on_fast_forward_changed = nullptr;
+jmethodID s_on_pad_kind_changed = nullptr;
 jmethodID s_on_achievements_token = nullptr;
 jmethodID s_store_memcard_sync_secret = nullptr;
 jmethodID s_load_memcard_sync_secret = nullptr;
@@ -740,6 +741,21 @@ void AndroidHost::NotifyFastForwardChanged(bool enabled)
   env->DeleteLocalRef(callbacks);
 }
 
+void AndroidHost::NotifyPadKindChanged(s32 kind)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  env->CallVoidMethod(callbacks, s_on_pad_kind_changed, static_cast<jint>(kind));
+  ClearException(env.get());
+  env->DeleteLocalRef(callbacks);
+}
+
 namespace {
 // Global references to the constants called names of the enum class_name, in that order, in out.
 template<size_t N>
@@ -835,6 +851,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     env->GetMethodID(s_callbacks_class, "onOsdMessage",
                      "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
   s_on_fast_forward_changed = env->GetMethodID(s_callbacks_class, "onFastForwardChanged", "(Z)V");
+  s_on_pad_kind_changed = env->GetMethodID(s_callbacks_class, "onPadKindChanged", "(I)V");
   s_on_achievements_token = env->GetMethodID(s_callbacks_class, "onAchievementsToken", "(Ljava/lang/String;)V");
   s_store_memcard_sync_secret =
     env->GetMethodID(s_callbacks_class, "storeMemcardSyncSecret", "(Ljava/lang/String;Ljava/lang/String;)Z");
@@ -860,7 +877,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                      "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
   if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey || !s_on_rumble ||
       !s_on_osd_message ||
-      !s_on_fast_forward_changed || !s_on_achievements_token || !s_on_achievements_changed ||
+      !s_on_fast_forward_changed || !s_on_pad_kind_changed || !s_on_achievements_token || !s_on_achievements_changed ||
       !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
       !s_on_achievement_notification || !s_on_achievement_toast ||
       !s_on_achievement_indicator || !s_on_achievement_image || !s_on_play_sound || !s_on_leaderboard)
@@ -2590,6 +2607,17 @@ NATIVE_LIBRARY_FUNCTION(void, setFastForward)(JNIEnv*, jobject, jboolean enabled
 NATIVE_LIBRARY_FUNCTION(void, toggleAnalogMode)(JNIEnv*, jobject)
 {
   AndroidHost::ToggleAnalogMode();
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setTouchPad)(JNIEnv*, jobject, jint buttons, jfloat left_x, jfloat left_y, jfloat right_x,
+                                           jfloat right_y)
+{
+  AndroidHost::QueueTouchPad(TouchPad::State{static_cast<u32>(buttons), {left_x, left_y, right_x, right_y}});
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setPictureAtTop)(JNIEnv*, jobject, jboolean top)
+{
+  AndroidHost::SetPictureAtTop(top);
 }
 
 NATIVE_LIBRARY_FUNCTION(void, saveScreenshot)(JNIEnv*, jobject)

@@ -176,11 +176,11 @@ fun SaveSlotPanel(
                 Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
             }
         }
-        if (panel.busy) Line(if (saving) "Saving…" else "Loading…")
+        if (panel.busy) SlotLine(if (saving) "Saving…" else "Loading…")
         when {
-            !sharedTab && !panel.hasKey -> Line(NO_KEY_STATES)
+            !sharedTab && !panel.hasKey -> SlotLine(NO_KEY_STATES)
             entries != null && !saving && entries.none { it.savedAt != null } && others.isEmpty() ->
-                Line(if (sharedTab) "No shared saves yet." else "No saves yet for this game.")
+                SlotLine(if (sharedTab) "No shared saves yet." else "No saves yet for this game.")
         }
         BoxWithConstraints(Modifier.weight(1f)) {
             val short = maxHeight < SHORT_SLOT_LIST
@@ -270,7 +270,7 @@ fun SaveSlotPanel(
 }
 
 /** A slot list shorter than this (a handheld's at large text, not the Thor's at 1x) has its rows compact ([SlotRow]). */
-private val SHORT_SLOT_LIST = 150.dp
+internal val SHORT_SLOT_LIST = 150.dp
 
 /** What a game without a key says of its own slots. */
 internal const val NO_KEY_STATES = "This game can't keep save states of its own."
@@ -285,7 +285,7 @@ internal const val SLOT_PICTURE = "slotPicture"
  * the time on Saved's line, so it fits the list's height.
  */
 @Composable
-private fun SlotRow(
+internal fun SlotRow(
     entry: SlotEntry,
     now: ZonedDateTime,
     enabled: Boolean,
@@ -374,7 +374,7 @@ private fun SlotRow(
 }
 
 @Composable
-private fun Line(text: String) {
+internal fun SlotLine(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.bodyLarge,

@@ -100,6 +100,9 @@ enum class Screen(
 
     /** A game's own settings, from its tile in the library. */
     GameSettings,
+
+    /** A game's Saves, from its tile in the library. */
+    Saves,
     Game,
 }
 
@@ -769,6 +772,33 @@ object AppController : NativeCallbacks {
     var libraryFocus by mutableStateOf<String?>(null)
         private set
 
+    /** A game's Saves page, from its library tile. */
+    val savesPage by lazy {
+        SavesPage(scope, gameDispatcher, SaveReader(NativeGameCoreApi, gameDispatcher), NativeGameCoreApi, { games }) {
+            game,
+            state,
+            refused,
+            ->
+            gameStarts.playFromState(game, state, refused)
+        }
+    }
+
+    /** Opens [game]'s Saves, from the library. */
+    fun openSaves(game: GameEntry) {
+        if (screen != Screen.Library || !ready || gameActive) return
+        savesPage.open(game)
+        screen = Screen.Saves
+    }
+
+    /** Back to the library, which focuses the game. */
+    fun closeSaves() {
+        if (screen != Screen.Saves) return
+        libraryFocus = savesPage.state?.game?.path
+        focusSettings = false
+        savesPage.close()
+        screen = Screen.Library
+    }
+
     /** Opens [game]'s own settings, from the library, if the settings can open and it has a key to keep them under. */
     fun openGameSettings(game: GameEntry) {
         if (screen != Screen.Library || !settingsReady || game.serial.isBlank()) return
@@ -1129,6 +1159,7 @@ object AppController : NativeCallbacks {
         messageIsError = false
         gameActive = true
         holdMemcards = true
+        if (screen == Screen.Saves) savesPage.close()
         screen = Screen.Game
         NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared)
     }

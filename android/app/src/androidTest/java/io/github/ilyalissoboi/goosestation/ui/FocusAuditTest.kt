@@ -43,6 +43,7 @@ import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
+import io.github.ilyalissoboi.goosestation.app.SavesPageState
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
@@ -93,6 +94,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /** Every screen, on fake data, can be used with a controller alone ([assertControllerReady]). */
 @OptIn(ExperimentalTestApi::class)
@@ -310,6 +313,81 @@ class FocusAuditTest {
     @Test
     fun emulationPage() {
         show { EmulationScreen(pageValues(EmulationSettings.all), null, onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    private val savesNow = ZonedDateTime.of(2026, 11, 8, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+    private val savesGame = GameEntry("content://g/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
+    private val savedRows = listOf(SlotEntry(SaveSlots.RESUME, 1_700_000_000L), SlotEntry(2, 1_700_000_000L))
+    private val sharedRows =
+        listOf(
+            SlotEntry(
+                4,
+                1_700_000_000L,
+                shared = true,
+                holds = HeldGame("Spyro", "SCUS-94228", "content://g/spyro.cue"),
+            ),
+        )
+
+    @Test
+    fun savesPage() {
+        show {
+            SavesScreen(
+                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows),
+                NoSavesActions,
+                savesNow,
+                {},
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun savesPageShared() {
+        show {
+            SavesScreen(
+                SavesPageState(savesGame, SlotTab.Shared, savedRows, shared = sharedRows),
+                NoSavesActions,
+                savesNow,
+                {},
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun savesPageDeleteQuestion() {
+        show {
+            SavesScreen(
+                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows, deleting = savedRows[1]),
+                NoSavesActions,
+                savesNow,
+                {},
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun savesPageEmpty() {
+        show {
+            SavesScreen(
+                SavesPageState(
+                    savesGame,
+                    SlotTab.ThisGame,
+                    emptyList(),
+                    shared = emptyList(),
+                ),
+                NoSavesActions,
+                savesNow,
+                {
+                },
+            )
+        }
+
         rule.assertControllerReady()
     }
 

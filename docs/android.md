@@ -753,10 +753,29 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
   counts each chain the game sets as one. Desktop's Copy global settings doesn't copy the chains, and neither does
   this app's.
 
+### A game's saves
+
+**X** on a focused game in the library opens its **Saves** page; a long press, by touch, offers **Saves** and **Game
+settings** (a game without a key opens Saves straight away). The library's foot says "A Play · X Saves · Y Game
+settings". The page, in the app's window, has the game's title over "Saves", then the in-game Load panel's two tabs
+(L1 and R1) and rows: **This game**, the resume state, slots 1 to 10 and Other saves, and **Shared**, desktop's
+shared slots, each naming the game it holds. The page scrolls as one, with `KeyHints` "A Start · X Delete · L1 R1
+Switch · B Back" at its foot. The first save is focused; with none, it says "No saves yet for this game.", and a
+game without a key opens on Shared, its This game tab saying "This game can't keep save states of its own."
+
+- **A** starts the game from that save, on the disc it was made on, as Resume does from the resume state. A shared
+  slot starts the game it holds, which may be another; one the library doesn't have says which game it needs ("Shared
+  slot 3 needs Crash Bandicoot (SCUS-94900), which isn't in your library."). When hardcore mode would start, no save
+  can start the game: "Loading a state is off in hardcore mode".
+- **X** (a long press, by touch) asks before deleting the save, in a panel over the page: Delete and Cancel, Cancel
+  focused. It works in hardcore mode too, where the in-game Load panel stays closed. The focus goes to the next save.
+- **B** goes back to the library, focusing the game's tile.
+
 ### Settings for each game
 
 A game can have settings of its own, over the global ones, as on desktop. They open from its tile: **Y** on a focused
-game in the library (a long press, by touch), which the library's foot says ("A Play · Y Game settings"); and, for the
+game in the library (or Game settings in its long press's choice, by touch), which the library's foot says ("A Play ·
+X Saves · Y Game settings"); and, for the
 running game, from **Settings** in its in-game menu (after Achievements). The library's opens only as the global
 pages do, with no game under way; a file with no key (a PSF) has none, and its menu's Settings says so.
 

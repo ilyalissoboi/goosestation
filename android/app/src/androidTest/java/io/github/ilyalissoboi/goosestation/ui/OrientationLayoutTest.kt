@@ -73,6 +73,7 @@ import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
+import io.github.ilyalissoboi.goosestation.app.SavesPageState
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
@@ -1293,6 +1294,40 @@ class OrientationLayoutTest {
                 ),
             lists = mapOf("Output volume" to ("0%" to "200%")),
         )
+
+    @Test
+    fun theSavesPage() {
+        val now = ZonedDateTime.of(2026, 11, 8, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+        val held = HeldGame(LONG_GAME.title, "SLPS-02021", LONG_GAME.path)
+        val own =
+            listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) +
+                (1..6).map { SlotEntry(it, now.toEpochSecond() - 86_400 * it) }
+        val shared = (1..4).map { SlotEntry(it, now.toEpochSecond() - 600, shared = true, holds = held, disc = 2) }
+        val page = mutableStateOf(SavesPageState(LONG_GAME, SlotTab.ThisGame, own, shared = shared))
+        eachConfig({ SavesScreen(page.value, NoSavesActions, now, {}) }) {
+            page.value = page.value.copy(tab = SlotTab.ThisGame)
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            assertTrue("Resume is focused, not ${focusedText()}", focusedHas("Resume"))
+            pressUntilFocusedInView(Key.DirectionDown, "Slot 6")
+            assertTextsLaidOut(inView = true)
+
+            page.value = page.value.copy(tab = SlotTab.Shared)
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            pressUntilFocusedInView(Key.DirectionDown, "Slot 4")
+            assertTextsLaidOut(inView = true)
+        }
+    }
+
+    @Test
+    fun theSavesPageAsksToDelete() {
+        val shared = SlotEntry(3, 1_700_000_000L, shared = true)
+        eachConfig({ SavesDeleteQuestion(shared, onConfirm = {}, onCancel = {}) }) {
+            assertTextsLaidOut()
+            assertFocusedInView()
+        }
+    }
 
     @Test
     fun aGamesHub() {

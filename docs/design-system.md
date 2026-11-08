@@ -384,6 +384,11 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   on one line, the time on Saved's line). Replacing a save asks in the
   panel, as the menu does, and so does deleting one in Load (X, or a long press: the question, Delete `Danger`, Cancel
   `Ghost` focused); after a delete the focus goes to the next row. The focus can't leave the panel.
+- `SavesScreen`: a game's Saves, from its tile: its title as an `Eyebrow` over "Saves" in `title-1`, `PanelTabs`
+  (This game, Shared), then `SaveSlotPanel`'s Load rows, the page scrolling as one with `KeyHints` fixed at its foot
+  (A Start, X Delete, L1 R1 Switch, B Back). A delete asks in an `OverlayPanel` (the question, Delete `Danger`, Cancel
+  `Ghost` focused); a refused start says why as a `Danger` notice under the tabs. With no save to focus, the title
+  holds the focus.
 - `DiscPanel`: Change disc, a side panel framed as `SaveSlotPanel`: a 48 dp row per disc, "Disc N" in `label` with the
   disc's title (or its serial) under it in `body-sm` `ink-muted`; the disc in the drive on `beak-soft` with "Current"
   at its end, and focused as it opens. A `Danger` notice says why a disc didn't go in. `KeyHints`: A Insert, B Back.

@@ -47,6 +47,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.then
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
@@ -100,6 +101,8 @@ import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.input.TouchLayout
+import io.github.ilyalissoboi.goosestation.library.LibrarySort
+import io.github.ilyalissoboi.goosestation.library.SortKey
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
@@ -116,6 +119,7 @@ import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.settings.Shader
 import io.github.ilyalissoboi.goosestation.settings.ShaderKind
 import io.github.ilyalissoboi.goosestation.ui.components.ACTION_LABEL
+import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
@@ -2288,6 +2292,106 @@ class OrientationLayoutTest {
             if (!focusedIsTheField()) press(Key.DirectionDown)
             assertTrue("the search field can't be reached", focusedIsTheField())
             assertFocusedInView(screen)
+        }
+    }
+
+    @Test
+    fun theLibrarysSortList() {
+        val games =
+            (1..12).map { number ->
+                GameEntry(
+                    "content://test/tree/games/document/game-$number.cue",
+                    "Game $number",
+                    "",
+                    "NTSC-U",
+                    0,
+                    0,
+                    null,
+                )
+            }
+        eachConfig({
+            LibraryScreen(
+                games = games,
+                gridView = true,
+                banners = emptyList(),
+                message = null,
+                isError = false,
+                onToggleView = {},
+                onOpenSettings = {},
+                onRefresh = {},
+                onStartGame = {},
+                focusPath = null,
+                focusSettings = true,
+                sort = LibrarySort(SortKey.UncompressedSize),
+            )
+        }) {
+            rule.onNodeWithContentDescription("Sort: Uncompressed size").requestFocus()
+            rule.waitForIdle()
+            press(Key.Enter)
+            val screen = screen()
+            val list = bounds(rule.onNodeWithTag(CHOICE_LIST))
+            assertTrue(
+                "the list ${list.describe()} isn't across the screen ${screen.describe()}",
+                list.left >= screen.left,
+            )
+            assertTrue("the list ${list.describe()} goes past the screen", list.right <= screen.right + 0.5.dp)
+            // From the current choice, the last, up to the first: each in view as the list scrolls.
+            assertTrue(focusedHas("Uncompressed size"))
+            assertFocusedInView(screen)
+            for (choice in listOf("File size", "File title", "Serial", "Time played", "Last played", "Title")) {
+                press(Key.DirectionUp)
+                assertTrue("Up didn't reach $choice", focusedHas(choice))
+                assertFocusedInView(screen)
+            }
+            press(Key.ButtonB)
+            assertTrue(focusedDescribedAs("Sort: Uncompressed size"))
+        }
+    }
+
+    @Test
+    fun zzDebugHeights() {
+        val games =
+            (1..3).map {
+                GameEntry(
+                    "content://t/tree/g/document/g$it.cue",
+                    "Game $it",
+                    "S-$it",
+                    "NTSC-U",
+                    0,
+                    0,
+                    null,
+                )
+            }
+        eachConfig({
+            LibraryScreen(
+                games = games,
+                gridView = false,
+                banners = emptyList(),
+                message = null,
+                isError = false,
+                onToggleView = {},
+                onOpenSettings = {},
+                onRefresh = {},
+                onStartGame = {},
+                focusPath = null,
+                focusSettings = true,
+            )
+        }, configs = CONFIGS.filter { it.size.width == 640.dp && it.fontScale > 1f }) {
+            val all =
+                rule
+                    .onAllNodes(
+                        hasText("", substring = true) or hasSetTextAction() or hasContentDescription("Sort: Title") or
+                            hasTestTag(SCREEN),
+                        useUnmergedTree = true,
+                    ).fetchSemanticsNodes()
+            for (n in all) {
+                android.util.Log.i(
+                    "GSDBG",
+                    "${n.config.getOrNull(
+                        SemanticsProperties.Text,
+                    )} ${n.config.getOrNull(SemanticsProperties.ContentDescription)} ${n.boxInRoot().describe()}",
+                )
+            }
         }
     }
 

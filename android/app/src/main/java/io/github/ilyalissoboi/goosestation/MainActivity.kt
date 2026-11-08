@@ -464,6 +464,8 @@ class MainActivity : ComponentActivity() {
                             focusSettings = AppController.focusSettings,
                             syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),
                             onSyncBadge = AppController::openSyncBadge,
+                            sort = AppController.librarySort,
+                            onSort = AppController::sortLibrary,
                         )
                         val starts = AppController.gameStarts
                         starts.offer?.let { offer ->

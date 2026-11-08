@@ -193,7 +193,7 @@ fun SearchField(
                                         else -> false
                                     }
                                 }.semantics { contentDescription = SEARCH_NAME }
-                                .padding(vertical = 12.dp),
+                                .padding(vertical = 8.dp),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.ink),
                         keyboardOptions =
                             KeyboardOptions(

@@ -151,7 +151,7 @@ fun ActionLabelStrip(
     val style = MaterialTheme.typography.bodySmall
     val density = LocalDensity.current
     // A label's padding and edge round its line, and a 2 dp gap above it.
-    val height = with(density) { style.lineHeight.toDp() } + 12.dp
+    val height = with(density) { style.lineHeight.toDp() } + 8.dp
     var origin by remember { mutableStateOf(Offset.Zero) }
     val shown = labels.shown
     Layout(
@@ -169,7 +169,7 @@ fun ActionLabelStrip(
                             .semantics { hideFromAccessibility() }
                             .background(colors.raised, GsShapes.small)
                             .border(1.dp, colors.line, GsShapes.small)
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                            .padding(horizontal = 10.dp, vertical = 2.dp),
                 )
             }
         },

@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,16 +38,22 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.onFocusEvent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.library.LibraryOrder
 import io.github.ilyalissoboi.goosestation.library.LibrarySort
+import io.github.ilyalissoboi.goosestation.library.LibraryWords
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.Banner
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
@@ -109,6 +116,37 @@ fun LibraryScreen(
 
     fun longPress(game: GameEntry) = if (game.serial.isBlank()) onSaves(game) else choosing = game
 
+    val sorted = remember(games, sort) { LibraryOrder.sorted(games, sort) }
+    var sortOpen by remember { mutableStateOf(false) }
+    // Where the Sort button is, and where this screen is, in the root: the list opens under the button.
+    var sortBounds by remember { mutableStateOf(Rect.Zero) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    var refocusSort by remember { mutableStateOf(false) }
+
+    fun closeSort() {
+        sortOpen = false
+        refocusSort = true
+    }
+
+    LaunchedEffect(refocusSort) {
+        if (!refocusSort) return@LaunchedEffect
+        // Once the list has gone, as a choice list gives the focus back to its row.
+        withFrameNanos {}
+        sortButton.requestFocus()
+        refocusSort = false
+    }
+
+    // A new order keeps the game last focused in view, so Down from the bar reaches it wherever it moved. Not on
+    // opening, which focuses a game of its own.
+    var shownSort by remember { mutableStateOf(sort) }
+    LaunchedEffect(sort) {
+        if (sort == shownSort) return@LaunchedEffect
+        shownSort = sort
+        val index = sorted.indexOfFirst { it.path == focus.focused }
+        if (index < 0) return@LaunchedEffect
+        if (gridView) gridState.scrollToItem(index) else listState.scrollToItem(index)
+    }
+
     // Not on every new list, which a resume brings: only on opening, on a toggle, and once there are games.
     LaunchedEffect(gridView, hasGames) {
         if (!hasGames || settingsFirst) {
@@ -118,101 +156,126 @@ fun LibraryScreen(
         }
         val index =
             listOf(focus.focused, focusPath).firstNotNullOfOrNull { path ->
-                games.indexOfFirst { it.path == path }.takeIf { it >= 0 }
+                sorted.indexOfFirst { it.path == path }.takeIf { it >= 0 }
             } ?: 0
         // A lazy item can only take focus once it's composed: it does so itself, once the scroll brings it in.
-        focus.pending = games[index].path
+        focus.pending = sorted[index].path
         if (gridView) gridState.scrollToItem(index) else listState.scrollToItem(index)
     }
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .then(focus.screenModifier)
-                .safeDrawingPadding()
-                .padding(horizontal = 32.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        LibraryTopBar(
-            gridView = gridView,
-            sort = sort,
-            syncBadge = syncBadge,
-            search = search,
-            searchFocus = searchFocus,
-            sortButton = sortButton,
-            settingsButton = settings,
-            onSort = {},
-            onOrder = {},
-            onToggleView = onToggleView,
-            onRefresh = onRefresh,
-            onOpenSettings = onOpenSettings,
-            onSyncBadge = onSyncBadge,
-            onSearchDown = { focusManager.moveFocus(FocusDirection.Down) },
-            onSearchKeyboardClosed = {},
-            onFocusArea = {},
-        )
+    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .then(focus.screenModifier)
+                    .safeDrawingPadding()
+                    .padding(horizontal = 32.dp, vertical = 20.dp),
+            // 8 dp, not 12: the bar, its labels, the search row and the count line need the height on a handheld.
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LibraryTopBar(
+                gridView = gridView,
+                sort = sort,
+                syncBadge = syncBadge,
+                search = search,
+                searchFocus = searchFocus,
+                sortButton = sortButton,
+                settingsButton = settings,
+                onSort = { sortOpen = true },
+                onOrder = { onSort(sort.copy(reverse = !sort.reverse)) },
+                onToggleView = onToggleView,
+                onRefresh = onRefresh,
+                onOpenSettings = onOpenSettings,
+                onSyncBadge = onSyncBadge,
+                onSearchDown = { focusManager.moveFocus(FocusDirection.Down) },
+                onSearchKeyboardClosed = {},
+                onFocusArea = {},
+                onSortBounds = { sortBounds = it },
+            )
 
-        banners.forEach { Banner(it) }
-        if (message != null) MessageBar(message, isError)
-
-        val content = Modifier.weight(1f)
-        when {
-            // While a message says what the app is doing, the list may just not be there yet.
-            !hasGames ->
-                if (message == null) {
+            banners.forEach { Banner(it) }
+            if (message != null) MessageBar(message, isError)
+            // The count line goes with the games, so a short screen takes its room from them, never from the hints.
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (hasGames) {
                     Text(
-                        "No games found in your games folders.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        LibraryWords.countLine(sorted.size, games.size, searching = false, sort = sort),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GooseStationTheme.colors.inkMuted,
                     )
                 }
-            gridView ->
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(152.dp),
-                    state = gridState,
-                    modifier = content,
-                    // Room for the focus ring, which is drawn outside a cover.
-                    contentPadding = PaddingValues(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp),
-                ) {
-                    items(games, key = { it.path }) { game ->
-                        val settings = gameSettingsOf(game, onGameSettings)
-                        GameTile(
-                            game,
-                            onClick = { onStartGame(game) },
-                            modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
-                            onLongClick = { longPress(game) },
-                        )
-                    }
+
+                val content = Modifier.weight(1f)
+                when {
+                    // While a message says what the app is doing, the list may just not be there yet.
+                    !hasGames ->
+                        if (message == null) {
+                            Text(
+                                "No games found in your games folders.",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    gridView ->
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(152.dp),
+                            state = gridState,
+                            modifier = content,
+                            // Room for the focus ring, which is drawn outside a cover.
+                            contentPadding = PaddingValues(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(24.dp),
+                        ) {
+                            items(sorted, key = { it.path }) { game ->
+                                val settings = gameSettingsOf(game, onGameSettings)
+                                GameTile(
+                                    game,
+                                    onClick = { onStartGame(game) },
+                                    modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
+                                    onLongClick = { longPress(game) },
+                                )
+                            }
+                        }
+                    else ->
+                        LazyColumn(
+                            state = listState,
+                            modifier = content,
+                            contentPadding = PaddingValues(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(sorted, key = { it.path }) { game ->
+                                val settings = gameSettingsOf(game, onGameSettings)
+                                GameListRow(
+                                    game,
+                                    onClick = { onStartGame(game) },
+                                    modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
+                                    onLongClick = { longPress(game) },
+                                )
+                            }
+                        }
                 }
-            else ->
-                LazyColumn(
-                    state = listState,
-                    modifier = content,
-                    contentPadding = PaddingValues(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    items(games, key = { it.path }) { game ->
-                        val settings = gameSettingsOf(game, onGameSettings)
-                        GameListRow(
-                            game,
-                            onClick = { onStartGame(game) },
-                            modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
-                            onLongClick = { longPress(game) },
-                        )
-                    }
-                }
+            }
+            if (hasGames) {
+                KeyHints(
+                    listOf(
+                        KeyHint(PadGlyphs.confirm, "Play"),
+                        KeyHint(PadGlyphs.action, "Saves"),
+                        KeyHint(PadGlyphs.options, "Game settings"),
+                    ),
+                )
+            }
         }
-        if (hasGames) {
-            KeyHints(
-                listOf(
-                    KeyHint(PadGlyphs.confirm, "Play"),
-                    KeyHint(PadGlyphs.action, "Saves"),
-                    KeyHint(PadGlyphs.options, "Game settings"),
-                ),
+        if (sortOpen) {
+            LibrarySortList(
+                sort,
+                anchor = sortBounds.translate(-origin),
+                onPick = { key ->
+                    if (key != sort.key) onSort(sort.copy(key = key))
+                    closeSort()
+                },
+                onClose = ::closeSort,
             )
         }
     }

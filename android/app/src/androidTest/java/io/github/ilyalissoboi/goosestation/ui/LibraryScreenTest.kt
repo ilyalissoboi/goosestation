@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertWidthIsEqualTo
@@ -28,6 +30,7 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -46,7 +49,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.library.LibrarySort
+import io.github.ilyalissoboi.goosestation.library.SortKey
 import io.github.ilyalissoboi.goosestation.ui.components.ACTION_LABEL
+import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -67,6 +73,8 @@ class LibraryScreenTest {
     private val gameSettings = mutableListOf<GameEntry>()
     private val saves = mutableListOf<GameEntry>()
     private var badgeClicks = 0
+    private var sort by mutableStateOf(LibrarySort())
+    private val sorts = mutableListOf<LibrarySort>()
 
     @Before
     fun makeGames() {
@@ -107,11 +115,20 @@ class LibraryScreenTest {
         focusSettings: Boolean = false,
         onToggleView: () -> Unit = {},
         syncBadge: SyncBadge? = null,
+        sort: LibrarySort = LibrarySort(),
+        search: TextFieldState = TextFieldState(),
     ) {
+        this.sort = sort
         rule.setContent {
             GooseStationTheme {
                 Box(Modifier.width(460.dp)) {
                     LibraryScreen(
+                        sort = this@LibraryScreenTest.sort,
+                        onSort = {
+                            sorts += it
+                            this@LibraryScreenTest.sort = it
+                        },
+                        search = search,
                         games = games,
                         gridView = gridView(),
                         banners = emptyList(),
@@ -350,6 +367,140 @@ class LibraryScreenTest {
         rule
             .onNode(isFocused())
             .assert(BUTTONS.map { hasContentDescription(it) }.reduce { a, b -> a or b })
+    }
+
+    // --- Sorting ---
+
+    private fun openSort(label: String = "Sort: Title") {
+        rule.onNodeWithContentDescription(label).requestFocus()
+        rule.waitForIdle()
+        press(Key.Enter)
+        rule.onNodeWithTag(CHOICE_LIST).assertIsDisplayed()
+    }
+
+    @Test
+    fun sortOpensItsListWithTheCurrentChoiceFocused() {
+        show()
+
+        openSort()
+
+        rule.onNodeWithTag(CHOICE_LIST).assertIsDisplayed()
+        rule.onNode(isFocused()).assert(hasText("Title"))
+    }
+
+    @Test
+    fun pickingASortCallsOnSortAndFocusesSort() {
+        show()
+        openSort()
+
+        press(Key.DirectionDown)
+        press(Key.Enter)
+
+        assertEquals(listOf(LibrarySort(SortKey.LastPlayed, false)), sorts)
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Sort: Last played").assertIsFocused()
+    }
+
+    @Test
+    fun pickingTheCurrentSortChangesNothing() {
+        show()
+        openSort()
+
+        press(Key.Enter)
+
+        assertEquals(emptyList<LibrarySort>(), sorts)
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Sort: Title").assertIsFocused()
+    }
+
+    @Test
+    fun bClosesTheSortListAndKeepsTheSearch() {
+        val search = TextFieldState("game")
+        show(search = search)
+        openSort()
+
+        press(Key.ButtonB)
+
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Sort: Title").assertIsFocused()
+        rule.runOnIdle { assertEquals("game", search.text.toString()) }
+        assertEquals(emptyList<LibrarySort>(), sorts)
+    }
+
+    @Test
+    fun aTapOutsideClosesTheSortList() {
+        show()
+        openSort()
+
+        rule.onNodeWithText("Game 03").performClick()
+
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        assertEquals(emptyList<GameEntry>(), started)
+    }
+
+    @Test
+    fun theSortListIsInTheScreen() {
+        show()
+        openSort()
+
+        rule.onAllNodes(isRoot()).assertCountEquals(1)
+    }
+
+    @Test
+    fun aDesktopOnlySortShowsByName() {
+        show(sort = LibrarySort(SortKey.Type))
+
+        rule.onNodeWithContentDescription("Order: Discs first").assertExists()
+        openSort("Sort: Type")
+
+        // Last, after the six the library offers, and current.
+        rule.onNode(isFocused()).assert(hasText("Type"))
+        press(Key.DirectionUp)
+        rule.onNode(isFocused()).assert(hasText("File size"))
+    }
+
+    @Test
+    fun orderReverses() {
+        show()
+        rule.onNodeWithContentDescription("Order: A to Z").requestFocus()
+        rule.waitForIdle()
+
+        press(Key.Enter)
+
+        assertEquals(listOf(LibrarySort(SortKey.Title, true)), sorts)
+        rule.onNodeWithContentDescription("Order: Z to A").assertIsFocused()
+    }
+
+    @Test
+    fun theGamesFollowTheSort() {
+        show(games = games.map { it.copy(lastPlayedSeconds = it.title.takeLast(2).toLong()) })
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
+
+        rule.runOnIdle { sort = LibrarySort(SortKey.LastPlayed) }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("30 games · Last played, most recent first").assertExists()
+        rule.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        rule.onAllNodes(hasText("Game ", substring = true))[0].assert(hasText("Game 30"))
+    }
+
+    @Test
+    fun afterASortTheLastFocusedGameIsInView() {
+        show(
+            games = games.map { if (it.title == "Game 25") it.copy(totalPlayedSeconds = 3_600) else it },
+            focusPath = entry(25).path,
+        )
+        rule.onNodeWithText("Game 25").assertIsFocused()
+
+        openSort()
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.Enter)
+
+        assertEquals(listOf(LibrarySort(SortKey.TimePlayed, false)), sorts)
+        rule.onNodeWithContentDescription("Sort: Time played").assertIsFocused()
+        // Played the most, it's last now: the grid has gone to it.
+        rule.onNodeWithText("Game 25").assertIsDisplayed()
     }
 
     // --- The top bar ---

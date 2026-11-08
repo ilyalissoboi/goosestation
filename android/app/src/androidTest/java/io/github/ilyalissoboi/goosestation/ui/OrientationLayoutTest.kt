@@ -66,6 +66,7 @@ import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameQuestion
 import io.github.ilyalissoboi.goosestation.app.GameSummary
+import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
@@ -75,6 +76,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
@@ -534,6 +536,22 @@ class OrientationLayoutTest {
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             pressUntilFocusedInView(Key.DirectionDown, "Slot 9")
+            assertTextsLaidOut(inView = true)
+
+            // The Shared tab, each slot naming a game with a long title, on its second disc.
+            val held = HeldGame(LONG_GAME.title, "SLPS-02021", LONG_GAME.path)
+            val shared =
+                listOf(2, 5, 8).map { SlotEntry(it, now.toEpochSecond() - 600, shared = true, holds = held, disc = 2) }
+            menu.value = menu.value.copy(slots = null)
+            rule.waitForIdle()
+            menu.value =
+                menu.value.copy(
+                    slots = SlotPanel(SlotMode.Load, saved, tab = SlotTab.Shared, shared = shared, sharedFocus = 2),
+                )
+            rule.waitForIdle()
+            assertTextsLaidOut(inView = true)
+            assertTrue("Slot 2 is focused, not ${focusedText()}", focusedHas("Slot 2"))
+            pressUntilFocusedInView(Key.DirectionDown, "Slot 8")
             assertTextsLaidOut(inView = true)
 
             // Change disc, with long disc titles.

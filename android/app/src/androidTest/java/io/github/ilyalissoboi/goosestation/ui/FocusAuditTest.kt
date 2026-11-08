@@ -37,6 +37,7 @@ import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameQuestion
 import io.github.ilyalissoboi.goosestation.app.GameSummary
+import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
@@ -45,6 +46,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
@@ -1013,6 +1015,46 @@ class FocusAuditTest {
         show {
             GameMenu(
                 GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, entries, focus = 2)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuSharedSlots() {
+        val held = HeldGame("Spyro the Dragon", "SCUS-94228", "content://g/spyro.chd")
+        val shared = (1..SaveSlots.COUNT).map { SlotEntry(it, if (it == 3) 1_700_000_000L else null, shared = true) }
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    slots =
+                        SlotPanel(
+                            SlotMode.Save,
+                            emptyList(),
+                            tab = SlotTab.Shared,
+                            shared = shared.map { if (it.slot == 3) it.copy(holds = held) else it },
+                            sharedFocus = 1,
+                        ),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuSlotsWithoutAKey() {
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    hasKey = false,
+                    slots = SlotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
+                ),
                 NoMenuActions,
             )
         }

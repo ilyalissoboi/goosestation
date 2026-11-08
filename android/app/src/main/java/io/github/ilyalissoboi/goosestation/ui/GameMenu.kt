@@ -192,7 +192,24 @@ fun GameMenu(
         @Composable
         fun SidePanel(modifier: Modifier) {
             when {
-                slots != null -> SaveSlotPanel(slots, actions, now, modifier)
+                slots != null ->
+                    SaveSlotPanel(
+                        slots,
+                        actions,
+                        now,
+                        modifier,
+                        keepFocus = {
+                            (
+                                if (slots.mode ==
+                                    SlotMode.Save
+                                ) {
+                                    cameFrom.saveRow
+                                } else {
+                                    cameFrom.loadRow
+                                }
+                            ).requestFocus()
+                        },
+                    )
                 discs != null -> DiscPanel(discs, game?.title.orEmpty(), actions, modifier)
                 codes != null -> PatchCodePanel(codes, actions, modifier)
                 cheevos != null && achievements != null ->

@@ -376,7 +376,10 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   dp, 64 x 48 dp in a row under 240 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
   `label`; Saved or Empty, with the disc for a multi-disc game ("Saved · Disc 2"); and the time in `mono`. Rows
   that can't be picked are disabled; Load lists only the slots that hold a save, then the states still under the
-  game's other discs, under an `Eyebrow("Other saves")`. Replacing a save asks in the
+  game's other discs, under an `Eyebrow("Other saves")`. `PanelTabs` (This game, Shared; L1 R1) head the list, inside
+  its scroll, so a short screen keeps the rows its height; a shared row names the game it holds under the slot's name,
+  in `body` `ink`, two lines at most. In a list under 150 dp tall, rows are compact (the 64 x 48 dp picture, the game
+  on one line, the time on Saved's line). Replacing a save asks in the
   panel, as the menu does. The focus can't leave the panel.
 - `DiscPanel`: Change disc, a side panel framed as `SaveSlotPanel`: a 48 dp row per disc, "Disc N" in `label` with the
   disc's title (or its serial) under it in `body-sm` `ink-muted`; the disc in the drive on `beak-soft` with "Current"

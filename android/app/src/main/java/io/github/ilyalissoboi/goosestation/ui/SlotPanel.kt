@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,21 +35,29 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
+import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
@@ -57,11 +66,14 @@ import java.time.ZonedDateTime
 
 /**
  * The slot panel of the in-game menu: the [panel]'s slots, each with its screenshot (once read), its name, Saved or
- * Empty, and when it was saved, as seen from [now]. A slot row's A, Enter or tap picks it ([GameMenuActions.pickSlot]).
- * In Load, an empty slot can't be focused, and the states still filed under the game's other discs follow the slots,
- * under "Other saves". As it opens, the panel's focus slot takes the focus; a question to replace a
+ * Empty, and when it was saved, as seen from [now]. Two tabs ([PanelTabs], L1 and R1): This game, whose rows'
+ * A, Enter or tap pick them ([GameMenuActions.pickSlot]), and Shared, desktop's shared slots, each naming the game it
+ * holds ([GameMenuActions.pickShared]). In Load, an empty slot can't be focused, and the states still filed under the
+ * game's other discs follow the slots, under "Other saves". A game without a key has no slots of its own: its This
+ * game tab says so. As it opens, and at each switch, the tab's focus slot takes the focus; a question to replace a
  * slot shows in place of the list, with Cancel focused, and the slot is focused again after it. The focus can't leave
- * the panel: B and Back close it ([GameMenu] handles them).
+ * the panel: B and Back close it ([GameMenu] handles them). [keepFocus] puts the focus outside the panel's rows as a
+ * switch replaces them, so it doesn't fall on the menu's top.
  */
 @Composable
 fun SaveSlotPanel(
@@ -69,28 +81,45 @@ fun SaveSlotPanel(
     actions: GameMenuActions,
     now: ZonedDateTime,
     modifier: Modifier = Modifier,
+    keepFocus: () -> Unit = {},
 ) {
     val colors = GooseStationTheme.colors
     val saving = panel.mode == SlotMode.Save
-    val entries = panel.entries
+    val sharedTab = panel.tab == SlotTab.Shared
+    val entries =
+        if (sharedTab) {
+            panel.shared
+        } else if (panel.hasKey) {
+            panel.entries
+        } else {
+            emptyList()
+        }
+    val others = if (sharedTab || !panel.hasKey) emptyList() else panel.others
     val title = remember { FocusRequester() }
-    val rows = remember { HashMap<Pair<String?, Int>, FocusRequester>() }
+    val rows = remember { HashMap<Triple<Boolean, String?, Int>, FocusRequester>() }
 
-    fun row(entry: SlotEntry) = rows.getOrPut(entry.owner to entry.slot) { FocusRequester() }
+    fun row(entry: SlotEntry) = rows.getOrPut(Triple(entry.shared, entry.owner, entry.slot)) { FocusRequester() }
 
     fun pickable(entry: SlotEntry) = saving || entry.savedAt != null
-    val others = panel.others
+
+    // Each switch brings the focus back into the panel, as its rows change.
+    var switches by remember { mutableIntStateOf(0) }
+    val switchTab = {
+        keepFocus()
+        actions.switchTab()
+        switches++
+    }
 
     // The slot to focus once the question about replacing it is answered.
     var returnTo by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(entries == null, panel.replacing) {
+    LaunchedEffect(entries == null, panel.replacing, panel.tab, switches) {
         val replacing = panel.replacing
         when {
             // The question focuses its Cancel.
             replacing != null -> returnTo = replacing
             entries == null -> title.requestFocus()
             else -> {
-                val wanted = returnTo ?: panel.focus
+                val wanted = returnTo ?: if (sharedTab) panel.sharedFocus else panel.focus
                 returnTo = null
                 val target =
                     entries.firstOrNull { it.slot == wanted && pickable(it) } ?: entries.firstOrNull(::pickable)
@@ -103,7 +132,11 @@ fun SaveSlotPanel(
     Column(
         modifier =
             modifier
-                .focusProperties {
+                .onPreviewKeyEvent { event ->
+                    if (event.key != Key.ButtonL1 && event.key != Key.ButtonR1) return@onPreviewKeyEvent false
+                    if (event.type == KeyEventType.KeyUp && panel.replacing == null && !panel.busy) switchTab()
+                    true
+                }.focusProperties {
                     // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
                     onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
                 }.focusGroup()
@@ -126,57 +159,91 @@ fun SaveSlotPanel(
             }
         }
         if (panel.busy) Line(if (saving) "Saving…" else "Loading…")
-        if (entries != null && !saving && entries.none { it.savedAt != null } && others.isEmpty()) {
-            Line("No saves yet for this game.")
+        when {
+            !sharedTab && !panel.hasKey -> Line(NO_KEY_STATES)
+            entries != null && !saving && entries.none { it.savedAt != null } && others.isEmpty() ->
+                Line(if (sharedTab) "No shared saves yet." else "No saves yet for this game.")
         }
-        Column(
-            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            val replacing = panel.replacing
-            if (replacing != null) {
-                Question(
-                    "Replace the save in slot $replacing?",
-                    "Replace",
-                    onConfirm = actions::confirmReplace,
-                    onCancel = actions::cancelReplace,
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val short = maxHeight < SHORT_SLOT_LIST
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                // In the list, as the Achievements panel's progress is, so a short screen keeps the rows its height.
+                PanelTabs(
+                    listOf("This game", "Shared"),
+                    current = if (sharedTab) 1 else 0,
+                    onSelect = { if (it != panel.tab.ordinal && panel.replacing == null && !panel.busy) switchTab() },
+                    modifier = Modifier.padding(bottom = 8.dp),
                 )
-            } else {
-                entries?.forEach { entry ->
-                    SlotRow(
-                        entry,
-                        now,
-                        enabled = pickable(entry),
-                        onClick = { actions.pickSlot(entry.slot) },
-                        modifier = Modifier.focusRequester(row(entry)),
+                val replacing = panel.replacing
+                if (replacing != null) {
+                    Question(
+                        "Replace the save in ${if (sharedTab) "shared slot" else "slot"} $replacing?",
+                        "Replace",
+                        onConfirm = actions::confirmReplace,
+                        onCancel = actions::cancelReplace,
                     )
-                }
-                if (others.isNotEmpty()) {
-                    Eyebrow("Other saves", Modifier.padding(top = 12.dp, start = 8.dp))
-                    others.forEach { entry ->
+                } else {
+                    entries?.forEach { entry ->
                         SlotRow(
                             entry,
                             now,
-                            enabled = true,
-                            onClick = { actions.pickOther(entry.owner.orEmpty(), entry.slot) },
+                            short = short,
+                            enabled = pickable(entry),
+                            onClick = {
+                                if (entry.shared) {
+                                    actions.pickShared(
+                                        entry.slot,
+                                    )
+                                } else {
+                                    actions.pickSlot(entry.slot)
+                                }
+                            },
                             modifier = Modifier.focusRequester(row(entry)),
                         )
+                    }
+                    if (others.isNotEmpty()) {
+                        Eyebrow("Other saves", Modifier.padding(top = 12.dp, start = 8.dp))
+                        others.forEach { entry ->
+                            SlotRow(
+                                entry,
+                                now,
+                                short = short,
+                                enabled = true,
+                                onClick = { actions.pickOther(entry.owner.orEmpty(), entry.slot) },
+                                modifier = Modifier.focusRequester(row(entry)),
+                            )
+                        }
                     }
                 }
             }
         }
         KeyHints(
-            listOf(KeyHint(PadGlyphs.confirm, if (saving) "Save" else "Load"), KeyHint(PadGlyphs.back, "Back")),
+            listOf(
+                KeyHint(PadGlyphs.confirm, if (saving) "Save" else "Load"),
+                KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Switch"),
+                KeyHint(PadGlyphs.back, "Back"),
+            ),
         )
     }
 }
+
+/** A slot list shorter than this (a handheld's at large text, not the Thor's at 1x) has its rows compact ([SlotRow]). */
+private val SHORT_SLOT_LIST = 150.dp
+
+/** What a game without a key says of its own slots. */
+internal const val NO_KEY_STATES = "This game can't keep save states of its own."
 
 /** The test tag of a slot row's picture. */
 internal const val SLOT_PICTURE = "slotPicture"
 
 /**
- * A slot: its screenshot (or the memory card icon), its name, Saved or Empty, and when it was saved. The picture is
- * 112 × 84 dp, or 64 × 48 dp in a row under 240 dp wide, so the words beside it fit at a large text size.
+ * A slot: its screenshot (or the memory card icon), its name, the game a shared slot holds, Saved or Empty, and when it
+ * was saved. The picture is 112 × 84 dp, or 64 × 48 dp in a row under 240 dp wide, so the words beside it fit at a large
+ * text size. A [short] row, in a short list, is compact whatever its width: the small picture, the game on one line, and
+ * the time on Saved's line, so it fits the list's height.
  */
 @Composable
 private fun SlotRow(
@@ -185,6 +252,7 @@ private fun SlotRow(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    short: Boolean = false,
 ) {
     val colors = GooseStationTheme.colors
     val savedAt = entry.savedAt
@@ -195,7 +263,7 @@ private fun SlotRow(
                 .focusRing(enabled = enabled, role = Role.Button, onClick = onClick)
                 .padding(8.dp),
     ) {
-        val compact = maxWidth < 240.dp
+        val compact = short || maxWidth < 240.dp
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 16.dp),
@@ -233,16 +301,28 @@ private fun SlotRow(
                     style = MaterialTheme.typography.titleMedium,
                     color = if (enabled) colors.ink else colors.inkFaint,
                 )
+                // A shared slot names the game it holds: two lines at most, so the row fits a short panel.
+                entry.holds?.let {
+                    Text(
+                        it.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (enabled) colors.ink else colors.inkFaint,
+                        maxLines = if (short) 1 else 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 // A multi-disc game's state says its disc on this line, so the row is no taller.
+                val time = savedAt?.let { SaveTimes.label(it, now) }
                 Text(
-                    listOfNotNull(if (savedAt != null) "Saved" else "Empty", entry.disc?.let { "Disc $it" })
-                        .joinToString(" · "),
+                    listOfNotNull(
+                        if (savedAt != null) "Saved" else "Empty",
+                        entry.disc?.let { "Disc $it" },
+                        time?.takeIf { short },
+                    ).joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkMuted,
                 )
-                savedAt?.let {
-                    Text(SaveTimes.label(it, now), style = GooseStationTheme.type.mono, color = colors.inkMuted)
-                }
+                if (!short) time?.let { Text(it, style = GooseStationTheme.type.mono, color = colors.inkMuted) }
             }
         }
     }

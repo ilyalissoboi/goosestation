@@ -1013,6 +1013,18 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   state whose disc isn't in the library fails to load with "Couldn't load slot 3: The disc this state was saved on
   isn't in your library: <file>.", and the game keeps its disc and place.
 
+  **This game and Shared.** The panel has two tabs, L1 and R1 switching them (`KeyHints` "L1 R1 Switch"): **This
+  game**, the slots above, focused as it opens, and **Shared**, desktop's ten global slots
+  (`savestates/savestate_<n>.sav`, the same files, so a data folder shared with desktop shows the same ones). Each
+  shared row names the game it holds under its slot (the library's title, or its serial for a game the library
+  doesn't know), and its disc for a multi-disc game. Saving to a shared slot writes the running game ("Saved to shared
+  slot 3"), asking "Replace the save in shared slot 3?" first when it holds one. A shared slot made in the running
+  game loads like any slot ("Loaded shared slot 3"); the host refuses to load one made in another game into it
+  ("That save is from another game."), and one whose state can't be read says "Couldn't read that save." A game
+  without a key (the BIOS alone, say) opens the panel on Shared, its This game tab saying "This game can't keep save
+  states of its own." In a list under 150 dp tall (a handheld's at large text), the rows are compact: the small
+  picture, the game on one line, and the time on Saved's line.
+
   **One set of states per game.** States made before discs were grouped (part 1 kept them under each disc's serial)
   are moved under the game's key the first time the game is played on this device, before it asks to resume: the
   newest state keeps each place, the others take the lowest free slots, and nothing is overwritten. The move is

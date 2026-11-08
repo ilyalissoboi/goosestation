@@ -39,8 +39,10 @@ data class SlotEntry(
 
 /**
  * The slot panel: its [mode], its [entries] (null while they're read), the slot to [focus] as it opens (null for none),
- * the slot it asks to replace, if any ([replacing]), whether a save or load is under way ([busy]), and the last one's
- * failure, as shown ([error]). In Load, [others] are the states still filed under the game's other discs.
+ * the slot it asks to replace, if any ([replacing], in the open [tab]), whether a save or load is under way ([busy]),
+ * and the last one's failure, as shown ([error]). In Load, [others] are the states still filed under the game's other
+ * discs. The Shared tab lists the [shared] slots (null while they're read), focusing [sharedFocus]. A game without a
+ * key ([hasKey] false) has no slots of its own: it opens on Shared.
  */
 data class SlotPanel(
     val mode: SlotMode,
@@ -50,6 +52,10 @@ data class SlotPanel(
     val busy: Boolean = false,
     val error: String? = null,
     val others: List<SlotEntry> = emptyList(),
+    val tab: SlotTab = SlotTab.ThisGame,
+    val shared: List<SlotEntry>? = null,
+    val sharedFocus: Int? = null,
+    val hasKey: Boolean = true,
 )
 
 /**
@@ -198,8 +204,11 @@ interface GameMenuActions {
 
     fun closeAchievements() {}
 
-    /** L1 or R1: the panel's other tab, when it has two. */
+    /** L1 or R1: the open panel's other tab, when it has two: the slot panel's, or the Achievements panel's. */
     fun switchTab() {}
+
+    /** Saves to or loads shared slot [slot], as the slot panel's mode says. */
+    fun pickShared(slot: Int) {}
 
     /** Opens leaderboard [id] in the Leaderboards tab, fetching its entries. */
     fun openLeaderboard(id: Int) {}
@@ -341,6 +350,12 @@ class InGameMenu(
     }
 
     override fun switchTab() {
+        state.slots?.let { slots ->
+            if (slots.busy || slots.replacing != null) return
+            val tab = if (slots.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
+            state = state.copy(slots = slots.copy(tab = tab, error = null))
+            return
+        }
         val panel = state.cheevos ?: return
         val game = state.achievements ?: return
         if (!game.hasAchievements || !game.hasLeaderboards) return
@@ -493,32 +508,43 @@ class InGameMenu(
 
     override fun openSlots(mode: SlotMode) {
         val serial = serial
-        if (!canSave || serial == null || (mode == SlotMode.Load && state.hardcore)) return
+        if (!state.booted || serial == null || (mode == SlotMode.Load && state.hardcore)) return
         val id = ++panelId
-        state = state.copy(slots = SlotPanel(mode), discs = null, codes = null, confirmingReset = false)
+        val hasKey = serial.isNotBlank()
+        val tab = if (hasKey) SlotTab.ThisGame else SlotTab.Shared
+        state =
+            state.copy(
+                slots = SlotPanel(mode, entries = if (hasKey) null else emptyList(), tab = tab, hasKey = hasKey),
+                discs = null,
+                codes = null,
+                confirmingReset = false,
+            )
         val discs = running?.discs.orEmpty()
         val multiDisc = discs.size > 1
         val path = running?.path.orEmpty()
         scope.launch {
-            val entries = reader.own(serial, mode)
-            val last = withContext(game) { lastSlots.get(serial) }
+            val entries = if (hasKey) reader.own(serial, mode) else emptyList()
+            val last = if (hasKey) withContext(game) { lastSlots.get(serial) } else null
             // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
-            val others = if (mode == SlotMode.Load) reader.others(serial, discs) else emptyList()
+            val others = if (hasKey && mode == SlotMode.Load) reader.others(serial, discs) else emptyList()
+            val shared = reader.shared(mode)
             if (id != panelId) return@launch
             updatePanel(id) {
-                it.copy(entries = entries, focus = SaveLists.focus(mode, entries, last), others = others)
+                it.copy(
+                    entries = entries,
+                    focus = SaveLists.focus(mode, entries, last),
+                    others = others,
+                    shared = shared,
+                    sharedFocus = SaveLists.focus(mode, shared, null),
+                )
             }
-            for (entry in entries.filter { it.savedAt != null } + others) {
+            // Each saved row's picture (and a shared slot's game), the open tab's first.
+            val own = entries.filter { it.savedAt != null } + others
+            val sharedSaved = shared.filter { it.savedAt != null }
+            for (entry in if (tab == SlotTab.Shared) sharedSaved + own else own + sharedSaved) {
                 val read = reader.preview(entry, serial, path, multiDisc) ?: continue
                 if (id != panelId) return@launch
-
-                fun SlotEntry.withPreview() = if (slot == entry.slot && owner == entry.owner) read else this
-                updatePanel(id) { panel ->
-                    panel.copy(
-                        entries = panel.entries?.map { it.withPreview() },
-                        others = panel.others.map { it.withPreview() },
-                    )
-                }
+                updatePanel(id) { panel -> panel.withRow(read) }
             }
         }
     }
@@ -530,7 +556,7 @@ class InGameMenu(
 
     override fun pickSlot(slot: Int) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.replacing != null) return
+        if (panel.busy || panel.replacing != null || panel.tab != SlotTab.ThisGame || !panel.hasKey) return
         val entry = panel.entries?.firstOrNull { it.slot == slot } ?: return
         val saved = entry.savedAt != null
         when {
@@ -539,6 +565,59 @@ class InGameMenu(
             else -> save(slot)
         }
     }
+
+    override fun pickShared(slot: Int) {
+        val panel = state.slots ?: return
+        if (panel.busy || panel.replacing != null || panel.tab != SlotTab.Shared) return
+        val entry = panel.shared?.firstOrNull { it.slot == slot } ?: return
+        val saved = entry.savedAt != null
+        when {
+            panel.mode == SlotMode.Save ->
+                if (saved) {
+                    state =
+                        state.copy(
+                            slots = panel.copy(replacing = slot),
+                        )
+                } else {
+                    saveShared(slot)
+                }
+            saved -> loadShared(entry)
+        }
+    }
+
+    /**
+     * Loads shared [entry], if it's the running game's. Its game is read first if the panel hasn't read it yet: a shared
+     * slot is never loaded as this game's without knowing it is.
+     */
+    private fun loadShared(entry: SlotEntry) {
+        val id = panelId
+        val key = serial.orEmpty()
+        val path = running?.path.orEmpty()
+        scope.launch {
+            val read = if (entry.holds != null) entry else reader.preview(entry, key, path, state.discCount > 1)
+            if (id != panelId) return@launch
+            read?.let { updatePanel(id) { panel -> panel.withRow(it) } }
+            val holds = read?.holds
+            when {
+                holds == null -> updatePanel(id) { it.copy(error = UNREADABLE) }
+                holds.path == path -> {
+                    val slot = entry.slot
+                    run(
+                        slot,
+                        { api.loadSharedState(slot) },
+                        "Loaded shared slot $slot",
+                        remember = false,
+                        loads = true,
+                    ) { "Couldn't load shared slot $slot: $it" }
+                }
+            }
+        }
+    }
+
+    private fun saveShared(slot: Int) =
+        run(slot, { api.saveSharedState(slot) }, "Saved to shared slot $slot", remember = false) {
+            if (it == CARD_BUSY) CARD_BUSY_SAVE else "Couldn't save to shared slot $slot: $it"
+        }
 
     override fun pickOther(
         serial: String,
@@ -667,7 +746,7 @@ class InGameMenu(
         val panel = state.slots ?: return
         val slot = panel.replacing ?: return
         state = state.copy(slots = panel.copy(replacing = null))
-        save(slot)
+        if (panel.tab == SlotTab.Shared) saveShared(slot) else save(slot)
     }
 
     override fun cancelReplace() {
@@ -885,6 +964,16 @@ class InGameMenu(
         return disc
     }
 
+    // The panel with [read] in place of the row it was read for, whichever list has it.
+    private fun SlotPanel.withRow(read: SlotEntry): SlotPanel {
+        fun SlotEntry.with() = if (slot == read.slot && owner == read.owner && shared == read.shared) read else this
+        return copy(
+            entries = entries?.map { it.with() },
+            others = others.map { it.with() },
+            shared = shared?.map { it.with() },
+        )
+    }
+
     // Changes the slot panel if it's still panel [id].
     private fun updatePanel(
         id: Int,
@@ -903,5 +992,8 @@ class InGameMenu(
         /** What the save state hotkeys say for a game without a key, and for Load in hardcore mode. */
         const val NO_STATES = "This game can't keep save states"
         const val HARDCORE_LOAD = "Loading a state is off in hardcore mode"
+
+        /** A shared slot whose state can't be read: nothing says which game it holds. */
+        const val UNREADABLE = "Couldn't read that save."
     }
 }

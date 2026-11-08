@@ -496,7 +496,12 @@ SVG per core input name (`Triangle`, `LLeft`, …).
   `GsIcons.memoryCard` and so on, used through `Icon(…, tint = …)` at 16, 20 or 24 dp.
 - **Colour them by context:** `ink-muted` at rest, `beak-ink` when focused or current, the status colour inside a
   notice. They're always paired with a word unless the meaning is universal (close, settings) and the element has an
-  accessible name.
+  accessible name. The one exception is `IconActionButton`, an icon alone whose label shows under it on focus and on a
+  long press, and is its accessible name (the library's top bar).
+- **The library's top bar** has its own: `sort` (three shortening lines), `order` and `order-reversed` (an arrow up
+  for a sort's first direction, down when reversed), `list-bulleted` (the view button in grid mode: it switches to the
+  list; `list`, three plain lines, stays the memory card picker's) and `refresh` (one arrow turning round an octagon,
+  so it can't be taken for `sync`'s two arrows, which the sync badge uses).
 - **Status icons differ in shape** (square, ticked square, triangle, octagon) so they read without colour.
 - **To add an icon:** draw it in the same style as an SVG in `docs/design-system/icons/`, using only `<polygon>`,
   `<polyline>`, `<rect>` and `<path>` with absolute `M`, `L`, `H` and `V`, stroked `#14171c`. Then run

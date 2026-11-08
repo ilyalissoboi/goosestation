@@ -19,9 +19,12 @@ import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -37,14 +40,17 @@ import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameQuestion
 import io.github.ilyalissoboi.goosestation.app.GameSummary
+import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
+import io.github.ilyalissoboi.goosestation.app.SavesPageState
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
@@ -91,6 +97,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /** Every screen, on fake data, can be used with a controller alone ([assertControllerReady]). */
 @OptIn(ExperimentalTestApi::class)
@@ -240,6 +248,16 @@ class FocusAuditTest {
     }
 
     @Test
+    fun libraryLongPressChoice() {
+        showLibrary(GAMES, gridView = true)
+        rule.onNodeWithText(GAMES[0].title).performTouchInput { longClick() }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Game settings").assertExists()
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun libraryWithTheSyncBadge() {
         showLibrary(GAMES, gridView = true, syncBadge = SyncBadge.NeedsSetup)
 
@@ -308,6 +326,81 @@ class FocusAuditTest {
     @Test
     fun emulationPage() {
         show { EmulationScreen(pageValues(EmulationSettings.all), null, onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    private val savesNow = ZonedDateTime.of(2026, 11, 8, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
+    private val savesGame = GameEntry("content://g/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
+    private val savedRows = listOf(SlotEntry(SaveSlots.RESUME, 1_700_000_000L), SlotEntry(2, 1_700_000_000L))
+    private val sharedRows =
+        listOf(
+            SlotEntry(
+                4,
+                1_700_000_000L,
+                shared = true,
+                holds = HeldGame("Spyro", "SCUS-94228", "content://g/spyro.cue"),
+            ),
+        )
+
+    @Test
+    fun savesPage() {
+        show {
+            SavesScreen(
+                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows),
+                NoSavesActions,
+                savesNow,
+                {},
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun savesPageShared() {
+        show {
+            SavesScreen(
+                SavesPageState(savesGame, SlotTab.Shared, savedRows, shared = sharedRows),
+                NoSavesActions,
+                savesNow,
+                {},
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun savesPageDeleteQuestion() {
+        show {
+            SavesScreen(
+                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows, deleting = savedRows[1]),
+                NoSavesActions,
+                savesNow,
+                {},
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun savesPageEmpty() {
+        show {
+            SavesScreen(
+                SavesPageState(
+                    savesGame,
+                    SlotTab.ThisGame,
+                    emptyList(),
+                    shared = emptyList(),
+                ),
+                NoSavesActions,
+                savesNow,
+                {
+                },
+            )
+        }
+
         rule.assertControllerReady()
     }
 
@@ -1001,6 +1094,13 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuWithUndoLoad() {
+        show { GameMenu(GameMenuState(booted = true, canUndo = true), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuWhileBooting() {
         show { GameMenu(GameMenuState(booted = false), NoMenuActions) }
 
@@ -1013,6 +1113,86 @@ class FocusAuditTest {
         show {
             GameMenu(
                 GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, entries, focus = 2)),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuSharedSlots() {
+        val held = HeldGame("Spyro the Dragon", "SCUS-94228", "content://g/spyro.chd")
+        val shared = (1..SaveSlots.COUNT).map { SlotEntry(it, if (it == 3) 1_700_000_000L else null, shared = true) }
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    slots =
+                        SlotPanel(
+                            SlotMode.Save,
+                            emptyList(),
+                            tab = SlotTab.Shared,
+                            shared = shared.map { if (it.slot == 3) it.copy(holds = held) else it },
+                            sharedFocus = 1,
+                        ),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuSlotsWithoutAKey() {
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    hasKey = false,
+                    slots = SlotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuSwitchQuestion() {
+        val held = HeldGame("Spyro the Dragon", "SCUS-94228", "content://g/spyro.chd")
+        val shared = listOf(SlotEntry(4, 1_700_000_000L, shared = true, holds = held))
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    slots =
+                        SlotPanel(
+                            SlotMode.Load,
+                            emptyList(),
+                            tab = SlotTab.Shared,
+                            shared = shared,
+                            switching = shared[0],
+                        ),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuDeleteQuestion() {
+        val entries = listOf(SlotEntry(1, 1_700_000_000L), SlotEntry(3, 1_700_000_000L))
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    slots = SlotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1]),
+                ),
                 NoMenuActions,
             )
         }

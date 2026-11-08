@@ -50,6 +50,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.SyncStatusBadge
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseMark
@@ -64,8 +65,9 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
  *
  * On opening, Settings has focus when [focusSettings] (coming back from the settings), or else the game at
  * [focusPath] (the last one launched), or else the first game; with no games, Settings has it. Toggling the view keeps
- * the focused game. A, Enter or a tap call [onStartGame]; Y or a long press open the game's own settings
- * ([onGameSettings]), for a game with a key (its serial). With games, the foot says so ([KeyHints]).
+ * the focused game. A, Enter or a tap call [onStartGame]; X opens the game's Saves ([onSaves]); Y opens its own
+ * settings ([onGameSettings]), for a game with a key (its serial). A long press offers both, in an [OverlayPanel] (a
+ * game without a key goes straight to its Saves). With games, the foot says so ([KeyHints]).
  */
 @Composable
 fun LibraryScreen(
@@ -83,6 +85,7 @@ fun LibraryScreen(
     syncBadge: SyncBadge? = null,
     onSyncBadge: () -> Unit = {},
     onGameSettings: (GameEntry) -> Unit = {},
+    onSaves: (GameEntry) -> Unit = {},
 ) {
     val settings = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
@@ -91,6 +94,10 @@ fun LibraryScreen(
     val hasGames = games.isNotEmpty()
     // Only on opening: a toggle, or games coming in, focus a game as usual.
     var settingsFirst by remember { mutableStateOf(focusSettings) }
+    // The game whose long press asks: Saves or Game settings.
+    var choosing by remember { mutableStateOf<GameEntry?>(null) }
+
+    fun longPress(game: GameEntry) = if (game.serial.isBlank()) onSaves(game) else choosing = game
 
     // Not on every new list, which a resume brings: only on opening, on a toggle, and once there are games.
     LaunchedEffect(gridView, hasGames) {
@@ -184,8 +191,8 @@ fun LibraryScreen(
                         GameTile(
                             game,
                             onClick = { onStartGame(game) },
-                            modifier = focus.modifier(game.path).gameSettingsKey(settings),
-                            onLongClick = settings,
+                            modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
+                            onLongClick = { longPress(game) },
                         )
                     }
                 }
@@ -201,14 +208,57 @@ fun LibraryScreen(
                         GameListRow(
                             game,
                             onClick = { onStartGame(game) },
-                            modifier = focus.modifier(game.path).gameSettingsKey(settings),
-                            onLongClick = settings,
+                            modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
+                            onLongClick = { longPress(game) },
                         )
                     }
                 }
         }
         if (hasGames) {
-            KeyHints(listOf(KeyHint(PadGlyphs.confirm, "Play"), KeyHint(PadGlyphs.options, "Game settings")))
+            KeyHints(
+                listOf(
+                    KeyHint(PadGlyphs.confirm, "Play"),
+                    KeyHint(PadGlyphs.action, "Saves"),
+                    KeyHint(PadGlyphs.options, "Game settings"),
+                ),
+            )
+        }
+    }
+    choosing?.let { game ->
+        GameChoicePanel(
+            game,
+            onSaves = {
+                choosing = null
+                onSaves(game)
+            },
+            onGameSettings = {
+                choosing = null
+                onGameSettings(game)
+            },
+            onClose = {
+                choosing = null
+                // Back to the game's tile.
+                focus.pending = game.path
+            },
+        )
+    }
+}
+
+/** A long press on [game]: its title, then Saves (focused) and Game settings. B closes it ([onClose]). */
+@Composable
+private fun GameChoicePanel(
+    game: GameEntry,
+    onSaves: () -> Unit,
+    onGameSettings: () -> Unit,
+    onClose: () -> Unit,
+) {
+    OverlayPanel(onBack = onClose) {
+        val saves = remember { FocusRequester() }
+        LaunchedEffect(game) { saves.requestFocus() }
+        Text(game.title, style = MaterialTheme.typography.titleLarge, color = GooseStationTheme.colors.ink)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionButton("Saves", onClick = onSaves, modifier = Modifier.focusRequester(saves))
+            ActionButton("Game settings", onClick = onGameSettings)
         }
     }
 }
@@ -219,13 +269,23 @@ private fun gameSettingsOf(
     onGameSettings: (GameEntry) -> Unit,
 ): (() -> Unit)? = if (game.serial.isBlank()) null else ({ onGameSettings(game) })
 
-/** Y opens the game's own settings ([settings]) on its key-up; without them, Y does nothing here. */
-private fun Modifier.gameSettingsKey(settings: (() -> Unit)?) =
-    onKeyEvent { event ->
-        if (event.key != Key.ButtonY || settings == null) return@onKeyEvent false
-        if (event.type == KeyEventType.KeyUp) settings()
-        true
-    }
+/**
+ * On their key-ups, X opens the game's Saves ([saves]) and Y its own settings ([settings]); without settings, Y does
+ * nothing here.
+ */
+private fun Modifier.gameKeys(
+    settings: (() -> Unit)?,
+    saves: () -> Unit,
+) = onKeyEvent { event ->
+    val action =
+        when (event.key) {
+            Key.ButtonX -> saves
+            Key.ButtonY -> settings
+            else -> null
+        } ?: return@onKeyEvent false
+    if (event.type == KeyEventType.KeyUp) action()
+    true
+}
 
 /**
  * Which game has focus, by path, and which one is to take it once it's composed: [pending], until anything in the

@@ -13,6 +13,7 @@ import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.PatchCode
+import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -44,6 +45,7 @@ class InGameMenuTest {
                 onResume = { calls += "resume" },
                 onExit = { calls += "exit $it" },
                 onSettings = { calls += "settings ${it?.serial}" },
+                onSwitch = { calls += "switch ${it.gamePath} ${it.state.slot}" },
             )
         if (booted) {
             menu.gameStarted(game(SERIAL))
@@ -134,14 +136,15 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Load)
             runCurrent()
 
-            // The times first, then each saved slot's picture, one at a time.
+            // The times first (the shared slots' too), then each saved slot's picture, one at a time.
             assertSame(picture, menu.entries().first { it.slot == 1 }.picture)
             assertSame(picture, menu.entries().first { it.slot == 2 }.picture)
             assertEquals(
                 listOf(
                     "getSaveStateTimes $SERIAL",
-                    "getSaveStatePreview $SERIAL 1",
-                    "getSaveStatePreview $SERIAL 2",
+                    "getSharedStateTimes",
+                    "getStatePreview $SERIAL 1",
+                    "getStatePreview $SERIAL 2",
                 ),
                 calls,
             )
@@ -348,16 +351,29 @@ class InGameMenuTest {
         }
 
     @Test
-    fun aGameWithoutASerialHasNoSlots() =
+    fun aGameWithoutAKeyOpensOnShared() =
         runTest {
+            api.sharedTimes[2] = 200
             val menu = menu(booted = false)
             menu.gameStarted(game(""))
             runCurrent()
+            calls.clear()
 
             menu.openSlots(SlotMode.Save)
             runCurrent()
 
-            assertNull(menu.state.slots)
+            val panel = menu.slots()
+            assertEquals(SlotTab.Shared, panel.tab)
+            assertFalse(panel.hasKey)
+            assertEquals(emptyList<SlotEntry>(), panel.entries)
+            assertEquals((1..10).toList(), panel.shared!!.map { it.slot })
+            // Nothing is read under a blank key.
+            assertTrue(calls.none { it.startsWith("getSaveStateTimes") })
+
+            menu.pickShared(3)
+            runCurrent()
+            assertTrue("saveSharedState 3" in calls)
+            assertTrue("message Saved to shared slot 3" in calls)
         }
 
     @Test
@@ -1614,5 +1630,570 @@ class InGameMenuTest {
             menu.opened()
 
             assertFalse(menu.state.cameFromSettings)
+        }
+
+    // --- Shared slots ---
+
+    private val crash = SaveStatePreview(null, 0, SERIAL, "CRASH", "content://games/crash.cue", "Crash Bandicoot")
+    private val spyro = SaveStatePreview(null, 0, "SCUS-94228", "SPYRO", "content://games/spyro.cue", "Spyro")
+
+    @Test
+    fun theSlotPanelOpensOnThisGame() =
+        runTest {
+            api.times[1] = 100
+            api.sharedTimes[4] = 400
+            api.sharedHolds[4] = spyro
+            val menu = menu()
+
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            val panel = menu.slots()
+            assertEquals(SlotTab.ThisGame, panel.tab)
+            assertTrue(panel.hasKey)
+            assertEquals(listOf(1), panel.entries!!.map { it.slot })
+            // Both tabs are read as it opens, so a switch shows at once.
+            assertEquals(
+                listOf(
+                    SlotEntry(
+                        4,
+                        400L,
+                        shared = true,
+                        holds = HeldGame("Spyro", "SCUS-94228", "content://games/spyro.cue"),
+                    ),
+                ),
+                panel.shared,
+            )
+            assertEquals(4, panel.sharedFocus)
+        }
+
+    @Test
+    fun l1R1SwitchToSharedAndBack() =
+        runTest {
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+
+            menu.switchTab()
+            assertEquals(SlotTab.Shared, menu.slots().tab)
+            menu.switchTab()
+            assertEquals(SlotTab.ThisGame, menu.slots().tab)
+        }
+
+    @Test
+    fun savingToAnEmptySharedSlotSaves() =
+        runTest {
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.switchTab()
+            calls.clear()
+
+            menu.pickShared(2)
+            runCurrent()
+
+            assertEquals(listOf("saveSharedState 2", "message Saved to shared slot 2", "resume"), calls)
+            assertNull(menu.state.slots)
+            // A shared slot isn't the game's last slot.
+            assertNull(lastSlots.get(SERIAL))
+        }
+
+    @Test
+    fun aFailedSharedSaveSaysWhy() =
+        runTest {
+            api.saveError = "Disk full."
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.switchTab()
+
+            menu.pickShared(2)
+            runCurrent()
+
+            assertEquals("Couldn't save to shared slot 2: Disk full.", menu.slots().error)
+        }
+
+    @Test
+    fun replacingASharedSlotAsks() =
+        runTest {
+            api.sharedTimes[5] = 500
+            api.sharedHolds[5] = spyro
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.switchTab()
+            calls.clear()
+
+            menu.pickShared(5)
+            assertEquals(5, menu.slots().replacing)
+            assertEquals(emptyList<String>(), calls)
+            // The question can't move to the other tab.
+            menu.switchTab()
+            assertEquals(SlotTab.Shared, menu.slots().tab)
+
+            menu.confirmReplace()
+            runCurrent()
+            assertEquals(listOf("saveSharedState 5", "message Saved to shared slot 5", "resume"), calls)
+        }
+
+    @Test
+    fun loadingThisGamesSharedSlotLoads() =
+        runTest {
+            api.sharedTimes[3] = 300
+            api.sharedHolds[3] = crash
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.switchTab()
+            calls.clear()
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals(listOf("loadSharedState 3", "message Loaded shared slot 3", "resume"), calls)
+            assertNull(lastSlots.get(SERIAL))
+        }
+
+    @Test
+    fun aSharedPickBeforeItsPreviewReadsItFirst() =
+        runTest {
+            api.sharedTimes[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            // Its preview wasn't readable as the panel opened; now it is.
+            assertNull(
+                menu
+                    .slots()
+                    .shared!!
+                    .single()
+                    .holds,
+            )
+            api.sharedHolds[3] = crash
+            menu.switchTab()
+            calls.clear()
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals(
+                listOf(
+                    "getStatePreview shared 3 content://games/crash.cue",
+                    "loadSharedState 3",
+                    "message Loaded shared slot 3",
+                    "resume",
+                ),
+                calls,
+            )
+        }
+
+    @Test
+    fun anUnreadableSharedSlotIsntLoaded() =
+        runTest {
+            api.sharedTimes[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.switchTab()
+            calls.clear()
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertTrue(calls.none { it.startsWith("loadSharedState") })
+            assertEquals("Couldn't read that save.", menu.slots().error)
+        }
+
+    // --- Delete ---
+
+    private val acDiscs =
+        listOf(
+            GameDisc("content://games/ac3 (disc 1).chd", "SLPS-02020", "AC3 (Disc 1)", 1),
+            GameDisc("content://games/ac3 (disc 2).chd", "SLPS-02021", "AC3 (Disc 2)", 2),
+        )
+
+    private suspend fun TestScope.loadPanel(menu: InGameMenu) {
+        menu.openSlots(SlotMode.Load)
+        runCurrent()
+        calls.clear()
+    }
+
+    @Test
+    fun xAsksBeforeDeleting() =
+        runTest {
+            api.times[3] = 300
+            val menu = menu()
+            loadPanel(menu)
+
+            menu.askDelete(menu.entries().single())
+            assertEquals(SlotEntry(3, 300L), menu.slots().deleting)
+            assertEquals(emptyList<String>(), calls)
+
+            menu.cancelDelete()
+            assertNull(menu.slots().deleting)
+            assertEquals(emptyList<String>(), calls)
+        }
+
+    @Test
+    fun saveDoesntDelete() =
+        runTest {
+            api.times[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            assertNull(menu.slots().deleting)
+        }
+
+    @Test
+    fun aDeleteRemovesTheSaveItAskedAbout() =
+        runTest {
+            api.times[3] = 300
+            api.times[5] = 500
+            val menu = menu()
+            loadPanel(menu)
+
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            // A save comes in under the question (desktop's, through the data folder): the delete is still slot 3's.
+            api.times[2] = 200
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("deleteState $SERIAL 3", calls.first())
+            assertNull(menu.slots().deleting)
+            assertEquals(listOf(2, 5), menu.entries().map { it.slot })
+            // The panel stays open, on the next row.
+            assertEquals(5, menu.slots().focusRow?.slot)
+            assertTrue(calls.none { it == "resume" })
+        }
+
+    @Test
+    fun deletingAnOtherDiscsSaveUsesItsSerial() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(4 to 400L)
+            val menu = menu(booted = false)
+            menu.gameStarted(game("SLPS-02020").copy(discs = acDiscs))
+            runCurrent()
+            loadPanel(menu)
+
+            menu.askDelete(menu.slots().others.single())
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("deleteState SLPS-02021 4", calls.first())
+            assertEquals(emptyList<SlotEntry>(), menu.slots().others)
+        }
+
+    @Test
+    fun deletingASharedSlot() =
+        runTest {
+            api.sharedTimes[6] = 600
+            val menu = menu()
+            loadPanel(menu)
+            menu.switchTab()
+
+            menu.askDelete(menu.slots().shared!!.single())
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("deleteState shared 6", calls.first())
+            assertEquals(emptyList<SlotEntry>(), menu.slots().shared)
+            assertEquals(SlotTab.Shared, menu.slots().tab)
+        }
+
+    @Test
+    fun aFailedDeleteSaysWhy() =
+        runTest {
+            api.times[3] = 300
+            api.deleteError = "Permission denied."
+            val menu = menu()
+            loadPanel(menu)
+
+            menu.askDelete(menu.entries().single())
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals("Couldn't delete that save: Permission denied.", menu.slots().error)
+            assertEquals(listOf(3), menu.entries().map { it.slot })
+        }
+
+    // --- Undo load ---
+
+    @Test
+    fun canUndoIsReadAsTheMenuOpens() =
+        runTest {
+            val menu = menu()
+            assertFalse(menu.state.canUndo)
+
+            api.canUndo = true
+            menu.opened()
+            runCurrent()
+            assertTrue(menu.state.canUndo)
+        }
+
+    @Test
+    fun undoLoadUndoesAndResumes() =
+        runTest {
+            api.canUndo = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.undoLoad()
+            runCurrent()
+
+            assertEquals(listOf("undoLoadState", "message Undid the last load", "resume"), calls)
+        }
+
+    @Test
+    fun undoLoadSaysWhenThereWasNone() =
+        runTest {
+            api.canUndo = true
+            api.undoes = false
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.undoLoad()
+            runCurrent()
+
+            assertEquals(listOf("undoLoadState", "message No load to undo", "resume"), calls)
+        }
+
+    @Test
+    fun undoLoadIsOffInHardcore() =
+        runTest {
+            api.canUndo = true
+            api.hardcore = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.undoLoad()
+            runCurrent()
+
+            assertTrue(calls.none { it == "undoLoadState" })
+        }
+
+    @Test
+    fun theUndoHotkeyIsRefusedInHardcore() =
+        runTest {
+            api.hardcore = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.hotkey(StateHotkey.Undo)
+            runCurrent()
+
+            assertEquals(listOf("message Loading a state is off in hardcore mode"), calls)
+        }
+
+    // --- A shared slot of another game ---
+
+    private suspend fun TestScope.sharedLoad(
+        menu: InGameMenu,
+        holds: SaveStatePreview = spyro,
+    ) {
+        api.sharedTimes[3] = 300
+        api.sharedHolds[3] = holds
+        menu.openSlots(SlotMode.Load)
+        runCurrent()
+        menu.switchTab()
+        calls.clear()
+    }
+
+    @Test
+    fun anotherGamesSharedSlotAsksFirst() =
+        runTest {
+            val menu = menu()
+            sharedLoad(menu)
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals(3, menu.slots().switching?.slot)
+            assertEquals(
+                "Load Spyro from shared slot 3? This game stops.",
+                SaveLists.switchQuestion(menu.slots().switching!!),
+            )
+            assertTrue(calls.none { it.startsWith("loadSharedState") || it.startsWith("exit") })
+
+            menu.cancelSwitch()
+            assertNull(menu.slots().switching)
+        }
+
+    @Test
+    fun confirmingTheSwitchExitsThenStartsIt() =
+        runTest {
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+
+            assertNull(menu.state.slots)
+            assertEquals(
+                listOf(
+                    "savesResumeState",
+                    "getSaveStateTimes $SERIAL",
+                    "saveResumeState $SERIAL",
+                    "switch content://games/spyro.cue 3",
+                    "exit null",
+                ),
+                calls,
+            )
+        }
+
+    @Test
+    fun theSwitchAsksToReplaceTheResumeState() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 900
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+            assertEquals(900L, menu.state.replacingResume)
+
+            menu.keepResume()
+            assertEquals(listOf("switch content://games/spyro.cue 3", "exit null"), calls.takeLast(2))
+        }
+
+    @Test
+    fun theSwitchWarnsWhileACardIsWritten() =
+        runTest {
+            api.cardBusy = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+            assertTrue(menu.state.confirmingExit)
+            assertTrue(calls.none { it.startsWith("switch") })
+
+            menu.confirmExit()
+            runCurrent()
+            assertEquals(listOf("switch content://games/spyro.cue 3", "exit null"), calls.takeLast(2))
+        }
+
+    @Test
+    fun aCancelledSwitchIsForgotten() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 900
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+            menu.confirmSwitch()
+            runCurrent()
+
+            // B on the resume question stays in the game.
+            menu.cancelReplaceResume()
+            api.times.remove(SaveSlots.RESUME)
+            calls.clear()
+
+            menu.exit()
+            runCurrent()
+            assertTrue(calls.none { it.startsWith("switch") })
+            assertEquals("exit null", calls.last())
+        }
+
+    @Test
+    fun aSwitchIsRefusedWhenHardcoreWouldStart() =
+        runTest {
+            api.hardcoreWouldStart = true
+            val menu = menu()
+            sharedLoad(menu)
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertNull(menu.slots().switching)
+            assertEquals("Loading a state is off in hardcore mode", menu.slots().error)
+        }
+
+    @Test
+    fun aGameNotInTheLibraryIsNamed() =
+        runTest {
+            val menu = menu()
+            sharedLoad(menu, SaveStatePreview(null, 0, "SCUS-94228", "Spyro the Dragon", "", ""))
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertNull(menu.slots().switching)
+            assertEquals(
+                "Shared slot 3 needs Spyro the Dragon (SCUS-94228), which isn't in your library.",
+                menu.slots().error,
+            )
+        }
+
+    // Review: a resume save that fails stops the switch, so the library says the place wasn't saved.
+    @Test
+    fun aFailedResumeSaveStopsTheSwitch() =
+        runTest {
+            api.resumeError = "No space left on device."
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+
+            assertTrue(calls.none { it.startsWith("switch") })
+            assertEquals("exit No space left on device.", calls.last())
+        }
+
+    // PR review: a second A while an unread shared slot's game is read doesn't load it twice (the second load would take
+    // the undo state).
+    @Test
+    fun aDoubleAOnAnUnreadSharedSlotLoadsOnce() =
+        runTest {
+            api.sharedTimes[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            api.sharedHolds[3] = crash
+            menu.switchTab()
+            calls.clear()
+
+            menu.pickShared(3)
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals(1, calls.count { it == "loadSharedState 3" })
+            assertEquals(1, calls.count { it.startsWith("getStatePreview shared 3") })
+        }
+
+    // A refused pick leaves the panel ready for another.
+    @Test
+    fun aRefusedSharedPickLeavesThePanelReady() =
+        runTest {
+            api.sharedTimes[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.switchTab()
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals("Couldn't read that save.", menu.slots().error)
+            assertFalse(menu.slots().busy)
         }
 }

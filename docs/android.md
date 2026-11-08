@@ -753,10 +753,29 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
   counts each chain the game sets as one. Desktop's Copy global settings doesn't copy the chains, and neither does
   this app's.
 
+### A game's saves
+
+**X** on a focused game in the library opens its **Saves** page; a long press, by touch, offers **Saves** and **Game
+settings** (a game without a key opens Saves straight away). The library's foot says "A Play · X Saves · Y Game
+settings". The page, in the app's window, has the game's title over "Saves", then the in-game Load panel's two tabs
+(L1 and R1) and rows: **This game**, the resume state, slots 1 to 10 and Other saves, and **Shared**, desktop's
+shared slots, each naming the game it holds. The page scrolls as one, with `KeyHints` "A Start · X Delete · L1 R1
+Switch · B Back" at its foot. The first save is focused; with none, it says "No saves yet for this game.", and a
+game without a key opens on Shared, its This game tab saying "This game can't keep save states of its own."
+
+- **A** starts the game from that save, on the disc it was made on, as Resume does from the resume state. A shared
+  slot starts the game it holds, which may be another; one the library doesn't have says which game it needs ("Shared
+  slot 3 needs Crash Bandicoot (SCUS-94900), which isn't in your library."). When hardcore mode would start, no save
+  can start the game: "Loading a state is off in hardcore mode".
+- **X** (a long press, by touch) asks before deleting the save, in a panel over the page: Delete and Cancel, Cancel
+  focused. It works in hardcore mode too, where the in-game Load panel stays closed. The focus goes to the next save.
+- **B** goes back to the library, focusing the game's tile.
+
 ### Settings for each game
 
 A game can have settings of its own, over the global ones, as on desktop. They open from its tile: **Y** on a focused
-game in the library (a long press, by touch), which the library's foot says ("A Play · Y Game settings"); and, for the
+game in the library (or Game settings in its long press's choice, by touch), which the library's foot says ("A Play ·
+X Saves · Y Game settings"); and, for the
 running game, from **Settings** in its in-game menu (after Achievements). The library's opens only as the global
 pages do, with no game under way; a file with no key (a PSF) has none, and its menu's Settings says so.
 
@@ -917,8 +936,10 @@ Toggle" binding from before (`[Pad1] Analog`) becomes it, with Select, the first
   and the resume rules. **Save To Selected Slot** and **Load From Selected Slot** use the slot last saved to or loaded
   from (slot 1 before any), and say "Saved to slot 4" or "Loaded slot 4"; **Select Previous/Next Save Slot** step
   through 1 to 10, wrapping, "Slot 5 selected"; **Save State and Select Next Slot** saves, then selects the next;
-  **Undo Load State** says "Undid the last load" or "No load to undo". Load in hardcore mode says "Loading a state is
-  off in hardcore mode", and a game without a key "This game can't keep save states". None opens the menu.
+  **Undo Load State** says "Undid the last load" or "No load to undo". Load and Undo Load State in hardcore mode say
+  "Loading a state is off in hardcore mode", and a game without a key "This game can't keep save states". None opens
+  the menu. The core's own per-slot and global-slot hotkeys (Load Game State 1…, Save Global State 1…) aren't built
+  on Android, so a binding to them from a desktop `settings.ini` does nothing: they'd save under the disc's serial.
 - **Select on a controller with a hotkey** is held back from the game until it's known not to start a chord: it goes
   to the game when it's let go (held down 100 ms, as a tap), together with the next button pressed (in one batch, so
   the core's chord fires and the game sees neither), or once held for 500 ms, for a game that wants Select held (a map,
@@ -1013,12 +1034,42 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   state whose disc isn't in the library fails to load with "Couldn't load slot 3: The disc this state was saved on
   isn't in your library: <file>.", and the game keeps its disc and place.
 
+  **This game and Shared.** The panel has two tabs, L1 and R1 switching them (`KeyHints` "L1 R1 Switch"): **This
+  game**, the slots above, focused as it opens, and **Shared**, desktop's ten global slots
+  (`savestates/savestate_<n>.sav`, the same files, so a data folder shared with desktop shows the same ones). Each
+  shared row names the game it holds under its slot (the library's title, or its serial for a game the library
+  doesn't know), and its disc for a multi-disc game. Saving to a shared slot writes the running game ("Saved to shared
+  slot 3"), asking "Replace the save in shared slot 3?" first when it holds one. A shared slot made in the running
+  game loads like any slot ("Loaded shared slot 3"). One made in another game asks first, in the panel: "Load Crash
+  Bandicoot from shared slot 3? This game stops.", Load and Cancel, Cancel focused. Load leaves the running game as
+  Exit game does (its resume state saved when that's on, with Exit's question to replace one, and its warning while a
+  memory card is being written; Cancel on either stays in the game), and once it has stopped, and its memory cards
+  have been synced, starts the other game from the state, on the disc it was made on. If that game isn't in the
+  library, the load is refused with the game it needs ("Shared slot 3 needs Crash Bandicoot (SCUS-94900), which isn't
+  in your library."), and when hardcore mode would start, with "Loading a state is off in hardcore mode", both before
+  the running game is left. The host itself refuses to load another game's state into the running one ("That save
+  is from another game."), and one whose state can't be read says "Couldn't read that save." A game
+  without a key (the BIOS alone, say) opens the panel on Shared, its This game tab saying "This game can't keep save
+  states of its own." In a list under 150 dp tall (a handheld's at large text), the rows are compact: the small
+  picture, the game on one line, and the time on Saved's line.
+
+  **Delete.** In Load, X on a row (or a long press, by touch) asks in the panel: "Delete the save in slot 3?" (or
+  "Delete the save in shared slot 3?", "Delete your resume state?", "Delete disc 2's save in slot 3?"), Delete and
+  Cancel, Cancel focused (`KeyHints` "X Delete"). Delete removes that save, the one the question named whatever the
+  list has done since, with the `.bak` a save kept of it (Settings → Emulation's save state backups), and the panel
+  stays open on the row after it. The deletion reaches the data folder through the mirror, as any change does. Save
+  has no Delete: it replaces. Saves have no names, as on desktop, which names them only by slot.
+
   **One set of states per game.** States made before discs were grouped (part 1 kept them under each disc's serial)
   are moved under the game's key the first time the game is played on this device, before it asks to resume: the
   newest state keeps each place, the others take the lowest free slots, and nothing is overwritten. The move is
   recorded as `migrated.<key>` in the `game` preferences, so it runs once per device. What doesn't fit, and anything
   desktop saves per disc later, is listed in Load state after the slots, under **Other saves**; loading one says
   "Loaded disc 2's slot 4".
+- **Undo load**, after Load state: puts the game back as it was before the last load in this game (the core keeps one
+  undo state), says "Undid the last load" and goes back to the game. It's off, with "Nothing to undo", until a load,
+  and off in hardcore mode, as Load state is; the hotkey and the host refuse it there too, and turning hardcore on
+  drops the undo state, so it can't come back once hardcore is off again.
 - **Change disc**, for a multi-disc game, with the disc in the drive ("Disc 1 of 2"): opens a panel beside the menu
   with a row per disc, "Disc 1" to "Disc N", each with its own title (or its serial, when its title is the game's),
   the disc in the drive marked Current. **A** Insert puts the disc in (a playlist's sub-image, or the disc's file),
@@ -1281,8 +1332,6 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
   `settings.ini` keeps the user's choice.
 - **A controller connected during a game** has its Select held back for its hotkeys from the next game on: they're
   read as a game starts.
-- **The in-game menu has no Undo load, global save slots, or way to delete or rename a save.** The core keeps an undo
-  state, but the menu doesn't offer it yet.
 - **The core's screenshot message lasts 2 s,** not the 5 s it means: its duration is passed to the text's formatting
   instead (`gpu.cpp`, desktop code, left as it is).
 - **The settings pages are reachable only from the library**, not from a game or its prompt. Leave the game to change
@@ -1709,6 +1758,27 @@ Not checkable on the emulator: Automatic hiding as a real controller connects (t
 and the press tick (no vibrator); `TouchControlsTest`, `GameScreenTouchTest` and `TouchOverlayTest` cover them. A
 phone with no controller (on gesture navigation, slides in from the edge over the D-pad and Circle too), and a tablet
 in portrait, are the user's check.
+
+### Save state management (2026-11-08)
+
+On `goose-test-1` (emulator-5580, landscape), the debug APK, set up by touch through the folder picker with
+`GooseTest/bios`, `GooseTest/games` (padtest and its disc image) and an empty data folder, driven with gamepad keys.
+The tests: `SaveListsTest`, `SaveReaderTest`, `SavesPageTest`, `InGameMenuTest` and `GameStartsTest` (JVM);
+`GameMenuTest`, `SavesScreenTest`, `LibraryScreenTest`, `FocusAuditTest`, `OrientationLayoutTest`, and the save state
+tests in `GameCallsTest` and `AchievementsOfflineTest` (instrumented); `AndroidDiscGroups.MatchStateGame*`
+(`common-tests`).
+
+| Check | Result |
+|---|---|
+| The library's foot | Pass. "A Play · X Saves · Y Game settings". |
+| Save to a shared slot | Pass. In padtest, Save state, R1: the Shared tab, Slot 1 focused; slot 3 saved `savestates/savestate_3.sav`, mirrored to the data folder, and no `HASH-…_3.sav`. |
+| A shared slot of another game | Pass. In the Pad Test disc, Load state, R1, slot 3: "Load padtest from shared slot 3? This game stops.", Cancel focused. Load saved the disc's resume state (`PADTESTEXE_resume.sav`), the game stopped, then the log had "Starting '…padtest.psexe' from 'savestate_3.sav'" and the core's "Loading state from 'savestate_3.sav'...". |
+| Saves from the tile | Pass. X on padtest opened "Saves" under "PADTEST": Resume with its screenshot and time, focused. R1: "Slot 3", "padtest", Saved, its time. |
+| Delete | Pass. X on shared slot 3 asked "Delete the save in shared slot 3?" over the page, Cancel focused; Delete left "No shared saves yet.", and the data folder's `savestate_3.sav` was gone after the push. |
+
+Hardcore mode isn't checkable here without the RetroAchievements fake's padtest disc set:
+`AchievementsOfflineTest.undoIsRefusedInHardcore` and `turningHardcoreOnDropsTheUndoState` cover the native side, and
+`InGameMenuTest` and `SavesPageTest` the app's.
 
 ## Results on the AYN Thor
 
@@ -2217,3 +2287,16 @@ adb logcat -v time > thor.log
    - [ ] Controllers for the game: Port 1's type **NeGcon** for this game only: the game sees a NeGcon (its steering
      works with the Thor's stick), another game a DualShock; the global Port 1 page lists the NeGcon's inputs under
      "NeGcon (a game's)".
+16. **Save state management.** With the build that has it, the Thor's own controls, and two games with a key. Note the
+    data folder's `savestates/` before and after.
+   - [ ] In the first game, Save state, R1: the Shared tab; saving to slot 3 writes `savestate_3.sav`, and the slot
+     names the game.
+   - [ ] In the second game, Load state, R1, slot 3: the question names the first game, Cancel focused; Load saves the
+     second game's place and starts the first from the state.
+   - [ ] Load state, then **Undo load** after Load state puts the game back, "Undid the last load"; until a load it
+     says "Nothing to undo".
+   - [ ] In Load, X on a slot asks before deleting; Delete removes it, with its `.bak`.
+   - [ ] In the library, X on a tile opens Saves; A on a slot starts the game from it, on its disc; a long press by
+     touch offers Saves and Game settings.
+   - [ ] With hardcore mode on (step 12): Load state and Undo load say "Off in hardcore mode", the Undo hotkey says
+     "Loading a state is off in hardcore mode", and the Saves page deletes but won't start from a save.

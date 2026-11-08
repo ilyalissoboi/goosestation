@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -34,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -103,6 +106,8 @@ fun GameMenu(
     BackHandler {
         val shown = current
         when {
+            shown.slots?.switching != null -> actions.cancelSwitch()
+            shown.slots?.deleting != null -> actions.cancelDelete()
             shown.slots?.replacing != null -> actions.cancelReplace()
             shown.slots != null -> {
                 (if (shown.slots.mode == SlotMode.Save) cameFrom.saveRow else cameFrom.loadRow).requestFocus()
@@ -137,6 +142,8 @@ fun GameMenu(
         listOf(
             state.slots?.mode,
             state.slots?.replacing,
+            state.slots?.deleting,
+            state.slots?.switching,
             state.discs != null,
             state.codes != null,
             state.cheevos != null,
@@ -192,7 +199,24 @@ fun GameMenu(
         @Composable
         fun SidePanel(modifier: Modifier) {
             when {
-                slots != null -> SaveSlotPanel(slots, actions, now, modifier)
+                slots != null ->
+                    SaveSlotPanel(
+                        slots,
+                        actions,
+                        now,
+                        modifier,
+                        keepFocus = {
+                            (
+                                if (slots.mode ==
+                                    SlotMode.Save
+                                ) {
+                                    cameFrom.saveRow
+                                } else {
+                                    cameFrom.loadRow
+                                }
+                            ).requestFocus()
+                        },
+                    )
                 discs != null -> DiscPanel(discs, game?.title.orEmpty(), actions, modifier)
                 codes != null -> PatchCodePanel(codes, actions, modifier)
                 cheevos != null && achievements != null ->
@@ -384,6 +408,19 @@ private fun MenuPanel(
                     value = if (state.hardcore) HARDCORE_OFF else null,
                     quiet = quiet,
                 )
+                MenuItem(
+                    "Undo load",
+                    GsIcons.undo,
+                    actions::undoLoad,
+                    enabled = booted && state.canUndo && !state.hardcore,
+                    value =
+                        when {
+                            state.hardcore -> HARDCORE_OFF
+                            !state.canUndo -> NOTHING_TO_UNDO
+                            else -> null
+                        },
+                    quiet = quiet,
+                )
                 if (state.discCount > 1) {
                     MenuItem(
                         "Change disc",
@@ -477,6 +514,9 @@ private fun MenuPanel(
 
 private fun onOff(on: Boolean) = if (on) "On" else "Off"
 
+/** Undo load's value while there's no load to undo. */
+const val NOTHING_TO_UNDO = "Nothing to undo"
+
 /** Said on Settings for a game with no key (a PSF), which keeps no settings of its own. */
 const val NO_KEY_SETTINGS = "This game has no serial to keep its own under"
 
@@ -501,10 +541,19 @@ private fun MenuItem(
 ) {
     val colors = GooseStationTheme.colors
     var focused by remember { mutableStateOf(false) }
+    // Into view again a frame after it takes the focus: a side panel closing widens the menu as the focus comes back to
+    // its row, and the scroll made at the narrower width can leave the row out of view.
+    val view = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) {
+        if (!focused) return@LaunchedEffect
+        withFrameNanos {}
+        view.bringIntoView()
+    }
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
+                .bringIntoViewRequester(view)
                 .semantics { selected = current }
                 .background(if (current) colors.beakSoft else colors.surface, GsShapes.medium)
                 .focusRing(

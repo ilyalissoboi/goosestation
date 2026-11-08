@@ -490,6 +490,20 @@ object GsIcons {
         }
     }
 
+    val undo: ImageVector by lazy {
+        icon("undo") {
+            moveTo(9f, 4f)
+            lineTo(5f, 8f)
+            lineTo(9f, 12f)
+            moveTo(5f, 8f)
+            lineTo(15f, 8f)
+            lineTo(19f, 12f)
+            lineTo(19f, 16f)
+            lineTo(15f, 20f)
+            lineTo(8f, 20f)
+        }
+    }
+
     val warning: ImageVector by lazy {
         icon("warning") {
             moveTo(12f, 3f)

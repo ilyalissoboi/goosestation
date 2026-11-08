@@ -37,11 +37,13 @@ import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
@@ -52,12 +54,14 @@ import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
@@ -66,9 +70,11 @@ import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.LeaderboardEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
+import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -231,10 +237,48 @@ class GameMenuTest {
 
             override fun switchTab() {
                 calls += "switchTab"
+                // The slot panel's tabs, as InGameMenu switches them.
+                state.slots?.let { slots ->
+                    val tab = if (slots.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
+                    state = state.copy(slots = slots.copy(tab = tab))
+                    return
+                }
                 if (switchingTabs) {
                     val list = if (listsLoad) null else boards
                     state = state.copy(cheevos = AchievementsPanelState(CheevoTab.Leaderboards, leaderboards = list))
                 }
+            }
+
+            override fun undoLoad() {
+                calls += "undoLoad"
+            }
+
+            override fun pickShared(slot: Int) {
+                calls += "pickShared $slot"
+            }
+
+            override fun askDelete(entry: SlotEntry) {
+                calls += "askDelete ${entry.slot}"
+                state = state.copy(slots = state.slots?.copy(deleting = entry))
+            }
+
+            override fun confirmSwitch() {
+                calls += "confirmSwitch"
+            }
+
+            override fun cancelSwitch() {
+                calls += "cancelSwitch"
+                state = state.copy(slots = state.slots?.copy(switching = null))
+            }
+
+            override fun confirmDelete() {
+                calls += "confirmDelete"
+            }
+
+            override fun cancelDelete() {
+                calls += "cancelDelete"
+                val slots = state.slots
+                state = state.copy(slots = slots?.copy(deleting = null, focusRow = slots.deleting))
             }
 
             override fun openLeaderboard(id: Int) {
@@ -302,6 +346,39 @@ class GameMenuTest {
     }
 
     @Test
+    fun undoLoadFollowsLoadState() {
+        state = GameMenuState(booted = true, canUndo = true)
+        show()
+
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Undo load", substring = true)).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("undoLoad"), calls)
+    }
+
+    @Test
+    fun undoLoadSaysNothingToUndo() {
+        state = GameMenuState(booted = true)
+        show()
+
+        rule
+            .onNode(hasText("Undo load", substring = true) and hasText("Nothing to undo", substring = true))
+            .assertIsNotEnabled()
+    }
+
+    @Test
+    fun undoLoadIsOffInHardcore() {
+        state = GameMenuState(booted = true, canUndo = true, hardcore = true)
+        show()
+
+        rule
+            .onNode(hasText("Undo load", substring = true) and hasText("Off in hardcore mode", substring = true))
+            .assertIsNotEnabled()
+    }
+
+    @Test
     fun settingsRowOpensTheGamesSettings() {
         state = GameMenuState(booted = true)
         show()
@@ -354,7 +431,7 @@ class GameMenuTest {
         state = GameMenuState(booted = true, analogMode = false, hardcore = true)
         show()
 
-        for (row in listOf("Load state", "Fast forward", "Patch codes")) {
+        for (row in listOf("Load state", "Undo load", "Fast forward", "Patch codes")) {
             rule.onNode(hasText(row) and hasText("Off in hardcore mode")).assertIsNotEnabled()
         }
         // The D-pad passes over them: from Save state, Down reaches Analog mode.
@@ -783,6 +860,214 @@ class GameMenuTest {
         rule.onNode(isFocused() and hasText("Slot 4", substring = true)).assertExists()
         press(Key.Enter)
         assertEquals(listOf("pickOther SLPS-02021 4"), calls)
+    }
+
+    private fun shared(vararg slots: Int): List<SlotEntry> =
+        slots.map {
+            SlotEntry(
+                it,
+                now.toEpochSecond() - 600,
+                shared = true,
+                holds = HeldGame("Spyro the Dragon", "SCUS-94228", "/g/spyro.chd"),
+            )
+        }
+
+    @Test
+    fun l1SwitchesTheSlotPanelsTab() {
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, saved(1).take(1), focus = 1, shared = shared(4, 6), sharedFocus = 6),
+            )
+        show()
+        rule.onNode(isFocused() and hasText("Slot 1", substring = true)).assertExists()
+        rule.onNodeWithContentDescription("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}: Switch").assertExists()
+
+        press(Key.ButtonR1)
+
+        assertEquals(listOf("switchTab"), calls)
+        rule.onNode(isFocused() and hasText("Slot 6", substring = true)).assertExists()
+        press(Key.DirectionUp)
+        rule.onNode(isFocused() and hasText("Slot 4", substring = true)).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("switchTab", "pickShared 4"), calls)
+
+        press(Key.ButtonL1)
+        rule.onNode(isFocused() and hasText("Slot 1", substring = true)).assertExists()
+    }
+
+    @Test
+    fun aSharedRowSaysItsGame() {
+        val unknown =
+            SlotEntry(7, now.toEpochSecond() - 600, shared = true, holds = HeldGame("CRASH", "SCUS-94900", null))
+        state =
+            GameMenuState(
+                booted = true,
+                slots =
+                    SlotPanel(
+                        SlotMode.Load,
+                        emptyList(),
+                        tab = SlotTab.Shared,
+                        shared = shared(4) + unknown,
+                        sharedFocus = 4,
+                    ),
+            )
+        show()
+
+        rule
+            .onNode(
+                isFocused() and hasText("Slot 4", substring = true) and hasText("Spyro the Dragon", substring = true),
+            ).assertExists()
+        // A game the library doesn't know is named by its serial.
+        rule.onNode(hasText("Slot 7", substring = true) and hasText("SCUS-94900", substring = true)).assertExists()
+        rule.onNodeWithText("This game").assertExists()
+        rule.onNodeWithText("Shared").assertIsSelected()
+    }
+
+    @Test
+    fun noKeyGameSaysSo() {
+        state =
+            GameMenuState(
+                booted = true,
+                hasKey = false,
+                slots =
+                    SlotPanel(
+                        SlotMode.Save,
+                        emptyList(),
+                        tab = SlotTab.ThisGame,
+                        shared = shared(),
+                        hasKey = false,
+                    ),
+            )
+        show()
+
+        rule.onNodeWithText("This game can't keep save states of its own.").assertExists()
+        rule.onNodeWithText("No saves yet for this game.").assertDoesNotExist()
+        // The panel holds the focus all the same, so B and the tabs still reach it.
+        rule.onNode(isFocused()).assertExists()
+    }
+
+    @Test
+    fun xOnARowAsksWithCancelFocused() {
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+            )
+        show()
+        rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertExists()
+
+        press(Key.ButtonX)
+
+        assertEquals(listOf("askDelete 2"), calls)
+        rule.onNodeWithText("Delete the save in slot 2?").assertExists()
+        rule.onNode(isFocused() and hasText("Cancel")).assertExists()
+        press(Key.DirectionLeft)
+        rule.onNode(isFocused() and hasText("Delete")).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("askDelete 2", "confirmDelete"), calls)
+    }
+
+    @Test
+    fun theSwitchQuestionFocusesCancel() {
+        val rows = shared(4)
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+            )
+        show()
+
+        rule.onNodeWithText("Load Spyro the Dragon from shared slot 4? This game stops.").assertExists()
+        rule.onNode(isFocused() and hasText("Cancel")).assertExists()
+        press(Key.DirectionLeft)
+        press(Key.Enter)
+        assertEquals(listOf("confirmSwitch"), calls)
+    }
+
+    @Test
+    fun bCancelsTheSwitch() {
+        val rows = shared(4)
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+            )
+        show()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("cancelSwitch"), calls)
+        assertNotNull(state.slots)
+    }
+
+    @Test
+    fun saveHasNoDelete() {
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(2), focus = 2))
+        show()
+        rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertDoesNotExist()
+
+        press(Key.ButtonX)
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    @Test
+    fun afterADeleteTheNextRowIsFocused() {
+        val rows = saved(2, 5, 7).filter { it.savedAt != null }
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[1]))
+        show()
+
+        // The core's list comes back without slot 5, the row after it named.
+        state = state.copy(slots = SlotPanel(SlotMode.Load, rows - rows[1], focus = 2, focusRow = rows[2]))
+        rule.waitForIdle()
+
+        rule.onNode(isFocused() and hasText("Slot 7", substring = true)).assertExists()
+    }
+
+    // Review: the list's last save deleted, the heading holds the focus.
+    @Test
+    fun deletingTheLastSaveFocusesTheHeading() {
+        val rows = saved(2).filter { it.savedAt != null }
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[0]))
+        show()
+
+        // As InGameMenu does: the question goes, the panel is busy with the old rows, then the list comes back empty.
+        state = state.copy(slots = state.slots!!.copy(deleting = null, busy = true))
+        rule.waitForIdle()
+        state = state.copy(slots = SlotPanel(SlotMode.Load, emptyList()))
+        rule.waitForIdle()
+
+        rule.onNode(isFocused() and hasText("Load state")).assertExists()
+    }
+
+    @Test
+    fun aLongPressAsksToo() {
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+            )
+        show()
+
+        rule.onNode(hasText("Slot 5", substring = true) and hasClickAction()).performTouchInput { longClick() }
+        rule.waitForIdle()
+
+        assertEquals(listOf("askDelete 5"), calls)
+    }
+
+    @Test
+    fun bCancelsTheDelete() {
+        val rows = saved(2, 5).filter { it.savedAt != null }
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2))
+        show()
+        press(Key.DirectionDown)
+        press(Key.ButtonX)
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("askDelete 5", "cancelDelete"), calls)
+        assertNotNull(state.slots)
+        rule.onNode(isFocused() and hasText("Slot 5", substring = true)).assertExists()
     }
 
     @Test

@@ -5042,6 +5042,15 @@ bool System::CanUndoLoadState()
   return s_undo_load_state.has_value();
 }
 
+#ifdef __ANDROID__
+void System::ClearUndoLoadState()
+{
+  if (s_undo_load_state.has_value())
+    INFO_LOG("Dropped the undo load state.");
+  s_undo_load_state.reset();
+}
+#endif
+
 std::optional<ExtendedSaveStateInfo> System::GetUndoSaveStateInfo()
 {
   std::optional<ExtendedSaveStateInfo> ssi;

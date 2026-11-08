@@ -51,6 +51,7 @@ import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
 import io.github.ilyalissoboi.goosestation.ui.PortScreen
 import io.github.ilyalissoboi.goosestation.ui.PostProcessingScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
+import io.github.ilyalissoboi.goosestation.ui.SavesScreen
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
@@ -59,6 +60,7 @@ import io.github.ilyalissoboi.goosestation.ui.deviceTicker
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class MainActivity : ComponentActivity() {
     // Registered here, before the activity starts, as the result API needs.
@@ -258,6 +260,12 @@ class MainActivity : ComponentActivity() {
                             hardcoreActive = false,
                             onBack = AppController::closeGameSettings,
                         )
+                    Screen.Saves -> {
+                        val page = AppController.savesPage
+                        page.state?.let {
+                            SavesScreen(it, page, ZonedDateTime.now(), onBack = AppController::closeSaves)
+                        }
+                    }
                     Screen.MemcardEditor -> {
                         val editor = AppController.memcardEditor
                         val ui = editor.ui
@@ -451,6 +459,7 @@ class MainActivity : ComponentActivity() {
                             onRefresh = AppController::refresh,
                             onStartGame = AppController::startGame,
                             onGameSettings = AppController::openGameSettings,
+                            onSaves = AppController::openSaves,
                             focusPath = AppController.libraryFocus ?: AppController.lastGamePath,
                             focusSettings = AppController.focusSettings,
                             syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),

@@ -210,6 +210,22 @@ void SetListedGames(std::vector<AndroidDiscGroups::Game> games);
 /// StartGame() before it boots.
 void StartGame(std::string path, u32 disc, bool resume);
 
+/// The state a boot starts from: key's slot (an empty key: the game's own; slot -1: its resume state), or, shared, the
+/// shared slot.
+struct BootState
+{
+  std::string key;
+  s32 slot;
+  bool shared;
+};
+
+/// StartGame(), from state if it has one, on the disc the state was made on.
+void StartGame(std::string path, u32 disc, std::optional<BootState> state);
+
+/// StartGame() from key's slot, or, shared, the shared slot: a state that isn't there, or whose disc isn't the game's,
+/// fails to boot with NotifyError() saying so.
+void StartGameFromState(std::string path, std::string key, s32 slot, bool shared);
+
 /// Shuts the running game down, or cancels a boot still waiting for a surface.
 void ShutdownGame();
 
@@ -227,15 +243,29 @@ struct Picture
 /// System::PER_GAME_SAVE_STATE_SLOTS slots. All 0 for an empty serial, or before Initialize() succeeded.
 std::vector<s64> GetSaveStateTimes(std::string serial);
 
-/// What serial's state in slot (-1 for the resume state) shows of itself: its screenshot, if it has one, and the
-/// number of the running game's disc it was made on, 0 if that isn't known.
+/// The modified times of the shared slots (desktop's global ones): [n] slot n, for System::GLOBAL_SAVE_STATE_SLOTS
+/// slots; [0] is always 0.
+std::vector<s64> GetSharedStateTimes();
+
+/// What a state shows of itself: its screenshot, if it has one; the serial and title it recorded; and the game it
+/// holds (game_path and game_title empty when it's none the app knows), with the number of that game's disc it was
+/// made on, 0 if that isn't known.
 struct SaveStatePreview
 {
   std::optional<Picture> picture;
   u32 disc;
+  std::string serial;
+  std::string title;
+  std::string game_path;
+  std::string game_title;
 };
 
-/// serial's state in slot's preview; nullopt if there's no state, or it has neither a picture nor a known disc.
+/// key's state in slot (-1 for the resume state), or, shared, the shared slot's: its preview, the game it holds being
+/// the running game, else the listed game whose path is game_path, else the first listed game it's of. nullopt if
+/// there's no state, or it can't be read.
+std::optional<SaveStatePreview> GetStatePreview(std::string key, s32 slot, bool shared, std::string game_path);
+
+/// GetStatePreview() of serial's state in slot; nullopt for an empty serial.
 std::optional<SaveStatePreview> GetSaveStatePreview(std::string serial, s32 slot);
 
 /// Saves the running game to key's slot, or loads key's slot (-1 for the resume state) into it, on the disc the state
@@ -243,6 +273,15 @@ std::optional<SaveStatePreview> GetSaveStatePreview(std::string serial, s32 slot
 /// game, no key, or the core's error.
 std::optional<std::string> SaveState(std::string key, s32 slot);
 std::optional<std::string> LoadState(std::string key, s32 slot);
+
+/// Saves the running game to the shared slot, or loads the shared slot into it, as SaveState() and LoadState() do. A
+/// load refuses a state that isn't the running game's ("That save is from another game.").
+std::optional<std::string> SaveSharedState(s32 slot);
+std::optional<std::string> LoadSharedState(s32 slot);
+
+/// Deletes key's state in slot (-1 for the resume state), or, shared, the shared slot's, with the .bak a save kept of
+/// it; no game need run. nullopt when it's gone, else why not.
+std::optional<std::string> DeleteSaveState(std::string key, s32 slot, bool shared);
 
 /// The number of the running game's disc in the drive: for a playlist its sub-image's, else the disc whose path is the
 /// media's. 0 without a game, or when the disc in the drive isn't one of the game's.
@@ -481,8 +520,12 @@ void NotifyRumble(s32 device_id, float large, float small);
 /// picks the slot itself.
 void NotifyHotkey(std::string_view name);
 
-/// Undoes the last state load (System::UndoLoadState()), on the CPU thread, waiting; false when there's none.
+/// Undoes the last state load (System::UndoLoadState()), on the CPU thread, waiting; false when there's none, or in
+/// hardcore mode.
 bool UndoLoadState();
+
+/// Whether there's a load to undo in the running game, waiting for the CPU thread; never in hardcore mode.
+bool CanUndoLoadState();
 
 /// The RetroAchievements login token changed (nullopt: it's gone). The app stores it before this returns. Called with
 /// the core's settings lock held, on whichever thread saved it.

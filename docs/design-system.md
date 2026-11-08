@@ -303,6 +303,7 @@ The button-hint footer: each button's glyph in a key chip (`key` type, a `line-s
 action it takes, in a row that wraps on a narrow screen. It goes at the foot of a panel, such as the pause menu.
 
 - Name the buttons with `PadGlyphs`, which labels them as the Controllers page does ("A" for `BUTTON_A`).
+- X (`PadGlyphs.action`) is an item's second action: Delete on a save, Saves on a game's tile.
 - Actions are short verbs, in sentence case: Select, Back, Save.
 - It takes no input: nothing in it is focusable, and each hint reads as "A: Select".
 - `KeyChip` is the chip alone, for a glyph shown elsewhere, such as `PanelTabs`.
@@ -355,17 +356,19 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   and Clear settings (`Danger`). Each asks in an `OverlayPanel` (`GameQuestionPanel`): the question, then its answer
   (`Danger`) and Cancel (`Ghost`, focused); the focus goes back to the button once it closes. In a game it takes the
   menu's place over the paused game.
-- The library's foot: `KeyHints` "A Play" and "Y Game settings", while it has games. Y, or a long press, on a game
-  opens its settings.
+- The library's foot: `KeyHints` "A Play", "X Saves" and "Y Game settings", while it has games. X on a game opens its
+  Saves (`SavesScreen`), Y its settings; a long press offers both in an `OverlayPanel` (the game's title, then Saves,
+  focused, and Game settings, both `Secondary`), or opens Saves for a game without a key.
 - `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
   edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end, or
   under the label when they don't fit; focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line`
   divider before Reset console, and `KeyHints` at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
-  A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Load state; Patch codes (`code`) follows
+  Undo load (`undo`, its value "Nothing to undo" while it's off) follows Load state.
+  A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Undo load; Patch codes (`code`) follows
   Screenshot, then Achievements (`trophy`, its value the progress, "14 of 40", or why it's off), then Settings
   (`settings`, the game's own). In hardcore mode,
-  Load state, Patch codes and Fast forward are disabled with "Off in hardcore mode" as their value. One side panel
+  Load state, Undo load, Patch codes and Fast forward are disabled with "Off in hardcore mode" as their value. One side panel
   shows at a time.
   Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),
   since both exit.
@@ -376,8 +379,17 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   dp, 64 x 48 dp in a row under 240 dp wide) on `sunken`, or the `memoryCard` icon in `ink-faint`; the slot's name in
   `label`; Saved or Empty, with the disc for a multi-disc game ("Saved · Disc 2"); and the time in `mono`. Rows
   that can't be picked are disabled; Load lists only the slots that hold a save, then the states still under the
-  game's other discs, under an `Eyebrow("Other saves")`. Replacing a save asks in the
-  panel, as the menu does. The focus can't leave the panel.
+  game's other discs, under an `Eyebrow("Other saves")`. `PanelTabs` (This game, Shared; L1 R1) head the list, inside
+  its scroll, so a short screen keeps the rows its height; a shared row names the game it holds under the slot's name,
+  in `body` `ink`, two lines at most. In a list under 150 dp tall, rows are compact (the 64 x 48 dp picture, the game
+  on one line, the time on Saved's line). Replacing a save asks in the
+  panel, as the menu does, and so does deleting one in Load (X, or a long press: the question, Delete `Danger`, Cancel
+  `Ghost` focused); after a delete the focus goes to the next row. The focus can't leave the panel.
+- `SavesScreen`: a game's Saves, from its tile: its title as an `Eyebrow` over "Saves" in `title-1`, `PanelTabs`
+  (This game, Shared), then `SaveSlotPanel`'s Load rows, the page scrolling as one with `KeyHints` fixed at its foot
+  (A Start, X Delete, L1 R1 Switch, B Back). A delete asks in an `OverlayPanel` (the question, Delete `Danger`, Cancel
+  `Ghost` focused); a refused start says why as a `Danger` notice under the tabs. With no save to focus, the title
+  holds the focus.
 - `DiscPanel`: Change disc, a side panel framed as `SaveSlotPanel`: a 48 dp row per disc, "Disc N" in `label` with the
   disc's title (or its serial) under it in `body-sm` `ink-muted`; the disc in the drive on `beak-soft` with "Current"
   at its end, and focused as it opens. A `Danger` notice says why a disc didn't go in. `KeyHints`: A Insert, B Back.

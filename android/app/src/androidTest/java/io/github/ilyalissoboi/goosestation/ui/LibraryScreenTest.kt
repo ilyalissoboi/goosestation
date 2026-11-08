@@ -19,14 +19,17 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
@@ -37,6 +40,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -54,6 +58,7 @@ class LibraryScreenTest {
     private lateinit var games: List<GameEntry>
     private val started = mutableListOf<GameEntry>()
     private val gameSettings = mutableListOf<GameEntry>()
+    private val saves = mutableListOf<GameEntry>()
     private var badgeClicks = 0
 
     @Before
@@ -105,6 +110,7 @@ class LibraryScreenTest {
                         onRefresh = {},
                         onStartGame = { started += it },
                         onGameSettings = { gameSettings += it },
+                        onSaves = { saves += it },
                         focusPath = focusPath,
                         focusSettings = focusSettings,
                         syncBadge = syncBadge,
@@ -143,14 +149,82 @@ class LibraryScreenTest {
     }
 
     @Test
-    fun aLongPressOpensItsSettings() {
+    fun aLongPressOffersSavesAndGameSettings() {
         show()
 
         rule.onNodeWithText("Game 02").performTouchInput { longClick() }
         rule.waitForIdle()
 
-        assertEquals(listOf(entry(2)), gameSettings)
+        assertEquals(emptyList<GameEntry>(), gameSettings)
         assertEquals(emptyList<GameEntry>(), started)
+        rule.onNode(isFocused() and hasText("Saves")).assertExists()
+        rule.onNode(hasText("Game settings") and hasClickAction()).performClick()
+        rule.waitForIdle()
+        assertEquals(listOf(entry(2)), gameSettings)
+    }
+
+    @Test
+    fun theLongPressChoiceOpensSaves() {
+        show()
+
+        rule.onNodeWithText("Game 02").performTouchInput { longClick() }
+        rule.waitForIdle()
+        press(Key.Enter)
+
+        assertEquals(listOf(entry(2)), saves)
+    }
+
+    @Test
+    fun aLongPressOnAGameWithoutAKeyOpensSaves() {
+        show(games = listOf(entry(1).copy(serial = "")))
+
+        rule.onNodeWithText("Game 01").performTouchInput { longClick() }
+        rule.waitForIdle()
+
+        assertEquals(listOf(entry(1).copy(serial = "")), saves)
+    }
+
+    @Test
+    fun bClosesTheChoiceBackToTheTile() {
+        show(focusPath = entry(2).path)
+
+        rule.onNodeWithText("Game 02").performTouchInput { longClick() }
+        rule.waitForIdle()
+        press(Key.ButtonB)
+
+        assertEquals(emptyList<GameEntry>(), saves + gameSettings)
+        rule.onNodeWithText("Saves").assertDoesNotExist()
+        rule.onNode(isFocused() and hasText("Game 02", substring = true)).assertExists()
+    }
+
+    // --- A game's Saves ---
+
+    @Test
+    fun xOpensSaves() {
+        show(focusPath = entry(2).path)
+
+        press(Key.ButtonX)
+
+        assertEquals(listOf(entry(2)), saves)
+        assertEquals(emptyList<GameEntry>(), started)
+    }
+
+    @Test
+    fun xInTheListOpensSaves() {
+        show(gridView = { false }, focusPath = entry(3).path)
+
+        press(Key.ButtonX)
+
+        assertEquals(listOf(entry(3)), saves)
+    }
+
+    @Test
+    fun xOnAGameWithoutAKeyOpensSaves() {
+        show(games = listOf(entry(1).copy(serial = "")))
+
+        press(Key.ButtonX)
+
+        assertEquals(listOf(entry(1).copy(serial = "")), saves)
     }
 
     @Test
@@ -168,6 +242,7 @@ class LibraryScreenTest {
 
         rule.onNodeWithText("Game settings", useUnmergedTree = true).assertExists()
         rule.onNodeWithText("Play", useUnmergedTree = true).assertExists()
+        rule.onNodeWithContentDescription("${PadGlyphs.action}: Saves").assertExists()
     }
 
     @Test

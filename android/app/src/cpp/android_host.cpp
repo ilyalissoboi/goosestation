@@ -136,11 +136,9 @@ static constexpr std::string_view ANALOG_BUTTON = "Analog";
 // would fire on each of a chord's keys.
 static constexpr std::string_view ANALOG_HOTKEY = "ToggleAnalogMode";
 
-// Hotkeys the Controllers page leaves out: the menu has Change disc and Reset with their questions, and the app has no
-// global slots (the per-slot hotkeys are left out by their prefixes, GetOfferedHotkeys()).
+// Hotkeys the Controllers page leaves out: the menu has Change disc and Reset with their questions. The core's
+// per-slot and global-slot hotkeys aren't built on Android (hotkeys.cpp): the app's own save path has the slots.
 static constexpr std::string_view LEFT_OUT_HOTKEYS[] = {"ChangeDisc", "Reset"};
-static constexpr std::string_view LEFT_OUT_HOTKEY_PREFIXES[] = {"LoadGameState", "SaveGameState", "LoadGlobalState",
-                                                                "SaveGlobalState"};
 
 static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 {
@@ -1513,6 +1511,18 @@ void AndroidHost::SetListedGames(std::vector<AndroidDiscGroups::Game> games)
 
 void AndroidHost::StartGame(std::string path, u32 disc, bool resume)
 {
+  StartGame(std::move(path), disc, resume ? std::optional<BootState>(BootState{std::string(), -1, false}) : std::nullopt);
+}
+
+void AndroidHost::StartGameFromState(std::string path, std::string key, s32 slot, bool shared)
+{
+  StartGame(std::move(path), 1, BootState{std::move(key), slot, shared});
+}
+
+static std::optional<ExtendedSaveStateInfo> ReadStateInfo(const std::string& path);
+
+void AndroidHost::StartGame(std::string path, u32 disc, std::optional<BootState> from)
+{
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to
   // boot, is refused or is cancelled before it boots. The app can't tell which game a late callback was for otherwise.
   if (!s_initialized)
@@ -1536,7 +1546,7 @@ void AndroidHost::StartGame(std::string path, u32 disc, bool resume)
     game.path = path;
 
   EmuThread::RunOnThread(
-    [game = std::move(game), disc, resume]() mutable {
+    [game = std::move(game), disc, from = std::move(from)]() mutable {
       // A running game isn't replaced: the app shuts it down first. One that's stopping (shut down from inside a
       // frame, and only destroyed once System::Execute() returns) is waited for.
       const System::State state = System::GetState();
@@ -1554,19 +1564,48 @@ void AndroidHost::StartGame(std::string path, u32 disc, bool resume)
         NotifyGameStopped();
       }
 
-      // A resume state boots on the disc it was saved on, found by its identity.
-      const std::string resume_state =
-        (resume && !game.key.empty()) ? System::GetGameSaveStateFileName(game.key, -1) : std::string();
-      if (!resume_state.empty() && !game.discs.empty())
+      // A state to boot from: the resume state (the game's key, slot -1), another of the game's, or a shared slot.
+      const bool resume = from.has_value() && !from->shared && from->key.empty() && from->slot < 0;
+      const std::string state_key = (from.has_value() && from->key.empty()) ? game.key : (from ? from->key : "");
+      std::string boot_state;
+      if (from.has_value() && from->shared)
+        boot_state = System::GetGlobalSaveStateFileName(from->slot);
+      else if (from.has_value() && !state_key.empty())
+        boot_state = System::GetGameSaveStateFileName(state_key, from->slot);
+      if (from.has_value() && !resume && !FileSystem::FileExists(boot_state.c_str()))
       {
-        const std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(resume_state.c_str());
+        NotifyError("Couldn't start from that save: There's no save in this slot.");
+        NotifyGameStopped();
+        return;
+      }
+
+      // A shared slot is the game's only if its state says so: it may have been replaced since the app read it. A file
+      // the library doesn't list has no identity until it boots (the app only starts listed games from a state).
+      if (from.has_value() && from->shared && (!game.key.empty() || !game.discs.empty()))
+      {
+        const std::optional<ExtendedSaveStateInfo> info = ReadStateInfo(boot_state);
+        if (!info.has_value() || !AndroidDiscGroups::MatchStateGame(game, info->serial, info->media_path,
+                                                                    info->media_subimage_index)
+                                     .has_value())
+        {
+          NotifyError("Couldn't start from that save: it's another game's.");
+          NotifyGameStopped();
+          return;
+        }
+      }
+
+      // It boots on the disc it was saved on, found by its identity.
+      if (!boot_state.empty() && !game.discs.empty())
+      {
+        const std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(boot_state.c_str());
         if (info.has_value() && !info->media_path.empty())
         {
           const std::optional<u32> number =
             AndroidDiscGroups::FindStateDisc(game, info->serial, info->media_path, info->media_subimage_index);
           if (!number.has_value())
           {
-            NotifyError(fmt::format("Couldn't resume: {}", MissingDiscMessage(info->media_path)));
+            NotifyError(fmt::format("{}: {}", resume ? "Couldn't resume" : "Couldn't start from that save",
+                                    MissingDiscMessage(info->media_path)));
             NotifyGameStopped();
             return;
           }
@@ -1581,7 +1620,7 @@ void AndroidHost::StartGame(std::string path, u32 disc, bool resume)
         (chosen != game.discs.end()) ? &*chosen : (game.discs.empty() ? nullptr : &game.discs.front());
       s_pending_playlist_index = (game.playlist && boot_disc) ? (boot_disc->number - 1) : 0;
       s_pending_boot_path = (game.playlist || !boot_disc) ? game.path : boot_disc->path;
-      s_pending_boot_state = resume_state;
+      s_pending_boot_state = std::move(boot_state);
       s_pending_game = std::move(game);
       if (state == System::State::Stopping)
         INFO_LOG("Waiting for the last game to stop to start '{}'.", Path::GetFileName(s_pending_boot_path.value()));
@@ -1709,23 +1748,58 @@ std::vector<s64> AndroidHost::GetSaveStateTimes(std::string serial)
   return times;
 }
 
-std::optional<AndroidHost::SaveStatePreview> AndroidHost::GetSaveStatePreview(std::string serial, s32 slot)
+std::vector<s64> AndroidHost::GetSharedStateTimes()
 {
-  if (!s_initialized || serial.empty())
+  std::vector<s64> times(System::GLOBAL_SAVE_STATE_SLOTS + 1, 0);
+  if (!s_initialized)
+    return times;
+
+  EmuThread::RunOnThread(
+    [&times]() {
+      for (s32 slot = 1; slot <= System::GLOBAL_SAVE_STATE_SLOTS; slot++)
+      {
+        FILESYSTEM_STAT_DATA sd;
+        if (FileSystem::StatFile(System::GetGlobalSaveStateFileName(slot).c_str(), &sd))
+          times[static_cast<size_t>(slot)] = static_cast<s64>(sd.ModificationTime);
+      }
+    },
+    true);
+  return times;
+}
+
+// A state's file: shared slot slot, or key's (-1 for the resume state). Empty for an empty key that isn't shared.
+static std::string StatePath(const std::string& key, s32 slot, bool shared)
+{
+  if (shared)
+    return System::GetGlobalSaveStateFileName(slot);
+  return key.empty() ? std::string() : System::GetGameSaveStateFileName(key, slot);
+}
+
+// The state's header, nullopt when there's no file or it can't be read (the core reports that as a zero time).
+static std::optional<ExtendedSaveStateInfo> ReadStateInfo(const std::string& path)
+{
+  if (path.empty() || !FileSystem::FileExists(path.c_str()))
+    return std::nullopt;
+  std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(path.c_str());
+  if (!info.has_value() || info->timestamp == 0)
+    return std::nullopt;
+  return info;
+}
+
+std::optional<AndroidHost::SaveStatePreview> AndroidHost::GetStatePreview(std::string key, s32 slot, bool shared,
+                                                                         std::string game_path)
+{
+  if (!s_initialized)
     return std::nullopt;
 
   std::optional<SaveStatePreview> result;
   EmuThread::RunOnThread(
-    [&serial, slot, &result]() {
-      const std::string path = System::GetGameSaveStateFileName(serial, slot);
-      if (!FileSystem::FileExists(path.c_str()))
-        return;
-
-      const std::optional<ExtendedSaveStateInfo> info = System::GetExtendedSaveStateInfo(path.c_str());
+    [&]() {
+      const std::optional<ExtendedSaveStateInfo> info = ReadStateInfo(StatePath(key, slot, shared));
       if (!info.has_value())
         return;
 
-      SaveStatePreview preview{std::nullopt, 0};
+      SaveStatePreview preview{std::nullopt, 0, info->serial, info->title, {}, {}};
       if (info->screenshot.IsValid())
       {
         const RGBA8Image& image = info->screenshot;
@@ -1733,44 +1807,81 @@ std::optional<AndroidHost::SaveStatePreview> AndroidHost::GetSaveStatePreview(st
         preview.picture = Picture{image.GetWidth(), image.GetHeight(),
                                   std::vector<u32>(pixels, pixels + image.GetWidth() * image.GetHeight())};
       }
-      if (s_running_game.has_value() && !info->media_path.empty())
+
+      // The game it holds: the running one, else the listed game at game_path, else any listed game.
+      const auto match = [&info](const AndroidDiscGroups::Game& game) {
+        return AndroidDiscGroups::MatchStateGame(game, info->serial, info->media_path, info->media_subimage_index);
+      };
+      const auto take = [&preview](const AndroidDiscGroups::Game& game, u32 disc) {
+        // Only a multi-disc game's rows say their disc.
+        preview.disc = (game.discs.size() > 1) ? disc : 0;
+        preview.game_path = game.path;
+        preview.game_title = game.title;
+      };
+      std::optional<u32> disc;
+      if (s_running_game.has_value() && (disc = match(*s_running_game)).has_value())
       {
-        preview.disc = AndroidDiscGroups::FindStateDisc(*s_running_game, info->serial, info->media_path,
-                                                        info->media_subimage_index)
-                         .value_or(0);
+        take(*s_running_game, disc.value());
       }
-      if (preview.picture.has_value() || preview.disc != 0)
-        result = std::move(preview);
+      else
+      {
+        std::unique_lock lock(s_listed_games_mutex);
+        const auto named = std::find_if(s_listed_games.begin(), s_listed_games.end(),
+                                        [&game_path](const AndroidDiscGroups::Game& g) { return g.path == game_path; });
+        if (named != s_listed_games.end() && (disc = match(*named)).has_value())
+        {
+          take(*named, disc.value());
+        }
+        else
+        {
+          for (const AndroidDiscGroups::Game& game : s_listed_games)
+          {
+            if ((disc = match(game)).has_value())
+            {
+              take(game, disc.value());
+              break;
+            }
+          }
+        }
+      }
+      result = std::move(preview);
     },
     true);
   return result;
 }
 
-/// Runs action(path, error) on the CPU thread for key's slot file in the running game: the reason it couldn't, or
-/// nullopt.
+std::optional<AndroidHost::SaveStatePreview> AndroidHost::GetSaveStatePreview(std::string serial, s32 slot)
+{
+  if (serial.empty())
+    return std::nullopt;
+  return GetStatePreview(std::move(serial), slot, false, std::string());
+}
+
+/// Runs action(path, error) on the CPU thread for key's slot file (shared: the shared slot's) in the running game: the
+/// reason it couldn't, or nullopt.
 template<typename Action>
-static std::optional<std::string> RunOnSlot(const std::string& key, s32 slot, const Action& action)
+static std::optional<std::string> RunOnSlot(const std::string& key, s32 slot, bool shared, const Action& action)
 {
   if (!AndroidHost::s_initialized)
     return std::string(NO_GAME_RUNNING);
 
   std::optional<std::string> result;
   EmuThread::RunOnThread(
-    [&key, slot, &action, &result]() {
+    [&key, slot, shared, &action, &result]() {
       if (!System::IsValid())
       {
         result = NO_GAME_RUNNING;
         return;
       }
 
-      if (key.empty())
+      if (key.empty() && !shared)
       {
         result = NO_SERIAL;
         return;
       }
 
       Error error;
-      const std::string path = System::GetGameSaveStateFileName(key, slot);
+      const std::string path = StatePath(key, slot, shared);
       if (!action(path, &error))
         result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
     },
@@ -1778,17 +1889,99 @@ static std::optional<std::string> RunOnSlot(const std::string& key, s32 slot, co
   return result;
 }
 
+// A slot save keeps the state it replaces as a .bak when asked, as desktop's do; the resume state never does.
+static bool SaveSlotState(const std::string& path, Error* error)
+{
+  return System::SaveState(path.c_str(), error, g_settings.create_save_state_backups);
+}
+
 std::optional<std::string> AndroidHost::SaveState(std::string key, s32 slot)
 {
-  // A slot save keeps the state it replaces as a .bak when asked, as desktop's do; the resume state never does.
-  return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
-    return System::SaveState(path.c_str(), error, g_settings.create_save_state_backups);
+  return RunOnSlot(key, slot, false, SaveSlotState);
+}
+
+std::optional<std::string> AndroidHost::SaveSharedState(s32 slot)
+{
+  return RunOnSlot(std::string(), slot, true, SaveSlotState);
+}
+
+std::optional<std::string> AndroidHost::LoadSharedState(s32 slot)
+{
+  return RunOnSlot(std::string(), slot, true, [](const std::string& path, Error* error) {
+    if (Achievements::IsHardcoreModeActive())
+    {
+      Error::SetStringView(error, "Loading states is off in hardcore mode.");
+      return false;
+    }
+
+    if (!FileSystem::FileExists(path.c_str()))
+    {
+      Error::SetStringView(error, "There's no save in this slot.");
+      return false;
+    }
+
+    // Only the running game's: loading another game's state would run that game on this one's disc and key. The app
+    // starts the other game from it instead.
+    const std::optional<ExtendedSaveStateInfo> info = ReadStateInfo(path);
+    if (!info.has_value())
+    {
+      Error::SetStringView(error, "Couldn't read that save.");
+      return false;
+    }
+    if (!s_running_game.has_value() ||
+        !AndroidDiscGroups::MatchStateGame(*s_running_game, info->serial, info->media_path,
+                                           info->media_subimage_index)
+           .has_value())
+    {
+      Error::SetStringView(error, "That save is from another game.");
+      return false;
+    }
+
+    return System::LoadState(path.c_str(), error, true);
   });
+}
+
+std::optional<std::string> AndroidHost::DeleteSaveState(std::string key, s32 slot, bool shared)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [&]() {
+      const std::string path = StatePath(key, slot, shared);
+      if (path.empty())
+      {
+        result = NO_SERIAL;
+        return;
+      }
+      if (!FileSystem::FileExists(path.c_str()))
+      {
+        result = "There's no save in this slot.";
+        return;
+      }
+
+      Error error;
+      if (!FileSystem::DeleteFile(path.c_str(), &error))
+      {
+        ERROR_LOG("Failed to delete '{}': {}", Path::GetFileName(path), error.GetDescription());
+        result = error.GetDescription().empty() ? std::string("Unknown error.") : error.GetDescription();
+        return;
+      }
+      INFO_LOG("Deleted '{}'.", Path::GetFileName(path));
+
+      // The backup a save kept of the state it replaced goes with it, as it's that slot's too.
+      const std::string backup = Path::ReplaceExtension(path, "bak");
+      if (FileSystem::FileExists(backup.c_str()) && !FileSystem::DeleteFile(backup.c_str(), &error))
+        ERROR_LOG("Failed to delete '{}': {}", Path::GetFileName(backup), error.GetDescription());
+    },
+    true);
+  return result;
 }
 
 std::optional<std::string> AndroidHost::LoadState(std::string key, s32 slot)
 {
-  return RunOnSlot(key, slot, [](const std::string& path, Error* error) {
+  return RunOnSlot(key, slot, false, [](const std::string& path, Error* error) {
     // The core refuses too, but reports success: the app would take the load as done.
     if (Achievements::IsHardcoreModeActive())
     {
@@ -3189,8 +3382,6 @@ std::vector<const HotkeyInfo*> AndroidHost::GetOfferedHotkeys(SettingsInterface&
   {
     const std::string_view name(hotkey->name);
     if (std::find(std::begin(LEFT_OUT_HOTKEYS), std::end(LEFT_OUT_HOTKEYS), name) != std::end(LEFT_OUT_HOTKEYS) ||
-        std::any_of(std::begin(LEFT_OUT_HOTKEY_PREFIXES), std::end(LEFT_OUT_HOTKEY_PREFIXES),
-                    [&name](std::string_view prefix) { return name.starts_with(prefix); }) ||
         (name == ANALOG_HOTKEY && !analog))
     {
       continue;
@@ -3207,9 +3398,26 @@ bool AndroidHost::UndoLoadState()
   if (!s_initialized)
     return false;
 
+  // An undo is a load, which hardcore mode allows none of; the core doesn't refuse it.
   bool undone = false;
-  EmuThread::RunOnThread([&undone]() { undone = System::IsValid() && System::UndoLoadState(); }, true);
+  EmuThread::RunOnThread(
+    [&undone]() {
+      undone = System::IsValid() && !Achievements::IsHardcoreModeActive() && System::UndoLoadState();
+    },
+    true);
   return undone;
+}
+
+bool AndroidHost::CanUndoLoadState()
+{
+  if (!s_initialized)
+    return false;
+
+  bool can = false;
+  EmuThread::RunOnThread(
+    [&can]() { can = System::IsValid() && !Achievements::IsHardcoreModeActive() && System::CanUndoLoadState(); },
+    true);
+  return can;
 }
 
 // Moves [Pad1] Analog's Android bindings (the old Analog Toggle row's) to the analog mode hotkey, under the settings

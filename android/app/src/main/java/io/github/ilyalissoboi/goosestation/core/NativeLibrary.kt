@@ -447,6 +447,17 @@ object NativeLibrary {
         resume: Boolean,
     )
 
+    /**
+     * Boots [path] (as [startGame] does) from a state: [key]'s [slot] (-1: its resume state), or, [shared], desktop's
+     * shared slot [slot], on the disc the state was made on.
+     */
+    external fun startGameFromState(
+        path: String,
+        key: String,
+        slot: Int,
+        shared: Boolean,
+    )
+
     external fun shutdownGame()
 
     // The in-game menu's calls ([io.github.ilyalissoboi.goosestation.app.GameCoreApi]). They run on the core's thread:
@@ -466,6 +477,37 @@ object NativeLibrary {
         serial: String,
         slot: Int,
     ): SaveStatePreview?
+
+    /** When each shared slot (desktop's global ones, `savestate_<n>.sav`) was saved: `[n]` slot n, `[0]` always 0. */
+    external fun getSharedStateTimes(): LongArray
+
+    /**
+     * What [key]'s state in [slot] (or, [shared], shared slot [slot]) shows of itself, and the game it holds: the
+     * running game, else the listed game at [gamePath] (the library page's), else any listed game it's of. Null with no
+     * readable state.
+     */
+    external fun getStatePreview(
+        key: String,
+        slot: Int,
+        shared: Boolean,
+        gamePath: String,
+    ): SaveStatePreview?
+
+    /** Saves the running game to shared slot [slot] (1 to 10). Null when it's saved, or else why not. */
+    external fun saveSharedState(slot: Int): String?
+
+    /** Loads shared slot [slot], made in the running game, into it. Null when it's loaded, or else why not. */
+    external fun loadSharedState(slot: Int): String?
+
+    /**
+     * Deletes [key]'s state in [slot] (-1: the resume state), or, [shared], shared slot [slot], with the backup it kept.
+     * No game need run. Null when it's gone, or else why not.
+     */
+    external fun deleteSaveState(
+        key: String,
+        slot: Int,
+        shared: Boolean,
+    ): String?
 
     /** Saves the running game to [key]'s [slot] (1 to 10). Null when it's saved, or else why not. */
     external fun saveState(
@@ -664,8 +706,11 @@ object NativeLibrary {
         small: Float,
     )
 
-    /** Undoes the running game's last state load; false when there's none to undo. Waits for the core. */
+    /** Undoes the running game's last state load; false when there's none to undo, or in hardcore mode. Waits for the core. */
     external fun undoLoadState(): Boolean
+
+    /** Whether the running game has a state load to undo; never in hardcore mode. Waits for the core. */
+    external fun canUndoLoadState(): Boolean
 
     /** The controller with [descriptor]'s pad (0-based, Port 1 by default), or -1 for one never connected. */
     external fun getControllerPort(descriptor: String): Int

@@ -1916,4 +1916,80 @@ class InGameMenuTest {
             assertEquals("Couldn't delete that save: Permission denied.", menu.slots().error)
             assertEquals(listOf(3), menu.entries().map { it.slot })
         }
+
+    // --- Undo load ---
+
+    @Test
+    fun canUndoIsReadAsTheMenuOpens() =
+        runTest {
+            val menu = menu()
+            assertFalse(menu.state.canUndo)
+
+            api.canUndo = true
+            menu.opened()
+            runCurrent()
+            assertTrue(menu.state.canUndo)
+        }
+
+    @Test
+    fun undoLoadUndoesAndResumes() =
+        runTest {
+            api.canUndo = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.undoLoad()
+            runCurrent()
+
+            assertEquals(listOf("undoLoadState", "message Undid the last load", "resume"), calls)
+        }
+
+    @Test
+    fun undoLoadSaysWhenThereWasNone() =
+        runTest {
+            api.canUndo = true
+            api.undoes = false
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.undoLoad()
+            runCurrent()
+
+            assertEquals(listOf("undoLoadState", "message No load to undo", "resume"), calls)
+        }
+
+    @Test
+    fun undoLoadIsOffInHardcore() =
+        runTest {
+            api.canUndo = true
+            api.hardcore = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.undoLoad()
+            runCurrent()
+
+            assertTrue(calls.none { it == "undoLoadState" })
+        }
+
+    @Test
+    fun theUndoHotkeyIsRefusedInHardcore() =
+        runTest {
+            api.hardcore = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            calls.clear()
+
+            menu.hotkey(StateHotkey.Undo)
+            runCurrent()
+
+            assertEquals(listOf("message Loading a state is off in hardcore mode"), calls)
+        }
 }

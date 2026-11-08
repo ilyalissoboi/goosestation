@@ -917,8 +917,10 @@ Toggle" binding from before (`[Pad1] Analog`) becomes it, with Select, the first
   and the resume rules. **Save To Selected Slot** and **Load From Selected Slot** use the slot last saved to or loaded
   from (slot 1 before any), and say "Saved to slot 4" or "Loaded slot 4"; **Select Previous/Next Save Slot** step
   through 1 to 10, wrapping, "Slot 5 selected"; **Save State and Select Next Slot** saves, then selects the next;
-  **Undo Load State** says "Undid the last load" or "No load to undo". Load in hardcore mode says "Loading a state is
-  off in hardcore mode", and a game without a key "This game can't keep save states". None opens the menu.
+  **Undo Load State** says "Undid the last load" or "No load to undo". Load and Undo Load State in hardcore mode say
+  "Loading a state is off in hardcore mode", and a game without a key "This game can't keep save states". None opens
+  the menu. The core's own per-slot and global-slot hotkeys (Load Game State 1…, Save Global State 1…) aren't built
+  on Android, so a binding to them from a desktop `settings.ini` does nothing: they'd save under the disc's serial.
 - **Select on a controller with a hotkey** is held back from the game until it's known not to start a chord: it goes
   to the game when it's let go (held down 100 ms, as a tap), together with the next button pressed (in one batch, so
   the core's chord fires and the game sees neither), or once held for 500 ms, for a game that wants Select held (a map,
@@ -1038,6 +1040,10 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   recorded as `migrated.<key>` in the `game` preferences, so it runs once per device. What doesn't fit, and anything
   desktop saves per disc later, is listed in Load state after the slots, under **Other saves**; loading one says
   "Loaded disc 2's slot 4".
+- **Undo load**, after Load state: puts the game back as it was before the last load in this game (the core keeps one
+  undo state), says "Undid the last load" and goes back to the game. It's off, with "Nothing to undo", until a load,
+  and off in hardcore mode, as Load state is; the hotkey and the host refuse it there too, and turning hardcore on
+  drops the undo state, so it can't come back once hardcore is off again.
 - **Change disc**, for a multi-disc game, with the disc in the drive ("Disc 1 of 2"): opens a panel beside the menu
   with a row per disc, "Disc 1" to "Disc N", each with its own title (or its serial, when its title is the game's),
   the disc in the drive marked Current. **A** Insert puts the disc in (a playlist's sub-image, or the disc's file),

@@ -1003,6 +1003,13 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuWithUndoLoad() {
+        show { GameMenu(GameMenuState(booted = true, canUndo = true), NoMenuActions) }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuWhileBooting() {
         show { GameMenu(GameMenuState(booted = false), NoMenuActions) }
 
@@ -1067,7 +1074,10 @@ class FocusAuditTest {
         val entries = listOf(SlotEntry(1, 1_700_000_000L), SlotEntry(3, 1_700_000_000L))
         show {
             GameMenu(
-                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1])),
+                GameMenuState(
+                    booted = true,
+                    slots = SlotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1]),
+                ),
                 NoMenuActions,
             )
         }

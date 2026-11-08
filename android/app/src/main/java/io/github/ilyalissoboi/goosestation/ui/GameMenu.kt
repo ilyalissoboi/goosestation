@@ -403,6 +403,19 @@ private fun MenuPanel(
                     value = if (state.hardcore) HARDCORE_OFF else null,
                     quiet = quiet,
                 )
+                MenuItem(
+                    "Undo load",
+                    GsIcons.undo,
+                    actions::undoLoad,
+                    enabled = booted && state.canUndo && !state.hardcore,
+                    value =
+                        when {
+                            state.hardcore -> HARDCORE_OFF
+                            !state.canUndo -> NOTHING_TO_UNDO
+                            else -> null
+                        },
+                    quiet = quiet,
+                )
                 if (state.discCount > 1) {
                     MenuItem(
                         "Change disc",
@@ -495,6 +508,9 @@ private fun MenuPanel(
 }
 
 private fun onOff(on: Boolean) = if (on) "On" else "Off"
+
+/** Undo load's value while there's no load to undo. */
+const val NOTHING_TO_UNDO = "Nothing to undo"
 
 /** Said on Settings for a game with no key (a PSF), which keeps no settings of its own. */
 const val NO_KEY_SETTINGS = "This game has no serial to keep its own under"

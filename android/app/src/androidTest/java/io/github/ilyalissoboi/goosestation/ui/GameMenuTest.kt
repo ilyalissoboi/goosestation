@@ -249,6 +249,10 @@ class GameMenuTest {
                 }
             }
 
+            override fun undoLoad() {
+                calls += "undoLoad"
+            }
+
             override fun pickShared(slot: Int) {
                 calls += "pickShared $slot"
             }
@@ -333,6 +337,39 @@ class GameMenuTest {
     }
 
     @Test
+    fun undoLoadFollowsLoadState() {
+        state = GameMenuState(booted = true, canUndo = true)
+        show()
+
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        rule.onNode(isFocused() and hasText("Undo load", substring = true)).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("undoLoad"), calls)
+    }
+
+    @Test
+    fun undoLoadSaysNothingToUndo() {
+        state = GameMenuState(booted = true)
+        show()
+
+        rule
+            .onNode(hasText("Undo load", substring = true) and hasText("Nothing to undo", substring = true))
+            .assertIsNotEnabled()
+    }
+
+    @Test
+    fun undoLoadIsOffInHardcore() {
+        state = GameMenuState(booted = true, canUndo = true, hardcore = true)
+        show()
+
+        rule
+            .onNode(hasText("Undo load", substring = true) and hasText("Off in hardcore mode", substring = true))
+            .assertIsNotEnabled()
+    }
+
+    @Test
     fun settingsRowOpensTheGamesSettings() {
         state = GameMenuState(booted = true)
         show()
@@ -385,7 +422,7 @@ class GameMenuTest {
         state = GameMenuState(booted = true, analogMode = false, hardcore = true)
         show()
 
-        for (row in listOf("Load state", "Fast forward", "Patch codes")) {
+        for (row in listOf("Load state", "Undo load", "Fast forward", "Patch codes")) {
             rule.onNode(hasText(row) and hasText("Off in hardcore mode")).assertIsNotEnabled()
         }
         // The D-pad passes over them: from Save state, Down reaches Analog mode.

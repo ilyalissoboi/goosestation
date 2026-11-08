@@ -363,10 +363,11 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   under the label when they don't fit; focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line`
   divider before Reset console, and `KeyHints` at the foot. The row whose panel is open is current: `beak-soft`, its icon `beak-ink`. A question (Reset console)
   takes the rows' place in the panel: the question in `title-2`, then a `Danger` button and Cancel (`Ghost`, focused).
-  A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Load state; Patch codes (`code`) follows
+  Undo load (`undo`, its value "Nothing to undo" while it's off) follows Load state.
+  A multi-disc game has Change disc (`disc`, its value "Disc 1 of 2") after Undo load; Patch codes (`code`) follows
   Screenshot, then Achievements (`trophy`, its value the progress, "14 of 40", or why it's off), then Settings
   (`settings`, the game's own). In hardcore mode,
-  Load state, Patch codes and Fast forward are disabled with "Off in hardcore mode" as their value. One side panel
+  Load state, Undo load, Patch codes and Fast forward are disabled with "Off in hardcore mode" as their value. One side panel
   shows at a time.
   Exit game's question about replacing the resume state offers Replace (`Danger`) and Keep it (`Secondary`, focused),
   since both exit.

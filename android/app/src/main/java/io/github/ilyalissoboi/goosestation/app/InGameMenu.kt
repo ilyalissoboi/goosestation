@@ -136,6 +136,8 @@ data class GameMenuState(
     val cameFromSettings: Boolean = false,
     /** The game has a key to keep its own settings under; a PSF has none. */
     val hasKey: Boolean = true,
+    /** The core has a load to undo in this game (never in hardcore mode): Undo load is on. */
+    val canUndo: Boolean = false,
 )
 
 /** What the in-game menu's rows and panels do. */
@@ -226,6 +228,9 @@ interface GameMenuActions {
 
     /** Back from an open leaderboard to the tab's list. */
     fun closeLeaderboard() {}
+
+    /** Undoes the last state load, as the core keeps it, and goes back to the game. */
+    fun undoLoad() {}
 
     /** Opens the running game's own settings, in the menu's place, once it has booted. */
     fun openSettings() {}
@@ -940,6 +945,7 @@ class InGameMenu(
         scope.launch {
             val (mode, cardBusy) = withContext(game) { api.getAnalogMode() to api.isSavingMemoryCards() }
             val (hardcore, achievements) = withContext(game) { api.isHardcoreActive() to api.getGameAchievements() }
+            val canUndo = withContext(game) { api.canUndoLoadState() }
             if (id == gameId) {
                 state =
                     state.copy(
@@ -947,6 +953,7 @@ class InGameMenu(
                         cardBusy = cardBusy,
                         hardcore = hardcore,
                         achievements = achievements,
+                        canUndo = canUndo && !hardcore,
                     )
             }
             if (!multiDisc) return@launch
@@ -964,7 +971,8 @@ class InGameMenu(
         if (!state.booted) return
         val key = serial
         if (key.isNullOrBlank()) return onMessage(NO_STATES)
-        if (which == StateHotkey.Load && state.hardcore) return onMessage(HARDCORE_LOAD)
+        // An undo is a load too.
+        if ((which == StateHotkey.Load || which == StateHotkey.Undo) && state.hardcore) return onMessage(HARDCORE_LOAD)
         val id = gameId
         scope.launch {
             val slot =
@@ -981,19 +989,34 @@ class InGameMenu(
                         selectedSlot = slot % SaveSlots.COUNT + 1
                     }
                 StateHotkey.Load -> hotkeyState(id, key, slot, loads = true)
-                StateHotkey.Undo -> {
-                    val multiDisc = state.discCount > 1
-                    var disc = 0
-                    val undone =
-                        withContext(game) {
-                            api.undoLoadState().also { if (it && multiDisc) disc = readDisc(key) }
-                        }
-                    if (id != gameId) return@launch
-                    if (disc > 0) state = state.copy(disc = disc)
-                    onMessage(if (undone) "Undid the last load" else "No load to undo")
-                }
+                StateHotkey.Undo -> undo(id, key)
             }
         }
+    }
+
+    /** Undo load: refused in hardcore mode, as Load state is. */
+    override fun undoLoad() {
+        val key = serial ?: return
+        if (!state.booted || state.hardcore || !state.canUndo) return
+        val id = gameId
+        scope.launch {
+            undo(id, key)
+            if (id == gameId) onResume()
+        }
+    }
+
+    /** Undoes the last load, reading the disc it put back for a multi-disc game, and says how it went. */
+    private suspend fun undo(
+        id: Int,
+        key: String,
+    ) {
+        val multiDisc = state.discCount > 1
+        var disc = 0
+        val undone = withContext(game) { api.undoLoadState().also { if (it && multiDisc) disc = readDisc(key) } }
+        if (id != gameId) return
+        state = state.copy(canUndo = false)
+        if (disc > 0) state = state.copy(disc = disc)
+        onMessage(if (undone) "Undid the last load" else "No load to undo")
     }
 
     private fun selectSlot(slot: Int) {

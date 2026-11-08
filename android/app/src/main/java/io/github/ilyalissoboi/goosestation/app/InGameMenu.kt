@@ -708,20 +708,22 @@ class InGameMenu(
         val id = panelId
         val key = serial.orEmpty()
         val path = running?.path.orEmpty()
+        // Busy at once, while its game is read: a second A starts nothing (a second load would take the undo state).
+        updatePanel(id) { it.copy(busy = true, error = null) }
         scope.launch {
             val read = if (entry.holds != null) entry else reader.preview(entry, key, path, state.discCount > 1)
             if (id != panelId) return@launch
             read?.let { updatePanel(id) { panel -> panel.withRow(it) } }
             val holds = read?.holds
             when {
-                holds == null -> updatePanel(id) { it.copy(error = UNREADABLE) }
-                holds.path == null -> updatePanel(id) { it.copy(error = SaveLists.notInLibrary(read)) }
+                holds == null -> updatePanel(id) { it.copy(busy = false, error = UNREADABLE) }
+                holds.path == null -> updatePanel(id) { it.copy(busy = false, error = SaveLists.notInLibrary(read)) }
                 holds.path != path -> {
                     // Asked before this game is left, so a refusal loses nothing.
                     if (withContext(game) { api.hardcoreWouldStart() }) {
-                        updatePanel(id) { it.copy(error = HARDCORE_LOAD) }
+                        updatePanel(id) { it.copy(busy = false, error = HARDCORE_LOAD) }
                     } else {
-                        updatePanel(id) { it.copy(switching = read, error = null) }
+                        updatePanel(id) { it.copy(busy = false, switching = read, error = null) }
                     }
                 }
                 else -> {

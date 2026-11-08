@@ -2158,4 +2158,42 @@ class InGameMenuTest {
             assertTrue(calls.none { it.startsWith("switch") })
             assertEquals("exit No space left on device.", calls.last())
         }
+
+    // PR review: a second A while an unread shared slot's game is read doesn't load it twice (the second load would take
+    // the undo state).
+    @Test
+    fun aDoubleAOnAnUnreadSharedSlotLoadsOnce() =
+        runTest {
+            api.sharedTimes[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            api.sharedHolds[3] = crash
+            menu.switchTab()
+            calls.clear()
+
+            menu.pickShared(3)
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals(1, calls.count { it == "loadSharedState 3" })
+            assertEquals(1, calls.count { it.startsWith("getStatePreview shared 3") })
+        }
+
+    // A refused pick leaves the panel ready for another.
+    @Test
+    fun aRefusedSharedPickLeavesThePanelReady() =
+        runTest {
+            api.sharedTimes[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.switchTab()
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals("Couldn't read that save.", menu.slots().error)
+            assertFalse(menu.slots().busy)
+        }
 }

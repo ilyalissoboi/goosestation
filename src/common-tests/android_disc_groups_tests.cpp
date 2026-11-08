@@ -375,3 +375,12 @@ TEST(AndroidDiscGroups, MatchStateGameFileNameNeedsNoContradictingSerial)
   unknown.key.clear();
   EXPECT_EQ(MatchStateGame(unknown, "HASH-2", "/elsewhere/padtest.psexe", 0), 0u);
 }
+
+TEST(AndroidDiscGroups, MatchStateGamePlaylistNameNeedsNoContradictingSerial)
+{
+  // Two games' playlists can share a name (FF7/game.m3u, FF8/game.m3u): the state's serial says whose it is.
+  Game same_name = TwoDiscs(true);
+  same_name.path = std::string(FOLDER) + "game.m3u";
+  EXPECT_FALSE(MatchStateGame(same_name, "SLUS-00001", "/elsewhere/game.m3u", 1).has_value());
+  EXPECT_EQ(MatchStateGame(same_name, "", "/elsewhere/GAME.m3u", 1), 2u);
+}

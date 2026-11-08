@@ -2196,4 +2196,23 @@ class InGameMenuTest {
             assertEquals("Couldn't read that save.", menu.slots().error)
             assertFalse(menu.slots().busy)
         }
+
+    // Review: a delete under way says so, not "Loading…".
+    @Test
+    fun aDeleteUnderWayIsMarked() =
+        runTest {
+            api.times[3] = 300
+            val menu = menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            menu.askDelete(menu.entries().single())
+            menu.confirmDelete()
+            assertTrue(menu.slots().busy)
+            assertTrue(menu.slots().removing)
+
+            runCurrent()
+            assertFalse(menu.slots().busy)
+            assertFalse(menu.slots().removing)
+        }
 }

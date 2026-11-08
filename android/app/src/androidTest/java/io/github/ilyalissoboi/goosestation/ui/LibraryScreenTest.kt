@@ -184,6 +184,20 @@ class LibraryScreenTest {
         assertEquals(listOf(entry(1).copy(serial = "")), saves)
     }
 
+    // Review: a choice the app refuses to open (not ready, a game running) leaves the tile focused.
+    @Test
+    fun aRefusedChoiceLeavesTheTileFocused() {
+        show(focusPath = entry(2).path)
+
+        rule.onNodeWithText("Game 02").performTouchInput { longClick() }
+        rule.waitForIdle()
+        press(Key.Enter)
+
+        // The test's onSaves opens nothing, as a refusal does.
+        assertEquals(listOf(entry(2)), saves)
+        rule.onNode(isFocused() and hasText("Game 02", substring = true)).assertExists()
+    }
+
     @Test
     fun bClosesTheChoiceBackToTheTile() {
         show(focusPath = entry(2).path)

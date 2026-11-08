@@ -174,7 +174,15 @@ fun SaveSlotPanel(
                 Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
             }
         }
-        if (panel.busy) SlotLine(if (saving) "Saving…" else "Loading…")
+        if (panel.busy) {
+            SlotLine(
+                when {
+                    panel.removing -> "Deleting…"
+                    saving -> "Saving…"
+                    else -> "Loading…"
+                },
+            )
+        }
         when {
             !sharedTab && !panel.hasKey -> SlotLine(NO_KEY_STATES)
             entries != null && !saving && entries.none { it.savedAt != null } && others.isEmpty() ->

@@ -61,6 +61,8 @@ data class SlotPanel(
     val deleting: SlotEntry? = null,
     val focusRow: SlotEntry? = null,
     val switching: SlotEntry? = null,
+    /** The [busy] work is a delete. */
+    val removing: Boolean = false,
 )
 
 /**
@@ -650,15 +652,22 @@ class InGameMenu(
         val id = panelId
         val ref = entry.ref(key)
         val next = SaveLists.afterDelete(entry, key, panel.entries, panel.others, panel.shared)
-        updatePanel(id) { it.copy(deleting = null, busy = true, error = null) }
+        updatePanel(id) { it.copy(deleting = null, busy = true, removing = true, error = null) }
         scope.launch {
             val error = withContext(game) { api.deleteState(ref) }
             if (id != panelId) return@launch
             if (error != null) {
-                updatePanel(id) { it.copy(busy = false, error = "Couldn't delete that save: $error", focusRow = entry) }
+                updatePanel(id) {
+                    it.copy(
+                        busy = false,
+                        removing = false,
+                        error = "Couldn't delete that save: $error",
+                        focusRow = entry,
+                    )
+                }
                 return@launch
             }
-            updatePanel(id) { it.copy(busy = false) }
+            updatePanel(id) { it.copy(busy = false, removing = false) }
             readSlots(id, panel.mode, next)
         }
     }

@@ -1040,6 +1040,28 @@ class GameMenuTest {
         rule.onNode(isFocused() and hasText("Load state")).assertExists()
     }
 
+    // Review: a delete under way says "Deleting…".
+    @Test
+    fun aDeleteUnderWaySaysDeleting() {
+        state =
+            GameMenuState(
+                booted = true,
+                slots =
+                    SlotPanel(
+                        SlotMode.Load,
+                        saved(2).filter {
+                            it.savedAt != null
+                        },
+                        busy = true,
+                        removing = true,
+                    ),
+            )
+        show()
+
+        rule.onNodeWithText("Deleting…").assertExists()
+        rule.onNodeWithText("Loading…").assertDoesNotExist()
+    }
+
     @Test
     fun aLongPressAsksToo() {
         state =

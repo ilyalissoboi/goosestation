@@ -2020,6 +2020,13 @@ Not checkable on the Thor: Automatic with no controller connected, the edge gest
 navigation, and portrait (the Thor's screens are landscape). A phone with no controller and a tablet in portrait are
 still to be checked.
 
+### Save state management on the Thor (2026-11-08)
+
+The debug APK of `master` at `82e60777b` (#63, save state management), installed over the existing one (data kept).
+The user went through step 16's checks by hand, and everything worked as expected: a shared slot saved in one game
+and loaded from another (asking first, then starting that game from the state), Undo load, delete in Load, a game's
+Saves from its tile, and hardcore mode's refusals.
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
@@ -2289,14 +2296,14 @@ adb logcat -v time > thor.log
      "NeGcon (a game's)".
 16. **Save state management.** With the build that has it, the Thor's own controls, and two games with a key. Note the
     data folder's `savestates/` before and after.
-   - [ ] In the first game, Save state, R1: the Shared tab; saving to slot 3 writes `savestate_3.sav`, and the slot
+   - [x] In the first game, Save state, R1: the Shared tab; saving to slot 3 writes `savestate_3.sav`, and the slot
      names the game.
-   - [ ] In the second game, Load state, R1, slot 3: the question names the first game, Cancel focused; Load saves the
+   - [x] In the second game, Load state, R1, slot 3: the question names the first game, Cancel focused; Load saves the
      second game's place and starts the first from the state.
-   - [ ] Load state, then **Undo load** after Load state puts the game back, "Undid the last load"; until a load it
+   - [x] Load state, then **Undo load** after Load state puts the game back, "Undid the last load"; until a load it
      says "Nothing to undo".
-   - [ ] In Load, X on a slot asks before deleting; Delete removes it, with its `.bak`.
-   - [ ] In the library, X on a tile opens Saves; A on a slot starts the game from it, on its disc; a long press by
+   - [x] In Load, X on a slot asks before deleting; Delete removes it, with its `.bak`.
+   - [x] In the library, X on a tile opens Saves; A on a slot starts the game from it, on its disc; a long press by
      touch offers Saves and Game settings.
-   - [ ] With hardcore mode on (step 12): Load state and Undo load say "Off in hardcore mode", the Undo hotkey says
+   - [x] With hardcore mode on (step 12): Load state and Undo load say "Off in hardcore mode", the Undo hotkey says
      "Loading a state is off in hardcore mode", and the Saves page deletes but won't start from a save.

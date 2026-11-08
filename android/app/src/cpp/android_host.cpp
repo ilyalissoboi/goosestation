@@ -2242,7 +2242,13 @@ void AndroidHost::ApplyTouchPad()
   if (s_touch_state != s_touch_applied)
   {
     TouchPad::Apply(*controller, s_touch_applied, s_touch_state);
+    const bool let_go = TouchPad::LetsGo(s_touch_applied, s_touch_state);
     s_touch_applied = s_touch_state;
+
+    // Touch controls on Always beside a controller on Port 1: what the touch pad let go of is held again where the
+    // controller still holds it, in this same pass.
+    if (let_go && s_input_source)
+      s_input_source->ReportHeld();
   }
   else if (s_touch_state != TouchPad::State{})
   {

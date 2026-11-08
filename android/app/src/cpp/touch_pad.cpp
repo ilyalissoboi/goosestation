@@ -78,6 +78,20 @@ void Apply(Controller& controller, const State& from, const State& to)
   }
 }
 
+bool LetsGo(const State& from, const State& to)
+{
+  if ((from.buttons & ~to.buttons) != 0)
+    return true;
+
+  for (u32 i = 0; i < AXES.size(); i++)
+  {
+    if (Negative(to.axes[i]) < Negative(from.axes[i]) || Positive(to.axes[i]) < Positive(from.axes[i]))
+      return true;
+  }
+
+  return false;
+}
+
 void Reassert(Controller& controller, const State& state)
 {
   for (u32 i = 0; i < BUTTONS.size(); i++)

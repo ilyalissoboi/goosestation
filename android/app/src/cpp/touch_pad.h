@@ -28,6 +28,10 @@ struct State
 /// controller's type lacks is skipped.
 void Apply(Controller& controller, const State& from, const State& to);
 
+/// Whether going from from to to lets go of anything: a button released, or a stick moved back towards rest or across
+/// it on either axis.
+bool LetsGo(const State& from, const State& to);
+
 /// Sets again every input state holds (pressed buttons, pushed half axes), so a controller the core made anew takes
 /// them too. On the same controller nothing changes: SetBindState() ignores an unchanged value.
 void Reassert(Controller& controller, const State& state);

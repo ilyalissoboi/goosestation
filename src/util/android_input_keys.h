@@ -159,6 +159,10 @@ public:
   /// Reports every input that isn't at rest as released, and forgets the state.
   void ReleaseAll(std::vector<PadEvent>& events);
 
+  /// Reports every input that isn't at rest at its value, as last reported, changing nothing: for the core to hear
+  /// again what's held, after something else let go of the same pad input (the app's touch pad).
+  void GetHeld(std::vector<PadEvent>& events) const;
+
   /// The axes known to be near rest (within BindingCapture's 0.25 of 0), in order: those whose last value reported to
   /// the core was, and those Android has given only at 0, so none was reported. An axis Android has never given isn't
   /// known, and the hat isn't an axis to the core. For seeding a BindingCapture.

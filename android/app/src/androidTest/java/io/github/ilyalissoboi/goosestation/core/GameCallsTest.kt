@@ -1264,6 +1264,23 @@ class GameCallsTest {
             assertEquals(0f, bind("Up"))
         }
 
+    // With touch controls on Always beside a controller on Port 1: letting go of the touch pad's Cross doesn't let go of
+    // the controller's, still held.
+    @Test
+    fun aTouchReleaseKeepsTheControllersPress() =
+        withPadtest {
+            NativeLibrary.onKey(DEVICE_ID, KEYCODE_BUTTON_A, true)
+            awaitBind("Cross", 1f)
+            // Each its own pass: the core takes only the latest state queued.
+            NativeLibrary.setTouchPad(TouchButton.Cross.bit, 0f, 0f, 0f, 0f)
+            Thread.sleep(300)
+            NativeLibrary.setTouchPad(0, 0f, 0f, 0f, 0f)
+            Thread.sleep(300)
+            assertEquals("the controller still holds it", 1f, bind("Cross"))
+            NativeLibrary.onKey(DEVICE_ID, KEYCODE_BUTTON_A, false)
+            awaitBind("Cross", 0f)
+        }
+
     @Test
     fun aTouchStickReachesPortOneInAnalogMode() {
         val kinds = LinkedBlockingQueue<Int>()
@@ -1450,6 +1467,7 @@ class GameCallsTest {
         const val PAD_TEST_DISC = "Pad Test #1 (100%)"
         const val PAD = "pad-a"
         const val DEVICE_ID = 1
+        const val KEYCODE_BUTTON_A = 96
         const val SELECT = 109
         const val X = 99
         const val CROSS = 96

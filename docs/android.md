@@ -978,7 +978,9 @@ press, on by default) are kept for this device only, in the app's own preference
   (Android allows this for up to 200 dp of each edge's height).
 - **What it drives:** Port 1, straight to its controller's inputs (`NativeLibrary.setTouchPad`), with fixed
   buttons that the Controllers page doesn't list or remap, and nothing written to `settings.ini`. Stick values go
-  through Port 1's Analog Sensitivity and dead zone, as any controller's do. A game's rumble never plays on the
+  through Port 1's Analog Sensitivity and dead zone, as any controller's do. On Always beside a controller on Port 1, both hold their
+  inputs: letting go of a touch button or stick leaves what the controller still holds held (the core hears the
+  controllers' held inputs again in the same pass). A game's rumble never plays on the
   device's own vibrator: only the press tick uses it.
 
 ### The in-game menu

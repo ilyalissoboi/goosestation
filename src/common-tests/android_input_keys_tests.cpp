@@ -342,6 +342,32 @@ TEST(AndroidInputKeys, ReleaseAll)
   ExpectEvent(events[0], BUTTON, 96, 1.0f, GenericInputBinding::Cross);
 }
 
+// What's held, as reported to the core, for the core to hear again (the touch pad let go of an input this pad holds):
+// every input not at rest, at its value, and nothing changes.
+TEST(AndroidInputKeys, HeldIsWhatIsntAtRest)
+{
+  PadState pad;
+  Key(pad, 96, true);
+  Key(pad, 97, true);
+  Key(pad, 97, false); // let go again: at rest
+  Axis(pad, 0, -0.7f);
+  Axis(pad, 1, 0.0f); // never moved
+
+  std::vector<PadEvent> events;
+  pad.GetHeld(events);
+  ASSERT_EQ(events.size(), 2u);
+  ExpectEvent(events[0], BUTTON, 96, 1.0f, GenericInputBinding::Cross);
+  EXPECT_EQ(events[1].subclass, AXIS);
+  EXPECT_EQ(events[1].number, 0u);
+  EXPECT_FLOAT_EQ(events[1].value, -0.7f);
+
+  // Nothing was changed: the same again, and the next change is reported as usual.
+  events.clear();
+  pad.GetHeld(events);
+  EXPECT_EQ(events.size(), 2u);
+  EXPECT_EQ(Key(pad, 96, false).size(), 1u);
+}
+
 // The app releases everything when it loses focus or a game boots or stops, with no key-up or axis event from Android.
 // Whatever was held then, the same input afterwards is a new press.
 TEST(AndroidInputKeys, PressAgainAfterReleaseAll)

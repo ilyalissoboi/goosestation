@@ -167,6 +167,17 @@ void AndroidInputSource::PollEvents()
   m_polled.clear();
 }
 
+void AndroidInputSource::ReportHeld()
+{
+  // Not use: the controllers' rumble stays where it went.
+  for (Device& device : m_devices)
+  {
+    m_pad_events.clear();
+    device.state.GetHeld(m_pad_events);
+    ReportPadEvents(device.index, m_pad_events);
+  }
+}
+
 std::vector<u32> AndroidInputSource::GetCenteredAxes(u32 index) const
 {
   std::vector<const AndroidInputKeys::PadState*> pads;

@@ -90,6 +90,17 @@ jobs:
         path: ~/deps-android
         key: ${{ steps.cache-deps.outputs.cache-primary-key }}
 
+    # Through GitHub's API with the job's token, into the copy the build takes before downloading (dep/emusync/):
+    # github.com's release links answer 504 to logged-out requests now and then, when the API still works. The build
+    # checks its SHA-256 as ever. The version is the build's own, read from build.gradle.kts.
+    - name: Fetch emusync's Android library
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        version=$(sed -n 's/^val emusyncVersion = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
+        test -n "$version"
+        gh release download "v$version" --repo ilyalissoboi/emusync --pattern "emusync-$version.aar" --dir dep/emusync
+
     - name: Build the APK, and run the JVM tests and the Kotlin checks
       working-directory: android
       run: |

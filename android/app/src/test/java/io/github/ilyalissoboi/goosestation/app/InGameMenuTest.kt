@@ -140,8 +140,8 @@ class InGameMenuTest {
             assertEquals(
                 listOf(
                     "getSaveStateTimes $SERIAL",
-                    "getSaveStatePreview $SERIAL 1",
-                    "getSaveStatePreview $SERIAL 2",
+                    "getStatePreview $SERIAL 1",
+                    "getStatePreview $SERIAL 2",
                 ),
                 calls,
             )

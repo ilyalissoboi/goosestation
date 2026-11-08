@@ -36,8 +36,57 @@ class FakeGameCore(
     var resumeOn = true
     var analog = -1
 
-    /** [undoLoadState]'s result. */
+    /** [undoLoadState]'s result, and [canUndoLoadState]'s (a query, so not logged). */
     var undoes = true
+    var canUndo = false
+
+    /** The shared slots' times and what each holds, by slot; [deleteError] is [deleteState]'s result. */
+    val sharedTimes = HashMap<Int, Long>()
+    val sharedHolds = HashMap<Int, SaveStatePreview>()
+    var deleteError: String? = null
+
+    override fun canUndoLoadState(): Boolean = canUndo
+
+    override fun getSharedStateTimes(): LongArray {
+        calls += "getSharedStateTimes"
+        return LongArray(SaveSlots.COUNT + 1) { sharedTimes[it] ?: 0L }.also { it[0] = 0L }
+    }
+
+    override fun getStatePreview(
+        state: StateRef,
+        gamePath: String,
+    ): SaveStatePreview? {
+        if (state.shared) {
+            calls += "getStatePreview shared ${state.slot} $gamePath"
+            return sharedHolds[state.slot]
+        }
+        calls += "getStatePreview ${state.key} ${state.slot}"
+        val picture = screenshots[state.slot]
+        val disc = stateDiscs[state.slot] ?: 0
+        return if (picture == null && disc == 0) null else SaveStatePreview(picture, disc)
+    }
+
+    override fun saveSharedState(slot: Int): String? {
+        calls += "saveSharedState $slot"
+        return saveError
+    }
+
+    override fun loadSharedState(slot: Int): String? {
+        calls += "loadSharedState $slot"
+        return loadError
+    }
+
+    override fun deleteState(state: StateRef): String? {
+        calls += if (state.shared) "deleteState shared ${state.slot}" else "deleteState ${state.key} ${state.slot}"
+        if (deleteError != null) return deleteError
+        if (state.shared) {
+            sharedTimes.remove(state.slot)
+        } else {
+            val owned = serialTimes[state.key]
+            if (owned != null) serialTimes[state.key] = owned - state.slot else times.remove(state.slot)
+        }
+        return null
+    }
 
     /** [isHardcoreActive] and [hardcoreWouldStart]: queries, so not logged. */
     var hardcore = false

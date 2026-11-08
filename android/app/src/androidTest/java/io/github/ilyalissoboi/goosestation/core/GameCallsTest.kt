@@ -935,7 +935,12 @@ class GameCallsTest {
 
             assertNull(NativeLibrary.deleteSaveState(PADTEST_SERIAL, 2, false))
             assertNull(NativeLibrary.deleteSaveState("", 4, true))
-            for (name in listOf("${PADTEST_SERIAL}_2.sav", "${PADTEST_SERIAL}_2.bak", "savestate_4.sav", "savestate_4.bak")) {
+            for (name in listOf(
+                "${PADTEST_SERIAL}_2.sav",
+                "${PADTEST_SERIAL}_2.bak",
+                "savestate_4.sav",
+                "savestate_4.bak",
+            )) {
                 assertFalse(name, File(states, name).exists())
             }
             assertTrue(File(states, "${PADTEST_SERIAL}_1.sav").exists())
@@ -956,7 +961,10 @@ class GameCallsTest {
         assertFalse(File(states, "SLUS-00001_5.bak").exists())
         assertNull(NativeLibrary.deleteSaveState("SLUS-00001", -1, false))
         assertFalse(File(states, "SLUS-00001_resume.sav").exists())
-        assertEquals("This game has no serial, so it can't have save states.", NativeLibrary.deleteSaveState("", 5, false))
+        assertEquals(
+            "This game has no serial, so it can't have save states.",
+            NativeLibrary.deleteSaveState("", 5, false),
+        )
         // No game, no shared slot either: nothing is read as a global one by a blank key.
         assertEquals(List(11) { 0L }, NativeLibrary.getSaveStateTimes("").toList())
     }

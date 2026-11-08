@@ -46,8 +46,32 @@ interface GameCoreApi {
         slot: Int,
     ): String?
 
-    /** Undoes the last load, as the core keeps it: false when there's none. */
+    /** Undoes the last load, as the core keeps it: false when there's none, or in hardcore mode. */
     fun undoLoadState(): Boolean
+
+    /** Whether there's a load to undo in the running game; never in hardcore mode. */
+    fun canUndoLoadState(): Boolean
+
+    /** When each shared slot was saved, in Unix seconds, 0 for none: `[n]` slot n, `[0]` always 0. */
+    fun getSharedStateTimes(): LongArray
+
+    /**
+     * What [state] shows of itself and the game it holds: the running game, else the listed game at [gamePath], else
+     * any listed game it's of. Null with no readable state.
+     */
+    fun getStatePreview(
+        state: StateRef,
+        gamePath: String,
+    ): SaveStatePreview?
+
+    /** Saves to shared slot [slot]: null when it's saved, or else why not. */
+    fun saveSharedState(slot: Int): String?
+
+    /** Loads shared slot [slot], made in the running game: null when it's loaded, or else why not. */
+    fun loadSharedState(slot: Int): String?
+
+    /** Deletes [state] and the backup kept of it, with or without a game running: null when it's gone, else why not. */
+    fun deleteState(state: StateRef): String?
 
     /** The running game's patch codes. */
     fun getPatchCodes(): PatchCodes
@@ -136,6 +160,22 @@ object NativeGameCoreApi : GameCoreApi {
     ): String? = NativeLibrary.loadState(key, slot)
 
     override fun undoLoadState(): Boolean = NativeLibrary.undoLoadState()
+
+    override fun canUndoLoadState(): Boolean = NativeLibrary.canUndoLoadState()
+
+    override fun getSharedStateTimes(): LongArray = NativeLibrary.getSharedStateTimes()
+
+    override fun getStatePreview(
+        state: StateRef,
+        gamePath: String,
+    ): SaveStatePreview? = NativeLibrary.getStatePreview(state.key, state.slot, state.shared, gamePath)
+
+    override fun saveSharedState(slot: Int): String? = NativeLibrary.saveSharedState(slot)
+
+    override fun loadSharedState(slot: Int): String? = NativeLibrary.loadSharedState(slot)
+
+    override fun deleteState(state: StateRef): String? =
+        NativeLibrary.deleteSaveState(state.key, state.slot, state.shared)
 
     override fun getPatchCodes(): PatchCodes = NativeLibrary.getPatchCodes() ?: PatchCodes("", emptyArray())
 

@@ -1796,7 +1796,8 @@ std::optional<AndroidHost::SaveStatePreview> AndroidHost::GetStatePreview(std::s
         return AndroidDiscGroups::MatchStateGame(game, info->serial, info->media_path, info->media_subimage_index);
       };
       const auto take = [&preview](const AndroidDiscGroups::Game& game, u32 disc) {
-        preview.disc = disc;
+        // Only a multi-disc game's rows say their disc.
+        preview.disc = (game.discs.size() > 1) ? disc : 0;
         preview.game_path = game.path;
         preview.game_title = game.title;
       };

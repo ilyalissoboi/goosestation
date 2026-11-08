@@ -25,7 +25,7 @@ enum class SlotMode { Save, Load }
  * One slot as the slot list shows it: its [slot] ([SaveSlots.RESUME] for the resume state), when it was saved (Unix
  * seconds; null for an empty slot), and its [picture], once it has been read. [owner] is null for the game's own slots,
  * or the serial another disc's state is still filed under; [disc] is the disc it was made on, shown for a multi-disc
- * game only.
+ * game only. A [shared] slot is desktop's global one; once read, it [holds] a game (null while unknown).
  */
 data class SlotEntry(
     val slot: Int,
@@ -33,6 +33,8 @@ data class SlotEntry(
     val picture: ArgbImage? = null,
     val owner: String? = null,
     val disc: Int? = null,
+    val shared: Boolean = false,
+    val holds: HeldGame? = null,
 )
 
 /**
@@ -243,6 +245,8 @@ class InGameMenu(
 ) : GameMenuActions {
     var state by mutableStateOf(GameMenuState())
         private set
+
+    private val reader = SaveReader(api, game)
 
     /** The running game, once it has booted. */
     private var running: GameEntry? = null
@@ -494,46 +498,21 @@ class InGameMenu(
         state = state.copy(slots = SlotPanel(mode), discs = null, codes = null, confirmingReset = false)
         val discs = running?.discs.orEmpty()
         val multiDisc = discs.size > 1
-        // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
-        val otherSerials =
-            if (mode ==
-                SlotMode.Load
-            ) {
-                discs.map { it.serial }.filter { it.isNotBlank() && it != serial }.distinct()
-            } else {
-                emptyList()
-            }
+        val path = running?.path.orEmpty()
         scope.launch {
-            val (times, last, otherTimes) =
-                withContext(game) {
-                    Triple(
-                        api.getSaveStateTimes(serial),
-                        lastSlots.get(serial),
-                        otherSerials.associateWith { api.getSaveStateTimes(it) },
-                    )
-                }
+            val entries = reader.own(serial, mode)
+            val last = withContext(game) { lastSlots.get(serial) }
+            // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
+            val others = if (mode == SlotMode.Load) reader.others(serial, discs) else emptyList()
             if (id != panelId) return@launch
-            val entries = entries(mode, times)
-            val others =
-                otherTimes.flatMap { (owner, ownerTimes) ->
-                    val disc = discs.firstOrNull { it.serial == owner }?.number
-                    entries(SlotMode.Load, ownerTimes).map { it.copy(owner = owner, disc = disc) }
-                }
-            updatePanel(id) { it.copy(entries = entries, focus = focus(mode, entries, last), others = others) }
+            updatePanel(id) {
+                it.copy(entries = entries, focus = SaveLists.focus(mode, entries, last), others = others)
+            }
             for (entry in entries.filter { it.savedAt != null } + others) {
-                val preview =
-                    withContext(game) { api.getSaveStatePreview(entry.owner ?: serial, entry.slot) } ?: continue
+                val read = reader.preview(entry, serial, path, multiDisc) ?: continue
                 if (id != panelId) return@launch
-                val disc = preview.disc.takeIf { multiDisc && it > 0 }
 
-                fun SlotEntry.withPreview() =
-                    if (slot == entry.slot &&
-                        owner == entry.owner
-                    ) {
-                        copy(picture = preview.picture, disc = disc ?: this.disc)
-                    } else {
-                        this
-                    }
+                fun SlotEntry.withPreview() = if (slot == entry.slot && owner == entry.owner) read else this
                 updatePanel(id) { panel ->
                     panel.copy(
                         entries = panel.entries?.map { it.withPreview() },
@@ -924,33 +903,5 @@ class InGameMenu(
         /** What the save state hotkeys say for a game without a key, and for Load in hardcore mode. */
         const val NO_STATES = "This game can't keep save states"
         const val HARDCORE_LOAD = "Loading a state is off in hardcore mode"
-
-        /** Save lists slots 1 to 10; Load lists the saved ones, the resume state first, when there is one. */
-        fun entries(
-            mode: SlotMode,
-            times: LongArray,
-        ): List<SlotEntry> {
-            val slots = (1..SaveSlots.COUNT).map { SlotEntry(it, times.getOrNull(it)?.takeIf { time -> time > 0 }) }
-            if (mode == SlotMode.Save) return slots
-            // Load lists what can be loaded: the saved slots, the resume state first.
-            val resume = times.getOrNull(0)?.takeIf { it > 0 }?.let { SlotEntry(SaveSlots.RESUME, it) }
-            return listOfNotNull(resume) + slots.filter { it.savedAt != null }
-        }
-
-        /**
-         * The slot to focus: the [last] one used, if Save lists it or Load has a save there; else Slot 1 (Save) or the
-         * newest save (Load), if any.
-         */
-        fun focus(
-            mode: SlotMode,
-            entries: List<SlotEntry>,
-            last: Int?,
-        ): Int? =
-            when (mode) {
-                SlotMode.Save -> last?.takeIf { it in 1..SaveSlots.COUNT } ?: 1
-                SlotMode.Load ->
-                    last?.takeIf { slot -> entries.any { it.slot == slot && it.savedAt != null } }
-                        ?: entries.filter { it.savedAt != null }.maxByOrNull { it.savedAt!! }?.slot
-            }
     }
 }

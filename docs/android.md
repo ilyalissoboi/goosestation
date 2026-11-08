@@ -1332,8 +1332,6 @@ with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is
   `settings.ini` keeps the user's choice.
 - **A controller connected during a game** has its Select held back for its hotkeys from the next game on: they're
   read as a game starts.
-- **The in-game menu has no Undo load, global save slots, or way to delete or rename a save.** The core keeps an undo
-  state, but the menu doesn't offer it yet.
 - **The core's screenshot message lasts 2 s,** not the 5 s it means: its duration is passed to the text's formatting
   instead (`gpu.cpp`, desktop code, left as it is).
 - **The settings pages are reachable only from the library**, not from a game or its prompt. Leave the game to change
@@ -1760,6 +1758,27 @@ Not checkable on the emulator: Automatic hiding as a real controller connects (t
 and the press tick (no vibrator); `TouchControlsTest`, `GameScreenTouchTest` and `TouchOverlayTest` cover them. A
 phone with no controller (on gesture navigation, slides in from the edge over the D-pad and Circle too), and a tablet
 in portrait, are the user's check.
+
+### Save state management (2026-11-08)
+
+On `goose-test-1` (emulator-5580, landscape), the debug APK, set up by touch through the folder picker with
+`GooseTest/bios`, `GooseTest/games` (padtest and its disc image) and an empty data folder, driven with gamepad keys.
+The tests: `SaveListsTest`, `SaveReaderTest`, `SavesPageTest`, `InGameMenuTest` and `GameStartsTest` (JVM);
+`GameMenuTest`, `SavesScreenTest`, `LibraryScreenTest`, `FocusAuditTest`, `OrientationLayoutTest`, and the save state
+tests in `GameCallsTest` and `AchievementsOfflineTest` (instrumented); `AndroidDiscGroups.MatchStateGame*`
+(`common-tests`).
+
+| Check | Result |
+|---|---|
+| The library's foot | Pass. "A Play · X Saves · Y Game settings". |
+| Save to a shared slot | Pass. In padtest, Save state, R1: the Shared tab, Slot 1 focused; slot 3 saved `savestates/savestate_3.sav`, mirrored to the data folder, and no `HASH-…_3.sav`. |
+| A shared slot of another game | Pass. In the Pad Test disc, Load state, R1, slot 3: "Load padtest from shared slot 3? This game stops.", Cancel focused. Load saved the disc's resume state (`PADTESTEXE_resume.sav`), the game stopped, then the log had "Starting '…padtest.psexe' from 'savestate_3.sav'" and the core's "Loading state from 'savestate_3.sav'...". |
+| Saves from the tile | Pass. X on padtest opened "Saves" under "PADTEST": Resume with its screenshot and time, focused. R1: "Slot 3", "padtest", Saved, its time. |
+| Delete | Pass. X on shared slot 3 asked "Delete the save in shared slot 3?" over the page, Cancel focused; Delete left "No shared saves yet.", and the data folder's `savestate_3.sav` was gone after the push. |
+
+Hardcore mode isn't checkable here without the RetroAchievements fake's padtest disc set:
+`AchievementsOfflineTest.undoIsRefusedInHardcore` and `turningHardcoreOnDropsTheUndoState` cover the native side, and
+`InGameMenuTest` and `SavesPageTest` the app's.
 
 ## Results on the AYN Thor
 
@@ -2268,3 +2287,16 @@ adb logcat -v time > thor.log
    - [ ] Controllers for the game: Port 1's type **NeGcon** for this game only: the game sees a NeGcon (its steering
      works with the Thor's stick), another game a DualShock; the global Port 1 page lists the NeGcon's inputs under
      "NeGcon (a game's)".
+16. **Save state management.** With the build that has it, the Thor's own controls, and two games with a key. Note the
+    data folder's `savestates/` before and after.
+   - [ ] In the first game, Save state, R1: the Shared tab; saving to slot 3 writes `savestate_3.sav`, and the slot
+     names the game.
+   - [ ] In the second game, Load state, R1, slot 3: the question names the first game, Cancel focused; Load saves the
+     second game's place and starts the first from the state.
+   - [ ] Load state, then **Undo load** after Load state puts the game back, "Undid the last load"; until a load it
+     says "Nothing to undo".
+   - [ ] In Load, X on a slot asks before deleting; Delete removes it, with its `.bak`.
+   - [ ] In the library, X on a tile opens Saves; A on a slot starts the game from it, on its disc; a long press by
+     touch offers Saves and Game settings.
+   - [ ] With hardcore mode on (step 12): Load state and Undo load say "Off in hardcore mode", the Undo hotkey says
+     "Loading a state is off in hardcore mode", and the Saves page deletes but won't start from a save.

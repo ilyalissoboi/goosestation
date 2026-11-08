@@ -1940,6 +1940,16 @@ copy and, with the next push, the data folder.
   Add page, a stage's page (Remove focused on a lone stage) and Clear settings' question all worked with key events;
   the hub counted the chain as one ("3 settings of its own": two in Graphics, one in Post-processing).
 
+### Touch controls on the Thor (2026-11-08)
+
+The debug APK of `2ece4813e` (the head of #61, now on `master`), installed over the existing one (data kept). The user
+checked the touch controls by hand: all of them worked as expected. On the Thor they show only with Touch controls on
+Always, since its built-in pad is a connected controller and Automatic hides them.
+
+Not checkable on the Thor: Automatic with no controller connected, the edge gestures on a phone with gesture
+navigation, and portrait (the Thor's screens are landscape). A phone with no controller and a tablet in portrait are
+still to be checked.
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with

@@ -356,8 +356,9 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   and Clear settings (`Danger`). Each asks in an `OverlayPanel` (`GameQuestionPanel`): the question, then its answer
   (`Danger`) and Cancel (`Ghost`, focused); the focus goes back to the button once it closes. In a game it takes the
   menu's place over the paused game.
-- The library's foot: `KeyHints` "A Play" and "Y Game settings", while it has games. Y, or a long press, on a game
-  opens its settings.
+- The library's foot: `KeyHints` "A Play", "X Saves" and "Y Game settings", while it has games. X on a game opens its
+  Saves (`SavesScreen`), Y its settings; a long press offers both in an `OverlayPanel` (the game's title, then Saves,
+  focused, and Game settings, both `Secondary`), or opens Saves for a game without a key.
 - `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
   edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end, or
   under the label when they don't fit; focused, the icon turns `beak-ink`; disabled, all `ink-faint`), a `line`

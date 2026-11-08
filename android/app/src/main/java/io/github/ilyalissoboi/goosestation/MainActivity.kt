@@ -459,6 +459,7 @@ class MainActivity : ComponentActivity() {
                             onRefresh = AppController::refresh,
                             onStartGame = AppController::startGame,
                             onGameSettings = AppController::openGameSettings,
+                            onSaves = AppController::openSaves,
                             focusPath = AppController.libraryFocus ?: AppController.lastGamePath,
                             focusSettings = AppController.focusSettings,
                             syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),

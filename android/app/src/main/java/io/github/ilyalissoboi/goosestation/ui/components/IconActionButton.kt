@@ -139,7 +139,7 @@ fun IconActionButton(
 
 /**
  * Where [labels]' buttons show their labels: a strip one label high whether or not one shows, under the buttons. The
- * label, `body-sm` `ink` on `raised` with a `line` edge, is centred under its button and kept inside the strip. It's
+ * label, text 12/16 in `ink` on `raised` with a `line` edge, is centred under its button and kept inside the strip. It's
  * hidden from screen readers, which hear the button's own name.
  */
 @Composable

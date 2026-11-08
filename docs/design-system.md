@@ -203,6 +203,38 @@ Row(Modifier.fillMaxWidth().focusRing(role = Role.Button, onClick = ::open).padd
 the touch target cover the whole element. For a ring on part of an element, pass `ring = false` and
 `onFocusChange`, and draw `Modifier.focusIndicator(focused, colors.focus, shape)` on the part, as `GameTile` does.
 
+### `IconActionButton` and `ActionLabelStrip` (`IconActionButton.kt`)
+
+```kotlin
+val labels = rememberActionLabelHost()
+Row { IconActionButton(GsIcons.sort, "Sort: Title", onClick = ::openSort, labels = labels) }
+ActionLabelStrip(labels)
+```
+
+A command as an icon alone, for a bar where words don't fit (the library's top bar): 48 dp square, `raised` on a `line`
+edge at `radius-md`, the icon 24 dp in `ink-muted`, `beak-ink` while focused, with the focus ring. Its label is its
+accessible name and says its value where it has one ("Sort: Title", "Order: A to Z", "Show as a list"). While it's
+focused, or for two seconds after a long press (a tap acts), the label shows in the `ActionLabelStrip` under the
+buttons: `text` 12/16 (`typography.bodySmall`, smaller than `body-sm` so it fits a handheld's bar) in `ink` on `raised`
+with a `line` edge at `radius-sm`, centred under its button and kept inside the strip. The strip keeps one label's
+height whether or not one shows, so nothing moves as the focus does, and it's laid out in the screen's own space, so the
+label never covers what's under it. Screen readers hear the button, not the strip. It's the one exception to icons
+always having a word (see Icons).
+
+### `SearchField` (`SearchField.kt`)
+
+```kotlin
+val focus = rememberSearchFocus()
+SearchField(state, focus, onDown = ::firstMatch, onKeyboardClosed = ::keyboardClosed)
+```
+
+A search box: a 48 dp `sunken` well with a `line-strong` edge at `radius-sm`, the `search` icon in `ink-muted`, the
+placeholder "Search your games" ("Search" under 200 dp), and a `close` ✕ while there's text, which clears it by touch
+(a 48 dp tap target, not a focus stop: B clears by controller). Its accessible name is "Search your games". As with a
+text row, focus doesn't open Android's keyboard, so a D-pad passes through; A, the D-pad centre, a tap or
+`SearchFocus.focusAndType()` (the library's Select) do. Up leaves it, Down is the screen's (`onDown`), and the
+keyboard's action is Search, which closes it; `onKeyboardClosed` hears it close, by that or by Back, once.
+
 ### `Notice` and `Banner` (`Banner.kt`)
 
 ```kotlin
@@ -356,8 +388,25 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   and Clear settings (`Danger`). Each asks in an `OverlayPanel` (`GameQuestionPanel`): the question, then its answer
   (`Danger`) and Cancel (`Ghost`, focused); the focus goes back to the button once it closes. In a game it takes the
   menu's place over the paused game.
-- The library's foot: `KeyHints` "A Play", "X Saves" and "Y Game settings", while it has games. X on a game opens its
-  Saves (`SavesScreen`), Y its settings; a long press offers both in an `OverlayPanel` (the game's title, then Saves,
+- `LibraryTopBar`: the goose and "Library" (`headline`), the `SearchField` taking the width left, the `SyncStatusBadge`
+  while sync is on, then `IconActionButton`s 8 dp apart: Sort (`sort`), Order (`order`, or `order-reversed` when
+  reversed), the view (`list-bulleted` in grid mode, `grid` in list mode), Refresh (`refresh`) and Settings
+  (`settings`), with the `ActionLabelStrip` straight under the buttons. The field stays on the buttons' row while it
+  gets 144 dp at text 1.0× (more as the text grows), as on the Thor at 1.0×; otherwise it goes on its own row under the
+  strip, and on a phone in portrait the buttons go under the title too. Up from the first game reaches the field, Up
+  again the buttons.
+- The count line under the bar, in `body-sm` `ink-muted`: "48 games · Title, A–Z", "2 of 48 games · Title, A–Z" while
+  searching. It goes with the games, so a short screen takes its room from them, never from the button hints.
+- The sort list: the choice list (`ChoiceList`) opened under the Sort button, in the screen's own layout (never a
+  window), 240 dp wide, its right edge on the button's, scrolling when there's no room under it. A picks; B, Back or a
+  tap outside close it; the focus goes back to Sort either way, and the game last focused stays in view.
+- A search match is marked `beak-ink` on `beak-soft` in the title (and the list row's serial). With nothing matching:
+  "No games match “zelda”." in `body` `ink-muted`, and Clear search (`Secondary`), which takes the focus only once the
+  keyboard closes, or on Down from the field.
+- The library's foot follows the focus: on a game "A Play", "X Saves", "Y Game settings", "Select Search"; on a
+  top-bar button or Clear search "A Choose", "Select Search"; on the field "A Type"; with the sort list open "A
+  Choose", "B Close". While searching, "B Clear search" takes "Select Search"'s place. X on a game opens its Saves
+  (`SavesScreen`), Y its settings; a long press offers both in an `OverlayPanel` (the game's title, then Saves,
   focused, and Game settings, both `Secondary`), or opens Saves for a game without a key.
 - `GameMenu`: the pause menu. A `scrim` over the game, a `surface` panel at `radius-lg`, 300 dp wide, 32 dp from the
   edges: "Paused" over the game's title and details, then menu rows (an icon, a label and any value at the end, or

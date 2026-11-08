@@ -1049,15 +1049,16 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   in your library."), and when hardcore mode would start, with "Loading a state is off in hardcore mode", both before
   the running game is left. The host itself refuses to load another game's state into the running one ("That save
   is from another game."), and one whose state can't be read says "Couldn't read that save." A game
-  without a key (the BIOS alone, say) opens the panel on Shared, its This game tab saying "This game can't keep save
-  states of its own." In a list under 150 dp tall (a handheld's at large text), the rows are compact: the small
+  without a key (a PSF, say) opens the panel on Shared, its This game tab saying "This game can't keep save
+  states of its own." A PSF's state records no serial and no disc, only the title the core gives it from its file's name, so
+  its shared slots are told from another PSF's by that title. In a list under 150 dp tall (a handheld's at large text), the rows are compact: the small
   picture, the game on one line, and the time on Saved's line.
 
   **Delete.** In Load, X on a row (or a long press, by touch) asks in the panel: "Delete the save in slot 3?" (or
   "Delete the save in shared slot 3?", "Delete your resume state?", "Delete disc 2's save in slot 3?"), Delete and
   Cancel, Cancel focused (`KeyHints` "X Delete"). Delete removes that save, the one the question named whatever the
-  list has done since, with the `.bak` a save kept of it (Settings → Emulation's save state backups), and the panel
-  stays open on the row after it. The deletion reaches the data folder through the mirror, as any change does. Save
+  list has done since, with the `.bak` a save kept of it (Settings → Emulation's save state backups); the panel says
+  "Deleting…" meanwhile, and stays open on the row after it. The deletion reaches the data folder through the mirror, as any change does. Save
   has no Delete: it replaces. Saves have no names, as on desktop, which names them only by slot.
 
   **One set of states per game.** States made before discs were grouped (part 1 kept them under each disc's serial)

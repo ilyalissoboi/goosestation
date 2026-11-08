@@ -400,7 +400,12 @@ std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std
     return disc();
   }
 
-  if (!file_name.empty())
+  // A file name only when no serial says otherwise: the state records none, or the game has none known. Another game's
+  // disc can share a name ("disc1.chd" in a folder per game).
+  const bool known_serial =
+    !game.key.empty() ||
+    std::any_of(game.discs.begin(), game.discs.end(), [](const Disc& d) { return !d.serial.empty(); });
+  if (!file_name.empty() && (serial.empty() || !known_serial))
   {
     if (StringUtil::EqualNoCase(FileName(game.path), file_name))
       return disc();

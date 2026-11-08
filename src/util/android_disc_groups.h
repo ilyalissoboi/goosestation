@@ -92,7 +92,8 @@ std::optional<u32> FindStateDisc(const Game& game, std::string_view serial, std:
 /// Whether a save state is [game]'s, from what the state recorded, and if so the number of the disc it was made on (0
 /// for a game without discs, or a disc that isn't known). It is when: its media is an M3U named as [game]'s playlist;
 /// its serial is [game]'s key or one of its discs' serials; its media's file name is [game]'s or one of its discs',
-/// ignoring case; or it records no serial and no media, and [game] has no key and no discs (the BIOS alone).
+/// ignoring case, when it records no serial or [game] has none known; or it records no serial and no media, and [game]
+/// has no key and no discs (the BIOS alone).
 std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std::string_view media_path,
                                   u32 subimage_index);
 

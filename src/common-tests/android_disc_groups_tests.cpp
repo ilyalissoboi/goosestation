@@ -364,3 +364,14 @@ TEST(AndroidDiscGroups, MatchStateGameBiosAlone)
   EXPECT_EQ(MatchStateGame(Game{}, "", "", 0), 0u);
   EXPECT_FALSE(MatchStateGame(Game{}, "SLUS-00001", "/g/crash.chd", 0).has_value());
 }
+
+TEST(AndroidDiscGroups, MatchStateGameFileNameNeedsNoContradictingSerial)
+{
+  // Another game's state whose disc file happens to share a name ("disc1.chd" in a folder per game) isn't this one's.
+  EXPECT_FALSE(MatchStateGame(TwoDiscs(false), "SLUS-00001", "/elsewhere/FF7 (Disc 2).CHD", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(Exe(), "HASH-2", "/elsewhere/padtest.psexe", 0).has_value());
+  // A game the app knows no serial of goes by the file name, whatever the state recorded.
+  Game unknown = Exe();
+  unknown.key.clear();
+  EXPECT_EQ(MatchStateGame(unknown, "HASH-2", "/elsewhere/padtest.psexe", 0), 0u);
+}

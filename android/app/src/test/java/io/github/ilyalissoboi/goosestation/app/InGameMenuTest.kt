@@ -2141,4 +2141,21 @@ class InGameMenuTest {
                 menu.slots().error,
             )
         }
+
+    // Review: a resume save that fails stops the switch, so the library says the place wasn't saved.
+    @Test
+    fun aFailedResumeSaveStopsTheSwitch() =
+        runTest {
+            api.resumeError = "No space left on device."
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+
+            assertTrue(calls.none { it.startsWith("switch") })
+            assertEquals("exit No space left on device.", calls.last())
+        }
 }

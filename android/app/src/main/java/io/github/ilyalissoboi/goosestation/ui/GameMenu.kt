@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -34,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -538,10 +541,19 @@ private fun MenuItem(
 ) {
     val colors = GooseStationTheme.colors
     var focused by remember { mutableStateOf(false) }
+    // Into view again a frame after it takes the focus: a side panel closing widens the menu as the focus comes back to
+    // its row, and the scroll made at the narrower width can leave the row out of view.
+    val view = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) {
+        if (!focused) return@LaunchedEffect
+        withFrameNanos {}
+        view.bringIntoView()
+    }
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
+                .bringIntoViewRequester(view)
                 .semantics { selected = current }
                 .background(if (current) colors.beakSoft else colors.surface, GsShapes.medium)
                 .focusRing(

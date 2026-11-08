@@ -1024,6 +1024,22 @@ class GameMenuTest {
         rule.onNode(isFocused() and hasText("Slot 7", substring = true)).assertExists()
     }
 
+    // Review: the list's last save deleted, the heading holds the focus.
+    @Test
+    fun deletingTheLastSaveFocusesTheHeading() {
+        val rows = saved(2).filter { it.savedAt != null }
+        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[0]))
+        show()
+
+        // As InGameMenu does: the question goes, the panel is busy with the old rows, then the list comes back empty.
+        state = state.copy(slots = state.slots!!.copy(deleting = null, busy = true))
+        rule.waitForIdle()
+        state = state.copy(slots = SlotPanel(SlotMode.Load, emptyList()))
+        rule.waitForIdle()
+
+        rule.onNode(isFocused() and hasText("Load state")).assertExists()
+    }
+
     @Test
     fun aLongPressAsksToo() {
         state =

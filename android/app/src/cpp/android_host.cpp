@@ -1519,6 +1519,8 @@ void AndroidHost::StartGameFromState(std::string path, std::string key, s32 slot
   StartGame(std::move(path), 1, BootState{std::move(key), slot, shared});
 }
 
+static std::optional<ExtendedSaveStateInfo> ReadStateInfo(const std::string& path);
+
 void AndroidHost::StartGame(std::string path, u32 disc, std::optional<BootState> from)
 {
   // Every StartGame() ends with one NotifyGameStopped(): once the game has stopped, or straight away when it fails to
@@ -1575,6 +1577,21 @@ void AndroidHost::StartGame(std::string path, u32 disc, std::optional<BootState>
         NotifyError("Couldn't start from that save: There's no save in this slot.");
         NotifyGameStopped();
         return;
+      }
+
+      // A shared slot is the game's only if its state says so: it may have been replaced since the app read it. A file
+      // the library doesn't list has no identity until it boots (the app only starts listed games from a state).
+      if (from.has_value() && from->shared && (!game.key.empty() || !game.discs.empty()))
+      {
+        const std::optional<ExtendedSaveStateInfo> info = ReadStateInfo(boot_state);
+        if (!info.has_value() || !AndroidDiscGroups::MatchStateGame(game, info->serial, info->media_path,
+                                                                    info->media_subimage_index)
+                                     .has_value())
+        {
+          NotifyError("Couldn't start from that save: it's another game's.");
+          NotifyGameStopped();
+          return;
+        }
       }
 
       // It boots on the disc it was saved on, found by its identity.

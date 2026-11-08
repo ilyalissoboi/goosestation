@@ -543,9 +543,12 @@ class InGameMenu(
         leave(error)
     }
 
-    /** The game stops ([onExit]), saying first which game is to start after it, if one is ([onSwitch]). */
+    /**
+     * The game stops ([onExit]), saying first which game is to start after it, if one is ([onSwitch]). Not when its
+     * resume state couldn't be saved: the library says so, rather than another game hiding it.
+     */
     private fun leave(resumeError: String?) {
-        switchTo?.let(onSwitch)
+        if (resumeError == null) switchTo?.let(onSwitch)
         switchTo = null
         onExit(resumeError)
     }

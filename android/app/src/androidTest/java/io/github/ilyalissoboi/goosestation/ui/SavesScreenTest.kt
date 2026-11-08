@@ -136,6 +136,21 @@ class SavesScreenTest {
         assertEquals(0, backs)
     }
 
+    // Review: the last save deleted, the title holds the focus.
+    @Test
+    fun deletingTheLastSaveFocusesTheTitle() {
+        val rows = saved(2)
+        page = page.copy(entries = rows, shared = listOf(), deleting = rows[0])
+        show()
+
+        page = page.copy(deleting = null)
+        rule.waitForIdle()
+        page = page.copy(entries = listOf())
+        rule.waitForIdle()
+
+        rule.onNode(isFocused() and hasText("Saves")).assertExists()
+    }
+
     @Test
     fun noSavesSaysSo() {
         page = page.copy(entries = listOf(), shared = listOf())

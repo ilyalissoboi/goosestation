@@ -987,6 +987,28 @@ class GameCallsTest {
         }
     }
 
+    // Review: a shared slot replaced by another game's state since it was read doesn't start this game from it.
+    @LargeTest
+    @Test
+    fun aSharedStateOfAnotherGameDoesntStartThisOne() {
+        withPadtest { assertNull(NativeLibrary.saveSharedState(6)) }
+        val errors = LinkedBlockingQueue<String>()
+        withPadtest(
+            disc = true,
+            booted = false,
+            onError = { errors.put(it) },
+            boot = { cue ->
+                // As the app starts it: a game the library lists, with its key.
+                NativeLibrary.setGameFolders(arrayOf(cue.parentFile!!.absolutePath))
+                NativeLibrary.refreshGameList(true)
+                val listed = NativeLibrary.getGameList().single { it.path.endsWith(".cue") }
+                NativeLibrary.startGameFromState(listed.path, "", 6, true)
+            },
+        ) {
+            assertEquals("Couldn't start from that save: it's another game's.", errors.poll(3, TimeUnit.SECONDS))
+        }
+    }
+
     // A macro presses its buttons while its trigger is held.
     @Test
     fun aMacroPressesItsButtons() =
@@ -1291,6 +1313,7 @@ class GameCallsTest {
         refreshRate: Float = 0f,
         frames: FrameReader? = null,
         disc: Boolean = false,
+        booted: Boolean = true,
         onError: (String) -> Unit = {},
         boot: (File) -> Unit = { NativeLibrary.startGame(it.absolutePath, 1, false) },
         body: () -> Unit,
@@ -1367,7 +1390,12 @@ class GameCallsTest {
         try {
             TestRenderer.apply()
             boot(if (disc) cue else exe)
-            assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
+            // Without [booted], the start is to be refused: it stops at once.
+            if (booted) {
+                assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
+            } else {
+                assertTrue("refused", stopped.await(30, TimeUnit.SECONDS))
+            }
             Thread.sleep(1_000)
             body()
         } finally {

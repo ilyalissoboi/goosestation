@@ -89,12 +89,10 @@ fun SaveSlotPanel(
     val saving = panel.mode == SlotMode.Save
     val sharedTab = panel.tab == SlotTab.Shared
     val entries =
-        if (sharedTab) {
-            panel.shared
-        } else if (panel.hasKey) {
-            panel.entries
-        } else {
-            emptyList()
+        when {
+            sharedTab -> panel.shared
+            panel.hasKey -> panel.entries
+            else -> emptyList()
         }
     val others = if (sharedTab || !panel.hasKey) emptyList() else panel.others
     val title = remember { FocusRequester() }
@@ -135,11 +133,7 @@ fun SaveSlotPanel(
                 returnTo = null
                 // A row the menu names (after a delete) comes first, whichever list has it.
                 val named =
-                    panel.focusRow?.let { focus ->
-                        (entries + others).firstOrNull {
-                            it.slot == focus.slot && it.owner == focus.owner && it.shared == focus.shared
-                        }
-                    }
+                    panel.focusRow?.let { focus -> (entries + others).firstOrNull { SaveLists.sameRow(it, focus) } }
                 val target =
                     named?.takeIf(::pickable) ?: entries.firstOrNull { it.slot == wanted && pickable(it) }
                         ?: entries.firstOrNull(::pickable) ?: others.firstOrNull()
@@ -229,13 +223,7 @@ fun SaveSlotPanel(
                             short = short,
                             enabled = pickable(entry),
                             onClick = {
-                                if (entry.shared) {
-                                    actions.pickShared(
-                                        entry.slot,
-                                    )
-                                } else {
-                                    actions.pickSlot(entry.slot)
-                                }
+                                if (entry.shared) actions.pickShared(entry.slot) else actions.pickSlot(entry.slot)
                             },
                             modifier = Modifier.focusRequester(row(entry)),
                             onDelete = delete?.takeIf { entry.savedAt != null }?.let { { it(entry) } },
@@ -281,8 +269,8 @@ internal const val SLOT_PICTURE = "slotPicture"
 /**
  * A slot: its screenshot (or the memory card icon), its name, the game a shared slot holds, Saved or Empty, and when it
  * was saved. The picture is 112 × 84 dp, or 64 × 48 dp in a row under 240 dp wide, so the words beside it fit at a large
- * text size. X or a long press call [onDelete], when it has one. A [short] row, in a short list, is compact whatever its width: the small picture, the game on one line, and
- * the time on Saved's line, so it fits the list's height.
+ * text size. X or a long press call [onDelete], when it has one. A [short] row, in a short list, is compact whatever
+ * its width: the small picture, the game on one line, and the time on Saved's line, so it fits the list's height.
  */
 @Composable
 internal fun SlotRow(

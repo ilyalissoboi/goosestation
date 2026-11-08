@@ -73,12 +73,10 @@ fun SavesScreen(
     val colors = GooseStationTheme.colors
     val sharedTab = page.tab == SlotTab.Shared
     val entries =
-        if (sharedTab) {
-            page.shared
-        } else if (page.hasKey) {
-            page.entries
-        } else {
-            emptyList()
+        when {
+            sharedTab -> page.shared
+            page.hasKey -> page.entries
+            else -> emptyList()
         }
     val others = if (sharedTab || !page.hasKey) emptyList() else page.others
     val title = remember { FocusRequester() }
@@ -99,10 +97,8 @@ fun SavesScreen(
 
     LaunchedEffect(entries == null, page.tab, page.deleting, page.focusRow, switches) {
         if (page.deleting != null) return@LaunchedEffect
-        val focus = page.focusRow
         val target =
-            focus?.let { f -> listed.firstOrNull { it.slot == f.slot && it.owner == f.owner && it.shared == f.shared } }
-                ?: listed.firstOrNull()
+            page.focusRow?.let { focus -> listed.firstOrNull { SaveLists.sameRow(it, focus) } } ?: listed.firstOrNull()
         (target?.let { row(it) } ?: title).requestFocus()
     }
 

@@ -646,14 +646,7 @@ class InGameMenu(
         val key = serial ?: return
         val id = panelId
         val ref = entry.ref(key)
-        val list =
-            when {
-                entry.shared -> panel.shared.orEmpty()
-                entry.owner != null -> panel.others
-                else -> panel.entries.orEmpty()
-            }.filter { it.savedAt != null }
-        val at = list.indexOfFirst { it.ref(key) == ref }
-        val next = list.getOrNull(at + 1) ?: list.getOrNull(at - 1)
+        val next = SaveLists.afterDelete(entry, key, panel.entries, panel.others, panel.shared)
         updatePanel(id) { it.copy(deleting = null, busy = true, error = null) }
         scope.launch {
             val error = withContext(game) { api.deleteState(ref) }
@@ -698,16 +691,9 @@ class InGameMenu(
         val entry = panel.shared?.firstOrNull { it.slot == slot } ?: return
         val saved = entry.savedAt != null
         when {
-            panel.mode == SlotMode.Save ->
-                if (saved) {
-                    state =
-                        state.copy(
-                            slots = panel.copy(replacing = slot),
-                        )
-                } else {
-                    saveShared(slot)
-                }
-            saved -> loadShared(entry)
+            panel.mode == SlotMode.Load -> if (saved) loadShared(entry)
+            saved -> state = state.copy(slots = panel.copy(replacing = slot))
+            else -> saveShared(slot)
         }
     }
 
@@ -1119,14 +1105,12 @@ class InGameMenu(
     }
 
     // The panel with [read] in place of the row it was read for, whichever list has it.
-    private fun SlotPanel.withRow(read: SlotEntry): SlotPanel {
-        fun SlotEntry.with() = if (slot == read.slot && owner == read.owner && shared == read.shared) read else this
-        return copy(
-            entries = entries?.map { it.with() },
-            others = others.map { it.with() },
-            shared = shared?.map { it.with() },
+    private fun SlotPanel.withRow(read: SlotEntry): SlotPanel =
+        copy(
+            entries = entries?.let { SaveLists.withRow(it, read) },
+            others = SaveLists.withRow(others, read),
+            shared = shared?.let { SaveLists.withRow(it, read) },
         )
-    }
 
     // Changes the slot panel if it's still panel [id].
     private fun updatePanel(

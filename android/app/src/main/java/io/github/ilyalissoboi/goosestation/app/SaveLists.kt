@@ -76,6 +76,40 @@ object SaveLists {
                     ?: entries.filter { it.savedAt != null }.maxByOrNull { it.savedAt!! }?.slot
         }
 
+    /** Whether [a] and [b] are the same row: the same slot, under the same owner, in the same list. */
+    fun sameRow(
+        a: SlotEntry,
+        b: SlotEntry,
+    ): Boolean = a.slot == b.slot && a.owner == b.owner && a.shared == b.shared
+
+    /** [rows] with [read] in place of the row it was read for. */
+    fun withRow(
+        rows: List<SlotEntry>,
+        read: SlotEntry,
+    ): List<SlotEntry> = rows.map { if (sameRow(it, read)) read else it }
+
+    /**
+     * The row to focus once [entry]'s save is deleted, in a game whose key is [key]: the save after it in its list (the
+     * [shared] slots, the other discs' [others], or the game's own [entries]), else the one before.
+     */
+    fun afterDelete(
+        entry: SlotEntry,
+        key: String,
+        entries: List<SlotEntry>?,
+        others: List<SlotEntry>,
+        shared: List<SlotEntry>?,
+    ): SlotEntry? {
+        val list =
+            when {
+                entry.shared -> shared.orEmpty()
+                entry.owner != null -> others
+                else -> entries.orEmpty()
+            }.filter { it.savedAt != null }
+        val ref = entry.ref(key)
+        val at = list.indexOfFirst { it.ref(key) == ref }
+        return list.getOrNull(at + 1) ?: list.getOrNull(at - 1)
+    }
+
     /** The game a state's [preview] says it holds, or null when it says nothing of one. */
     fun held(preview: SaveStatePreview): HeldGame? {
         if (preview.serial.isBlank() && preview.title.isBlank() && preview.gamePath.isBlank()) return null
@@ -100,12 +134,10 @@ object SaveLists {
     fun notInLibrary(entry: SlotEntry): String {
         val holds = entry.holds
         val game =
-            if (holds == null ||
-                holds.serial.isBlank()
-            ) {
-                holds?.title.orEmpty()
-            } else {
-                "${holds.title} (${holds.serial})"
+            when {
+                holds == null -> ""
+                holds.serial.isBlank() -> holds.title
+                else -> "${holds.title} (${holds.serial})"
             }
         return "Shared slot ${entry.slot} needs $game, which isn't in your library."
     }

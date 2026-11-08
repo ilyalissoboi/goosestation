@@ -135,14 +135,7 @@ class SavesPage(
         val key = page.game.serial
         val ref = entry.ref(key)
         val id = pageId
-        val list =
-            when {
-                entry.shared -> page.shared.orEmpty()
-                entry.owner != null -> page.others
-                else -> page.entries.orEmpty()
-            }
-        val at = list.indexOfFirst { it.ref(key) == ref }
-        val next = list.getOrNull(at + 1) ?: list.getOrNull(at - 1)
+        val next = SaveLists.afterDelete(entry, key, page.entries, page.others, page.shared)
         state = page.copy(deleting = null)
         scope.launch {
             val error = withContext(game) { api.deleteState(ref) }
@@ -183,14 +176,12 @@ class SavesPage(
         state = state?.let(update)
     }
 
-    private fun SavesPageState.withRow(read: SlotEntry): SavesPageState {
-        fun SlotEntry.with() = if (slot == read.slot && owner == read.owner && shared == read.shared) read else this
-        return copy(
-            entries = entries?.map { it.with() },
-            others = others.map { it.with() },
-            shared = shared?.map { it.with() },
+    private fun SavesPageState.withRow(read: SlotEntry): SavesPageState =
+        copy(
+            entries = entries?.let { SaveLists.withRow(it, read) },
+            others = SaveLists.withRow(others, read),
+            shared = shared?.let { SaveLists.withRow(it, read) },
         )
-    }
 
     private companion object {
         const val UNREADABLE = "Couldn't read that save."

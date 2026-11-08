@@ -266,6 +266,64 @@ private fun shoulder(label: String): Glyph {
     return Glyph(30f, listOf(Mark.Shape(tab, Ink.Sunken, Ink.Ink)), Label(label, 15f, 16.5f, 9.5f))
 }
 
+// The face symbols, also drawn without their plates on the touch overlay (PsFaceSymbols).
+private val TRIANGLE = pts(12, 6.5, 17, 15.5, 7, 15.5)
+private val CIRCLE = Offset(12f, 12f)
+private const val CIRCLE_RADIUS = 5f
+
+// Corner to corner through the middle, then the other stroke from its far end.
+private val CROSS = pts(8, 8, 16, 16, 12, 12, 16, 8, 8, 16)
+private val SQUARE = pts(7.5, 7.5, 16.5, 7.5, 16.5, 16.5, 7.5, 16.5)
+
+private fun List<Float>.offsets() = chunked(2).map { (x, y) -> Offset(x, y) }
+
+/** A part of a face symbol, in [PsGlyph]'s 24-unit box, stroked 2 units wide. */
+internal sealed interface SymbolPart {
+    data class Polygon(
+        val points: List<Offset>,
+    ) : SymbolPart
+
+    data class Segment(
+        val from: Offset,
+        val to: Offset,
+    ) : SymbolPart
+
+    data class Ring(
+        val centre: Offset,
+        val radius: Float,
+    ) : SymbolPart
+}
+
+/**
+ * The four PlayStation face symbols as [PsGlyph] draws them, without their plates: for drawings of them on their own
+ * ([TouchGlyphs]). The Cross is its two strokes, each with its own square ends.
+ */
+internal object PsFaceSymbols {
+    val names = listOf("Triangle", "Circle", "Cross", "Square")
+
+    fun parts(name: String): List<SymbolPart> =
+        when (name) {
+            "Triangle" -> listOf(SymbolPart.Polygon(TRIANGLE.offsets()))
+            "Circle" -> listOf(SymbolPart.Ring(CIRCLE, CIRCLE_RADIUS))
+            "Cross" ->
+                CROSS.offsets().let { listOf(SymbolPart.Segment(it[0], it[1]), SymbolPart.Segment(it[3], it[4])) }
+            "Square" -> listOf(SymbolPart.Polygon(SQUARE.offsets()))
+            else -> error("No face symbol $name")
+        }
+
+    fun color(
+        name: String,
+        colors: GsColors,
+    ): Color =
+        when (name) {
+            "Triangle" -> colors.psTriangle
+            "Circle" -> colors.psCircle
+            "Cross" -> colors.psCross
+            "Square" -> colors.psSquare
+            else -> error("No face symbol $name")
+        }
+}
+
 private val UP = pts(12, 3.5, 15, 7, 9, 7)
 private val DOWN = pts(12, 20.5, 15, 17, 9, 17)
 private val LEFT = pts(3.5, 12, 7, 9, 7, 15)
@@ -277,11 +335,10 @@ private val GLYPHS: Map<String, Glyph> =
         "Down" to dpad(pts(8.5, 22, 15.5, 22, 15.5, 15, 12, 12, 8.5, 15)),
         "Left" to dpad(pts(2, 8.5, 2, 15.5, 9, 15.5, 12, 12, 9, 8.5)),
         "Right" to dpad(pts(22, 8.5, 22, 15.5, 15, 15.5, 12, 12, 15, 8.5)),
-        "Triangle" to face(Mark.Shape(pts(12, 6.5, 17, 15.5, 7, 15.5), stroke = Ink.Triangle)),
-        "Circle" to face(Mark.Ring(12f, 12f, 5f, Ink.Circle)),
-        "Cross" to
-            face(Mark.Shape(pts(8, 8, 16, 16, 12, 12, 16, 8, 8, 16), stroke = Ink.Cross, closed = false)),
-        "Square" to face(Mark.Shape(pts(7.5, 7.5, 16.5, 7.5, 16.5, 16.5, 7.5, 16.5), stroke = Ink.Square)),
+        "Triangle" to face(Mark.Shape(TRIANGLE, stroke = Ink.Triangle)),
+        "Circle" to face(Mark.Ring(CIRCLE.x, CIRCLE.y, CIRCLE_RADIUS, Ink.Circle)),
+        "Cross" to face(Mark.Shape(CROSS, stroke = Ink.Cross, closed = false)),
+        "Square" to face(Mark.Shape(SQUARE, stroke = Ink.Square)),
         "Select" to
             Glyph(
                 60f,

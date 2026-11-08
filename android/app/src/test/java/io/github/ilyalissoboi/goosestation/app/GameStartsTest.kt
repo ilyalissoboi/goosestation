@@ -55,11 +55,14 @@ class GameStartsTest {
 
     private fun TestScope.starts(): GameStarts {
         val starts =
-            GameStarts(backgroundScope, StandardTestDispatcher(testScheduler), api, records, lastSlotStore) {
-                game,
-                disc,
-                resume,
-                ->
+            GameStarts(
+                backgroundScope,
+                StandardTestDispatcher(testScheduler),
+                api,
+                records,
+                lastSlotStore,
+                startFrom = { game, state -> calls += "startFrom ${game.title} $state" },
+            ) { game, disc, resume ->
                 calls += "start ${game.title} $disc $resume"
             }
         calls.clear()
@@ -307,5 +310,30 @@ class GameStartsTest {
             runCurrent()
 
             assertFalse(starts.offer!!.hardcore)
+        }
+
+    // --- A start from a save ---
+
+    @Test
+    fun playFromStateStartsFromIt() =
+        runTest {
+            val starts = starts()
+
+            starts.playFromState(crash, StateRef("", 3, shared = true)) { calls += "refused $it" }
+            runCurrent()
+
+            assertEquals(listOf("startFrom Crash Bandicoot ${StateRef("", 3, shared = true)}"), calls)
+        }
+
+    @Test
+    fun playFromStateIsRefusedInHardcore() =
+        runTest {
+            api.hardcoreWouldStart = true
+            val starts = starts()
+
+            starts.playFromState(crash, StateRef("SCUS-94900", 2)) { calls += "refused $it" }
+            runCurrent()
+
+            assertEquals(listOf("refused Loading a state is off in hardcore mode"), calls)
         }
 }

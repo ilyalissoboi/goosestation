@@ -262,6 +262,15 @@ class GameMenuTest {
                 state = state.copy(slots = state.slots?.copy(deleting = entry))
             }
 
+            override fun confirmSwitch() {
+                calls += "confirmSwitch"
+            }
+
+            override fun cancelSwitch() {
+                calls += "cancelSwitch"
+                state = state.copy(slots = state.slots?.copy(switching = null))
+            }
+
             override fun confirmDelete() {
                 calls += "confirmDelete"
             }
@@ -957,6 +966,39 @@ class GameMenuTest {
         rule.onNode(isFocused() and hasText("Delete")).assertExists()
         press(Key.Enter)
         assertEquals(listOf("askDelete 2", "confirmDelete"), calls)
+    }
+
+    @Test
+    fun theSwitchQuestionFocusesCancel() {
+        val rows = shared(4)
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+            )
+        show()
+
+        rule.onNodeWithText("Load Spyro the Dragon from shared slot 4? This game stops.").assertExists()
+        rule.onNode(isFocused() and hasText("Cancel")).assertExists()
+        press(Key.DirectionLeft)
+        press(Key.Enter)
+        assertEquals(listOf("confirmSwitch"), calls)
+    }
+
+    @Test
+    fun bCancelsTheSwitch() {
+        val rows = shared(4)
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+            )
+        show()
+
+        press(Key.ButtonB)
+
+        assertEquals(listOf("cancelSwitch"), calls)
+        assertNotNull(state.slots)
     }
 
     @Test

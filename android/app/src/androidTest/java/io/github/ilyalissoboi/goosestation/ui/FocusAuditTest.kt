@@ -1070,6 +1070,30 @@ class FocusAuditTest {
     }
 
     @Test
+    fun gameMenuSwitchQuestion() {
+        val held = HeldGame("Spyro the Dragon", "SCUS-94228", "content://g/spyro.chd")
+        val shared = listOf(SlotEntry(4, 1_700_000_000L, shared = true, holds = held))
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    slots =
+                        SlotPanel(
+                            SlotMode.Load,
+                            emptyList(),
+                            tab = SlotTab.Shared,
+                            shared = shared,
+                            switching = shared[0],
+                        ),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
     fun gameMenuDeleteQuestion() {
         val entries = listOf(SlotEntry(1, 1_700_000_000L), SlotEntry(3, 1_700_000_000L))
         show {

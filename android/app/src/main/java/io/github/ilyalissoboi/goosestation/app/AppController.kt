@@ -127,6 +127,9 @@ object AppController : NativeCallbacks {
         "The SD card was removed, so the game was stopped. Its memory cards are saved on this device."
     private const val COPYING = "Copying your data from the data folder…"
 
+    /** A game the in-game menu left for, from its shared slot, that the library no longer has. */
+    private const val GONE_FROM_LIBRARY = "Couldn't start that save's game: it isn't in your library any more."
+
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // The controllers' rumble, on a thread of its own, so neither the core nor the UI waits on a vibrator.
@@ -425,8 +428,13 @@ object AppController : NativeCallbacks {
             onSettings = { game ->
                 if (game == null) gameMenuSettings.close() else gameMenuSettings.open(game, running = true)
             },
+            // A shared slot of another game: it starts once this one has stopped (onGameStopped()).
+            onSwitch = { nextStart = it },
         )
     }
+
+    /** The game to start from a state once the running one has stopped, as the in-game menu asked. */
+    private var nextStart: StateStart? = null
 
     /** What the app keeps per game on this device: its last slot, last disc, and so on. */
     private val gamePrefs by lazy { SharedPreferencesStore(context, "game") }
@@ -462,6 +470,7 @@ object AppController : NativeCallbacks {
             NativeGameCoreApi,
             gameRecords,
             lastSlots,
+            ::startGameFromStateNow,
             ::startGameNow,
         )
     }
@@ -1102,6 +1111,37 @@ object AppController : NativeCallbacks {
         NativeLibrary.startGame(game.path, disc, resume)
     }
 
+    // A start from a state (a save on the Saves page, or a shared slot of another game), as startGameNow() starts.
+    private fun startGameFromStateNow(
+        game: GameEntry,
+        state: StateRef,
+    ) {
+        if (!ready || gameActive) return
+        if (!catchUps.startsAllowed) {
+            showMessage(COPYING)
+            return
+        }
+        lastGamePath = game.path
+        libraryFocus = null
+        runningGame = game
+        focusSettings = false
+        message = null
+        messageIsError = false
+        gameActive = true
+        holdMemcards = true
+        screen = Screen.Game
+        NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared)
+    }
+
+    // The game the in-game menu left for, from its shared slot, now that the last one has stopped.
+    private fun startNext() {
+        val next = nextStart ?: return
+        nextStart = null
+        val entry = games.firstOrNull { it.path == next.gamePath }
+        if (entry == null) return showError(GONE_FROM_LIBRARY)
+        gameStarts.playFromState(entry, next.state, ::showError)
+    }
+
     // Back to the library, which waits for the game's onGameStopped() before it starts another.
     fun leaveGame() {
         promptOpen = false
@@ -1694,11 +1734,13 @@ object AppController : NativeCallbacks {
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
             if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
-            // The memory cards held back while it ran come in now, then the game's own writes go out.
+            // The memory cards held back while it ran come in now, then the game's own writes go out; a game the menu
+            // left for starts after that, on the cards as they are now.
             scope.launch {
                 withContext(coreDispatcher) { readCorePaths() }
                 pull(onlyMemcards = true)
                 push(force = true)
+                startNext()
             }
         }
     }

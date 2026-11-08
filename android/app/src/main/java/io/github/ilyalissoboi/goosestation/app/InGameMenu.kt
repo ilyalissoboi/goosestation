@@ -43,7 +43,8 @@ data class SlotEntry(
  * and the last one's failure, as shown ([error]). In Load, [others] are the states still filed under the game's other
  * discs. The Shared tab lists the [shared] slots (null while they're read), focusing [sharedFocus]. A game without a
  * key ([hasKey] false) has no slots of its own: it opens on Shared. In Load, [deleting] is the save it asks to delete,
- * and [focusRow], when set, the row to focus (the one after a deleted save), before [focus] and [sharedFocus].
+ * and [focusRow], when set, the row to focus (the one after a deleted save), before [focus] and [sharedFocus]. A shared
+ * slot of another game asks first ([switching]) whether to stop this game and start that one from it.
  */
 data class SlotPanel(
     val mode: SlotMode,
@@ -59,6 +60,7 @@ data class SlotPanel(
     val hasKey: Boolean = true,
     val deleting: SlotEntry? = null,
     val focusRow: SlotEntry? = null,
+    val switching: SlotEntry? = null,
 )
 
 /**
@@ -223,6 +225,11 @@ interface GameMenuActions {
 
     fun cancelDelete() {}
 
+    /** Loads the other game's shared slot asked about: this game is left as Exit game leaves it, then that one starts. */
+    fun confirmSwitch() {}
+
+    fun cancelSwitch() {}
+
     /** Opens leaderboard [id] in the Leaderboards tab, fetching its entries. */
     fun openLeaderboard(id: Int) {}
 
@@ -238,6 +245,12 @@ interface GameMenuActions {
     /** Back from the game's settings to the menu. */
     fun closeSettings() {}
 }
+
+/** A game to start once the running one has stopped: the library game at [gamePath], from [state]. */
+data class StateStart(
+    val gamePath: String,
+    val state: StateRef,
+)
 
 /** The save state hotkeys the app runs itself, by the core's names for them ([coreName]). */
 enum class StateHotkey(
@@ -267,6 +280,8 @@ class InGameMenu(
     private val onExit: (resumeError: String?) -> Unit,
     /** The running game's own settings are to show, or, with null, to go. */
     private val onSettings: (GameEntry?) -> Unit = {},
+    /** Exit game is leaving for another game, to start from a shared slot: just before [onExit]. */
+    private val onSwitch: (StateStart) -> Unit = {},
 ) : GameMenuActions {
     var state by mutableStateOf(GameMenuState())
         private set
@@ -290,6 +305,9 @@ class InGameMenu(
 
     private val canSave get() = state.booted && !serial.isNullOrBlank()
 
+    /** The game Exit game is leaving for, once the player has said to load another game's shared slot. */
+    private var switchTo: StateStart? = null
+
     /** The save state hotkeys' slot, once one has run in this game: until then, the last slot, or slot 1. */
     private var selectedSlot: Int? = null
 
@@ -311,6 +329,7 @@ class InGameMenu(
         gameId++
         panelId++
         running = null
+        switchTo = null
         selectedSlot = null
         if (state.settings) onSettings(null)
         state = GameMenuState()
@@ -322,6 +341,7 @@ class InGameMenu(
      */
     fun opened() {
         panelId++
+        switchTo = null
         state =
             state.copy(
                 slots = null,
@@ -367,7 +387,7 @@ class InGameMenu(
 
     override fun switchTab() {
         state.slots?.let { slots ->
-            if (slots.busy || slots.replacing != null || slots.deleting != null) return
+            if (slots.busy || slots.replacing != null || slots.deleting != null || slots.switching != null) return
             val tab = if (slots.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
             state = state.copy(slots = slots.copy(tab = tab, error = null))
             return
@@ -484,10 +504,10 @@ class InGameMenu(
             return
         }
         state = state.copy(confirmingExit = false)
-        if (!canSave || serial == null) return onExit(null)
+        if (!canSave || serial == null) return leave(null)
         state = state.copy(exiting = true)
         scope.launch {
-            if (!withContext(game) { api.savesResumeState() }) return@launch onExit(null)
+            if (!withContext(game) { api.savesResumeState() }) return@launch leave(null)
             val savedAt = withContext(game) { api.getSaveStateTimes(serial)[0] }
             if (savedAt > 0) {
                 state = state.copy(exiting = false, replacingResume = savedAt)
@@ -508,18 +528,26 @@ class InGameMenu(
     override fun keepResume() {
         if (state.replacingResume == null) return
         state = state.copy(replacingResume = null)
-        onExit(null)
+        leave(null)
     }
 
-    /** Stay in the game. */
+    /** Stay in the game, and not go to another. */
     override fun cancelReplaceResume() {
+        switchTo = null
         state = state.copy(replacingResume = null)
     }
 
     private suspend fun saveAndExit() {
         val key = serial.orEmpty()
         val error = withContext(game) { api.saveResumeState(key) }
-        onExit(error)
+        leave(error)
+    }
+
+    /** The game stops ([onExit]), saying first which game is to start after it, if one is ([onSwitch]). */
+    private fun leave(resumeError: String?) {
+        switchTo?.let(onSwitch)
+        switchTo = null
+        onExit(resumeError)
     }
 
     override fun openSlots(mode: SlotMode) {
@@ -578,6 +606,20 @@ class InGameMenu(
                 updatePanel(id) { panel -> panel.withRow(read) }
             }
         }
+    }
+
+    override fun confirmSwitch() {
+        val panel = state.slots ?: return
+        val entry = panel.switching ?: return
+        val path = entry.holds?.path ?: return
+        switchTo = StateStart(path, entry.ref(serial.orEmpty()))
+        closeSlots()
+        exit()
+    }
+
+    override fun cancelSwitch() {
+        val panel = state.slots ?: return
+        state = state.copy(slots = panel.copy(switching = null, focusRow = panel.switching))
     }
 
     override fun askDelete(entry: SlotEntry) {
@@ -648,7 +690,11 @@ class InGameMenu(
 
     override fun pickShared(slot: Int) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.replacing != null || panel.deleting != null || panel.tab != SlotTab.Shared) return
+        if (panel.busy || panel.replacing != null || panel.deleting != null || panel.switching != null ||
+            panel.tab != SlotTab.Shared
+        ) {
+            return
+        }
         val entry = panel.shared?.firstOrNull { it.slot == slot } ?: return
         val saved = entry.savedAt != null
         when {
@@ -680,7 +726,16 @@ class InGameMenu(
             val holds = read?.holds
             when {
                 holds == null -> updatePanel(id) { it.copy(error = UNREADABLE) }
-                holds.path == path -> {
+                holds.path == null -> updatePanel(id) { it.copy(error = SaveLists.notInLibrary(read)) }
+                holds.path != path -> {
+                    // Asked before this game is left, so a refusal loses nothing.
+                    if (withContext(game) { api.hardcoreWouldStart() }) {
+                        updatePanel(id) { it.copy(error = HARDCORE_LOAD) }
+                    } else {
+                        updatePanel(id) { it.copy(switching = read, error = null) }
+                    }
+                }
+                else -> {
                     val slot = entry.slot
                     run(
                         slot,
@@ -870,6 +925,7 @@ class InGameMenu(
     }
 
     override fun cancelExit() {
+        switchTo = null
         state = state.copy(confirmingExit = false)
     }
 

@@ -114,13 +114,21 @@ fun SaveSlotPanel(
 
     // The slot to focus once the question about replacing it is answered.
     var returnTo by remember { mutableStateOf<Int?>(null) }
-    val asking = panel.replacing != null || panel.deleting != null
-    LaunchedEffect(entries == null, panel.replacing, panel.deleting, panel.focusRow, panel.tab, switches) {
+    val asking = panel.replacing != null || panel.deleting != null || panel.switching != null
+    LaunchedEffect(
+        entries == null,
+        panel.replacing,
+        panel.deleting,
+        panel.switching,
+        panel.focusRow,
+        panel.tab,
+        switches,
+    ) {
         val replacing = panel.replacing
         when {
             // A question focuses its Cancel.
             replacing != null -> returnTo = replacing
-            panel.deleting != null -> {}
+            panel.deleting != null || panel.switching != null -> {}
             entries == null -> title.requestFocus()
             else -> {
                 val wanted = returnTo ?: if (sharedTab) panel.sharedFocus else panel.focus
@@ -189,9 +197,17 @@ fun SaveSlotPanel(
                 )
                 val replacing = panel.replacing
                 val deleting = panel.deleting
+                val switching = panel.switching
                 // Load's rows: X or a long press asks before deleting the save.
                 val delete: ((SlotEntry) -> Unit)? = if (saving) null else actions::askDelete
-                if (deleting != null) {
+                if (switching != null) {
+                    Question(
+                        SaveLists.switchQuestion(switching),
+                        "Load",
+                        onConfirm = actions::confirmSwitch,
+                        onCancel = actions::cancelSwitch,
+                    )
+                } else if (deleting != null) {
                     Question(
                         SaveLists.deleteQuestion(deleting),
                         "Delete",

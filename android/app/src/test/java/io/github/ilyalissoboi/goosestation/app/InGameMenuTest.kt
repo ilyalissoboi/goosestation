@@ -45,6 +45,7 @@ class InGameMenuTest {
                 onResume = { calls += "resume" },
                 onExit = { calls += "exit $it" },
                 onSettings = { calls += "settings ${it?.serial}" },
+                onSwitch = { calls += "switch ${it.gamePath} ${it.state.slot}" },
             )
         if (booted) {
             menu.gameStarted(game(SERIAL))
@@ -1991,5 +1992,153 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals(listOf("message Loading a state is off in hardcore mode"), calls)
+        }
+
+    // --- A shared slot of another game ---
+
+    private suspend fun TestScope.sharedLoad(
+        menu: InGameMenu,
+        holds: SaveStatePreview = spyro,
+    ) {
+        api.sharedTimes[3] = 300
+        api.sharedHolds[3] = holds
+        menu.openSlots(SlotMode.Load)
+        runCurrent()
+        menu.switchTab()
+        calls.clear()
+    }
+
+    @Test
+    fun anotherGamesSharedSlotAsksFirst() =
+        runTest {
+            val menu = menu()
+            sharedLoad(menu)
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertEquals(3, menu.slots().switching?.slot)
+            assertEquals(
+                "Load Spyro from shared slot 3? This game stops.",
+                SaveLists.switchQuestion(menu.slots().switching!!),
+            )
+            assertTrue(calls.none { it.startsWith("loadSharedState") || it.startsWith("exit") })
+
+            menu.cancelSwitch()
+            assertNull(menu.slots().switching)
+        }
+
+    @Test
+    fun confirmingTheSwitchExitsThenStartsIt() =
+        runTest {
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+
+            assertNull(menu.state.slots)
+            assertEquals(
+                listOf(
+                    "savesResumeState",
+                    "getSaveStateTimes $SERIAL",
+                    "saveResumeState $SERIAL",
+                    "switch content://games/spyro.cue 3",
+                    "exit null",
+                ),
+                calls,
+            )
+        }
+
+    @Test
+    fun theSwitchAsksToReplaceTheResumeState() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 900
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+            assertEquals(900L, menu.state.replacingResume)
+
+            menu.keepResume()
+            assertEquals(listOf("switch content://games/spyro.cue 3", "exit null"), calls.takeLast(2))
+        }
+
+    @Test
+    fun theSwitchWarnsWhileACardIsWritten() =
+        runTest {
+            api.cardBusy = true
+            val menu = menu()
+            menu.opened()
+            runCurrent()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+
+            menu.confirmSwitch()
+            runCurrent()
+            assertTrue(menu.state.confirmingExit)
+            assertTrue(calls.none { it.startsWith("switch") })
+
+            menu.confirmExit()
+            runCurrent()
+            assertEquals(listOf("switch content://games/spyro.cue 3", "exit null"), calls.takeLast(2))
+        }
+
+    @Test
+    fun aCancelledSwitchIsForgotten() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 900
+            val menu = menu()
+            sharedLoad(menu)
+            menu.pickShared(3)
+            runCurrent()
+            menu.confirmSwitch()
+            runCurrent()
+
+            // B on the resume question stays in the game.
+            menu.cancelReplaceResume()
+            api.times.remove(SaveSlots.RESUME)
+            calls.clear()
+
+            menu.exit()
+            runCurrent()
+            assertTrue(calls.none { it.startsWith("switch") })
+            assertEquals("exit null", calls.last())
+        }
+
+    @Test
+    fun aSwitchIsRefusedWhenHardcoreWouldStart() =
+        runTest {
+            api.hardcoreWouldStart = true
+            val menu = menu()
+            sharedLoad(menu)
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertNull(menu.slots().switching)
+            assertEquals("Loading a state is off in hardcore mode", menu.slots().error)
+        }
+
+    @Test
+    fun aGameNotInTheLibraryIsNamed() =
+        runTest {
+            val menu = menu()
+            sharedLoad(menu, SaveStatePreview(null, 0, "SCUS-94228", "Spyro the Dragon", "", ""))
+
+            menu.pickShared(3)
+            runCurrent()
+
+            assertNull(menu.slots().switching)
+            assertEquals(
+                "Shared slot 3 needs Spyro the Dragon (SCUS-94228), which isn't in your library.",
+                menu.slots().error,
+            )
         }
 }

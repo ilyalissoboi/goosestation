@@ -92,6 +92,24 @@ object SaveLists {
             else -> "slot ${entry.slot}"
         }
 
+    /** What the question before loading shared [entry], another game's, asks: that game starts in this one's place. */
+    fun switchQuestion(entry: SlotEntry): String =
+        "Load ${entry.holds?.label.orEmpty()} from shared slot ${entry.slot}? This game stops."
+
+    /** Why shared [entry]'s game can't start: the library doesn't have it. */
+    fun notInLibrary(entry: SlotEntry): String {
+        val holds = entry.holds
+        val game =
+            if (holds == null ||
+                holds.serial.isBlank()
+            ) {
+                holds?.title.orEmpty()
+            } else {
+                "${holds.title} (${holds.serial})"
+            }
+        return "Shared slot ${entry.slot} needs $game, which isn't in your library."
+    }
+
     /** What the question before deleting [entry] asks. */
     fun deleteQuestion(entry: SlotEntry): String {
         val resume = entry.slot == SaveSlots.RESUME

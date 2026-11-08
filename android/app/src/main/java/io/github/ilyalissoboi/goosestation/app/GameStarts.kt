@@ -36,6 +36,8 @@ class GameStarts(
     private val api: GameCoreApi,
     private val records: GameRecordStore,
     private val lastSlots: LastSlotStore,
+    /** Boots a game from a state: one of its saves, or a shared slot. */
+    private val startFrom: (game: GameEntry, state: StateRef) -> Unit = { _, _ -> },
     private val start: (game: GameEntry, disc: Int, resume: Boolean) -> Unit,
 ) {
     /** The question being asked, or null. */
@@ -114,10 +116,35 @@ class GameStarts(
         start(offer.game, offerDisc, false)
     }
 
+    /**
+     * Starts [entry] from [state] (the Saves page's pick, or a shared slot of another game), on the disc the state was
+     * made on. Not when hardcore mode would start, which the state would end: [refused] says so.
+     */
+    fun playFromState(
+        entry: GameEntry,
+        state: StateRef,
+        refused: (String) -> Unit,
+    ) {
+        if (checking || offer != null) return
+        checking = true
+        scope.launch {
+            try {
+                if (withContext(game) { api.hardcoreWouldStart() }) refused(HARDCORE_LOAD) else startFrom(entry, state)
+            } finally {
+                checking = false
+            }
+        }
+    }
+
     /** Nothing starts. */
     fun cancel() {
         take()
     }
 
     private fun take(): ResumeOffer? = offer.also { offer = null }
+
+    companion object {
+        /** What a start from a save says in hardcore mode, as a load does. */
+        const val HARDCORE_LOAD = "Loading a state is off in hardcore mode"
+    }
 }

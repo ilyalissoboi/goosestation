@@ -103,6 +103,7 @@ fun GameMenu(
     BackHandler {
         val shown = current
         when {
+            shown.slots?.switching != null -> actions.cancelSwitch()
             shown.slots?.deleting != null -> actions.cancelDelete()
             shown.slots?.replacing != null -> actions.cancelReplace()
             shown.slots != null -> {
@@ -139,6 +140,7 @@ fun GameMenu(
             state.slots?.mode,
             state.slots?.replacing,
             state.slots?.deleting,
+            state.slots?.switching,
             state.discs != null,
             state.codes != null,
             state.cheevos != null,

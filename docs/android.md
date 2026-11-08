@@ -1021,8 +1021,15 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   shared row names the game it holds under its slot (the library's title, or its serial for a game the library
   doesn't know), and its disc for a multi-disc game. Saving to a shared slot writes the running game ("Saved to shared
   slot 3"), asking "Replace the save in shared slot 3?" first when it holds one. A shared slot made in the running
-  game loads like any slot ("Loaded shared slot 3"); the host refuses to load one made in another game into it
-  ("That save is from another game."), and one whose state can't be read says "Couldn't read that save." A game
+  game loads like any slot ("Loaded shared slot 3"). One made in another game asks first, in the panel: "Load Crash
+  Bandicoot from shared slot 3? This game stops.", Load and Cancel, Cancel focused. Load leaves the running game as
+  Exit game does (its resume state saved when that's on, with Exit's question to replace one, and its warning while a
+  memory card is being written; Cancel on either stays in the game), and once it has stopped, and its memory cards
+  have been synced, starts the other game from the state, on the disc it was made on. If that game isn't in the
+  library, the load is refused with the game it needs ("Shared slot 3 needs Crash Bandicoot (SCUS-94900), which isn't
+  in your library."), and when hardcore mode would start, with "Loading a state is off in hardcore mode", both before
+  the running game is left. The host itself refuses to load another game's state into the running one ("That save
+  is from another game."), and one whose state can't be read says "Couldn't read that save." A game
   without a key (the BIOS alone, say) opens the panel on Shared, its This game tab saying "This game can't keep save
   states of its own." In a list under 150 dp tall (a handheld's at large text), the rows are compact: the small
   picture, the game on one line, and the time on Saved's line.

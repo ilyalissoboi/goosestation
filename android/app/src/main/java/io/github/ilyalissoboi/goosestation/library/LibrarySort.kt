@@ -47,9 +47,40 @@ object LibraryOrder {
     ): List<GameEntry> {
         // File titles come from decoding paths: once a game, not once a comparison.
         val fileTitles = if (sort.key == SortKey.FileTitle) games.map { GameFiles.fileTitle(it.path) } else null
-        return games.indices
-            .sortedWith { a, b -> compare(games[a], games[b], sort, fileTitles?.get(a), fileTitles?.get(b)) }
-            .map { games[it] }
+        val order =
+            mergeSort(games.size) { a, b -> compare(games[a], games[b], sort, fileTitles?.get(a), fileTitles?.get(b)) }
+        return order.map { games[it] }
+    }
+
+    /**
+     * The indices 0 until [size] in [compare]'s order, stably, by merging. Not the platform's sort: Big Picture's File
+     * title comparison isn't consistent ("Crash" ties with both "Crash 2" and "Crasha", which don't tie with each
+     * other), and TimSort throws when it sees that. A merge never checks, so the order is Big Picture's comparison's
+     * wherever that has one.
+     */
+    private fun mergeSort(
+        size: Int,
+        compare: (Int, Int) -> Int,
+    ): IntArray {
+        var from = IntArray(size) { it }
+        var to = IntArray(size)
+        var width = 1
+        while (width < size) {
+            var start = 0
+            while (start < size) {
+                val middle = minOf(start + width, size)
+                val end = minOf(start + 2 * width, size)
+                var i = start
+                var j = middle
+                for (k in start until end) {
+                    to[k] = if (i < middle && (j >= end || compare(from[i], from[j]) <= 0)) from[i++] else from[j++]
+                }
+                start = end
+            }
+            from = to.also { to = from }
+            width *= 2
+        }
+        return from
     }
 
     private fun compare(

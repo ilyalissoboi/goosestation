@@ -130,6 +130,24 @@ class LibrarySortTest {
     }
 
     @Test
+    fun fileTitlesThatStartOneAnotherNeverBreakTheSort() {
+        // "Crash" ties with both "Crash 2" and "Crasha" (each starts with it), which don't tie with each other: no
+        // order of three such can satisfy every comparison, and a sort that checks its comparator throws.
+        val names = listOf("Crash", "Crash 2", "Crasha", "Cras", "Crash Team", "Crash!", "Crashb", "C", "Cr")
+        for (seed in 1..300) {
+            val random = Random(seed)
+            val games =
+                (1..random.nextInt(32, 600)).map {
+                    game(title = "T${random.nextInt(1000)}", path = "/games/${names[random.nextInt(names.size)]}.cue")
+                }
+            for (reverse in listOf(false, true)) {
+                val sorted = LibraryOrder.sorted(games, LibrarySort(SortKey.FileTitle, reverse))
+                assertEquals(games.size, sorted.size)
+            }
+        }
+    }
+
+    @Test
     fun caseFoldsOnlyAscii() {
         assertEquals(listOf("apple", "Banana"), titles(listOf(game("Banana"), game("apple")), SortKey.Title))
         // strcasecmp folds ASCII only: É (C3 89) comes before é (C3 A9) whatever follows.

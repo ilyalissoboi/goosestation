@@ -2385,7 +2385,9 @@ class OrientationLayoutTest {
                 rule.runOnIdle { search.setTextAndPlaceCursorAtEnd("a game no one has, by a name that goes on") }
                 rule.waitForIdle()
                 assertTextsLaidOut(inView = true)
-                press(Key.ButtonSelect)
+                // Focused as the D-pad would, not by Select: an emulator's own keyboard would take the Down.
+                rule.onNode(hasSetTextAction()).requestFocus()
+                rule.waitForIdle()
                 press(Key.DirectionDown)
                 assertTrue("Down from the field didn't reach Clear search", focusedHas("Clear search"))
                 assertFocusedInView(screen())

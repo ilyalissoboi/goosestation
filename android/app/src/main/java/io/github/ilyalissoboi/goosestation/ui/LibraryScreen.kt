@@ -146,6 +146,8 @@ fun LibraryScreen(
 
     fun clear() {
         search.clearText()
+        // Clear search goes with the search: the field takes the focus, as the button gives it.
+        if (area == LibraryArea.ClearSearch) searchFocus.focus()
     }
     var sortOpen by remember { mutableStateOf(false) }
     // Where the Sort button is, and where this screen is, in the root: the list opens under the button.
@@ -296,10 +298,7 @@ fun LibraryScreen(
                             query.orEmpty(),
                             // Scrolls on a short screen, so Clear search comes into view as it takes the focus.
                             area = content.verticalScroll(rememberScrollState()),
-                            onClear = {
-                                clear()
-                                searchFocus.focus()
-                            },
+                            onClear = ::clear,
                             modifier =
                                 Modifier
                                     .focusRequester(clearSearch)

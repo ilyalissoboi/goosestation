@@ -513,6 +513,22 @@ class LibraryScreenTest {
         rule.onNodeWithText("Game 25").assertIsDisplayed()
     }
 
+    @Test
+    fun aSortKeepsInViewAGameThatWasntTheFirstShown() {
+        show(games = games.map { if (it.title == "Game 01") it.copy(totalPlayedSeconds = 3_600) else it })
+        // Game 02, beside the first game shown, Game 01.
+        press(Key.DirectionRight)
+        rule.onNodeWithText("Game 02").assertIsFocused()
+
+        // Time played sends Game 01, which the grid follows, to the end; Game 02 moves up to Game 01's place.
+        openSort()
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.Enter)
+
+        rule.onNodeWithText("Game 02").assertIsDisplayed()
+    }
+
     // --- Searching ---
 
     private fun field() = rule.onNode(hasSetTextAction())
@@ -621,6 +637,19 @@ class LibraryScreenTest {
 
         press(Key.Enter)
         assertEquals("", field().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        field().assertIsFocused()
+    }
+
+    @Test
+    fun bOnClearSearchClearsAndFocusesTheField() {
+        show()
+        type("zelda")
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Clear search").assertIsFocused()
+
+        press(Key.ButtonB)
+
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
         field().assertIsFocused()
     }
 

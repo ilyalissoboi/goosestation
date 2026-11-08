@@ -446,6 +446,8 @@ in landscape in the bars beside the picture, in portrait under the picture, whic
   The layout grows with the screen and the Size setting, and shrinks as far as it must: **every touch area is at least
   48 dp each way** and none overlaps another's, even where the drawn shape is smaller (a shoulder's area runs into
   the gaps around it). Where the bars beside the picture are too narrow, the controls are drawn over the picture.
+  The D-pad and the face diamond reach the screen's edges, so they're kept from Android's edge gestures
+  (`systemGestureExclusion`): a thumb sliding inward plays, rather than going Back.
 - **Touch only:** it shows only in a game, never under the menu, and in Automatic only while no controller is
   connected, so the controller-first rules hold everywhere else. Nothing in it is focusable or `clickable`, and
   screen readers don't hear it. It never covers the app's own screens, which keep their own touch handling.

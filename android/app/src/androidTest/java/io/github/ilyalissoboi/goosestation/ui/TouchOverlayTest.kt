@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -53,6 +55,7 @@ class TouchOverlayTest {
     // The overlay's size and density, as it's laid out (the emulator's screen).
     private var size = DpSize.Zero
     private var density = 1f
+    private var view: View? = null
 
     // The overlay over black, filling the screen, with these; composed once, then changed. Returns its layout.
     private fun show(
@@ -70,6 +73,7 @@ class TouchOverlayTest {
                     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
                         size = DpSize(maxWidth, maxHeight)
                         density = LocalDensity.current.density
+                        view = LocalView.current
                         if (shown) {
                             TouchOverlay(
                                 sticks = this@TouchOverlayTest.sticks,
@@ -98,6 +102,28 @@ class TouchOverlayTest {
     private fun TouchLayout.centre(id: TouchControlId) = px(getValue(id).drawn.center)
 
     private fun bits(vararg buttons: TouchButton) = buttons.fold(0) { acc, b -> acc or b.bit }
+
+    // The D-pad and the face diamond run to the screen's edges, where a thumb's slide inward would be Android's Back
+    // gesture on gesture navigation: they're kept from it.
+    @Test
+    fun theClustersAreKeptFromTheBackGesture() {
+        val layout = show()
+        var rects = emptyList<android.graphics.Rect>()
+        rule.runOnIdle { rects = view!!.systemGestureExclusionRects }
+        for (id in listOf(TouchControlId.DPad, TouchControlId.Face)) {
+            val drawn = layout.getValue(id).drawn
+            val centre = px(drawn.center)
+            assertTrue(
+                "$id in $rects",
+                rects.any {
+                    it.contains(
+                        centre.x.toInt(),
+                        centre.y.toInt(),
+                    ) && it.width() >= drawn.width * density - 2
+                },
+            )
+        }
+    }
 
     @Test
     fun aTapPressesAndReleases() {

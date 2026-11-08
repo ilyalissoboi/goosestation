@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -209,13 +210,15 @@ private fun TouchControlView(
 ) {
     val colors = GooseStationTheme.colors
     when (control.id) {
+        // The clusters reach the screen's edges, where a thumb sliding inward is Android's Back gesture on gesture
+        // navigation: they're kept from it.
         TouchControlId.DPad -> {
-            Placed(control.drawn, "touch-${control.id}") {
+            Placed(control.drawn, "touch-${control.id}", Modifier.systemGestureExclusion()) {
                 Box(Modifier.fillMaxSize().drawBehind { drawDPad(layout.dpadArm.dp.toPx(), state, colors) })
             }
         }
         TouchControlId.Face -> {
-            Placed(control.drawn, "touch-${control.id}") {}
+            Placed(control.drawn, "touch-${control.id}", Modifier.systemGestureExclusion()) {}
             for (button in FACE) {
                 val rect = layout.faceButtonRect(button)
                 Placed(rect, "touch-$button") {
@@ -282,11 +285,12 @@ private fun TouchControlView(
     }
 }
 
-// [content] in a box at [rect] (dp, from the overlay's corner), out of the screen readers' way.
+// [content] in a box at [rect] (dp, from the overlay's corner), out of the screen readers' way, with [modifier].
 @Composable
 private fun Placed(
     rect: Rect,
     tag: String,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     Box(
@@ -294,7 +298,8 @@ private fun Placed(
             .absoluteOffset(rect.left.dp, rect.top.dp)
             .size(rect.width.dp, rect.height.dp)
             .testTag(tag)
-            .semantics(mergeDescendants = true) { hideFromAccessibility() },
+            .semantics(mergeDescendants = true) { hideFromAccessibility() }
+            .then(modifier),
     ) { content() }
 }
 

@@ -297,6 +297,8 @@ class MainActivity : ComponentActivity() {
                                     onOpenHotkeys = page::openHotkeys,
                                     onBack = AppController::controllersBack,
                                     cameFrom = state.cameFrom,
+                                    touch = AppController.touchControls.settings,
+                                    onTouch = { AppController.touchControls.settings = it },
                                 )
                             is ControllersView.Port -> {
                                 val bindings = state.bindings

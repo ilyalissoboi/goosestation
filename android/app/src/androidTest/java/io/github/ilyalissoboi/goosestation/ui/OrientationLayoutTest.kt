@@ -1842,6 +1842,10 @@ class OrientationLayoutTest {
             assertTextsLaidOut()
             assertTrue(focusedHas(PAD.name))
             assertFocusedInView()
+            // The touch controls' rows, their notes too.
+            pressUntilFocused(Key.DirectionDown, "Vibration")
+            assertTextsLaidOut()
+            assertFocusedInView()
             pressUntilFocused(Key.DirectionDown, "Port 2D")
             assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "Select + a button")

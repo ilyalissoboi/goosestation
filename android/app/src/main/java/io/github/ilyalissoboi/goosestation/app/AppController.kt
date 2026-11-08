@@ -429,6 +429,16 @@ object AppController : NativeCallbacks {
 
     /** What the app keeps per game on this device: its last slot, last disc, and so on. */
     private val gamePrefs by lazy { SharedPreferencesStore(context, "game") }
+
+    /** The on-screen touch controls' settings, on this device, and Port 1's kind for them in the running game. */
+    val touchControls by lazy {
+        TouchControls(
+            TouchPrefs(SharedPreferencesStore(context, "touch")),
+            { controllers?.connected?.value?.size ?: 0 },
+        ) {
+            osd.post(it)
+        }
+    }
     private val gameRecords by lazy { GameRecords(gamePrefs) }
     private val lastSlots by lazy { LastSlots(gamePrefs) }
 

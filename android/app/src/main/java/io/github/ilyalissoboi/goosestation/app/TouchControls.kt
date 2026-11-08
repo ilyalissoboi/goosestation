@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.input.PadKind
@@ -148,6 +149,15 @@ class TouchControls(
 
     fun gameStarted() {
         told = false
+    }
+
+    /** Counts [release]s: the overlay is made anew for each, so nothing it held stays held. Compose state. */
+    var releases by mutableIntStateOf(0)
+        private set
+
+    /** Lets go of everything the overlay holds, as the app pauses or its window loses focus. */
+    fun release() {
+        releases++
     }
 
     companion object {

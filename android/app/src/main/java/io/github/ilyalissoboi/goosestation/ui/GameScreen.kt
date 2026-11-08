@@ -8,9 +8,13 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
@@ -28,6 +32,8 @@ import io.github.ilyalissoboi.goosestation.app.AchievementOverlay
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.OsdMessage
+import io.github.ilyalissoboi.goosestation.app.TouchSettings
+import io.github.ilyalissoboi.goosestation.app.TouchVisibility
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 
@@ -39,6 +45,12 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
  * show over the game, under the menu; [onOsdExpire] runs at [osdExpiry]. While the menu's [GameMenuState.settings],
  * the game's own settings ([settings]) take the menu's place, over the game, which stays paused under them; Mode
  * resumes from them as from the menu.
+ *
+ * While [touch], the touch controls ([TouchOverlay], at [touchSettings]' size and opacity, sticks as [touch] says) are
+ * over the game and its messages, sending what they hold to [touchSink] and ticking [ticker]; their menu button opens
+ * the menu as Back does. They hide while the menu is open. In portrait they want the picture at the top, menu or not:
+ * [onPictureAtTop] says so as that changes, and false once they go. A new [touchKey] makes them anew, letting go of
+ * everything they held.
  */
 @Composable
 fun GameScreen(
@@ -57,6 +69,12 @@ fun GameScreen(
     overlayExpiry: Long? = null,
     onOverlayExpire: () -> Unit = {},
     settings: @Composable () -> Unit = {},
+    touch: TouchVisibility.Shown? = null,
+    touchSettings: TouchSettings = TouchSettings(),
+    touchSink: TouchSink = TouchSink {},
+    ticker: Ticker? = null,
+    onPictureAtTop: (Boolean) -> Unit = {},
+    touchKey: Int = 0,
 ) {
     BackHandler(enabled = !menuOpen, onBack = onOpenMenu)
 
@@ -69,7 +87,13 @@ fun GameScreen(
         onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val atTop = touch != null && maxHeight > maxWidth
+        val currentPictureAtTop by rememberUpdatedState(onPictureAtTop)
+        DisposableEffect(atTop) {
+            currentPictureAtTop(atTop)
+            onDispose { if (atTop) currentPictureAtTop(false) }
+        }
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
@@ -85,6 +109,19 @@ fun GameScreen(
             },
         )
         OsdLayer(osd, fastForward, osdExpiry, onOsdExpire, card, indicators, overlayExpiry, onOverlayExpire, badge)
+        if (touch != null && !menuOpen) {
+            // Made anew for each new key, letting go of everything the last one held.
+            key(touchKey) {
+                TouchOverlay(
+                    sticks = touch.sticks,
+                    size = touchSettings.size,
+                    opacity = touchSettings.opacity,
+                    sink = touchSink,
+                    ticker = ticker,
+                    onMenu = onOpenMenu,
+                )
+            }
+        }
         when {
             menuOpen && menu.settings ->
                 Box(

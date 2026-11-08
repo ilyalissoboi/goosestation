@@ -27,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.NativeShaderPackApi
 import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
+import io.github.ilyalissoboi.goosestation.input.PadKind
 import io.github.ilyalissoboi.goosestation.input.Rumble
 import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
@@ -1647,6 +1648,7 @@ object AppController : NativeCallbacks {
             val started = runningGame ?: GameEntry("", title, serial, "", 0, 0, null)
             gameMenu.gameStarted(if (started.serial.isBlank()) started.copy(serial = serial) else started)
             unreachableSaid = false
+            touchControls.gameStarted()
             if (signInExpired) {
                 signInExpired = false
                 // With what it keeps for when the player signs in again.
@@ -1854,6 +1856,10 @@ object AppController : NativeCallbacks {
 
     override fun onFastForwardChanged(enabled: Boolean) {
         mainHandler.post { gameMenu.fastForwardChanged(enabled) }
+    }
+
+    override fun onPadKindChanged(kind: Int) {
+        mainHandler.post { touchControls.kind = PadKind.fromCore(kind) }
     }
 
     override fun onRumble(

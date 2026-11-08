@@ -139,6 +139,15 @@ class TouchControlsTest {
         assertNull(touch.shown(inGame = true, menuOpen = false))
     }
 
+    // Each release (the app paused, the window's focus lost) is a new count, which makes the overlay anew.
+    @Test
+    fun aReleaseIsANewCount() {
+        val before = touch.releases
+        touch.release()
+        touch.release()
+        assertEquals(before + 2, touch.releases)
+    }
+
     private companion object {
         const val MESSAGE = "Touch controls work with a digital pad or an analog controller on Port 1."
     }

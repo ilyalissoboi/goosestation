@@ -93,8 +93,9 @@ std::optional<u32> FindStateDisc(const Game& game, std::string_view serial, std:
 /// for a game without discs, or a disc that isn't known). It is when: its serial is [game]'s key or one of its discs'
 /// serials; or, when it records no serial or [game] has none known, its media is an M3U named as [game]'s playlist, or
 /// its media's file name is [game]'s or one of its discs', ignoring case; or it records no serial and no media, and
-/// [game] has no key and no discs (the BIOS alone).
-std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std::string_view media_path,
-                                  u32 subimage_index);
+/// [game] has no key and no discs, and its [title] is the file title of [game]'s path, as the core titles a PSF (or the
+/// BIOS alone, with no path and no title).
+std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std::string_view title,
+                                  std::string_view media_path, u32 subimage_index);
 
 } // namespace AndroidDiscGroups

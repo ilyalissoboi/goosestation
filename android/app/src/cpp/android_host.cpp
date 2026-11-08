@@ -1584,9 +1584,10 @@ void AndroidHost::StartGame(std::string path, u32 disc, std::optional<BootState>
       if (from.has_value() && from->shared && (!game.key.empty() || !game.discs.empty()))
       {
         const std::optional<ExtendedSaveStateInfo> info = ReadStateInfo(boot_state);
-        if (!info.has_value() || !AndroidDiscGroups::MatchStateGame(game, info->serial, info->media_path,
-                                                                    info->media_subimage_index)
-                                     .has_value())
+        if (!info.has_value() ||
+            !AndroidDiscGroups::MatchStateGame(game, info->serial, info->title, info->media_path,
+                                               info->media_subimage_index)
+               .has_value())
         {
           NotifyError("Couldn't start from that save: it's another game's.");
           NotifyGameStopped();
@@ -1810,7 +1811,8 @@ std::optional<AndroidHost::SaveStatePreview> AndroidHost::GetStatePreview(std::s
 
       // The game it holds: the running one, else the listed game at game_path, else any listed game.
       const auto match = [&info](const AndroidDiscGroups::Game& game) {
-        return AndroidDiscGroups::MatchStateGame(game, info->serial, info->media_path, info->media_subimage_index);
+        return AndroidDiscGroups::MatchStateGame(game, info->serial, info->title, info->media_path,
+                                                 info->media_subimage_index);
       };
       const auto take = [&preview](const AndroidDiscGroups::Game& game, u32 disc) {
         // Only a multi-disc game's rows say their disc.
@@ -1929,7 +1931,7 @@ std::optional<std::string> AndroidHost::LoadSharedState(s32 slot)
       return false;
     }
     if (!s_running_game.has_value() ||
-        !AndroidDiscGroups::MatchStateGame(*s_running_game, info->serial, info->media_path,
+        !AndroidDiscGroups::MatchStateGame(*s_running_game, info->serial, info->title, info->media_path,
                                            info->media_subimage_index)
            .has_value())
     {

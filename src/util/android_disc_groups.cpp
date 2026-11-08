@@ -379,8 +379,8 @@ std::optional<u32> FindStateDisc(const Game& game, std::string_view serial, std:
   return std::nullopt;
 }
 
-std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std::string_view media_path,
-                                  u32 subimage_index)
+std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std::string_view title,
+                                  std::string_view media_path, u32 subimage_index)
 {
   const std::string_view file_name = FileName(media_path);
   const auto disc = [&]() {
@@ -418,8 +418,13 @@ std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std
     }
   }
 
-  if (serial.empty() && media_path.empty() && game.key.empty() && game.discs.empty())
+  // A PSF's state records no serial and no media: only its title, which the core takes from its file's title. Two
+  // PSFs differ by it.
+  if (serial.empty() && media_path.empty() && game.key.empty() && game.discs.empty() &&
+      title == Path::GetFileTitle(game.path))
+  {
     return 0u;
+  }
 
   return std::nullopt;
 }

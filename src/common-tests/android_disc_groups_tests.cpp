@@ -14,6 +14,7 @@
 using AndroidDiscGroups::Disc;
 using AndroidDiscGroups::FileType;
 using AndroidDiscGroups::FindStateDisc;
+using AndroidDiscGroups::MatchStateGame;
 using AndroidDiscGroups::Game;
 using AndroidDiscGroups::GroupFiles;
 using AndroidDiscGroups::ListedFile;
@@ -312,4 +313,54 @@ TEST(AndroidDiscGroups, FindStateDiscSerialOnTwoDiscs)
   game.discs[1].serial = game.discs[0].serial;
   EXPECT_EQ(FindStateDisc(game, "SCUS-94163", "/home/a/ff7 (disc 2).chd", 0), 2u);
   EXPECT_FALSE(FindStateDisc(game, "SCUS-94163", "/home/a/unknown.chd", 0).has_value());
+}
+
+namespace {
+
+Game Exe()
+{
+  Game game;
+  game.key = "HASH-1";
+  game.title = "padtest";
+  game.path = std::string(FOLDER) + "padtest.psexe";
+  return game;
+}
+
+} // namespace
+
+TEST(AndroidDiscGroups, MatchStateGamePlaylistByName)
+{
+  EXPECT_EQ(MatchStateGame(TwoDiscs(true), "", "/home/a/FF7.M3U", 1), 2u);
+  EXPECT_FALSE(MatchStateGame(TwoDiscs(true), "", "/home/a/Other.m3u", 1).has_value());
+}
+
+TEST(AndroidDiscGroups, MatchStateGameByKey)
+{
+  EXPECT_EQ(MatchStateGame(Exe(), "HASH-1", "/somewhere/else.psexe", 0), 0u);
+  // A playlist state names the boot disc's serial, the key, whatever the playlist's name now.
+  EXPECT_EQ(MatchStateGame(TwoDiscs(true), "SCUS-94163", "/home/a/Renamed.m3u", 1), 2u);
+}
+
+TEST(AndroidDiscGroups, MatchStateGameByDiscSerial)
+{
+  EXPECT_EQ(MatchStateGame(TwoDiscs(false), "SCUS-94164", "content://elsewhere/tree/x/renamed.chd", 0), 2u);
+}
+
+TEST(AndroidDiscGroups, MatchStateGameByFileName)
+{
+  EXPECT_EQ(MatchStateGame(TwoDiscs(false), "", "/elsewhere/FF7 (Disc 2).CHD", 0), 2u);
+  EXPECT_EQ(MatchStateGame(Exe(), "", "/elsewhere/PADTEST.psexe", 0), 0u);
+}
+
+TEST(AndroidDiscGroups, MatchStateGameOtherGame)
+{
+  EXPECT_FALSE(MatchStateGame(TwoDiscs(false), "SLUS-00001", "/g/crash.chd", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(Exe(), "SLUS-00001", "/g/crash.chd", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(Exe(), "", "", 0).has_value());
+}
+
+TEST(AndroidDiscGroups, MatchStateGameBiosAlone)
+{
+  EXPECT_EQ(MatchStateGame(Game{}, "", "", 0), 0u);
+  EXPECT_FALSE(MatchStateGame(Game{}, "SLUS-00001", "/g/crash.chd", 0).has_value());
 }

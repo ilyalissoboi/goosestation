@@ -379,4 +379,42 @@ std::optional<u32> FindStateDisc(const Game& game, std::string_view serial, std:
   return std::nullopt;
 }
 
+std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std::string_view media_path,
+                                  u32 subimage_index)
+{
+  const std::string_view file_name = FileName(media_path);
+  const auto disc = [&]() {
+    return FindStateDisc(game, serial, media_path, subimage_index).value_or(0);
+  };
+
+  if (game.playlist && StringUtil::EndsWithNoCase(file_name, ".m3u") &&
+      StringUtil::EqualNoCase(FileName(game.path), file_name))
+  {
+    return disc();
+  }
+
+  if (!serial.empty() &&
+      (serial == game.key ||
+       std::any_of(game.discs.begin(), game.discs.end(), [serial](const Disc& d) { return d.serial == serial; })))
+  {
+    return disc();
+  }
+
+  if (!file_name.empty())
+  {
+    if (StringUtil::EqualNoCase(FileName(game.path), file_name))
+      return disc();
+    for (const Disc& d : game.discs)
+    {
+      if (StringUtil::EqualNoCase(FileName(d.path), file_name))
+        return d.number;
+    }
+  }
+
+  if (serial.empty() && media_path.empty() && game.key.empty() && game.discs.empty())
+    return 0u;
+
+  return std::nullopt;
+}
+
 } // namespace AndroidDiscGroups

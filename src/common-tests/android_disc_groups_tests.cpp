@@ -330,50 +330,73 @@ Game Exe()
 
 TEST(AndroidDiscGroups, MatchStateGamePlaylistByName)
 {
-  EXPECT_EQ(MatchStateGame(TwoDiscs(true), "", "/home/a/FF7.M3U", 1), 2u);
-  EXPECT_FALSE(MatchStateGame(TwoDiscs(true), "", "/home/a/Other.m3u", 1).has_value());
+  EXPECT_EQ(MatchStateGame(TwoDiscs(true), "", "", "/home/a/FF7.M3U", 1), 2u);
+  EXPECT_FALSE(MatchStateGame(TwoDiscs(true), "", "", "/home/a/Other.m3u", 1).has_value());
 }
 
 TEST(AndroidDiscGroups, MatchStateGameByKey)
 {
-  EXPECT_EQ(MatchStateGame(Exe(), "HASH-1", "/somewhere/else.psexe", 0), 0u);
+  EXPECT_EQ(MatchStateGame(Exe(), "HASH-1", "", "/somewhere/else.psexe", 0), 0u);
   // A playlist state names the boot disc's serial, the key, whatever the playlist's name now.
-  EXPECT_EQ(MatchStateGame(TwoDiscs(true), "SCUS-94163", "/home/a/Renamed.m3u", 1), 2u);
+  EXPECT_EQ(MatchStateGame(TwoDiscs(true), "SCUS-94163", "", "/home/a/Renamed.m3u", 1), 2u);
 }
 
 TEST(AndroidDiscGroups, MatchStateGameByDiscSerial)
 {
-  EXPECT_EQ(MatchStateGame(TwoDiscs(false), "SCUS-94164", "content://elsewhere/tree/x/renamed.chd", 0), 2u);
+  EXPECT_EQ(MatchStateGame(TwoDiscs(false), "SCUS-94164", "", "content://elsewhere/tree/x/renamed.chd", 0), 2u);
 }
 
 TEST(AndroidDiscGroups, MatchStateGameByFileName)
 {
-  EXPECT_EQ(MatchStateGame(TwoDiscs(false), "", "/elsewhere/FF7 (Disc 2).CHD", 0), 2u);
-  EXPECT_EQ(MatchStateGame(Exe(), "", "/elsewhere/PADTEST.psexe", 0), 0u);
+  EXPECT_EQ(MatchStateGame(TwoDiscs(false), "", "", "/elsewhere/FF7 (Disc 2).CHD", 0), 2u);
+  EXPECT_EQ(MatchStateGame(Exe(), "", "", "/elsewhere/PADTEST.psexe", 0), 0u);
 }
 
 TEST(AndroidDiscGroups, MatchStateGameOtherGame)
 {
-  EXPECT_FALSE(MatchStateGame(TwoDiscs(false), "SLUS-00001", "/g/crash.chd", 0).has_value());
-  EXPECT_FALSE(MatchStateGame(Exe(), "SLUS-00001", "/g/crash.chd", 0).has_value());
-  EXPECT_FALSE(MatchStateGame(Exe(), "", "", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(TwoDiscs(false), "SLUS-00001", "", "/g/crash.chd", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(Exe(), "SLUS-00001", "", "/g/crash.chd", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(Exe(), "", "", "", 0).has_value());
+}
+
+TEST(AndroidDiscGroups, MatchStateGamePsfByTitle)
+{
+  // A PSF's state records no serial and no media, only the title the core gave it: its file's title.
+  Game a;
+  a.path = std::string(FOLDER) + "Track 01.psf";
+  Game b;
+  b.path = std::string(FOLDER) + "Track 02.psf";
+  EXPECT_EQ(MatchStateGame(a, "", "Track 01", "", 0), 0u);
+  EXPECT_FALSE(MatchStateGame(b, "", "Track 01", "", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(a, "", "", "", 0).has_value());
+}
+
+TEST(AndroidDiscGroups, MatchStateGamePsfByALongTitle)
+{
+  // A state's header keeps 127 bytes of the title (SAVE_STATE_HEADER::title, 128 with its terminator): a longer one is
+  // cut there, and still the PSF's.
+  const std::string title(200, 'a');
+  Game psf;
+  psf.path = std::string(FOLDER) + title + ".psf";
+  EXPECT_EQ(MatchStateGame(psf, "", title.substr(0, 127), "", 0), 0u);
+  EXPECT_FALSE(MatchStateGame(psf, "", title.substr(0, 126), "", 0).has_value());
 }
 
 TEST(AndroidDiscGroups, MatchStateGameBiosAlone)
 {
-  EXPECT_EQ(MatchStateGame(Game{}, "", "", 0), 0u);
-  EXPECT_FALSE(MatchStateGame(Game{}, "SLUS-00001", "/g/crash.chd", 0).has_value());
+  EXPECT_EQ(MatchStateGame(Game{}, "", "", "", 0), 0u);
+  EXPECT_FALSE(MatchStateGame(Game{}, "SLUS-00001", "", "/g/crash.chd", 0).has_value());
 }
 
 TEST(AndroidDiscGroups, MatchStateGameFileNameNeedsNoContradictingSerial)
 {
   // Another game's state whose disc file happens to share a name ("disc1.chd" in a folder per game) isn't this one's.
-  EXPECT_FALSE(MatchStateGame(TwoDiscs(false), "SLUS-00001", "/elsewhere/FF7 (Disc 2).CHD", 0).has_value());
-  EXPECT_FALSE(MatchStateGame(Exe(), "HASH-2", "/elsewhere/padtest.psexe", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(TwoDiscs(false), "SLUS-00001", "", "/elsewhere/FF7 (Disc 2).CHD", 0).has_value());
+  EXPECT_FALSE(MatchStateGame(Exe(), "HASH-2", "", "/elsewhere/padtest.psexe", 0).has_value());
   // A game the app knows no serial of goes by the file name, whatever the state recorded.
   Game unknown = Exe();
   unknown.key.clear();
-  EXPECT_EQ(MatchStateGame(unknown, "HASH-2", "/elsewhere/padtest.psexe", 0), 0u);
+  EXPECT_EQ(MatchStateGame(unknown, "HASH-2", "", "/elsewhere/padtest.psexe", 0), 0u);
 }
 
 TEST(AndroidDiscGroups, MatchStateGamePlaylistNameNeedsNoContradictingSerial)
@@ -381,6 +404,6 @@ TEST(AndroidDiscGroups, MatchStateGamePlaylistNameNeedsNoContradictingSerial)
   // Two games' playlists can share a name (FF7/game.m3u, FF8/game.m3u): the state's serial says whose it is.
   Game same_name = TwoDiscs(true);
   same_name.path = std::string(FOLDER) + "game.m3u";
-  EXPECT_FALSE(MatchStateGame(same_name, "SLUS-00001", "/elsewhere/game.m3u", 1).has_value());
-  EXPECT_EQ(MatchStateGame(same_name, "", "/elsewhere/GAME.m3u", 1), 2u);
+  EXPECT_FALSE(MatchStateGame(same_name, "SLUS-00001", "", "/elsewhere/game.m3u", 1).has_value());
+  EXPECT_EQ(MatchStateGame(same_name, "", "", "/elsewhere/GAME.m3u", 1), 2u);
 }

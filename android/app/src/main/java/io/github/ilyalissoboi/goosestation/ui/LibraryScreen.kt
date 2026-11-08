@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -224,21 +225,30 @@ fun LibraryScreen(
             )
         }
     }
+    // Back to the tile on every way out of the choice: an open the app refuses (not ready, a game running) leaves it
+    // focused, as B does.
+    var refocus by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(refocus) {
+        val path = refocus ?: return@LaunchedEffect
+        focus.refocus(path)
+        refocus = null
+    }
     choosing?.let { game ->
         GameChoicePanel(
             game,
             onSaves = {
                 choosing = null
+                refocus = game.path
                 onSaves(game)
             },
             onGameSettings = {
                 choosing = null
+                refocus = game.path
                 onGameSettings(game)
             },
             onClose = {
                 choosing = null
-                // Back to the game's tile.
-                focus.pending = game.path
+                refocus = game.path
             },
         )
     }
@@ -296,6 +306,19 @@ private class GameFocus {
     var focused: String? = null
     var pending by mutableStateOf<String?>(null)
 
+    /** Each composed game's requester, by path, to give it the focus back ([refocus]). */
+    private val requesters = HashMap<String, FocusRequester>()
+
+    /**
+     * The game at [path] takes the focus again, a frame from now: after an overlay over the screen has gone, and the
+     * focus has fallen where it falls as it does, which [pending] doesn't outlast.
+     */
+    suspend fun refocus(path: String) {
+        withFrameNanos {}
+        // Not composed (scrolled away): nothing to focus.
+        runCatching { requesters[path]?.requestFocus() }
+    }
+
     /** For the whole screen, which sees the focus move anywhere in it. */
     val screenModifier = Modifier.onFocusEvent { if (it.hasFocus) pending = null }
 
@@ -303,6 +326,7 @@ private class GameFocus {
     @Composable
     fun modifier(path: String): Modifier {
         val requester = remember { FocusRequester() }
+        requesters[path] = requester
         if (pending == path) {
             LaunchedEffect(Unit) {
                 // Not if something else has taken the focus since the item was composed.

@@ -994,7 +994,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_save_state_preview_class = static_cast<jclass>(env->NewGlobalRef(save_state_preview_class));
   env->DeleteLocalRef(save_state_preview_class);
   s_save_state_preview_constructor = env->GetMethodID(s_save_state_preview_class, "<init>",
-                                                      "(Lio/github/ilyalissoboi/goosestation/core/ArgbImage;I)V");
+                                                      "(Lio/github/ilyalissoboi/goosestation/core/ArgbImage;ILjava/lang/String;"
+                                                      "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
   if (!s_save_state_preview_constructor)
   {
     ClearException(env);
@@ -2441,6 +2442,13 @@ NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jin
   AndroidHost::StartGame(FromJString(env, path), static_cast<u32>(std::max(disc, 0)), resume == JNI_TRUE);
 }
 
+NATIVE_LIBRARY_FUNCTION(void, startGameFromState)
+(JNIEnv* env, jobject, jstring path, jstring key, jint slot, jboolean shared)
+{
+  AndroidHost::StartGameFromState(FromJString(env, path), FromJString(env, key), static_cast<s32>(slot),
+                                  shared == JNI_TRUE);
+}
+
 NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject)
 {
   AndroidHost::ShutdownGame();
@@ -2461,10 +2469,9 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jst
   return result;
 }
 
-NATIVE_LIBRARY_FUNCTION(jobject, getSaveStatePreview)(JNIEnv* env, jobject, jstring serial, jint slot)
+// A SaveStatePreview for Kotlin, or null.
+static jobject ToSaveStatePreview(JNIEnv* env, const std::optional<AndroidHost::SaveStatePreview>& preview)
 {
-  const std::optional<AndroidHost::SaveStatePreview> preview =
-    AndroidHost::GetSaveStatePreview(FromJString(env, serial), static_cast<s32>(slot));
   if (!preview.has_value())
     return nullptr;
 
@@ -2477,12 +2484,51 @@ NATIVE_LIBRARY_FUNCTION(jobject, getSaveStatePreview)(JNIEnv* env, jobject, jstr
       return nullptr;
   }
 
-  jobject result = env->NewObject(s_save_state_preview_class, s_save_state_preview_constructor, picture,
-                                  static_cast<jint>(preview->disc));
+  jstring serial = ToJString(env, preview->serial);
+  jstring title = ToJString(env, preview->title);
+  jstring game_path = ToJString(env, preview->game_path);
+  jstring game_title = ToJString(env, preview->game_title);
+  jobject result = nullptr;
+  if (serial && title && game_path && game_title)
+  {
+    result = env->NewObject(s_save_state_preview_class, s_save_state_preview_constructor, picture,
+                            static_cast<jint>(preview->disc), serial, title, game_path, game_title);
+  }
   if (ClearException(env))
     result = nullptr;
-  if (picture)
-    env->DeleteLocalRef(picture);
+  for (jobject local : {picture, static_cast<jobject>(serial), static_cast<jobject>(title),
+                        static_cast<jobject>(game_path), static_cast<jobject>(game_title)})
+  {
+    if (local)
+      env->DeleteLocalRef(local);
+  }
+  return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getSaveStatePreview)(JNIEnv* env, jobject, jstring serial, jint slot)
+{
+  return ToSaveStatePreview(env, AndroidHost::GetSaveStatePreview(FromJString(env, serial), static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jobject, getStatePreview)
+(JNIEnv* env, jobject, jstring key, jint slot, jboolean shared, jstring game_path)
+{
+  return ToSaveStatePreview(env, AndroidHost::GetStatePreview(FromJString(env, key), static_cast<s32>(slot),
+                                                              shared == JNI_TRUE, FromJString(env, game_path)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jlongArray, getSharedStateTimes)(JNIEnv* env, jobject)
+{
+  const std::vector<s64> times = AndroidHost::GetSharedStateTimes();
+  jlongArray result = env->NewLongArray(static_cast<jsize>(times.size()));
+  if (!result)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+
+  std::vector<jlong> values(times.begin(), times.end());
+  env->SetLongArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
   return result;
 }
 
@@ -2490,6 +2536,21 @@ NATIVE_LIBRARY_FUNCTION(jobject, getSaveStatePreview)(JNIEnv* env, jobject, jstr
 static jstring ToResult(JNIEnv* env, const std::optional<std::string>& error)
 {
   return error.has_value() ? ToJString(env, error.value()) : nullptr;
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, saveSharedState)(JNIEnv* env, jobject, jint slot)
+{
+  return ToResult(env, AndroidHost::SaveSharedState(static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, loadSharedState)(JNIEnv* env, jobject, jint slot)
+{
+  return ToResult(env, AndroidHost::LoadSharedState(static_cast<s32>(slot)));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, deleteSaveState)(JNIEnv* env, jobject, jstring key, jint slot, jboolean shared)
+{
+  return ToResult(env, AndroidHost::DeleteSaveState(FromJString(env, key), static_cast<s32>(slot), shared == JNI_TRUE));
 }
 
 NATIVE_LIBRARY_FUNCTION(jstring, saveState)(JNIEnv* env, jobject, jstring key, jint slot)

@@ -25,6 +25,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -890,6 +891,94 @@ class GameCallsTest {
             assertFalse(NativeLibrary.canUndoLoadState())
         }
 
+    // Desktop's shared slots, savestate_<n>.sav: saved and loaded in the running game, each saying the game it holds.
+    @Test
+    fun sharedSlotsSaveLoadAndShowTheirGame() =
+        withPadtest {
+            assertNull(NativeLibrary.saveSharedState(3))
+            val times = NativeLibrary.getSharedStateTimes()
+            assertEquals(11, times.size)
+            assertTrue("slot 3 ${times[3]}", times[3] > 0)
+            assertEquals(listOf(3), times.indices.filter { times[it] != 0L })
+
+            val preview = NativeLibrary.getStatePreview("", 3, true, "")
+            assertNotNull(preview?.picture)
+            assertEquals(PADTEST_SERIAL, preview!!.serial)
+            assertEquals(File(root, "padtest.psexe").absolutePath, preview.gamePath)
+
+            assertNull(NativeLibrary.loadSharedState(3))
+            assertTrue(File(states, "savestate_3.sav").exists())
+            assertFalse(File(states, "${PADTEST_SERIAL}_3.sav").exists())
+            assertEquals("There's no save in this slot.", NativeLibrary.loadSharedState(4))
+        }
+
+    // A shared slot made in another game never loads into the running one.
+    @LargeTest
+    @Test
+    fun aSharedStateFromAnotherGameIsRefused() {
+        withPadtest { assertNull(NativeLibrary.saveSharedState(3)) }
+        withPadtest(disc = true) {
+            assertEquals("That save is from another game.", NativeLibrary.loadSharedState(3))
+            assertNotEquals("", NativeLibrary.getStatePreview("", 3, true, "")?.serial.orEmpty())
+        }
+    }
+
+    // A delete takes the save and the backup it kept, and nothing else.
+    @Test
+    fun deleteTakesTheSaveAndItsBackup() =
+        withPadtest(settings = { NativeLibrary.setBoolSetting("Main", "CreateSaveStateBackups", true) }) {
+            assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 1))
+            repeat(2) { assertNull(NativeLibrary.saveState(PADTEST_SERIAL, 2)) }
+            repeat(2) { assertNull(NativeLibrary.saveSharedState(4)) }
+            assertTrue(File(states, "${PADTEST_SERIAL}_2.bak").exists())
+            assertTrue(File(states, "savestate_4.bak").exists())
+
+            assertNull(NativeLibrary.deleteSaveState(PADTEST_SERIAL, 2, false))
+            assertNull(NativeLibrary.deleteSaveState("", 4, true))
+            for (name in listOf("${PADTEST_SERIAL}_2.sav", "${PADTEST_SERIAL}_2.bak", "savestate_4.sav", "savestate_4.bak")) {
+                assertFalse(name, File(states, name).exists())
+            }
+            assertTrue(File(states, "${PADTEST_SERIAL}_1.sav").exists())
+            assertEquals("There's no save in this slot.", NativeLibrary.deleteSaveState(PADTEST_SERIAL, 2, false))
+        }
+
+    // The library's Saves page deletes with no game running.
+    @Test
+    fun deleteWorksWithNoGameRunning() {
+        initialize()
+        states.mkdirs()
+        File(states, "SLUS-00001_5.sav").writeBytes(ByteArray(64) { 7 })
+        File(states, "SLUS-00001_5.bak").writeBytes(ByteArray(64) { 7 })
+        File(states, "SLUS-00001_resume.sav").writeBytes(ByteArray(64) { 7 })
+
+        assertNull(NativeLibrary.deleteSaveState("SLUS-00001", 5, false))
+        assertFalse(File(states, "SLUS-00001_5.sav").exists())
+        assertFalse(File(states, "SLUS-00001_5.bak").exists())
+        assertNull(NativeLibrary.deleteSaveState("SLUS-00001", -1, false))
+        assertFalse(File(states, "SLUS-00001_resume.sav").exists())
+        assertEquals("This game has no serial, so it can't have save states.", NativeLibrary.deleteSaveState("", 5, false))
+        // No game, no shared slot either: nothing is read as a global one by a blank key.
+        assertEquals(List(11) { 0L }, NativeLibrary.getSaveStateTimes("").toList())
+    }
+
+    // A game starts from a shared slot as from its resume state: the core loads it as it boots.
+    @Test
+    fun aGameStartsFromASharedState() {
+        withPadtest { assertNull(NativeLibrary.saveSharedState(6)) }
+        val loads = LinkedBlockingQueue<String>()
+        val errors = LinkedBlockingQueue<String>()
+        withPadtest(
+            onMessage = { key, text -> if (key == "load_state") loads.put(text) },
+            onError = { errors.put(it) },
+            boot = { NativeLibrary.startGameFromState(it.absolutePath, "", 6, true) },
+        ) {
+            // The core's own message as it loads the state ("Loading state from 'savestate_6.sav'...").
+            val loaded = loads.poll(3, TimeUnit.SECONDS).orEmpty()
+            assertTrue(loaded, "savestate_6.sav" in loaded)
+            assertEquals(emptyList<String>(), errors.toList())
+        }
+    }
+
     // A macro presses its buttons while its trigger is held.
     @Test
     fun aMacroPressesItsButtons() =
@@ -1193,6 +1282,9 @@ class GameCallsTest {
         beforeBoot: () -> Unit = {},
         refreshRate: Float = 0f,
         frames: FrameReader? = null,
+        disc: Boolean = false,
+        onError: (String) -> Unit = {},
+        boot: (File) -> Unit = { NativeLibrary.startGame(it.absolutePath, 1, false) },
         body: () -> Unit,
     ) {
         val exe = File(root, "padtest.psexe")
@@ -1201,6 +1293,15 @@ class GameCallsTest {
             copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
                 copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe),
         )
+        // With [disc], padtest's disc image boots instead: a game of its own, with another ID.
+        val cue = File(root, "games/$PAD_TEST_DISC.cue")
+        if (disc) {
+            assumeTrue(
+                "No padtest disc image in /sdcard/GooseTest",
+                copyGlobAsShell("$SDCARD_TESTS/games/Pad*.cue", cue) &&
+                    copyGlobAsShell("$SDCARD_TESTS/games/Pad*.bin", File(root, "games/$PAD_TEST_DISC.bin")),
+            )
+        }
         val started = CountDownLatch(1)
         val stopped = CountDownLatch(1)
         NativeLibrary.setCallbacks(
@@ -1217,7 +1318,7 @@ class GameCallsTest {
 
                 override fun onGameStopped() = stopped.countDown()
 
-                override fun onError(message: String) {}
+                override fun onError(message: String) = onError.invoke(message)
 
                 override fun onFastForwardChanged(enabled: Boolean) = onFastForward(enabled)
 
@@ -1257,7 +1358,7 @@ class GameCallsTest {
         NativeLibrary.surfaceChanged(surface, frames?.width ?: 640, frames?.height ?: 480, 1f, refreshRate)
         try {
             TestRenderer.apply()
-            NativeLibrary.startGame(exe.absolutePath, 1, false)
+            boot(if (disc) cue else exe)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             Thread.sleep(1_000)
             body()

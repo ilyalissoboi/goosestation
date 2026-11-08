@@ -466,7 +466,7 @@ class PostProcessingScreenTest {
 
         rule.onNodeWithText("A favourite needs a name.").assertExists()
         press(Key.Back)
-        assertEquals("closeFavourite", model.calls.last())
+        assertEquals("cancelNaming", model.calls.last())
         focused("Save as favourite")
     }
 
@@ -525,5 +525,35 @@ class PostProcessingScreenTest {
         val name = rule.onNodeWithText("CRT royale + border").getUnclippedBoundsInRoot()
         val gap = name.top - panel.top
         assertTrue("$gap above the name", gap >= 23.dp)
+    }
+
+    @Test
+    fun aFavouriteWithNoShadersSaysSo() {
+        model.favourites = listOf(FavouriteInfo("Empty", emptyArray(), emptyArray()))
+        show()
+
+        rule.onNodeWithText("No shaders").assertExists()
+    }
+
+    // Cancel, or B, in the rename form goes back to the favourite's panel, as Big Picture's does.
+    @Test
+    fun cancellingARenameGoesBackToThePanel() {
+        model.favourites("CRT", "Sharp LCD")
+        model.openFavourite("Sharp LCD")
+        show()
+
+        rule.onNodeWithText("Rename…").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitForIdle()
+
+        assertEquals("cancelNaming", model.calls.last())
+        focused("Apply")
+
+        rule.onNodeWithText("Rename…").performClick()
+        rule.waitForIdle()
+        press(Key.Back)
+        assertEquals("cancelNaming", model.calls.last())
+        focused("Apply")
     }
 }

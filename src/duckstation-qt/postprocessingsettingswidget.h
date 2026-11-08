@@ -7,6 +7,8 @@
 
 #include "util/postprocessing.h"
 
+#include "common/memory_settings_interface.h"
+
 #include <QtWidgets/QTableWidget>
 #include <QtWidgets/QWidget>
 
@@ -32,6 +34,9 @@ public:
   PostProcessingChainConfigWidget(SettingsWindow* dialog, QWidget* parent, const char* section);
   ~PostProcessingChainConfigWidget();
 
+protected:
+  void changeEvent(QEvent* event) override;
+
 private Q_SLOTS:
   void onAddButtonClicked();
   void onRemoveButtonClicked();
@@ -52,6 +57,10 @@ private:
   void updateList(const SettingsInterface& si);
   void updateList();
 
+  /// The display chain as settings.ini has it now, shown again if it isn't what the list shows (a favourite hotkey
+  /// changed it while the window was in the background).
+  void refreshIfChanged();
+
   SettingsWindow* m_dialog;
 
   Ui::PostProcessingChainConfigWidget m_ui;
@@ -59,6 +68,10 @@ private:
   const char* m_section;
 
   PostProcessingShaderConfigWidget* m_shader_config = nullptr;
+
+  /// The chain the list shows, and whether it's on, as last read.
+  MemorySettingsInterface m_shown_chain;
+  bool m_shown_enabled = false;
 };
 
 class PostProcessingShaderConfigWidget : public QWidget

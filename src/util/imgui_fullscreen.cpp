@@ -1232,6 +1232,44 @@ bool ImGuiFullscreen::MenuButton(const char* title, const char* summary, bool en
   return pressed;
 }
 
+bool ImGuiFullscreen::MenuButtonVerbatim(const char* str_id, std::string_view title, std::string_view summary,
+                                         bool enabled, float height, ImFont* font, ImFont* summary_font)
+{
+  ImRect bb;
+  bool visible, hovered;
+  bool pressed = MenuButtonFrame(str_id, enabled, height, &visible, &hovered, &bb);
+  if (!visible)
+    return false;
+
+  const float midpoint = bb.Min.y + font->FontSize + LayoutScale(4.0f);
+  const ImRect title_bb(bb.Min, ImVec2(bb.Max.x, midpoint));
+  const ImRect summary_bb(ImVec2(bb.Min.x, midpoint), bb.Max);
+
+  if (!enabled)
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_TextDisabled));
+
+  // RenderTextClippedEx draws the text it's given, all of it: RenderTextClipped stops at "##".
+  ImDrawList* const draw_list = ImGui::GetWindowDrawList();
+  ImGui::PushFont(font);
+  ImGui::RenderTextClippedEx(draw_list, title_bb.Min, title_bb.Max, title.data(), title.data() + title.size(), nullptr,
+                             ImVec2(0.0f, 0.0f), &title_bb);
+  ImGui::PopFont();
+
+  if (!summary.empty())
+  {
+    ImGui::PushFont(summary_font);
+    ImGui::RenderTextClippedEx(draw_list, summary_bb.Min, summary_bb.Max, summary.data(),
+                               summary.data() + summary.size(), nullptr, ImVec2(0.0f, 0.0f), &summary_bb);
+    ImGui::PopFont();
+  }
+
+  if (!enabled)
+    ImGui::PopStyleColor();
+
+  s_menu_button_index++;
+  return pressed;
+}
+
 bool ImGuiFullscreen::MenuButtonWithoutSummary(const char* title, bool enabled, float height, ImFont* font,
                                                const ImVec2& text_align)
 {

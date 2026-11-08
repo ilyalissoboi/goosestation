@@ -26,6 +26,24 @@ static std::string FilePath(const std::string& folder, std::string_view name)
   return Path::Combine(folder, fmt::format("{}.ini", name));
 }
 
+// The favourite's file as it's spelled: <name>.ini, or one whose extension differs in case (copied from Windows,
+// say), which a folder that tells case apart wouldn't open as <name>.ini.
+static std::string FileOf(const std::string& folder, std::string_view name)
+{
+  std::string path = FilePath(folder, name);
+  if (FileSystem::FileExists(path.c_str()))
+    return path;
+
+  FileSystem::FindResultsArray results;
+  FileSystem::FindFiles(folder.c_str(), "*.ini", FILESYSTEM_FIND_FILES, &results);
+  for (const FILESYSTEM_FIND_DATA& fd : results)
+  {
+    if (Path::GetFileTitle(fd.FileName) == name)
+      return fd.FileName;
+  }
+  return path;
+}
+
 static bool LessNoCase(const std::string& lhs, const std::string& rhs)
 {
   return StringUtil::Strcasecmp(lhs.c_str(), rhs.c_str()) < 0;
@@ -38,7 +56,12 @@ static std::vector<std::string> Names(const std::string& folder, const SettingsI
   FileSystem::FindResultsArray results;
   FileSystem::FindFiles(folder.c_str(), "*.ini", FILESYSTEM_FIND_FILES, &results);
   for (const FILESYSTEM_FIND_DATA& fd : results)
-    files.emplace_back(Path::GetFileTitle(fd.FileName));
+  {
+    // Never a hidden file, which Windows lists (macOS's ._ metadata beside a copied favourite, say).
+    std::string title(Path::GetFileTitle(fd.FileName));
+    if (!title.empty() && !Path::GetFileName(fd.FileName).starts_with('.'))
+      files.push_back(std::move(title));
+  }
 
   std::vector<std::string> names;
   for (const std::string& listed : order.GetStringList(ORDER_SECTION, ORDER_KEY))
@@ -95,7 +118,7 @@ static std::unique_ptr<INISettingsInterface> LoadFavourite(const std::string& fo
     return {};
   }
 
-  auto file = std::make_unique<INISettingsInterface>(FilePath(folder, *it));
+  auto file = std::make_unique<INISettingsInterface>(FileOf(folder, *it));
   if (!file->Load(error))
     return {};
   return file;
@@ -150,7 +173,7 @@ std::vector<PostProcessing::Favourites::Info> PostProcessing::Favourites::List(c
   for (std::string& name : Names(folder, order))
   {
     Info info;
-    INISettingsInterface file(FilePath(folder, name));
+    INISettingsInterface file(FileOf(folder, name));
     file.Load();
     const u32 count = Config::GetStageCount(file, DISPLAY);
     for (u32 i = 0; i < count; i++)
@@ -201,7 +224,7 @@ bool PostProcessing::Favourites::Save(const std::string& folder, SettingsInterfa
     return false;
 
   // A fresh file, never loaded: replacing a favourite leaves nothing of the old one.
-  INISettingsInterface file(FilePath(folder, trimmed));
+  INISettingsInterface file((existing != names.end()) ? FileOf(folder, trimmed) : FilePath(folder, trimmed));
   Config::CopyChain(chain, file, DISPLAY);
   file.SetBoolValue(DISPLAY, "Enabled", true);
   Error save_error;
@@ -243,7 +266,7 @@ bool PostProcessing::Favourites::Rename(const std::string& folder, SettingsInter
     return false;
   }
 
-  const std::string old_path = FilePath(folder, *old);
+  const std::string old_path = FileOf(folder, *old);
   const std::string new_path = FilePath(folder, trimmed);
   Error rename_error;
   bool renamed;
@@ -279,7 +302,7 @@ void PostProcessing::Favourites::Move(const std::string& folder, SettingsInterfa
                                       bool down)
 {
   std::vector<std::string> names = Names(folder, order);
-  const auto it = FindName(names, name);
+  const auto it = FindName(names, StringUtil::StripWhitespace(name));
   if (it == names.end())
     return;
 
@@ -303,7 +326,7 @@ bool PostProcessing::Favourites::Delete(const std::string& folder, SettingsInter
   }
 
   Error delete_error;
-  if (!FileSystem::DeleteFile(FilePath(folder, *it).c_str(), &delete_error))
+  if (!FileSystem::DeleteFile(FileOf(folder, *it).c_str(), &delete_error))
   {
     Error::SetString(error, fmt::format(TRANSLATE_FS("PostProcessing", "Couldn't delete {}: {}"), *it,
                                         delete_error.GetDescription()));
@@ -370,9 +393,10 @@ std::optional<std::string> PostProcessing::Favourites::Step(const std::string& f
 std::optional<std::string> PostProcessing::Favourites::StepChain(const std::string& folder, SettingsInterface& base,
                                                                  const SettingsInterface* game_layer,
                                                                  const std::string& game_file, std::string* last,
-                                                                 bool forward, Error* error)
+                                                                 bool forward, bool* wrote_game_file, Error* error)
 {
   const bool game = game_layer && !game_file.empty() && Config::HasOwnChain(*game_layer, DISPLAY);
+  *wrote_game_file = false;
   std::optional<std::string> next = Step(folder, base, game ? *game_layer : base, *last, forward);
   if (!next.has_value())
     return std::nullopt;
@@ -399,6 +423,7 @@ std::optional<std::string> PostProcessing::Favourites::StepChain(const std::stri
   }
 
   *last = *next;
+  *wrote_game_file = game;
   return next;
 }
 
@@ -406,5 +431,7 @@ std::string PostProcessing::Favourites::Summary(const Info& info)
 {
   if (!info.missing.empty())
     return fmt::format(TRANSLATE_FS("PostProcessing", "Not installed: {}"), fmt::join(info.missing, ", "));
+  if (info.shaders.empty())
+    return TRANSLATE_STR("PostProcessing", "No shaders");
   return fmt::format("{}", fmt::join(info.shaders, " · "));
 }

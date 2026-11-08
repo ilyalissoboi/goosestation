@@ -207,6 +207,11 @@ bool ActiveButtonWithRightText(const char* title, const char* right_title, bool 
                                float height = LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY, ImFont* font = g_large_font);
 bool MenuButton(const char* title, const char* summary, bool enabled = true, float height = LAYOUT_MENU_BUTTON_HEIGHT,
                 ImFont* font = g_large_font, ImFont* summary_font = g_medium_font);
+/// A MenuButton whose ID is str_id, and whose title and summary are drawn as they are: text the player typed (a
+/// favourite's name, say), where ImGui would take "##" for the start of an ID and hide what follows.
+bool MenuButtonVerbatim(const char* str_id, std::string_view title, std::string_view summary, bool enabled = true,
+                        float height = LAYOUT_MENU_BUTTON_HEIGHT, ImFont* font = g_large_font,
+                        ImFont* summary_font = g_medium_font);
 bool MenuButtonWithoutSummary(const char* title, bool enabled = true,
                               float height = LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY, ImFont* font = g_large_font,
                               const ImVec2& text_align = ImVec2(0.0f, 0.0f));

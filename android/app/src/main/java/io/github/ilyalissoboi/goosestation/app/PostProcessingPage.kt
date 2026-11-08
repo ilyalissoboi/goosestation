@@ -197,6 +197,9 @@ interface PostProcessingModel {
     /** The name form's answer: saves (asking first when the name is taken) or renames. */
     fun submitName(text: String)
 
+    /** Cancel in the name form: back to the favourite's panel when renaming, else to "Save as favourite". */
+    fun cancelNaming()
+
     /** Applies [name] to the display chain, asking first when that replaces stages. */
     fun apply(name: String)
 
@@ -575,6 +578,16 @@ class PostProcessingPage(
             favouriteQuestion = FavouriteQuestion.Replace(taken.name, text)
         } else {
             save(text, replace = false)
+        }
+    }
+
+    override fun cancelNaming() {
+        val form = naming ?: return
+        if (form.renaming != null) {
+            naming = null
+            favouriteError = null
+        } else {
+            closeFavourite()
         }
     }
 

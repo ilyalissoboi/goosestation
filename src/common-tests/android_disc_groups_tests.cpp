@@ -371,6 +371,17 @@ TEST(AndroidDiscGroups, MatchStateGamePsfByTitle)
   EXPECT_FALSE(MatchStateGame(a, "", "", "", 0).has_value());
 }
 
+TEST(AndroidDiscGroups, MatchStateGamePsfByALongTitle)
+{
+  // A state's header keeps 127 bytes of the title (SAVE_STATE_HEADER::title, 128 with its terminator): a longer one is
+  // cut there, and still the PSF's.
+  const std::string title(200, 'a');
+  Game psf;
+  psf.path = std::string(FOLDER) + title + ".psf";
+  EXPECT_EQ(MatchStateGame(psf, "", title.substr(0, 127), "", 0), 0u);
+  EXPECT_FALSE(MatchStateGame(psf, "", title.substr(0, 126), "", 0).has_value());
+}
+
 TEST(AndroidDiscGroups, MatchStateGameBiosAlone)
 {
   EXPECT_EQ(MatchStateGame(Game{}, "", "", "", 0), 0u);

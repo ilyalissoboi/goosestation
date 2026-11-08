@@ -419,9 +419,10 @@ std::optional<u32> MatchStateGame(const Game& game, std::string_view serial, std
   }
 
   // A PSF's state records no serial and no media: only its title, which the core takes from its file's title. Two
-  // PSFs differ by it.
+  // PSFs differ by it. The state's header keeps 127 bytes of it (SAVE_STATE_HEADER::title, 128 with its terminator).
+  constexpr size_t STATE_TITLE_BYTES = 127;
   if (serial.empty() && media_path.empty() && game.key.empty() && game.discs.empty() &&
-      title == Path::GetFileTitle(game.path))
+      title == Path::GetFileTitle(game.path).substr(0, STATE_TITLE_BYTES))
   {
     return 0u;
   }

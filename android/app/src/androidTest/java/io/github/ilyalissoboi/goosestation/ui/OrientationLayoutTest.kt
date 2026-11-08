@@ -5,6 +5,8 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
@@ -451,7 +453,8 @@ class OrientationLayoutTest {
             val text = node.text()
             val results = mutableListOf<TextLayoutResult>()
             node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
-            val layout = results.single()
+            val layout =
+                results.singleOrNull() ?: fail("\"$text\" at ${box.describe()} gives no text layout") as Nothing
             // Not didOverflowWidth: the semantics' layout is at the text's max width, wider than the text itself. A
             // word too wide for its line is broken, which the check below catches. A text ending in an ellipsis, such
             // as a game's title in the list, is cut short on purpose.
@@ -489,11 +492,12 @@ class OrientationLayoutTest {
      * part its scrolling containers show. Read from the node, without another fetch.
      */
     private fun SemanticsNode.boxInRoot(clipped: Boolean = false): DpRect {
+        // Not placed (a lazy list's item composed ahead of the scroll): nowhere, so the in-view checks leave it out.
         val rect =
             when {
+                !layoutInfo.isPlaced -> Rect(Float.NaN, Float.NaN, Float.NaN, Float.NaN)
                 clipped -> boundsInRoot
-                layoutInfo.isPlaced -> Rect(positionInRoot, size.toSize())
-                else -> Rect(Float.NaN, Float.NaN, Float.NaN, Float.NaN)
+                else -> Rect(positionInRoot, size.toSize())
             }
         return with(layoutInfo.density) {
             DpRect(rect.left.toDp(), rect.top.toDp(), rect.right.toDp(), rect.bottom.toDp())
@@ -2267,7 +2271,8 @@ class OrientationLayoutTest {
         }) { config ->
             // The list clips a row it shows only in part, which may meet the button hints under it.
             assertTextsLaidOut(inView = true)
-            for (text in listOf("Library", "Game settings")) {
+            // Settings has the focus, so the hints are a button's.
+            for (text in listOf("Library", "Choose")) {
                 rule.onNodeWithText(text, useUnmergedTree = true).assertIsDisplayed()
             }
             assertTrue(focusedDescribedAs("Settings"))
@@ -2349,23 +2354,14 @@ class OrientationLayoutTest {
     }
 
     @Test
-    fun zzDebugHeights() {
-        val games =
-            (1..3).map {
-                GameEntry(
-                    "content://t/tree/g/document/g$it.cue",
-                    "Game $it",
-                    "S-$it",
-                    "NTSC-U",
-                    0,
-                    0,
-                    null,
-                )
-            }
+    fun theLibraryWhileSearching() {
+        val games = (1..6).map { LONG_GAME.copy(path = "content://test/tree/games/document/long-$it.cue") }
+        val search = TextFieldState()
+        val grid = mutableStateOf(true)
         eachConfig({
             LibraryScreen(
                 games = games,
-                gridView = false,
+                gridView = grid.value,
                 banners = emptyList(),
                 message = null,
                 isError = false,
@@ -2374,23 +2370,26 @@ class OrientationLayoutTest {
                 onRefresh = {},
                 onStartGame = {},
                 focusPath = null,
-                focusSettings = true,
+                search = search,
             )
-        }, configs = CONFIGS.filter { it.size.width == 640.dp && it.fontScale > 1f }) {
-            val all =
-                rule
-                    .onAllNodes(
-                        hasText("", substring = true) or hasSetTextAction() or hasContentDescription("Sort: Title") or
-                            hasTestTag(SCREEN),
-                        useUnmergedTree = true,
-                    ).fetchSemanticsNodes()
-            for (n in all) {
-                android.util.Log.i(
-                    "GSDBG",
-                    "${n.config.getOrNull(
-                        SemanticsProperties.Text,
-                    )} ${n.config.getOrNull(SemanticsProperties.ContentDescription)} ${n.boxInRoot().describe()}",
-                )
+        }) {
+            for (gridView in listOf(true, false)) {
+                grid.value = gridView
+                // A match marked in each long title.
+                rule.runOnIdle { search.setTextAndPlaceCursorAtEnd("Long-Named") }
+                rule.waitForIdle()
+                assertTextsLaidOut(inView = true)
+                rule.onNodeWithText("6 of 6 games · Title, A–Z", useUnmergedTree = true).assertIsDisplayed()
+
+                rule.runOnIdle { search.setTextAndPlaceCursorAtEnd("a game no one has, by a name that goes on") }
+                rule.waitForIdle()
+                assertTextsLaidOut(inView = true)
+                press(Key.ButtonSelect)
+                press(Key.DirectionDown)
+                assertTrue("Down from the field didn't reach Clear search", focusedHas("Clear search"))
+                assertFocusedInView(screen())
+                press(Key.Enter)
+                assertTrue(focusedIsTheField())
             }
         }
     }

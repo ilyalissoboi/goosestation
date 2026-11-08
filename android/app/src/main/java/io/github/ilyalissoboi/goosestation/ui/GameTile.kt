@@ -43,8 +43,8 @@ internal val covers = CoverLoader((Runtime.getRuntime().maxMemory() / 8).coerceA
 
 /**
  * A game in the grid: its cover, fitted into a square, or the disc icon, its title and serial there until it has one;
- * then the title and a line of its region and play time under it. Focus rings the cover, so the art stays the hero. A,
- * Enter or a tap call [onClick]; a long press, [onLongClick], if any.
+ * then the title, a match of the search's [query] marked in it, and a line of its region and play time under it. Focus
+ * rings the cover, so the art stays the hero. A, Enter or a tap call [onClick]; a long press, [onLongClick], if any.
  */
 @Composable
 fun GameTile(
@@ -52,6 +52,7 @@ fun GameTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    query: String? = null,
 ) {
     val colors = GooseStationTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -95,6 +96,8 @@ fun GameTile(
                     textAlign = TextAlign.Center,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    // A long title gives way, a line at a time, so the serial under it always fits the square.
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (game.serial.isNotBlank()) {
                     Text(game.serial, style = GooseStationTheme.type.mono, color = colors.inkMuted, maxLines = 1)
@@ -103,7 +106,7 @@ fun GameTile(
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                game.title,
+                marked(game.title, query, colors),
                 style = MaterialTheme.typography.titleMedium,
                 color = colors.ink,
                 maxLines = 2,

@@ -25,12 +25,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.library.LibrarySearch
 import io.github.ilyalissoboi.goosestation.library.PlayTime
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import io.github.ilyalissoboi.goosestation.ui.theme.GsColors
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 
@@ -49,9 +54,38 @@ internal fun gameDetails(
         .filter { it.isNotBlank() }
         .joinToString(" · ")
 
+/** [text] with the first match of the search's [query] marked, `beak-ink` on `beak-soft`; as it is without one. */
+internal fun marked(
+    text: String,
+    query: String?,
+    colors: GsColors,
+): AnnotatedString =
+    buildAnnotatedString {
+        append(text)
+        LibrarySearch.match(text, query)?.let {
+            addStyle(SpanStyle(color = colors.beakInk, background = colors.beakSoft), it.first, it.last + 1)
+        }
+    }
+
+/** [gameDetails], with a match of the search's [query] in the serial marked, as [marked] marks it. */
+private fun markedDetails(
+    game: GameEntry,
+    query: String?,
+    colors: GsColors,
+): AnnotatedString {
+    val details = gameDetails(game)
+    val match = LibrarySearch.match(game.serial, query) ?: return AnnotatedString(details)
+    val at = details.indexOf(game.serial).takeIf { it >= 0 } ?: return AnnotatedString(details)
+    return buildAnnotatedString {
+        append(details)
+        addStyle(SpanStyle(color = colors.beakInk, background = colors.beakSoft), at + match.first, at + match.last + 1)
+    }
+}
+
 /**
- * A game in the list: its cover, small, then its title, and its region, serial and play time under it. A, Enter or a
- * tap call [onClick]; a long press, [onLongClick], if any.
+ * A game in the list: its cover, small, then its title, and its region, serial and play time under it, a match of the
+ * search's [query] marked in the title and the serial. A, Enter or a tap call [onClick]; a long press, [onLongClick],
+ * if any.
  */
 @Composable
 fun GameListRow(
@@ -59,6 +93,7 @@ fun GameListRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    query: String? = null,
 ) {
     val colors = GooseStationTheme.colors
     Row(
@@ -84,14 +119,14 @@ fun GameListRow(
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                game.title,
+                marked(game.title, query, colors),
                 style = MaterialTheme.typography.titleMedium,
                 color = colors.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                gameDetails(game),
+                markedDetails(game, query, colors),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.inkMuted,
                 maxLines = 1,

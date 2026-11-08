@@ -13,6 +13,8 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -346,6 +348,9 @@ object AppController : NativeCallbacks {
     /** The library shows a cover grid, or else a list: `[UI] GameListGridView`, read once the core runs. */
     var gridView by mutableStateOf(true)
         private set
+
+    /** What the library's search field holds, kept while the player visits other screens; cleared as a game starts. */
+    val librarySearch = TextFieldState()
 
     /** The library's sort, in Big Picture's keys ([LibraryPrefs]), read once the core runs. */
     var librarySort by mutableStateOf(LibrarySort())
@@ -1146,6 +1151,8 @@ object AppController : NativeCallbacks {
         }
         lastGamePath = game.path
         libraryFocus = null
+        // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
+        librarySearch.clearText()
         runningGame = game
         focusSettings = false
         message = null
@@ -1169,6 +1176,8 @@ object AppController : NativeCallbacks {
         }
         lastGamePath = game.path
         libraryFocus = null
+        // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
+        librarySearch.clearText()
         runningGame = game
         focusSettings = false
         message = null

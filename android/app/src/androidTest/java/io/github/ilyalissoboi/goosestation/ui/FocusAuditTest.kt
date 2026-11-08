@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -281,6 +282,21 @@ class FocusAuditTest {
         press(Key.Enter)
 
         rule.onNodeWithTag(CHOICE_LIST).assertExists()
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun librarySearching() {
+        showLibrary(GAMES, gridView = true, search = GAMES[0].title.take(3))
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun libraryNoMatch() {
+        showLibrary(GAMES, gridView = false, search = "zelda")
+
+        rule.onNodeWithText("Clear search").assertExists()
         rule.assertControllerReady()
     }
 
@@ -1462,8 +1478,10 @@ class FocusAuditTest {
         games: List<GameEntry>,
         gridView: Boolean,
         syncBadge: SyncBadge? = null,
+        search: String = "",
     ) = show {
         LibraryScreen(
+            search = remember { TextFieldState(search) },
             games = games,
             gridView = gridView,
             banners = listOf(BannerModel("The games folder can't be reached.", listOf("Pick again" to {}))),

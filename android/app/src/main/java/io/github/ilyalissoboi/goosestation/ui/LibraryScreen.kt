@@ -3,15 +3,19 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,8 +25,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,10 +37,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -47,11 +54,12 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.library.LibraryOrder
+import io.github.ilyalissoboi.goosestation.library.LibrarySearch
 import io.github.ilyalissoboi.goosestation.library.LibrarySort
 import io.github.ilyalissoboi.goosestation.library.LibraryWords
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
@@ -66,6 +74,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.rememberSearchFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
+import kotlinx.coroutines.launch
 
 /**
  * The games, as a cover grid ([gridView]) or a list, under the [LibraryTopBar]: the goose and "Library", the
@@ -80,6 +89,7 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
  * settings ([onGameSettings]), for a game with a key (its serial). A long press offers both, in an [OverlayPanel] (a
  * game without a key goes straight to its Saves). With games, the foot says so ([KeyHints]).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LibraryScreen(
     games: List<GameEntry>,
@@ -104,7 +114,6 @@ fun LibraryScreen(
     val settings = remember { FocusRequester() }
     val sortButton = remember { FocusRequester() }
     val searchFocus = rememberSearchFocus()
-    val focusManager = LocalFocusManager.current
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     val focus = remember { GameFocus() }
@@ -117,6 +126,27 @@ fun LibraryScreen(
     fun longPress(game: GameEntry) = if (game.serial.isBlank()) onSaves(game) else choosing = game
 
     val sorted = remember(games, sort) { LibraryOrder.sorted(games, sort) }
+    val query = LibrarySearch.query(search.text)
+    val shown = remember(sorted, query) { LibrarySearch.filter(sorted, query) }
+    // Where the focus is, for the button hints.
+    var area by remember { mutableStateOf(LibraryArea.Game) }
+    val clearSearch = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val imeVisible = WindowInsets.isImeVisible
+
+    suspend fun scrollTo(index: Int) = if (gridView) gridState.scrollToItem(index) else listState.scrollToItem(index)
+
+    fun inView(index: Int) =
+        if (gridView) {
+            gridState.layoutInfo.visibleItemsInfo.any { it.index == index }
+        } else {
+            listState.layoutInfo.visibleItemsInfo.any { it.index == index }
+        }
+
+    fun clear() {
+        search.clearText()
+    }
     var sortOpen by remember { mutableStateOf(false) }
     // Where the Sort button is, and where this screen is, in the root: the list opens under the button.
     var sortBounds by remember { mutableStateOf(Rect.Zero) }
@@ -136,15 +166,22 @@ fun LibraryScreen(
         refocusSort = false
     }
 
-    // A new order keeps the game last focused in view, so Down from the bar reaches it wherever it moved. Not on
-    // opening, which focuses a game of its own.
-    var shownSort by remember { mutableStateOf(sort) }
-    LaunchedEffect(sort) {
-        if (sort == shownSort) return@LaunchedEffect
-        shownSort = sort
-        val index = sorted.indexOfFirst { it.path == focus.focused }
-        if (index < 0) return@LaunchedEffect
-        if (gridView) gridState.scrollToItem(index) else listState.scrollToItem(index)
+    // As the games shown change (a sort, a search, a new list), the focus never jumps to the top: a focused game that's
+    // still shown stays in view; a search typed or changed shows its matches from the first; otherwise the game last
+    // focused stays in view, so Down from the bar reaches it wherever it moved. Not on opening, which focuses a game of
+    // its own.
+    val before = remember { ShownBefore(shown, query) }
+    LaunchedEffect(shown) {
+        if (shown === before.games) return@LaunchedEffect
+        val queryChanged = query != before.query
+        before.games = shown
+        before.query = query
+        val last = shown.indexOfFirst { it.path == focus.focused }.takeIf { it >= 0 }
+        when {
+            area == LibraryArea.Game && last != null -> if (!inView(last)) scrollTo(last)
+            query != null && queryChanged -> scrollTo(0)
+            last != null -> if (!inView(last)) scrollTo(last)
+        }
     }
 
     // Not on every new list, which a resume brings: only on opening, on a toggle, and once there are games.
@@ -156,12 +193,29 @@ fun LibraryScreen(
         }
         val index =
             listOf(focus.focused, focusPath).firstNotNullOfOrNull { path ->
-                sorted.indexOfFirst { it.path == path }.takeIf { it >= 0 }
+                shown.indexOfFirst { it.path == path }.takeIf { it >= 0 }
             } ?: 0
+        // Every game filtered out: the search has the focus, to change or clear it.
+        if (shown.isEmpty()) {
+            searchFocus.focus()
+            return@LaunchedEffect
+        }
         // A lazy item can only take focus once it's composed: it does so itself, once the scroll brings it in.
-        focus.pending = sorted[index].path
+        focus.pending = shown[index].path
         if (gridView) gridState.scrollToItem(index) else listState.scrollToItem(index)
     }
+
+    @Composable
+    fun gameModifier(
+        game: GameEntry,
+        settings: (() -> Unit)?,
+    ) = focus
+        .modifier(game.path)
+        .onFocusChanged { if (it.isFocused) area = LibraryArea.Game }
+        .gameKeys(settings) { onSaves(game) }
+
+    // A search Back clears, as B does, while the sort list or the long press's choice isn't taking Back first.
+    BackHandler(enabled = query != null && !sortOpen && choosing == null) { clear() }
 
     Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         Column(
@@ -170,7 +224,23 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .then(focus.screenModifier)
-                    .safeDrawingPadding()
+                    .onKeyEvent { event ->
+                        when (event.key) {
+                            // From anywhere in the library: the search, with the keyboard.
+                            Key.ButtonSelect -> {
+                                if (event.type == KeyEventType.KeyUp) searchFocus.focusAndType()
+                                true
+                            }
+                            // The keyboard first, then the search; with neither, Back is the activity's.
+                            Key.ButtonB, Key.Back ->
+                                when {
+                                    imeVisible -> true.also { if (event.type == KeyEventType.KeyUp) keyboard?.hide() }
+                                    query != null -> true.also { if (event.type == KeyEventType.KeyUp) clear() }
+                                    else -> false
+                                }
+                            else -> false
+                        }
+                    }.safeDrawingPadding()
                     .padding(horizontal = 32.dp, vertical = 20.dp),
             // 8 dp, not 12: the bar, its labels, the search row and the count line need the height on a handheld.
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -189,9 +259,20 @@ fun LibraryScreen(
                 onRefresh = onRefresh,
                 onOpenSettings = onOpenSettings,
                 onSyncBadge = onSyncBadge,
-                onSearchDown = { focusManager.moveFocus(FocusDirection.Down) },
-                onSearchKeyboardClosed = {},
-                onFocusArea = {},
+                onSearchDown = {
+                    if (shown.isEmpty()) {
+                        if (query != null) clearSearch.requestFocus()
+                    } else {
+                        scope.launch {
+                            scrollTo(0)
+                            focus.refocus(shown[0].path)
+                        }
+                    }
+                },
+                // Clear search takes the focus only once the keyboard has closed on nothing matching, never as the
+                // typing passes through a search that matches nothing.
+                onSearchKeyboardClosed = { if (query != null && shown.isEmpty()) clearSearch.requestFocus() },
+                onFocusArea = { area = it },
                 onSortBounds = { sortBounds = it },
             )
 
@@ -201,7 +282,7 @@ fun LibraryScreen(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (hasGames) {
                     Text(
-                        LibraryWords.countLine(sorted.size, games.size, searching = false, sort = sort),
+                        LibraryWords.countLine(shown.size, games.size, searching = query != null, sort = sort),
                         style = MaterialTheme.typography.bodyMedium,
                         color = GooseStationTheme.colors.inkMuted,
                     )
@@ -210,6 +291,20 @@ fun LibraryScreen(
                 val content = Modifier.weight(1f)
                 when {
                     // While a message says what the app is doing, the list may just not be there yet.
+                    hasGames && shown.isEmpty() ->
+                        NoMatch(
+                            query.orEmpty(),
+                            // Scrolls on a short screen, so Clear search comes into view as it takes the focus.
+                            area = content.verticalScroll(rememberScrollState()),
+                            onClear = {
+                                clear()
+                                searchFocus.focus()
+                            },
+                            modifier =
+                                Modifier
+                                    .focusRequester(clearSearch)
+                                    .onFocusChanged { if (it.isFocused) area = LibraryArea.ClearSearch },
+                        )
                     !hasGames ->
                         if (message == null) {
                             Text(
@@ -228,13 +323,14 @@ fun LibraryScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(24.dp),
                         ) {
-                            items(sorted, key = { it.path }) { game ->
+                            items(shown, key = { it.path }) { game ->
                                 val settings = gameSettingsOf(game, onGameSettings)
                                 GameTile(
                                     game,
                                     onClick = { onStartGame(game) },
-                                    modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
+                                    modifier = gameModifier(game, settings),
                                     onLongClick = { longPress(game) },
+                                    query = query,
                                 )
                             }
                         }
@@ -245,27 +341,20 @@ fun LibraryScreen(
                             contentPadding = PaddingValues(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            items(sorted, key = { it.path }) { game ->
+                            items(shown, key = { it.path }) { game ->
                                 val settings = gameSettingsOf(game, onGameSettings)
                                 GameListRow(
                                     game,
                                     onClick = { onStartGame(game) },
-                                    modifier = focus.modifier(game.path).gameKeys(settings) { onSaves(game) },
+                                    modifier = gameModifier(game, settings),
                                     onLongClick = { longPress(game) },
+                                    query = query,
                                 )
                             }
                         }
                 }
             }
-            if (hasGames) {
-                KeyHints(
-                    listOf(
-                        KeyHint(PadGlyphs.confirm, "Play"),
-                        KeyHint(PadGlyphs.action, "Saves"),
-                        KeyHint(PadGlyphs.options, "Game settings"),
-                    ),
-                )
-            }
+            if (hasGames) KeyHints(libraryHints(area, sortOpen, searching = query != null))
         }
         if (sortOpen) {
             LibrarySortList(
@@ -305,6 +394,58 @@ fun LibraryScreen(
                 refocus = game.path
             },
         )
+    }
+}
+
+/** What the library showed last, so a change of it can be told from the first time. */
+private class ShownBefore(
+    var games: List<GameEntry>,
+    var query: String?,
+)
+
+/** The library's button hints, for where the focus is ([area]), the sort list being open, and a search. */
+private fun libraryHints(
+    area: LibraryArea,
+    sortOpen: Boolean,
+    searching: Boolean,
+): List<KeyHint> {
+    if (sortOpen) return listOf(KeyHint(PadGlyphs.confirm, "Choose"), KeyHint(PadGlyphs.back, "Close"))
+    val hints =
+        when (area) {
+            LibraryArea.Game ->
+                listOf(
+                    KeyHint(PadGlyphs.confirm, "Play"),
+                    KeyHint(PadGlyphs.action, "Saves"),
+                    KeyHint(PadGlyphs.options, "Game settings"),
+                )
+            LibraryArea.Bar, LibraryArea.ClearSearch -> listOf(KeyHint(PadGlyphs.confirm, "Choose"))
+            LibraryArea.Search -> listOf(KeyHint(PadGlyphs.confirm, "Type"))
+        }
+    // While searching, Clear search takes Search's place, as the mockup has it, so the hints keep to one line on a
+    // handheld; Select still jumps to the field.
+    return when {
+        searching -> hints + KeyHint(PadGlyphs.back, "Clear search")
+        area == LibraryArea.Search -> hints
+        else -> hints + KeyHint(PadGlyphs.select, "Search")
+    }
+}
+
+/** Nothing matches the search's [query]: it says so, with Clear search ([onClear]), in the games' [area]. */
+@Composable
+private fun NoMatch(
+    query: String,
+    onClear: () -> Unit,
+    area: Modifier,
+    modifier: Modifier = Modifier,
+) {
+    // Room for the button's focus ring.
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = area.padding(4.dp)) {
+        Text(
+            "No games match “$query”.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ActionButton("Clear search", onClick = onClear, modifier = modifier)
     }
 }
 

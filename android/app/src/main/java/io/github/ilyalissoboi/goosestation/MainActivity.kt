@@ -466,6 +466,7 @@ class MainActivity : ComponentActivity() {
                             onSyncBadge = AppController::openSyncBadge,
                             sort = AppController.librarySort,
                             onSort = AppController::sortLibrary,
+                            search = AppController.librarySearch,
                         )
                         val starts = AppController.gameStarts
                         starts.offer?.let { offer ->

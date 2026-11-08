@@ -15,7 +15,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -39,8 +42,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -56,6 +61,8 @@ import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -75,6 +82,7 @@ class LibraryScreenTest {
     private var badgeClicks = 0
     private var sort by mutableStateOf(LibrarySort())
     private val sorts = mutableListOf<LibrarySort>()
+    private val outerKeys = mutableListOf<Key>()
 
     @Before
     fun makeGames() {
@@ -117,11 +125,13 @@ class LibraryScreenTest {
         syncBadge: SyncBadge? = null,
         sort: LibrarySort = LibrarySort(),
         search: TextFieldState = TextFieldState(),
+        shownGames: (() -> List<GameEntry>)? = null,
     ) {
         this.sort = sort
         rule.setContent {
             GooseStationTheme {
-                Box(Modifier.width(460.dp)) {
+                // Sees the keys the screen leaves alone, as the activity would.
+                Box(Modifier.width(460.dp).onKeyEvent { event -> false.also { outerKeys += event.key } }) {
                     LibraryScreen(
                         sort = this@LibraryScreenTest.sort,
                         onSort = {
@@ -129,7 +139,7 @@ class LibraryScreenTest {
                             this@LibraryScreenTest.sort = it
                         },
                         search = search,
-                        games = games,
+                        games = shownGames?.invoke() ?: games,
                         gridView = gridView(),
                         banners = emptyList(),
                         message = null,
@@ -501,6 +511,206 @@ class LibraryScreenTest {
         rule.onNodeWithContentDescription("Sort: Time played").assertIsFocused()
         // Played the most, it's last now: the grid has gone to it.
         rule.onNodeWithText("Game 25").assertIsDisplayed()
+    }
+
+    // --- Searching ---
+
+    private fun field() = rule.onNode(hasSetTextAction())
+
+    private fun type(text: String) {
+        field().performTextInput(text)
+        rule.waitForIdle()
+    }
+
+    private fun hint(
+        glyph: String,
+        action: String,
+    ) = rule.onNodeWithContentDescription("$glyph: $action")
+
+    @Test
+    fun typingNarrowsTheGames() {
+        show()
+
+        type("game 2")
+
+        rule.onNodeWithText("10 of 30 games · Title, A–Z").assertExists()
+        rule.onNodeWithText("Game 20").assertExists()
+        rule.onNodeWithText("Game 02").assertDoesNotExist()
+        rule.onNodeWithText("Game 19").assertDoesNotExist()
+    }
+
+    @Test
+    fun aMatchIsMarked() {
+        show(gridView = { false })
+
+        type("e 2")
+
+        val title =
+            rule
+                .onNodeWithText("Game 20")
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.Text]
+                .single { it.text == "Game 20" }
+        assertEquals(listOf(3 until 6), title.spanStyles.map { it.start until it.end })
+    }
+
+    @Test
+    fun selectJumpsToTheSearch() {
+        show()
+        rule.onNodeWithText("Game 01").assertIsFocused()
+
+        press(Key.ButtonSelect)
+
+        field().assertIsFocused()
+    }
+
+    @Test
+    fun downFromTheFieldGoesToTheFirstMatch() {
+        show()
+        type("game 2")
+
+        press(Key.DirectionDown)
+
+        rule.onNodeWithText("Game 20").assertIsFocused()
+    }
+
+    @Test
+    fun bClearsTheSearchAndKeepsTheGame() {
+        show()
+        type("game 2")
+        press(Key.DirectionDown)
+
+        press(Key.ButtonB)
+
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
+        rule.onNodeWithText("Game 20").assertIsFocused().assertIsDisplayed()
+        assertFalse(outerKeys.contains(Key.ButtonB))
+    }
+
+    @Test
+    fun bWithoutASearchIsLeftAlone() {
+        show()
+
+        press(Key.ButtonB)
+
+        assertTrue(outerKeys.contains(Key.ButtonB))
+    }
+
+    @Test
+    fun spacesAloneAreNoSearch() {
+        show()
+
+        type("   ")
+
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
+        press(Key.ButtonB)
+        assertTrue(outerKeys.contains(Key.ButtonB))
+    }
+
+    @Test
+    fun noMatchSaysSoAndWaitsForTheKeyboard() {
+        show()
+        type("zelda")
+
+        rule.onNodeWithText("No games match “zelda”.").assertExists()
+        field().assertIsFocused()
+
+        field().performImeAction()
+        rule.waitForIdle()
+        rule.onNodeWithText("Clear search").assertIsFocused()
+
+        press(Key.Enter)
+        assertEquals("", field().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        field().assertIsFocused()
+    }
+
+    @Test
+    fun downOnNoMatchGoesToClearSearch() {
+        show()
+        type("zelda")
+
+        press(Key.DirectionDown)
+
+        rule.onNodeWithText("Clear search").assertIsFocused()
+    }
+
+    @Test
+    fun theFooterFollowsTheFocus() {
+        show()
+        // On a game.
+        hint(PadGlyphs.confirm, "Play").assertExists()
+        hint(PadGlyphs.action, "Saves").assertExists()
+        hint(PadGlyphs.options, "Game settings").assertExists()
+        hint(PadGlyphs.select, "Search").assertExists()
+        hint(PadGlyphs.back, "Clear search").assertDoesNotExist()
+
+        // On the field, with a search.
+        type("game")
+        hint(PadGlyphs.confirm, "Type").assertExists()
+        hint(PadGlyphs.back, "Clear search").assertExists()
+        hint(PadGlyphs.confirm, "Play").assertDoesNotExist()
+
+        // On a game while searching: Clear search in Search's place.
+        press(Key.DirectionDown)
+        hint(PadGlyphs.confirm, "Play").assertExists()
+        hint(PadGlyphs.back, "Clear search").assertExists()
+        hint(PadGlyphs.select, "Search").assertDoesNotExist()
+        press(Key.ButtonB)
+
+        // On a top-bar button.
+        rule.onNodeWithContentDescription("Sort: Title").requestFocus()
+        rule.waitForIdle()
+        hint(PadGlyphs.confirm, "Choose").assertExists()
+        hint(PadGlyphs.select, "Search").assertExists()
+
+        // With the sort list open.
+        press(Key.Enter)
+        hint(PadGlyphs.confirm, "Choose").assertExists()
+        hint(PadGlyphs.back, "Close").assertExists()
+        hint(PadGlyphs.select, "Search").assertDoesNotExist()
+    }
+
+    @Test
+    fun aNewListWhileSearchingKeepsTheFocusedGame() {
+        var shown by mutableStateOf(games)
+        show(shownGames = { shown })
+        type("game 2")
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Game 20").assertIsFocused()
+
+        rule.runOnIdle {
+            shown =
+                games.map { it.copy() } +
+                games[0].copy(path = "content://test/tree/games/document/game-2a.cue", title = "Game 2A")
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Game 20").assertIsFocused()
+        rule.onNodeWithText("11 of 31 games · Title, A–Z").assertExists()
+    }
+
+    @Test
+    fun aThousandGames() {
+        val many =
+            (1..1000).map { n ->
+                GameEntry(
+                    path = "content://test/tree/games/document/game-$n.cue",
+                    title = "Game %03d".format(n),
+                    serial = "SLUS-%05d".format(n),
+                    region = "NTSC-U",
+                    totalPlayedSeconds = 0,
+                    lastPlayedSeconds = 0,
+                    coverPath = null,
+                )
+            }
+        show(games = many)
+
+        type("game 99")
+
+        // Game 990 to Game 999.
+        rule.onNodeWithText("10 of 1000 games · Title, A–Z").assertExists()
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Game 990").assertIsFocused()
     }
 
     // --- The top bar ---

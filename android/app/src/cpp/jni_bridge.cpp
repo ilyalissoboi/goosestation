@@ -914,7 +914,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_game_entry_constructor =
     env->GetMethodID(s_game_entry_class, "<init>",
                      "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;"
-                     "[Lio/github/ilyalissoboi/goosestation/core/GameDisc;Z)V");
+                     "[Lio/github/ilyalissoboi/goosestation/core/GameDisc;ZJJI)V");
   if (!s_game_entry_constructor)
   {
     ClearException(env);
@@ -2265,6 +2265,9 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
     s64 total_played_time;
     s64 last_played_time;
     std::time_t modified_time;
+    s64 file_size;
+    u64 uncompressed_size;
+    GameList::EntryType type;
   };
 
   struct Game
@@ -2274,6 +2277,9 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
     s64 total_played_time;
     s64 last_played_time;
     std::string cover_path;
+    s64 file_size;
+    u64 uncompressed_size;
+    GameList::EntryType type;
   };
 
   // Copied out under the lock; the playlists are read, the covers looked up, and the Java objects made, without it.
@@ -2302,7 +2308,8 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
       file.known = !entry->serial.empty() && GameDatabase::GetEntryForSerial(entry->serial) != nullptr;
       listed.push_back(std::move(file));
       files.push_back({Settings::GetDiscRegionName(entry->region), static_cast<s64>(entry->total_played_time),
-                       static_cast<s64>(entry->last_played_time), entry->last_modified_time});
+                       static_cast<s64>(entry->last_played_time), entry->last_modified_time, entry->file_size,
+                       entry->uncompressed_size, entry->GetSortType()});
     }
   }
 
@@ -2337,9 +2344,25 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
   games.reserve(grouped.size());
   for (AndroidDiscGroups::Game& game : grouped)
   {
+    const File& first = files[game.files.front()];
+    Game shown{std::move(game), first.region, 0, 0, std::string(), 0, 0, first.type};
+    // A playlist is one entry for the core, its sub-images' sizes summed into it; any other game sums its files', as
+    // desktop sums a disc set's.
+    for (const size_t index : shown.game.files)
+    {
+      if (shown.game.playlist && listed[index].type != AndroidDiscGroups::FileType::Playlist)
+        continue;
+
+      shown.file_size += files[index].file_size;
+      shown.uncompressed_size += files[index].uncompressed_size;
+      if (shown.game.playlist)
+      {
+        shown.type = files[index].type;
+        break;
+      }
+    }
+
     // Play time is kept per serial, so a playlist and its first disc, which share one, count once.
-    const char* region = files[game.files.front()].region;
-    Game shown{std::move(game), region, 0, 0, std::string()};
     std::vector<std::string_view> counted;
     for (const size_t index : shown.game.files)
     {
@@ -2397,7 +2420,9 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
     {
       entry = env->NewObject(s_game_entry_class, s_game_entry_constructor, path, title, serial, region,
                              static_cast<jlong>(game.total_played_time), static_cast<jlong>(game.last_played_time),
-                             cover_path, discs, static_cast<jboolean>(game.game.playlist));
+                             cover_path, discs, static_cast<jboolean>(game.game.playlist),
+                             static_cast<jlong>(game.file_size), static_cast<jlong>(game.uncompressed_size),
+                             static_cast<jint>(game.type));
       if (ClearException(env))
         entry = nullptr;
     }

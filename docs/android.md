@@ -342,7 +342,9 @@ press does by touch; screen readers hear the same. When the bar has no room for 
 640 dp-wide handheld at text 1.3×, a phone in portrait), the field goes on its own row under them. The library also
 refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves it. The
 tile for the last game played is focused when the library comes back. A tile shows the game's cover from `covers/` in
-the data folder, or its title when there's none; a list row shows the title, region, serial and play time. The line
+the data folder, or its title when there's none; on a short screen (a handheld in landscape) the cover shrinks so a
+whole tile, title and details too, fits above the button hints. A list row shows the title, region, serial and play
+time. The line
 under the bar says how many games there are and the sort ("48 games · Title, A–Z"), and while searching how many
 match ("2 of 48 games · Title, A–Z"). The button hints at the foot follow the focus.
 

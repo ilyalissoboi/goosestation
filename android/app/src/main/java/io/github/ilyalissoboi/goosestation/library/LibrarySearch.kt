@@ -6,6 +6,16 @@ package io.github.ilyalissoboi.goosestation.library
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 
 /**
+ * [games] ready to search: each one's file name and its discs', decoded once for the list, at its first search, rather
+ * than on every keystroke, which a thousand games' content URIs would make slow.
+ */
+class SearchIndex(
+    val games: List<GameEntry>,
+) {
+    internal val fileNames: List<List<String>> by lazy { games.map(LibrarySearch::fileNames) }
+}
+
+/**
  * The library's search: a game matches when its title, its file's name or one of its discs', or its key or one of its
  * discs' serials holds the query anywhere, ignoring case. Case is compared a character at a time, so a match's range
  * is in the text as shown.
@@ -17,20 +27,31 @@ object LibrarySearch {
     fun matches(
         game: GameEntry,
         query: String,
+    ): Boolean = matches(game, fileNames(game), query)
+
+    private fun matches(
+        game: GameEntry,
+        fileNames: List<String>,
+        query: String,
     ): Boolean =
         game.title.contains(query, ignoreCase = true) ||
             game.serial.contains(query, ignoreCase = true) ||
-            GameFiles.fileName(game.path).contains(query, ignoreCase = true) ||
-            game.discs.any {
-                it.serial.contains(query, ignoreCase = true) ||
-                    GameFiles.fileName(it.path).contains(query, ignoreCase = true)
-            }
+            game.discs.any { it.serial.contains(query, ignoreCase = true) } ||
+            fileNames.any { it.contains(query, ignoreCase = true) }
 
-    /** The [games] matching [query], in their order; all of them without a query. */
+    /** The [index]'s games matching [query], in their order; all of them without a query. */
     fun filter(
-        games: List<GameEntry>,
+        index: SearchIndex,
         query: String?,
-    ): List<GameEntry> = if (query == null) games else games.filter { matches(it, query) }
+    ): List<GameEntry> =
+        if (query == null) {
+            index.games
+        } else {
+            index.games.filterIndexed { i, game -> matches(game, index.fileNames[i], query) }
+        }
+
+    internal fun fileNames(game: GameEntry): List<String> =
+        listOf(GameFiles.fileName(game.path)) + game.discs.map { GameFiles.fileName(it.path) }
 
     /** Where [query] first is in [text], to mark it; null without a query or a match. */
     fun match(

@@ -286,6 +286,26 @@ TEST(AndroidCoverDownloads, RunWithEverySourceDroppedCountsTheRestUnreachable)
   EXPECT_EQ(summary.total, 5u);
 }
 
+// From review: an answer too large to hold (HttpBridge's -100) is an answer, not a dead source.
+TEST(AndroidCoverDownloads, AnOversizedAnswerIsNoCoverButAnAnswer)
+{
+  FakeHooks fake;
+  std::vector<Target> targets;
+  for (int i = 1; i <= 4; i++)
+  {
+    targets.push_back(Game("G" + std::to_string(i), "G"));
+    fake.answers["http://a/G" + std::to_string(i) + ".jpg"] = (i < 4) ? Response{-100, {}} : Image();
+  }
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
+
+  const Summary summary = AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  EXPECT_EQ(fake.fetched.size(), 4u);
+  EXPECT_EQ(summary.found, 1u);
+  EXPECT_EQ(summary.missing, 3u);
+  EXPECT_EQ(summary.unreachable, 0u);
+}
+
 TEST(AndroidCoverDownloads, AnAnswerResetsASourcesCount)
 {
   FakeHooks fake;

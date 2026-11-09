@@ -143,7 +143,9 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
         summary.cancelled = true;
         break;
       }
-      if (response.status < 0)
+      // No connection or a timeout: no answer. Any other failure (a body too large to hold) is an answer, no cover.
+      if (response.status == HTTPDownloader::HTTP_STATUS_ERROR ||
+          response.status == HTTPDownloader::HTTP_STATUS_TIMEOUT)
       {
         unanswered[s]++;
         continue;

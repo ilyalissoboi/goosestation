@@ -75,7 +75,7 @@ fun barLayout(
     }
 
 /** Where the focus is in the library, for its button hints. */
-enum class LibraryArea { Game, Bar, Search, ClearSearch }
+enum class LibraryArea { Game, Bar, Search, ClearSearch, Banner }
 
 /**
  * The library's top bar: the goose and "Library", the [search] field, the sync badge while sync is on ([syncBadge];

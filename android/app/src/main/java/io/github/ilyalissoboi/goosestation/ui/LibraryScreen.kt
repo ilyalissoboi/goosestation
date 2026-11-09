@@ -285,7 +285,9 @@ fun LibraryScreen(
                 onSortBounds = { sortBounds = it },
             )
 
-            banners.forEach { Banner(it) }
+            banners.forEach {
+                Banner(it, Modifier.onFocusChanged { state -> if (state.hasFocus) area = LibraryArea.Banner })
+            }
             if (message != null) MessageBar(message, isError)
             // The count line goes with the games, so a short screen takes its room from them, never from the hints.
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -436,7 +438,7 @@ private fun libraryHints(
                     KeyHint(PadGlyphs.action, "Saves"),
                     KeyHint(PadGlyphs.options, "Game settings"),
                 )
-            LibraryArea.Bar, LibraryArea.ClearSearch -> listOf(KeyHint(PadGlyphs.confirm, "Choose"))
+            LibraryArea.Bar, LibraryArea.ClearSearch, LibraryArea.Banner -> listOf(KeyHint(PadGlyphs.confirm, "Choose"))
             LibraryArea.Search -> listOf(KeyHint(PadGlyphs.confirm, "Type"))
         }
     // While searching, Clear search takes Search's place, as the mockup has it, so the hints keep to one line on a

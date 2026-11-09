@@ -234,6 +234,22 @@ class CoversScreenTest {
         assertTrue(focused(), focusedHas("Download covers"))
     }
 
+    // From review: the end of a run took the focus to Download covers even after the player had moved off Cancel.
+    @Test
+    fun aRunEndingLeavesTheFocusWhereThePlayerMovedIt() {
+        val model = show(FakeCoversModel())
+        pressUntilFocused(Key.DirectionDown, "Download covers")
+        press(Key.Enter)
+        assertTrue(focused(), focusedHas("Cancel"))
+
+        press(Key.DirectionUp)
+        assertTrue(focused(), focusedHas("Save covers by serial"))
+        model.job = null
+        rule.waitForIdle()
+
+        assertTrue(focused(), focusedHas("Save covers by serial"))
+    }
+
     @Test
     fun backGoesBack() {
         show(FakeCoversModel())

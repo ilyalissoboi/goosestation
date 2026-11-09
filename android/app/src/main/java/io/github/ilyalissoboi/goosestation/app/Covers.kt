@@ -82,6 +82,9 @@ interface CoversModel {
     fun cancel()
 }
 
+/** Why Download covers waits while a source has no variable. */
+const val SOURCES_NEED_A_VARIABLE = "Each source needs \${serial}, \${title} or \${filetitle}."
+
 /** A download's progress, as the page shows it ("Downloading the cover for Crash Bandicoot… 12 of 48"). */
 fun coverProgressText(job: CoverJob): String =
     if (job.title == null) "Starting…" else "Downloading the cover for ${job.title}… ${job.position} of ${job.total}"
@@ -147,11 +150,7 @@ class Covers(
             val texts = texts()
             return when {
                 texts.isEmpty() -> "Add a source first."
-                texts.any {
-                    coverSourceProblem(
-                        it,
-                    ) != null
-                } -> "Each source needs \${serial}, \${title} or \${filetitle}."
+                texts.any { coverSourceProblem(it) != null } -> SOURCES_NEED_A_VARIABLE
                 else -> null
             }
         }

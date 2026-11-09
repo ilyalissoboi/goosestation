@@ -68,6 +68,7 @@ import androidx.test.filters.LargeTest
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.CoverJob
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameControllers
@@ -1625,6 +1626,45 @@ class OrientationLayoutTest {
             pressUntilFocused(Key.DirectionDown, "Shared card 1")
             assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "One card for all discs of a game")
+        }
+    }
+
+    @Test
+    fun theCoversPageWithLongSourcesAndADownload() {
+        val long = "https://covers.example.com/" + "a-very-long-folder-name/".repeat(7) + "\${serial}.jpg"
+        eachConfig({
+            CoversScreen(
+                FakeCoversModel(
+                    texts = listOf(long, long.replace("\${serial}", "\${title}"), "https://covers.example/cover.jpg"),
+                    job = CoverJob("A game whose title is long enough to wrap onto a second line on a phone", 12, 48),
+                    message = "Found 31 covers. 17 games had none at these sources. 3 couldn't be reached.",
+                ),
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue("the page opened on ${focusedText()}", focusedDescribedAs("Source 1"))
+            assertFocusedInView()
+            pressUntil(Key.DirectionDown, "Source 3") { focusedDescribedAs("Source 3") }
+            press(Key.DirectionRight)
+            assertTrue("Right reached ${focusedText()}", focusedHas("Remove"))
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Add a source")
+            press(Key.DirectionRight)
+            assertTrue("Right reached ${focusedText()}", focusedHas("Restore the preset source"))
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Save covers by serial")
+            pressUntilFocused(Key.DirectionDown, "Cancel")
+            assertTextsLaidOut()
+        }
+    }
+
+    @Test
+    fun theCoversRestoreQuestion() {
+        eachConfig({ CoversRestoreQuestion(onReplace = {}, onKeep = {}) }) {
+            assertTextsLaidOut()
+            assertTrue("the question opened on ${focusedText()}", focusedHas("Keep mine"))
+            assertFocusedInView()
         }
     }
 

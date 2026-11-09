@@ -127,6 +127,20 @@ TEST(AndroidCoverDownloads, CoverFileNameUnsafeTitle)
   EXPECT_EQ(CoverFileName(Game("SCPS-10091", "Ape Escape: Special?"), false, "jpg"), "SCPS-10091.jpg");
 }
 
+TEST(AndroidCoverDownloads, CoverFileNameIsPortable)
+{
+  // Names the data folder's storage and Windows can hold, whatever the platform this runs on.
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "What?"), false, "jpg"), "SLUS-00001.jpg");
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "Say \"Hi\""), false, "jpg"), "SLUS-00001.jpg");
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "A<B>C|D"), false, "jpg"), "SLUS-00001.jpg");
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "Back\\slash"), false, "jpg"), "SLUS-00001.jpg");
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "Ends with a dot."), false, "jpg"), "SLUS-00001.jpg");
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "Ends with a space "), false, "jpg"), "SLUS-00001.jpg");
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "Tab\there"), false, "jpg"), "SLUS-00001.jpg");
+  EXPECT_EQ(CoverFileName(Game("SLUS-00001", "Crash Bandicoot 3 - Warped (USA) [!]"), false, "jpg"),
+            "Crash Bandicoot 3 - Warped (USA) [!].jpg");
+}
+
 TEST(AndroidCoverDownloads, CoverFileNameNoSerial)
 {
   EXPECT_EQ(CoverFileName(Game("", "Demo"), true, "png"), "Demo.png");
@@ -247,6 +261,24 @@ TEST(AndroidCoverDownloads, RunRechecksBeforeEachGame)
   EXPECT_EQ(summary.total, 2u);
   EXPECT_EQ(summary.found, 1u);
   EXPECT_EQ(fake.fetched, (std::vector<std::string>{"http://a/A.jpg"}));
+}
+
+TEST(AndroidCoverDownloads, RunRechecksBeforeSaving)
+{
+  FakeHooks fake;
+  fake.answers["http://a/A.jpg"] = Image();
+  // A cover comes for index 0 while its request is out: asked at the count, before the fetch, and before the save.
+  fake.covered_after = {{0, 2}};
+  const std::vector<Target> targets = {Game("A", "A")};
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
+
+  const Summary summary = AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  EXPECT_EQ(summary.total, 1u);
+  EXPECT_EQ(summary.found, 0u);
+  EXPECT_EQ(summary.unsaved, 0u);
+  EXPECT_EQ(fake.fetched.size(), 1u);
+  EXPECT_TRUE(fake.saved.empty());
 }
 
 TEST(AndroidCoverDownloads, RunStopsWhenCancelled)

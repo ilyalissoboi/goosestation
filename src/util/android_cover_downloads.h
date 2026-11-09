@@ -39,9 +39,9 @@ std::string ExpandSource(std::string_view source, const Target& target);
 std::optional<std::string> CoverExtension(std::string_view content_type, std::string_view url);
 
 /// The cover's file name: by the key when [use_serial] (unless it's the core's `HASH-…` ID, which isn't a serial),
-/// else by the title, else by the key, else by the path's file title, the first that can be a file name as it is (as
-/// the core's GetNewCoverImagePathForEntry names one, which saves by an empty serial instead of falling back). Nullopt
-/// when none can.
+/// else by the title, else by the key, else by the path's file title, the first that can be a file name as it is on
+/// FAT and Windows, whatever the platform (as the core's GetNewCoverImagePathForEntry names one, which saves by an
+/// empty serial instead of falling back, and goes by the host's own rules). Nullopt when none can.
 std::optional<std::string> CoverFileName(const Target& target, bool use_serial, std::string_view extension);
 
 /// An answer: its HTTP status (or HTTPDownloader's negative ones), content type and body.
@@ -77,7 +77,8 @@ struct Summary
 };
 
 /// Fetches a cover for each of [targets] without one, trying [sources] in order (skipping one without a variable) and
-/// stopping at the first image. A game whose cover appears before its turn is skipped; one is never replaced.
+/// stopping at the first image. A game whose cover appears before its turn, or while its image is fetched, is skipped;
+/// one is never replaced.
 Summary Run(std::span<const Target> targets, std::span<const std::string> sources, bool use_serial,
             const Hooks& hooks);
 

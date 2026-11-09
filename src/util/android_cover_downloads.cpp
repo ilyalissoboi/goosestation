@@ -47,9 +47,15 @@ std::string URLExtension(std::string_view url)
   return (dot == std::string_view::npos) ? std::string() : Lower(segment.substr(dot + 1));
 }
 
+// A name the data folder's storage (FAT, through the storage provider) and Windows can both hold, wherever this runs:
+// Path::SanitizeFileName() keeps what the host allows, which on Android is all but '/' and '*'.
 bool CanBeFileName(const std::string& name)
 {
-  return !name.empty() && Path::SanitizeFileName(name) == name;
+  if (name.empty() || name.back() == '.' || name.back() == ' ')
+    return false;
+  return std::none_of(name.begin(), name.end(), [](char c) {
+    return static_cast<unsigned char>(c) < 32 || std::string_view("<>:\"/\\|?*").find(c) != std::string_view::npos;
+  });
 }
 
 } // namespace
@@ -152,6 +158,11 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
       if (!extension.has_value())
         continue;
 
+      // A cover that came while the request was out (by another name or extension, which the lookup might prefer).
+      done = true;
+      if (hooks.has_cover(index))
+        break;
+
       const std::optional<std::string> file_name = CoverFileName(target, use_serial, extension.value());
       const std::optional<std::string> saved =
         file_name.has_value() ? hooks.save(index, file_name.value(), response.data) : std::nullopt;
@@ -164,7 +175,6 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
       {
         summary.unsaved++;
       }
-      done = true;
       break;
     }
 

@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.getValue
@@ -36,6 +37,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
@@ -65,7 +67,8 @@ class SearchFieldTest {
     // The text sessions the field starts, as Android's keyboard would be asked to open for each.
     private val sessions = CopyOnWriteArrayList<Int>()
 
-    private fun show() {
+    // With a button beside the field, to its right, as the one-row bar has the sync badge or Sort.
+    private fun show(beside: Boolean = false) {
         rule.setContent {
             GooseStationTheme {
                 InterceptPlatformTextInput(
@@ -83,12 +86,16 @@ class SearchFieldTest {
                     focus = rememberSearchFocus()
                     Column(Modifier.width(width)) {
                         ActionButton("Above", onClick = {})
-                        SearchField(
-                            state,
-                            focus,
-                            onKeyboardClosed = { closes++ },
-                            onDown = { downs++ },
-                        )
+                        Row {
+                            SearchField(
+                                state,
+                                focus,
+                                modifier = Modifier.weight(1f),
+                                onKeyboardClosed = { closes++ },
+                                onDown = { downs++ },
+                            )
+                            if (beside) ActionButton("Beside", onClick = {})
+                        }
                     }
                 }
             }
@@ -155,6 +162,23 @@ class SearchFieldTest {
             .performSemanticsAction(SemanticsActions.OnClick)
 
         rule.runOnIdle { assertEquals("", state.text.toString()) }
+    }
+
+    @Test
+    fun rightAtTheEndOfTheTextLeavesTheField() {
+        show(beside = true)
+        focusField()
+        field().performTextInput("crash")
+        rule.waitForIdle()
+
+        // Within the text, Right moves the cursor.
+        press(Key.DirectionLeft)
+        press(Key.DirectionRight)
+        field().assertIsFocused()
+        rule.runOnIdle { assertEquals(TextRange(5), state.selection) }
+
+        press(Key.DirectionRight)
+        rule.onNodeWithText("Beside").assertIsFocused()
     }
 
     @Test

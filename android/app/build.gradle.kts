@@ -57,6 +57,42 @@ val emusyncAar: File =
         aar
     }
 
+// The version, from git: `git describe --dirty` (0.1-574-gec4c2bf2e) and the commit. Without git or a tag,
+// 0.0-unknown. A release's version code grows with each commit, as update/AppVersion.kt computes it (keep the two in
+// step): (MAJOR * 1000 + MINOR) * 100000 + the commits since the tag. Debug builds keep code 1, so an older checkout's
+// debug build always installs over a newer one's.
+fun git(vararg args: String): String =
+    providers
+        .exec {
+            commandLine("git", *args)
+            workingDir = rootProject.file("..")
+            isIgnoreExitValue = true
+        }.standardOutput.asText
+        .get()
+        .trim()
+
+val gitVersion: String = git("describe", "--dirty").ifEmpty { "0.0-unknown" }
+val gitCommit: String = git("rev-parse", "HEAD").takeIf { Regex("[0-9a-f]{40}").matches(it) }.orEmpty()
+val gitVersionCode: Int =
+    Regex("""^(\d+)\.(\d+)(?:-(\d+)-g[0-9a-f]+)?(-dirty)?$""").matchEntire(gitVersion)?.destructured?.let {
+        (major, minor, count) ->
+        val (ma, mi, n) = Triple(major.toInt(), minor.toInt(), count.ifEmpty { "0" }.toInt())
+        if (ma > 20 || mi > 999 || n > 99_999) {
+            throw GradleException("$gitVersion is past what a version code can hold (see build.gradle.kts).")
+        }
+        (ma * 1000 + mi) * 100_000 + n
+    } ?: 1
+
+// Release builds from the rolling release workflow name their update channel (-Pgoose.updateChannel): only those check
+// for updates. -Pgoose.updateApi points the check elsewhere, as the test tiers' local server; an http:// one allows
+// cleartext in that build only.
+val updateChannel: String = providers.gradleProperty("goose.updateChannel").orNull.orEmpty()
+if (updateChannel !in listOf("", "preview", "latest")) {
+    throw GradleException("goose.updateChannel is \"$updateChannel\": it must be preview, latest, or empty.")
+}
+val updateApi: String =
+    providers.gradleProperty("goose.updateApi").orNull ?: "https://api.github.com/repos/ilyalissoboi/goosestation"
+
 // The instrumented tests' Gradle properties (testOptions below).
 val orchestrated: Boolean = providers.gradleProperty("goose.orchestrator").orNull?.toBooleanStrict() ?: true
 val testResults: String? = providers.gradleProperty("goose.testResults").orNull
@@ -70,9 +106,15 @@ android {
         applicationId = "io.github.ilyalissoboi.goosestation"
         minSdk = 29
         targetSdk = 37
+        // A release's is set in androidComponents below.
         versionCode = 1
-        versionName = "0.1"
+        versionName = gitVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
+        buildConfigField("int", "GIT_VERSION_CODE", "$gitVersionCode")
+        buildConfigField("String", "UPDATE_CHANNEL", "\"$updateChannel\"")
+        buildConfigField("String", "UPDATE_API", "\"$updateApi\"")
+        manifestPlaceholders["cleartext"] = updateApi.startsWith("http://").toString()
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -103,6 +145,10 @@ android {
     }
 
     buildTypes {
+        // GooseStation Debug installs beside the release, with its own app storage (its name: src/debug/res).
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -297,6 +343,7 @@ tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
 
 androidComponents {
     onVariants { variant ->
+        if (variant.buildType == "release") variant.outputs.forEach { it.versionCode.set(gitVersionCode) }
         variant.sources.jniLibs?.addGeneratedSourceDirectory(stageDepsLibraries, StageFiles::outputDirectory)
         variant.sources.assets?.addGeneratedSourceDirectory(stageResources, StageFiles::outputDirectory)
     }

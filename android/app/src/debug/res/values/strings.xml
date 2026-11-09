@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 GooseStation contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0 -->
+<resources>
+    <!-- The debug build installs beside the release (applicationIdSuffix), so the two need telling apart. -->
+    <string name="app_name" translatable="false">GooseStation Debug</string>
+</resources>

@@ -303,7 +303,7 @@ adb push <your BIOS image> /sdcard/GooseStation/bios/
 adb push extras/padtest/padtest.psexe /sdcard/GooseStation/games/
 adb push "<a disc image>.chd" /sdcard/GooseStation/games/
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
+adb shell am start -n io.github.ilyalissoboi.goosestation.debug/io.github.ilyalissoboi.goosestation.MainActivity
 ```
 
 The first launch opens **setup**: a welcome screen, then the BIOS folder, the games folders and the data folder, one
@@ -468,8 +468,8 @@ with the data folder, and remembers what it last saw of both in `files/mirror-ma
 `files/bios`. The working copy is private, but a debug build can be inspected with `run-as`:
 
 ```bash
-adb shell run-as io.github.ilyalissoboi.goosestation ls -R files/data
-adb shell run-as io.github.ilyalissoboi.goosestation cat files/mirror-manifest.txt
+adb shell run-as io.github.ilyalissoboi.goosestation.debug ls -R files/data
+adb shell run-as io.github.ilyalissoboi.goosestation.debug cat files/mirror-manifest.txt
 ```
 
 The rules:
@@ -677,7 +677,7 @@ adb pull /sdcard/GooseStation/data/settings.ini /tmp/settings.ini
 # In /tmp/settings.ini: under [GPU], WireframeMode = OverlayWireframe.
 adb push /tmp/settings.ini /sdcard/GooseStation/data/settings.ini
 adb shell input keyevent KEYCODE_HOME
-adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
+adb shell am start -n io.github.ilyalissoboi.goosestation.debug/io.github.ilyalissoboi.goosestation.MainActivity
 ```
 
 - `[Main] SettingsVersion = 3` must be there, or the core resets the file to its defaults. Desktop and Android use
@@ -2192,10 +2192,10 @@ adb shell mkdir -p $SD/GooseStation/bios $SD/GooseStation/games /sdcard/GooseSta
 adb push ~/work/goose-test/ps-30j.bin $SD/GooseStation/bios/
 adb push extras/padtest/padtest.psexe $SD/GooseStation/games/
 adb push "$HOME/work/goose-test/Ace Combat 3 Electrosphere (Disc 1).chd" $SD/GooseStation/games/
-adb uninstall io.github.ilyalissoboi.goosestation   # setup runs on a fresh install only
+adb uninstall io.github.ilyalissoboi.goosestation.debug   # setup runs on a fresh install only
 adb install android/app/build/outputs/apk/debug/app-debug.apk
 adb logcat -c
-adb shell am start -n io.github.ilyalissoboi.goosestation/.MainActivity
+adb shell am start -n io.github.ilyalissoboi.goosestation.debug/io.github.ilyalissoboi.goosestation.MainActivity
 ```
 
 Run setup with the built-in controller first (step 7's first check), picking `GooseStation/bios` and
@@ -2265,9 +2265,9 @@ adb logcat -v time > thor.log
      `.goosetmp` may show up between the steps of a write, but none is left behind.
    - [x] Home mid-game, replace the card in the folder with `adb push`, then reopen. The game keeps its card. After
      quitting, the working copy has the folder's version
-     (`adb shell run-as io.github.ilyalissoboi.goosestation md5sum "files/data/memcards/<the card>"`).
+     (`adb shell run-as io.github.ilyalissoboi.goosestation.debug md5sum "files/data/memcards/<the card>"`).
    - [ ] Delete a save state from the folder, then reopen: it's gone from the working copy
-     (`adb shell run-as io.github.ilyalissoboi.goosestation ls files/data/savestates`).
+     (`adb shell run-as io.github.ilyalissoboi.goosestation.debug ls files/data/savestates`).
    - [ ] Move the data folder away (`adb shell mv /sdcard/GooseStation/data /sdcard/GooseStation/data-away`), then
      save on a memory card. The unreachable banner shows, and the save stays in the working copy. Move it back and
      reopen the app: the save reaches the folder, and the banner goes.
@@ -2283,9 +2283,9 @@ adb logcat -v time > thor.log
      once the card is back.
    - [x] Kill the app during a large push. Make a 200 MB file (`adb shell "dd if=/dev/urandom
      of=/data/local/tmp/big.bin bs=1048576 count=200 && chmod 644 /data/local/tmp/big.bin"`), copy it in with
-     `adb shell run-as io.github.ilyalissoboi.goosestation cp /data/local/tmp/big.bin files/data/screenshots/big.bin`,
+     `adb shell run-as io.github.ilyalissoboi.goosestation.debug cp /data/local/tmp/big.bin files/data/screenshots/big.bin`,
      press Home,
-     then `adb shell am kill io.github.ilyalissoboi.goosestation` once a `big.bin.goosetmp` shows in the folder.
+     then `adb shell am kill io.github.ilyalissoboi.goosestation.debug` once a `big.bin.goosetmp` shows in the folder.
      Start the app again: the folder has no `big.bin` that is short, no temporary document is left, and the next
      push completes.
    - [x] Copy a desktop `settings.ini` (version 3, `Renderer = Software`, an `SDL-0` binding) into the data folder,

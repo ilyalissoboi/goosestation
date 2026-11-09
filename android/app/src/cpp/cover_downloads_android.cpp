@@ -125,7 +125,12 @@ AndroidCoverDownloads::Summary CoverDownloadsAndroid::Download(JNIEnv* env, cons
   const std::unique_ptr<HTTPDownloader> downloader = HTTPDownloader::Create(Host::GetHTTPUserAgent());
 
   AndroidCoverDownloads::Hooks hooks;
-  hooks.has_cover = [&games](size_t index) { return !FindLibraryCover(games[index]).empty(); };
+  // EmuFolders::Covers is read under the settings lock, as EmuFolders::Update() changes it under it: settings can be
+  // applied from another page while this runs.
+  hooks.has_cover = [&games](size_t index) {
+    const auto lock = Host::GetSettingsLock();
+    return !FindLibraryCover(games[index]).empty();
+  };
   hooks.fetch = [&downloader, &cancel](const std::string& url) {
     AndroidCoverDownloads::Response response;
     response.status = HTTPDownloader::HTTP_STATUS_ERROR;
@@ -144,6 +149,7 @@ AndroidCoverDownloads::Summary CoverDownloadsAndroid::Download(JNIEnv* env, cons
     return response;
   };
   hooks.save = [](size_t, const std::string& file_name, std::span<const u8> data) -> std::optional<std::string> {
+    const auto lock = Host::GetSettingsLock();
     Error error;
     if (!FileSystem::EnsureDirectoryExists(EmuFolders::Covers.c_str(), false, &error))
     {

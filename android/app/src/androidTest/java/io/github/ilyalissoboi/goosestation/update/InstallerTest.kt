@@ -42,7 +42,7 @@ class InstallerTest {
             val apk = File(app.cacheDir, "installer-test.apk")
             File(instrumentation.context.packageCodePath).copyTo(apk, overwrite = true)
             try {
-                val outcome = withTimeout(60_000) { installer.install(apk) }
+                val outcome = withTimeout(60_000) { installer.install(apk) { show -> show() } }
                 assertTrue(outcome.toString(), outcome is InstallOutcome.Failed)
                 assertTrue(asked.isEmpty())
             } finally {
@@ -56,7 +56,7 @@ class InstallerTest {
             allowInstalls()
             val apk = File(app.cacheDir, "installer-test.apk").apply { writeText("<html>Sign in</html>") }
             try {
-                val outcome = withTimeout(60_000) { Installer(app) {}.install(apk) }
+                val outcome = withTimeout(60_000) { Installer(app) {}.install(apk) { show -> show() } }
                 assertTrue(outcome.toString(), outcome is InstallOutcome.Failed)
             } finally {
                 apk.delete()

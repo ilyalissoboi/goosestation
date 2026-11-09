@@ -266,7 +266,8 @@ primary one. From 700 dp wide (times the font scale) the buttons sit beside the 
 takes half the height from the games; narrower, they wrap under them. Pressing Update turns it into the update's progress, in the same place. Downloading has a `ProgressBar`,
 "12 of 48 MB" and Cancel. Then come "Checking the download…", the permission prompt (Open settings, and where to find
 it once the player came back without it), and "Installing GooseStation 0.1-512…" with "Android's installer may need
-touch.". A failure is a `Danger` notice with Try again, and the installer's own words (its code may wrap at its
+touch.". Each state keeps a button (Cancel while checking and installing too), so the focus stays in the banner as it
+moves on. A failure is a `Danger` notice with Try again, and the installer's own words (its code may wrap at its
 underscores). It never takes the focus. While the focus is in it, an offer or
 a failure hides on B or Back, as the ✕ does by touch: a 48 dp target that is no focus stop (a button named Hide to a
 screen reader). The foot says "A Choose", "B Hide". In the other states B does nothing. Hidden or skipped, the

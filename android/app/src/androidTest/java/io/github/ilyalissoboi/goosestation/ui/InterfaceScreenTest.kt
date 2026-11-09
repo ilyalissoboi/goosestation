@@ -3,10 +3,13 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasText
@@ -17,6 +20,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
@@ -125,7 +129,28 @@ class InterfaceScreenTest {
     fun checkingSaysSoAndWaits() {
         showWithUpdates(CheckNowState.Checking)
         assertTrue(shown("Checking for updates…"))
-        rule.onNodeWithText("Check now").assertIsNotEnabled()
+        rule.onNodeWithText("Check now").performClick()
+        assertEquals(0, checks)
+    }
+
+    // From review: disabled while checking, Check now lost the focus for the whole check, and it never came back.
+    @Test
+    fun checkNowKeepsTheFocusWhileChecking() {
+        var check by mutableStateOf<CheckNowState>(CheckNowState.Idle)
+        rule.setContent {
+            GooseStationTheme {
+                InterfaceScreen(start, onChange = {}, onBack = {}, updates = InterfaceUpdates(check) { checks++ })
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText("Check now").requestFocus()
+        rule.waitForIdle()
+        check = CheckNowState.Checking
+        rule.waitForIdle()
+        rule.onNodeWithText("Check now").assertIsFocused()
+        check = CheckNowState.Done(CheckResult.UpToDate)
+        rule.waitForIdle()
+        rule.onNodeWithText("Check now").assertIsFocused()
     }
 
     @Test

@@ -18,10 +18,12 @@ import io.github.ilyalissoboi.goosestation.update.UpdatePrefs
 import io.github.ilyalissoboi.goosestation.update.UpdateSourceApi
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Why an update stopped: its download, the APK (not this app's), or Android's installer. */
 enum class UpdateFailure { Download, NotThisApp, Installer }
@@ -89,15 +91,15 @@ data class UpdateBuild(
  * and the APK on [io]. Nothing is downloaded or installed unless the player pressed Update ([update]). The check at
  * start ([startupCheck]) runs once per process, never while a game runs ([onScreen]), and offers only a newer version
  * that wasn't skipped; Check now ([checkNow]) offers a skipped one too. An APK is handed to the installer only once
- * [ApkCheck] has passed it, and only in the library. A new process starts by deleting [apkFile], which a process that
- * ended mid-download may have left.
+ * [ApkCheck] has passed it, and only in the library. Each attempt downloads into a file of its own in [apkFolder], which
+ * a new process empties: a process that ended mid-download may have left one.
  */
 class Updates(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher,
     private val source: UpdateSourceApi,
     private val prefs: UpdatePrefs,
-    private val apkFile: File,
+    private val apkFolder: File,
     private val own: () -> PackageFacts,
     private val archive: (File) -> PackageFacts?,
     private val installer: InstallerApi,
@@ -121,15 +123,24 @@ class Updates(
     private var startupAsked = false
     private var startupDue: String? = null
     private var inGame = false
-    private var installDue: ChannelRelease? = null
+    private var shown = true
+    private var installing: Job? = null
+
+    // The installer's question, while it waits for the app to be on screen.
+    private var question: (() -> Unit)? = null
+    private var installDue: Pair<ChannelRelease, File>? = null
     private var askedPermission = false
 
-    // Each update() is an attempt; a cancelled one's late results are dropped.
+    // Each update() is an attempt, with a file and a cancel of its own: a cancelled one that ends late (stalled in a
+    // read) deletes only its own file, and its results are dropped.
     private var attempt = 0
-    private var cancelled = false
+    private var cancelAttempt: AtomicBoolean? = null
+
+    // The APK the installer waits for: the one checked, until it's installed.
+    private var apk: File? = null
 
     init {
-        apkFile.delete()
+        apkFolder.listFiles()?.forEach { it.delete() }
     }
 
     /** The check at start, on channel [tag], if [enabled] (`[AutoUpdater] CheckAtStartup`). Once per process. */
@@ -176,10 +187,7 @@ class Updates(
             startupDue = null
             runStartupCheck(it)
         }
-        installDue?.let {
-            installDue = null
-            install(it)
-        }
+        if (shown) runInstallDue()
     }
 
     /** Downloads the offered version (or tries again after a failure), checks it, and hands it to the installer. */
@@ -191,7 +199,8 @@ class Updates(
                 else -> return
             }
         val mine = ++attempt
-        cancelled = false
+        val cancel = AtomicBoolean(false).also { cancelAttempt = it }
+        val file = File(apkFolder, "update-$mine.apk")
         failureMessage = null
         state = UpdateState.Downloading(release, 0, release.apkSize)
         scope.launch {
@@ -199,63 +208,81 @@ class Updates(
             val result =
                 try {
                     withContext(io) {
-                        source.download(release, apkFile) { done, total ->
+                        source.download(release, file) { done, total ->
                             scope.launch {
                                 if (mine == attempt && state is UpdateState.Downloading) {
                                     state = UpdateState.Downloading(release, done, total)
                                 }
                             }
-                            !(cancelled && mine == attempt)
+                            !cancel.get()
                         }
                     }
                 } catch (_: IOException) {
-                    withContext(io) { apkFile.delete() }
+                    withContext(io) { file.delete() }
                     DownloadResult.Failed
                 }
-            if (mine != attempt || cancelled) return@launch
+            if (mine != attempt || cancel.get()) {
+                withContext(io) { file.delete() }
+                return@launch
+            }
             when (result) {
                 DownloadResult.Cancelled -> state = UpdateState.Available(release)
                 DownloadResult.Failed -> state = UpdateState.Failed(release, UpdateFailure.Download)
                 DownloadResult.Done -> {
                     state = UpdateState.Checking(release)
-                    val ours = withContext(io) { ApkCheck.verdict(own(), archive(apkFile), release.versionCode) }
-                    if (!ours) {
-                        withContext(io) { apkFile.delete() }
+                    val ours = withContext(io) { ApkCheck.verdict(own(), archive(file), release.versionCode) }
+                    if (mine != attempt || cancel.get()) {
+                        withContext(io) { file.delete() }
+                    } else if (!ours) {
+                        withContext(io) { file.delete() }
                         state = UpdateState.Failed(release, UpdateFailure.NotThisApp)
-                    } else if (inGame) {
-                        installDue = release
                     } else {
-                        install(release)
+                        apk = file
+                        later(release, file)
                     }
                 }
             }
         }
     }
 
-    /** Stops a download; the version is offered again. */
+    /** Stops a download, its check or the wait for the installer; the version is offered again. */
     fun cancel() {
-        val s = state as? UpdateState.Downloading ?: return
-        cancelled = true
-        apkFile.delete()
-        state = UpdateState.Available(s.release)
+        val release =
+            when (val s = state) {
+                is UpdateState.Downloading -> s.release
+                is UpdateState.Checking -> s.release
+                is UpdateState.Installing -> s.release
+                else -> return
+            }
+        cancelAttempt?.set(true)
+        // The installer's session is abandoned as its wait is cancelled.
+        installing?.cancel()
+        installing = null
+        question = null
+        installDue = null
+        state = UpdateState.Available(release)
     }
 
-    private fun install(release: ChannelRelease) {
+    private fun install(
+        release: ChannelRelease,
+        file: File,
+    ) {
         if (!installer.canInstall()) {
             state = UpdateState.NeedsPermission(release, refused = askedPermission)
             return
         }
         state = UpdateState.Installing(release)
-        scope.launch {
-            when (val outcome = installer.install(apkFile)) {
-                InstallOutcome.Installed -> state = UpdateState.None
-                InstallOutcome.Aborted -> state = UpdateState.Available(release)
-                is InstallOutcome.Failed -> {
-                    failureMessage = outcome.message
-                    state = UpdateState.Failed(release, UpdateFailure.Installer)
+        installing =
+            scope.launch {
+                when (val outcome = installer.install(file, ::ask)) {
+                    InstallOutcome.Installed -> state = UpdateState.None
+                    InstallOutcome.Aborted -> state = UpdateState.Available(release)
+                    is InstallOutcome.Failed -> {
+                        failureMessage = outcome.message
+                        state = UpdateState.Failed(release, UpdateFailure.Installer)
+                    }
                 }
             }
-        }
     }
 
     /** Opens Android's setting to allow GooseStation to install apps. */
@@ -265,10 +292,46 @@ class Updates(
         installer.openPermissionSettings()
     }
 
-    /** Back in front: an update waiting for the permission carries on if it was given. */
-    fun onResume() {
-        val s = state as? UpdateState.NeedsPermission ?: return
-        if (inGame) installDue = s.release else install(s.release)
+    /**
+     * Whether the app is on screen. Hidden, the installer waits: Android won't show its question from the background,
+     * and no status would come. Back, an update waiting for the permission carries on if it was given, and the
+     * installer's question, if it came meanwhile, is shown.
+     */
+    fun onShown(shown: Boolean) {
+        this.shown = shown
+        if (!shown) return
+        when (val s = state) {
+            is UpdateState.NeedsPermission -> apk?.let { file -> later(s.release, file) }
+            is UpdateState.Installing -> showQuestion()
+            else -> if (!inGame) runInstallDue()
+        }
+    }
+
+    // The installer's question: shown now, or kept for the app's return.
+    private fun ask(show: () -> Unit) {
+        question = show
+        if (shown) showQuestion()
+    }
+
+    private fun showQuestion() {
+        val show = question ?: return
+        question = null
+        show()
+    }
+
+    // Installs now, or once the library is on screen again.
+    private fun later(
+        release: ChannelRelease,
+        file: File,
+    ) {
+        if (inGame || !shown) installDue = release to file else install(release, file)
+    }
+
+    private fun runInstallDue() {
+        installDue?.let { (release, file) ->
+            installDue = null
+            install(release, file)
+        }
     }
 
     /** Skip this version: not offered at start again, here (desktop and the other app keep their own). */

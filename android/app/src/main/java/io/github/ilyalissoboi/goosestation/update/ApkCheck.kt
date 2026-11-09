@@ -63,7 +63,15 @@ object ApkCheck {
         return info?.let(::facts)
     }
 
-    private const val SIGNING = PackageManager.GET_SIGNING_CERTIFICATES
+    // Before API 30 an archive's certificates are read only with GET_SIGNATURES as well: without it, signingInfo
+    // came back null, and every update would be refused.
+    @Suppress("DEPRECATION")
+    private val SIGNING =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
+        }
 
     private fun facts(info: PackageInfo): PackageFacts? {
         val signing = info.signingInfo ?: return null

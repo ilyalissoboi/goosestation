@@ -14,6 +14,7 @@ import io.github.ilyalissoboi.goosestation.update.PackageFacts
 import io.github.ilyalissoboi.goosestation.update.UpdatePrefs
 import io.github.ilyalissoboi.goosestation.update.UpdateSourceApi
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -26,6 +27,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /** The update model, over a fake GitHub, a fake installer and a skipped version kept in memory. */
 class UpdatesTest {
@@ -94,9 +98,27 @@ class UpdatesTest {
             settingsOpened++
         }
 
-        override suspend fun install(apk: File): InstallOutcome {
+        var asked = 0
+        var cancelledInstalls = 0
+
+        // Set: the installer has a question for the player once it completes.
+        var question: CompletableDeferred<Unit>? = null
+
+        override suspend fun install(
+            apk: File,
+            ask: (show: () -> Unit) -> Unit,
+        ): InstallOutcome {
             installs += apk
-            gate?.await()
+            try {
+                question?.let {
+                    it.await()
+                    ask { asked++ }
+                }
+                gate?.await()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                cancelledInstalls++
+                throw e
+            }
             return outcome
         }
     }
@@ -104,13 +126,19 @@ class UpdatesTest {
     @get:Rule
     val temp = TemporaryFolder()
 
+    // One install, of an APK in the updates folder.
+    private fun assertInstalledOnce() {
+        assertEquals(1, installer.installs.size)
+        assertEquals(apkFolder, installer.installs.single().parentFile)
+    }
+
     private val source = FakeSource()
     private val installer = FakeInstaller()
     private val store = MemoryStore()
     private val signer = setOf("ab".repeat(32))
     private val own = PackageFacts("io.github.ilyalissoboi.goosestation", 100_498, signer)
     private var archive: PackageFacts? = own.copy(versionCode = 100_512)
-    private val apkFile by lazy { temp.root.resolve("updates/update.apk") }
+    private val apkFolder by lazy { temp.root.resolve("updates") }
 
     private fun TestScope.updates(canUpdate: Boolean = true): Updates {
         val dispatcher = StandardTestDispatcher(testScheduler)
@@ -119,7 +147,7 @@ class UpdatesTest {
             io = dispatcher,
             source = source,
             prefs = UpdatePrefs(store),
-            apkFile = apkFile,
+            apkFolder = apkFolder,
             own = { own },
             archive = { archive },
             installer = installer,
@@ -226,7 +254,7 @@ class UpdatesTest {
             assertEquals(UpdateState.Downloading(newer, 0, 4), updates.state)
             runCurrent()
             assertEquals(UpdateState.Installing(newer), updates.state)
-            assertEquals(listOf(apkFile), installer.installs)
+            assertInstalledOnce()
             installer.gate!!.complete(Unit)
             runCurrent()
         }
@@ -242,7 +270,7 @@ class UpdatesTest {
             updates.cancel()
             runCurrent()
             assertEquals(UpdateState.Available(newer), updates.state)
-            assertFalse(apkFile.exists())
+            assertEquals(emptyList<File>(), apkFolder.listFiles().orEmpty().toList())
             assertEquals(emptyList<File>(), installer.installs)
         }
 
@@ -257,7 +285,7 @@ class UpdatesTest {
             runCurrent()
             assertEquals(UpdateState.Failed(newer, UpdateFailure.NotThisApp), updates.state)
             assertEquals(emptyList<File>(), installer.installs)
-            assertFalse(apkFile.exists())
+            assertEquals(emptyList<File>(), apkFolder.listFiles().orEmpty().toList())
         }
 
     @Test
@@ -274,7 +302,7 @@ class UpdatesTest {
             source.download = DownloadResult.Done
             updates.update()
             runCurrent()
-            assertEquals(listOf(apkFile), installer.installs)
+            assertInstalledOnce()
         }
 
     @Test
@@ -301,7 +329,7 @@ class UpdatesTest {
             assertEquals(emptyList<File>(), installer.installs)
             updates.onScreen(inGame = false)
             runCurrent()
-            assertEquals(listOf(apkFile), installer.installs)
+            assertInstalledOnce()
         }
 
     @Test
@@ -317,9 +345,9 @@ class UpdatesTest {
             updates.openPermissionSettings()
             assertEquals(1, installer.settingsOpened)
             installer.allowed = true
-            updates.onResume()
+            updates.onShown(true)
             runCurrent()
-            assertEquals(listOf(apkFile), installer.installs)
+            assertInstalledOnce()
         }
 
     @Test
@@ -332,7 +360,7 @@ class UpdatesTest {
             updates.update()
             runCurrent()
             updates.openPermissionSettings()
-            updates.onResume()
+            updates.onShown(true)
             runCurrent()
             assertEquals(UpdateState.NeedsPermission(newer, refused = true), updates.state)
             assertEquals(emptyList<File>(), installer.installs)
@@ -390,12 +418,156 @@ class UpdatesTest {
             assertEquals(newer.commit, UpdatePrefs(store).skippedCommit())
         }
 
+    // From review: a cancelled download stalled in a read finishes after the retry has begun, and deletes its file as
+    // HttpBridge does. With one path for both, that was the retry's file: Try again failed for no reason.
+    @Test
+    fun aCancelledDownloadDoesntSpoilTheRetry() =
+        runTest {
+            val pool = Executors.newFixedThreadPool(2)
+            val firstEnds = CountDownLatch(1)
+            val firstEnded = CountDownLatch(1)
+            val retryWrote = CountDownLatch(1)
+            var calls = 0
+            val slow =
+                object : UpdateSourceApi by source {
+                    override fun download(
+                        release: ChannelRelease,
+                        file: File,
+                        onProgress: (done: Long, total: Long) -> Boolean,
+                    ): DownloadResult {
+                        if (++calls == 1) {
+                            firstEnds.await(5, TimeUnit.SECONDS)
+                            file.delete()
+                            firstEnded.countDown()
+                            return DownloadResult.Failed
+                        }
+                        file.parentFile!!.mkdirs()
+                        file.writeBytes(byteArrayOf(1, 2, 3, 4))
+                        retryWrote.countDown()
+                        firstEnded.await(5, TimeUnit.SECONDS)
+                        return DownloadResult.Done
+                    }
+                }
+            archive = null
+            val updates =
+                Updates(
+                    scope = backgroundScope,
+                    io = pool.asCoroutineDispatcher(),
+                    source = slow,
+                    prefs = UpdatePrefs(store),
+                    apkFolder = apkFolder,
+                    own = { own },
+                    archive = { file -> own.copy(versionCode = 100_512).takeIf { file.isFile && file.length() == 4L } },
+                    installer = installer,
+                    build =
+                        UpdateBuild(
+                            true,
+                            commit = "f".repeat(40),
+                            code = 100_498,
+                            versionName = "0.1-498-gfffffff",
+                        ),
+                )
+            try {
+                updates.checkNow("preview")
+                until { updates.state is UpdateState.Available }
+                updates.update()
+                updates.cancel()
+                updates.update()
+                retryWrote.await(5, TimeUnit.SECONDS)
+                firstEnds.countDown()
+                until { installer.installs.isNotEmpty() || updates.state is UpdateState.Failed }
+                // The check passed only on the retry's whole file, so it reached the installer.
+                assertInstalledOnce()
+            } finally {
+                pool.shutdownNow()
+            }
+        }
+
+    // Runs the test's queue until [done], as work comes back from the pool's threads.
+    private fun TestScope.until(done: () -> Boolean) {
+        val end = System.nanoTime() + 5_000_000_000
+        while (!done()) {
+            check(System.nanoTime() < end) { "timed out" }
+            runCurrent()
+            Thread.sleep(1)
+        }
+    }
+
+    // From review: in the background Android won't start the installer's question, and no status ever comes: the
+    // banner stayed at Installing. The installer waits until the app is shown again.
+    @Test
+    fun installWaitsUntilTheAppIsShown() =
+        runTest {
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            updates.onShown(false)
+            runCurrent()
+            assertEquals(emptyList<File>(), installer.installs)
+            updates.onShown(true)
+            runCurrent()
+            assertInstalledOnce()
+        }
+
+    // The installer's question came while the app was hidden, where Android wouldn't show it: it's shown on return.
+    @Test
+    fun aQuestionThatCameInTheBackgroundIsShownOnReturn() =
+        runTest {
+            installer.question = CompletableDeferred()
+            installer.gate = CompletableDeferred()
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+            updates.onShown(false)
+            installer.question!!.complete(Unit)
+            runCurrent()
+            assertEquals(0, installer.asked)
+            updates.onShown(true)
+            assertEquals(1, installer.asked)
+        }
+
+    // Asked in front, its own window hides the app; back from answering it, it isn't asked again.
+    @Test
+    fun aQuestionShownInFrontIsNotAskedTwice() =
+        runTest {
+            installer.question = CompletableDeferred<Unit>().apply { complete(Unit) }
+            installer.gate = CompletableDeferred()
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+            assertEquals(1, installer.asked)
+            updates.onShown(false)
+            updates.onShown(true)
+            assertEquals(1, installer.asked)
+        }
+
+    @Test
+    fun cancelWhileInstallingGoesBackToAvailable() =
+        runTest {
+            installer.gate = CompletableDeferred()
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+            assertEquals(UpdateState.Installing(newer), updates.state)
+            updates.cancel()
+            runCurrent()
+            assertEquals(UpdateState.Available(newer), updates.state)
+            assertEquals(1, installer.cancelledInstalls)
+        }
+
     @Test
     fun startClearsALeftoverDownload() =
         runTest {
-            apkFile.parentFile!!.mkdirs()
-            apkFile.writeText("half an APK")
+            apkFolder.mkdirs()
+            apkFolder.resolve("update-1.apk").writeText("half an APK")
             updates()
-            assertFalse(apkFile.exists())
+            assertEquals(emptyList<File>(), apkFolder.listFiles().orEmpty().toList())
         }
 }

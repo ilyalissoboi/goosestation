@@ -174,7 +174,8 @@ private fun UpdateRows(
         Modifier.bringIntoViewRequester(bring).padding(top = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ActionButton("Check now", onClick = updates.onCheckNow, enabled = updates.check != CheckNowState.Checking)
+        // Not disabled while checking, which would take the focus from it: a press then does nothing.
+        ActionButton("Check now", onClick = { if (updates.check != CheckNowState.Checking) updates.onCheckNow() })
         line?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted) }
     }
 }

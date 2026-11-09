@@ -4,6 +4,9 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -243,5 +246,45 @@ class UpdateBannerTest {
         rule.waitForIdle()
         assertTrue(shown("Couldn't load the changes. Check your network connection."))
         assertEquals(1, rule.onAllNodes(isFocused().and(hasText("Close"))).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun checkingAndInstallingCanBeCancelled() {
+        show(UpdateState.Installing(release))
+        rule.onNodeWithText("Cancel").performClick()
+        assertEquals(listOf("cancel"), calls)
+    }
+
+    // From review: Checking and Installing had no button, so the focus went with the one it was on, and never came back.
+    @Test
+    fun theFocusStaysInTheBannerAsItMoves() {
+        var state by mutableStateOf<UpdateState>(UpdateState.Available(release))
+        rule.setContent {
+            GooseStationTheme {
+                Column {
+                    UpdateBanner(model(state), onWhatsNew = {})
+                    ActionButton("Elsewhere", onClick = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+        focus("Update")
+        for (
+        (next, button) in
+        listOf(
+            UpdateState.Downloading(release, 0, 4) to "Cancel",
+            UpdateState.Checking(release) to "Cancel",
+            UpdateState.Installing(release) to "Cancel",
+            UpdateState.Available(release) to "Update",
+        )
+        ) {
+            state = next
+            rule.waitForIdle()
+            assertEquals(
+                next.toString(),
+                1,
+                rule.onAllNodes(isFocused().and(hasText(button))).fetchSemanticsNodes().size,
+            )
+        }
     }
 }

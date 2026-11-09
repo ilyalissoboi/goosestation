@@ -81,7 +81,18 @@ val gitVersionCode: Int =
             throw GradleException("$gitVersion is past what a version code can hold (see build.gradle.kts).")
         }
         (ma * 1000 + mi) * 100_000 + n
-    } ?: 1
+    } ?: run {
+        // A release run's build must have a version code that grows: 1 couldn't install over any release.
+        if (providers
+                .gradleProperty("goose.updateChannel")
+                .orNull
+                .orEmpty()
+                .isNotEmpty()
+        ) {
+            throw GradleException("$gitVersion isn't a MAJOR.MINOR version from git describe (see docs/releasing.md).")
+        }
+        1
+    }
 
 // Release builds from the rolling release workflow name their update channel (-Pgoose.updateChannel): only those check
 // for updates. -Pgoose.updateApi points the check elsewhere, as the test tiers' local server; an http:// one allows

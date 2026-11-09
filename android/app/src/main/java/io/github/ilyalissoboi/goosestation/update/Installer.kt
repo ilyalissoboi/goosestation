@@ -42,8 +42,14 @@ interface InstallerApi {
     /** Opens Android's setting that allows GooseStation to install apps. */
     fun openPermissionSettings()
 
-    /** Hands [apk] to the installer, which asks the player, and waits for how it ends. */
-    suspend fun install(apk: File): InstallOutcome
+    /**
+     * Hands [apk] to the installer, and waits for how it ends. When the installer has a question for the player, [ask]
+     * gets what shows it, to run when the app is on screen (Android won't show it from the background).
+     */
+    suspend fun install(
+        apk: File,
+        ask: (show: () -> Unit) -> Unit,
+    ): InstallOutcome
 }
 
 /**
@@ -61,7 +67,10 @@ class Installer(
             Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
         )
 
-    override suspend fun install(apk: File): InstallOutcome {
+    override suspend fun install(
+        apk: File,
+        ask: (show: () -> Unit) -> Unit,
+    ): InstallOutcome {
         val installer = context.packageManager.packageInstaller
         val session =
             try {
@@ -78,8 +87,9 @@ class Installer(
                 }
             } catch (e: IOException) {
                 return InstallOutcome.Failed(e.message ?: "couldn't write the update")
-            } catch (e: SecurityException) {
-                return InstallOutcome.Failed(e.message ?: "not allowed")
+            } catch (e: RuntimeException) {
+                // A SecurityException, or the session refusing a write: a failure the banner names, never a crash.
+                return InstallOutcome.Failed(e.message ?: e.javaClass.simpleName)
             }
         return suspendCancellableCoroutine { continuation ->
             val action = "${context.packageName}.INSTALL_STATUS.${System.nanoTime()}"
@@ -93,7 +103,7 @@ class Installer(
                         val outcome =
                             when (status) {
                                 PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                                    userAction(intent)?.let(startActivity)
+                                    userAction(intent)?.let { question -> ask { startActivity(question) } }
                                     return
                                 }
                                 PackageInstaller.STATUS_SUCCESS -> InstallOutcome.Installed
@@ -123,8 +133,18 @@ class Installer(
                     Intent(action).setPackage(context.packageName),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
                 )
-            session.commit(status.intentSender)
-            session.close()
+            try {
+                session.commit(status.intentSender)
+                session.close()
+            } catch (e: RuntimeException) {
+                runCatching { context.unregisterReceiver(receiver) }
+                runCatching { session.abandon() }
+                if (continuation.isActive) {
+                    continuation.resume(
+                        InstallOutcome.Failed(e.message ?: e.javaClass.simpleName),
+                    )
+                }
+            }
         }
     }
 

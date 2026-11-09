@@ -68,7 +68,7 @@ const val INSTALL_PERMISSION_PATH = "Settings → Apps → Special app access �
 
 /**
  * The library's update banner: a newer version (Update, What's new, which calls [onWhatsNew], and Skip this version),
- * its download (progress and Cancel), and each step after it, as an info notice; a failure, with Try again, as a
+ * its download (progress), the check and the installer, each with Cancel, as an info notice; a failure, with Try again, as a
  * danger one. Never a primary button. It never takes the focus itself. While the focus is in it, B or Back hide an
  * offer or a failure ([UpdateBannerModel.onHide]), as the ✕ does by touch, which is no focus stop; in the other
  * states nothing hides it. From 700 dp wide (more for larger text), the buttons sit beside the words rather than
@@ -120,7 +120,9 @@ fun UpdateBanner(
         when (state) {
             is UpdateState.Available ->
                 listOf("Update" to model.onUpdate, "What's new" to onWhatsNew, "Skip this version" to model.onSkip)
-            is UpdateState.Downloading -> listOf("Cancel" to model.onCancel)
+            // Every state keeps a button, so the focus has somewhere to stay as the banner moves on.
+            is UpdateState.Downloading, is UpdateState.Checking, is UpdateState.Installing ->
+                listOf("Cancel" to model.onCancel)
             is UpdateState.NeedsPermission -> listOf("Open settings" to model.onOpenSettings)
             is UpdateState.Failed -> listOf("Try again" to model.onUpdate)
             else -> emptyList()

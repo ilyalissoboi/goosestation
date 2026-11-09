@@ -567,7 +567,9 @@ object AppController : NativeCallbacks {
         scope.launch(Dispatchers.IO) { NativeLibrary.load() }
         updates =
             makeUpdates(appContext).also { made ->
-                scope.launch { snapshotFlow { screen == Screen.Game }.collect { made.onScreen(it) } }
+                // A game left is still shutting down (its resume state, its cards) until the core says it stopped: no
+                // installer meanwhile.
+                scope.launch { snapshotFlow { screen == Screen.Game || gameActive }.collect { made.onScreen(it) } }
             }
         scope.launch {
             val (saved, images) = withContext(Dispatchers.IO) { prefs.load() to prefs.biosImages() }
@@ -582,7 +584,7 @@ object AppController : NativeCallbacks {
             io = Dispatchers.IO,
             source = UpdateSource(),
             prefs = UpdatePrefs(SharedPreferencesStore(appContext, UpdatePrefs.NAME)),
-            apkFile = File(appContext.cacheDir, "updates/update.apk"),
+            apkFolder = File(appContext.cacheDir, "updates"),
             own = { ApkCheck.own(appContext) },
             archive = { ApkCheck.ofArchive(appContext, it) },
             // The installer's question and Android's settings, over the app: from the activity when there is one.
@@ -666,8 +668,8 @@ object AppController : NativeCallbacks {
             }
         }
         networkWatch.start()
-        // Back from Android's settings: an update waiting to be allowed carries on.
-        updates?.onResume()
+        // Back in front: an update waiting to be allowed carries on, and the installer's question comes back.
+        updates?.onShown(true)
     }
 
     /**
@@ -684,6 +686,8 @@ object AppController : NativeCallbacks {
         // After the pause's card writes, which the core has queued already: sync pushes them, then rests.
         syncVisibility.stopped()
         networkWatch.stop()
+        // Android won't show the installer's question from the background: the update waits for the app.
+        updates?.onShown(false)
     }
 
     // --- Setup ---

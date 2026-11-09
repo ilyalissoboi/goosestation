@@ -294,6 +294,8 @@ endif()
 if(ANDROID)
   target_sources(util PRIVATE
     aaudio_audio_stream.cpp
+    android_cover_downloads.cpp
+    android_cover_downloads.h
     android_disc_groups.cpp
     android_disc_groups.h
     android_game_settings.cpp

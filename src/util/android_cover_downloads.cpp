@@ -84,8 +84,10 @@ std::optional<std::string> CoverExtension(std::string_view content_type, std::st
 
 std::optional<std::string> CoverFileName(const Target& target, bool use_serial, std::string_view extension)
 {
-  const std::array<const std::string*, 4> names = {use_serial ? &target.key : nullptr, &target.title, &target.key,
-                                                   &target.path_title};
+  // The core's ID for a file without a serial isn't one to name a cover by when asked for serials.
+  const bool has_serial = !target.key.starts_with("HASH-");
+  const std::array<const std::string*, 4> names = {(use_serial && has_serial) ? &target.key : nullptr, &target.title,
+                                                   &target.key, &target.path_title};
   for (const std::string* name : names)
   {
     if (!name || !CanBeFileName(*name))

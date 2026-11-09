@@ -135,6 +135,13 @@ TEST(AndroidCoverDownloads, CoverFileNameNoSerial)
   EXPECT_EQ(CoverFileName(Game("", "", ""), false, "png"), std::nullopt);
 }
 
+TEST(AndroidCoverDownloads, CoverFileNameHashKeyIsNoSerial)
+{
+  // The core's ID for a file without a serial: saved by the title, as a game without a serial is.
+  EXPECT_EQ(CoverFileName(Game("HASH-74D2E3F1A0B9C8D7", "GAME C"), true, "png"), "GAME C.png");
+  EXPECT_EQ(CoverFileName(Game("HASH-74D2E3F1A0B9C8D7", "A:B", ""), true, "png"), "HASH-74D2E3F1A0B9C8D7.png");
+}
+
 TEST(AndroidCoverDownloads, RunTriesSourcesInOrder)
 {
   FakeHooks fake;

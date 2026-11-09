@@ -7,6 +7,7 @@
 #include "android_host.h"
 #include "bios_import.h"
 #include "content_bridge.h"
+#include "cover_downloads_android.h"
 #include "emu_thread.h"
 #include "http_downloader_android.h"
 #include "jni_util.h"
@@ -1594,6 +1595,33 @@ NATIVE_LIBRARY_FUNCTION(void, applySettings)(JNIEnv*, jobject)
   AndroidHost::ApplySettings();
 }
 
+NATIVE_LIBRARY_FUNCTION(jintArray, downloadCovers)(JNIEnv* env, jobject, jobjectArray jsources, jboolean use_serial,
+                                                    jobject listener)
+{
+  std::vector<std::string> sources;
+  const jsize count = jsources ? env->GetArrayLength(jsources) : 0;
+  for (jsize i = 0; i < count; i++)
+  {
+    jstring source = static_cast<jstring>(env->GetObjectArrayElement(jsources, i));
+    sources.push_back(FromJString(env, source));
+    env->DeleteLocalRef(source);
+  }
+
+  const AndroidCoverDownloads::Summary summary =
+    CoverDownloadsAndroid::Download(env, sources, use_serial == JNI_TRUE, listener);
+  const jint values[] = {static_cast<jint>(summary.total),       static_cast<jint>(summary.found),
+                         static_cast<jint>(summary.missing),     static_cast<jint>(summary.unreachable),
+                         static_cast<jint>(summary.unsaved),     summary.cancelled ? 1 : 0};
+  jintArray result = env->NewIntArray(6);
+  if (!result)
+  {
+    ClearException(env);
+    return env->NewIntArray(0);
+  }
+  env->SetIntArrayRegion(result, 0, 6, values);
+  return result;
+}
+
 // A streamed download's progress, for the ProgressCallback at progress: false once it's cancelled.
 NATIVE_LIBRARY_FUNCTION(jboolean, downloadProgress)(JNIEnv*, jobject, jlong progress, jlong done, jlong total)
 {
@@ -2378,14 +2406,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
   }
 
   for (Game& game : games)
-  {
-    game.cover_path = GameList::GetCoverImagePath(game.game.path, game.game.key, game.game.title);
-    if (game.cover_path.empty() && !game.game.discs.empty())
-    {
-      const AndroidDiscGroups::Disc& first = game.game.discs.front();
-      game.cover_path = GameList::GetCoverImagePath(first.path, first.serial, first.title);
-    }
-  }
+    game.cover_path = CoverDownloadsAndroid::FindLibraryCover(game.game);
 
   std::stable_sort(games.begin(), games.end(), [](const Game& a, const Game& b) {
     return StringUtil::Strcasecmp(a.game.title.c_str(), b.game.title.c_str()) < 0;

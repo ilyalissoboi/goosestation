@@ -924,6 +924,16 @@ object NativeLibrary {
     /** The shader packs, 8 fields each: id, name, description, licence, needs, installed version, incomplete, size. */
     external fun getShaderPacks(): Array<String>
 
+    /**
+     * Fetches a cover for each library tile without one (as the last [getGameList] listed them), from [sources] in
+     * order, saved by serial when [useSerial]: total, found, missing, unreachable, unsaved, cancelled (1). Blocks.
+     */
+    external fun downloadCovers(
+        sources: Array<String>,
+        useSerial: Boolean,
+        progress: CoverProgress,
+    ): IntArray
+
     /** Each pack's latest version from GitHub, 4 fields each: id, version, worded size, error. Blocks. */
     external fun checkShaderPacks(progress: PackProgress): Array<String>
 

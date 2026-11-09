@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,7 +51,7 @@ internal val covers = CoverLoader((Runtime.getRuntime().maxMemory() / 8).coerceA
  *
  * The cover is as wide as the tile's column, unless a whole tile (the cover, two lines of title and the details line)
  * would be taller than [fitHeight], the grid's room for a row: then it's smaller, still square, and the tile is centred
- * in its column ([coverSize]).
+ * in its column ([coverSize]). A tile is that tall with a one-line title too, the room left under its details line.
  */
 @Composable
 fun GameTile(
@@ -86,7 +87,12 @@ fun GameTile(
         contentAlignment = Alignment.TopCenter,
     ) {
         val side = coverSize(maxWidth, fitHeight, textHeight)
-        Column(Modifier.width(side), verticalArrangement = Arrangement.spacedBy(TITLE_GAP)) {
+        // Room for two lines of title whatever the title: every tile in a row is as tall, so the grid, which centres the
+        // focused one, doesn't move the row as the focus goes from a one-line title to a two-line one.
+        Column(
+            Modifier.width(side).heightIn(min = side + textHeight),
+            verticalArrangement = Arrangement.spacedBy(TITLE_GAP),
+        ) {
             BoxWithConstraints(
                 modifier =
                     Modifier

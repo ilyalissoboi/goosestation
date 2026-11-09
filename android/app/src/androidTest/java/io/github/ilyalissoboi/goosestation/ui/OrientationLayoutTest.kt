@@ -2494,6 +2494,71 @@ class OrientationLayoutTest {
         }
     }
 
+    // From testing on the Thor: a tile with a one-line title, focused in a row of two-line ones, moved the whole row,
+    // as the grid centres the focused tile by its height. The first row can't move (the grid is at its top), so the
+    // walk is along the second. Titles in their sorted order: every third game's fits one line.
+    @Test
+    fun aRowStaysPutAsTheFocusMovesAlongIt() {
+        val games =
+            (1..15).map {
+                val title = "Game %02d".format(it) + if (it % 3 == 0) "" else ": ${LONG_GAME.title}"
+                LONG_GAME.copy(path = "content://test/tree/games/document/game-$it.cue", title = title)
+            }
+        val configs =
+            listOf(DpSize(832.dp, 468.dp), DpSize(960.dp, 540.dp)).flatMap { size ->
+                listOf(
+                    1f,
+                    1.3f,
+                ).map { Config("landscape ${size.width.value.toInt()}x${size.height.value.toInt()}", size, it) }
+            }
+        eachConfig(
+            {
+                Box(
+                    Modifier
+                        .consumeWindowInsets(WindowInsets.safeDrawing)
+                        .padding(top = 30.dp, bottom = 24.dp),
+                ) {
+                    LibraryScreen(
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = games[0].path,
+                    )
+                }
+            },
+            configs,
+        ) {
+            fun focused() = rule.onNode(isFocused()).fetchSemanticsNode().boxInRoot()
+
+            fun onAGame() = focusedHas("Game ")
+            press(Key.DirectionDown)
+            val tops = mutableListOf(focused().top)
+            var left = focused().left
+            repeat(4) {
+                press(Key.DirectionRight)
+                val tile = focused()
+                // The row's end: the focus went on to the next row, or up to the bar.
+                if (!onAGame() || tile.left < left) return@repeat
+                left = tile.left
+                tops += tile.top
+            }
+            assertTrue("the walk was too short: $tops", tops.size >= 3)
+            assertTrue(
+                "the row's top as the focus moved along it: $tops",
+                tops.all {
+                    (it - tops[0]).value in
+                        -0.5f..0.5f
+                },
+            )
+        }
+    }
+
     private fun focusedIsTheField() =
         rule.onAllNodes(isFocused() and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
 

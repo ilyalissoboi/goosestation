@@ -2559,6 +2559,70 @@ class OrientationLayoutTest {
         }
     }
 
+    // From testing on the Thor: where a row fills the grid, the next isn't composed yet, and Down went to its first game
+    // rather than the one under the focused game; onto a shorter last row, Down goes to its last game.
+    @Test
+    fun downAndUpKeepTheColumn() {
+        val games =
+            (1..11).map {
+                LONG_GAME.copy(path = "content://test/tree/games/document/game-$it.cue", title = "Game %02d".format(it))
+            }
+        val configs =
+            listOf(DpSize(832.dp, 468.dp), DpSize(960.dp, 540.dp)).flatMap { size ->
+                listOf(
+                    1f,
+                    1.3f,
+                ).map { Config("landscape ${size.width.value.toInt()}x${size.height.value.toInt()}", size, it) }
+            }
+        eachConfig(
+            {
+                Box(
+                    Modifier
+                        .consumeWindowInsets(WindowInsets.safeDrawing)
+                        .padding(top = 30.dp, bottom = 24.dp),
+                ) {
+                    LibraryScreen(
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = games[1].path,
+                    )
+                }
+            },
+            configs,
+        ) {
+            fun focused() = rule.onNode(isFocused()).fetchSemanticsNode()
+
+            fun number() = (1..11).first { focusedHas("Game %02d".format(it)) }
+            assertEquals(2, number())
+            val left = focused().boxInRoot().left
+            press(Key.DirectionDown)
+            assertFocusedInView()
+            val below = number()
+            assertTrue("Down from Game 02 went to Game %02d, not the game under it".format(below), below > 2)
+            assertEquals("Down from Game 02 left its column", left.value, focused().boxInRoot().left.value, 0.5f)
+            press(Key.DirectionUp)
+            assertEquals("Up didn't come back to Game 02", 2, number())
+
+            // The first row's last game, then down to the end: a shorter last row has its last game under it.
+            var last = number()
+            while (true) {
+                press(Key.DirectionRight)
+                if (!focusedHas("Game ") || number() < last) break
+                last = number()
+            }
+            pressUntilFocused(Key.DirectionDown, "Game %02d".format(last))
+            repeat(6) { press(Key.DirectionDown) }
+            assertEquals("Down to the end from the last column", 11, number())
+        }
+    }
+
     private fun focusedIsTheField() =
         rule.onAllNodes(isFocused() and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
 

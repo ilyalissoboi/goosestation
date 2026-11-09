@@ -469,6 +469,7 @@ class MainActivity : ComponentActivity() {
                             sort = AppController.librarySort,
                             onSort = AppController::sortLibrary,
                             search = AppController.librarySearch,
+                            overlayOpen = AppController.gameStarts.offer != null,
                         )
                         val starts = AppController.gameStarts
                         starts.offer?.let { offer ->

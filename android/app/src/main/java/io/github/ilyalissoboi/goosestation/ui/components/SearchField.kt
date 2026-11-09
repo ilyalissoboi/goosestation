@@ -50,7 +50,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,11 +93,11 @@ class SearchFocus {
 fun rememberSearchFocus(): SearchFocus = remember { SearchFocus() }
 
 /**
- * A search box over [state]: a `sunken` well with a `line-strong` edge, the `search` icon, a placeholder, and a ✕
- * that clears the text while there's any (a 48 dp tap target, not a focus stop: B clears by controller). Focus doesn't
- * open the keyboard, so a D-pad passes through; A, the D-pad centre, a tap or [SearchFocus.focusAndType] do. Up leaves
- * it, Down calls [onDown]. The keyboard's action is Search, which closes it; [onKeyboardClosed] runs whenever the
- * keyboard closes, by that or by Back.
+ * A search box over [state]: a `sunken` well with a `line-strong` edge, the `search` icon, a placeholder, and a ✕ that
+ * clears the text while there's any (a 48 dp tap target and a button to a screen reader, not a focus stop: B clears by
+ * controller). Focus doesn't open the keyboard, so a D-pad passes through; A, the D-pad centre, a tap or
+ * [SearchFocus.focusAndType] do. Up leaves it, Down calls [onDown]. The keyboard's action is Search, which closes it;
+ * [onKeyboardClosed] runs whenever the keyboard closes, by that or by Back.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -218,7 +221,16 @@ fun SearchField(
                         Modifier
                             .size(48.dp)
                             .pointerInput(state) { detectTapGestures { state.clearText() } }
-                            .semantics { contentDescription = "Clear search" },
+                            // A button to a screen reader, which can't tap it; still not a focus stop.
+                            .semantics {
+                                contentDescription = "Clear search"
+                                role = Role.Button
+                                onClick {
+                                    state.clearText()
+                                    true
+                                }
+                                notAFocusStop = "B clears the search"
+                            },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(

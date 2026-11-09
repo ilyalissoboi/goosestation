@@ -11,12 +11,14 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import io.github.ilyalissoboi.goosestation.ui.components.NotAFocusStop
 import org.junit.Assert.fail
 
 /**
  * Asserts the screen shown can be used with a controller alone: once it settles, something has the focus, so keys
  * (B among them) reach the screen; and everything that can be clicked, and isn't disabled, can take the focus, so a
- * D-pad can reach it. A failure names what's wrong by its text.
+ * D-pad can reach it, unless it says why a controller needn't ([NotAFocusStop]). A failure names what's wrong by its
+ * text.
  */
 fun ComposeContentTestRule.assertControllerReady() {
     waitForIdle()
@@ -27,7 +29,8 @@ fun ComposeContentTestRule.assertControllerReady() {
         onAllNodes(
             SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick) and
                 isEnabled() and
-                SemanticsMatcher.keyNotDefined(SemanticsActions.RequestFocus),
+                SemanticsMatcher.keyNotDefined(SemanticsActions.RequestFocus) and
+                SemanticsMatcher.keyNotDefined(NotAFocusStop),
         ).fetchSemanticsNodes()
     if (unreachable.isNotEmpty()) {
         fail(

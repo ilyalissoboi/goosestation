@@ -38,6 +38,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -182,3 +184,11 @@ fun ActionButton(
         Text(text = text, style = MaterialTheme.typography.titleMedium, color = ink)
     }
 }
+
+/**
+ * Why a node that can be clicked is, by design, no focus stop: a controller does what it does another way (the search
+ * field's ✕, which B stands in for). The focus audit lets such a node be, where it'd otherwise want every clickable node
+ * focusable.
+ */
+val NotAFocusStop = SemanticsPropertyKey<String>("NotAFocusStop")
+var SemanticsPropertyReceiver.notAFocusStop by NotAFocusStop

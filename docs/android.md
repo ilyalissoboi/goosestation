@@ -338,8 +338,8 @@ and "Library", a **search field**, the sync badge while sync is on, then icon bu
 **view** (a bulleted list in grid mode, which switches to the list, and the grid in list mode; the choice is saved as
 `[UI] GameListGridView` in `settings.ini`), **Refresh** (scans the games folders again) and **Settings** (see
 "Changing settings"). The focused button shows its name and value under it ("Sort: Title", "Order: A to Z"), as a long
-press does by touch; screen readers hear the same. When the bar has no room for the field beside the buttons (the
-Thor at text 1.3×, a sync badge, a phone in portrait), the field goes on its own row under them. The library also
+press does by touch; screen readers hear the same. When the bar has no room for the field beside the buttons (a
+640 dp-wide handheld at text 1.3×, a phone in portrait), the field goes on its own row under them. The library also
 refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves it. The
 tile for the last game played is focused when the library comes back. A tile shows the game's cover from `covers/` in
 the data folder, or its title when there's none; a list row shows the title, region, serial and play time. The line
@@ -1823,7 +1823,8 @@ On `goose-test-1` and `goose-test-2` (emulator-5580 and 5582), by the tests alon
 | Sort list, search, no match | Pass, the same sizes, grid and list: every choice reached and in view; marked titles laid out; Clear search reached and in view. |
 
 The test emulators' insets leave the library about 200 dp of height at 640×360 with text at 1.3×, so there the games
-get only a sliver under the two-row bar. How much room they get on the Thor itself at 1.3× is still to check.
+get only a sliver under the two-row bar. The Thor, at its own density, has far more room (see "Library sort and search
+on the Thor").
 
 ## Results on the AYN Thor
 
@@ -2071,6 +2072,25 @@ The debug APK of `master` at `82e60777b` (#63, save state management), installed
 The user went through step 16's checks by hand, and everything worked as expected: a shared slot saved in one game
 and loaded from another (asking first, then starting that game from the state), Undo load, delete in Load, a game's
 Saves from its tile, and hardcore mode's refusals.
+
+### Library sort and search on the Thor (2026-11-09)
+
+The debug APK of `master` at `f66b52470` (#66, library sort and search), installed over the existing one (data kept),
+driven over adb (`input -d 0 keyevent`, screenshots of display 0). The Thor runs at 369 dpi, so its 1920×1080 screen
+is 832×468 dp, not the 640×360 the layout tests take for a handheld. Nothing was saved: the sort list was opened and
+closed with B, and Order wasn't pressed, so `[Main] FullscreenUIGameSort` stayed unwritten.
+
+| Check | Result |
+|---|---|
+| The bar at text 1.0× | Pass. One row, with the sync badge ("Synced"): the goose and "Library", "Search your games", the badge and the five buttons; "3 games · Title, A–Z" under it, then a whole row of tiles, and the hints. |
+| Labels | Pass. Right from the empty field reached the badge, then Sort, "Sort: Title" under it in the gap, clear of the count line; the hints "A Choose · Select Search". |
+| Sort list | Pass. A on Sort opened the six choices under it, Title current and focused, all in view; "A Choose · B Close". B closed it, Sort focused, nothing changed. |
+| Select and the keyboard | Pass. Select from a tile focused the field and opened Gboard docked under the app (not its full-screen editor); "ace" left "2 of 3 games · Title, A–Z", hints "A Type · B Clear search". |
+| B with Gboard open | Pass. The first B closed the keyboard and kept the search, "Ace" marked in both titles; the second cleared it ("3 games"). Down then reached the first game, Up the field. The B was sent by adb, as the pad's own button sends `KEYCODE_BUTTON_B`. |
+| Text at 1.3× | Pass. Still one row; a whole row of tiles in view, their details line just under the fold (the grid scrolls), and the hints on one line. The text scale was put back afterwards. |
+
+A tile without a cover breaks "Electrosphere" mid-word in its title at text 1.3× (the cover's fallback title in
+`title-2`, a column about 140 dp wide); that was so before this work.
 
 ## Checks on the AYN Thor
 

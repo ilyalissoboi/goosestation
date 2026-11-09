@@ -1509,6 +1509,12 @@ void AndroidHost::SetListedGames(std::vector<AndroidDiscGroups::Game> games)
   s_listed_games = std::move(games);
 }
 
+std::vector<AndroidDiscGroups::Game> AndroidHost::GetListedGames()
+{
+  std::unique_lock lock(s_listed_games_mutex);
+  return s_listed_games;
+}
+
 void AndroidHost::StartGame(std::string path, u32 disc, bool resume)
 {
   StartGame(std::move(path), disc, resume ? std::optional<BootState>(BootState{std::string(), -1, false}) : std::nullopt);

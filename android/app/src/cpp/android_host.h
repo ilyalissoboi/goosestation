@@ -203,6 +203,9 @@ void RefreshGameList(bool invalidate_cache);
 /// The games the library lists, as the last getGameList() grouped them. From any thread.
 void SetListedGames(std::vector<AndroidDiscGroups::Game> games);
 
+/// A copy of the games the library lists, as the last getGameList() grouped them. From any thread.
+std::vector<AndroidDiscGroups::Game> GetListedGames();
+
 /// Boots the listed game whose path is path, once the app has given a surface: on its disc numbered disc (its first if
 /// it has none such), or with resume, from its resume state. A path the list doesn't have boots as a game of its own.
 /// NotifyGameStarted() reports that it booted. Every call ends with one NotifyGameStopped(): when the game stops, or

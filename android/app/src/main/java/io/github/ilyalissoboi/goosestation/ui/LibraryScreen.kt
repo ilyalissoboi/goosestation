@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,7 +23,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -52,6 +53,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -89,7 +91,9 @@ import kotlinx.coroutines.launch
  * [focusPath] (the last one launched), or else the first game; with no games, Settings has it. Toggling the view keeps
  * the focused game. A, Enter or a tap call [onStartGame]; X opens the game's Saves ([onSaves]); Y opens its own
  * settings ([onGameSettings]), for a game with a key (its serial). A long press offers both, in an [OverlayPanel] (a
- * game without a key goes straight to its Saves). With games, the foot says so ([KeyHints]).
+ * game without a key goes straight to its Saves). With games, the foot says so ([KeyHints]). While [overlayOpen],
+ * something the caller draws over the library has the focus (the resume prompt); once it closes, the game last
+ * focused takes the focus back, not the first thing on the screen.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -112,6 +116,7 @@ fun LibraryScreen(
     sort: LibrarySort = LibrarySort(),
     onSort: (LibrarySort) -> Unit = {},
     search: TextFieldState = rememberTextFieldState(),
+    overlayOpen: Boolean = false,
 ) {
     val settings = remember { FocusRequester() }
     val sortButton = remember { FocusRequester() }
@@ -222,6 +227,42 @@ fun LibraryScreen(
         .modifier(game.path)
         .onFocusChanged { if (it.isFocused) area = LibraryArea.Game }
         .gameKeys(settings) { onSaves(game) }
+
+    // Up and Down in the grid go to the game in the same column of the row above or below (the last game of a shorter
+    // last row), rather than where Compose's search lands when that row isn't composed yet: its first game. A row
+    // that isn't composed is scrolled in just far enough to be, and the game takes the focus once it is; the grid's
+    // centring then brings it the rest of the way. Up from the first row goes on to the top bar, as before.
+    fun Modifier.gridRows(index: Int) =
+        onPreviewKeyEvent { event ->
+            val step =
+                when (event.key) {
+                    Key.DirectionDown -> 1
+                    Key.DirectionUp -> -1
+                    else -> return@onPreviewKeyEvent false
+                }
+            val info = gridState.layoutInfo
+            val columns = (info.visibleItemsInfo.maxOfOrNull { it.column } ?: return@onPreviewKeyEvent false) + 1
+            val row = index / columns + step
+            if (row < 0 || row > shown.lastIndex / columns) return@onPreviewKeyEvent false
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent true
+            val target = minOf(index + step * columns, shown.lastIndex)
+            val path = shown[target].path
+            if (info.visibleItemsInfo.any { it.index == target } && focus.request(path)) return@onPreviewKeyEvent true
+            focus.pending = path
+            scope.launch {
+                val visible = gridState.layoutInfo.visibleItemsInfo
+                val distance =
+                    if (step > 0) {
+                        val bottom = visible.maxOf { it.offset.y + it.size.height }
+                        bottom + info.mainAxisItemSpacing - info.viewportEndOffset + 1
+                    } else {
+                        val top = visible.minOf { it.offset.y }
+                        top - info.mainAxisItemSpacing - info.viewportStartOffset - 1
+                    }
+                gridState.scrollBy(distance.toFloat())
+            }
+            true
+        }
 
     // A search Back clears, as B does, while the sort list or the long press's choice isn't taking Back first.
     BackHandler(enabled = query != null && !sortOpen && choosing == null) { clear() }
@@ -334,12 +375,12 @@ fun LibraryScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(24.dp),
                             ) {
-                                items(shown, key = { it.path }) { game ->
+                                itemsIndexed(shown, key = { _, game -> game.path }) { index, game ->
                                     val settings = gameSettingsOf(game, onGameSettings)
                                     GameTile(
                                         game,
                                         onClick = { onStartGame(game) },
-                                        modifier = gameModifier(game, settings),
+                                        modifier = gameModifier(game, settings).gridRows(index),
                                         onLongClick = { longPress(game) },
                                         query = query,
                                         fitHeight = rowHeight,
@@ -384,6 +425,12 @@ fun LibraryScreen(
     // Back to the tile on every way out of the choice: an open the app refuses (not ready, a game running) leaves it
     // focused, as B does.
     var refocus by remember { mutableStateOf<String?>(null) }
+    // And once an overlay of the caller's closes, as the long press's own does.
+    var overlayWasOpen by remember { mutableStateOf(overlayOpen) }
+    LaunchedEffect(overlayOpen) {
+        if (overlayWasOpen && !overlayOpen) refocus = focus.focused
+        overlayWasOpen = overlayOpen
+    }
     LaunchedEffect(refocus) {
         val path = refocus ?: return@LaunchedEffect
         focus.refocus(path)
@@ -533,6 +580,9 @@ private class GameFocus {
         // Not composed (scrolled away): nothing to focus.
         runCatching { requesters[path]?.requestFocus() }
     }
+
+    /** The composed game at [path] takes the focus now; false if it isn't composed. */
+    fun request(path: String): Boolean = runCatching { requesters[path]?.requestFocus() == true }.getOrDefault(false)
 
     /** For the whole screen, which sees the focus move anywhere in it. */
     val screenModifier = Modifier.onFocusEvent { if (it.hasFocus) pending = null }

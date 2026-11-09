@@ -68,6 +68,7 @@ import androidx.test.filters.LargeTest
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.CoverJob
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameControllers
@@ -1414,7 +1415,7 @@ class OrientationLayoutTest {
         eachConfig({ SettingsScreen(focusEntry = null, coreReady = true, onOpen = {}, onBack = {}) }) {
             assertTextsLaidOut()
             assertFocusedInView()
-            pressUntilFocused(Key.DirectionDown, "Folders")
+            pressUntilFocused(Key.DirectionDown, "Covers")
             pressUntilFocused(Key.DirectionUp, "Controllers")
         }
     }
@@ -1625,6 +1626,45 @@ class OrientationLayoutTest {
             pressUntilFocused(Key.DirectionDown, "Shared card 1")
             assertTextsLaidOut()
             pressUntilFocused(Key.DirectionDown, "One card for all discs of a game")
+        }
+    }
+
+    @Test
+    fun theCoversPageWithLongSourcesAndADownload() {
+        val long = "https://covers.example.com/" + "a-very-long-folder-name/".repeat(7) + "\${serial}.jpg"
+        eachConfig({
+            CoversScreen(
+                FakeCoversModel(
+                    texts = listOf(long, long.replace("\${serial}", "\${title}"), "https://covers.example/cover.jpg"),
+                    job = CoverJob("A game whose title is long enough to wrap onto a second line on a phone", 12, 48),
+                    message = "Found 31 covers. 17 games had none at these sources. 3 couldn't be reached.",
+                ),
+                onBack = {},
+            )
+        }) {
+            assertTextsLaidOut()
+            assertTrue("the page opened on ${focusedText()}", focusedDescribedAs("Source 1"))
+            assertFocusedInView()
+            pressUntil(Key.DirectionDown, "Source 3") { focusedDescribedAs("Source 3") }
+            press(Key.DirectionRight)
+            assertTrue("Right reached ${focusedText()}", focusedHas("Remove"))
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Add a source")
+            press(Key.DirectionRight)
+            assertTrue("Right reached ${focusedText()}", focusedHas("Restore the preset source"))
+            assertFocusedInView()
+            pressUntilFocused(Key.DirectionDown, "Save covers by serial")
+            pressUntilFocused(Key.DirectionDown, "Cancel")
+            assertTextsLaidOut()
+        }
+    }
+
+    @Test
+    fun theCoversRestoreQuestion() {
+        eachConfig({ CoversRestoreQuestion(onReplace = {}, onKeep = {}) }) {
+            assertTextsLaidOut()
+            assertTrue("the question opened on ${focusedText()}", focusedHas("Keep mine"))
+            assertFocusedInView()
         }
     }
 
@@ -2451,6 +2491,135 @@ class OrientationLayoutTest {
                 )
                 press(Key.DirectionDown)
             }
+        }
+    }
+
+    // From testing on the Thor: a tile with a one-line title, focused in a row of two-line ones, moved the whole row,
+    // as the grid centres the focused tile by its height. The first row can't move (the grid is at its top), so the
+    // walk is along the second. Titles in their sorted order: every third game's fits one line.
+    @Test
+    fun aRowStaysPutAsTheFocusMovesAlongIt() {
+        val games =
+            (1..15).map {
+                val title = "Game %02d".format(it) + if (it % 3 == 0) "" else ": ${LONG_GAME.title}"
+                LONG_GAME.copy(path = "content://test/tree/games/document/game-$it.cue", title = title)
+            }
+        val configs =
+            listOf(DpSize(832.dp, 468.dp), DpSize(960.dp, 540.dp)).flatMap { size ->
+                listOf(
+                    1f,
+                    1.3f,
+                ).map { Config("landscape ${size.width.value.toInt()}x${size.height.value.toInt()}", size, it) }
+            }
+        eachConfig(
+            {
+                Box(
+                    Modifier
+                        .consumeWindowInsets(WindowInsets.safeDrawing)
+                        .padding(top = 30.dp, bottom = 24.dp),
+                ) {
+                    LibraryScreen(
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = games[0].path,
+                    )
+                }
+            },
+            configs,
+        ) {
+            fun focused() = rule.onNode(isFocused()).fetchSemanticsNode().boxInRoot()
+
+            fun onAGame() = focusedHas("Game ")
+            press(Key.DirectionDown)
+            val tops = mutableListOf(focused().top)
+            var left = focused().left
+            repeat(4) {
+                press(Key.DirectionRight)
+                val tile = focused()
+                // The row's end: the focus went on to the next row, or up to the bar.
+                if (!onAGame() || tile.left < left) return@repeat
+                left = tile.left
+                tops += tile.top
+            }
+            assertTrue("the walk was too short: $tops", tops.size >= 3)
+            assertTrue(
+                "the row's top as the focus moved along it: $tops",
+                tops.all {
+                    (it - tops[0]).value in
+                        -0.5f..0.5f
+                },
+            )
+        }
+    }
+
+    // From testing on the Thor: where a row fills the grid, the next isn't composed yet, and Down went to its first game
+    // rather than the one under the focused game; onto a shorter last row, Down goes to its last game.
+    @Test
+    fun downAndUpKeepTheColumn() {
+        val games =
+            (1..11).map {
+                LONG_GAME.copy(path = "content://test/tree/games/document/game-$it.cue", title = "Game %02d".format(it))
+            }
+        val configs =
+            listOf(DpSize(832.dp, 468.dp), DpSize(960.dp, 540.dp)).flatMap { size ->
+                listOf(
+                    1f,
+                    1.3f,
+                ).map { Config("landscape ${size.width.value.toInt()}x${size.height.value.toInt()}", size, it) }
+            }
+        eachConfig(
+            {
+                Box(
+                    Modifier
+                        .consumeWindowInsets(WindowInsets.safeDrawing)
+                        .padding(top = 30.dp, bottom = 24.dp),
+                ) {
+                    LibraryScreen(
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = games[1].path,
+                    )
+                }
+            },
+            configs,
+        ) {
+            fun focused() = rule.onNode(isFocused()).fetchSemanticsNode()
+
+            fun number() = (1..11).first { focusedHas("Game %02d".format(it)) }
+            assertEquals(2, number())
+            val left = focused().boxInRoot().left
+            press(Key.DirectionDown)
+            assertFocusedInView()
+            val below = number()
+            assertTrue("Down from Game 02 went to Game %02d, not the game under it".format(below), below > 2)
+            assertEquals("Down from Game 02 left its column", left.value, focused().boxInRoot().left.value, 0.5f)
+            press(Key.DirectionUp)
+            assertEquals("Up didn't come back to Game 02", 2, number())
+
+            // The first row's last game, then down to the end: a shorter last row has its last game under it.
+            var last = number()
+            while (true) {
+                press(Key.DirectionRight)
+                if (!focusedHas("Game ") || number() < last) break
+                last = number()
+            }
+            pressUntilFocused(Key.DirectionDown, "Game %02d".format(last))
+            repeat(6) { press(Key.DirectionDown) }
+            assertEquals("Down to the end from the last column", 11, number())
         }
     }
 

@@ -342,7 +342,7 @@ press does by touch; screen readers hear the same. When the bar has no room for 
 640 dp-wide handheld at text 1.3×, a phone in portrait), the field goes on its own row under them. The library also
 refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves it. The
 tile for the last game played is focused when the library comes back. A tile shows the game's cover from `covers/` in
-the data folder, or its title when there's none; on a short screen (a handheld in landscape) the cover shrinks so a
+the data folder (Settings → **Covers** downloads them), or its title when there's none; on a short screen (a handheld in landscape) the cover shrinks so a
 whole tile, title and details too, fits above the button hints. A list row shows the title, region, serial and play
 time. The line
 under the bar says how many games there are and the sort ("48 games · Title, A–Z"), and while searching how many
@@ -429,6 +429,33 @@ folder.
   the data folder.
 
 Folders the app no longer uses have their grants released, unless another saved folder still needs the same one.
+
+### Covers
+
+**Settings** → **Covers**, after Folders, downloads covers for the library from sources you choose, as desktop's
+Download Covers does. GooseStation hosts no covers and sends nothing anywhere until you press **Download covers**.
+
+- **Sources**: URL templates, one per row, tried in order for each game. `${serial}`, `${title}` and `${filetitle}`
+  stand for the game's serial, title and file name, URL-encoded; a source needs at least one (one without says so on
+  its row, and Download covers waits until it's fixed or removed). **Remove** is beside each, and **Add a source**
+  after them. Until you change the list it holds one preset, xlenore's PSX cover collection
+  (`https://raw.githubusercontent.com/xlenore/psx-covers/main/covers/default/${serial}.jpg`); a list you empty stays
+  empty, and **Restore the preset source** puts the preset back, asking first when it would replace your sources.
+- **Save covers by serial**: on by default, as the preset names covers by serial; off saves them by title, as desktop
+  does by default. A game without a serial (a PS-EXE, a disc the database doesn't know) is saved by its title, or
+  its file's title when the title can't be a file name.
+- **Download covers** fetches a cover for each library tile that shows none, for the disc the tile reads its cover
+  from (disc 1, or the playlist), and never replaces a cover already there. The page shows each game as it goes
+  ("Downloading the cover for Crash Bandicoot… 12 of 48") with **Cancel**, which stops the request under way, and
+  then a summary ("Found 31 covers. 17 games had none at these sources."), or that the sources couldn't be reached.
+  It goes on when you leave the page (reopen it to see how far it is), and stops, keeping the covers found, when a
+  game starts or the app goes to the background. Each cover shows on its tile as it lands, and reaches the data
+  folder through the mirror, where desktop finds it too.
+
+The sources and the switch are kept in `settings.ini` under `[Covers]` (`SourceCount`, `Source1` …, `UseSerial`),
+which desktop doesn't read: its dialog keeps nothing. Android runs the download itself, natively, over the core's
+cover path helpers and HTTP downloader (`src/util/android_cover_downloads.cpp`,
+`android/app/src/cpp/cover_downloads_android.cpp`); desktop's `GameList::DownloadCovers` is unchanged.
 
 ### The data folder and its mirror
 
@@ -1844,6 +1871,24 @@ passed on both test emulators, 953 of 953, at the branch's last code commit.
 | A sort picked before the core starts | Pass. Kept through the core's first read of `settings.ini` and written once the core runs; a `settings.ini` pulled later gives its sort. |
 | Right past the typed text | Pass, with no change: within "crash" Right moves the cursor, and at its end it leaves the field for the button beside it. |
 
+### Cover downloads (2026-11-09)
+
+On `goose-test-1` and `goose-test-2` (emulator-5580 and 5582), by the tests alone, with covers served from a server
+on the device (the emulators can't reach GitHub over HTTPS): `AndroidCoverDownloads` (common-tests, on macOS and on
+emulator-5582); `CoverSettingsTest` and `CoversTest` (JVM); `CoverDownloadsTest`, `CoversScreenTest`,
+`SettingsScreenTest`, `FocusAuditTest`, `OrientationLayoutTest` and `LibraryScanTest` (instrumented). The full tier
+passed, 1225 of 1225, at the branch's last code commit; `minifyReleaseWithR8` keeps what native code calls.
+
+| Check | Result |
+|---|---|
+| The first source that answers | Pass. A 404 from the first source, a PNG from the second: saved as `covers/GAME C.png` (a PS-EXE's `HASH-` ID isn't a serial, so by its title), reported for its tile, and the library lists it. |
+| A cover already there | Pass. No request for that game; its file unchanged. A cover that lands while the game's image is fetched is kept too. |
+| Cancel | Pass. With the server holding the request, a cancel half a second in returns in about a second, not the 30 s timeout; nothing saved. |
+| No network | Pass. A source on a closed port: every game unreachable, and the page says the sources couldn't be reached. |
+| A web page, a bad name | Pass. A 200 `text/html` answer is no cover, and the next source is tried; a title FAT or Windows can't hold (`:`, `?`, a trailing dot) saves by serial, else the file's title, never `covers/.jpg`. |
+| The page | Pass, at 640×360, 800×360, 960×540, 360×800 and 411×891, text 1.0× and 1.3×: three 200-character sources and a running download laid out; Right from a source reaches its Remove, Down goes source to source and on to Add a source, whose Right reaches Restore beside or under it; the restore question focused on Keep mine. |
+| Release builds | Found and fixed: R8 stripped `HttpBridge` (so every HTTP request failed in a release build, RetroAchievements and the shader packs included) and the progress listeners' methods; keep rules hold them now. |
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon
@@ -2110,6 +2155,21 @@ closed with B, and Order wasn't pressed, so `[Main] FullscreenUIGameSort` stayed
 
 A tile without a cover breaks "Electrosphere" mid-word in its title at text 1.3× (the cover's fallback title in
 `title-2`, a column about 140 dp wide); that was so before this work.
+
+### Cover downloads on the Thor (2026-11-09)
+
+The debug APK of `claude/cover-downloads` at `29c708131` (#70), installed over the existing one (data kept), driven
+over adb (`input -d 0 keyevent`, screenshots of display 0), on Wi-Fi. A real download from the preset, GitHub.
+
+| Check | Result |
+|---|---|
+| The page | Pass. Settings → Covers, last in the hub: Source 1 the preset, focused, Remove beside it; Save covers by serial on; Down reached Add a source, the switch, then Download covers. |
+| Download covers | Pass. Two requests, `SLPS-02020.jpg` 200 and padtest's `HASH-9FDA0E1A56D8DF5B.jpg` 404, done in under a second: "Found 1 cover. 1 game had none at these sources." Too quick to see the progress line. |
+| The tiles | Pass. Both Ace Combat 3 tiles (two files, one serial) show the cover, `covers/SLPS-02020.jpg` (39698 bytes), in the working copy and in the data folder on the SD card within seconds; padtest still shows its title. |
+| Nothing else | Pass. The stray `covers/unreachable-check.txt` from October was left as it was; `settings.ini` has no `[Covers]` section, as nothing on the page was changed; the crash buffer is empty. |
+
+Step 17's other checks (Cancel mid-run, a game started or Home mid-run, Wi-Fi off, removing and restoring the preset)
+are still to do.
 
 ## Checks on the AYN Thor
 
@@ -2391,3 +2451,16 @@ adb logcat -v time > thor.log
      touch offers Saves and Game settings.
    - [x] With hardcore mode on (step 12): Load state and Undo load say "Off in hardcore mode", the Undo hotkey says
      "Loading a state is off in hardcore mode", and the Saves page deletes but won't start from a save.
+17. **Cover downloads.** With the build that has them, on Wi-Fi, and a library with some games that have no cover.
+    Note `covers/` in the data folder before and after; the download is a real one, from the preset (GitHub).
+   - [ ] Settings → **Covers**: Source 1 is the preset, Save covers by serial on; Right from the field reaches
+     Remove, Down reaches Add a source.
+   - [ ] **Download covers**: "Downloading the cover for … n of N" with Cancel focused; covers appear on their tiles
+     as they land (Back to the library while it runs); the summary says how many were found.
+   - [ ] A cover already in `covers/` is still the same file afterwards.
+   - [ ] **Cancel** mid-run stops within a second or two, "Cancelled. Found n covers."; starting a game mid-run, or
+     pressing Home, stops it too.
+   - [ ] With Wi-Fi off: "The sources couldn't be reached. Check your network connection."
+   - [ ] Remove the preset: the list stays empty after Back and reopening; **Restore the preset source** puts it back
+     without asking. With a source of your own, it asks first, focused on Keep mine.
+   - [ ] `settings.ini` has `[Covers] SourceCount`, `Source1` and `UseSerial`.

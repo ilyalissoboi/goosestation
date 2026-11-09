@@ -36,6 +36,7 @@ import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.CardSlots
 import io.github.ilyalissoboi.goosestation.ui.ConsoleScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
+import io.github.ilyalissoboi.goosestation.ui.CoversScreen
 import io.github.ilyalissoboi.goosestation.ui.EmulationScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
@@ -425,6 +426,7 @@ class MainActivity : ComponentActivity() {
                                 )
                         }
                     }
+                    Screen.Covers -> CoversScreen(AppController.covers, onBack = AppController::closeSettingsPage)
                     Screen.Folders -> {
                         val mirrorState by AppController.mirrorState.collectAsState()
                         FoldersScreen(
@@ -467,6 +469,7 @@ class MainActivity : ComponentActivity() {
                             sort = AppController.librarySort,
                             onSort = AppController::sortLibrary,
                             search = AppController.librarySearch,
+                            overlayOpen = AppController.gameStarts.offer != null,
                         )
                         val starts = AppController.gameStarts
                         starts.offer?.let { offer ->

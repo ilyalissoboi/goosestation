@@ -11,9 +11,12 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
@@ -57,8 +60,10 @@ import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.library.LibrarySort
 import io.github.ilyalissoboi.goosestation.library.SortKey
 import io.github.ilyalissoboi.goosestation.ui.components.ACTION_LABEL
+import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -529,6 +534,79 @@ class LibraryScreenTest {
         press(Key.Enter)
 
         rule.onNodeWithText("Game 02").assertIsDisplayed()
+    }
+
+    // From testing on the Thor: cancelling the resume prompt, which the activity draws over the library, left the
+    // focus on the search field rather than on the game being started.
+    @Test
+    fun aGameGetsTheFocusBackWhenAnOverlayCloses() {
+        var open by mutableStateOf(false)
+        rule.setContent {
+            GooseStationTheme {
+                Box(Modifier.width(460.dp)) {
+                    LibraryScreen(
+                        search = TextFieldState(),
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = { open = true },
+                        focusPath = null,
+                        overlayOpen = open,
+                    )
+                    if (open) {
+                        OverlayPanel(onBack = { open = false }) {
+                            val cancel = remember { FocusRequester() }
+                            LaunchedEffect(Unit) { cancel.requestFocus() }
+                            ActionButton(
+                                "Cancel",
+                                onClick = { open = false },
+                                modifier = Modifier.focusRequester(cancel),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        press(Key.DirectionRight)
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Game 04").assertIsFocused()
+
+        press(Key.Enter)
+        rule.onNodeWithText("Cancel").assertIsFocused()
+        press(Key.Enter)
+
+        rule.onNodeWithText("Game 04").assertIsFocused()
+    }
+
+    // From testing on the Thor: Down from a tile that wasn't the first in its row went to the next row's first.
+    @Test
+    fun downGoesToTheGameUnderneath() {
+        show()
+        press(Key.DirectionRight)
+        rule.onNodeWithText("Game 02").assertIsFocused()
+
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Game 04").assertIsFocused()
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Game 06").assertIsFocused()
+        press(Key.DirectionUp)
+        rule.onNodeWithText("Game 04").assertIsFocused()
+    }
+
+    @Test
+    fun downOntoAShortLastRowGoesToItsLastGame() {
+        show(games = games.take(29), focusPath = entry(28).path)
+        rule.onNodeWithText("Game 28").assertIsFocused()
+
+        press(Key.DirectionDown)
+
+        rule.onNodeWithText("Game 29").assertIsFocused()
     }
 
     // --- Searching ---

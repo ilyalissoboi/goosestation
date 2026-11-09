@@ -115,12 +115,29 @@ class LibrarySearchTest {
             return times.sorted()[times.size / 2] / 1_000_000.0
         }
         val index = SearchIndex(games)
-        val indexing = median { SearchIndex(games).fileNames }
         val filtering = median { LibrarySearch.filter(index, "game 09") }
 
         assertEquals(100, LibrarySearch.filter(index, "game 09").size)
-        assertTrue("took $filtering ms", filtering < 4.0)
-        // A search doesn't decode the 4000 file names again, which takes about as long as the index does.
-        assertTrue("took $filtering ms, the index $indexing ms", filtering < indexing / 2)
+        // A frame's budget at 60 Hz: a bound a shared CI runner keeps (a tighter one failed there now and then).
+        assertTrue("took $filtering ms", filtering < 16.0)
+    }
+
+    // Each search used to decode the 4000 file names again; a timing bound against the index's own time caught it, but
+    // failed now and then on CI's shared runners. Counted instead: once per games list, at the first search.
+    @Test
+    fun aSearchDecodesTheFileNamesOncePerList() {
+        val games = (1..3).map { game("Game $it", path = "content://tree/document/Game%20$it.cue") }
+        var decoded = 0
+        val index =
+            SearchIndex(games) {
+                decoded++
+                LibrarySearch.fileNames(it)
+            }
+
+        LibrarySearch.filter(index, "game")
+        LibrarySearch.filter(index, "game 2")
+        LibrarySearch.filter(index, "2")
+
+        assertEquals(3, decoded)
     }
 }

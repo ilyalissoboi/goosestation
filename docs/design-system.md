@@ -327,7 +327,14 @@ SettingsPage("Graphics", onBack = onBack) {
 - `TextFieldRow`: a text setting, its label in `label-sm` over a 48 dp `sunken` well with a `line-strong` edge at
   `radius-sm`, the focus ring around the well. Focus doesn't open the keyboard, so a D-pad passes through; A, the
   D-pad centre or a tap open it, and up and down leave the field as on any row. A password is the secure field:
-  dots, and never offered to a keyboard to learn. It takes a `TextFieldState`.
+  dots, and never offered to a keyboard to learn. It takes a `TextFieldState`. Its `note` goes under the well, as on
+  any row. A `trailing` action (a `Ghost` button) sits beside the well; Right past the end of the text reaches it,
+  as the field would otherwise keep the key.
+- **A list of text values a page edits** (the Covers page's sources): each a `TextFieldRow` numbered in order
+  ("Source 1"), with Remove as its `trailing` action and a note when the value can't work; "Add a source" (and any
+  other list action) in a `FlowRow` after the last. Up and down go from field to field, then to the first button.
+  Add focuses the new field, without opening the keyboard; Remove doesn't ask, and focuses the field that took its
+  place, else the one before, else Add.
 
 ### `KeyHints` (`KeyHints.kt`)
 

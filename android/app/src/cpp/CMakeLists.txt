@@ -11,6 +11,8 @@ add_library(goosestation SHARED
   bios_import.h
   content_bridge.cpp
   content_bridge.h
+  cover_downloads_android.cpp
+  cover_downloads_android.h
   emu_thread.cpp
   emu_thread.h
   foreign_settings.cpp

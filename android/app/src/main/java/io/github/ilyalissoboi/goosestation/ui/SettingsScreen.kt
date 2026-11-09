@@ -12,7 +12,10 @@ import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 
-/** The settings hub's entries, each a page, in desktop's order, as the hub lists them; all but Folders need the core. */
+/**
+ * The settings hub's entries, each a page, in desktop's order, as the hub lists them, then Covers (desktop's is a dialog
+ * of its own); all but Folders need the core.
+ */
 enum class SettingsEntry(
     val label: String,
     val summary: String,
@@ -30,6 +33,7 @@ enum class SettingsEntry(
     Achievements("Achievements", "Sign-in, hardcore mode, messages"),
     Advanced("Advanced", "Logging, save states, CD-ROM and CPU tweaks"),
     Folders("Folders", "BIOS, games and data folders", needsCore = false),
+    Covers("Covers", "Cover sources and downloads"),
 }
 
 /** Said, in place of its summary, on an entry that needs the core while it isn't [SettingsScreen]'s `coreReady`. */

@@ -35,6 +35,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.CoverJob
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.GameControllers
@@ -75,6 +76,7 @@ import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
+import io.github.ilyalissoboi.goosestation.settings.CoverSources
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
@@ -337,6 +339,45 @@ class FocusAuditTest {
             ),
         )
 
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun coversPage() {
+        show {
+            CoversScreen(
+                FakeCoversModel(
+                    texts = listOf(CoverSources.PRESET, "https://covers.example/cover.jpg"),
+                    message = "Found 31 covers. 17 games had none at these sources.",
+                ),
+                onBack = {},
+            )
+        }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun coversPageEmpty() {
+        show { CoversScreen(FakeCoversModel(texts = emptyList()), onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun coversPageDownloading() {
+        show { CoversScreen(FakeCoversModel(job = CoverJob("Crash Bandicoot", 12, 48)), onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun coversRestoreQuestion() {
+        show {
+            CoversScreen(
+                FakeCoversModel(texts = listOf("https://covers.example/\${serial}.png")).apply {
+                    askRestore()
+                },
+                onBack = {},
+            )
+        }
         rule.assertControllerReady()
     }
 

@@ -40,6 +40,7 @@ distribution itself against `distributionSha256Sum`, which matches the published
 | `androidx.core:core-ktx` | 1.19.1 |
 | `org.jetbrains.kotlinx:kotlinx-coroutines-android` and `-test` | 1.11.0 |
 | `junit:junit` (JVM unit tests) | 4.13.2 |
+| `org.json:json` (JVM unit tests only: the app uses Android's own `org.json`) | 20250517 |
 | `androidx.test:runner` | 1.7.0 |
 | `androidx.test.ext:junit` | 1.3.0 |
 | `androidx.test:orchestrator` (brings `androidx.test.services:test-services` 1.6.0) | 1.6.1 |

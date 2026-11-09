@@ -73,9 +73,9 @@ fun git(vararg args: String): String =
 
 val gitVersion: String = git("describe", "--dirty").ifEmpty { "0.0-unknown" }
 val gitCommit: String = git("rev-parse", "HEAD").takeIf { Regex("[0-9a-f]{40}").matches(it) }.orEmpty()
+val versionPattern = Regex("""^(\d+)\.(\d+)(?:-(\d+)-g[0-9a-f]+)?(-dirty)?$""")
 val gitVersionCode: Int =
-    Regex("""^(\d+)\.(\d+)(?:-(\d+)-g[0-9a-f]+)?(-dirty)?$""").matchEntire(gitVersion)?.destructured?.let {
-        (major, minor, count) ->
+    versionPattern.matchEntire(gitVersion)?.destructured?.let { (major, minor, count) ->
         val (ma, mi, n) = Triple(major.toInt(), minor.toInt(), count.ifEmpty { "0" }.toInt())
         if (ma > 20 || mi > 999 || n > 99_999) {
             throw GradleException("$gitVersion is past what a version code can hold (see build.gradle.kts).")
@@ -360,6 +360,7 @@ dependencies {
     implementation(files(emusyncAar))
 
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))

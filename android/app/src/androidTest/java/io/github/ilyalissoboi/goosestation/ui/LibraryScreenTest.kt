@@ -57,6 +57,7 @@ import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.library.LibrarySort
 import io.github.ilyalissoboi.goosestation.library.SortKey
 import io.github.ilyalissoboi.goosestation.ui.components.ACTION_LABEL
+import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -126,6 +127,7 @@ class LibraryScreenTest {
         sort: LibrarySort = LibrarySort(),
         search: TextFieldState = TextFieldState(),
         shownGames: (() -> List<GameEntry>)? = null,
+        banners: List<BannerModel> = emptyList(),
     ) {
         this.sort = sort
         rule.setContent {
@@ -141,7 +143,7 @@ class LibraryScreenTest {
                         search = search,
                         games = shownGames?.invoke() ?: games,
                         gridView = gridView(),
-                        banners = emptyList(),
+                        banners = banners,
                         message = null,
                         isError = false,
                         onToggleView = onToggleView,
@@ -721,6 +723,20 @@ class LibraryScreenTest {
         hint(PadGlyphs.confirm, "Choose").assertExists()
         hint(PadGlyphs.back, "Close").assertExists()
         hint(PadGlyphs.select, "Search").assertDoesNotExist()
+    }
+
+    @Test
+    fun aBannersButtonSaysAChoose() {
+        show(banners = listOf(BannerModel("The games folder can't be reached.", listOf("Pick again" to {}))))
+        hint(PadGlyphs.confirm, "Play").assertExists()
+
+        rule.onNodeWithText("Pick again").requestFocus()
+        rule.waitForIdle()
+
+        hint(PadGlyphs.confirm, "Choose").assertExists()
+        hint(PadGlyphs.select, "Search").assertExists()
+        hint(PadGlyphs.confirm, "Play").assertDoesNotExist()
+        hint(PadGlyphs.action, "Saves").assertDoesNotExist()
     }
 
     @Test

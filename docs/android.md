@@ -346,7 +346,7 @@ the data folder, or its title when there's none; on a short screen (a handheld i
 whole tile, title and details too, fits above the button hints. A list row shows the title, region, serial and play
 time. The line
 under the bar says how many games there are and the sort ("48 games · Title, A–Z"), and while searching how many
-match ("2 of 48 games · Title, A–Z"). The button hints at the foot follow the focus.
+match ("2 of 48 games · Title, A–Z"). The button hints at the foot follow the focus, onto a banner's buttons too.
 
 **Sort** opens its list under the button, in the screen itself: Title, Last played, Time played, Serial, File title
 and File size, the current one marked. A picks, and B, Back or a tap outside close it; either way the focus goes back to
@@ -356,15 +356,17 @@ data folder shared with desktop sorts alike in both: Title, Serial and File titl
 least first, Last played most recent first, each the other way reversed; ties go by title, reversed with the rest;
 titles fold ASCII case only, as `strcasecmp` does, and File title compares only up to the shorter name. The keys are
 written only once the sort changes, so until then Android sorts by Title, where Big Picture's own default is Type. A
-sort set on desktop that Android doesn't offer (Type, Uncompressed size) is applied as there and shown by its name.
+sort picked while the core is still starting is kept, and written once it runs. A sort set on desktop that Android
+doesn't offer (Type, Uncompressed size) is applied as there and shown by its name.
 File title is the file's name without its extension, from a `content://` path's document; a multi-disc game's sizes
 are its files' summed (a playlist's are its own entry's, its sub-images summed by the core).
 
 **Search** narrows the grid or list as you type, to games whose title, file name (or a disc's) or serial (or a disc's)
 holds the text anywhere, ignoring case, the match marked in the title and the list's serial. Select jumps to the field
-and opens the keyboard from anywhere in the library; A on the field opens it too, and Down goes to the first match. B
-closes the keyboard first, then clears the search, as the ✕ in the field does by touch; with no search, B and Back do
-what they did. With nothing matching, the library says so ("No games match “zelda”.") with **Clear search**, which
+and opens the keyboard from anywhere in the library; A on the field opens it too, Down goes to the first match, and
+Right past the end of the text leaves the field. B closes the keyboard first, then clears the search, as the ✕ in the
+field does by touch (a screen reader has it as the button "Clear search"); with no search, B and Back do what they
+did. With nothing matching, the library says so ("No games match “zelda”.") with **Clear search**, which
 takes the focus once the keyboard closes (or on Down from the field), never while you're typing. The search clears
 when a game starts, so the library comes back whole; the sort is kept.
 
@@ -1827,6 +1829,20 @@ On `goose-test-1` and `goose-test-2` (emulator-5580 and 5582), by the tests alon
 The test emulators' insets leave the library about 200 dp of height at 640×360 with text at 1.3×, so there the games
 get only a sliver under the two-row bar. The Thor, at its own density, has far more room (see "Library sort and search
 on the Thor").
+
+### Library sort and search: the review's leftovers (2026-11-09)
+
+On `goose-test-1` (emulator-5580), by the tests alone: `LibrarySearchTest` and `LibrarySortStateTest` (JVM);
+`LibraryScreenTest`, `SearchFieldTest`, `FocusAuditTest` and `OrientationLayoutTest` (instrumented). The quick tier
+passed on both test emulators, 953 of 953, at the branch's last code commit.
+
+| Check | Result |
+|---|---|
+| A banner's buttons | Pass. With "Pick again" focused, the hints are "A Choose" and "Select Search", no longer the game's "A Play". |
+| A thousand games, decoded | Pass. Each game's file and its three discs' names as the storage provider gives them, escaped: a search takes under 4 ms and under half the time the names take to decode once; decoding them on each search made it as slow as that. |
+| The ✕ to a screen reader | Pass. "Clear search" has the button role and a click action that clears the search, and is still no focus stop; the focus audit lets it be for its `NotAFocusStop` reason. |
+| A sort picked before the core starts | Pass. Kept through the core's first read of `settings.ini` and written once the core runs; a `settings.ini` pulled later gives its sort. |
+| Right past the typed text | Pass, with no change: within "crash" Right moves the cursor, and at its end it leaves the field for the button beside it. |
 
 ## Results on the AYN Thor
 

@@ -57,8 +57,8 @@ class LibrarySearchTest {
         assertNull(LibrarySearch.query("   "))
         assertNull(LibrarySearch.query(""))
         assertEquals("crash", LibrarySearch.query("  crash "))
-        assertEquals(games, LibrarySearch.filter(games, null))
-        assertEquals(listOf(crash), LibrarySearch.filter(games, "crash"))
+        assertEquals(games, LibrarySearch.filter(SearchIndex(games), null))
+        assertEquals(listOf(crash), LibrarySearch.filter(SearchIndex(games), "crash"))
     }
 
     @Test
@@ -92,18 +92,35 @@ class LibrarySearchTest {
 
     @Test
     fun aThousandGamesFilterInAFrame() {
-        val games = (1..1000).map { game("Game %04d".format(it), serial = "SLUS-%05d".format(it)) }
-        repeat(50) { LibrarySearch.filter(games, "game 09") }
-
-        val times =
-            (1..25).map {
-                val start = System.nanoTime()
-                LibrarySearch.filter(games, "game 09")
-                System.nanoTime() - start
+        // As the storage provider names them: every file name in the path is escaped, so it needs decoding.
+        fun file(name: String) =
+            "content://com.android.externalstorage.documents/tree/primary%3APS1/document/primary%3APS1%2F" +
+                "Games%20(USA)%2F" + name.replace(" ", "%20").replace("(", "%28").replace(")", "%29")
+        val games =
+            (1..1000).map { n ->
+                val title = "Game %04d".format(n)
+                val serial = "SLUS-%05d".format(n)
+                val discs = (1..3).map { GameDisc(file("$title (USA) (Disc $it).cue"), serial, title, it) }
+                game(title, serial = serial, path = file("$title (USA).m3u"), discs = discs)
             }
 
-        assertEquals(100, LibrarySearch.filter(games, "game 09").size)
-        val median = times.sorted()[times.size / 2] / 1_000_000.0
-        assertTrue("took $median ms", median < 4.0)
+        fun median(work: () -> Unit): Double {
+            repeat(50) { work() }
+            val times =
+                (1..25).map {
+                    val start = System.nanoTime()
+                    work()
+                    System.nanoTime() - start
+                }
+            return times.sorted()[times.size / 2] / 1_000_000.0
+        }
+        val index = SearchIndex(games)
+        val indexing = median { SearchIndex(games).fileNames }
+        val filtering = median { LibrarySearch.filter(index, "game 09") }
+
+        assertEquals(100, LibrarySearch.filter(index, "game 09").size)
+        assertTrue("took $filtering ms", filtering < 4.0)
+        // A search doesn't decode the 4000 file names again, which takes about as long as the index does.
+        assertTrue("took $filtering ms, the index $indexing ms", filtering < indexing / 2)
     }
 }

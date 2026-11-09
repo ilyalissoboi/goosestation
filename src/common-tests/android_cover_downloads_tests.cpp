@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <string>
@@ -28,9 +29,14 @@ Target Game(std::string key, std::string title, std::string path_title = "", std
   return Target{std::move(key), std::move(title), std::move(path_title), std::move(display_title)};
 }
 
-Response Image(std::string type = "image/jpeg")
+const std::vector<u8> JPEG = {0xff, 0xd8, 0xff, 0xe0, 0, 0x10};
+const std::vector<u8> PNG = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0};
+const std::vector<u8> WEBP = {'R', 'I', 'F', 'F', 4, 0, 0, 0, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '};
+const std::vector<u8> HTML = {'<', '!', 'd', 'o', 'c', 't', 'y', 'p', 'e', '>'};
+
+Response Image(std::vector<u8> data = JPEG)
 {
-  return Response{200, std::move(type), {0xff, 0xd8, 0xff}};
+  return Response{200, std::move(data)};
 }
 
 // Answers each URL from a map (404 for any other), and records what the loop asked and did.
@@ -59,7 +65,7 @@ struct FakeHooks
     hooks.fetch = [this](const std::string& url) {
       fetched.push_back(url);
       const auto it = answers.find(url);
-      return (it != answers.end()) ? it->second : Response{404, "text/html", {'n', 'o'}};
+      return (it != answers.end()) ? it->second : Response{404, HTML};
     };
     hooks.save = [this](size_t, const std::string& file_name, std::span<const u8>) -> std::optional<std::string> {
       if (save_fails)
@@ -101,18 +107,15 @@ TEST(AndroidCoverDownloads, ExpandSourceEncodesEachVariable)
 
 TEST(AndroidCoverDownloads, CoverExtension)
 {
-  EXPECT_EQ(CoverExtension("image/png", "http://h/a.jpg"), "png");
-  EXPECT_EQ(CoverExtension("image/jpeg", "http://h/a.png"), "jpg");
-  EXPECT_EQ(CoverExtension("image/webp", "http://h/a"), "webp");
-  EXPECT_EQ(CoverExtension("", "http://h/a.webp?x=1"), "webp");
-  EXPECT_EQ(CoverExtension("application/octet-stream", "http://h/a.PNG"), "png");
-  EXPECT_EQ(CoverExtension("", "http://h/a.jpeg#top"), "jpeg");
-  EXPECT_EQ(CoverExtension("", "http://h/a"), "jpg");
-  EXPECT_EQ(CoverExtension("", "http://h.example.com/"), "jpg");
-  EXPECT_EQ(CoverExtension("image/gif", "http://h/a.gif"), "jpg");
-  EXPECT_EQ(CoverExtension("image/png; charset=binary", "http://h/a"), "png");
-  EXPECT_EQ(CoverExtension("text/html", "http://h/a.jpg"), std::nullopt);
-  EXPECT_EQ(CoverExtension("text/html; charset=utf-8", "http://h/a.jpg"), std::nullopt);
+  // By the image's own bytes, whatever the server called it.
+  EXPECT_EQ(CoverExtension(JPEG), "jpg");
+  EXPECT_EQ(CoverExtension(PNG), "png");
+  EXPECT_EQ(CoverExtension(WEBP), "webp");
+  EXPECT_EQ(CoverExtension(HTML), std::nullopt);
+  EXPECT_EQ(CoverExtension(std::vector<u8>{'G', 'I', 'F', '8', '9', 'a'}), std::nullopt);
+  EXPECT_EQ(CoverExtension(std::vector<u8>{'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E'}), std::nullopt);
+  EXPECT_EQ(CoverExtension(std::vector<u8>{0xff, 0xd8}), std::nullopt);
+  EXPECT_EQ(CoverExtension(std::vector<u8>{}), std::nullopt);
 }
 
 TEST(AndroidCoverDownloads, CoverFileNameBySerial)
@@ -193,8 +196,8 @@ TEST(AndroidCoverDownloads, RunSkipsGamesWithACover)
 TEST(AndroidCoverDownloads, RunSkipsANonImageAnswer)
 {
   FakeHooks fake;
-  fake.answers["http://a/A.jpg"] = Image("text/html");
-  fake.answers["http://b/A.jpg"] = Image("image/png");
+  fake.answers["http://a/A.jpg"] = Image(HTML);
+  fake.answers["http://b/A.jpg"] = Image(PNG);
   const std::vector<Target> targets = {Game("A", "A")};
   const std::vector<std::string> sources = {"http://a/${serial}.jpg", "http://b/${serial}.jpg"};
 
@@ -207,7 +210,7 @@ TEST(AndroidCoverDownloads, RunSkipsANonImageAnswer)
 TEST(AndroidCoverDownloads, RunSkipsAnEmptyAnswer)
 {
   FakeHooks fake;
-  fake.answers["http://a/A.jpg"] = Response{200, "image/jpeg", {}};
+  fake.answers["http://a/A.jpg"] = Response{200, {}};
   const std::vector<Target> targets = {Game("A", "A")};
   const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
 
@@ -217,12 +220,127 @@ TEST(AndroidCoverDownloads, RunSkipsAnEmptyAnswer)
   EXPECT_TRUE(fake.saved.empty());
 }
 
+TEST(AndroidCoverDownloads, RunSkipsASourceWhoseVariableIsEmpty)
+{
+  FakeHooks fake;
+  const std::vector<Target> targets = {Game("", "Demo", "demo", ""), Game("HASH-74D2E3F1A0B9C8D7", "Other")};
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg", "http://b/${filetitle}.jpg",
+                                            "http://c/${title}.jpg"};
+
+  const Summary summary = AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  // No serial (or only the core's HASH- ID), no file title: only the title source is asked.
+  EXPECT_EQ(fake.fetched, (std::vector<std::string>{"http://c/Demo.jpg", "http://c/Other.jpg"}));
+  EXPECT_EQ(summary.missing, 2u);
+}
+
+TEST(AndroidCoverDownloads, RunWithNoSourceForAGameCountsItMissing)
+{
+  FakeHooks fake;
+  const std::vector<Target> targets = {Game("", "Demo")};
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
+
+  const Summary summary = AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  EXPECT_TRUE(fake.fetched.empty());
+  EXPECT_EQ(summary.missing, 1u);
+  EXPECT_EQ(summary.unreachable, 0u);
+}
+
+TEST(AndroidCoverDownloads, RunDropsASourceThatStopsAnswering)
+{
+  FakeHooks fake;
+  std::vector<Target> targets;
+  for (int i = 1; i <= 5; i++)
+  {
+    targets.push_back(Game("G" + std::to_string(i), "G"));
+    fake.answers["http://a/G" + std::to_string(i) + ".jpg"] = Response{-2, {}};
+  }
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg", "http://b/${serial}.jpg"};
+
+  const Summary summary = AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  // Three games in a row without an answer from a, then only b is asked; b answers (404), so they had none.
+  EXPECT_EQ(std::count_if(fake.fetched.begin(), fake.fetched.end(),
+                          [](const std::string& url) { return url.starts_with("http://a/"); }),
+            3);
+  EXPECT_EQ(summary.missing, 5u);
+  EXPECT_EQ(summary.unreachable, 0u);
+}
+
+TEST(AndroidCoverDownloads, RunWithEverySourceDroppedCountsTheRestUnreachable)
+{
+  FakeHooks fake;
+  std::vector<Target> targets;
+  for (int i = 1; i <= 5; i++)
+  {
+    targets.push_back(Game("G" + std::to_string(i), "G"));
+    fake.answers["http://a/G" + std::to_string(i) + ".jpg"] = Response{-1, {}};
+  }
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
+
+  const Summary summary = AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  EXPECT_EQ(fake.fetched.size(), 3u);
+  EXPECT_EQ(summary.unreachable, 5u);
+  EXPECT_EQ(summary.total, 5u);
+}
+
+// From review: an answer too large to hold (HttpBridge's -100) is an answer, not a dead source.
+TEST(AndroidCoverDownloads, AnOversizedAnswerIsNoCoverButAnAnswer)
+{
+  FakeHooks fake;
+  std::vector<Target> targets;
+  for (int i = 1; i <= 4; i++)
+  {
+    targets.push_back(Game("G" + std::to_string(i), "G"));
+    fake.answers["http://a/G" + std::to_string(i) + ".jpg"] = (i < 4) ? Response{-100, {}} : Image();
+  }
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
+
+  const Summary summary = AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  EXPECT_EQ(fake.fetched.size(), 4u);
+  EXPECT_EQ(summary.found, 1u);
+  EXPECT_EQ(summary.missing, 3u);
+  EXPECT_EQ(summary.unreachable, 0u);
+}
+
+TEST(AndroidCoverDownloads, AnAnswerResetsASourcesCount)
+{
+  FakeHooks fake;
+  std::vector<Target> targets;
+  for (int i = 1; i <= 6; i++)
+  {
+    targets.push_back(Game("G" + std::to_string(i), "G"));
+    // Two without an answer, then one that answers (404), then two more: never three in a row.
+    if (i != 3)
+      fake.answers["http://a/G" + std::to_string(i) + ".jpg"] = Response{-1, {}};
+  }
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
+
+  AndroidCoverDownloads::Run(targets, sources, true, fake.Make());
+
+  EXPECT_EQ(fake.fetched.size(), 6u);
+}
+
+TEST(AndroidCoverDownloads, RunCountsTheLibrarysGames)
+{
+  FakeHooks fake;
+  fake.covered = {0, 1};
+  const std::vector<Target> targets = {Game("A", "A"), Game("B", "B")};
+  const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
+
+  EXPECT_EQ(AndroidCoverDownloads::Run(targets, sources, true, fake.Make()).games, 2u);
+  EXPECT_EQ(AndroidCoverDownloads::Run({}, sources, true, fake.Make()).games, 0u);
+}
+
 TEST(AndroidCoverDownloads, RunCountsUnreachable)
 {
   {
     FakeHooks fake;
-    fake.answers["http://a/A.jpg"] = Response{-1, "", {}};
-    fake.answers["http://a/B.jpg"] = Response{-2, "", {}};
+    fake.answers["http://a/A.jpg"] = Response{-1, {}};
+    fake.answers["http://a/B.jpg"] = Response{-2, {}};
     const std::vector<Target> targets = {Game("A", "A"), Game("B", "B")};
     const std::vector<std::string> sources = {"http://a/${serial}.jpg"};
 
@@ -235,7 +353,7 @@ TEST(AndroidCoverDownloads, RunCountsUnreachable)
   {
     // One source answered: the game had none there.
     FakeHooks fake;
-    fake.answers["http://a/A.jpg"] = Response{-1, "", {}};
+    fake.answers["http://a/A.jpg"] = Response{-1, {}};
     const std::vector<Target> targets = {Game("A", "A")};
     const std::vector<std::string> sources = {"http://a/${serial}.jpg", "http://b/${serial}.jpg"};
 
@@ -297,7 +415,7 @@ TEST(AndroidCoverDownloads, RunStopsWhenCancelled)
   }
   {
     FakeHooks fake;
-    fake.answers["http://a/A.jpg"] = Response{-3, "", {}};
+    fake.answers["http://a/A.jpg"] = Response{-3, {}};
     const std::vector<Target> targets = {Game("A", "A"), Game("B", "B")};
     const std::vector<std::string> sources = {"http://a/${serial}.jpg", "http://b/${serial}.jpg"};
 

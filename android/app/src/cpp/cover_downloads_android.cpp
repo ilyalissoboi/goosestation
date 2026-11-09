@@ -29,11 +29,18 @@ public:
   Listener(JNIEnv* env, jobject listener) : m_env(env), m_listener(listener)
   {
     jclass cls = env->GetObjectClass(listener);
-    m_game = env->GetMethodID(cls, "game", "(IILjava/lang/String;)V");
-    m_found = env->GetMethodID(cls, "found", "(Ljava/lang/String;Ljava/lang/String;)V");
-    m_cancelled = env->GetMethodID(cls, "cancelled", "()Z");
-    env->DeleteLocalRef(cls);
+    // A failed lookup leaves an exception pending, so the first one to fail ends the chain: JNI calls with one pending
+    // abort under CheckJNI.
+    const bool found = (m_game = env->GetMethodID(cls, "game", "(IILjava/lang/String;)V")) &&
+                       (m_found = env->GetMethodID(cls, "found", "(Ljava/lang/String;Ljava/lang/String;)V")) &&
+                       (m_cancelled = env->GetMethodID(cls, "cancelled", "()Z"));
     JNIUtil::ClearException(env);
+    if (!found)
+    {
+      ERROR_LOG("CoverProgress lacks a method native code calls.");
+      m_game = m_found = m_cancelled = nullptr;
+    }
+    env->DeleteLocalRef(cls);
   }
 
   bool Cancelled() const
@@ -139,9 +146,8 @@ AndroidCoverDownloads::Summary CoverDownloadsAndroid::Download(JNIEnv* env, cons
 
     downloader->CreateRequest(
       url,
-      [&response](s32 status, const std::string& content_type, HTTPDownloader::Request::Data data) {
+      [&response](s32 status, const std::string&, HTTPDownloader::Request::Data data) {
         response.status = status;
-        response.content_type = content_type;
         response.data = std::move(data);
       },
       &cancel);

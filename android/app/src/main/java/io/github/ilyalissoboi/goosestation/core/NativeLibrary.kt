@@ -926,7 +926,8 @@ object NativeLibrary {
 
     /**
      * Fetches a cover for each library tile without one (as the last [getGameList] listed them), from [sources] in
-     * order, saved by serial when [useSerial]: total, found, missing, unreachable, unsaved, cancelled (1). Blocks.
+     * order, saved by serial when [useSerial]: total, found, missing, unreachable, unsaved, cancelled (1), the library's
+     * games. Blocks.
      */
     external fun downloadCovers(
         sources: Array<String>,

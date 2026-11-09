@@ -33,10 +33,9 @@ struct Target
 /// [source] with each variable replaced by the URL-encoded key, title or display title.
 std::string ExpandSource(std::string_view source, const Target& target);
 
-/// The extension to save an answer as: the content type's, else the URL's last path segment's, when it's one the
-/// library reads (jpg, jpeg, png, webp), else jpg. Nullopt when the content type is present and is neither an image nor
-/// `application/octet-stream`: a web page, not a cover.
-std::optional<std::string> CoverExtension(std::string_view content_type, std::string_view url);
+/// The extension to save an answer as, from the image's own bytes: jpg, png or webp, the formats the library reads.
+/// Nullopt for anything else (a web page, another format), whatever the server said it was.
+std::optional<std::string> CoverExtension(std::span<const u8> data);
 
 /// The cover's file name: by the key when [use_serial] (unless it's the core's `HASH-…` ID, which isn't a serial),
 /// else by the title, else by the key, else by the path's file title, the first that can be a file name as it is on
@@ -44,11 +43,10 @@ std::optional<std::string> CoverExtension(std::string_view content_type, std::st
 /// empty serial instead of falling back, and goes by the host's own rules). Nullopt when none can.
 std::optional<std::string> CoverFileName(const Target& target, bool use_serial, std::string_view extension);
 
-/// An answer: its HTTP status (or HTTPDownloader's negative ones), content type and body.
+/// An answer: its HTTP status (or HTTPDownloader's negative ones) and body.
 struct Response
 {
   s32 status = 0;
-  std::string content_type;
   std::vector<u8> data;
 };
 
@@ -64,10 +62,11 @@ struct Hooks
   std::function<bool()> cancelled;
 };
 
-/// How a run went: the games without a cover at its start, and how many of them got one, had none at the sources, had
-/// no source answer at all, or got one that couldn't be saved; and whether it was cancelled.
+/// How a run went: the library's games, those without a cover at its start, and how many of them got one, had none at
+/// the sources, had no source answer at all, or got one that couldn't be saved; and whether it was cancelled.
 struct Summary
 {
+  u32 games = 0;
   u32 total = 0;
   u32 found = 0;
   u32 missing = 0;
@@ -76,10 +75,15 @@ struct Summary
   bool cancelled = false;
 };
 
-/// Fetches a cover for each of [targets] without one, trying [sources] in order (skipping one without a variable) and
-/// stopping at the first image. A game whose cover appears before its turn, or while its image is fetched, is skipped;
-/// one is never replaced.
+/// How many games in a row a source may leave unanswered (no connection, a timeout) before the run stops asking it.
+inline constexpr u32 UNANSWERED_IN_A_ROW = 3;
+
+/// Fetches a cover for each of [targets] without one, trying [sources] in order and stopping at the first image. A
+/// source is skipped without a variable, for a game where one of its variables is empty (`${serial}` with no serial or
+/// only a `HASH-` ID), and for the rest of the run once it has left [UNANSWERED_IN_A_ROW] games in a row unanswered. A
+/// game whose cover appears before its turn, or while its image is fetched, is skipped; one is never replaced.
 Summary Run(std::span<const Target> targets, std::span<const std::string> sources, bool use_serial,
             const Hooks& hooks);
+
 
 } // namespace AndroidCoverDownloads

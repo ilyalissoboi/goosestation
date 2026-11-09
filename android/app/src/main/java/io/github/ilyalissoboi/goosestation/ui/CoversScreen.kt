@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.CoverJob
@@ -87,10 +88,18 @@ fun CoversScreen(
     // A download starting or ending, and the question closing, as last seen: the focus follows a change of either.
     val running = model.job != null
     var wasRunning by remember { mutableStateOf(running) }
+    // Whether Cancel had the focus when last it changed: a run that ends takes it on to Download covers only then,
+    // not from wherever the player moved it during the run. Not state: it's read once the run has ended.
+    val cancelFocused = remember { booleanArrayOf(false) }
     LaunchedEffect(running) {
         if (running == wasRunning) return@LaunchedEffect
         wasRunning = running
-        focusTarget = if (running) cancel else download
+        if (running) {
+            focusTarget = cancel
+        } else if (cancelFocused[0]) {
+            cancelFocused[0] = false
+            focusTarget = download
+        }
     }
     var wasRestoring by remember { mutableStateOf(model.restoring) }
     LaunchedEffect(model.restoring) {
@@ -163,7 +172,17 @@ fun CoversScreen(
             )
             val job = model.job
             if (job != null) {
-                Progress(job, Modifier.focusRequester(cancel), model::cancel)
+                Progress(
+                    job,
+                    Modifier.focusRequester(cancel).onFocusChanged {
+                        if (model.job !=
+                            null
+                        ) {
+                            cancelFocused[0] = it.isFocused
+                        }
+                    },
+                    model::cancel,
+                )
             } else {
                 val blocked = model.blocked
                 Buttons {

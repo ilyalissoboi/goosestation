@@ -451,6 +451,10 @@ Download Covers does. GooseStation hosts no covers and sends nothing anywhere un
   It goes on when you leave the page (reopen it to see how far it is), and stops, keeping the covers found, when a
   game starts or the app goes to the background. Each cover shows on its tile as it lands, and reaches the data
   folder through the mirror, where desktop finds it too.
+- What counts as a cover is a JPEG, PNG or WebP by its own bytes, saved under that extension, whatever the server
+  calls it; anything else (a web page, a GIF) is none. A source isn't asked for a game it can't name (`${serial}` for
+  a game with no serial, or only the core's `HASH-` ID), and a source that leaves three games in a row unanswered (no
+  connection, a timeout) is asked no more in that run. An answer over 32 MiB is refused.
 
 The sources and the switch are kept in `settings.ini` under `[Covers]` (`SourceCount`, `Source1` …, `UseSerial`),
 which desktop doesn't read: its dialog keeps nothing. Android runs the download itself, natively, over the core's

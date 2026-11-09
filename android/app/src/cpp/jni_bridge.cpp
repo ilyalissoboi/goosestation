@@ -1611,14 +1611,16 @@ NATIVE_LIBRARY_FUNCTION(jintArray, downloadCovers)(JNIEnv* env, jobject, jobject
     CoverDownloadsAndroid::Download(env, sources, use_serial == JNI_TRUE, listener);
   const jint values[] = {static_cast<jint>(summary.total),       static_cast<jint>(summary.found),
                          static_cast<jint>(summary.missing),     static_cast<jint>(summary.unreachable),
-                         static_cast<jint>(summary.unsaved),     summary.cancelled ? 1 : 0};
-  jintArray result = env->NewIntArray(6);
+                         static_cast<jint>(summary.unsaved),     summary.cancelled ? 1 : 0,
+                         static_cast<jint>(summary.games)};
+  constexpr jsize fields = static_cast<jsize>(std::size(values));
+  jintArray result = env->NewIntArray(fields);
   if (!result)
   {
     ClearException(env);
     return env->NewIntArray(0);
   }
-  env->SetIntArrayRegion(result, 0, 6, values);
+  env->SetIntArrayRegion(result, 0, fields, values);
   return result;
 }
 

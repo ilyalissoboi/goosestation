@@ -32,8 +32,11 @@ object HttpBridge {
     /** A stream stopped by its progress callback (the core's HTTP_STATUS_CANCELLED). */
     const val STATUS_CANCELLED = -3
 
-    /** A stream past its cap (the core's ShaderPacks::STATUS_TOO_LARGE). */
+    /** A stream, or a body held in memory, past its cap (the core's ShaderPacks::STATUS_TOO_LARGE). */
     const val STATUS_TOO_LARGE = -100
+
+    /** The most a body held in memory ([run]) may be: far past any cover or RetroAchievements answer. */
+    const val MAX_BODY_BYTES = 32L * 1024 * 1024
 
     // How often a stream reports its progress.
     private const val PROGRESS_STEP = 64 * 1024
@@ -86,7 +89,10 @@ object HttpBridge {
         active.remove(downloader to request)?.connection?.disconnect()
     }
 
-    /** Runs one request on the calling thread. */
+    /**
+     * Runs one request on the calling thread. A body over [maxBytes] is refused ([STATUS_TOO_LARGE]) rather than held
+     * in memory: these answers are whole in memory, unlike [download]'s.
+     */
     internal fun run(
         url: String,
         post: ByteArray?,
@@ -94,6 +100,7 @@ object HttpBridge {
         timeoutMs: Int,
         log: (String) -> Unit = ::logRequest,
         onConnection: (HttpURLConnection) -> Unit = {},
+        maxBytes: Long = MAX_BODY_BYTES,
     ): HttpResult {
         val method = if (post != null) "POST" else "GET"
         val parsed = runCatching { URL(url) }.getOrNull()
@@ -118,8 +125,12 @@ object HttpBridge {
                         }
                         val status = connection.responseCode
                         val stream = if (status >= 400) connection.errorStream else connection.inputStream
-                        val body = stream?.use { it.readBytes() } ?: ByteArray(0)
-                        HttpResult(status, connection.contentType.orEmpty(), body)
+                        val body =
+                            if (connection.contentLengthLong > maxBytes) null else stream?.use { read(it, maxBytes) }
+                        when {
+                            stream != null && body == null -> HttpResult(STATUS_TOO_LARGE, "", ByteArray(0))
+                            else -> HttpResult(status, connection.contentType.orEmpty(), body ?: ByteArray(0))
+                        }
                     } finally {
                         connection.disconnect()
                     }
@@ -202,6 +213,21 @@ object HttpBridge {
         if (status != 200) file.delete()
         log("GET $where -> $status")
         return status
+    }
+
+    // The whole of [input], or null once it's past [maxBytes].
+    private fun read(
+        input: InputStream,
+        maxBytes: Long,
+    ): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(PROGRESS_STEP)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) return out.toByteArray()
+            if (out.size() + read > maxBytes) return null
+            out.write(buffer, 0, read)
+        }
     }
 
     private fun copy(

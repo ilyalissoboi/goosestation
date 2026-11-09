@@ -30,6 +30,7 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /** The update model, over a fake GitHub, a fake installer and a skipped version kept in memory. */
 class UpdatesTest {
@@ -427,7 +428,7 @@ class UpdatesTest {
             val firstEnds = CountDownLatch(1)
             val firstEnded = CountDownLatch(1)
             val retryWrote = CountDownLatch(1)
-            var calls = 0
+            val calls = AtomicInteger(0)
             val slow =
                 object : UpdateSourceApi by source {
                     override fun download(
@@ -435,7 +436,7 @@ class UpdatesTest {
                         file: File,
                         onProgress: (done: Long, total: Long) -> Boolean,
                     ): DownloadResult {
-                        if (++calls == 1) {
+                        if (calls.incrementAndGet() == 1) {
                             firstEnds.await(5, TimeUnit.SECONDS)
                             file.delete()
                             firstEnded.countDown()
@@ -471,9 +472,11 @@ class UpdatesTest {
                 updates.checkNow("preview")
                 until { updates.state is UpdateState.Available }
                 updates.update()
+                // The first download under way before it's cancelled and retried, so it's the first call.
+                until { calls.get() == 1 }
                 updates.cancel()
                 updates.update()
-                retryWrote.await(5, TimeUnit.SECONDS)
+                until { retryWrote.count == 0L }
                 firstEnds.countDown()
                 until { installer.installs.isNotEmpty() || updates.state is UpdateState.Failed }
                 // The check passed only on the retry's whole file, so it reached the installer.
@@ -560,6 +563,52 @@ class UpdatesTest {
             runCurrent()
             assertEquals(UpdateState.Available(newer), updates.state)
             assertEquals(1, installer.cancelledInstalls)
+        }
+
+    // From review: a game started while the installer worked; its question came then, and showed over the game.
+    @Test
+    fun aQuestionThatCameDuringAGameWaitsForTheLibrary() =
+        runTest {
+            installer.question = CompletableDeferred()
+            installer.gate = CompletableDeferred()
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+            updates.onScreen(inGame = true)
+            installer.question!!.complete(Unit)
+            runCurrent()
+            assertEquals(0, installer.asked)
+            updates.onScreen(inGame = false)
+            assertEquals(1, installer.asked)
+        }
+
+    // From review: switched to another channel, Check now found nothing newer there, and the library still offered
+    // (and would download) the first channel's build.
+    @Test
+    fun checkingAnotherChannelDropsTheFirstOnesOffer() =
+        runTest {
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            assertEquals(UpdateState.Available(newer), updates.state)
+            source.result = CheckResult.UpToDate
+            updates.checkNow("latest")
+            runCurrent()
+            assertEquals(UpdateState.None, updates.state)
+        }
+
+    @Test
+    fun checkingTheSameChannelKeepsItsOffer() =
+        runTest {
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            source.result = CheckResult.Unreachable
+            updates.checkNow("preview")
+            runCurrent()
+            assertEquals(UpdateState.Available(newer), updates.state)
         }
 
     @Test

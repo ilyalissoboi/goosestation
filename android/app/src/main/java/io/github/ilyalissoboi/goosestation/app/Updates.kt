@@ -172,9 +172,20 @@ class Updates(
             if (result is CheckResult.Newer && offerable()) {
                 state = UpdateState.Available(result.release)
                 hidden = false
+            } else if (result !is CheckResult.Newer && offeredFrom()?.let { it != tag } == true) {
+                // Another channel's offer, which this one's check didn't find: the library stops offering it.
+                state = UpdateState.None
             }
         }
     }
+
+    // The channel of an offer not yet taken up (Available, or Failed), or null.
+    private fun offeredFrom(): String? =
+        when (val s = state) {
+            is UpdateState.Available -> s.release.tag
+            is UpdateState.Failed -> s.release.tag
+            else -> null
+        }
 
     // A check doesn't replace an update under way.
     private fun offerable() = state == UpdateState.None || state is UpdateState.Available || state is UpdateState.Failed
@@ -187,7 +198,10 @@ class Updates(
             startupDue = null
             runStartupCheck(it)
         }
-        if (shown) runInstallDue()
+        if (!shown) return
+        runInstallDue()
+        // A question that came while a game was on.
+        if (state is UpdateState.Installing) showQuestion()
     }
 
     /** Downloads the offered version (or tries again after a failure), checks it, and hands it to the installer. */
@@ -302,7 +316,7 @@ class Updates(
         if (!shown) return
         when (val s = state) {
             is UpdateState.NeedsPermission -> apk?.let { file -> later(s.release, file) }
-            is UpdateState.Installing -> showQuestion()
+            is UpdateState.Installing -> if (!inGame) showQuestion()
             else -> if (!inGame) runInstallDue()
         }
     }
@@ -310,7 +324,7 @@ class Updates(
     // The installer's question: shown now, or kept for the app's return.
     private fun ask(show: () -> Unit) {
         question = show
-        if (shown) showQuestion()
+        if (shown && !inGame) showQuestion()
     }
 
     private fun showQuestion() {

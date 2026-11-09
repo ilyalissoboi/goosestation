@@ -60,6 +60,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
+import io.github.ilyalissoboi.goosestation.app.UpdateState
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.library.LibraryOrder
 import io.github.ilyalissoboi.goosestation.library.LibrarySearch
@@ -78,6 +79,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.rememberSearchFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
+import io.github.ilyalissoboi.goosestation.update.AppVersion
 import kotlinx.coroutines.launch
 
 /**
@@ -117,6 +119,7 @@ fun LibraryScreen(
     onSort: (LibrarySort) -> Unit = {},
     search: TextFieldState = rememberTextFieldState(),
     overlayOpen: Boolean = false,
+    update: UpdateBannerModel? = null,
 ) {
     val settings = remember { FocusRequester() }
     val sortButton = remember { FocusRequester() }
@@ -129,6 +132,19 @@ fun LibraryScreen(
     var settingsFirst by remember { mutableStateOf(focusSettings) }
     // The game whose long press asks: Saves or Game settings.
     var choosing by remember { mutableStateOf<GameEntry?>(null) }
+    // The game to give the focus back to, once what took it (a panel, the update banner) has gone.
+    var refocus by remember { mutableStateOf<String?>(null) }
+    // What's new, over the library; closed, the focus goes back to its button.
+    var whatsNewOpen by remember { mutableStateOf(false) }
+    val whatsNewButton = remember { FocusRequester() }
+    var whatsNewClosed by remember { mutableStateOf(false) }
+    // Once the panel has gone: while it's there, it keeps the focus from leaving it.
+    LaunchedEffect(whatsNewOpen, whatsNewClosed) {
+        if (!whatsNewOpen && whatsNewClosed) {
+            whatsNewClosed = false
+            whatsNewButton.requestFocus()
+        }
+    }
 
     fun longPress(game: GameEntry) = if (game.serial.isBlank()) onSaves(game) else choosing = game
 
@@ -265,7 +281,7 @@ fun LibraryScreen(
         }
 
     // A search Back clears, as B does, while the sort list or the long press's choice isn't taking Back first.
-    BackHandler(enabled = query != null && !sortOpen && choosing == null) { clear() }
+    BackHandler(enabled = query != null && !sortOpen && choosing == null && !whatsNewOpen) { clear() }
 
     Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         Column(
@@ -328,6 +344,27 @@ fun LibraryScreen(
 
             banners.forEach {
                 Banner(it, Modifier.onFocusChanged { state -> if (state.hasFocus) area = LibraryArea.Banner })
+            }
+            update?.let {
+                // Hide and Skip take the banner away, focus and all: the focus goes back to the game last focused.
+                fun back() {
+                    refocus = focus.focused ?: shown.firstOrNull()?.path
+                }
+                UpdateBanner(
+                    it.copy(
+                        onHide = {
+                            back()
+                            it.onHide()
+                        },
+                        onSkip = {
+                            back()
+                            it.onSkip()
+                        },
+                    ),
+                    onWhatsNew = { whatsNewOpen = true },
+                    modifier = Modifier.onFocusChanged { state -> if (state.hasFocus) area = LibraryArea.Update },
+                    whatsNewFocus = whatsNewButton,
+                )
             }
             if (message != null) MessageBar(message, isError)
             // The count line goes with the games, so a short screen takes its room from them, never from the hints.
@@ -408,7 +445,10 @@ fun LibraryScreen(
                         }
                 }
             }
-            if (hasGames) KeyHints(libraryHints(area, sortOpen, searching = query != null))
+            if (hasGames) {
+                val hideable = update?.state.let { it is UpdateState.Available || it is UpdateState.Failed }
+                KeyHints(libraryHints(area, sortOpen, searching = query != null, updateHideable = hideable))
+            }
         }
         if (sortOpen) {
             LibrarySortList(
@@ -422,10 +462,8 @@ fun LibraryScreen(
             )
         }
     }
-    // Back to the tile on every way out of the choice: an open the app refuses (not ready, a game running) leaves it
-    // focused, as B does.
-    var refocus by remember { mutableStateOf<String?>(null) }
-    // And once an overlay of the caller's closes, as the long press's own does.
+    // Back to the tile on every way out of the choice (an open the app refuses, not ready or a game running, leaves it
+    // focused, as B does), and once an overlay of the caller's closes, as the long press's own does.
     var overlayWasOpen by remember { mutableStateOf(overlayOpen) }
     LaunchedEffect(overlayOpen) {
         if (overlayWasOpen && !overlayOpen) refocus = focus.focused
@@ -435,6 +473,13 @@ fun LibraryScreen(
         val path = refocus ?: return@LaunchedEffect
         focus.refocus(path)
         refocus = null
+    }
+    if (whatsNewOpen && update != null) {
+        val version = update.state.let { (it as? UpdateState.Available)?.release?.versionName.orEmpty() }
+        WhatsNewPanel(AppVersion.short(version), update.loadChanges) {
+            whatsNewOpen = false
+            whatsNewClosed = true
+        }
     }
     choosing?.let { game ->
         GameChoicePanel(
@@ -475,6 +520,7 @@ private fun libraryHints(
     area: LibraryArea,
     sortOpen: Boolean,
     searching: Boolean,
+    updateHideable: Boolean = false,
 ): List<KeyHint> {
     if (sortOpen) return listOf(KeyHint(PadGlyphs.confirm, "Choose"), KeyHint(PadGlyphs.back, "Close"))
     val hints =
@@ -486,6 +532,11 @@ private fun libraryHints(
                     KeyHint(PadGlyphs.options, "Game settings"),
                 )
             LibraryArea.Bar, LibraryArea.ClearSearch, LibraryArea.Banner -> listOf(KeyHint(PadGlyphs.confirm, "Choose"))
+            LibraryArea.Update ->
+                listOfNotNull(
+                    KeyHint(PadGlyphs.confirm, "Choose"),
+                    KeyHint(PadGlyphs.back, "Hide").takeIf { updateHideable },
+                )
             LibraryArea.Search -> listOf(KeyHint(PadGlyphs.confirm, "Type"))
         }
     // While searching, Clear search takes Search's place, as the mockup has it, so the hints keep to one line on a

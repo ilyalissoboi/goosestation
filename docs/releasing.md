@@ -51,7 +51,7 @@ Each channel has a single release, so the release history does not grow with eve
 
 Builds from these workflow runs carry `src/scmversion/tag.h`, which names their channel and the
 release asset for their platform. The updater (Windows, macOS and the Linux AppImage; the Flatpak
-updates through Flatpak) then:
+updates through Flatpak, and Android has its own, under [Android](#updates-on-android)) then:
 
 1. reads `https://api.github.com/repos/ilyalissoboi/goosestation/tags` and takes the commit of the
    channel's tag (`preview`, or the one chosen under Update Channel in the Interface settings);
@@ -62,6 +62,85 @@ updates through Flatpak) then:
 To check it after a release: install the previous release (or keep a build from before the newest
 commit), choose **Check for Updates** in the Help menu, and install the update. Current Version in
 the Interface settings should then show the new number.
+
+## Android
+
+Each release also carries `goosestation-android-arm64.apk`, a release build signed with GooseStation's release key.
+The key is the maintainer's: it is never in the repository, a log or an artifact, and only the signing job of a
+release run can read it.
+
+### The release key (once)
+
+1. Create it, outside any repository, and give it a strong password:
+
+   ```bash
+   keytool -genkeypair -v -keystore goosestation-release.jks -alias goosestation -keyalg RSA -keysize 4096 \
+     -validity 36500 -dname "CN=GooseStation"
+   ```
+
+2. Back it up: the keystore file and its passwords, in two places offline (a password manager, and an encrypted
+   drive). **A lost key can't be replaced.** Android installs an update only when it's signed with the same key, so
+   everyone would have to uninstall GooseStation, and lose its app-only data, to move to a new one.
+3. Record its fingerprint, which anyone can check an APK against:
+
+   ```bash
+   keytool -list -v -keystore goosestation-release.jks -alias goosestation | grep SHA256
+   ```
+
+   Release certificate SHA-256: *(not created yet)*.
+4. Set up the `release` environment: the repository's Settings → Environments → New environment, named `release`,
+   with **Deployment branches and tags** set to selected branches, `master` and `dev`. Pull requests and other
+   branches can't run a job in it, so they never see its secrets.
+5. Add its secrets and variable (the `gh` commands read the value, so it never goes in your shell history):
+
+   ```bash
+   base64 -i goosestation-release.jks | gh secret set ANDROID_KEYSTORE_BASE64 --env release
+   gh secret set ANDROID_KEYSTORE_PASSWORD --env release
+   gh secret set ANDROID_KEY_ALIAS --env release        # goosestation
+   gh secret set ANDROID_KEY_PASSWORD --env release     # the same as the store's, for a PKCS12 keystore
+   gh variable set ANDROID_CERT_SHA256 --env release --body <the fingerprint, hex, colons or not>
+   ```
+
+### In each run
+
+- `android-build` builds the release APK (R8 on) on every run, pull requests included, unsigned. It checks that R8
+  kept every class and member the native code looks up by name (`android/scripts/check-jni-keeps.py`), and uploads
+  the unsigned APK and R8's `mapping.txt` (for reading a release's stack traces) as `android-release-unsigned`. On
+  `master` and `dev` the APK names its update channel (`preview`, `latest`).
+- `android-sign` runs only in a release run (hand-started, on `master` or `dev`), in the `release` environment. It
+  builds nothing: it signs that APK with `android/scripts/sign-apk.sh`, checks that the certificate is
+  `ANDROID_CERT_SHA256`, and deletes the key. Without the secrets it fails, saying which are missing, and nothing is
+  published.
+- `create-release` attaches the signed APK as `goosestation-android-arm64.apk`.
+
+The first signed run is the maintainer's check: run the workflow on `master` once the secrets are in, then install
+the APK on a device that has never had GooseStation's release (an earlier debug install there has another ID,
+`io.github.ilyalissoboi.goosestation.debug`, and stays).
+
+### Versions on Android
+
+`versionName` is `git describe`'s version. Android installs an update only over a lower `versionCode`, so a
+release's grows with every commit: `(MAJOR × 1000 + MINOR) × 100000 + N`, where N is the commits since the tag
+(`0.1-574-g…` is 100574). A new tag gives a higher code, as long as MINOR or MAJOR goes up. Debug builds keep code
+1.
+
+### Updates on Android
+
+Release builds from a release run check for updates (debug and local builds don't), at start when **Check for
+updates at start** is on, or with **Check now** in Settings → Interface. They share desktop's `[AutoUpdater]
+CheckAtStartup` and `UpdateTag`. The check:
+
+1. reads the channel's release (`https://api.github.com/repos/ilyalissoboi/goosestation/releases/tags/<tag>`), its
+   commit (the release's target), its version (the last word of its title) and its APK;
+2. offers an update only when the commit differs from the build's and the version code is higher, since Android
+   won't install a lower one. "Skip this version" is kept on the device, apart from desktop's
+   `[AutoUpdater] LastVersion`;
+3. lists the commits in between with the `compare` API, under What's new;
+4. on Update, downloads the APK, checks that it's this app's package, signed with the installed app's certificate,
+   and the version the release names, and only then hands it to Android's installer.
+
+To check it after a release: install the previous release's APK, open the app (or Settings → Interface → Check now),
+and update from the library's banner. Version under Settings → Interface should then show the new number.
 
 ## Runtime resources
 

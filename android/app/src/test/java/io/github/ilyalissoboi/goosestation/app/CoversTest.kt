@@ -342,7 +342,14 @@ class CoversTest {
         assertEquals("Found 2 covers.", words(2, 2))
         assertEquals("Found no covers. 3 games had none at these sources.", words(3, 0, 3))
         assertEquals("Found 1 cover. 3 couldn't be reached. 1 couldn't be saved.", words(5, 1, 0, 3, 1))
-        assertEquals("Every game in the library has a cover.", words(0, 0))
+        assertEquals(
+            "There are no games in the library.",
+            coverSummaryText(CoverSummary(0, 0, 0, 0, 0, false, games = 0)),
+        )
+        assertEquals(
+            "Every game in the library has a cover.",
+            coverSummaryText(CoverSummary(0, 0, 0, 0, 0, false, games = 3)),
+        )
         assertEquals("The sources couldn't be reached. Check your network connection.", words(4, 0, 0, 4))
         assertEquals("Cancelled. Found 4 covers.", words(48, 4, cancelled = true))
         assertEquals("Cancelled. Found 1 cover.", words(48, 1, cancelled = true))

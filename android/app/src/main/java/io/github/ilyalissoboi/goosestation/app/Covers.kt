@@ -99,6 +99,7 @@ fun coverSummaryText(summary: CoverSummary): String {
         }
     return when {
         summary.cancelled -> if (summary.found > 0) "Cancelled. Found $found." else "Cancelled."
+        summary.games == 0 -> "There are no games in the library."
         summary.total == 0 -> "Every game in the library has a cover."
         summary.found == 0 && summary.unreachable == summary.total ->
             "The sources couldn't be reached. Check your network connection."

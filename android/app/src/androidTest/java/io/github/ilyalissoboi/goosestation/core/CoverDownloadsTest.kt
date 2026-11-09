@@ -207,7 +207,9 @@ class CoverDownloadsTest {
     }
 
     private companion object {
-        val PNG = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 1, 2, 3)
+        // A PNG's signature (which is how a cover is told from a web page), then a few bytes.
+        val PNG =
+            byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 13, 10, 26, 10, 1, 2, 3)
 
         fun psExe() = ByteArray(2048).also { "PS-X EXE".toByteArray().copyInto(it) }
 

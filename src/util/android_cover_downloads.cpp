@@ -16,35 +16,21 @@ namespace {
 
 constexpr std::array<std::string_view, 3> VARIABLES = {"${serial}", "${title}", "${filetitle}"};
 
-// The extensions GameList::GetCoverImagePath looks for.
-constexpr std::array<std::string_view, 4> COVER_EXTENSIONS = {"jpg", "jpeg", "png", "webp"};
-
-std::string Lower(std::string_view text)
+// Whether [data] starts with [magic] at [offset].
+bool StartsWith(std::span<const u8> data, size_t offset, std::string_view magic)
 {
-  std::string lower(text);
-  std::transform(lower.begin(), lower.end(), lower.begin(),
-                 [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; });
-  return lower;
+  return data.size() >= offset + magic.size() &&
+         std::equal(magic.begin(), magic.end(), data.begin() + offset,
+                    [](char m, u8 d) { return static_cast<u8>(m) == d; });
 }
 
-bool IsCoverExtension(std::string_view extension)
+// Whether a source asks for a value [target] doesn't have: then there's nothing to ask it.
+bool AsksForAnEmptyValue(std::string_view source, const Target& target)
 {
-  return std::find(COVER_EXTENSIONS.begin(), COVER_EXTENSIONS.end(), extension) != COVER_EXTENSIONS.end();
-}
-
-// The extension of the URL's last path segment, lower-cased, or empty.
-std::string URLExtension(std::string_view url)
-{
-  url = url.substr(0, std::min(url.find('?'), url.find('#')));
-  const std::string_view::size_type scheme = url.find("://");
-  if (scheme != std::string_view::npos)
-    url.remove_prefix(scheme + 3);
-  const std::string_view::size_type slash = url.find('/');
-  if (slash == std::string_view::npos)
-    return {};
-  const std::string_view segment = url.substr(url.rfind('/') + 1);
-  const std::string_view::size_type dot = segment.rfind('.');
-  return (dot == std::string_view::npos) ? std::string() : Lower(segment.substr(dot + 1));
+  const bool no_serial = target.key.empty() || target.key.starts_with("HASH-");
+  return (no_serial && source.find("${serial}") != std::string_view::npos) ||
+         (target.title.empty() && source.find("${title}") != std::string_view::npos) ||
+         (target.display_title.empty() && source.find("${filetitle}") != std::string_view::npos);
 }
 
 // A name the data folder's storage (FAT, through the storage provider) and Windows can both hold, wherever this runs:
@@ -75,17 +61,15 @@ std::string ExpandSource(std::string_view source, const Target& target)
   return url;
 }
 
-std::optional<std::string> CoverExtension(std::string_view content_type, std::string_view url)
+std::optional<std::string> CoverExtension(std::span<const u8> data)
 {
-  const std::string type = Lower(StringUtil::StripWhitespace(content_type.substr(0, content_type.find(';'))));
-  if (!type.empty() && !type.starts_with("image/") && type != "application/octet-stream")
-    return std::nullopt;
-
-  if (std::string extension = HTTPDownloader::GetExtensionForContentType(type); IsCoverExtension(extension))
-    return extension;
-  if (std::string extension = URLExtension(url); IsCoverExtension(extension))
-    return extension;
-  return "jpg";
+  if (StartsWith(data, 0, "\xff\xd8\xff"))
+    return "jpg";
+  if (StartsWith(data, 0, "\x89PNG\r\n\x1a\n"))
+    return "png";
+  if (StartsWith(data, 0, "RIFF") && StartsWith(data, 8, "WEBP"))
+    return "webp";
+  return std::nullopt;
 }
 
 std::optional<std::string> CoverFileName(const Target& target, bool use_serial, std::string_view extension)
@@ -109,6 +93,7 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
             const Hooks& hooks)
 {
   Summary summary;
+  summary.games = static_cast<u32>(targets.size());
   std::vector<size_t> wanted;
   for (size_t i = 0; i < targets.size(); i++)
   {
@@ -116,6 +101,9 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
       wanted.push_back(i);
   }
   summary.total = static_cast<u32>(wanted.size());
+
+  // Each source's games in a row without an answer; at UNANSWERED_IN_A_ROW it's asked no more.
+  std::vector<u32> unanswered(sources.size(), 0);
 
   u32 position = 0;
   for (const size_t index : wanted)
@@ -134,11 +122,18 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
     const Target& target = targets[index];
     bool answered = false;
     bool tried = false;
+    bool dropped = false;
     bool done = false;
-    for (const std::string& source : sources)
+    for (size_t s = 0; s < sources.size(); s++)
     {
-      if (!HasVariable(source))
+      const std::string& source = sources[s];
+      if (!HasVariable(source) || AsksForAnEmptyValue(source, target))
         continue;
+      if (unanswered[s] >= UNANSWERED_IN_A_ROW)
+      {
+        dropped = true;
+        continue;
+      }
 
       const std::string url = ExpandSource(source, target);
       const Response response = hooks.fetch(url);
@@ -149,12 +144,16 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
         break;
       }
       if (response.status < 0)
+      {
+        unanswered[s]++;
         continue;
+      }
 
+      unanswered[s] = 0;
       answered = true;
-      if (response.status != HTTPDownloader::HTTP_STATUS_OK || response.data.empty())
+      if (response.status != HTTPDownloader::HTTP_STATUS_OK)
         continue;
-      const std::optional<std::string> extension = CoverExtension(response.content_type, url);
+      const std::optional<std::string> extension = CoverExtension(response.data);
       if (!extension.has_value())
         continue;
 
@@ -182,7 +181,8 @@ Summary Run(std::span<const Target> targets, std::span<const std::string> source
       break;
     if (!done)
     {
-      if (tried && !answered)
+      // No answer from any source asked, or every one that could be asked had stopped answering.
+      if ((tried || dropped) && !answered)
         summary.unreachable++;
       else
         summary.missing++;

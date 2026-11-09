@@ -23,7 +23,8 @@ interface CoverProgress {
 
 /**
  * How a download went: of the [total] tiles without a cover at its start, how many got one, had none at the sources
- * ([missing]), had no source answer at all ([unreachable]), or got one that couldn't be saved ([unsaved]).
+ * ([missing]), had no source answer at all ([unreachable]), or got one that couldn't be saved ([unsaved]); and the
+ * library's [games], all of them.
  */
 data class CoverSummary(
     val total: Int,
@@ -32,6 +33,7 @@ data class CoverSummary(
     val unreachable: Int,
     val unsaved: Int,
     val cancelled: Boolean,
+    val games: Int = total,
 )
 
 /** Cover downloads for the library's tiles. Blocks (the network): never on the main or the core's thread. */
@@ -52,6 +54,6 @@ object NativeCoverApi : CoverApi {
         progress: CoverProgress,
     ): CoverSummary =
         NativeLibrary.downloadCovers(sources.toTypedArray(), useSerial, progress).let {
-            CoverSummary(it[0], it[1], it[2], it[3], it[4], it[5] == 1)
+            CoverSummary(it[0], it[1], it[2], it[3], it[4], it[5] == 1, it[6])
         }
 }

@@ -1871,6 +1871,24 @@ passed on both test emulators, 953 of 953, at the branch's last code commit.
 | A sort picked before the core starts | Pass. Kept through the core's first read of `settings.ini` and written once the core runs; a `settings.ini` pulled later gives its sort. |
 | Right past the typed text | Pass, with no change: within "crash" Right moves the cursor, and at its end it leaves the field for the button beside it. |
 
+### Cover downloads (2026-11-09)
+
+On `goose-test-1` and `goose-test-2` (emulator-5580 and 5582), by the tests alone, with covers served from a server
+on the device (the emulators can't reach GitHub over HTTPS): `AndroidCoverDownloads` (common-tests, on macOS and on
+emulator-5582); `CoverSettingsTest` and `CoversTest` (JVM); `CoverDownloadsTest`, `CoversScreenTest`,
+`SettingsScreenTest`, `FocusAuditTest`, `OrientationLayoutTest` and `LibraryScanTest` (instrumented). The full tier
+passed, 1225 of 1225, at the branch's last code commit; `minifyReleaseWithR8` keeps what native code calls.
+
+| Check | Result |
+|---|---|
+| The first source that answers | Pass. A 404 from the first source, a PNG from the second: saved as `covers/GAME C.png` (a PS-EXE's `HASH-` ID isn't a serial, so by its title), reported for its tile, and the library lists it. |
+| A cover already there | Pass. No request for that game; its file unchanged. A cover that lands while the game's image is fetched is kept too. |
+| Cancel | Pass. With the server holding the request, a cancel half a second in returns in about a second, not the 30 s timeout; nothing saved. |
+| No network | Pass. A source on a closed port: every game unreachable, and the page says the sources couldn't be reached. |
+| A web page, a bad name | Pass. A 200 `text/html` answer is no cover, and the next source is tried; a title FAT or Windows can't hold (`:`, `?`, a trailing dot) saves by serial, else the file's title, never `covers/.jpg`. |
+| The page | Pass, at 640×360, 800×360, 960×540, 360×800 and 411×891, text 1.0× and 1.3×: three 200-character sources and a running download laid out; Right from a source reaches its Remove, Down goes source to source and on to Add a source, whose Right reaches Restore beside or under it; the restore question focused on Keep mine. |
+| Release builds | Found and fixed: R8 stripped `HttpBridge` (so every HTTP request failed in a release build, RetroAchievements and the shader packs included) and the progress listeners' methods; keep rules hold them now. |
+
 ## Results on the AYN Thor
 
 Checked on 2026-10-26 with the debug APK built from `9dc56372e`, on an AYN Thor: Android 13 (API 33), Snapdragon

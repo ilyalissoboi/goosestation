@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -316,24 +317,29 @@ fun LibraryScreen(
                             )
                         }
                     gridView ->
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(152.dp),
-                            state = gridState,
-                            modifier = content,
-                            // Room for the focus ring, which is drawn outside a cover.
-                            contentPadding = PaddingValues(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(24.dp),
-                        ) {
-                            items(shown, key = { it.path }) { game ->
-                                val settings = gameSettingsOf(game, onGameSettings)
-                                GameTile(
-                                    game,
-                                    onClick = { onStartGame(game) },
-                                    modifier = gameModifier(game, settings),
-                                    onLongClick = { longPress(game) },
-                                    query = query,
-                                )
+                        BoxWithConstraints(content) {
+                            // A row's room: the grid's height less its padding, so a whole tile fits on a short screen.
+                            val rowHeight = maxHeight - GRID_TOP - GRID_BOTTOM
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(152.dp),
+                                state = gridState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding =
+                                    PaddingValues(start = 4.dp, top = GRID_TOP, end = 4.dp, bottom = GRID_BOTTOM),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(24.dp),
+                            ) {
+                                items(shown, key = { it.path }) { game ->
+                                    val settings = gameSettingsOf(game, onGameSettings)
+                                    GameTile(
+                                        game,
+                                        onClick = { onStartGame(game) },
+                                        modifier = gameModifier(game, settings),
+                                        onLongClick = { longPress(game) },
+                                        query = query,
+                                        fitHeight = rowHeight,
+                                    )
+                                }
                             }
                         }
                     else ->
@@ -398,6 +404,13 @@ fun LibraryScreen(
         )
     }
 }
+
+/**
+ * The grid's padding above and below its tiles: room for the focus ring, which is drawn outside a cover, and under the
+ * last row, so the button hints don't crowd it (24 dp from a tile to the hints, with the screen's gap).
+ */
+private val GRID_TOP = 4.dp
+private val GRID_BOTTOM = 16.dp
 
 /** What the library showed last, so a change of it can be told from the first time. */
 private class ShownBefore(

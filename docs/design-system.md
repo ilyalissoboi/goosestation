@@ -378,9 +378,11 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
 
 ### Library and game screens (`ui/`)
 
-- `GameTile`: the cover in a square on `sunken`, fitted whole, never cropped; the disc icon, title and serial until
-  the art loads; then the title (2 lines) and region · play time. Tiles are at least 152 dp wide, 16 dp apart across
-  and 24 down.
+- `GameTile`: the cover in a square on `sunken`, fitted whole, never cropped; the disc icon, title and serial until the
+  art loads; then the title (2 lines) and region · play time. Tiles are at least 152 dp wide, 16 dp apart across and 24
+  down. A whole tile always fits the grid's height: on a short screen (a handheld in landscape) the cover shrinks, still
+  square and at least 96 dp (under 140 dp, only the disc until the art loads), and the tile is centred in its column.
+  The grid keeps 16 dp under its last row, so the library's `KeyHints` don't crowd it.
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.
 - `GameSettingsScreen`: a game's own settings hub, a `SettingsPage` titled "Game settings" under the game's title as
   an `Eyebrow`: the serial and region in `body` `ink-muted`, what its file sets in `body` `ink`, a `NavRow` per page

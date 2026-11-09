@@ -4,7 +4,11 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
@@ -125,6 +129,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
+import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -459,7 +464,7 @@ class OrientationLayoutTest {
             // word too wide for its line is broken, which the check below catches. A text ending in an ellipsis, such
             // as a game's title in the list, is cut short on purpose.
             assertTrue(
-                "\"$text\" is cut off at the bottom",
+                "\"$text\" is cut off at the bottom at ${box.describe()}, laid out in ${layout.layoutInput.constraints}, ${layout.size}",
                 !layout.didOverflowHeight || layout.layoutInput.overflow == TextOverflow.Ellipsis,
             )
             for (line in 0 until layout.lineCount - 1) {
@@ -2393,6 +2398,58 @@ class OrientationLayoutTest {
                 assertFocusedInView(screen())
                 press(Key.Enter)
                 assertTrue(focusedIsTheField())
+            }
+        }
+    }
+
+    @Test
+    fun aWholeTileFitsAboveTheHints() {
+        val games = (1..8).map { LONG_GAME.copy(path = "content://test/tree/games/document/long-$it.cue") }
+        // The Thor at its own 369 dpi (832×468 dp) and a 960×540 handheld, each with a status bar and a gesture bar of
+        // its own rather than the test emulator's, which are a portrait phone's.
+        val configs =
+            listOf(DpSize(832.dp, 468.dp), DpSize(960.dp, 540.dp)).flatMap { size ->
+                listOf(
+                    1f,
+                    1.3f,
+                ).map { Config("landscape ${size.width.value.toInt()}x${size.height.value.toInt()}", size, it) }
+            }
+        eachConfig(
+            {
+                Box(
+                    Modifier
+                        .consumeWindowInsets(WindowInsets.safeDrawing)
+                        .padding(top = 30.dp, bottom = 24.dp),
+                ) {
+                    LibraryScreen(
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = games[0].path,
+                    )
+                }
+            },
+            configs,
+        ) {
+            val hints = bounds(rule.onNodeWithContentDescription("${PadGlyphs.confirm}: Play"))
+            // The first row, then the second, each whole tile (cover, title and details) in view, clear of the hints.
+            repeat(2) { row ->
+                val tile = rule.onNode(isFocused()).fetchSemanticsNode().boxInRoot()
+                assertTrue(
+                    "row ${row + 1}: the tile ${tile.describe()} isn't in the grid ${viewport().describe()}",
+                    viewport().contains(tile),
+                )
+                assertTrue(
+                    "row ${row + 1}: the tile ${tile.describe()} is less than 16 dp over the hints ${hints.describe()}",
+                    hints.top - tile.bottom >= 16.dp - 0.5.dp,
+                )
+                press(Key.DirectionDown)
             }
         }
     }

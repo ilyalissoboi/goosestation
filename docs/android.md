@@ -2156,6 +2156,21 @@ closed with B, and Order wasn't pressed, so `[Main] FullscreenUIGameSort` stayed
 A tile without a cover breaks "Electrosphere" mid-word in its title at text 1.3× (the cover's fallback title in
 `title-2`, a column about 140 dp wide); that was so before this work.
 
+### Cover downloads on the Thor (2026-11-09)
+
+The debug APK of `claude/cover-downloads` at `29c708131` (#70), installed over the existing one (data kept), driven
+over adb (`input -d 0 keyevent`, screenshots of display 0), on Wi-Fi. A real download from the preset, GitHub.
+
+| Check | Result |
+|---|---|
+| The page | Pass. Settings → Covers, last in the hub: Source 1 the preset, focused, Remove beside it; Save covers by serial on; Down reached Add a source, the switch, then Download covers. |
+| Download covers | Pass. Two requests, `SLPS-02020.jpg` 200 and padtest's `HASH-9FDA0E1A56D8DF5B.jpg` 404, done in under a second: "Found 1 cover. 1 game had none at these sources." Too quick to see the progress line. |
+| The tiles | Pass. Both Ace Combat 3 tiles (two files, one serial) show the cover, `covers/SLPS-02020.jpg` (39698 bytes), in the working copy and in the data folder on the SD card within seconds; padtest still shows its title. |
+| Nothing else | Pass. The stray `covers/unreachable-check.txt` from October was left as it was; `settings.ini` has no `[Covers]` section, as nothing on the page was changed; the crash buffer is empty. |
+
+Step 17's other checks (Cancel mid-run, a game started or Home mid-run, Wi-Fi off, removing and restoring the preset)
+are still to do.
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with

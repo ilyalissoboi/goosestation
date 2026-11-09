@@ -654,6 +654,30 @@ class LibraryScreenTest {
     }
 
     @Test
+    fun searchingAnEmptyLibraryKeepsTheField() {
+        show(games = emptyList())
+        type("zelda")
+        assertEquals("zelda", field().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        field().assertIsFocused()
+
+        // No games, so no Clear search to go to: the field keeps the focus, and nothing asks for a button that isn't
+        // there (Compose prints "FocusRequester is not initialized" for it, or throws in other versions).
+        val printed = java.io.ByteArrayOutputStream()
+        val out = System.out
+        System.setOut(java.io.PrintStream(printed, true))
+        try {
+            press(Key.DirectionDown)
+            field().performImeAction()
+            rule.waitForIdle()
+        } finally {
+            System.setOut(out)
+        }
+
+        field().assertIsFocused()
+        assertFalse(printed.toString(), printed.toString().contains("FocusRequester is not initialized"))
+    }
+
+    @Test
     fun downOnNoMatchGoesToClearSearch() {
         show()
         type("zelda")

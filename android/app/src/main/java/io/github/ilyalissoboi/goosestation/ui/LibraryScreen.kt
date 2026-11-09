@@ -128,6 +128,9 @@ fun LibraryScreen(
     val sorted = remember(games, sort) { LibraryOrder.sorted(games, sort) }
     val query = LibrarySearch.query(search.text)
     val shown = remember(sorted, query) { LibrarySearch.filter(sorted, query) }
+    // A search that matches none of the games: the screen says so, with Clear search. Not without games, where there's
+    // nothing to clear the search for and no button to focus.
+    val noMatch = hasGames && shown.isEmpty()
     // Where the focus is, for the button hints.
     var area by remember { mutableStateOf(LibraryArea.Game) }
     val clearSearch = remember { FocusRequester() }
@@ -263,7 +266,7 @@ fun LibraryScreen(
                 onSyncBadge = onSyncBadge,
                 onSearchDown = {
                     if (shown.isEmpty()) {
-                        if (query != null) clearSearch.requestFocus()
+                        if (noMatch) clearSearch.requestFocus()
                     } else {
                         scope.launch {
                             scrollTo(0)
@@ -273,7 +276,7 @@ fun LibraryScreen(
                 },
                 // Clear search takes the focus only once the keyboard has closed on nothing matching, never as the
                 // typing passes through a search that matches nothing.
-                onSearchKeyboardClosed = { if (query != null && shown.isEmpty()) clearSearch.requestFocus() },
+                onSearchKeyboardClosed = { if (noMatch) clearSearch.requestFocus() },
                 onFocusArea = { area = it },
                 onSortBounds = { sortBounds = it },
             )
@@ -293,7 +296,7 @@ fun LibraryScreen(
                 val content = Modifier.weight(1f)
                 when {
                     // While a message says what the app is doing, the list may just not be there yet.
-                    hasGames && shown.isEmpty() ->
+                    noMatch ->
                         NoMatch(
                             query.orEmpty(),
                             // Scrolls on a short screen, so Clear search comes into view as it takes the focus.

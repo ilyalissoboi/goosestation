@@ -2090,6 +2090,7 @@ closed with B, and Order wasn't pressed, so `[Main] FullscreenUIGameSort` stayed
 | Select and the keyboard | Pass. Select from a tile focused the field and opened Gboard docked under the app (not its full-screen editor); "ace" left "2 of 3 games · Title, A–Z", hints "A Type · B Clear search". |
 | B with Gboard open | Pass. The first B closed the keyboard and kept the search, "Ace" marked in both titles; the second cleared it ("3 games"). Down then reached the first game, Up the field. The B was sent by adb, as the pad's own button sends `KEYCODE_BUTTON_B`. |
 | Text at 1.3× | Pass. Still one row; a whole row of tiles in view, their details line just under the fold (the grid scrolls), and the hints on one line. The text scale was put back afterwards. |
+| Whole tiles (later the same day) | Pass, after the tile fitting. At text 1.0× each tile's cover, two lines of title and details line show above the hints with room to spare; at 1.3× the covers shrink (the disc alone, under 140 dp) and whole tiles still fit. |
 
 A tile without a cover breaks "Electrosphere" mid-word in its title at text 1.3× (the cover's fallback title in
 `title-2`, a column about 140 dp wide); that was so before this work.

@@ -183,8 +183,12 @@ class Covers(
             override fun cancelled() = cancelled
         }
 
+    /** Reads the sources and the switch, from none shown, so the page focuses its first row once they're in. */
     override fun open() {
         restoring = false
+        // An edit still waiting is saved first, and so read back.
+        if (pendingSave?.isActive == true) save()
+        sources = null
         scope.launch {
             val (read, serial) = withContext(core) { CoverSources.load(settings) to CoverUseSerial.load(settings) }
             sources = read.map(::newSource)

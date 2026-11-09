@@ -107,6 +107,19 @@ class CoversTest {
             assertNull(covers.blocked)
         }
 
+    // From review: reopened, the page showed the last visit's rows, then lost its focus when the read replaced them.
+    @Test
+    fun reopeningReadsFromNone() =
+        runTest {
+            val covers = opened()
+            covers.close()
+
+            covers.open()
+            assertNull(covers.sources)
+            runCurrent()
+            assertEquals(listOf(CoverSources.PRESET), covers.texts())
+        }
+
     @Test
     fun anEditIsSavedAfterAPause() =
         runTest {

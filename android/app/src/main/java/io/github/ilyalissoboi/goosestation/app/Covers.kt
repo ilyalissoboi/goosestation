@@ -118,7 +118,8 @@ fun coverSummaryText(summary: CoverSummary): String {
 /**
  * The Covers page's sources and switch, read and saved through [settings] on [core], and its download, run through
  * [api] on [io]. The app owns it, so a download goes on when the page closes; [onFound] hears each cover as it lands,
- * for the library's tile. Main thread only.
+ * for the library's tile, and [onFinished] each download's end, for any other tile the same cover file serves.
+ * Main thread only.
  */
 class Covers(
     private val scope: CoroutineScope,
@@ -126,6 +127,7 @@ class Covers(
     private val core: CoroutineDispatcher,
     private val api: CoverApi,
     private val settings: CoreSettings,
+    private val onFinished: (CoverSummary) -> Unit = {},
     private val onFound: (gamePath: String, coverPath: String) -> Unit,
 ) : CoversModel {
     override var sources by mutableStateOf<List<CoverSource>?>(null)
@@ -266,6 +268,7 @@ class Covers(
             val summary = withContext(io) { api.downloadCovers(texts, serial, progress) }
             message = coverSummaryText(summary)
             job = null
+            onFinished(summary)
         }
     }
 

@@ -266,10 +266,18 @@ object AppController : NativeCallbacks {
 
     /**
      * The Covers page's sources and download: the app's, so a download goes on when the page closes, until a game
-     * starts or the app is hidden. Each cover found goes straight onto its tile.
+     * starts or the app is hidden. Each cover found goes straight onto its tile; once a download that found some
+     * ends, the library's tiles are read again (not rescanned), for any other tile the same cover file serves.
      */
     val covers =
-        Covers(scope, Dispatchers.IO, coreDispatcher, NativeCoverApi, NativeCoreSettings) { gamePath, coverPath ->
+        Covers(
+            scope,
+            Dispatchers.IO,
+            coreDispatcher,
+            NativeCoverApi,
+            NativeCoreSettings,
+            onFinished = { if (it.found > 0) scope.launch { rereadLibrary() } },
+        ) { gamePath, coverPath ->
             games = games.map { if (it.path == gamePath) it.copy(coverPath = coverPath) else it }
         }
 
@@ -1705,6 +1713,12 @@ object AppController : NativeCallbacks {
         if (!coreStarted) return
         applyGameFolders()
         refreshLibrary()
+    }
+
+    // The library's tiles as the core lists them now, without a scan: their covers looked up again.
+    private suspend fun rereadLibrary() {
+        if (!coreStarted) return
+        games = withContext(coreDispatcher) { NativeLibrary.getGameList().toList() }
     }
 
     private suspend fun refreshLibrary(showProgress: Boolean = false) {

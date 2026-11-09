@@ -63,6 +63,7 @@ class CoversTest {
     private val settings = MemoryCoreSettings()
     private val io = Executors.newSingleThreadExecutor()
     private val landed = mutableListOf<Pair<String, String>>()
+    private val finished = mutableListOf<CoverSummary>()
 
     @After
     fun stop() {
@@ -77,6 +78,7 @@ class CoversTest {
             StandardTestDispatcher(testScheduler),
             api,
             settings,
+            onFinished = { finished += it },
         ) { game, cover -> landed += game to cover }
 
     // Runs the test's queue until [done], as work comes back from the io thread.
@@ -250,6 +252,21 @@ class CoversTest {
             api.finish(CoverSummary(48, 31, 17, 0, 0, false))
             until { covers.job == null }
             assertEquals("Found 31 covers. 17 games had none at these sources.", covers.message)
+        }
+
+    // From review: two tiles sharing a cover file (two copies of one serial) got it on one only, as the other was
+    // skipped once the cover was there; the library is read again when a run ends, for every tile's cover.
+    @Test
+    fun theEndOfARunIsHeard() =
+        runTest {
+            val covers = opened()
+            covers.download()
+            until { api.progress != null }
+            assertTrue(finished.isEmpty())
+
+            api.finish(CoverSummary(2, 1, 0, 0, 0, false))
+            until { covers.job == null }
+            assertEquals(listOf(CoverSummary(2, 1, 0, 0, 0, false)), finished)
         }
 
     @Test

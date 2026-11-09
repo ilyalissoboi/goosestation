@@ -392,9 +392,9 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   while sync is on, then `IconActionButton`s 8 dp apart: Sort (`sort`), Order (`order`, or `order-reversed` when
   reversed), the view (`list-bulleted` in grid mode, `grid` in list mode), Refresh (`refresh`) and Settings
   (`settings`), with the `ActionLabelStrip` straight under the buttons. The field stays on the buttons' row while it
-  gets 144 dp at text 1.0× (more as the text grows), as on the Thor at 1.0×; otherwise it goes on its own row under the
-  strip, and on a phone in portrait the buttons go under the title too. Up from the first game reaches the field, Up
-  again the buttons.
+  gets 144 dp at text 1.0× (more as the text grows), as on a 640 dp-wide handheld at 1.0×; otherwise it goes on its own
+  row under the strip, and on a phone in portrait the buttons go under the title too. Up from the first game reaches the
+  field, Up again the buttons.
 - The count line under the bar, in `body-sm` `ink-muted`: "48 games · Title, A–Z", "2 of 48 games · Title, A–Z" while
   searching. It goes with the games, so a short screen takes its room from them, never from the button hints.
 - The sort list: the choice list (`ChoiceList`) opened under the Sort button, in the screen's own layout (never a

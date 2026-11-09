@@ -7,12 +7,14 @@ import io.github.ilyalissoboi.goosestation.core.GameEntry
 
 /**
  * [games] ready to search: each one's file name and its discs', decoded once for the list, at its first search, rather
- * than on every keystroke, which a thousand games' content URIs would make slow.
+ * than on every keystroke, which a thousand games' content URIs would make slow. [decode] is
+ * [LibrarySearch.fileNames]; tests count its calls.
  */
 class SearchIndex(
     val games: List<GameEntry>,
+    private val decode: (GameEntry) -> List<String> = LibrarySearch::fileNames,
 ) {
-    internal val fileNames: List<List<String>> by lazy { games.map(LibrarySearch::fileNames) }
+    internal val fileNames: List<List<String>> by lazy { games.map(decode) }
 }
 
 /**

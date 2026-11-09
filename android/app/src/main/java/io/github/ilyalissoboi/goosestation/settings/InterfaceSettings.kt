@@ -20,5 +20,13 @@ object InterfaceSettings {
     /** The update channel's tag: `preview` (from master) or `latest` (from dev). By default, the build's own. */
     val UPDATE_CHANNEL = StringSetting("AutoUpdater", "UpdateTag", BuildConfig.UPDATE_CHANNEL.ifEmpty { "preview" })
 
-    val all: List<Setting<*>> = listOf(START_PAUSED, PAUSE_ON_DISCONNECT, SAVE_STATE_ON_EXIT, SAVE_STATE_BACKUPS)
+    val all: List<Setting<*>> =
+        listOf(
+            START_PAUSED,
+            PAUSE_ON_DISCONNECT,
+            SAVE_STATE_ON_EXIT,
+            SAVE_STATE_BACKUPS,
+            CHECK_UPDATES_AT_START,
+            UPDATE_CHANNEL,
+        )
 }

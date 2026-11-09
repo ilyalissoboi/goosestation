@@ -213,10 +213,11 @@ fun UpdateBanner(
 private val WIDE = 700.dp
 
 /**
- * [text] that may wrap after each `_`, as the installer's codes (INSTALL_FAILED_INSUFFICIENT_STORAGE) need on a narrow
- * screen: a zero-width space follows each.
+ * [text] that may wrap after each `_` and `-`, as the installer's codes (INSTALL_FAILED_INSUFFICIENT_STORAGE) and
+ * versions (0.1-575-g9c532cd4f-dirty, which the line breaker takes for one number) need on a narrow screen: a
+ * zero-width space follows each.
  */
-internal fun breakable(text: String) = text.replace("_", "_\u200B")
+internal fun breakable(text: String) = text.replace("_", "_\u200B").replace("-", "-\u200B")
 
 /** "12 of 48 MB", in whole megabytes rounded down; "12 MB" when the size isn't known. */
 internal fun megabytes(

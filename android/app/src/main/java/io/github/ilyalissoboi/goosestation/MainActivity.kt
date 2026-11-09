@@ -27,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.app.TouchVisibility
 import io.github.ilyalissoboi.goosestation.app.Updates
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
@@ -46,6 +47,7 @@ import io.github.ilyalissoboi.goosestation.ui.GameSettingsHost
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.HotkeysScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
+import io.github.ilyalissoboi.goosestation.ui.InterfaceUpdates
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.MacroScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
@@ -148,7 +150,18 @@ class MainActivity : ComponentActivity() {
                         )
                     Screen.Interface ->
                         CorePageRoute(CorePage.Interface) { values, onChange ->
-                            InterfaceScreen(values, onChange, onBack = AppController::closeSettingsPage)
+                            val updates = AppController.updates?.takeIf { it.build.canUpdate }
+                            InterfaceScreen(
+                                values,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                                updates =
+                                    updates?.let {
+                                        InterfaceUpdates(it.checkNowState) {
+                                            it.checkNow(values[InterfaceSettings.UPDATE_CHANNEL])
+                                        }
+                                    },
+                            )
                         }
                     Screen.Console ->
                         CorePageRoute(CorePage.Console) { values, onChange ->

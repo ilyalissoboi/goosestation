@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.CoverJob
@@ -106,6 +107,7 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.update.Change
 import io.github.ilyalissoboi.goosestation.update.Changes
 import io.github.ilyalissoboi.goosestation.update.ChannelRelease
+import io.github.ilyalissoboi.goosestation.update.CheckResult
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -437,6 +439,20 @@ class FocusAuditTest {
     @Test
     fun interfacePage() {
         show { InterfaceScreen(pageValues(InterfaceSettings.all), onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun interfacePageWithUpdates() {
+        show {
+            InterfaceScreen(
+                pageValues(InterfaceSettings.all),
+                onChange = {},
+                onBack = {},
+                updates = InterfaceUpdates(CheckNowState.Done(CheckResult.UpToDate), onCheckNow = {}),
+                version = "0.1-575-g9c532cd4f",
+            )
+        }
         rule.assertControllerReady()
     }
 

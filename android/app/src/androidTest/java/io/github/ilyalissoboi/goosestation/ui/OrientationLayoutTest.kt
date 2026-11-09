@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.width
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.CoverJob
@@ -140,6 +141,7 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.update.Change
 import io.github.ilyalissoboi.goosestation.update.Changes
 import io.github.ilyalissoboi.goosestation.update.ChannelRelease
+import io.github.ilyalissoboi.goosestation.update.CheckResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -840,7 +842,17 @@ class OrientationLayoutTest {
         settingsPageFits(
             {
                 var values by remember { mutableStateOf(pageValues(InterfaceSettings.all)) }
-                InterfaceScreen(values, onChange = { values = it }, onBack = {})
+                InterfaceScreen(
+                    values,
+                    onChange = { values = it },
+                    onBack = {},
+                    updates =
+                        InterfaceUpdates(
+                            CheckNowState.Done(CheckResult.Unreadable(403)),
+                            onCheckNow = {},
+                        ),
+                    version = "0.1-575-g9c532cd4f-dirty",
+                )
             },
             rows =
                 listOf(
@@ -848,6 +860,9 @@ class OrientationLayoutTest {
                     "Pause when a controller disconnects",
                     "Save state on exit",
                     "Create save state backups",
+                    "Check for updates at start",
+                    "Update channel",
+                    "Check now",
                 ),
         )
 

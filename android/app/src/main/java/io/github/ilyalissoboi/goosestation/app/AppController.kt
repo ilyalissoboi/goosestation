@@ -33,6 +33,7 @@ import io.github.ilyalissoboi.goosestation.input.PadKind
 import io.github.ilyalissoboi.goosestation.input.Rumble
 import io.github.ilyalissoboi.goosestation.library.LibraryPrefs
 import io.github.ilyalissoboi.goosestation.library.LibrarySort
+import io.github.ilyalissoboi.goosestation.library.LibrarySortState
 import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
@@ -352,9 +353,12 @@ object AppController : NativeCallbacks {
     /** What the library's search field holds, kept while the player visits other screens; cleared as a game starts. */
     val librarySearch = TextFieldState()
 
-    /** The library's sort, in Big Picture's keys ([LibraryPrefs]), read once the core runs. */
-    var librarySort by mutableStateOf(LibrarySort())
-        private set
+    // The library's sort, in Big Picture's keys (LibraryPrefs), read as the core starts.
+    private val librarySorts =
+        LibrarySortState { sort -> scope.launch(coreDispatcher) { LibraryPrefs.write(NativeCoreSettings, sort) } }
+
+    /** The library's sort: settings.ini's, or the player's latest pick, which a pick before the core starts keeps. */
+    val librarySort: LibrarySort get() = librarySorts.sort
 
     /** The last game started, which the library focuses on coming back to it. */
     var lastGamePath by mutableStateOf<String?>(null)
@@ -710,14 +714,10 @@ object AppController : NativeCallbacks {
     }
 
     /**
-     * Sorts the library by [sort], and saves it in settings.ini as Big Picture keeps it; nothing when it's the sort
-     * already, so the keys are only written once the player changes it.
+     * Sorts the library by [sort], and saves it in settings.ini as Big Picture keeps it, once the core runs; nothing
+     * when it's the sort already, so the keys are only written once the player changes it.
      */
-    fun sortLibrary(sort: LibrarySort) {
-        if (sort == librarySort) return
-        librarySort = sort
-        if (coreStarted) scope.launch(coreDispatcher) { LibraryPrefs.write(NativeCoreSettings, sort) }
-    }
+    fun sortLibrary(sort: LibrarySort) = librarySorts.pick(sort)
 
     /** Scans the games folders again, unless a scan from here is under way. */
     fun refresh() {
@@ -1615,6 +1615,7 @@ object AppController : NativeCallbacks {
         Log.i(TAG, "The core is ready.")
         coreStarted = true
         syncVisibility.coreStarted()
+        librarySorts.coreStarted()
         memcardSyncStatus.refresh()
         if (biosOverridesToCheck) dropStaleBiosOverrides()
         // Reported once the core takes input; it keeps connections made before then anyway.
@@ -1649,7 +1650,7 @@ object AppController : NativeCallbacks {
         val sort = LibraryPrefs.read(NativeCoreSettings)
         withContext(Dispatchers.Main) {
             gridView = grid
-            librarySort = sort
+            librarySorts.read(sort)
         }
     }
 

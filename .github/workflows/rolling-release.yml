@@ -301,7 +301,15 @@ jobs:
         scripts/generate-metainfo.sh scripts/flatpak
         cat scripts/flatpak/io.github.ilyalissoboi.GooseStation.metainfo.xml
 
+    # `flatpak-builder-lint appstream` is `appstreamcli validate --explain`, which also checks that each URL
+    # answers. GitHub's pages at times time out (504) for visitors who aren't logged in, which failed the job
+    # for no fault of the file. So every check but the URLs' gates the job, and the URLs are checked after,
+    # reported without failing it.
     - name: Validate AppStream XML
+      run: appstreamcli validate --explain --no-net scripts/flatpak/io.github.ilyalissoboi.GooseStation.metainfo.xml
+
+    - name: Check AppStream URLs
+      continue-on-error: true
       run: flatpak-builder-lint appstream scripts/flatpak/io.github.ilyalissoboi.GooseStation.metainfo.xml
 
     - name: Validate manifest

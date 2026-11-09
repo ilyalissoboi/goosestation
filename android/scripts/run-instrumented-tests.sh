@@ -28,6 +28,15 @@
 # (-Pgoose.testResults). Logs are in $TMPDIR (or /tmp), and the results of the last run under
 # app/build/outputs/androidTest-results/shard<N>-<part> (and gles). Needs ANDROID_HOME.
 
+# Both tiers end with the release part, on the first emulator: a release build (R8 on) signed with the test key
+# (sign-apk.sh --test-key), installed under the release's ID, with a fake GitHub on the emulator's own 127.0.0.1: one
+# answer, a release older than any build, from the shell's nc (an app can't reach the host's servers from these
+# emulators, at 10.0.2.2 or through adb reverse, but can reach the device's loopback). It passes when the app launches,
+# loads libgoosestation.so
+# (JNI_OnLoad finds the app's classes by name) and asks the fake for its channel's release at start (an HTTP request
+# through HttpBridge), and is still running, with nothing in the crash log: the two R8 misses on record. Its logs are
+# $TMPDIR/goose-tests-release-*. GOOSE_TEST_PARTS picks the parts, "tests release" by default ("release" for that alone).
+
 set -e
 
 if [ "$1" != quick ] && [ "$1" != full ]; then
@@ -50,6 +59,10 @@ read -r -a SERIALS <<<"${GOOSE_TEST_SERIALS:-emulator-5580 emulator-5582}"
 SHARDS=${#SERIALS[@]}
 UI_PACKAGE=io.github.ilyalissoboi.goosestation.ui
 RUNNER_ARGS=-Pandroid.testInstrumentationRunnerArguments
+PARTS_WANTED=" ${GOOSE_TEST_PARTS:-tests release} "
+want() { [[ "$PARTS_WANTED" == *" $1 "* ]]; }
+RELEASE_ID=io.github.ilyalissoboi.goosestation
+RELEASE_PORT=${GOOSE_TEST_RELEASE_PORT:-8765}
 
 # Every file a test assumes: one missing would skip its tests, and a full run would still pass.
 if [ "$TIER" = full ]; then
@@ -112,7 +125,7 @@ done
 
 cd "$ANDROID_DIR"
 # Built once, so the shards' builds find everything up to date and only run the tests.
-./gradlew --quiet assembleDebug assembleDebugAndroidTest
+want tests && ./gradlew --quiet assembleDebug assembleDebugAndroidTest
 
 FILTER=()
 [ "$TIER" = quick ] && FILTER=("$RUNNER_ARGS.notAnnotation=androidx.test.filters.LargeTest")
@@ -144,21 +157,22 @@ run_shard() {
 	return $status
 }
 
+START=$SECONDS
+status=0
+PARTS=()
+if want tests; then
 echo "Running the $TIER tests on ${SERIALS[*]}."
 rm -rf "$RESULTS"/shard* "$RESULTS"/gles
-START=$SECONDS
 pids=()
 for shard in "${!SERIALS[@]}"; do
 	run_shard "$shard" "${SERIALS[$shard]}" &
 	pids+=($!)
 done
-status=0
 for pid in "${pids[@]}"; do
 	wait "$pid" || status=1
 done
 echo "All shards finished in $((SECONDS - START)) s."
 
-PARTS=()
 for shard in "${!SERIALS[@]}"; do
 	PARTS+=("shard$shard-ui" "shard$shard-core")
 done
@@ -193,6 +207,78 @@ if [ "$TIER" = full ]; then
 	"$ADB" -s "$GLES_SERIAL" emu kill >/dev/null
 	while "$ADB" devices | grep -q "^$GLES_SERIAL"; do sleep 1; done
 	"$ANDROID_DIR/scripts/start-test-emulators.sh" "$GLES_AVD" || status=1
+fi
+fi
+
+# The release part (see the top). Prints one line: what passed, or the first thing missing.
+run_release() {
+	local serial="${SERIALS[0]}" start=$SECONDS apk="$LOGS/goose-tests-release.apk"
+	local requests="$LOGS/goose-tests-release-requests.txt" logcat="$LOGS/goose-tests-release-logcat.txt"
+	local answer=/data/local/tmp/goose-release-answer.txt asked_file=/data/local/tmp/goose-release-request.txt
+	local want_request="GET /repos/ilyalissoboi/goosestation/releases/tags/preview"
+	if ! ./gradlew --quiet assembleRelease -Pgoose.updateChannel=preview \
+		"-Pgoose.updateApi=http://127.0.0.1:$RELEASE_PORT/repos/ilyalissoboi/goosestation" \
+		>"$LOGS/goose-tests-release-build.log" 2>&1; then
+		echo "release: failed: the release build (see $LOGS/goose-tests-release-build.log)"
+		return 1
+	fi
+	if ! "$ANDROID_DIR/scripts/sign-apk.sh" --test-key app/build/outputs/apk/release/app-release-unsigned.apk "$apk" \
+		>"$LOGS/goose-tests-release-sign.log" 2>&1; then
+		echo "release: failed: signing with the test key (see $LOGS/goose-tests-release-sign.log)"
+		return 1
+	fi
+	# The fake GitHub's one answer: the channel's release, "Preview 0.0" (code 0, older than any build), with the APK, so
+	# the app offers nothing.
+	local body
+	body='{"tag_name": "preview", "name": "Preview 0.0", "target_commitish": "0000000000000000000000000000000000000000",'
+	body+=' "assets": [{"name": "goosestation-android-arm64.apk", "size": 1, "browser_download_url": "http://127.0.0.1/x"}]}'
+	printf 'HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
+		"${#body}" "$body" >"$LOGS/goose-tests-release-answer.txt"
+	: >"$requests"
+	"$ADB" -s "$serial" push "$LOGS/goose-tests-release-answer.txt" "$answer" >/dev/null
+	"$ADB" -s "$serial" shell rm -f "$asked_file"
+	"$ADB" -s "$serial" shell "nc -l -p $RELEASE_PORT < $answer > $asked_file" >"$LOGS/goose-tests-release-server.log" 2>&1 &
+	local server=$!
+	# Another build under the release's ID (an old debug install) has another signature: it goes first.
+	"$ADB" -s "$serial" uninstall "$RELEASE_ID" >/dev/null 2>&1 || true
+	local missing=""
+	if ! "$ADB" -s "$serial" install "$apk" >"$LOGS/goose-tests-release-install.log" 2>&1; then
+		missing="the install (see $LOGS/goose-tests-release-install.log)"
+	else
+		"$ADB" -s "$serial" logcat -c
+		"$ADB" -s "$serial" logcat -b all -c 2>/dev/null || true
+		"$ADB" -s "$serial" shell am start -W -n "$RELEASE_ID/io.github.ilyalissoboi.goosestation.MainActivity" >/dev/null
+		local loaded="" asked="" end=$((SECONDS + 60))
+		while [ $SECONDS -lt $end ] && { [ -z "$loaded" ] || [ -z "$asked" ]; }; do
+			"$ADB" -s "$serial" logcat -d -s GooseStation:I >"$logcat" 2>/dev/null || true
+			grep -q "Loaded libgoosestation.so." "$logcat" && loaded=yes
+			"$ADB" -s "$serial" shell cat "$asked_file" 2>/dev/null | tr -d '\r' >"$requests" || true
+			grep -qF "$want_request" "$requests" && asked=yes
+			sleep 1
+		done
+		sleep 2
+		"$ADB" -s "$serial" logcat -d >"$logcat" 2>/dev/null || true
+		if [ -z "$loaded" ]; then
+			missing="libgoosestation.so never loaded"
+		elif [ -z "$asked" ]; then
+			missing="no request for the channel's release reached the fake GitHub"
+		elif [ -z "$("$ADB" -s "$serial" shell pidof "$RELEASE_ID" | tr -d '\r')" ]; then
+			missing="the app isn't running"
+		elif [ -n "$("$ADB" -s "$serial" logcat -d -b crash | grep -v '^---------' | tr -d '\r')" ]; then
+			missing="the crash log isn't empty"
+		fi
+	fi
+	kill "$server" 2>/dev/null || true
+	"$ADB" -s "$serial" shell "pkill -f 'nc -l -p $RELEASE_PORT'; rm -f $answer $asked_file" >/dev/null 2>&1 || true
+	"$ADB" -s "$serial" uninstall "$RELEASE_ID" >/dev/null 2>&1 || true
+	if [ -n "$missing" ]; then
+		echo "release: failed: $missing (see $logcat)"
+		return 1
+	fi
+	echo "release: launched, loaded the core and asked for the update in $((SECONDS - start)) s"
+}
+if want release; then
+	run_release || status=1
 fi
 echo "Everything finished in $((SECONDS - START)) s."
 

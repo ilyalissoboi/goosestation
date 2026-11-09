@@ -170,6 +170,9 @@ Every screen must work with a D-pad alone. That's tested (see Checking a new scr
 - **Left and right step a value** on a cycler or number row; elsewhere they move focus sideways.
 - **Nothing can be clicked that can't be focused.** A tap-only part, such as a cycler's arrows, uses
   `pointerInput` rather than `clickable`, so it isn't a separate focus stop, and the row it's in carries the action.
+  Where a screen reader needs such a part as a button of its own (the search field's ✕), it gets a semantics
+  `onClick` and `Role.Button`, and `notAFocusStop` saying which key does it by controller, which the focus audit
+  accepts.
 
 ## Components
 
@@ -230,10 +233,11 @@ SearchField(state, focus, onDown = ::firstMatch, onKeyboardClosed = ::keyboardCl
 
 A search box: a 48 dp `sunken` well with a `line-strong` edge at `radius-sm`, the `search` icon in `ink-muted`, the
 placeholder "Search your games" ("Search" under 200 dp), and a `close` ✕ while there's text, which clears it by touch
-(a 48 dp tap target, not a focus stop: B clears by controller). Its accessible name is "Search your games". As with a
-text row, focus doesn't open Android's keyboard, so a D-pad passes through; A, the D-pad centre, a tap or
-`SearchFocus.focusAndType()` (the library's Select) do. Up leaves it, Down is the screen's (`onDown`), and the
-keyboard's action is Search, which closes it; `onKeyboardClosed` hears it close, by that or by Back, once.
+(a 48 dp tap target, not a focus stop: B clears by controller; a screen reader has it as the button "Clear search").
+Its accessible name is "Search your games". As with a text row, focus doesn't open Android's keyboard, so a D-pad
+passes through; A, the D-pad centre, a tap or `SearchFocus.focusAndType()` (the library's Select) do. Up leaves it,
+Down is the screen's (`onDown`), Left and Right move the cursor within the text and leave the field past its end, and
+the keyboard's action is Search, which closes it; `onKeyboardClosed` hears it close, by that or by Back, once.
 
 ### `Notice` and `Banner` (`Banner.kt`)
 
@@ -406,7 +410,7 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
   "No games match “zelda”." in `body` `ink-muted`, and Clear search (`Secondary`), which takes the focus only once the
   keyboard closes, or on Down from the field.
 - The library's foot follows the focus: on a game "A Play", "X Saves", "Y Game settings", "Select Search"; on a
-  top-bar button or Clear search "A Choose", "Select Search"; on the field "A Type"; with the sort list open "A
+  top-bar button, a banner's button or Clear search "A Choose", "Select Search"; on the field "A Type"; with the sort list open "A
   Choose", "B Close". While searching, "B Clear search" takes "Select Search"'s place. X on a game opens its Saves
   (`SavesScreen`), Y its settings; a long press offers both in an `OverlayPanel` (the game's title, then Saves,
   focused, and Game settings, both `Secondary`), or opens Saves for a game without a key.
@@ -608,8 +612,8 @@ SVG per core input name (`Triangle`, `LLeft`, …).
 
 The instrumented tests (`android/app/src/androidTest/…/ui/`) hold every screen to the system:
 
-- `FocusAuditTest`, through `assertControllerReady()`: something has focus, and everything clickable can be focused.
-  Add the new screen to it.
+- `FocusAuditTest`, through `assertControllerReady()`: something has focus, and everything clickable can be focused,
+  but for a part marked `notAFocusStop`. Add the new screen to it.
 - `OrientationLayoutTest`: at phone and handheld sizes, portrait and landscape, at text 1.0× and 1.3×, no text is cut
   off, broken mid-word, overlapping or off-screen, and every focusable is reached with the D-pad and scrolled into
   view. Add settings pages and anything with long, user-supplied text to it.

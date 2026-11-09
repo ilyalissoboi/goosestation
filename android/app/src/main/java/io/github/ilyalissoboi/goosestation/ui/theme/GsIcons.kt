@@ -279,6 +279,32 @@ object GsIcons {
         }
     }
 
+    val listBulleted: ImageVector by lazy {
+        icon("list-bulleted") {
+            moveTo(4f, 5f)
+            lineTo(6f, 5f)
+            lineTo(6f, 7f)
+            lineTo(4f, 7f)
+            close()
+            moveTo(4f, 11f)
+            lineTo(6f, 11f)
+            lineTo(6f, 13f)
+            lineTo(4f, 13f)
+            close()
+            moveTo(4f, 17f)
+            lineTo(6f, 17f)
+            lineTo(6f, 19f)
+            lineTo(4f, 19f)
+            close()
+            moveTo(10f, 6f)
+            lineTo(20f, 6f)
+            moveTo(10f, 12f)
+            lineTo(20f, 12f)
+            moveTo(10f, 18f)
+            lineTo(20f, 18f)
+        }
+    }
+
     val list: ImageVector by lazy {
         icon("list") {
             moveTo(4f, 6f)
@@ -316,6 +342,26 @@ object GsIcons {
             close()
             moveTo(9f, 15f)
             lineTo(15f, 15f)
+        }
+    }
+
+    val orderReversed: ImageVector by lazy {
+        icon("order-reversed") {
+            moveTo(12f, 4f)
+            lineTo(12f, 19f)
+            moveTo(7f, 14f)
+            lineTo(12f, 19f)
+            lineTo(17f, 14f)
+        }
+    }
+
+    val order: ImageVector by lazy {
+        icon("order") {
+            moveTo(12f, 20f)
+            lineTo(12f, 5f)
+            moveTo(7f, 10f)
+            lineTo(12f, 5f)
+            lineTo(17f, 10f)
         }
     }
 
@@ -364,6 +410,21 @@ object GsIcons {
             lineTo(20f, 15f)
             lineTo(20f, 10f)
             lineTo(17f, 6f)
+        }
+    }
+
+    val refresh: ImageVector by lazy {
+        icon("refresh") {
+            moveTo(19f, 15f)
+            lineTo(15f, 19f)
+            lineTo(9f, 19f)
+            lineTo(5f, 15f)
+            lineTo(5f, 9f)
+            lineTo(9f, 5f)
+            lineTo(16f, 5f)
+            moveTo(13f, 2f)
+            lineTo(16f, 5f)
+            lineTo(13f, 8f)
         }
     }
 
@@ -432,6 +493,17 @@ object GsIcons {
             lineTo(10f, 19f)
             lineTo(6f, 19f)
             close()
+        }
+    }
+
+    val sort: ImageVector by lazy {
+        icon("sort") {
+            moveTo(4f, 6f)
+            lineTo(20f, 6f)
+            moveTo(4f, 12f)
+            lineTo(15f, 12f)
+            moveTo(4f, 18f)
+            lineTo(10f, 18f)
         }
     }
 

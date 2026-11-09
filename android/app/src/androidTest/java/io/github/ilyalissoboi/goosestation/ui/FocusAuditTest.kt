@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -20,12 +21,14 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -268,6 +271,32 @@ class FocusAuditTest {
     fun libraryList() {
         showLibrary(GAMES, gridView = false)
 
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun librarySortList() {
+        showLibrary(GAMES, gridView = true)
+        rule.onNodeWithContentDescription("Sort: Title").requestFocus()
+        rule.waitForIdle()
+        press(Key.Enter)
+
+        rule.onNodeWithTag(CHOICE_LIST).assertExists()
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun librarySearching() {
+        showLibrary(GAMES, gridView = true, search = GAMES[0].title.take(3))
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun libraryNoMatch() {
+        showLibrary(GAMES, gridView = false, search = "zelda")
+
+        rule.onNodeWithText("Clear search").assertExists()
         rule.assertControllerReady()
     }
 
@@ -1449,8 +1478,10 @@ class FocusAuditTest {
         games: List<GameEntry>,
         gridView: Boolean,
         syncBadge: SyncBadge? = null,
+        search: String = "",
     ) = show {
         LibraryScreen(
+            search = remember { TextFieldState(search) },
             games = games,
             gridView = gridView,
             banners = listOf(BannerModel("The games folder can't be reached.", listOf("Pick again" to {}))),

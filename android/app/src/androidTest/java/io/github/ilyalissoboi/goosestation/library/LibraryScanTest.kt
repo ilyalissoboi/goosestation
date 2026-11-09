@@ -126,6 +126,39 @@ class LibraryScanTest {
         assertNotNull(NativeLibrary.getGameList().singleOrNull { it.path.endsWith("/Game A/Game A.cue") })
     }
 
+    @Test
+    fun sizesAndTypesReachKotlin() {
+        val games = NativeLibrary.getGameList().toList()
+
+        fun game(suffix: String) = games.single { it.path.endsWith(suffix) }
+        val disc = 300L * SECTOR_SIZE
+
+        val exe = game("/GAME C.PSEXE")
+        assertEquals(2048L, exe.fileSize)
+        assertEquals(2048L, exe.uncompressedSize)
+        assertEquals(2, exe.typeOrder)
+
+        // A CUE's size on disk is its BINs', as the core counts it.
+        val gameA = game("/Game A/Game A.cue")
+        assertEquals(0, gameA.typeOrder)
+        assertEquals(disc, gameA.fileSize)
+        // The core counts the image's two-second lead-in too.
+        val raw = gameA.uncompressedSize
+        assertEquals(disc + 150 * SECTOR_SIZE, raw)
+
+        // A playlist is one entry for the core, its sub-images' sizes summed into it.
+        val playlist = game("/Set/Game B.m3u")
+        assertEquals(3, playlist.typeOrder)
+        assertEquals(2 * raw, playlist.uncompressedSize)
+
+        // Two discs grouped by name: their sizes summed, as desktop sums a disc set's.
+        val gameD = games.single { it.title.startsWith("Game D") }
+        assertEquals(games.toString(), 2, gameD.discs.size)
+        assertEquals(0, gameD.typeOrder)
+        assertEquals(2 * disc, gameD.fileSize)
+        assertEquals(2 * raw, gameD.uncompressedSize)
+    }
+
     private fun clearRequests() {
         TestDocumentsProvider.opened.clear()
         TestDocumentsProvider.listed.clear()
@@ -156,6 +189,11 @@ class LibraryScanTest {
                 "Set/Game B (Disc 2) (Track 1).bin" to bin(),
                 "notes.txt" to "Not a game.\n".toByteArray(),
                 "GAME C.PSEXE" to psExe(),
+                // In the tree's root, so the folders listed don't change.
+                "Game D (Disc 1).cue" to cue("Game D (Disc 1) (Track 1).bin"),
+                "Game D (Disc 1) (Track 1).bin" to bin(),
+                "Game D (Disc 2).cue" to cue("Game D (Disc 2) (Track 1).bin"),
+                "Game D (Disc 2) (Track 1).bin" to bin(),
             )
     }
 }

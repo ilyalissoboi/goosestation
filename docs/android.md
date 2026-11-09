@@ -333,12 +333,38 @@ system folder picker is the exception, and may need touch (each step says so). I
     (a leftover is cleaned up as any `.goosetmp` is). A folder where no file can be created gets "GooseStation can't
     create files in this folder. Pick another."
 
-Finish starts the core and shows the **library**: a grid of covers by default, or a list (the **List** and **Grid**
-button switches, and the choice is saved as `[UI] GameListGridView` in `settings.ini`). **Settings** opens the
-settings (see "Changing settings"), and **Refresh** scans the games folders again. The library also refreshes when
-the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves it. The tile for the
-last game played is focused when the library comes back. A tile shows the game's cover from `covers/` in the data
-folder, or its title when there's none; a list row shows the title, region, serial and play time.
+Finish starts the core and shows the **library**: a grid of covers by default, or a list. Its top bar has the goose
+and "Library", a **search field**, the sync badge while sync is on, then icon buttons: **Sort**, **Order**, the
+**view** (a bulleted list in grid mode, which switches to the list, and the grid in list mode; the choice is saved as
+`[UI] GameListGridView` in `settings.ini`), **Refresh** (scans the games folders again) and **Settings** (see
+"Changing settings"). The focused button shows its name and value under it ("Sort: Title", "Order: A to Z"), as a long
+press does by touch; screen readers hear the same. When the bar has no room for the field beside the buttons (the
+Thor at text 1.3×, a sync badge, a phone in portrait), the field goes on its own row under them. The library also
+refreshes when the app comes back to the foreground. A, Enter or a tap starts the selected game; Back leaves it. The
+tile for the last game played is focused when the library comes back. A tile shows the game's cover from `covers/` in
+the data folder, or its title when there's none; a list row shows the title, region, serial and play time. The line
+under the bar says how many games there are and the sort ("48 games · Title, A–Z"), and while searching how many
+match ("2 of 48 games · Title, A–Z"). The button hints at the foot follow the focus.
+
+**Sort** opens its list under the button, in the screen itself: Title, Last played, Time played, Serial, File title
+and File size, the current one marked. A picks, and B, Back or a tap outside close it; either way the focus goes back to
+Sort, and the game last focused stays in view. **Order** reverses the sort. The library keeps both in Big Picture's own
+keys, `[Main] FullscreenUIGameSort` and `FullscreenUIGameSortReverse`, and orders exactly as Big Picture does, so a
+data folder shared with desktop sorts alike in both: Title, Serial and File title A to Z, Time played and File size
+least first, Last played most recent first, each the other way reversed; ties go by title, reversed with the rest;
+titles fold ASCII case only, as `strcasecmp` does, and File title compares only up to the shorter name. The keys are
+written only once the sort changes, so until then Android sorts by Title, where Big Picture's own default is Type. A
+sort set on desktop that Android doesn't offer (Type, Uncompressed size) is applied as there and shown by its name.
+File title is the file's name without its extension, from a `content://` path's document; a multi-disc game's sizes
+are its files' summed (a playlist's are its own entry's, its sub-images summed by the core).
+
+**Search** narrows the grid or list as you type, to games whose title, file name (or a disc's) or serial (or a disc's)
+holds the text anywhere, ignoring case, the match marked in the title and the list's serial. Select jumps to the field
+and opens the keyboard from anywhere in the library; A on the field opens it too, and Down goes to the first match. B
+closes the keyboard first, then clears the search, as the ✕ in the field does by touch; with no search, B and Back do
+what they did. With nothing matching, the library says so ("No games match “zelda”.") with **Clear search**, which
+takes the focus once the keyboard closes (or on Down from the field), never while you're typing. The search clears
+when a game starts, so the library comes back whole; the sort is kept.
 
 The library lists what the core's game list finds in the games folders, as on desktop: disc images (CUE/BIN, CHD,
 ISO and the rest), M3U playlists, and PS-X EXE files. Disc images in the same folder as a CUE resolve by name, with
@@ -1780,6 +1806,24 @@ tests in `GameCallsTest` and `AchievementsOfflineTest` (instrumented); `AndroidD
 Hardcore mode isn't checkable here without the RetroAchievements fake's padtest disc set:
 `AchievementsOfflineTest.undoIsRefusedInHardcore` and `turningHardcoreOnDropsTheUndoState` cover the native side, and
 `InGameMenuTest` and `SavesPageTest` the app's.
+
+### Library sort and search (2026-11-09)
+
+On `goose-test-1` and `goose-test-2` (emulator-5580 and 5582), by the tests alone: `LibrarySortTest`,
+`LibrarySearchTest`, `GameFilesTest`, `LibraryPrefsTest` and `LibraryTopBarLayoutTest` (JVM); `LibraryScreenTest`,
+`IconActionButtonTest`, `SearchFieldTest`, `FocusAuditTest`, `OrientationLayoutTest` and `LibraryScanTest`
+(instrumented). The full tier passed, 1196 of 1196, at the branch's last code commit.
+
+| Check | Result |
+|---|---|
+| Big Picture's order | Pass. Each sort both ways, ties by title reversed with the rest, ASCII-only case folding ("Ébc" before "éab"), File title only up to the shorter name, serials as bytes, an unknown `FullscreenUIGameSort` as Title. Names that start one another ("Crash", "Crash 2", "Crasha") make Big Picture's File title comparison inconsistent; the library's merge sort takes it where TimSort threw. |
+| Sizes and types | Pass. A PS-EXE's 2048 bytes and type 2, a CUE's BIN size and its 450 sectors (the lead-in counted), a playlist's type 3 with its two discs summed, two discs grouped by name summed. |
+| A thousand games | Pass. Sorting by any key takes under 8 ms and a search under 4 ms on the JVM (medians); in the library, "game 99" narrows 1000 games to 10, and Down reaches the first. |
+| The top bar | Pass, at 640×360, 800×360, 960×540, 360×800 and 411×891, text 1.0× and 1.3×: one row on the Thor at 1.0× and at 960×540, the field under the buttons at 1.3× on the Thor and in portrait; each button reached and its label clear of the field and the games. |
+| Sort list, search, no match | Pass, the same sizes, grid and list: every choice reached and in view; marked titles laid out; Clear search reached and in view. |
+
+The test emulators' insets leave the library about 200 dp of height at 640×360 with text at 1.3×, so there the games
+get only a sliver under the two-row bar. How much room they get on the Thor itself at 1.3× is still to check.
 
 ## Results on the AYN Thor
 

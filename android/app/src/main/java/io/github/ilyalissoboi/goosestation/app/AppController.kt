@@ -13,6 +13,8 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -29,6 +31,8 @@ import io.github.ilyalissoboi.goosestation.core.Resources
 import io.github.ilyalissoboi.goosestation.input.ControllerInput
 import io.github.ilyalissoboi.goosestation.input.PadKind
 import io.github.ilyalissoboi.goosestation.input.Rumble
+import io.github.ilyalissoboi.goosestation.library.LibraryPrefs
+import io.github.ilyalissoboi.goosestation.library.LibrarySort
 import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
@@ -343,6 +347,13 @@ object AppController : NativeCallbacks {
 
     /** The library shows a cover grid, or else a list: `[UI] GameListGridView`, read once the core runs. */
     var gridView by mutableStateOf(true)
+        private set
+
+    /** What the library's search field holds, kept while the player visits other screens; cleared as a game starts. */
+    val librarySearch = TextFieldState()
+
+    /** The library's sort, in Big Picture's keys ([LibraryPrefs]), read once the core runs. */
+    var librarySort by mutableStateOf(LibrarySort())
         private set
 
     /** The last game started, which the library focuses on coming back to it. */
@@ -696,6 +707,16 @@ object AppController : NativeCallbacks {
         val grid = !gridView
         gridView = grid
         if (coreStarted) scope.launch(coreDispatcher) { NativeLibrary.setBoolSetting(UI, GRID_VIEW, grid) }
+    }
+
+    /**
+     * Sorts the library by [sort], and saves it in settings.ini as Big Picture keeps it; nothing when it's the sort
+     * already, so the keys are only written once the player changes it.
+     */
+    fun sortLibrary(sort: LibrarySort) {
+        if (sort == librarySort) return
+        librarySort = sort
+        if (coreStarted) scope.launch(coreDispatcher) { LibraryPrefs.write(NativeCoreSettings, sort) }
     }
 
     /** Scans the games folders again, unless a scan from here is under way. */
@@ -1130,6 +1151,8 @@ object AppController : NativeCallbacks {
         }
         lastGamePath = game.path
         libraryFocus = null
+        // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
+        librarySearch.clearText()
         runningGame = game
         focusSettings = false
         message = null
@@ -1153,6 +1176,8 @@ object AppController : NativeCallbacks {
         }
         lastGamePath = game.path
         libraryFocus = null
+        // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
+        librarySearch.clearText()
         runningGame = game
         focusSettings = false
         message = null
@@ -1527,7 +1552,7 @@ object AppController : NativeCallbacks {
                         when (step) {
                             StartupStep.ReloadSettings -> {
                                 NativeLibrary.reloadSettings()
-                                readGridView()
+                                readLibraryView()
                                 readCorePaths()
                             }
                             StartupStep.ReadCorePaths -> readCorePaths()
@@ -1572,7 +1597,7 @@ object AppController : NativeCallbacks {
                             SyncSettings.defaultDeviceName(),
                         ).also {
                             if (it) {
-                                readGridView()
+                                readLibraryView()
                                 readCorePaths()
                             }
                         }
@@ -1618,10 +1643,14 @@ object AppController : NativeCallbacks {
         }
     }
 
-    // On coreDispatcher, once the core has read settings.ini.
-    private suspend fun readGridView() {
+    // On coreDispatcher, once the core has read settings.ini: the view and the sort.
+    private suspend fun readLibraryView() {
         val grid = NativeLibrary.getBoolSetting(UI, GRID_VIEW, true)
-        withContext(Dispatchers.Main) { gridView = grid }
+        val sort = LibraryPrefs.read(NativeCoreSettings)
+        withContext(Dispatchers.Main) {
+            gridView = grid
+            librarySort = sort
+        }
     }
 
     /**

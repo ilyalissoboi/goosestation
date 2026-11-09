@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,24 +15,37 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -40,9 +54,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.library.LibrarySort
+import io.github.ilyalissoboi.goosestation.library.SortKey
+import io.github.ilyalissoboi.goosestation.ui.components.ACTION_LABEL
+import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -60,6 +80,9 @@ class LibraryScreenTest {
     private val gameSettings = mutableListOf<GameEntry>()
     private val saves = mutableListOf<GameEntry>()
     private var badgeClicks = 0
+    private var sort by mutableStateOf(LibrarySort())
+    private val sorts = mutableListOf<LibrarySort>()
+    private val outerKeys = mutableListOf<Key>()
 
     @Before
     fun makeGames() {
@@ -87,6 +110,11 @@ class LibraryScreenTest {
 
     private fun entry(n: Int) = games[n - 1]
 
+    private companion object {
+        /** The top bar's buttons, by their labels, in grid mode with the default sort. */
+        val BUTTONS = listOf("Sort: Title", "Order: A to Z", "Show as a list", "Refresh the library", "Settings")
+    }
+
     // Two columns of tiles (150 dp or more each), whatever the device: at most 460 dp, less the padding and insets.
     private fun show(
         games: List<GameEntry> = this.games,
@@ -95,12 +123,23 @@ class LibraryScreenTest {
         focusSettings: Boolean = false,
         onToggleView: () -> Unit = {},
         syncBadge: SyncBadge? = null,
+        sort: LibrarySort = LibrarySort(),
+        search: TextFieldState = TextFieldState(),
+        shownGames: (() -> List<GameEntry>)? = null,
     ) {
+        this.sort = sort
         rule.setContent {
             GooseStationTheme {
-                Box(Modifier.width(460.dp)) {
+                // Sees the keys the screen leaves alone, as the activity would.
+                Box(Modifier.width(460.dp).onKeyEvent { event -> false.also { outerKeys += event.key } }) {
                     LibraryScreen(
-                        games = games,
+                        sort = this@LibraryScreenTest.sort,
+                        onSort = {
+                            sorts += it
+                            this@LibraryScreenTest.sort = it
+                        },
+                        search = search,
+                        games = shownGames?.invoke() ?: games,
                         gridView = gridView(),
                         banners = emptyList(),
                         message = null,
@@ -121,6 +160,9 @@ class LibraryScreenTest {
         }
         rule.waitForIdle()
     }
+
+    private fun focusedHas(text: String) =
+        rule.onAllNodes(isFocused() and hasText(text)).fetchSemanticsNodes().isNotEmpty()
 
     private fun press(key: Key) {
         rule.onRoot().performKeyInput { pressKey(key) }
@@ -316,7 +358,7 @@ class LibraryScreenTest {
     fun theToggleButtonHandsTheFocusToTheGame() {
         var grid by mutableStateOf(true)
         show(gridView = { grid }, focusPath = entry(25).path, onToggleView = { grid = !grid })
-        rule.onNodeWithText("List").requestFocus()
+        rule.onNodeWithContentDescription("Show as a list").requestFocus()
 
         press(Key.Enter)
 
@@ -325,12 +367,430 @@ class LibraryScreenTest {
     }
 
     @Test
-    fun upFromTheFirstRowReachesTheTopBar() {
+    fun upFromTheFirstGameReachesTheSearchThenTheButtons() {
         show()
 
         press(Key.DirectionUp)
+        rule.onNode(hasSetTextAction()).assertIsFocused()
 
-        rule.onNode(isFocused()).assert(hasText("List") or hasText("Settings") or hasText("Refresh"))
+        press(Key.DirectionUp)
+        rule
+            .onNode(isFocused())
+            .assert(BUTTONS.map { hasContentDescription(it) }.reduce { a, b -> a or b })
+    }
+
+    // --- Sorting ---
+
+    private fun openSort(label: String = "Sort: Title") {
+        rule.onNodeWithContentDescription(label).requestFocus()
+        rule.waitForIdle()
+        press(Key.Enter)
+        rule.onNodeWithTag(CHOICE_LIST).assertIsDisplayed()
+    }
+
+    @Test
+    fun sortOpensItsListWithTheCurrentChoiceFocused() {
+        show()
+
+        openSort()
+
+        rule.onNodeWithTag(CHOICE_LIST).assertIsDisplayed()
+        rule.onNode(isFocused()).assert(hasText("Title"))
+    }
+
+    @Test
+    fun pickingASortCallsOnSortAndFocusesSort() {
+        show()
+        openSort()
+
+        press(Key.DirectionDown)
+        press(Key.Enter)
+
+        assertEquals(listOf(LibrarySort(SortKey.LastPlayed, false)), sorts)
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Sort: Last played").assertIsFocused()
+    }
+
+    @Test
+    fun pickingTheCurrentSortChangesNothing() {
+        show()
+        openSort()
+
+        press(Key.Enter)
+
+        assertEquals(emptyList<LibrarySort>(), sorts)
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Sort: Title").assertIsFocused()
+    }
+
+    @Test
+    fun bClosesTheSortListAndKeepsTheSearch() {
+        val search = TextFieldState("game")
+        show(search = search)
+        openSort()
+
+        press(Key.ButtonB)
+
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Sort: Title").assertIsFocused()
+        rule.runOnIdle { assertEquals("game", search.text.toString()) }
+        assertEquals(emptyList<LibrarySort>(), sorts)
+    }
+
+    @Test
+    fun aTapOutsideClosesTheSortList() {
+        show()
+        openSort()
+
+        rule.onNodeWithText("Game 03").performClick()
+
+        rule.onNodeWithTag(CHOICE_LIST).assertDoesNotExist()
+        assertEquals(emptyList<GameEntry>(), started)
+    }
+
+    @Test
+    fun theSortListIsInTheScreen() {
+        show()
+        openSort()
+
+        rule.onAllNodes(isRoot()).assertCountEquals(1)
+    }
+
+    @Test
+    fun aDesktopOnlySortShowsByName() {
+        show(sort = LibrarySort(SortKey.Type))
+
+        rule.onNodeWithContentDescription("Order: Discs first").assertExists()
+        openSort("Sort: Type")
+
+        // Last, after the six the library offers, and current.
+        rule.onNode(isFocused()).assert(hasText("Type"))
+        press(Key.DirectionUp)
+        rule.onNode(isFocused()).assert(hasText("File size"))
+    }
+
+    @Test
+    fun orderReverses() {
+        show()
+        rule.onNodeWithContentDescription("Order: A to Z").requestFocus()
+        rule.waitForIdle()
+
+        press(Key.Enter)
+
+        assertEquals(listOf(LibrarySort(SortKey.Title, true)), sorts)
+        rule.onNodeWithContentDescription("Order: Z to A").assertIsFocused()
+    }
+
+    @Test
+    fun theGamesFollowTheSort() {
+        show(games = games.map { it.copy(lastPlayedSeconds = it.title.takeLast(2).toLong()) })
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
+
+        rule.runOnIdle { sort = LibrarySort(SortKey.LastPlayed) }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("30 games · Last played, most recent first").assertExists()
+        rule.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        rule.onAllNodes(hasText("Game ", substring = true))[0].assert(hasText("Game 30"))
+    }
+
+    @Test
+    fun afterASortTheLastFocusedGameIsInView() {
+        show(
+            games = games.map { if (it.title == "Game 25") it.copy(totalPlayedSeconds = 3_600) else it },
+            focusPath = entry(25).path,
+        )
+        rule.onNodeWithText("Game 25").assertIsFocused()
+
+        openSort()
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.Enter)
+
+        assertEquals(listOf(LibrarySort(SortKey.TimePlayed, false)), sorts)
+        rule.onNodeWithContentDescription("Sort: Time played").assertIsFocused()
+        // Played the most, it's last now: the grid has gone to it.
+        rule.onNodeWithText("Game 25").assertIsDisplayed()
+    }
+
+    @Test
+    fun aSortKeepsInViewAGameThatWasntTheFirstShown() {
+        show(games = games.map { if (it.title == "Game 01") it.copy(totalPlayedSeconds = 3_600) else it })
+        // Game 02, beside the first game shown, Game 01.
+        press(Key.DirectionRight)
+        rule.onNodeWithText("Game 02").assertIsFocused()
+
+        // Time played sends Game 01, which the grid follows, to the end; Game 02 moves up to Game 01's place.
+        openSort()
+        press(Key.DirectionDown)
+        press(Key.DirectionDown)
+        press(Key.Enter)
+
+        rule.onNodeWithText("Game 02").assertIsDisplayed()
+    }
+
+    // --- Searching ---
+
+    private fun field() = rule.onNode(hasSetTextAction())
+
+    private fun type(text: String) {
+        field().performTextInput(text)
+        rule.waitForIdle()
+    }
+
+    private fun hint(
+        glyph: String,
+        action: String,
+    ) = rule.onNodeWithContentDescription("$glyph: $action")
+
+    @Test
+    fun typingNarrowsTheGames() {
+        show()
+
+        type("game 2")
+
+        rule.onNodeWithText("10 of 30 games · Title, A–Z").assertExists()
+        rule.onNodeWithText("Game 20").assertExists()
+        rule.onNodeWithText("Game 02").assertDoesNotExist()
+        rule.onNodeWithText("Game 19").assertDoesNotExist()
+    }
+
+    @Test
+    fun aMatchIsMarked() {
+        show(gridView = { false })
+
+        type("e 2")
+
+        val title =
+            rule
+                .onNodeWithText("Game 20")
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.Text]
+                .single { it.text == "Game 20" }
+        assertEquals(listOf(3 until 6), title.spanStyles.map { it.start until it.end })
+    }
+
+    @Test
+    fun selectJumpsToTheSearch() {
+        show()
+        rule.onNodeWithText("Game 01").assertIsFocused()
+
+        press(Key.ButtonSelect)
+
+        field().assertIsFocused()
+    }
+
+    @Test
+    fun downFromTheFieldGoesToTheFirstMatch() {
+        show()
+        type("game 2")
+
+        press(Key.DirectionDown)
+
+        rule.onNodeWithText("Game 20").assertIsFocused()
+    }
+
+    @Test
+    fun bClearsTheSearchAndKeepsTheGame() {
+        show()
+        type("game 2")
+        press(Key.DirectionDown)
+
+        press(Key.ButtonB)
+
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
+        rule.onNodeWithText("Game 20").assertIsFocused().assertIsDisplayed()
+        assertFalse(outerKeys.contains(Key.ButtonB))
+    }
+
+    @Test
+    fun bWithoutASearchIsLeftAlone() {
+        show()
+
+        press(Key.ButtonB)
+
+        assertTrue(outerKeys.contains(Key.ButtonB))
+    }
+
+    @Test
+    fun spacesAloneAreNoSearch() {
+        show()
+
+        type("   ")
+
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
+        press(Key.ButtonB)
+        assertTrue(outerKeys.contains(Key.ButtonB))
+    }
+
+    @Test
+    fun noMatchSaysSoAndWaitsForTheKeyboard() {
+        show()
+        type("zelda")
+
+        rule.onNodeWithText("No games match “zelda”.").assertExists()
+        field().assertIsFocused()
+
+        field().performImeAction()
+        rule.waitForIdle()
+        rule.onNodeWithText("Clear search").assertIsFocused()
+
+        press(Key.Enter)
+        assertEquals("", field().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        field().assertIsFocused()
+    }
+
+    @Test
+    fun bOnClearSearchClearsAndFocusesTheField() {
+        show()
+        type("zelda")
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Clear search").assertIsFocused()
+
+        press(Key.ButtonB)
+
+        rule.onNodeWithText("30 games · Title, A–Z").assertExists()
+        field().assertIsFocused()
+    }
+
+    @Test
+    fun searchingAnEmptyLibraryKeepsTheField() {
+        show(games = emptyList())
+        type("zelda")
+        assertEquals("zelda", field().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        field().assertIsFocused()
+
+        // No games, so no Clear search to go to: the field keeps the focus, and nothing asks for a button that isn't
+        // there (Compose prints "FocusRequester is not initialized" for it, or throws in other versions).
+        val printed = java.io.ByteArrayOutputStream()
+        val out = System.out
+        System.setOut(java.io.PrintStream(printed, true))
+        try {
+            press(Key.DirectionDown)
+            field().performImeAction()
+            rule.waitForIdle()
+        } finally {
+            System.setOut(out)
+        }
+
+        field().assertIsFocused()
+        assertFalse(printed.toString(), printed.toString().contains("FocusRequester is not initialized"))
+    }
+
+    @Test
+    fun downOnNoMatchGoesToClearSearch() {
+        show()
+        type("zelda")
+
+        press(Key.DirectionDown)
+
+        rule.onNodeWithText("Clear search").assertIsFocused()
+    }
+
+    @Test
+    fun theFooterFollowsTheFocus() {
+        show()
+        // On a game.
+        hint(PadGlyphs.confirm, "Play").assertExists()
+        hint(PadGlyphs.action, "Saves").assertExists()
+        hint(PadGlyphs.options, "Game settings").assertExists()
+        hint(PadGlyphs.select, "Search").assertExists()
+        hint(PadGlyphs.back, "Clear search").assertDoesNotExist()
+
+        // On the field, with a search.
+        type("game")
+        hint(PadGlyphs.confirm, "Type").assertExists()
+        hint(PadGlyphs.back, "Clear search").assertExists()
+        hint(PadGlyphs.confirm, "Play").assertDoesNotExist()
+
+        // On a game while searching: Clear search in Search's place.
+        press(Key.DirectionDown)
+        hint(PadGlyphs.confirm, "Play").assertExists()
+        hint(PadGlyphs.back, "Clear search").assertExists()
+        hint(PadGlyphs.select, "Search").assertDoesNotExist()
+        press(Key.ButtonB)
+
+        // On a top-bar button.
+        rule.onNodeWithContentDescription("Sort: Title").requestFocus()
+        rule.waitForIdle()
+        hint(PadGlyphs.confirm, "Choose").assertExists()
+        hint(PadGlyphs.select, "Search").assertExists()
+
+        // With the sort list open.
+        press(Key.Enter)
+        hint(PadGlyphs.confirm, "Choose").assertExists()
+        hint(PadGlyphs.back, "Close").assertExists()
+        hint(PadGlyphs.select, "Search").assertDoesNotExist()
+    }
+
+    @Test
+    fun aNewListWhileSearchingKeepsTheFocusedGame() {
+        var shown by mutableStateOf(games)
+        show(shownGames = { shown })
+        type("game 2")
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Game 20").assertIsFocused()
+
+        rule.runOnIdle {
+            shown =
+                games.map { it.copy() } +
+                games[0].copy(path = "content://test/tree/games/document/game-2a.cue", title = "Game 2A")
+        }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Game 20").assertIsFocused()
+        rule.onNodeWithText("11 of 31 games · Title, A–Z").assertExists()
+    }
+
+    @Test
+    fun aThousandGames() {
+        val many =
+            (1..1000).map { n ->
+                GameEntry(
+                    path = "content://test/tree/games/document/game-$n.cue",
+                    title = "Game %03d".format(n),
+                    serial = "SLUS-%05d".format(n),
+                    region = "NTSC-U",
+                    totalPlayedSeconds = 0,
+                    lastPlayedSeconds = 0,
+                    coverPath = null,
+                )
+            }
+        show(games = many)
+
+        type("game 99")
+
+        // Game 990 to Game 999.
+        rule.onNodeWithText("10 of 1000 games · Title, A–Z").assertExists()
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Game 990").assertIsFocused()
+    }
+
+    // --- The top bar ---
+
+    @Test
+    fun theButtonsAreIconsNamedByTheirLabels() {
+        show()
+
+        for (name in BUTTONS) {
+            rule.onNodeWithContentDescription(name).assertWidthIsEqualTo(48.dp).assertHeightIsEqualTo(48.dp)
+        }
+        rule.onNodeWithContentDescription("Show as a grid").assertDoesNotExist()
+    }
+
+    @Test
+    fun theViewButtonShowsTheGridInListMode() {
+        show(gridView = { false })
+
+        rule.onNodeWithContentDescription("Show as a grid").assertExists()
+        rule.onNodeWithContentDescription("Show as a list").assertDoesNotExist()
+    }
+
+    @Test
+    fun aFocusedButtonShowsItsLabel() {
+        show(focusSettings = true)
+
+        rule.onNodeWithTag(ACTION_LABEL, useUnmergedTree = true).assertTextEquals("Settings")
     }
 
     @Test
@@ -350,14 +810,14 @@ class LibraryScreenTest {
         show(games = emptyList())
 
         rule.onNodeWithText("No games found in your games folders.").assertExists()
-        rule.onNodeWithText("Settings").assertIsFocused()
+        rule.onNodeWithContentDescription("Settings").assertIsFocused()
     }
 
     @Test
     fun comingBackFromTheSettingsFocusesSettings() {
         show(focusPath = entry(25).path, focusSettings = true)
 
-        rule.onNodeWithText("Settings").assertIsFocused()
+        rule.onNodeWithContentDescription("Settings").assertIsFocused()
     }
 
     @Test
@@ -383,8 +843,7 @@ class LibraryScreenTest {
                 }
             }
             LaunchedEffect(Unit) {
-                // List (the view toggle), then Settings.
-                focusManager.moveFocus(FocusDirection.Next)
+                // Sort, first in the bar by place: at this width the buttons are over the search field.
                 focusManager.moveFocus(FocusDirection.Next)
             }
         }
@@ -394,7 +853,7 @@ class LibraryScreenTest {
         rule.waitForIdle()
 
         rule.onNodeWithText("Game 30").assertExists()
-        rule.onNodeWithText("Settings").assertIsFocused()
+        rule.onNodeWithContentDescription("Sort: Title").assertIsFocused()
     }
 
     @Test
@@ -417,9 +876,9 @@ class LibraryScreenTest {
     fun badgeIsFocusableAndOpens() {
         show(syncBadge = SyncBadge.Synced, focusSettings = true)
 
-        // Left of Grid/List, which is left of Settings.
-        press(Key.DirectionLeft)
-        press(Key.DirectionLeft)
+        // Left of the five buttons, Settings the last; or beside the title, over them, on a narrow screen.
+        repeat(5) { if (!focusedHas("Synced")) press(Key.DirectionLeft) }
+        if (!focusedHas("Synced")) press(Key.DirectionUp)
         rule.onNode(isFocused()).assert(hasText("Synced"))
         press(Key.ButtonA)
 

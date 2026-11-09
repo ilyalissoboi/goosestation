@@ -42,6 +42,9 @@ object PadGlyphs {
     /** The button for an item's options, such as a game's own settings: KEYCODE_BUTTON_Y. */
     val options: String = BindingLabels.label("Button100")
 
+    /** The button that jumps to the library's search: KEYCODE_BUTTON_SELECT. */
+    val select: String = BindingLabels.label("Button109")
+
     /** The shoulder buttons that switch a panel's tabs: KEYCODE_BUTTON_L1 and KEYCODE_BUTTON_R1. */
     val previousTab: String = BindingLabels.label("Button102")
     val nextTab: String = BindingLabels.label("Button103")

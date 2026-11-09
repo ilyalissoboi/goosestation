@@ -5,6 +5,8 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
@@ -33,17 +35,21 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.then
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,6 +103,8 @@ import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.input.TouchLayout
+import io.github.ilyalissoboi.goosestation.library.LibrarySort
+import io.github.ilyalissoboi.goosestation.library.SortKey
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
@@ -112,12 +120,15 @@ import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.settings.Shader
 import io.github.ilyalissoboi.goosestation.settings.ShaderKind
+import io.github.ilyalissoboi.goosestation.ui.components.ACTION_LABEL
+import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -442,7 +453,8 @@ class OrientationLayoutTest {
             val text = node.text()
             val results = mutableListOf<TextLayoutResult>()
             node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
-            val layout = results.single()
+            val layout =
+                results.singleOrNull() ?: fail("\"$text\" at ${box.describe()} gives no text layout") as Nothing
             // Not didOverflowWidth: the semantics' layout is at the text's max width, wider than the text itself. A
             // word too wide for its line is broken, which the check below catches. A text ending in an ellipsis, such
             // as a game's title in the list, is cut short on purpose.
@@ -461,10 +473,12 @@ class OrientationLayoutTest {
                 box.left >= screen.left - 0.5.dp && box.right <= screen.right + 0.5.dp,
             )
         }
-        for (i in boxes.indices) {
-            for (j in i + 1 until boxes.size) {
-                val (a, aBox) = boxes[i]
-                val (b, bBox) = boxes[j]
+        // An empty text field draws no text, so its placeholder over it overlaps nothing.
+        val drawn = boxes.filter { (node, _) -> node.text().isNotEmpty() }
+        for (i in drawn.indices) {
+            for (j in i + 1 until drawn.size) {
+                val (a, aBox) = drawn[i]
+                val (b, bBox) = drawn[j]
                 assertTrue(
                     "\"${a.text()}\" ${aBox.describe()} overlaps \"${b.text()}\" ${bBox.describe()}",
                     !aBox.overlaps(bBox),
@@ -478,11 +492,12 @@ class OrientationLayoutTest {
      * part its scrolling containers show. Read from the node, without another fetch.
      */
     private fun SemanticsNode.boxInRoot(clipped: Boolean = false): DpRect {
+        // Not placed (a lazy list's item composed ahead of the scroll): nowhere, so the in-view checks leave it out.
         val rect =
             when {
+                !layoutInfo.isPlaced -> Rect(Float.NaN, Float.NaN, Float.NaN, Float.NaN)
                 clipped -> boundsInRoot
-                layoutInfo.isPlaced -> Rect(positionInRoot, size.toSize())
-                else -> Rect(Float.NaN, Float.NaN, Float.NaN, Float.NaN)
+                else -> Rect(positionInRoot, size.toSize())
             }
         return with(layoutInfo.density) {
             DpRect(rect.left.toDp(), rect.top.toDp(), rect.right.toDp(), rect.bottom.toDp())
@@ -2216,8 +2231,8 @@ class OrientationLayoutTest {
         }) {
             assertTextsLaidOut()
             rule.onNodeWithText("2 conflicts", useUnmergedTree = true).assertIsDisplayed()
-            // Left of Grid, which is left of Settings; on a narrow screen the buttons may wrap under the title.
-            repeat(4) { if (!focusedHas("2 conflicts")) press(Key.DirectionLeft) }
+            // Left of the five buttons, Settings the last; on a narrow screen it may sit beside the title instead.
+            repeat(5) { if (!focusedHas("2 conflicts")) press(Key.DirectionLeft) }
             if (!focusedHas("2 conflicts")) press(Key.DirectionUp)
             assertTrue("didn't reach the badge", focusedHas("2 conflicts"))
             assertFocusedInView(screen())
@@ -2253,22 +2268,150 @@ class OrientationLayoutTest {
                 focusPath = null,
                 focusSettings = true,
             )
-        }) {
+        }) { config ->
             // The list clips a row it shows only in part, which may meet the button hints under it.
             assertTextsLaidOut(inView = true)
-            for (text in listOf("Library", "Grid", "Settings", "Refresh", "Game settings")) {
+            // Settings has the focus, so the hints are a button's.
+            for (text in listOf("Library", "Choose")) {
                 rule.onNodeWithText(text, useUnmergedTree = true).assertIsDisplayed()
             }
-            assertTrue(focusedHas("Settings"))
+            assertTrue(focusedDescribedAs("Settings"))
             val screen = screen()
             assertFocusedInView(screen)
+            assertTheLabelCoversNothing()
+            for (name in listOf("Refresh the library", "Show as a grid", "Order: A to Z", "Sort: Title")) {
+                press(Key.DirectionLeft)
+                assertTrue("Left didn't reach $name", focusedDescribedAs(name))
+                assertFocusedInView(screen)
+                assertTextsLaidOut(inView = true)
+                assertTheLabelCoversNothing()
+            }
+            val sort = bounds(rule.onNodeWithContentDescription("Sort: Title"))
+            val field = bounds(rule.onNode(hasSetTextAction()))
+            // One row on the Thor at text 1.0× (640 dp) and wider; the field under the buttons at 1.3× there.
+            val wide = config.size.width >= 640.dp && config.fontScale == 1f
+            val narrow = config.size.width < 640.dp || (config.size.width == 640.dp && config.fontScale > 1f)
+            if (wide) assertTrue("the field ${field.describe()} isn't beside Sort", field.top < sort.bottom)
+            if (narrow) assertTrue("the field ${field.describe()} isn't under Sort", field.top >= sort.bottom)
+            // Beside the buttons, Left reaches it; under them, Down.
             press(Key.DirectionLeft)
-            assertTrue("Left didn't reach Grid", focusedHas("Grid"))
-            press(Key.DirectionRight)
-            press(Key.DirectionRight)
-            if (!focusedHas("Refresh")) press(Key.DirectionDown)
-            assertTrue("Refresh can't be reached", focusedHas("Refresh"))
+            if (!focusedIsTheField()) press(Key.DirectionDown)
+            assertTrue("the search field can't be reached", focusedIsTheField())
             assertFocusedInView(screen)
         }
+    }
+
+    @Test
+    fun theLibrarysSortList() {
+        val games =
+            (1..12).map { number ->
+                GameEntry(
+                    "content://test/tree/games/document/game-$number.cue",
+                    "Game $number",
+                    "",
+                    "NTSC-U",
+                    0,
+                    0,
+                    null,
+                )
+            }
+        eachConfig({
+            LibraryScreen(
+                games = games,
+                gridView = true,
+                banners = emptyList(),
+                message = null,
+                isError = false,
+                onToggleView = {},
+                onOpenSettings = {},
+                onRefresh = {},
+                onStartGame = {},
+                focusPath = null,
+                focusSettings = true,
+                sort = LibrarySort(SortKey.UncompressedSize),
+            )
+        }) {
+            rule.onNodeWithContentDescription("Sort: Uncompressed size").requestFocus()
+            rule.waitForIdle()
+            press(Key.Enter)
+            val screen = screen()
+            val list = bounds(rule.onNodeWithTag(CHOICE_LIST))
+            assertTrue(
+                "the list ${list.describe()} isn't across the screen ${screen.describe()}",
+                list.left >= screen.left,
+            )
+            assertTrue("the list ${list.describe()} goes past the screen", list.right <= screen.right + 0.5.dp)
+            // From the current choice, the last, up to the first: each in view as the list scrolls.
+            assertTrue(focusedHas("Uncompressed size"))
+            assertFocusedInView(screen)
+            for (choice in listOf("File size", "File title", "Serial", "Time played", "Last played", "Title")) {
+                press(Key.DirectionUp)
+                assertTrue("Up didn't reach $choice", focusedHas(choice))
+                assertFocusedInView(screen)
+            }
+            press(Key.ButtonB)
+            assertTrue(focusedDescribedAs("Sort: Uncompressed size"))
+        }
+    }
+
+    @Test
+    fun theLibraryWhileSearching() {
+        val games = (1..6).map { LONG_GAME.copy(path = "content://test/tree/games/document/long-$it.cue") }
+        val search = TextFieldState()
+        val grid = mutableStateOf(true)
+        eachConfig({
+            LibraryScreen(
+                games = games,
+                gridView = grid.value,
+                banners = emptyList(),
+                message = null,
+                isError = false,
+                onToggleView = {},
+                onOpenSettings = {},
+                onRefresh = {},
+                onStartGame = {},
+                focusPath = null,
+                search = search,
+            )
+        }) {
+            for (gridView in listOf(true, false)) {
+                grid.value = gridView
+                // A match marked in each long title.
+                rule.runOnIdle { search.setTextAndPlaceCursorAtEnd("Long-Named") }
+                rule.waitForIdle()
+                assertTextsLaidOut(inView = true)
+                rule.onNodeWithText("6 of 6 games · Title, A–Z", useUnmergedTree = true).assertIsDisplayed()
+
+                rule.runOnIdle { search.setTextAndPlaceCursorAtEnd("a game no one has, by a name that goes on") }
+                rule.waitForIdle()
+                assertTextsLaidOut(inView = true)
+                // Focused as the D-pad would, not by Select: an emulator's own keyboard would take the Down.
+                rule.onNode(hasSetTextAction()).requestFocus()
+                rule.waitForIdle()
+                press(Key.DirectionDown)
+                assertTrue("Down from the field didn't reach Clear search", focusedHas("Clear search"))
+                assertFocusedInView(screen())
+                press(Key.Enter)
+                assertTrue(focusedIsTheField())
+            }
+        }
+    }
+
+    private fun focusedIsTheField() =
+        rule.onAllNodes(isFocused() and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
+
+    /** The focused button's label, if one shows, clear of the search field and of the first game. */
+    private fun assertTheLabelCoversNothing() {
+        val labels = rule.onAllNodesWithTag(ACTION_LABEL, useUnmergedTree = true).fetchSemanticsNodes()
+        val label = labels.singleOrNull()?.boxInRoot() ?: return
+        val field = bounds(rule.onNode(hasSetTextAction()))
+        val game =
+            rule
+                .onAllNodesWithText("Game 1", useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .first()
+                .boxInRoot()
+        assertFalse("the label ${label.describe()} covers the field ${field.describe()}", label.overlaps(field))
+        assertFalse("the label ${label.describe()} covers the first game ${game.describe()}", label.overlaps(game))
     }
 }

@@ -1,0 +1,171 @@
+<style>
+  .gs { font: 14px "Atkinson Hyperlegible", -apple-system, sans-serif; color: #f3f1ec; background: #0e1116; width: 960px; height: 540px; border-radius: 6px; position: relative; overflow: hidden; margin: 8px 0 26px; }
+  .top { position: absolute; left: 32px; right: 32px; top: 16px; height: 48px; display: flex; align-items: center; gap: 8px; }
+  .h1 { font: 600 28px "Chakra Petch", sans-serif; margin-right: 18px; display:flex; align-items:center; gap: 10px; }
+  .logo { width: 22px; height: 28px; background: linear-gradient(90deg,#f3f1ec 60%,#ff7a1a 60%); border-radius: 3px; }
+  .ib { position: relative; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 8px; background: #1f242d; border: 1px solid #2c323d; box-sizing: border-box; flex: none; }
+  .ib svg { width: 24px; height: 24px; }
+  .ib.f { outline: 2px solid #ff7a1a; outline-offset: 2px; }
+  .tip { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: #1f242d; border: 1px solid #2c323d; border-radius: 6px; padding: 4px 10px; font-size: 13px; white-space: nowrap; color: #f3f1ec; z-index: 3; }
+  .field { flex: 1; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 6px; background: #0a0c10; border: 1.5px solid #6a7383; color: #a7aebb; box-sizing: border-box; }
+  .field svg { width: 20px; height: 20px; flex: none; }
+  .field.f { outline: 2px solid #ff7a1a; outline-offset: 2px; color: #f3f1ec; }
+  .caret { width: 1.5px; height: 18px; background: #ff7a1a; }
+  .badge { height: 32px; display:inline-flex; align-items:center; gap:6px; padding: 0 10px; border-radius: 16px; background:#14261d; color:#6fd39a; font-size:13px; font-weight:600; flex:none; }
+  .sub { position: absolute; left: 32px; top: 76px; font-size: 13px; color: #a7aebb; }
+  .grid { position: absolute; left: 32px; right: 32px; top: 104px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px 16px; }
+  .tile .cov { height: 150px; background: #0a0c10; border-radius: 4px; display:grid; place-items:center; color:#6b7381; font: 600 15px "Chakra Petch",sans-serif; text-align:center; padding: 0 8px; }
+  .tile.f .cov { outline: 2px solid #ff7a1a; outline-offset: 2px; }
+  .tile b { display:block; font-size: 14px; margin-top: 8px; } .tile span { font-size: 12px; color:#a7aebb; }
+  mark { background: #3a2312; color: #ffb27a; border-radius: 2px; padding: 0 1px; }
+  .foot { position: absolute; left: 32px; bottom: 14px; display:flex; gap: 18px; font-size: 13px; color:#a7aebb; }
+  .chip { display:inline-grid; place-items:center; min-width:20px; height:20px; padding:0 4px; border:1.5px solid #6a7383; border-radius:4px; font: 700 11px sans-serif; color:#f3f1ec; margin-right:6px; }
+  .list { position: absolute; top: 72px; width: 230px; background: #0a0c10; border: 1.5px solid #6a7383; border-radius: 8px; padding: 4px; z-index: 2; }
+  .list div { height: 44px; display:flex; align-items:center; padding: 0 12px; border-radius: 6px; font-size: 14px; }
+  .list .cur { background: #3a2312; color: #ffb27a; } .list .fo { outline: 2px solid #ff7a1a; }
+  .icons { display:flex; gap: 20px; flex-wrap: wrap; margin: 6px 0 20px; } .icons div { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:12px; color:#888; }
+  .icons .ib { background:#f3f1ec; border-color:#ddd; }
+
+  .rows { position:absolute; left:32px; right:32px; top:104px; }
+  .row { height: 64px; display:flex; align-items:center; gap: 14px; padding: 0 12px; border-radius: 8px; }
+  .row.f { outline: 2px solid #ff7a1a; outline-offset: 2px; background:#1f242d; }
+  .thumb { width: 48px; height: 48px; background:#0a0c10; border-radius: 4px; flex:none; display:grid; place-items:center; color:#6b7381; font-size:10px; }
+  .row b { font-size: 15px; display:block; } .row span { font-size: 13px; color:#a7aebb; }
+  .mono { font-family: "Atkinson Hyperlegible Mono", ui-monospace, monospace; }
+</style>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><polygon points="16.51,12.99 12.99,16.51 8.01,16.51 4.49,12.99 4.49,8.01 8.01,4.49 12.99,4.49 16.51,8.01"/><path d="M15.5 15.5 20 20"/></g></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square"><path d="M4 6H20M4 12H15M4 18H10"/></g></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 20V5M7 10 12 5 17 10"/></g></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square"><path d="M10 6H20M10 12H20M10 18H20"/></g><g fill="#f3f1ec"><rect x="3" y="5" width="3" height="3"/><rect x="3" y="11" width="3" height="3"/><rect x="3" y="17" width="3" height="3"/></g></symbol><symbol id="i-grid" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></g></symbol><symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M19 12A7 7 0 1 1 16.5 6.6"/><path d="M15 3 19 6 15 9"/></g></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square"><path d="M4 7H13M17 7H20M4 17H6M10 17H20"/><rect x="13" y="5" width="4" height="4"/><rect x="6" y="15" width="4" height="4"/></g></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><g fill="none" stroke="#f3f1ec" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="M20 8H5M9 4 5 8 9 12M4 16H19M15 12 19 16 15 20"/></g></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><g fill="none" stroke="#a7aebb" stroke-width="2" stroke-linecap="square"><path d="M6 6 18 18M18 6 6 18"/></g></symbol>
+</defs></svg>
+
+<h2>v3: bulleted-list icon, a distinct Refresh, and list mode</h2>
+<p class="subtitle">In grid mode the view button shows the bulleted list (it switches to the list); in list mode it shows the grid. Refresh is a single circular arrow, unlike the sync badge's two arrows. Sort, order, List/Grid, Settings and Refresh become 48 dp icon buttons (the smallest touch target), from the design system's icons; two new icons (sort, order) in the same style. The focused button shows its name and current value in a label under it, and screen readers say the same. The current sort is also on the count line under the bar, so it's always visible.</p>
+
+<h3>1. At rest, Sort focused (its label shows what it does)</h3>
+<div class="gs">
+  <div class="top">
+    <div class="h1"><div class="logo"></div>Library</div>
+    <div class="field"><svg><use href="#i-search"/></svg>Search your games</div>
+    <span class="ib f"><svg><use href="#i-sort"/></svg><span class="tip">Sort: Title</span></span>
+    <span class="ib"><svg><use href="#i-up"/></svg></span>
+    <span class="ib"><svg><use href="#i-list"/></svg></span>
+    <span class="ib"><svg><use href="#i-refresh"/></svg></span>
+    <span class="ib"><svg><use href="#i-settings"/></svg></span>
+  </div>
+  <div class="sub">48 games · Title, A–Z</div>
+  <div class="grid">
+    <div class="tile"><div class="cov">Ace Combat 3</div><b>Ace Combat 3 Electrosphere</b><span>NTSC-J · 12h 4m</span></div>
+    <div class="tile"><div class="cov">Ape Escape</div><b>Ape Escape</b><span>NTSC-U · Never played</span></div>
+    <div class="tile"><div class="cov">Crash Bandicoot</div><b>Crash Bandicoot</b><span>NTSC-U · 3h 12m</span></div>
+    <div class="tile"><div class="cov">Crash Team Racing</div><b>Crash Team Racing</b><span>NTSC-U · 45m</span></div>
+    <div class="tile"><div class="cov">Final Fantasy VII</div><b>Final Fantasy VII</b><span>NTSC-U · 41h 2m</span></div>
+  </div>
+  <div class="foot"><span><span class="chip">A</span>Choose</span><span><span class="chip">SELECT</span>Search</span></div>
+</div>
+
+<h3>2. With sync on: the badge keeps its word, the buttons stay icons</h3>
+<div class="gs" style="height:140px">
+  <div class="top">
+    <div class="h1"><div class="logo"></div>Library</div>
+    <div class="field"><svg><use href="#i-search"/></svg>Search your games</div>
+    <span class="badge">✓ Synced</span>
+    <span class="ib"><svg><use href="#i-sort"/></svg></span>
+    <span class="ib"><svg><use href="#i-up"/></svg></span>
+    <span class="ib"><svg><use href="#i-list"/></svg></span>
+    <span class="ib f"><svg><use href="#i-refresh"/></svg><span class="tip">Refresh the library</span></span>
+    <span class="ib"><svg><use href="#i-settings"/></svg></span>
+  </div>
+</div>
+
+<h3>3. Sort open</h3>
+<div class="gs">
+  <div class="top">
+    <div class="h1"><div class="logo"></div>Library</div>
+    <div class="field"><svg><use href="#i-search"/></svg>Search your games</div>
+    <span class="ib f"><svg><use href="#i-sort"/></svg></span>
+    <span class="ib"><svg><use href="#i-up"/></svg></span>
+    <span class="ib"><svg><use href="#i-list"/></svg></span>
+    <span class="ib"><svg><use href="#i-refresh"/></svg></span>
+    <span class="ib"><svg><use href="#i-settings"/></svg></span>
+  </div>
+  <div class="list" style="left:600px">
+    <div class="cur">✓&nbsp; Title</div><div class="fo">Last played</div><div>Time played</div><div>Region</div><div>Serial</div><div>File title</div><div>File size</div>
+  </div>
+  <div class="sub">48 games · Title, A–Z</div>
+  <div class="foot"><span><span class="chip">A</span>Choose</span><span><span class="chip">B</span>Close</span></div>
+</div>
+
+<h3>4. Searching</h3>
+<div class="gs">
+  <div class="top">
+    <div class="h1"><div class="logo"></div>Library</div>
+    <div class="field f"><svg><use href="#i-search"/></svg>crash<span class="caret"></span><svg style="margin-left:auto"><use href="#i-close"/></svg></div>
+    <span class="ib"><svg><use href="#i-sort"/></svg></span>
+    <span class="ib"><svg><use href="#i-up"/></svg></span>
+    <span class="ib"><svg><use href="#i-list"/></svg></span>
+    <span class="ib"><svg><use href="#i-refresh"/></svg></span>
+    <span class="ib"><svg><use href="#i-settings"/></svg></span>
+  </div>
+  <div class="sub">2 of 48 games · Title, A–Z</div>
+  <div class="grid">
+    <div class="tile f"><div class="cov">Crash Bandicoot</div><b><mark>Crash</mark> Bandicoot</b><span>NTSC-U · 3h 12m</span></div>
+    <div class="tile"><div class="cov">Crash Team Racing</div><b><mark>Crash</mark> Team Racing</b><span>NTSC-U · 45m</span></div>
+  </div>
+  <div class="foot"><span><span class="chip">A</span>Play</span><span><span class="chip">B</span>Clear search</span></div>
+</div>
+
+
+<h3>5. List mode (the view button now shows the grid icon)</h3>
+<div class="gs">
+  <div class="top">
+    <div class="h1"><div class="logo"></div>Library</div>
+    <div class="field"><svg><use href="#i-search"/></svg>Search your games</div>
+    <span class="ib"><svg><use href="#i-sort"/></svg></span>
+    <span class="ib"><svg><use href="#i-up"/></svg></span>
+    <span class="ib"><svg><use href="#i-grid"/></svg></span>
+    <span class="ib"><svg><use href="#i-refresh"/></svg></span>
+    <span class="ib"><svg><use href="#i-settings"/></svg></span>
+  </div>
+  <div class="sub">48 games · Last played, most recent first</div>
+  <div class="rows">
+    <div class="row f"><div class="thumb">cover</div><div><b>Final Fantasy VII</b><span>NTSC-U · <span class="mono">SCUS-94163</span> · 41h 2m</span></div></div>
+    <div class="row"><div class="thumb">cover</div><div><b>Crash Bandicoot</b><span>NTSC-U · <span class="mono">SCUS-94900</span> · 3h 12m</span></div></div>
+    <div class="row"><div class="thumb">cover</div><div><b>Ace Combat 3 Electrosphere</b><span>NTSC-J · <span class="mono">SLPS-02020</span> · 12h 4m</span></div></div>
+    <div class="row"><div class="thumb">cover</div><div><b>Crash Team Racing</b><span>NTSC-U · <span class="mono">SCUS-94426</span> · 45m</span></div></div>
+    <div class="row"><div class="thumb">cover</div><div><b>Ape Escape</b><span>NTSC-U · <span class="mono">SCUS-94423</span> · Never played</span></div></div>
+  </div>
+  <div class="foot"><span><span class="chip">A</span>Play</span><span><span class="chip">X</span>Saves</span><span><span class="chip">Y</span>Game settings</span><span><span class="chip">SELECT</span>Search</span></div>
+</div>
+
+<h3>6. List mode, searching</h3>
+<div class="gs" style="height:300px">
+  <div class="top">
+    <div class="h1"><div class="logo"></div>Library</div>
+    <div class="field f"><svg><use href="#i-search"/></svg>scus-949<span class="caret"></span><svg style="margin-left:auto"><use href="#i-close"/></svg></div>
+    <span class="ib"><svg><use href="#i-sort"/></svg></span>
+    <span class="ib"><svg><use href="#i-up"/></svg></span>
+    <span class="ib"><svg><use href="#i-grid"/></svg></span>
+    <span class="ib"><svg><use href="#i-refresh"/></svg></span>
+    <span class="ib"><svg><use href="#i-settings"/></svg></span>
+  </div>
+  <div class="sub">1 of 48 games · Last played, most recent first</div>
+  <div class="rows">
+    <div class="row"><div class="thumb">cover</div><div><b>Crash Bandicoot</b><span>NTSC-U · <span class="mono"><mark>SCUS-949</mark>00</span> · 3h 12m</span></div></div>
+  </div>
+</div>
+
+<h3>The icons</h3>
+<div class="icons">
+  <div><span class="ib" style="background:#1f242d"><svg><use href="#i-search"/></svg></span>search</div>
+  <div><span class="ib" style="background:#1f242d"><svg><use href="#i-sort"/></svg></span>sort (new)</div>
+  <div><span class="ib" style="background:#1f242d"><svg><use href="#i-up"/></svg></span>order (new; flips for descending)</div>
+  <div><span class="ib" style="background:#1f242d"><svg><use href="#i-list"/></svg></span>list view (new, in grid mode)</div><div><span class="ib" style="background:#1f242d"><svg><use href="#i-grid"/></svg></span>grid view (in list mode)</div>
+  <div><span class="ib" style="background:#1f242d"><svg><use href="#i-refresh"/></svg></span>refresh (new)</div>
+  <div><span class="ib" style="background:#1f242d"><svg><use href="#i-settings"/></svg></span>settings</div>
+</div>

@@ -8,7 +8,6 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.util.Log
-import java.net.URLDecoder
 
 /** A folder picked to be the data folder, looked at: what it holds, or why it can't be the data folder. */
 sealed interface DataFolderInspection {
@@ -146,8 +145,7 @@ object DataFolderCheck {
         if (authorityEnd < 0 || !treeUri.startsWith(TREE, authorityEnd)) return null
         val encoded = treeUri.substring(authorityEnd + TREE.length).substringBefore('/')
         if (encoded.isEmpty()) return null
-        // Uri.encode() leaves no '+' unescaped, so one here is itself, not a space.
-        val documentId = runCatching { URLDecoder.decode(encoded.replace("+", "%2B"), "UTF-8") }.getOrNull()
+        val documentId = decodeDocumentId(encoded)
         return documentId?.let { treeUri.substring(scheme.length, authorityEnd) to it }
     }
 }

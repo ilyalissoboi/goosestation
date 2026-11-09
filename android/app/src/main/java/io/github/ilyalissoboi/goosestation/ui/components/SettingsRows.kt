@@ -756,7 +756,7 @@ fun TextFieldRow(
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun DockedKeyboard(content: @Composable () -> Unit) {
+internal fun DockedKeyboard(content: @Composable () -> Unit) {
     InterceptPlatformTextInput(
         interceptor = { request, next ->
             next.startInputMethod(

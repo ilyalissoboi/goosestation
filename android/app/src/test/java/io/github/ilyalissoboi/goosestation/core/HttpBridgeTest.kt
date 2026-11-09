@@ -207,6 +207,21 @@ class HttpBridgeTest {
         assertFalse(file.exists())
     }
 
+    // From review: a body held in memory had no cap, so a source serving huge files could run the app out of memory.
+    @Test
+    fun aBodyPastTheCapIsRefused() {
+        serveBytes("/big.jpg", ByteArray(1024 * 1024))
+        serveBytes("/big-chunked.jpg", ByteArray(1024 * 1024), chunked = true)
+        serveBytes("/small.jpg", ByteArray(100_000))
+        for (path in listOf("/big.jpg", "/big-chunked.jpg")) {
+            val result = HttpBridge.run("$base$path", null, "Goose", 5_000, log = {}, maxBytes = 100_000)
+            assertEquals(path, HttpBridge.STATUS_TOO_LARGE, result.status)
+            assertEquals(path, 0, result.body.size)
+        }
+        assertEquals(200, HttpBridge.run("$base/small.jpg", null, "Goose", 5_000, log = {}, maxBytes = 100_000).status)
+        assertEquals(32L * 1024 * 1024, HttpBridge.MAX_BODY_BYTES)
+    }
+
     @Test
     fun aStreamPastTheCapStopsAndDeletesTheFile() {
         serveBytes("/big.zip", ByteArray(1024 * 1024))

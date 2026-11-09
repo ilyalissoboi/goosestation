@@ -25,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import io.github.ilyalissoboi.goosestation.core.NativeCallbacks
+import io.github.ilyalissoboi.goosestation.core.NativeCoverApi
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.core.NativeShaderPackApi
 import io.github.ilyalissoboi.goosestation.core.Resources
@@ -98,6 +99,7 @@ enum class Screen(
     MemoryCards(SettingsEntry.MemoryCards),
     Bios(SettingsEntry.Bios),
     Folders(SettingsEntry.Folders),
+    Covers(SettingsEntry.Covers),
     SyncConflicts,
 
     /** The memory card editor, from the Memory cards page. */
@@ -260,6 +262,15 @@ object AppController : NativeCallbacks {
             listOf(postProcessingPage, gameSettingsPages.postProcessing, gameMenuSettings.postProcessing)
                 .filter { it.chains.isNotEmpty() }
                 .forEach { it.reread() }
+        }
+
+    /**
+     * The Covers page's sources and download: the app's, so a download goes on when the page closes, until a game
+     * starts or the app is hidden. Each cover found goes straight onto its tile.
+     */
+    val covers =
+        Covers(scope, Dispatchers.IO, coreDispatcher, NativeCoverApi, NativeCoreSettings) { gamePath, coverPath ->
+            games = games.map { if (it.path == gamePath) it.copy(coverPath = coverPath) else it }
         }
 
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
@@ -601,6 +612,8 @@ object AppController : NativeCallbacks {
      */
     fun onStop(activity: Activity) {
         if (!isCurrent(activity)) return
+        // A cover download is for the app in front, and stops with what it found; an edit to a source is saved.
+        covers.stop()
         pushTicker?.cancel()
         pushTicker = null
         scope.launch { push(force = true) }
@@ -770,6 +783,7 @@ object AppController : NativeCallbacks {
             SettingsEntry.Controllers -> controllersPage.open()
             SettingsEntry.PostProcessing -> postProcessingPage.open(null, running = false)
             SettingsEntry.Folders -> {}
+            SettingsEntry.Covers -> covers.open()
         }
         screen = Screen.entries.first { it.page == entry }
     }
@@ -781,6 +795,7 @@ object AppController : NativeCallbacks {
         if (page == SettingsEntry.Folders) return closeFolders()
         if (page == SettingsEntry.Controllers) controllersPage.close()
         if (page == SettingsEntry.PostProcessing) postProcessingPage.close()
+        if (page == SettingsEntry.Covers) covers.close()
         // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before this.
         if (page == SettingsEntry.Advanced) scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         settingsEntry = page
@@ -1159,6 +1174,8 @@ object AppController : NativeCallbacks {
         messageIsError = false
         gameActive = true
         holdMemcards = true
+        // A cover download stops for the game, keeping the covers it found.
+        covers.stop()
         screen = Screen.Game
         // It boots once the game screen's surface exists.
         NativeLibrary.startGame(game.path, disc, resume)
@@ -1184,6 +1201,7 @@ object AppController : NativeCallbacks {
         messageIsError = false
         gameActive = true
         holdMemcards = true
+        covers.stop()
         if (screen == Screen.Saves) savesPage.close()
         screen = Screen.Game
         NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared)

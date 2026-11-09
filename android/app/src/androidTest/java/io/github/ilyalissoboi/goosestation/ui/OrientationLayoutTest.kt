@@ -1415,7 +1415,7 @@ class OrientationLayoutTest {
         eachConfig({ SettingsScreen(focusEntry = null, coreReady = true, onOpen = {}, onBack = {}) }) {
             assertTextsLaidOut()
             assertFocusedInView()
-            pressUntilFocused(Key.DirectionDown, "Folders")
+            pressUntilFocused(Key.DirectionDown, "Covers")
             pressUntilFocused(Key.DirectionUp, "Controllers")
         }
     }

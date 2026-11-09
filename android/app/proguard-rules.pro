@@ -105,3 +105,23 @@
 -keep class io.github.ilyalissoboi.goosestation.core.FavouriteInfo {
     <init>(java.lang.String, java.lang.String[], java.lang.String[]);
 }
+# HttpBridge's static methods are only called from native code (http_downloader_android.cpp finds the class by name in
+# JNI_OnLoad): without them every HTTP request fails in a release build.
+-keep class io.github.ilyalissoboi.goosestation.core.HttpBridge {
+    public static void start(long, long, java.lang.String, byte[], java.lang.String, int);
+    public static void cancel(long, long);
+    public static int download(java.lang.String, java.lang.String, java.lang.String, int, long, long);
+}
+# The progress listeners native code calls back by name (jni_bridge.cpp, cover_downloads_android.cpp).
+-keep interface io.github.ilyalissoboi.goosestation.core.PackProgress { *; }
+-keepclassmembers class * implements io.github.ilyalissoboi.goosestation.core.PackProgress {
+    public void status(java.lang.String);
+    public void progress(long, long);
+    public boolean cancelled();
+}
+-keep interface io.github.ilyalissoboi.goosestation.core.CoverProgress { *; }
+-keepclassmembers class * implements io.github.ilyalissoboi.goosestation.core.CoverProgress {
+    public void game(int, int, java.lang.String);
+    public void found(java.lang.String, java.lang.String);
+    public boolean cancelled();
+}

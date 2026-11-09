@@ -21,7 +21,7 @@
 # jni_bridge.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().
 -keep class io.github.ilyalissoboi.goosestation.core.GameEntry {
     <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, long, long, java.lang.String,
-        io.github.ilyalissoboi.goosestation.core.GameDisc[], boolean);
+        io.github.ilyalissoboi.goosestation.core.GameDisc[], boolean, long, long, int);
 }
 -keep class io.github.ilyalissoboi.goosestation.core.GameDisc {
     <init>(java.lang.String, java.lang.String, java.lang.String, int);
@@ -33,7 +33,8 @@
     <init>(int, int, int[]);
 }
 -keep class io.github.ilyalissoboi.goosestation.core.SaveStatePreview {
-    <init>(io.github.ilyalissoboi.goosestation.core.ArgbImage, int);
+    <init>(io.github.ilyalissoboi.goosestation.core.ArgbImage, int, java.lang.String, java.lang.String,
+        java.lang.String, java.lang.String);
 }
 -keep class io.github.ilyalissoboi.goosestation.core.PatchCode {
     <init>(int, java.lang.String, java.lang.String, boolean, boolean);
@@ -41,6 +42,17 @@
 -keep class io.github.ilyalissoboi.goosestation.core.PatchCodes {
     <init>(java.lang.String, io.github.ilyalissoboi.goosestation.core.PatchCode[]);
 }
+
+# jni_bridge.cpp finds RetroAchievements' classes and their constructors by name in JNI_OnLoad: the account, the queue
+# of unlocks waiting to be sent, a game's achievements and sections, and the leaderboards.
+-keep class io.github.ilyalissoboi.goosestation.core.AchievementsAccount { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.AchievementsQueue { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.GameAchievements { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.Achievement { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.AchievementSection { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.Leaderboard { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.LeaderboardEntry { <init>(...); }
+-keep class io.github.ilyalissoboi.goosestation.core.LeaderboardPage { <init>(...); }
 
 # jni_bridge.cpp finds MemcardSyncState and its constructor, and SyncStatusKind's and SyncActivity's values, by name in
 # JNI_OnLoad, for getMemcardSyncState().

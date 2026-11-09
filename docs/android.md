@@ -212,6 +212,36 @@ prefix, as for the configure script) and `data/resources` as assets under `resou
 to its internal files on first run and whenever the app is reinstalled or updated: it compares the version code and
 the install's `lastUpdateTime` (`<versionCode>-<lastUpdateTime>`) with the last copy's.
 
+### Debug and release builds
+
+| | Debug (`assembleDebug`) | Release (`assembleRelease`) |
+|---|---|---|
+| ID | `io.github.ilyalissoboi.goosestation.debug` | `io.github.ilyalissoboi.goosestation` |
+| Name in the launcher | GooseStation Debug | GooseStation |
+| `versionName` | `git describe --dirty` (`0.1-575-g9c532cd4f`) | the same |
+| `versionCode` | 1, so an older checkout's build installs over a newer one's | grows with each commit (`docs/releasing.md`) |
+| Kotlin | as written | R8 (minified, with `app/proguard-rules.pro`) |
+| Signed | with the SDK's debug key | not by Gradle: `android/scripts/sign-apk.sh` |
+| Checks for updates | never | only when built by the rolling release with a channel |
+
+Both install side by side, each with its own app storage. The package of the Kotlin code (the `namespace`) is the
+same for both, so `am start` names the activity in full:
+`adb shell am start -n io.github.ilyalissoboi.goosestation.debug/io.github.ilyalissoboi.goosestation.MainActivity`.
+
+A release build to try on a device or an emulator, signed with a test key made in `app/build/test-signing/` (never
+the release key, which only the release workflow has):
+
+```bash
+cd android && ./gradlew assembleRelease && cd ..
+android/scripts/sign-apk.sh --test-key android/app/build/outputs/apk/release/app-release-unsigned.apk /tmp/goosestation-test.apk
+python3 android/scripts/check-jni-keeps.py android/app/build/outputs/mapping/release/seeds.txt android/app/src/cpp
+```
+
+The last line checks that R8 kept every class and member the native code finds by name (`JNI_OnLoad` fails at
+launch on one it didn't); the release workflow runs it too. A new JNI lookup needs its keep rule in
+`proguard-rules.pro`. `-Pgoose.updateChannel=preview` (or `latest`) makes a release build that checks for updates,
+and `-Pgoose.updateApi=<url>` points its check at another server, as the test tiers' release part does.
+
 ## The app's look
 
 The app's colours, fonts, icons and components follow the design system: see
@@ -249,6 +279,16 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
   `core/TestRenderer.kt`), checks the log has `Created an OpenGL ES context` and no Vulkan device, and puts
   `goose-test-2` back on the host's GPU. full won't run without `GOOSE_TEST_DATA`'s BIOS, so most core tests can't
   skip in it.
+- **Both tiers end with a release build** on the first emulator: `assembleRelease` (R8 on, as published) with the
+  `preview` channel, signed with the test key (`sign-apk.sh --test-key`), installed under the release's ID (an old
+  install there under that ID goes first). The update check at start asks a fake GitHub on the emulator's own
+  `127.0.0.1:8765` (a one-shot `nc` from the shell, answering with a release older than any build); an app on these
+  emulators can't reach the host's servers, at `10.0.2.2` or through `adb reverse`. It passes once the app has
+  logged `Loaded libgoosestation.so.` (so `JNI_OnLoad` found every class it looks up), the request has come, the app
+  is still running and the crash log is empty, and prints `release: launched, loaded the core and asked for the
+  update in N s`; the release is uninstalled after. Its logs are `$TMPDIR/goose-tests-release-*`.
+  `GOOSE_TEST_PARTS=release` runs only that part (`tests` only the tests; both by default). A build left at the
+  release's ID on an emulator, signed with another key, is replaced.
 - Each emulator runs one shard (`-Pandroid.testInstrumentationRunnerArguments.numShards=2` and `shardIndex`), with its
   own `ANDROID_SERIAL`, in two parts: the `ui` package's tests, which don't start the core, in one process without the
   Orchestrator (`-Pgoose.orchestrator=false`), then the rest under it. Each part's results are under
@@ -472,6 +512,12 @@ with the data folder, and remembers what it last saw of both in `files/mirror-ma
 adb shell run-as io.github.ilyalissoboi.goosestation.debug ls -R files/data
 adb shell run-as io.github.ilyalissoboi.goosestation.debug cat files/mirror-manifest.txt
 ```
+
+GooseStation Debug and the release each keep their own working copy, folder grants and install ID. **Give GooseStation
+Debug a data folder of its own** (setup asks for one). Sharing one works, but each app reads a `settings.ini` the
+other wrote as another install's: switching between them resets the device-specific settings each time (renderer,
+Port 1 bindings, hotkeys, controllers, game folders; see "Changing settings"), and memory card sync runs as two
+devices over the same cards. Nothing stops it.
 
 The rules:
 
@@ -1363,6 +1409,25 @@ through `FakeS3`) drive the real core; `MemcardEditorTest` and `MemcardEditorSav
 with `FocusAuditTest` and `OrientationLayoutTest`. The core's card image code is in `common-tests`
 (`memory_card_image_tests.cpp`, with the undelete fix), and the playlist rule in `android_memcards_tests.cpp`.
 
+### Updates
+
+Release builds from the rolling release check their channel's GitHub release when the app starts, as desktop does
+(`docs/releasing.md` has how). The check is quiet: with no network, no update or a release with no APK, nothing is
+said. A newer version shows a banner in the library, "GooseStation 0.1-512 is available", with **Update**, **What's
+new** (the commits since this build) and **Skip this version** (kept in the app's own preferences, so desktop and the
+other app keep their own). B, Back or its ✕ hide it until the next start. The check never runs in a game; one found
+then waits in the library.
+
+**Update** downloads `goosestation-android-arm64.apk` with its progress and Cancel. It checks that the APK is this
+app's package, signed with the installed app's certificate and at the version the release names, and only then
+hands it to Android's installer. The first time, the banner asks the player to allow GooseStation to install apps
+(Open settings, then Back). Android may install an update from the app itself without asking; when it asks, its
+question may need touch. Installed, the app closes, and starts again from the launcher.
+
+Settings → Interface has **Check for updates at start** and **Update channel** (Preview, from `master`; Rolling,
+from `dev`: desktop's `[AutoUpdater] CheckAtStartup` and `UpdateTag`, so a shared folder keeps one choice), **Check
+now**, which says what it found, and the version. In a build that can't update, only the version shows.
+
 ### Known limits
 
 - A slang preset in the data folder's `shaders/` can't refer to a pack's files by a relative path (`../shaders_slang/…`):
@@ -1893,6 +1958,26 @@ passed, 1225 of 1225, at the branch's last code commit; `minifyReleaseWithR8` ke
 | A web page, a bad name | Pass. A 200 `text/html` answer is no cover, and the next source is tried; a title FAT or Windows can't hold (`:`, `?`, a trailing dot) saves by serial, else the file's title, never `covers/.jpg`. |
 | The page | Pass, at 640×360, 800×360, 960×540, 360×800 and 411×891, text 1.0× and 1.3×: three 200-character sources and a running download laid out; Right from a source reaches its Remove, Down goes source to source and on to Add a source, whose Right reaches Restore beside or under it; the restore question focused on Keep mine. |
 | Release builds | Found and fixed: R8 stripped `HttpBridge` (so every HTTP request failed in a release build, RetroAchievements and the shader packs included) and the progress listeners' methods; keep rules hold them now. |
+
+### Release APKs and updates (2026-11-10)
+
+On `goose-test-1` and `goose-test-2` (emulator-5580 and 5582), by the tests alone, with GitHub's answers from local
+servers (the emulators can't reach GitHub over HTTPS) and a test key (never the release key): `AppVersionTest`,
+`ReleasesTest`, `UpdateSourceTest`, `ApkCheckTest`, `UpdatesTest`, `InterfaceSettingsTest` and `CheckNowLineTest`
+(JVM); `ApkFactsTest`, `InstallerTest`, `UpdateBannerTest`, `LibraryScreenTest`, `InterfaceScreenTest`,
+`FocusAuditTest` and `OrientationLayoutTest` (instrumented); `test-sign-apk.sh` and the release part of the tiers. The
+full tier passed, 1274 of 1274, with the release part, at the branch's last code commit (`c43fab86f`).
+
+| Check | Result |
+|---|---|
+| Versions | Pass. Debug: `io.github.ilyalissoboi.goosestation.debug`, "GooseStation Debug", code 1; release: the plain ID, "GooseStation", code 100575 for `0.1-575-…`; both `versionName`s are `git describe --dirty`'s. |
+| Signing | Pass. The test key signs and verifies; missing variables are named and nothing is written; a certificate other than the expected one is refused; the APK stays 16 KB-aligned. |
+| R8 and JNI | Found and fixed: the release build crashed at launch (`JNI_OnLoad`: `LeaderboardPage` renamed, `Achievement` and `LeaderboardEntry` removed, the `GameEntry` and `SaveStatePreview` constructor rules stale). `check-jni-keeps.py` passes, 37 classes and 54 members, and fails without the `HttpBridge` rule. |
+| The release build launched | Pass. Installed under the release's ID, it logs `Loaded libgoosestation.so.`, asks the fake GitHub for `preview` at start, offers nothing (an older release) and keeps running; without the `HttpBridge` rule it dies in `JNI_OnLoad`. |
+| The check | Pass. The same commit is up to date; a higher code is newer, an equal or lower one older; a release with no APK, no release, a 403, a captive portal's page and a closed port are each told apart; a skipped version isn't offered at start but is on Check now; the check waits while a game is on screen. |
+| The download | Pass. Progress and Cancel; a short download, a missing APK and a write error fail; an APK of another package or signer, or of another version than the release's, never reaches the installer; a cancelled download that ends late doesn't spoil the retry. |
+| The installer | Pass, as far as an emulator goes: a session is written and committed, and a refused APK comes back as a failure. An update from the app itself, with the same signer, installs here without asking, so the question's hand-off is the Thor's check. The installer waits for the library and for the app to be shown. |
+| The banner and the page | Pass, at 640×360, 800×360, 960×540, 832×468 (the Thor), 360×800 and 411×891, text 1.0× and 1.3×: every state laid out; the focus stays in the banner as it moves on, and B or Skip gives it back to the game; on the Thor the banner takes its room from the games, its buttons beside the words; What's new scrolls; the Updates rows reach Check now and its line. |
 
 ## Results on the AYN Thor
 
@@ -2469,3 +2554,21 @@ adb logcat -v time > thor.log
    - [ ] Remove the preset: the list stays empty after Back and reopening; **Restore the preset source** puts it back
      without asking. With a source of your own, it asks first, focused on Keep mine.
    - [ ] `settings.ini` has `[Covers] SourceCount`, `Source1` and `UseSerial`.
+18. **Release APKs and updates.** The maintainer's, once the release key is in the `release` environment and a
+    signed release is published (`docs/releasing.md`). Nothing here uses the real key off GitHub.
+   - [ ] **Once, before the first release:** the debug install made before the debug ID existed has the release's
+     ID (`io.github.ilyalissoboi.goosestation`), signed with the debug key, so the release can't install over it.
+     Uninstall it (`adb uninstall io.github.ilyalissoboi.goosestation`). Its app-only data goes with it: the working
+     copy (it comes back from the data folder), the folder grants (setup runs again), the install ID (the release
+     reads the folder's `settings.ini` as another install's: renderer, bindings, hotkeys and controllers reset), and
+     the RetroAchievements token and memory card sync's keys in the Keystore, which are entered again.
+   - [ ] Install the previous release's `goosestation-android-arm64.apk` (from the channel's release, or a run's
+     artifact). The launcher shows GooseStation; GooseStation Debug, if installed, stays beside it with its own data
+     folder.
+   - [ ] After a newer signed release: at start the library shows "GooseStation 0.1-N is available". What's new lists
+     the commits; B hides the banner until the next start.
+   - [ ] Update: the progress and Cancel; Cancel offers it again. Update again: Android asks to allow GooseStation to
+     install apps the first time (Open settings); allowed and back, the installer runs (by touch if it asks), the app
+     closes, and opened again, Settings → Interface → Version shows the new number.
+   - [ ] Settings → Interface → Check now on the same version: "GooseStation is up to date."; on Rolling before
+     `dev` has a release: "This channel has no release yet."

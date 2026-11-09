@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -17,7 +18,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class UpdateSourceTest {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).also { it.start() }
-    private val api = "http://127.0.0.1:${server.address.port}/repos/x"
+    private val host = "http://127.0.0.1:${server.address.port}"
+    private val api = "$host/repos/x"
     private val paths = CopyOnWriteArrayList<String>()
     private var userAgent: String? = null
 
@@ -130,5 +132,57 @@ class UpdateSourceTest {
     fun changesThatFailAreNull() {
         serve("/repos/x/compare/aaa...bbb", 500, "")
         assertEquals(null, source().changes("aaa", "bbb"))
+    }
+
+    private fun release(
+        path: String,
+        size: Long,
+    ) = ChannelRelease("preview", "0.1-512-g1a2b3c4", 100_512, ReleaseFixtures.COMMIT, "$host$path", size)
+
+    // Serves size bytes at path, claiming claimed of them.
+    private fun serveApk(
+        path: String,
+        size: Int,
+        claimed: Int = size,
+    ) {
+        server.createContext(path) { exchange: HttpExchange ->
+            exchange.sendResponseHeaders(200, claimed.toLong())
+            exchange.responseBody.use { it.write(ByteArray(size) { i -> i.toByte() }) }
+        }
+    }
+
+    @Test
+    fun downloadWritesTheApk() {
+        serveApk("/apk", 300_000)
+        val file = temp.root.resolve("update.apk")
+        var last = 0L
+        val result = source().download(release("/apk", 300_000), file) { done, _ -> true.also { last = done } }
+        assertEquals(DownloadResult.Done, result)
+        assertEquals(300_000L, file.length())
+        assertEquals(300_000L, last)
+    }
+
+    @Test
+    fun aShortDownloadFails() {
+        serveApk("/apk", 1000)
+        val file = temp.root.resolve("update.apk")
+        assertEquals(DownloadResult.Failed, source().download(release("/apk", 5000), file) { _, _ -> true })
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun aMissingApkFails() {
+        val file = temp.root.resolve("update.apk")
+        assertEquals(DownloadResult.Failed, source().download(release("/gone", 5000), file) { _, _ -> true })
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun cancellingStops() {
+        serveApk("/apk", 300_000)
+        val file = temp.root.resolve("update.apk")
+        val result = source().download(release("/apk", 300_000), file) { done, _ -> done < 64 * 1024 }
+        assertEquals(DownloadResult.Cancelled, result)
+        assertFalse(file.exists())
     }
 }

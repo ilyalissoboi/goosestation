@@ -70,7 +70,7 @@ class SettingsScreenTest {
     fun theFirstEntryIsFocusedWithoutAnEntry() {
         show(focusEntry = null)
 
-        assertFocusedHas("Interface", "Pausing, resume states, backups")
+        assertFocusedHas("Interface", "Pausing, resume states, backups, updates")
     }
 
     @Test
@@ -85,7 +85,7 @@ class SettingsScreenTest {
         show(focusEntry = null)
 
         // The first entry, where Up stays, then down to the last.
-        assertFocusedHas("Interface", "Pausing, resume states, backups")
+        assertFocusedHas("Interface", "Pausing, resume states, backups, updates")
         press(Key.DirectionUp)
         assertFocusedHas("Interface")
         for (

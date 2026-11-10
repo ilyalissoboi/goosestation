@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: write        # push the import branch
       pull-requests: write   # open or update its pull request
-      actions: write         # start gamedb-lint.yml on it (a push with this token starts no workflows)
+      actions: write         # start gamedb-lint.yml on the branch (see the last step)
     env:
       BRANCH: gamedb/redump-import
       BASE: master
@@ -104,4 +104,7 @@ jobs:
         else
           gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
         fi
+        # A push with this token starts no workflows, so lint the branch by hand. That run shows on the Actions tab and
+        # on the commit, not in the PR's checks; the PR's own lint run waits for a maintainer to approve it (the PR is
+        # the bot's), and that one shows there.
         gh workflow run gamedb-lint.yml --ref "$BRANCH"

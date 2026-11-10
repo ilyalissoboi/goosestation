@@ -153,6 +153,40 @@ class PostProcessingFavouritesTest {
             assertEquals(1, page.focusFavourite)
         }
 
+    // From review: a read asked for meanwhile (a pack installed, a pull) dropped the save's end, and the form stayed.
+    @Test
+    fun aSaveOvertakenByAReadStillClosesTheForm() =
+        runTest {
+            globalStages("crt-lottes")
+            favourites("CRT")
+            val page = page()
+
+            page.startSaving()
+            page.submitName("Lottes")
+            page.reread()
+            runCurrent()
+
+            assertTrue("savePostProcessingFavourite null Lottes false" in calls)
+            assertNull(page.naming)
+            assertEquals(listOf("CRT", "Lottes"), page.names())
+        }
+
+    // From review (Codex): an edit that ends after the page was left and opened again ends the old page's edit, not
+    // the new page's: a refused save doesn't bring its form back.
+    @Test
+    fun anEditEndingAfterThePageOpenedAgainLeavesTheNewPage() =
+        runTest {
+            val page = page()
+            page.startSaving()
+
+            page.submitName("  ")
+            page.close()
+            page.open(null, running = false)
+            runCurrent()
+
+            assertNull(page.naming)
+        }
+
     @Test
     fun savingATakenNameAsksToReplace() =
         runTest {

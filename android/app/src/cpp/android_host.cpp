@@ -552,9 +552,13 @@ void AndroidHost::ReloadSettings()
       // The file can put controllers on other ports.
       UpdateSourceControllers();
 
-      // Update() takes the lock itself, and loads the folders again.
+      // Update() takes the lock itself, and loads the folders again. The app's BIOS folder goes back under it too, as
+      // other threads read the folders under it (a reader in between sees settings.ini's for a moment).
       EmuFolders::Update();
-      EmuFolders::Bios = s_bios_dir;
+      {
+        const auto lock = Host::GetSettingsLock();
+        EmuFolders::Bios = s_bios_dir;
+      }
       System::ApplySettings(false);
     },
     true);
@@ -657,8 +661,14 @@ std::vector<std::string> AndroidHost::GetSharedCardNames()
   if (!s_initialized)
     return names;
 
+  // Under the lock, as EmuFolders::Update() rewrites it under it on the CPU thread.
+  std::string folder;
+  {
+    const auto lock = Host::GetSettingsLock();
+    folder = EmuFolders::MemoryCards;
+  }
   FileSystem::FindResultsArray results;
-  FileSystem::FindFiles(EmuFolders::MemoryCards.c_str(), "*.mcd",
+  FileSystem::FindFiles(folder.c_str(), "*.mcd",
                         FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES | FILESYSTEM_FIND_RELATIVE_PATHS,
                         &results);
   names.reserve(results.size());
@@ -948,30 +958,38 @@ std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingS
   if (!s_initialized)
     return shaders;
 
-  for (const PostProcessing::AvailableShader& available : PostProcessing::GetAvailableShaders())
-  {
-    const std::string& name = available.name;
-    // A pack has thousands of slang presets: they're offered by name, and one that doesn't load says so when added.
-    Error error;
-    if (!PostProcessing::Slang::IsPresetName(name) && !ShaderLoads(name, &error))
-    {
-      INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
-      continue;
-    }
-    shaders.emplace_back(name, PostProcessing::GetShaderKindName(available.kind));
-  }
+  // On the CPU thread: the shader folders are rewritten there (EmuFolders::Update()), and ShaderLoads() reads the GPU
+  // device. The Post-processing page is in the library, or under the in-game menu, with the game paused.
+  EmuThread::RunOnThread(
+    [&shaders]() {
+      for (const PostProcessing::AvailableShader& available : PostProcessing::GetAvailableShaders())
+      {
+        const std::string& name = available.name;
+        // A pack has thousands of slang presets: they're offered by name, and one that doesn't load says so when
+        // added.
+        Error error;
+        if (!PostProcessing::Slang::IsPresetName(name) && !ShaderLoads(name, &error))
+        {
+          INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
+          continue;
+        }
+        shaders.emplace_back(name, PostProcessing::GetShaderKindName(available.kind));
+      }
+    },
+    true);
   return shaders;
 }
 
-std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStages(const std::optional<std::string>& key,
-                                                                                const char* section)
+// A chain layer's stages, each with its kind and options, or why it doesn't load. On the CPU thread.
+static std::vector<AndroidHost::PostProcessingStage> ReadStages(const std::optional<std::string>& key,
+                                                               const char* section)
 {
-  return ReadChainLayer(key, std::vector<PostProcessingStage>(), [section](const SettingsInterface& si) {
-    std::vector<PostProcessingStage> stages;
+  return ReadChainLayer(key, std::vector<AndroidHost::PostProcessingStage>(), [section](const SettingsInterface& si) {
+    std::vector<AndroidHost::PostProcessingStage> stages;
     const u32 count = PostProcessing::Config::GetStageCount(si, section);
     for (u32 i = 0; i < count; i++)
     {
-      PostProcessingStage stage;
+      AndroidHost::PostProcessingStage stage;
       stage.shader = PostProcessing::Config::GetStageShaderName(si, section, i);
       Error error;
       if (!stage.shader.empty() && ShaderLoads(stage.shader, &error))
@@ -987,6 +1005,18 @@ std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStag
     }
     return stages;
   });
+}
+
+std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStages(const std::optional<std::string>& key,
+                                                                                const char* section)
+{
+  std::vector<PostProcessingStage> result;
+  if (!s_initialized)
+    return result;
+
+  // On the CPU thread, as GetPostProcessingShaders(): ShaderLoads() and ShaderKind() read the shader folders.
+  EmuThread::RunOnThread([&]() { result = ReadStages(key, section); }, true);
+  return result;
 }
 
 std::string AndroidHost::AddPostProcessingStage(const std::optional<std::string>& key, const char* section,

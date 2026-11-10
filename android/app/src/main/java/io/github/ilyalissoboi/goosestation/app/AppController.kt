@@ -1650,6 +1650,7 @@ object AppController : NativeCallbacks {
         refreshed?.let { games = it }
         if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
         if (StartupStep.ReloadSettings in steps && screen == Screen.PostProcessing) postProcessingPage.reread()
+        if (StartupStep.ReloadSettings in steps) controllersPage.reloadShown()
         // settings.ini, or a game's own file, pulled from the data folder while that game's pages show.
         if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) {
             gameSettingsPages.reloadShown()

@@ -26,6 +26,18 @@ object MemoryCardPaths {
     ): Boolean = gameActive && matches(path, paths)
 
     /**
+     * Whether a pull leaves the working-copy file at [path] alone. One for [onlyMemcards] (the one after a game stops)
+     * brings in only the cards in [paths], and like every pull leaves them while [gameActive]: a game started while it
+     * runs keeps the cards it loaded.
+     */
+    fun leftByPull(
+        path: String,
+        paths: List<String>,
+        onlyMemcards: Boolean,
+        gameActive: Boolean,
+    ): Boolean = (onlyMemcards && !matches(path, paths)) || deferred(path, paths, gameActive)
+
+    /**
      * The paths the core [reported] now, plus the card files among the [previous] ones it no longer reports: a game's
      * own card (its `gamesettings/<serial>.ini`) is reported only while it runs, and stays a card for the rest of the
      * run. Folders aren't kept: settings.ini names the memory card folder.

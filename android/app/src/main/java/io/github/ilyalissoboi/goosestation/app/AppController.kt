@@ -1566,14 +1566,7 @@ object AppController : NativeCallbacks {
         if (!coreStarted || !dataGranted) return Applied.NOTHING
         val pull = layoutSettling.pullStarting()
         // Asked for each file as the mirror acts, so a game started meanwhile keeps its cards.
-        val result =
-            mirror.pull { path ->
-                if (onlyMemcards) {
-                    !MemoryCardPaths.matches(path, memcardPaths)
-                } else {
-                    MemoryCardPaths.deferred(path, memcardPaths, holdMemcards)
-                }
-            }
+        val result = mirror.pull { path -> MemoryCardPaths.leftByPull(path, memcardPaths, onlyMemcards, holdMemcards) }
         val applied = applyChanged(result.changed, onGrowth)
         if (result.changed.isNotEmpty()) refreshEditor()
         // Only the memory cards: game settings that name more files may be among those it left.

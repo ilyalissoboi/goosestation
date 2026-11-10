@@ -460,7 +460,10 @@ class InGameMenu(
         state = state.copy(fastForward = enabled)
     }
 
-    /** Back to the game, unless Exit game is saving the resume state: the game stops once that's done. */
+    /**
+     * Back to the game, closing its settings, unless Exit game is saving the resume state: the game stops once that's
+     * done. Every action that goes back to the game, a save or a disc change done, comes here.
+     */
     override fun resume() {
         if (state.exiting) return
         if (state.settings) {
@@ -800,7 +803,7 @@ class InGameMenu(
             }
             state = state.copy(disc = number, discs = null)
             onMessage("Disc $number inserted")
-            onResume()
+            resume()
         }
     }
 
@@ -982,7 +985,7 @@ class InGameMenu(
             if (remember) selectedSlot = slot
             if (id == panelId) closeSlots()
             onMessage(done)
-            onResume()
+            resume()
         }
     }
 
@@ -990,7 +993,7 @@ class InGameMenu(
     private fun thenResume(call: () -> Unit) {
         scope.launch {
             withContext(game) { call() }
-            onResume()
+            resume()
         }
     }
 
@@ -1057,7 +1060,7 @@ class InGameMenu(
         val id = gameId
         scope.launch {
             undo(id, key)
-            if (id == gameId) onResume()
+            if (id == gameId) resume()
         }
     }
 

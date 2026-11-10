@@ -566,6 +566,49 @@ class InGameMenuTest {
             )
         }
 
+    // Exit game tapped while a save runs: the save finishes and says so, then the game stops, never going on first.
+    @Test
+    fun exitDuringASaveExitsOnceTheSaveIsDone() =
+        runTest {
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            calls.clear()
+
+            menu.pickSlot(2)
+            menu.exit()
+            runCurrent()
+
+            assertEquals(
+                listOf(
+                    "saveState $SERIAL 2",
+                    "savesResumeState",
+                    "message Saved to slot 2",
+                    "getSaveStateTimes $SERIAL",
+                    "saveResumeState $SERIAL",
+                    "exit null",
+                ),
+                calls,
+            )
+        }
+
+    // A save that ends while the game's settings show closes them as it goes back to the game, as Resume does.
+    @Test
+    fun aSaveEndingUnderTheSettingsClosesThem() =
+        runTest {
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.pickSlot(2)
+            menu.openSettings()
+            calls.clear()
+
+            runCurrent()
+
+            assertFalse(menu.state.settings)
+            assertEquals(listOf("saveState $SERIAL 2", "message Saved to slot 2", "settings null", "resume"), calls)
+        }
+
     @Test
     fun theGameStoppingClearsEverything() =
         runTest {

@@ -807,7 +807,11 @@ class InGameMenu(
             // The panel inserting it, unless another row has taken its place: the disc put in is known all the same.
             val open = state.discs?.takeIf { it.busy }
             if (error != null) {
-                if (open != null) state = state.copy(discs = open.copy(busy = false, error = error)) else onMessage(error)
+                if (open != null) {
+                    state = state.copy(discs = open.copy(busy = false, error = error))
+                } else {
+                    onMessage(error)
+                }
                 return@launch
             }
             state = state.copy(disc = number, discs = if (open != null) null else state.discs)

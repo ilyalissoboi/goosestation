@@ -301,6 +301,9 @@ class PostProcessingPage(
     // Changes as each read is asked for and each edit is made: a read that comes back after either is dropped.
     private var reads = 0
 
+    // Changes as the page opens and closes: an edit that ends after either ends nothing on the page shown now.
+    private var session = 0
+
     /** Shows [key]'s chains (settings.ini's for null), from none, on the chains page. */
     fun open(
         key: String?,
@@ -318,6 +321,7 @@ class PostProcessingPage(
         shown = Chain.Display
         forgetFavourite()
         focusFavourite = null
+        session++
         read()
     }
 
@@ -334,6 +338,7 @@ class PostProcessingPage(
         forgetFavourite()
         focusFavourite = null
         reads++
+        session++
     }
 
     /** Reads the chains again, as their file changed under them; the page shown stays. */
@@ -701,13 +706,15 @@ class PostProcessingPage(
     private fun settingsFor(key: String?): CoreSettings = if (key == null) global else layer(key)
 
     // Runs [change] on core, applies it in a running game, reads the chains it left, then runs [after]. The chains are
-    // shown unless a later read was asked for meanwhile, which has them too; [after] runs either way: it ends the edit
-    // (closes the name form, moves the focus, says why the core refused).
+    // shown unless a later read was asked for meanwhile, which has them too; [after] runs either way, unless the page
+    // closed or opened again meanwhile: it ends the edit (closes the name form, moves the focus, says why the core
+    // refused), and the page now shown has none.
     private fun edit(
         after: () -> Unit = {},
         change: () -> Unit,
     ) {
         val read = ++reads
+        val opened = session
         val key = key
         val apply = running
         scope.launch {
@@ -721,7 +728,7 @@ class PostProcessingPage(
                 chains = loaded
                 favourites = saved
             }
-            after()
+            if (opened == session) after()
         }
     }
 

@@ -171,6 +171,22 @@ class PostProcessingFavouritesTest {
             assertEquals(listOf("CRT", "Lottes"), page.names())
         }
 
+    // From review (Codex): an edit that ends after the page was left and opened again ends the old page's edit, not
+    // the new page's: a refused save doesn't bring its form back.
+    @Test
+    fun anEditEndingAfterThePageOpenedAgainLeavesTheNewPage() =
+        runTest {
+            val page = page()
+            page.startSaving()
+
+            page.submitName("  ")
+            page.close()
+            page.open(null, running = false)
+            runCurrent()
+
+            assertNull(page.naming)
+        }
+
     @Test
     fun savingATakenNameAsksToReplace() =
         runTest {

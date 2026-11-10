@@ -477,6 +477,22 @@ private:
   std::vector<jstring> m_strings;
 };
 
+// For a native Kotlin declares never null: result, or, when it couldn't be made (out of memory, as a rule), null with
+// an exception pending, which Kotlin throws at the call, rather than a null that fails later far from it: the one
+// that stopped it, if it's still pending, else one naming the call.
+template<typename T>
+T Made(JNIEnv* env, T result, const char* call)
+{
+  if (result || env->ExceptionCheck())
+    return result;
+  if (jclass cls = env->FindClass("java/lang/IllegalStateException"))
+  {
+    env->ThrowNew(cls, fmt::format("{} couldn't make its result.", call).c_str());
+    env->DeleteLocalRef(cls);
+  }
+  return nullptr;
+}
+
 /// Runs call(env, callbacks) if the app has set its callbacks, on any thread.
 template<typename F>
 void WithCallbacks(F&& call)
@@ -1511,9 +1527,11 @@ NATIVE_LIBRARY_FUNCTION(jfloat, getGameFloatSetting)(JNIEnv* env, jobject, jstri
 NATIVE_LIBRARY_FUNCTION(jstring, getGameStringSetting)(JNIEnv* env, jobject, jstring key, jstring section,
                                                        jstring name, jstring default_value)
 {
-  return ToJString(env, AndroidHost::GetGameStringSetting(FromJString(env, key), FromJString(env, section).c_str(),
+  return Made(env,
+              ToJString(env, AndroidHost::GetGameStringSetting(FromJString(env, key), FromJString(env, section).c_str(),
                                                           FromJString(env, name).c_str(),
-                                                          FromJString(env, default_value).c_str()));
+                                                          FromJString(env, default_value).c_str())),
+              "getGameStringSetting");
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setGameBoolSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name,
@@ -1747,14 +1765,12 @@ NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsAccount)(JNIEnv* env, jobject)
   const AchievementsBridge::Account account = AchievementsBridge::GetAccount();
   const LocalStrings strings(env, {account.username, account.display_name});
   if (!strings.ok())
-    return nullptr;
+    return Made<jobject>(env, nullptr, "getAchievementsAccount");
 
   jobject ret = env->NewObject(s_achievements_account_class, s_achievements_account_constructor,
                                static_cast<jint>(account.state), strings[0], strings[1],
                                static_cast<jint>(account.score), static_cast<jint>(account.softcore_score));
-  if (!ret)
-    ClearException(env);
-  return ret;
+  return Made(env, ret, "getAchievementsAccount");
 }
 
 NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsQueue)(JNIEnv* env, jobject)
@@ -1773,17 +1789,15 @@ NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsQueue)(JNIEnv* env, jobject)
   if (!user_array || !count_array)
   {
     ClearException(env);
-    return nullptr;
+    return Made<jobject>(env, nullptr, "getAchievementsQueue");
   }
   env->SetIntArrayRegion(count_array, 0, static_cast<jsize>(counts.size()), counts.data());
 
   jobject ret = env->NewObject(s_achievements_queue_class, s_achievements_queue_constructor,
                                static_cast<jint>(queue.own), user_array, count_array);
-  if (!ret)
-    ClearException(env);
   env->DeleteLocalRef(user_array);
   env->DeleteLocalRef(count_array);
-  return ret;
+  return Made(env, ret, "getAchievementsQueue");
 }
 
 NATIVE_LIBRARY_FUNCTION(jstring, signIn)(JNIEnv* env, jobject, jstring username, jstring password)
@@ -1807,9 +1821,7 @@ NATIVE_LIBRARY_FUNCTION(jobject, getGameAchievements)(JNIEnv* env, jobject)
                                static_cast<jint>(game.total_points), static_cast<jboolean>(game.has_achievements),
                                static_cast<jboolean>(game.has_leaderboards), static_cast<jboolean>(game.hardcore),
                                static_cast<jboolean>(game.offline), static_cast<jint>(game.waiting));
-  if (!ret)
-    ClearException(env);
-  return ret;
+  return Made(env, ret, "getGameAchievements");
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getAchievementSections)(JNIEnv* env, jobject)
@@ -1817,37 +1829,29 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getAchievementSections)(JNIEnv* env, jobje
   const std::vector<AchievementsBridge::AchievementSection> sections = AchievementsBridge::GetAchievementSections();
   jobjectArray ret = env->NewObjectArray(static_cast<jsize>(sections.size()), s_achievement_section_class, nullptr);
   if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+    return Made(env, ret, "getAchievementSections");
 
   for (size_t i = 0; i < sections.size(); i++)
   {
     const AchievementsBridge::AchievementSection& section = sections[i];
     jobjectArray items = env->NewObjectArray(static_cast<jsize>(section.items.size()), s_achievement_class, nullptr);
     if (!items)
-    {
-      ClearException(env);
-      return nullptr;
-    }
+      return Made(env, items, "getAchievementSections");
 
     for (size_t j = 0; j < section.items.size(); j++)
     {
       const AchievementsBridge::AchievementItem& item = section.items[j];
+      // One that can't be made fails them all: Kotlin's arrays have no gaps.
       const LocalStrings strings(env, {item.title, item.description, item.badge_path, item.progress});
       if (!strings.ok())
-        continue;
+        return Made<jobjectArray>(env, nullptr, "getAchievementSections");
 
       jobject cheevo = env->NewObject(s_achievement_class, s_achievement_constructor, static_cast<jint>(item.id),
                                       strings[0], strings[1], static_cast<jint>(item.points), strings[2],
                                       static_cast<jlong>(item.unlocked_at), strings[3],
                                       static_cast<jfloat>(item.percent));
       if (!cheevo)
-      {
-        ClearException(env);
-        continue;
-      }
+        return Made<jobjectArray>(env, nullptr, "getAchievementSections");
       env->SetObjectArrayElement(items, static_cast<jsize>(j), cheevo);
       env->DeleteLocalRef(cheevo);
     }
@@ -1856,15 +1860,10 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getAchievementSections)(JNIEnv* env, jobje
     jobject jsection = label.ok() ? env->NewObject(s_achievement_section_class, s_achievement_section_constructor,
                                                     static_cast<jint>(section.bucket), label[0], items) :
                                     nullptr;
-    if (jsection)
-    {
-      env->SetObjectArrayElement(ret, static_cast<jsize>(i), jsection);
-      env->DeleteLocalRef(jsection);
-    }
-    else
-    {
-      ClearException(env);
-    }
+    if (!jsection)
+      return Made<jobjectArray>(env, nullptr, "getAchievementSections");
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), jsection);
+    env->DeleteLocalRef(jsection);
     env->DeleteLocalRef(items);
   }
 
@@ -1876,10 +1875,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getLeaderboards)(JNIEnv* env, jobject)
   const std::vector<AchievementsBridge::LeaderboardItem> boards = AchievementsBridge::GetLeaderboards();
   jobjectArray ret = env->NewObjectArray(static_cast<jsize>(boards.size()), s_leaderboard_class, nullptr);
   if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+    return Made(env, ret, "getLeaderboards");
 
   for (size_t i = 0; i < boards.size(); i++)
   {
@@ -1888,10 +1884,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getLeaderboards)(JNIEnv* env, jobject)
                                                   static_cast<jint>(boards[i].id), strings[0], strings[1]) :
                                    nullptr;
     if (!board)
-    {
-      ClearException(env);
-      return nullptr;
-    }
+      return Made<jobjectArray>(env, nullptr, "getLeaderboards");
     env->SetObjectArrayElement(ret, static_cast<jsize>(i), board);
     env->DeleteLocalRef(board);
   }
@@ -1970,14 +1963,12 @@ NATIVE_LIBRARY_FUNCTION(jobject, getMemcardSyncState)(JNIEnv* env, jobject)
                          jstrings[4], jstrings[5], activity,
                          static_cast<jint>(state.conflicts));
   }
-  if (!ret)
-    ClearException(env);
   for (jstring str : jstrings)
   {
     if (str)
       env->DeleteLocalRef(str);
   }
-  return ret;
+  return Made(env, ret, "getMemcardSyncState");
 }
 
 NATIVE_LIBRARY_FUNCTION(void, applyMemcardSync)(JNIEnv*, jobject)
@@ -2040,17 +2031,14 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardSyncConflicts)(JNIEnv* env, jobj
   const std::vector<MemcardSyncBridge::Conflict> conflicts = MemcardSyncBridge::GetConflicts();
   jobjectArray ret = env->NewObjectArray(static_cast<jsize>(conflicts.size()), s_sync_conflict_class, nullptr);
   if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+    return Made(env, ret, "getMemcardSyncConflicts");
   for (size_t i = 0; i < conflicts.size(); i++)
   {
     jobject c = ToSyncConflict(env, conflicts[i]);
     if (!c)
     {
       env->DeleteLocalRef(ret);
-      return nullptr;
+      return Made<jobjectArray>(env, nullptr, "getMemcardSyncConflicts");
     }
     env->SetObjectArrayElement(ret, static_cast<jsize>(i), c);
     env->DeleteLocalRef(c);
@@ -2527,10 +2515,7 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jst
   const std::vector<s64> times = AndroidHost::GetSaveStateTimes(FromJString(env, serial));
   jlongArray result = env->NewLongArray(static_cast<jsize>(times.size()));
   if (!result)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+    return Made(env, result, "getSaveStateTimes");
 
   std::vector<jlong> values(times.begin(), times.end());
   env->SetLongArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
@@ -2590,10 +2575,7 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getSharedStateTimes)(JNIEnv* env, jobject)
   const std::vector<s64> times = AndroidHost::GetSharedStateTimes();
   jlongArray result = env->NewLongArray(static_cast<jsize>(times.size()));
   if (!result)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+    return Made(env, result, "getSharedStateTimes");
 
   std::vector<jlong> values(times.begin(), times.end());
   env->SetLongArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
@@ -3613,17 +3595,14 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardFiles)(JNIEnv* env, jobject, job
   const std::vector<MemcardEditorBridge::CardFile> cards = MemcardEditorBridge::ListCards(games);
   jobjectArray ret = env->NewObjectArray(static_cast<jsize>(cards.size()), s_memcard_file_class, nullptr);
   if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+    return Made(env, ret, "getMemcardFiles");
   for (size_t i = 0; i < cards.size(); i++)
   {
     jobject card = ToMemcardFile(env, cards[i]);
     if (!card)
     {
       env->DeleteLocalRef(ret);
-      return nullptr;
+      return Made<jobjectArray>(env, nullptr, "getMemcardFiles");
     }
     env->SetObjectArrayElement(ret, static_cast<jsize>(i), card);
     env->DeleteLocalRef(card);
@@ -3645,10 +3624,7 @@ jbyteArray ToJByteArray(JNIEnv* env, std::span<const u8> bytes)
 {
   jbyteArray ret = env->NewByteArray(static_cast<jsize>(bytes.size()));
   if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
+    return Made(env, ret, "getMemcardFiles");
   env->SetByteArrayRegion(ret, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
   return ret;
 }
@@ -3753,8 +3729,9 @@ NATIVE_LIBRARY_FUNCTION(jbyteArray, formatMemcard)(JNIEnv* env, jobject)
 NATIVE_LIBRARY_FUNCTION(jobject, copyMemcardSave)(JNIEnv* env, jobject, jbyteArray from, jint first_block,
                                                  jbyteArray to, jboolean replace)
 {
-  return ToMemcardEdit(env, MemcardEditorBridge::CopySave(FromJByteArray(env, from), static_cast<u32>(first_block),
-                                                          FromJByteArray(env, to), replace == JNI_TRUE));
+  const MemcardEditorBridge::Edit edit = MemcardEditorBridge::CopySave(
+    FromJByteArray(env, from), static_cast<u32>(first_block), FromJByteArray(env, to), replace == JNI_TRUE);
+  return Made(env, ToMemcardEdit(env, edit), "copyMemcardSave");
 }
 
 NATIVE_LIBRARY_FUNCTION(jbyteArray, deleteMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jint first_block,
@@ -3781,9 +3758,7 @@ NATIVE_LIBRARY_FUNCTION(jobject, checkMemcardRename)(JNIEnv* env, jobject, jbyte
                                static_cast<jboolean>(check.single_byte_title),
                                static_cast<jboolean>(check.title_not_shown_exactly),
                                static_cast<jboolean>(check.name_not_standard));
-  if (!ret)
-    ClearException(env);
-  return ret;
+  return Made(env, ret, "checkMemcardRename");
 }
 
 NATIVE_LIBRARY_FUNCTION(jbyteArray, renameMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jint first_block,
@@ -3797,19 +3772,23 @@ NATIVE_LIBRARY_FUNCTION(jbyteArray, renameMemcardSave)(JNIEnv* env, jobject, jby
 NATIVE_LIBRARY_FUNCTION(jobject, importMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jstring file_name,
                                                    jbyteArray data)
 {
-  return ToMemcardEdit(env, MemcardEditorBridge::ImportSave(FromJByteArray(env, card), FromJString(env, file_name),
-                                                            FromJByteArray(env, data)));
+  const MemcardEditorBridge::Edit edit =
+    MemcardEditorBridge::ImportSave(FromJByteArray(env, card), FromJString(env, file_name), FromJByteArray(env, data));
+  return Made(env, ToMemcardEdit(env, edit), "importMemcardSave");
 }
 
 NATIVE_LIBRARY_FUNCTION(jobject, importMemcard)(JNIEnv* env, jobject, jstring file_name, jbyteArray data)
 {
-  return ToMemcardEdit(env, MemcardEditorBridge::ImportCard(FromJString(env, file_name), FromJByteArray(env, data)));
+  const MemcardEditorBridge::Edit edit =
+    MemcardEditorBridge::ImportCard(FromJString(env, file_name), FromJByteArray(env, data));
+  return Made(env, ToMemcardEdit(env, edit), "importMemcard");
 }
 
 NATIVE_LIBRARY_FUNCTION(jobject, exportMemcardSave)(JNIEnv* env, jobject, jbyteArray card, jint first_block)
 {
-  return ToMemcardEdit(env,
-                       MemcardEditorBridge::ExportSave(FromJByteArray(env, card), static_cast<u32>(first_block)));
+  const MemcardEditorBridge::Edit edit =
+    MemcardEditorBridge::ExportSave(FromJByteArray(env, card), static_cast<u32>(first_block));
+  return Made(env, ToMemcardEdit(env, edit), "exportMemcardSave");
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, isMemcardKnownToSync)(JNIEnv* env, jobject, jstring path)
@@ -3828,11 +3807,9 @@ NATIVE_LIBRARY_FUNCTION(jobject, writeMemcard)(JNIEnv* env, jobject, jstring pat
   jobject ret = error ? env->NewObject(s_memcard_write_class, s_memcard_write_constructor,
                                        s_memcard_write_outcomes[static_cast<size_t>(result.outcome)], error) :
                         nullptr;
-  if (!ret)
-    ClearException(env);
   if (error)
     env->DeleteLocalRef(error);
-  return ret;
+  return Made(env, ret, "writeMemcard");
 }
 
 } // extern "C"

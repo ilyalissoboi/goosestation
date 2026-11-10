@@ -4,7 +4,8 @@
 
 # Checks sign-apk.sh on an unsigned APK ($1, such as android/app/build/outputs/apk/release/app-release-unsigned.apk):
 # the test key signs it; missing variables are named and nothing is written; a wrong expected certificate fails, and
-# the right one passes. Uses the test key only. Needs ANDROID_HOME.
+# the right one passes, keytool's line for it too; a fingerprint that isn't a SHA-256 is refused. Uses the test key
+# only. Needs ANDROID_HOME.
 #
 #   test-sign-apk.sh <unsigned.apk>
 
@@ -59,4 +60,16 @@ GOOSE_CERT_SHA256="$digest" "$SIGN" "$UNSIGNED" "$OUT/right.apk" >"$OUT/log4" 2>
 	fail "the right certificate was refused: $(cat "$OUT/log4")"
 "$APKSIGNER" verify "$OUT/right.apk" || fail "the APK doesn't verify"
 
-echo "sign-apk: 4 checks passed"
+# 5. The fingerprint as keytool prints it (its label, capitals and colons) is the same one.
+pasted="SHA256: $(tr 'a-f' 'A-F' <<<"$digest" | sed 's/../&:/g; s/:$//')"
+GOOSE_CERT_SHA256="$pasted" "$SIGN" "$UNSIGNED" "$OUT/pasted.apk" >"$OUT/log5" 2>&1 ||
+	fail "keytool's line \"$pasted\" was refused: $(cat "$OUT/log5")"
+
+# 6. Something that isn't a SHA-256 is refused, saying so, with nothing written.
+if GOOSE_CERT_SHA256="SHA1: AB:CD" "$SIGN" "$UNSIGNED" "$OUT/short.apk" >"$OUT/log6" 2>&1; then
+	fail "a fingerprint that isn't a SHA-256 was accepted"
+fi
+grep -q "isn't a SHA-256" "$OUT/log6" || fail "a fingerprint that isn't a SHA-256 isn't named: $(cat "$OUT/log6")"
+[ ! -e "$OUT/short.apk" ] || fail "an APK was written for a fingerprint that isn't a SHA-256"
+
+echo "sign-apk: 6 checks passed"

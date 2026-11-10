@@ -137731,3 +137731,1136 @@ SLPM-80638:
     - tracks:
         - size: 370983312
           md5: "eb274fa2a3c10cf40e3fa51a06d8ab34"
+PCPX-96070:
+  name: "3D-Kaleidoscope - Baby Universe (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 396970560
+          md5: "2e825bc6e9e119b3b718a059232314b2"
+SLPM-80311:
+  name: "Advanced V.G. 2 (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 241896144
+          md5: "0963a00a28c20bcff0e39af540077fc2"
+        - size: 58668288
+          md5: "34602d39a3a7e092731a25cf08b0876f"
+SLPM-84001:
+  name: "Alabama Meets Will Vi - The 33rd Tokyo Motor Show (Japan)"
+  trackData:
+    - tracks:
+        - size: 318289104
+          md5: "fb316da8f1704c506b1b8a7d8b4274b7"
+        - size: 19326384
+          md5: "f4e0db0d3fe1082c46be9ace6564f5b3"
+        - size: 41077680
+          md5: "36ffd86dc76b52fe2a05cfd72c917e18"
+PAPX-90016:
+  name: "Arc the Lad - Monster Game (Japan) (Present-ban)"
+  trackData:
+    - tracks:
+        - size: 179946816
+          md5: "4ea4c898ace25741334516486acc9c59"
+SLPS-02646:
+  name: "Bass Landing 2 (Japan) (Special Fishing Set)"
+  trackData:
+    - tracks:
+        - size: 560211120
+          md5: "5d1113317da7604a455831d2029d19ac"
+SLPS-01502:
+  name: "Blue Breaker Burst - Hohoemi o Anata to (Japan)"
+  trackData:
+    - tracks:
+        - size: 512524320
+          md5: "79ee575269be4075aca386be90d57f86"
+PCPX-96163:
+  name: "Book of Watermarks, The (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 145069008
+          md5: "b11b98d7f9469304c2a65cfe3b92541e"
+SLPM-80577:
+  name: "Brave Sword (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 741853728
+          md5: "95c8411fc9b875773f4e63b0f898b78a"
+SLPM-86720:
+  name: "Breath of Fire III (Japan) (Rev 1)"
+  trackData:
+    - version: "Rev 1"
+      tracks:
+        - size: 442415904
+          md5: "b536eeb56ba44b3e903fccc50620acc1"
+        - size: 37396800
+          md5: "2d7b5e8e94a91bf5423b2356f6a34863"
+SLPM-87159:
+  name: "Breath of Fire IV - Utsurowazaru Mono (Japan) (Rev 1)"
+  trackData:
+    - version: "Rev 1"
+      tracks:
+        - size: 654603936
+          md5: "74423a9a83499ad304450c7fd8592f87"
+        - size: 43248576
+          md5: "356b1233660dd9c8ca95f980b46481dc"
+SLPM-88505:
+  name: "Casper - Friends Around the World (Korea)"
+  trackData:
+    - tracks:
+        - size: 319347504
+          md5: "e4013909d901415c9c64828728f435db"
+SLPM-80330:
+  name: "Catherine Catherine - Enfants Terrible - Visual Disc (Japan)"
+  trackData:
+    - tracks:
+        - size: 287510832
+          md5: "d5a721d7583968e75f974ae5b562b548"
+SLPS-02027:
+  name: "Chibi Chara Game - Ginga Eiyuu Densetsu (Japan) (Disc 1) (Go! Go! Casino)"
+  trackData:
+    - tracks:
+        - size: 360258192
+          md5: "06cabc6f5dc4d66ca1b6eed1fe8380a7"
+SLPS-02028:
+  name: "Chibi Chara Game - Ginga Eiyuu Densetsu (Japan) (Disc 2) (Let's Surogoku)"
+  trackData:
+    - tracks:
+        - size: 257579280
+          md5: "83860de244cd7864e3a063e5ed075b3b"
+SLPM-80013:
+  name: "Chou Aniki - Kyuukyoku Muteki Ginga Saikyou Otoko - Shotaiken Manual CD-ROM (Japan)"
+  trackData:
+    - tracks:
+        - size: 62273904
+          md5: "10896a4e241228c5b6fdb2b7681b1db0"
+SLPM-80189:
+  name: "Chou Sentou Kyuugi Vanborg (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 8246112
+          md5: "1f5aa25638dd5f9e940c4e6604b48587"
+        - size: 31947216
+          md5: "1ba53037c1a915d9903d9f12c9851506"
+        - size: 27633648
+          md5: "4d65479c523bcb9de17041ae42b5bed3"
+        - size: 18171552
+          md5: "0d9942f3bb62e2c520d4007ffa07edd1"
+        - size: 16360512
+          md5: "6255ae0d53746eecda9865558d276088"
+        - size: 25476864
+          md5: "013b533e261ec6a2e5f8698d31b11739"
+        - size: 12190416
+          md5: "df174559150e1c4c648bf57786d7bd86"
+        - size: 3278688
+          md5: "4b7c1924d1f6ce4a2ddaeae5d7e91935"
+        - size: 1898064
+          md5: "87db5f85f3baa8a0d602b01340fa278c"
+        - size: 3459792
+          md5: "479e5af5673661699bb973c6f84cfe9a"
+        - size: 1803984
+          md5: "4f102d6f77e80ae0ce437e252c580d25"
+        - size: 11423664
+          md5: "699ae1e4d4c33b1eb1c6f5eceefc1e3a"
+        - size: 13201776
+          md5: "c01680fc58d08563eda42967dc3b9b70"
+        - size: 11642400
+          md5: "bc97903b57cc52dccb65bec0ddfa3ceb"
+        - size: 33102048
+          md5: "fb233657cdf11b908c3e39b401be8f37"
+        - size: 9139872
+          md5: "460887b4332a2d0902d8e13dc476406b"
+SLPM-80019:
+  name: "Classic Road (Japan) (Otanoshimi Data Disc)"
+  trackData:
+    - tracks:
+        - size: 99781248
+          md5: "ef1c49c1fbf24abf83187d475812622c"
+SLES-03249:
+  name: "Dave Mirra Freestyle BMX (Europe) (En,Fr,De)"
+  trackData:
+    - tracks:
+        - size: 258390720
+          md5: "d192b1428cbe9dbe17a93cce27bb8272"
+        - size: 32163600
+          md5: "092a1d1e6932a3c99426b9020c8ef8fb"
+SLPM-86455:
+  name: "Deep, The - Ushinawareta Shinkai (Japan) (Global Game Selection 2000)"
+  trackData:
+    - tracks:
+        - size: 271665408
+          md5: "fae6eaf333ffa0e229d722c6353b8722"
+PCPX-96048:
+  name: "Depth (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 234045168
+          md5: "d06046ae7406c26ce7b82ba11362fd4e"
+SLPS-03393:
+  name: "Doko made mo Aoku... (Japan)"
+  trackData:
+    - tracks:
+        - size: 741178704
+          md5: "5b465615a9a1edfbcc879d04f6b10529"
+SLPS-91450:
+  name: "Doukyuu Re-mix - Billiards Multiple (Japan) (PSone Books)"
+  trackData:
+    - tracks:
+        - size: 622633200
+          md5: "14e63fbed1e834857cddf3bfed7f0f12"
+SLPM-80637:
+  name: "Dragon Drive - Tactics Break (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 33871152
+          md5: "e9370df573735ab5685b4891fab5f5d3"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+SLES-03667:
+  name: "FIFA Football 2002 (Belgium)"
+  trackData:
+    - tracks:
+        - size: 662424336
+          md5: "0c8cafd5dd3c3c5c59dcd0ea15f7bcf0"
+SLUS-00612:
+  name: "Formula 1 Championship Edition (USA) (En,Fr,De,Es,It) (SLUS-00612)"
+  trackData:
+    - tracks:
+        - size: 656476128
+          md5: "7c99a21d0bde44f3326f183428c7b89e"
+        - size: 42688800
+          md5: "d3acdf1a08d047c72e595351fc548900"
+SLPM-87285:
+  name: "Game of Life, The - DX Jinsei Game IV (Japan) (Rev 1)"
+  trackData:
+    - version: "Rev 1"
+      tracks:
+        - size: 276875088
+          md5: "8df5b46ea4333d3e575e68fe851c9b78"
+        - size: 33365472
+          md5: "820bb7e94928b06f1f7a6237bca80c94"
+SLPM-84016:
+  name: "Gekitou! Crush Gear Turbo - Comic Bom Bom Special Disc (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 210525168
+          md5: "53a8728a185668ae97605e1e31df0ea4"
+SLPM-84011:
+  name: "Gokui Game Creator ni Narou! (Japan)"
+  trackData:
+    - tracks:
+        - size: 500049312
+          md5: "9696112e97c09dd3202b652502aca0e0"
+SLED-01093:
+  name: "Grand Theft Auto (France) (Demo)"
+  trackData:
+    - tracks:
+        - size: 20591760
+          md5: "5703541a7f562adddd970f8481c88cb1"
+        - size: 43083936
+          md5: "d984352db5db84acd7170eaf11af65f9"
+SLPM-80171:
+  name: "Groove Jigoku V (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 96566064
+          md5: "735d442dc9dc6b54f904d76006d89d9b"
+SLPS-91195:
+  name: "Gunbarl (Japan) (Rev 1)"
+  trackData:
+    - version: "Rev 1"
+      tracks:
+        - size: 480412464
+          md5: "fd17af0a4045938739f1cba116e9bc00"
+SLPM-80625:
+  name: "Helix - Fear Effect (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 467803392
+          md5: "f3dbf7c0703b1815e4f2b858965ed057"
+PAPX-90004:
+  name: "Hermie Hopperhead - Scrap Panic (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 429446976
+          md5: "258c6683359d077f91f063af7222928f"
+SLPS-00471:
+  name: "Heroine Dream (Japan)"
+  trackData:
+    - tracks:
+        - size: 371023296
+          md5: "ff3a1abe6ae057af5f1e071a1389b0ff"
+        - size: 32104800
+          md5: "65aea234c174ee35fb574d981fe3fc4f"
+SLPM-80359:
+  name: "Initial D (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 351873312
+          md5: "7aa75644df339a2b3441b197910fe3c8"
+SLPS-03504:
+  name: "Inuyasha - Sengoku Otogi Gassen (Japan)"
+  trackData:
+    - tracks:
+        - size: 667448208
+          md5: "a4abff5baf1b398fd1bfed919d8b27aa"
+SLPM-80551:
+  name: "Jikkyou Golf Master 2000 (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 391245792
+          md5: "69d234da2abd7f79abe3a99a81659b8c"
+SLPM-86045:
+  name: "Katou Hifumi Kudan - Shougi Club (Japan)"
+  trackData:
+    - tracks:
+        - size: 2434320
+          md5: "7d05306cdb218721d9981e86cd16cd1f"
+        - size: 32104800
+          md5: "65aea234c174ee35fb574d981fe3fc4f"
+SLED-01379:
+  name: "Kick Off World (Greece) (Demo)"
+  trackData:
+    - tracks:
+        - size: 204238272
+          md5: "ab53d963b49af0923744fc6a8da7e6dd"
+SLPM-80553:
+  name: "Kidou Senshi Gundam - Gihren no Yabou - Zeon no Keifu (Japan) (Disc 1) (Earth Federation Disc) (Koudansha Rengou Kikaku Tokubetsu Disc)"
+  trackData:
+    - tracks:
+        - size: 721882896
+          md5: "baba7b55d98417ab002f2920c84694e6"
+        - size: 12357408
+          md5: "eec0bae6829eca9fba60a817de9a6a08"
+SLPM-80554:
+  name: "Kidou Senshi Gundam - Gihren no Yabou - Zeon no Keifu (Japan) (Disc 2) (Zeon Disc) (Koudansha Rengou Kikaku Tokubetsu Disc)"
+  trackData:
+    - tracks:
+        - size: 725076912
+          md5: "75d425b50b861a7bd86002a41ef754e7"
+        - size: 13159440
+          md5: "e5d32509d544d4f653b9b06a74df32a1"
+SLPS-03324:
+  name: "Kids Station - Doraemon - Himitsu no Yojigen Pocket (Japan)"
+  trackData:
+    - tracks:
+        - size: 238563360
+          md5: "ea2eb486e4ddbc958de52ca35f6a5f09"
+SLPM-88507:
+  name: "Kids Station - Gomdori Pooh Hakseup Series - Gomdori Pooh Yuchiwon Hakseubyeohaeng (Korea) (En,Ko)"
+  trackData:
+    - tracks:
+        - size: 271568976
+          md5: "547ded9864615cddbe6ba2908815be91"
+SLPM-86904:
+  name: "Kids Station - Hello Kitty no Oshaberi ABC (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 481038096
+          md5: "c95c7f9834ddce2818ebdc5a1b2279f8"
+SLPS-02699:
+  name: "Kids Station - Kikansha Thomas to Nakamatachi (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 155594208
+          md5: "f06dbb39bef1320a4e4ec01c14b5a344"
+SLPS-03406:
+  name: "Kids Station - Oja Majo DoReMi Dokkan! Maho-dou Eigo Festival (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 310376976
+          md5: "ba47624e798e4e6a36adeeb9325704b3"
+SLPS-03514:
+  name: "Kids Station - Oshaberi Oekaki - Kikansha Thomas to Nakamatachi (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 211552992
+          md5: "21512ae0d52ef2f4c5a2d3dd7d2f92e5"
+SLPS-03358:
+  name: "Kids Station - Ponkickies 21 - Game no Omocha-bako (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 70084896
+          md5: "1a7dbdf5eb045c3fa7e3fd249a32874a"
+SLPS-02700:
+  name: "Kids Station - Soreike! Anpanman (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 368730096
+          md5: "f798aacb127aa81d28a0c070b312f481"
+SLPM-80588:
+  name: "Kids Station - Soreike! Anpanman (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 368824176
+          md5: "fea0816d0386b34fcefe8961b9cebdb9"
+SLPS-03196:
+  name: "Kids Station - Soreike! Anpanman 2 - Anpanman to Daibouken! (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 163212336
+          md5: "25abe2c00868fc6fae1b70e9471f558b"
+SLPS-03404:
+  name: "Kids Station - Soreike! Anpanman 3 - Sugoroku Anpanman (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 348415872
+          md5: "e8b9b3ec9e6088d69031eb3ec38bb6be"
+SLPM-87168:
+  name: "Kids Station - Ugoku Tomica Zukan (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 400976016
+          md5: "0c5d0c98cad46aa2309904a853bc4ffe"
+SLPS-03315:
+  name: "Kids Station - Ultraman Cosmos - Yuusha no Chikai (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 497241024
+          md5: "39216b8a72d640b79440beb88284b914"
+SLPS-03172:
+  name: "Kids Station - Yancharu Moncha (Japan) (Controller Set)"
+  trackData:
+    - tracks:
+        - size: 111383664
+          md5: "1b8721a34d0ea0e2c68a212815ab73d7"
+SLPS-02975:
+  name: "Kowloon's Gate - Kowloon Fuusuiden (Japan) (Disc 1) (Byakko) (Artdink Best Choice)"
+  trackData:
+    - tracks:
+        - size: 737457840
+          md5: "9dcf14b532776bb7c8747478c18728b5"
+SLPS-02976:
+  name: "Kowloon's Gate - Kowloon Fuusuiden (Japan) (Disc 2) (Genbu) (Artdink Best Choice)"
+  trackData:
+    - tracks:
+        - size: 728774256
+          md5: "f332c26af10328bac9ec294792798085"
+SLPS-02977:
+  name: "Kowloon's Gate - Kowloon Fuusuiden (Japan) (Disc 3) (Suzaku) (Artdink Best Choice)"
+  trackData:
+    - tracks:
+        - size: 730479456
+          md5: "5974dc705e87e1f0f91a16fb34b4e5ab"
+SLPS-02978:
+  name: "Kowloon's Gate - Kowloon Fuusuiden (Japan) (Disc 4) (Seiryuu) (Artdink Best Choice)"
+  trackData:
+    - tracks:
+        - size: 718841760
+          md5: "4648d9f1135623e232a0ec9c07fbb6b7"
+SLPM-88504:
+  name: "Land Before Time, The - Great Valley Racing Adventure (Korea)"
+  trackData:
+    - tracks:
+        - size: 227231424
+          md5: "ad90194b854ccf45b19b3b27fbe91191"
+SLED-01462:
+  name: "Lemmings & Oh No! More Lemmings (Europe) (En,Fr,De,Es,It) (Demo)"
+  trackData:
+    - tracks:
+        - size: 31594416
+          md5: "0a8d40000db2b2dd81ce9161bc0eae82"
+        - size: 29475264
+          md5: "11660faaabc9166381c985e344ed21d8"
+        - size: 28826112
+          md5: "5295d72dab1cfe5e1654e5370fc7f9bb"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+SLED-01249:
+  name: "Lucky Luke (Europe) (Demo)"
+  trackData:
+    - tracks:
+        - size: 203746704
+          md5: "fe1bcb4c94b1b6676c7598ae867fa62c"
+SLPM-80549:
+  name: "Menkyo o Torou (Japan) (Demo 1)"
+  trackData:
+    - tracks:
+        - size: 159999504
+          md5: "cffb3842088bb4d938b26ae2d1715520"
+PCPX-96040:
+  name: "MiruMiru PlayStation Vol. 1 (Japan) (Disc 2)"
+  trackData:
+    - tracks:
+        - size: 471032688
+          md5: "ce7f32bac0a3894d1160343dba4773bb"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+PCPX-96071:
+  name: "MiruMiru PlayStation Vol. 10 (Japan)"
+  trackData:
+    - tracks:
+        - size: 465637200
+          md5: "8ab78d3ae1f28ea3847b9b4a6b755941"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96043:
+  name: "MiruMiru PlayStation Vol. 2 (Japan) (Disc 1)"
+  trackData:
+    - tracks:
+        - size: 495883920
+          md5: "2995699c7279e4c6697f17ebd3d7c77e"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+PCPX-96044:
+  name: "MiruMiru PlayStation Vol. 2 (Japan) (Disc 2)"
+  trackData:
+    - tracks:
+        - size: 502589472
+          md5: "e9069a4e6fd52b1102aa19a530e85017"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+PCPX-96117:
+  name: "MiruMiru PlayStation Vol. 23 (Japan)"
+  trackData:
+    - tracks:
+        - size: 400089312
+          md5: "df1ac3b82156a62598117ab60caf9744"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96120:
+  name: "MiruMiru PlayStation Vol. 24 (Japan)"
+  trackData:
+    - tracks:
+        - size: 444859632
+          md5: "2002be590207d42559fc5d9d9da19d46"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96123:
+  name: "MiruMiru PlayStation Vol. 25 (Japan)"
+  trackData:
+    - tracks:
+        - size: 631309728
+          md5: "cf2d10f7332984f598fa748c1d9f8b51"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96124:
+  name: "MiruMiru PlayStation Vol. 26 (Japan)"
+  trackData:
+    - tracks:
+        - size: 615059760
+          md5: "1b05f2a0353bc0eaf4479743e86ac29e"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96131:
+  name: "MiruMiru PlayStation Vol. 27 (Japan)"
+  trackData:
+    - tracks:
+        - size: 744236304
+          md5: "3f1da8560ec261aa09382966533e43ba"
+PCPX-96045:
+  name: "MiruMiru PlayStation Vol. 3 (Japan) (Disc 1)"
+  trackData:
+    - tracks:
+        - size: 637253232
+          md5: "9e39f1e060ddeb32beda0bc397cfc8a7"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+PCPX-96046:
+  name: "MiruMiru PlayStation Vol. 3 (Japan) (Disc 2)"
+  trackData:
+    - tracks:
+        - size: 634070976
+          md5: "60d137b2ea03246e4368616d21f51a90"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+PCPX-96141:
+  name: "MiruMiru PlayStation Vol. 30 (Japan)"
+  trackData:
+    - tracks:
+        - size: 619681440
+          md5: "a2b7597aa7dad606360f028e42ed0035"
+PCPX-96151:
+  name: "MiruMiru PlayStation Vol. 33 (Japan)"
+  trackData:
+    - tracks:
+        - size: 341719728
+          md5: "bb3196b8f51aae78807cd1e22bab9d21"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96158:
+  name: "MiruMiru PlayStation Vol. 35 (Japan)"
+  trackData:
+    - tracks:
+        - size: 452611824
+          md5: "b1e4aa6883f167e461a16fcbab9201e8"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96162:
+  name: "MiruMiru PlayStation Vol. 36 (Japan)"
+  trackData:
+    - tracks:
+        - size: 485431632
+          md5: "5ab00fe8366e91ff65e72f67c32908c8"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96169:
+  name: "MiruMiru PlayStation Vol. 37 (Japan)"
+  trackData:
+    - tracks:
+        - size: 568821792
+          md5: "0ed5058463cdd4d8e7235d36c1971b93"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96172:
+  name: "MiruMiru PlayStation Vol. 38 (Japan)"
+  trackData:
+    - tracks:
+        - size: 461469456
+          md5: "7c7e7f36e8d75a81f78c57c037e42718"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96175:
+  name: "MiruMiru PlayStation Vol. 39 (Japan)"
+  trackData:
+    - tracks:
+        - size: 615445488
+          md5: "dd038bbf4506d40233a9c91d47cae715"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96051:
+  name: "MiruMiru PlayStation Vol. 4 (Japan) (Disc 1)"
+  trackData:
+    - tracks:
+        - size: 625963632
+          md5: "3696b9232a9025a12a11deda90643d33"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+PCPX-96052:
+  name: "MiruMiru PlayStation Vol. 4 (Japan) (Disc 2)"
+  trackData:
+    - tracks:
+        - size: 418282032
+          md5: "0b9dda5f93ae79b82e35fccd5ffb85f8"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+PCPX-96181:
+  name: "MiruMiru PlayStation Vol. 40 (Japan)"
+  trackData:
+    - tracks:
+        - size: 584053344
+          md5: "e9690f5001e6464f8ac0c3e5bfcb61fa"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96197:
+  name: "MiruMiru PlayStation Vol. 44 (Japan)"
+  trackData:
+    - tracks:
+        - size: 198675792
+          md5: "aa8312de4d051d4589c27c70535d6441"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+PCPX-96069:
+  name: "MiruMiru PlayStation Vol. 9 (Japan)"
+  trackData:
+    - tracks:
+        - size: 562130352
+          md5: "d365e91a688e3b1ad821fc848017a3c3"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+SLPM-80585:
+  name: "Mobile Police Patlabor - Game Edition (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 98866320
+          md5: "222371c394e89dc87c73c965d00c9fca"
+SLPM-80375:
+  name: "Mobile Suit Gundam - Char's Counterattack (Japan) (Tokubetsuban)"
+  trackData:
+    - tracks:
+        - size: 695119488
+          md5: "8432eee80a0f9ec3a75a621fea20302e"
+        - size: 32986800
+          md5: "dc4481393ef2a15556468790fd55e84a"
+SCPS-46002:
+  name: "Mr. Driller (Korea)"
+  trackData:
+    - tracks:
+        - size: 371213808
+          md5: "7940935673b679a9adea35cbc804c066"
+SLPM-80529:
+  name: "My Home Dream 2 - Niwatsuki Ikkodate de, Ikou! (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 247162272
+          md5: "f0e3a6069107d6a7c81762201e505932"
+SLPS-02667:
+  name: "Natsuiro Kenjutsu Komachi (Japan)"
+  trackData:
+    - tracks:
+        - size: 572131056
+          md5: "9a2c304aa93fa250bc32a4736d73e1d6"
+        - size: 34303920
+          md5: "f8893657e397f946b31779dac878cd10"
+SCED-03913:
+  name: "Nestle Disney Demo (Europe)"
+  trackData:
+    - tracks:
+        - size: 264745824
+          md5: "e2a713a37a203d7a165cce4502e5333e"
+        - size: 21240912
+          md5: "55385e623ff3d5ec811804d19669c7d3"
+        - size: 21511392
+          md5: "795f388820cbbf3b72cc3473ff72b6c4"
+        - size: 31867248
+          md5: "240dd25680e5d6ed42f17cb4093cbf43"
+        - size: 5402544
+          md5: "04ad28f9ed1a3919c3bef49e715403fd"
+        - size: 33908784
+          md5: "369ff3006396bbca8d9a1fb9cc125af9"
+        - size: 32356464
+          md5: "f69392e9568b55dc52d1aebb900c2a61"
+SLPM-80639:
+  name: "Ninpuu Sentai Hurricanger & Kamen Rider Ryuuki (Japan) (2-dai Hero Special Disc Taikenban)"
+  trackData:
+    - tracks:
+        - size: 288475152
+          md5: "c917c574c1260b6b84bb7ee2ee56af54"
+        - size: 2829456
+          md5: "f431373cd27fd1eaf96b6cf5fa1473c2"
+        - size: 37396800
+          md5: "2d7b5e8e94a91bf5423b2356f6a34863"
+SLPM-86887:
+  name: "Nobunaga no Yabou - Reppuuden (Japan) (Rev 1)"
+  trackData:
+    - version: "Rev 1"
+      tracks:
+        - size: 143874192
+          md5: "456d99eac0ecddafe70ec4f5a2de62a1"
+        - size: 37810752
+          md5: "61239a3dc22088a08f2d320918ac11a1"
+SLPM-80075:
+  name: "Odo Odo Oddity (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 180365472
+          md5: "f44c847ff6722722246762ba893b1fa8"
+        - size: 40256832
+          md5: "f559348310a65f1cacda5f3eed4b4523"
+SLPS-00345:
+  name: "Oh-chan no Oekaki Logic 2 (Japan)"
+  trackData:
+    - tracks:
+        - size: 86393664
+          md5: "f5031ce4e1b1848d00b4eddef81d8f3f"
+        - size: 21930048
+          md5: "78e145774e27288fddf7a2f4b6320d44"
+        - size: 26636400
+          md5: "cd4b096d98ac894b79b7ec7f64be1a2b"
+        - size: 41750352
+          md5: "8240e5a60d321e76187251d06c8ae2e3"
+        - size: 27511344
+          md5: "344cc5144a42911d9adcb5d3a86f4997"
+        - size: 32340000
+          md5: "97612c22902e621c8671230cb4e86cec"
+        - size: 32391744
+          md5: "39594826bde41b5981f780985dbbbe90"
+        - size: 33019728
+          md5: "d903a85840b32d914c2fe029330ec910"
+        - size: 32798640
+          md5: "0d1354c443f7073f08abc61428268c4e"
+        - size: 32716320
+          md5: "4350e0741903749192b45f8ed014bee4"
+        - size: 33299616
+          md5: "ca7b43ecad54763cc9626be8c0574c2a"
+        - size: 1573488
+          md5: "e095242720a748be548498fb998e49f7"
+        - size: 17009664
+          md5: "fd578d0ca407ad5ef8600c57bf83cfac"
+        - size: 3490368
+          md5: "f1808a625c9512589b8939dabda673b6"
+        - size: 32173008
+          md5: "da945e0f2cb5996fd14b7336b147c837"
+SLES-00294:
+  name: "Olympic Soccer (Germany)"
+  trackData:
+    - tracks:
+        - size: 57494640
+          md5: "afbee15e1e6f10157e848d460bba72fd"
+        - size: 28390992
+          md5: "e25a5ca0896bcc776d2d420fbeaad17f"
+        - size: 19436928
+          md5: "cfc6521892e9052998eaeb6dc8cd03b3"
+        - size: 42169008
+          md5: "4e2f9529b2f04976a42f72f6c3776f1b"
+        - size: 28647360
+          md5: "83787261f6e6f7078ac9f9f208aa7c86"
+        - size: 33290208
+          md5: "d98fd9cfb29d32ca5cb2c1132d83f8a8"
+        - size: 17207232
+          md5: "ca582151ab0bf25a3be17b8e9b4f1594"
+        - size: 30314928
+          md5: "5cf53cdd7d38877af06263ffae003d94"
+        - size: 29945664
+          md5: "b183f4d773590d9600e70e56edfaab70"
+        - size: 31293360
+          md5: "29f9140c7366bb0288d59d8ae306912f"
+        - size: 16355808
+          md5: "f3c4e1ee410f409c94487f2ff1beae41"
+        - size: 33603024
+          md5: "3e830f5e4b8cbb618f74ef7c57212ceb"
+        - size: 34842528
+          md5: "9d116037c7d430e72cab0b82e07de314"
+        - size: 1914528
+          md5: "c485a31ee4c94ddb9226d05508c7eb24"
+        - size: 1712256
+          md5: "c78ae7f747cedd0dfe309100987879cd"
+        - size: 1829856
+          md5: "b0a07c87be13235c6c8f62cf01bf6b65"
+        - size: 10311168
+          md5: "c9da0285f1ef5a7e1e43e34609cd2fa0"
+        - size: 21436128
+          md5: "02e49536d8f3c236446974c86d804fff"
+        - size: 27193824
+          md5: "5c8b031afcf309bafedb04690cc81267"
+        - size: 42169008
+          md5: "4e2f9529b2f04976a42f72f6c3776f1b"
+SLPS-02684:
+  name: "Ongaku Tkool - Kanadeeru 2 (Japan) (Rerelease)"
+  trackData:
+    - tracks:
+        - size: 80755920
+          md5: "e8c976a4c4afcbdfd8dd2ce15ff8ac21"
+PAPX-90084:
+  name: "Ore no Ryouri (Japan) (Demo 1)"
+  trackData:
+    - tracks:
+        - size: 109638480
+          md5: "9cda3a4dea5c497bb35b76ee31fbe432"
+SCPS-45051:
+  name: "PaRappa the Rapper (Asia) (En,Ja,Fr,De,Es,It,Zh)"
+  trackData:
+    - tracks:
+        - size: 729536304
+          md5: "7570809e304b557dc21dfd804fedec4e"
+SLPM-80443:
+  name: "Paca Paca Passion (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 391610352
+          md5: "994958522f0757695c7681e5f702a701"
+SLPM-80546:
+  name: "Paca Paca Passion 2 (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 234028704
+          md5: "ac6f872a1ae443d5cd734e48ea3ee215"
+SLPM-80030:
+  name: "Pandora Project - The Logic Master (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 123207168
+          md5: "9b9245b2881b0849e718ec29b3f28122"
+        - size: 34781376
+          md5: "a451ceaa463e573c10dd20a6c71425d8"
+SLPM-89005:
+  name: "Play de Oboeru Series - Sekaishi Keyword Deruderu 1800 (Japan) (Shotenban)"
+  trackData:
+    - tracks:
+        - size: 131330976
+          md5: "eed1f9fe24bf58a5e21781172c3ffc71"
+SLPS-01505:
+  name: "Princess Maker - Go! Go! Princess (Japan)"
+  trackData:
+    - tracks:
+        - size: 692285328
+          md5: "50a09058a3e4c455b360621a24e41e7d"
+SLED-02232:
+  name: "R-C Stunt Copter (Germany) (Demo)"
+  trackData:
+    - tracks:
+        - size: 163953216
+          md5: "fd8bd38aa0240687a6bddc1ff665f84d"
+        - size: 32281200
+          md5: "cecf1db7cf5a258ae34c2ae23bf0d546"
+SLED-03050:
+  name: "Rayman 2 - The Great Escape (Europe) (Demo)"
+  trackData:
+    - tracks:
+        - size: 81499152
+          md5: "f5be79678e2a2607caf9b375ce9baa31"
+SLPM-80125:
+  name: "Recipro Heat 5000 (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 31839024
+          md5: "6272c75cd1464d14812f50cceaadfc32"
+        - size: 78949584
+          md5: "6cd7efbbd10f4834f0f6d219787421c7"
+        - size: 60180624
+          md5: "7f47abbc98709706b3aceed06cb49d7a"
+        - size: 62687856
+          md5: "24b057432c2e8198304bebcc5de83beb"
+        - size: 23221296
+          md5: "b772d7d7a1b5b7c10b3f47e62ad1faa7"
+        - size: 21520800
+          md5: "a5b9901bd6383fb524a2c25156560f3c"
+        - size: 70004928
+          md5: "ee207198423c747cc16455312ce010ec"
+SLPM-80475:
+  name: "Remote Control Dandy - Bangai-hen (Japan)"
+  trackData:
+    - tracks:
+        - size: 214126080
+          md5: "094c908c662358e8eaf34a7da76f0252"
+SLPM-80201:
+  name: "Riven - The Sequel to Myst (Japan) (Otameshi Disc)"
+  trackData:
+    - tracks:
+        - size: 655123728
+          md5: "9482eb78bcf767bb70687c1fbd2d6ac8"
+SLUS-94272:
+  name: "Running Wild (USA) (Beta) (1998-07-28)"
+  trackData:
+    - tracks:
+        - size: 64503600
+          md5: "f1bdda9ce3a2dc58a8cc95fd0f36dbe3"
+SLPS-03506:
+  name: "Samurai Deeper Kyo (Japan)"
+  trackData:
+    - tracks:
+        - size: 380617104
+          md5: "b1d06e9377644afd256b0c96bb825d29"
+SLPS-91024:
+  name: "Samurai Spirits - Zankurou Musouken (Japan) (PlayStation the Best)"
+  trackData:
+    - tracks:
+        - size: 415184448
+          md5: "22e8ac5f67daa933afb0887402570a25"
+PCPX-96166:
+  name: "Saru! Get You! (Japan) (Demo 2)"
+  trackData:
+    - tracks:
+        - size: 142801680
+          md5: "06abe0bfc1b746e62b7fac272c1c099d"
+SLPM-80190:
+  name: "SatelliTV & Doki Doki Shutter Chance - Koi no Puzzle o Kumitatete (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 205611840
+          md5: "f9718f21fb9a29fd07f3cfa10081bd7f"
+SCED-00609:
+  name: "Serial Players Only (France)"
+  trackData:
+    - tracks:
+        - size: 82952688
+          md5: "a57acce25399a09b402e8ffa5fa40fb0"
+        - size: 36611232
+          md5: "c8446e15de683617492958f16d5e35cf"
+        - size: 33638304
+          md5: "90e8e1cf13e32ced4c9c2a9d3750a07d"
+        - size: 20086080
+          md5: "5ee1542bf415d7eaf38552bf0e81e96d"
+        - size: 33889968
+          md5: "8fadd596551fa53188b74269c18358ea"
+SLPS-00655:
+  name: "Shin SD Sengokuden - Kidou Musha Taisen (Japan)"
+  trackData:
+    - tracks:
+        - size: 692772192
+          md5: "bc95e7748036b9b911a53d2ac403a652"
+SLPM-80503:
+  name: "Simple 1500 Series - The Demo II (Japan) (Taikenban)"
+  trackData:
+    - tracks:
+        - size: 14507136
+          md5: "d26ba509a8a6f8bf22aae5527bcd0ad7"
+        - size: 1455888
+          md5: "829247ba0a2a28d50bb8e21ccb54cd9c"
+        - size: 1411200
+          md5: "4ff6bc3b4d22b5bdea41bce36989a02b"
+        - size: 1676976
+          md5: "6b3c9c6d77257fae96e434758963da3a"
+        - size: 48512352
+          md5: "cac9ca7ff1b856069801fa07bd0862ec"
+        - size: 2048592
+          md5: "1a7de3237eb3074398e7fefd7f864b38"
+        - size: 1761648
+          md5: "f49cb3f2ec77dfe4f9cb3a5202e8f8f7"
+        - size: 2112096
+          md5: "aeb048e6ba4f8c7a50bf4f59999d250a"
+        - size: 2556624
+          md5: "9da5d8fe7bd74e70df99f3a59dce9700"
+        - size: 1876896
+          md5: "00a1000a91200a0cebe6e411056ece49"
+        - size: 1945104
+          md5: "049de4a3aa6868e2a8c6cd44af599dc0"
+        - size: 1455888
+          md5: "356cf3def8aa84456e288accd44c4a2b"
+        - size: 1679328
+          md5: "d982b8168c19ffd08ce06f0e2f2fd348"
+        - size: 2222640
+          md5: "ab392fa78458c7016c714fdfe6ea14e2"
+        - size: 35672784
+          md5: "1bf22d5a9122c29a6c984e623f9335f4"
+        - size: 44264640
+          md5: "e6f57b64909a99921872bb708c887264"
+        - size: 16313472
+          md5: "10948fd42cc79a68b535b7605c2696e9"
+SLPM-80356:
+  name: "Street Fighter Zero 3 (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 475494432
+          md5: "b7fb91eb5771ae9e3b8a907c9b864c09"
+        - size: 43248576
+          md5: "b8d6e0a2d2c14b4e54b4c9edb3a2dc7d"
+SLKA-02002:
+  name: "Super Lite Best Vol. 1 - Cotton Original & Block Keeper (Korea)"
+  trackData:
+    - tracks:
+        - size: 113944992
+          md5: "e75b78a7591084936551bacc0b580848"
+        - size: 23712864
+          md5: "68a8dada5a8b83c6d47939d1d0c60e4e"
+        - size: 33882912
+          md5: "100a2e7cec31a1ea2bc33125a533d294"
+SLKA-02003:
+  name: "Super Lite Best Vol. 2 - Sanvein & Bomb Boat (Korea) (En,Ko)"
+  trackData:
+    - tracks:
+        - size: 198038400
+          md5: "252174096b52d267fa7b1f988ef74834"
+        - size: 10993248
+          md5: "67be88825ebd5a24ef41d2806ee16bf3"
+        - size: 23712864
+          md5: "68a8dada5a8b83c6d47939d1d0c60e4e"
+        - size: 33882912
+          md5: "100a2e7cec31a1ea2bc33125a533d294"
+SCKA-01001:
+  name: "Super Shot Soccer (Korea)"
+  trackData:
+    - tracks:
+        - size: 333346608
+          md5: "3c92d96df55977efec424a2ccb1d7664"
+        - size: 6115200
+          md5: "e1b5990e89897d297ba470cdb3a7bb97"
+        - size: 16240560
+          md5: "28f5fdf0d6692b89153cd89c4587a11e"
+        - size: 12068112
+          md5: "a6b8ad188a53044f22bbef87576731e9"
+        - size: 19232304
+          md5: "d442058f38b2fe1530c58e61f511caca"
+        - size: 4360608
+          md5: "bc6cd90015f483653508b33f55b71a51"
+        - size: 32634000
+          md5: "8a791879d4bb4ec9e3c44630d9e20131"
+SLPM-80260:
+  name: "TOCA Touring Car Championship (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 50304576
+          md5: "83ffb2defedd7c4a1e988e6f6e50a6e6"
+        - size: 34334496
+          md5: "f8ae0756894b8fd643188cfdee1a8dfd"
+        - size: 56248080
+          md5: "53f058837467d0dc854e1b636829236e"
+        - size: 56248080
+          md5: "53f058837467d0dc854e1b636829236e"
+        - size: 59540880
+          md5: "e2fdbcd13725453dc75d273b1a0f8de8"
+        - size: 56248080
+          md5: "53f058837467d0dc854e1b636829236e"
+PAPX-90017:
+  name: "Total NBA '97 (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 450626736
+          md5: "16344efbf5d9539c44c25343161d099e"
+        - size: 42789936
+          md5: "26d92549b65c142e1f9dfcf9cb50d188"
+SLPM-80263:
+  name: "Trap Gunner (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 710407488
+          md5: "07445bce4de16c5ac48cb2600e503c30"
+SLPM-89007:
+  name: "Vantan Dennoh Intelligence College V-Disc - Vantan Gakkou Annai CD-ROM (Japan)"
+  trackData:
+    - tracks:
+        - size: 545210064
+          md5: "5209faed659fef3c64a21bc2f5d80534"
+SCED-02672:
+  name: "Video IDU Demo 06E (Europe)"
+  trackData:
+    - tracks:
+        - size: 626706864
+          md5: "2a32a9b840d97ed7f43e80567370d916"
+        - size: 51527616
+          md5: "4d65a549fd5ee87e0b3722442c0e267c"
+SCED-01195:
+  name: "Video IDU Demo 1F (France)"
+  trackData:
+    - tracks:
+        - size: 656894784
+          md5: "905c51f637ca49858770d71707bb043f"
+        - size: 32354112
+          md5: "ee83e17e16bca73cd5438462de6883d2"
+SLPM-87086:
+  name: "Water Summer (Japan)"
+  trackData:
+    - tracks:
+        - size: 481889520
+          md5: "a7ce9b211a3e25b6687bb234893b083a"
+        - size: 28931952
+          md5: "ab3beab2d9897a3c4d9187ca526e97a2"
+        - size: 28661472
+          md5: "f300560e12afe106f9970724f53f5d3a"
+        - size: 32104800
+          md5: "65aea234c174ee35fb574d981fe3fc4f"
+SCPM-85003:
+  name: "World of Philosoma, The (Japan)"
+  trackData:
+    - tracks:
+        - size: 313443984
+          md5: "201ce5232083ae17057dd7879bfa553d"
+SCPS-45268:
+  name: "XI [sai] (Asia) (En,Zh)"
+  trackData:
+    - tracks:
+        - size: 111009696
+          md5: "786c233669cc37701854c6f6926144f5"
+        - size: 35388192
+          md5: "00d7eab69d837db80a5edd863272fa58"
+        - size: 35630448
+          md5: "9d9d210c86c07dc53bdfb3adab074cba"
+        - size: 32156544
+          md5: "a73ad1a4914020f844c3ef99ab24d331"
+        - size: 23216592
+          md5: "4a8d1d4cb466f1ef569904a3ebf6e31f"
+        - size: 55478976
+          md5: "482c55560a0bba74eaacb7018807ec3c"
+        - size: 11019120
+          md5: "a74d5853e3c2762c60cb91ae07c5c04c"
+        - size: 10939152
+          md5: "a478435f829fa679194acda9106f44d7"
+        - size: 53987808
+          md5: "73adfea5157b39521c21f5274b70084b"
+        - size: 53769072
+          md5: "b993d12c9f7cab2e289b77166ef0c508"
+        - size: 23200128
+          md5: "5f41858ad3b5fb6972f7681b42992684"
+        - size: 53517408
+          md5: "f251fa4d7f1f7c43578c2e963ff141a0"
+SLPM-80329:
+  name: "Xing Entertainment Winter Special '98 Premium Disc (Japan)"
+  trackData:
+    - tracks:
+        - size: 189006720
+          md5: "2e2c67d8172c570da80027245ff2084d"
+SLPM-80129:
+  name: "Yuukyuu Gensoukyoku (Japan) (Tentou Jitsuenban)"
+  trackData:
+    - tracks:
+        - size: 168640752
+          md5: "78dd292e3b7f38f99f465602de19046c"
+        - size: 63268800
+          md5: "3c6fc2e651d283df21bf853c264be75d"
+SLPM-80207:
+  name: "Yuukyuu Gensoukyoku 2nd Album (Japan) (Demo)"
+  trackData:
+    - tracks:
+        - size: 47336352
+          md5: "0f463ae217cfd72273da8958d99674a2"
+        - size: 40353264
+          md5: "76d1247ace938d4021595fdcd4e4dd5d"

@@ -479,8 +479,9 @@ Folders the app no longer uses have their grants released, unless another saved 
 Download Covers does. GooseStation hosts no covers and sends nothing anywhere until you press **Download covers**.
 
 - **Sources**: URL templates, one per row, tried in order for each game. `${serial}`, `${title}` and `${filetitle}`
-  stand for the game's serial, title and file name, URL-encoded; a source needs at least one (one without says so on
-  its row, and Download covers waits until it's fixed or removed). **Remove** is beside each, and **Add a source**
+  stand for the game's serial, title and file name, URL-encoded; a source needs at least one, and an `https://`
+  address, as Android won't fetch plain HTTP (one that breaks either rule says so on its row, and Download covers waits
+  until it's fixed or removed). **Remove** is beside each, and **Add a source**
   after them. Until you change the list it holds one preset, xlenore's PSX cover collection
   (`https://raw.githubusercontent.com/xlenore/psx-covers/main/covers/default/${serial}.jpg`); a list you empty stays
   empty, and **Restore the preset source** puts the preset back, asking first when it would replace your sources.

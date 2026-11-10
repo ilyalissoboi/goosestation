@@ -78,6 +78,12 @@ class ParseGamedbTests(unittest.TestCase):
         with self.assertRaisesRegex(FormatError, r"gamedb\.yaml:3"):
             parse_gamedb(text)
 
+    def test_parse_gamedb_rejects_codes_it_would_misread(self):
+        for line in ["    - SLUS-00002 # note", "    # a comment", '    - "SLUS-00002"', "      - SLUS-00002"]:
+            text = f'SLUS-00001:\n  codes:\n    - SLUS-00001\n{line}\n  name: "X"\n'
+            with self.assertRaisesRegex(FormatError, r"gamedb\.yaml:4", msg=line):
+                parse_gamedb(text)
+
     def test_parse_gamedb_rejects_unindented_line(self):
         with self.assertRaisesRegex(FormatError, r"gamedb\.yaml:2"):
             parse_gamedb("SLUS-00001:\n name: \"X\"\n")

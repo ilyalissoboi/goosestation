@@ -173,11 +173,14 @@ def read_redump_zip(path: Path, min_discs: int = MIN_DISCS) -> RedumpList:
 
 
 def read_skip_list(path: Path) -> set[str]:
+    """Names and serials to skip; a printed serial also skips its core form. " # " starts a comment."""
     entries = set()
     for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+        line = line.split(" # ", 1)[0].strip()
         if line and not line.startswith("#"):
             entries.add(line)
+            if serial := core_serial(line):
+                entries.add(serial)
     return entries
 
 

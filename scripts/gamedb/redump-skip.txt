@@ -3,5 +3,5 @@
 #
 # Discs the redump import must not propose again: review rejected them. One per line, either the disc's redump name
 # exactly as the import's pull request lists it, or a serial (as redump prints it, or in the core's form). Lines
-# starting with # are comments. Edit this on master: each import run rebuilds its pull request from master. See
-# docs/gamedb.md.
+# starting with # are comments, and " # " starts one after an entry (say why: "SLPM-80001 # a bad dump"). Edit
+# this on master: each import run rebuilds its pull request from master. See docs/gamedb.md.

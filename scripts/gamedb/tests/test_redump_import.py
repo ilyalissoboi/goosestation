@@ -281,8 +281,17 @@ class PlanTests(unittest.TestCase):
     def test_read_skip_list(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "skip.txt"
-            path.write_text("# comment\n\nRejected (USA)\n  SLPM 86770  \n")
-            self.assertEqual(read_skip_list(path), {"Rejected (USA)", "SLPM 86770"})
+            path.write_text("# comment\n\nRejected (USA)\n  SLPM 86770  \nSLUS-00101 # bad dump\nPart #903075\n")
+            self.assertEqual(
+                read_skip_list(path), {"Rejected (USA)", "SLPM 86770", "SLPM-86770", "SLUS-00101", "Part #903075"}
+            )
+
+    def test_spaced_skip_entry_matches_dashed_serial(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "skip.txt"
+            path.write_text("SLPM 86770\n")
+            disc = rdisc("Dashed (Japan)", "SLPM-86770")
+            self.assertEqual(plan(disc, skip=read_skip_list(path)).skipped, (disc,))
 
     def test_nothing_new(self):
         result = plan(rdisc("Known Again (Europe)", "SLES-00001", tracks=KNOWN_TRACKS))

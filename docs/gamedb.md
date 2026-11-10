@@ -164,7 +164,8 @@ redump.org publishes the PS1 discs it has verified, with each track's MD5, as a 
 5. pushes the branch `gamedb/redump-import` (rebuilt from `master` each time) and opens one pull request,
    "GameDB: redump import <list date>", or updates the open one, then starts `gamedb-lint.yml` on it (a pull
    request made with the job's own token starts no other workflows). If nothing is new, it closes an open import
-   pull request; if the files are the same as last run's, it leaves the branch and pull request alone.
+   pull request; if the files are the same as last run's and that run's pull request exists (open or closed), it
+   leaves the branch and pull request alone.
 
 It never merges. The pull request's description has the counts, a table by category and the added serials, then
 **what wasn't added**, for a later decision: discs with no serial (only an executable hash could key them, which
@@ -173,10 +174,11 @@ discs whose serial `discdb.yaml` already has for other tracks (adding them would
 60,000 characters the lists are cut short; the run's summary page has them in full.
 
 **Reviewing an import:** check a few added entries against redump.org's pages, and that the diff only adds. To
-reject a disc, add its redump name or serial to `scripts/gamedb/redump-skip.txt` **on `master`** (in its own
-pull request, or in the import's before merging it): each run rebuilds the import branch from `master`, so edits
-made only on the import branch last until the next run. Closing the import pull request without a skip-list entry
-proposes the same discs again once the list or `master` changes.
+reject a disc, add its redump name or serial to `scripts/gamedb/redump-skip.txt` **on `master`**, with the reason
+after ` # ` (`SLPM-80001 # a bad dump`), in its own pull request or in the import's before merging it. Each run
+rebuilds the import branch from `master`, so edits made only on the import branch last until the next run.
+Closing the import pull request without a skip-list entry proposes the same discs again once the list or `master`
+changes.
 
 **Running it by hand** on a downloaded list (keep the download in a folder of its own; it is untrusted data):
 
@@ -194,4 +196,4 @@ python3 -m unittest discover -s scripts/gamedb/tests -t scripts/gamedb
 to: *Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull
 requests*. The default workflow permissions can stay read-only; the import job asks for `contents`,
 `pull-requests` and `actions` write for itself only. Until the setting is on, the job pushes its branch and then
-fails at opening the pull request.
+fails at opening the pull request; the next run (or a re-run) opens it.

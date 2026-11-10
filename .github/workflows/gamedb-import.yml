@@ -37,7 +37,7 @@ jobs:
         mkdir "$RUNNER_TEMP/redump"
         ua="GooseStation gamedb import (+https://github.com/${GITHUB_REPOSITORY})"
         for scheme in https http; do
-          if curl --fail --silent --show-error --max-time 300 --user-agent "$ua" \
+          if curl --fail --silent --show-error --max-time 300 --max-filesize 67108864 --user-agent "$ua" \
               --output "$RUNNER_TEMP/redump/list.zip" "$scheme://redump.org/datfile/psx/serial,version"; then
             echo "Downloaded over $scheme."
             exit 0
@@ -51,7 +51,8 @@ jobs:
       shell: bash
       run: |
         python3 -I scripts/gamedb/redump_import.py --list "$RUNNER_TEMP/redump/list.zip" \
-          --summary "$RUNNER_TEMP/pr-body.md" --full-summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT"
+          --summary "$RUNNER_TEMP/pr-body.md" --full-summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT" ||
+          { echo "::error::The import stopped (exit $?); its log says why."; exit 1; }
 
     - name: Check the result
       shell: bash
@@ -83,12 +84,16 @@ jobs:
         git add data/resources/gamedb.yaml data/resources/discdb.yaml
         git commit --quiet --message "$TITLE"
 
-        # The same files as last week's run (the list or master hasn't changed): leave the branch and its pull
-        # request alone, including one a reviewer closed.
+        # The same files as the last run's (the list or master hasn't changed), and that run's pull request exists:
+        # leave the branch and the pull request alone, including one a reviewer closed. Without a pull request (the
+        # last run couldn't open one), go on and open it.
         if git fetch --quiet origin "$BRANCH" 2>/dev/null &&
             [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'FETCH_HEAD^{tree}')" ]; then
-          echo "Nothing changed since the last run."
-          exit 0
+          any_pr=$(gh pr list --head "$BRANCH" --base "$BASE" --state all --json number --jq '.[0].number // empty')
+          if [ -n "$any_pr" ]; then
+            echo "Nothing changed since the last run (pull request #$any_pr)."
+            exit 0
+          fi
         fi
         git push --force origin "$BRANCH"
 

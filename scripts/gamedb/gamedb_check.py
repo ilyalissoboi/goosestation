@@ -31,7 +31,7 @@ DEFAULT_RESOURCES = REPO / "data" / "resources"
 DEFAULT_KNOWN_CLASHES = REPO / "scripts" / "gamedb" / "known-clashes.txt"
 
 _KEY = re.compile(r"^([^\s#]\S*):$")
-_CODE = re.compile(r"^    - (\S+)$")
+_CODE = re.compile(r"^    - ([A-Za-z0-9][A-Za-z0-9-]*)$")
 _QUOTED = r'"((?:[^"\\]|\\["\\])*)"'
 _NAME = re.compile(r"^  name: " + _QUOTED + "$")
 _VERSION = re.compile(r"^    - version: " + _QUOTED + "$")
@@ -89,6 +89,8 @@ def parse_gamedb(text: str, path: str = "gamedb.yaml") -> list[GameEntry]:
             if match:
                 codes.append(match.group(1))
                 continue
+            if line.startswith("   "):  # a comment, a quoted code, deeper indentation: never guess at codes
+                raise FormatError(f"{path}:{number}: codes must be plain '    - SERIAL' lines")
             if not codes:
                 raise FormatError(f"{path}:{number}: codes has no entries")
             in_codes = False

@@ -314,8 +314,9 @@ On GitHub, `.github/workflows/android.yml` ("Android build") runs on pull reques
 the app, the core or `scripts/deps/build-dependencies-android.sh`, and twice a week to keep its cache warm. On
 `ubuntu-24.04` it installs the SDK's NDK, CMake (with its Ninja) and platform at the versions above, builds the
 dependency prefix into `~/deps-android` (cached by the script's hash and the NDK version), then runs `assembleDebug`,
-`testDebugUnitTest`, `ktlintCheck` and `checkNoWindowDialogs`, and uploads the debug APK as `android-debug-apk`. It
-has no secrets, and isn't part of a release.
+`assembleDebugAndroidTest` (the instrumented tests are built, not run: CI has no emulator), `testDebugUnitTest`,
+`ktlintCheck` and `checkNoWindowDialogs`, and uploads the debug APK as `android-debug-apk`. It has no secrets, and
+isn't part of a release.
 
 The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
 can only be initialized once per process); with `-Pgoose.orchestrator=false` they share one, which only the `ui`

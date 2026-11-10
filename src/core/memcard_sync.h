@@ -224,6 +224,7 @@ enum class Activity : u8
   Failed,       ///< The last sync, or the start, failed.
   Locked,       ///< The storage is encrypted and this device has no key for it, or the passphrase is wrong.
   AuthRequired, ///< The storage rejected the access key.
+  Count,        ///< Not a value: how many there are (the app's SyncActivity has one for each).
 };
 
 Activity GetActivity();

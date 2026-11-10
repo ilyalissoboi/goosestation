@@ -412,6 +412,21 @@ class ControllersPage(
         controllersJob = null
     }
 
+    /**
+     * settings.ini was pulled from the data folder: an open page reads what it shows again (the hub, the open port or
+     * macro, and the bindings shown), as the other settings pages do. A closed one reads nothing.
+     */
+    fun reloadShown() {
+        if (controllersJob == null) return
+        readHub()
+        when (val view = state.view) {
+            is ControllersView.Port -> readPort(view.pad)
+            is ControllersView.Macro -> readMacro(view.pad, view.macro)
+            else -> {}
+        }
+        state.selected?.let { readBindings(it) }
+    }
+
     /** Shows the controller with [descriptor]'s bindings, and selects it whenever it's connected from now on. */
     fun select(descriptor: String) {
         pickedController = descriptor

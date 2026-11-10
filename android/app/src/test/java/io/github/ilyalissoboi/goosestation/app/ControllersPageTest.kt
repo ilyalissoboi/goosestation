@@ -254,6 +254,37 @@ class ControllersPageTest {
             assertEquals(0.3f, page.state.portValues!![setting])
         }
 
+    // From review: a settings.ini pulled from the data folder reloaded every other settings page but this one.
+    @Test
+    fun aPullReadsTheHubAndTheOpenPortAgain() =
+        runTest {
+            api.typeSettings = mapOf("AnalogController" to listOf(deadzone))
+            val page = openPage()
+            page.openPort(0)
+            runCurrent()
+
+            settings.values["ControllerPorts/MultitapMode"] = "Port1Only"
+            settings.values["Pad1/AnalogDeadzone"] = "0.4"
+            page.reloadShown()
+            runCurrent()
+
+            assertEquals("Port1Only", page.state.multitap!![PortSettings.MULTITAP])
+            assertEquals(0.4f, page.state.portValues!![PortSettings.setting(0, deadzone) as FloatSetting])
+        }
+
+    @Test
+    fun aPullReadsNothingForAClosedPage() =
+        runTest {
+            val page = openPage()
+            page.close()
+            calls.clear()
+
+            page.reloadShown()
+            runCurrent()
+
+            assertEquals(emptyList<String>(), calls)
+        }
+
     @Test
     fun aStaleBindingsReadIsDropped() =
         runTest {

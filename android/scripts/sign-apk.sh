@@ -9,10 +9,10 @@
 #                                           # GOOSE_KEY_ALIAS and GOOSE_KEY_PASSWORD: the release run's
 #   sign-apk.sh --test-key IN.apk OUT.apk   # with a test key, made in android/app/build/test-signing/ if it's missing
 #
-# With GOOSE_CERT_SHA256 set (the certificate's SHA-256, hex), the signed APK must carry that certificate, or nothing
-# is written: a release signed with another key couldn't update the installed apps. The passwords are passed to
-# apksigner through the environment, never on a command line, and nothing here prints them. Needs ANDROID_HOME, with
-# build-tools 37.0.0; --test-key needs keytool (a JDK).
+# With GOOSE_CERT_SHA256 set (the certificate's SHA-256: hex, with or without colons, or keytool's line for it), the
+# signed APK must carry that certificate, or nothing is written: a release signed with another key couldn't update the
+# installed apps. The passwords are passed to apksigner through the environment, never on a command line, and nothing
+# here prints them. Needs ANDROID_HOME, with build-tools 37.0.0; --test-key needs keytool (a JDK).
 
 set -e
 
@@ -64,6 +64,16 @@ else
 fi
 export GOOSE_KEYSTORE_PASSWORD GOOSE_KEY_PASSWORD
 
+# The expected certificate, as hex: keytool's line for it ("SHA256: 97:4D:…") is fine as pasted.
+want=""
+if [ -n "$GOOSE_CERT_SHA256" ]; then
+	want=$(tr 'A-Z' 'a-z' <<<"$GOOSE_CERT_SHA256" | sed -E 's/^[[:space:]]*sha-?256[[:space:]]*:?//' | tr -cd '0-9a-f')
+	if [ ${#want} -ne 64 ]; then
+		echo "GOOSE_CERT_SHA256 isn't a SHA-256 (64 hex digits, as keytool -list -v prints after SHA256:)."
+		exit 1
+	fi
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -72,8 +82,7 @@ trap 'rm -rf "$WORK"' EXIT
 	--key-pass env:GOOSE_KEY_PASSWORD --out "$WORK/signed.apk" "$WORK/aligned.apk"
 "$TOOLS/apksigner" verify --print-certs "$WORK/signed.apk" >"$WORK/certs.txt"
 
-if [ -n "$GOOSE_CERT_SHA256" ]; then
-	want=$(tr -d ': ' <<<"$GOOSE_CERT_SHA256" | tr 'A-F' 'a-f')
+if [ -n "$want" ]; then
 	# One line per signature scheme (apksigner names them "V3.0 Signer:" or "Signer #1:"): one certificate in all.
 	got=$(sed -n 's/.*certificate SHA-256 digest: //p' "$WORK/certs.txt" | tr -d ': ' | tr 'A-F' 'a-f' | sort -u)
 	if [ -z "$got" ] || [ "$(wc -l <<<"$got" | tr -d ' ')" != 1 ] || [ "$got" != "$want" ]; then

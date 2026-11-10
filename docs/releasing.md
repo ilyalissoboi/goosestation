@@ -71,6 +71,23 @@ release run can read it.
 
 ### The release key (once)
 
+**GooseStation's release key is the Android SDK's debug keystore on the maintainer's Mac** (`~/.android/debug.keystore`,
+alias `androiddebugkey`, the SDK's default passwords), chosen on 2026-11-10 and first used for Preview
+`0.1-592-ga6f1b03f7`. Every update has to be signed with it from now on:
+
+- **Keep a copy outside `~/.android`.** The Android tools make a new debug keystore when that one is missing, and a
+  new key can't sign updates for what's installed.
+- **Its passwords are public**, so the `release` environment's branch limit, and the branch protection on `master`
+  and `dev`, are what keep it to release runs.
+- It also signs the debug builds made on that Mac (another ID, `.debug`, so they don't take the release's place).
+
+Release certificate SHA-256: `974ddb1ddd9788c29376486564d614082b7acbc572f213082265bd37129a93fc`
+(`C=US, O=Android, CN=Android Debug`). Check an APK against it with
+`apksigner verify --print-certs goosestation-android-arm64.apk`.
+
+A new key would mean every player uninstalls GooseStation, losing its app-only data, before taking the first release
+signed with it. For a fork of your own, or if the key is ever lost, the steps are:
+
 1. Create it, outside any repository, and give it a strong password:
 
    ```bash
@@ -87,7 +104,6 @@ release run can read it.
    keytool -list -v -keystore goosestation-release.jks -alias goosestation | grep SHA256
    ```
 
-   Release certificate SHA-256: *(not created yet)*.
 4. Set up the `release` environment: the repository's Settings → Environments → New environment, named `release`,
    with **Deployment branches and tags** set to selected branches, `master` and `dev`. Pull requests and other
    branches can't run a job in it, so they never see its secrets.
@@ -98,7 +114,7 @@ release run can read it.
    gh secret set ANDROID_KEYSTORE_PASSWORD --env release
    gh secret set ANDROID_KEY_ALIAS --env release        # goosestation
    gh secret set ANDROID_KEY_PASSWORD --env release     # the same as the store's, for a PKCS12 keystore
-   gh variable set ANDROID_CERT_SHA256 --env release --body <the fingerprint, hex, colons or not>
+   gh variable set ANDROID_CERT_SHA256 --env release --body <the fingerprint: hex, colons or not, or keytool's line>
    ```
 
 ### In each run

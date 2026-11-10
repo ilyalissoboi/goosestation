@@ -84,14 +84,16 @@ jobs:
         git add data/resources/gamedb.yaml data/resources/discdb.yaml
         git commit --quiet --message "$TITLE"
 
-        # The same files as the last run's (the list or master hasn't changed), and that run's pull request exists:
-        # leave the branch and the pull request alone, including one a reviewer closed. Without a pull request (the
-        # last run couldn't open one), go on and open it.
+        # The same files as the last run's (the list or master hasn't changed), and a pull request (open or closed)
+        # has the branch's current commit as its head: leave them alone, including a PR a reviewer closed. A PR from
+        # an earlier import (another head commit), or none (the last run couldn't open one): go on and open one.
         if git fetch --quiet origin "$BRANCH" 2>/dev/null &&
             [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'FETCH_HEAD^{tree}')" ]; then
-          any_pr=$(gh pr list --head "$BRANCH" --base "$BASE" --state all --json number --jq '.[0].number // empty')
-          if [ -n "$any_pr" ]; then
-            echo "Nothing changed since the last run (pull request #$any_pr)."
+          pushed=$(git rev-parse FETCH_HEAD)
+          same_pr=$(gh pr list --head "$BRANCH" --base "$BASE" --state all --json number,headRefOid \
+            --jq '.[] | "\(.number) \(.headRefOid)"' | awk -v oid="$pushed" '$2 == oid { print $1; exit }')
+          if [ -n "$same_pr" ]; then
+            echo "Nothing changed since the last run (pull request #$same_pr)."
             exit 0
           fi
         fi

@@ -12,8 +12,10 @@ request, listing what wasn't added. The list is untrusted: run this with ``pytho
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
+from collections import Counter
 import zipfile
 import zlib
 from dataclasses import dataclass
@@ -22,11 +24,24 @@ from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from gamedb_check import DiscEntry, GameEntry  # noqa: E402
+from gamedb_check import (  # noqa: E402
+    DEFAULT_KNOWN_CLASHES,
+    DEFAULT_RESOURCES,
+    REPO,
+    DiscEntry,
+    FormatError,
+    GameEntry,
+    find_problems,
+    parse_discdb,
+    parse_gamedb,
+    read_known_clashes,
+)
 
 MIN_DISCS = 10_900
 MAX_DAT_BYTES = 64 * 1024 * 1024
 HEADER_NAME = "Sony - PlayStation"
+PR_BODY_LIMIT = 60_000  # GitHub allows 65,536 characters
+DEFAULT_SKIP = REPO / "scripts" / "gamedb" / "redump-skip.txt"
 
 _CORE_SERIAL = re.compile(r"^([A-Z]{4})[ -](\d{5})$")
 _MD5 = re.compile(r"^[0-9a-f]{32}$")
@@ -198,3 +213,155 @@ def plan_import(redump: RedumpList, games: list[GameEntry], discs: list[DiscEntr
         known_serial=tuple(known_serial),
         skipped=tuple(skipped),
     )
+
+
+def yaml_quote(text: str) -> str:
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in text):
+        raise ListShapeError(f"a control character in {text!r}")
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def render_discdb_entry(added: Added) -> str:
+    lines = [f"{added.serial}:", f"  name: {yaml_quote(added.disc.name)}", "  trackData:"]
+    if added.disc.version:
+        lines += [f"    - version: {yaml_quote(added.disc.version)}", "      tracks:"]
+    else:
+        lines.append("    - tracks:")
+    for size, md5 in added.disc.tracks:
+        lines += [f"        - size: {size}", f'          md5: "{md5}"']
+    return "\n".join(lines) + "\n"
+
+
+def render_gamedb_entry(added: Added) -> str:
+    return f"{added.serial}:\n  name: {yaml_quote(added.disc.name)}\n"
+
+
+def _append(path: Path, text: str) -> None:
+    if text:
+        with path.open("a", encoding="utf-8", newline="\n") as file:
+            file.write(text)
+
+
+def apply_plan(plan: ImportPlan, resources: Path) -> None:
+    _append(resources / "discdb.yaml", "".join(render_discdb_entry(added) for added in plan.added))
+    _append(resources / "gamedb.yaml", "".join(render_gamedb_entry(added) for added in plan.added if added.gamedb))
+
+
+def pr_title(plan: ImportPlan) -> str:
+    return f"GameDB: redump import {plan.list_version[:10]}"
+
+
+def _sections(plan: ImportPlan) -> list[tuple[str, list[str]]]:
+    def printed(disc: Disc) -> str:
+        return ", ".join(f"`{serial}`" for serial in disc.serials)
+
+    sections = [
+        ("Added", [f"- `{a.serial}` {a.disc.name} ({a.disc.category})" for a in plan.added]),
+        ("Not added: no serial", [f"- {d.name} ({d.category})" for d in plan.no_serial]),
+        ("Not added: serial not in the core's form", [f"- {d.name} ({d.category}): {printed(d)}" for d in plan.odd_serial]),
+        (
+            "Not added: known serial, new tracks",
+            [f"- `{serial}` {d.name} ({d.category})" for serial, d in plan.known_serial],
+        ),
+        ("Skipped (redump-skip.txt)", [f"- {d.name} ({d.category})" for d in plan.skipped]),
+    ]
+    return [(title, items) for title, items in sections if items]
+
+
+def _render(plan: ImportPlan, shown: int | None) -> str:
+    added = len(plan.added)
+    gamedb = sum(a.gamedb for a in plan.added)
+    not_added = plan.total - plan.known - added
+    lines = [
+        f"redump.org's PS1 list of {plan.list_version}: {plan.total} discs, {plan.known} already known. "
+        f"This adds {added} discs to discdb.yaml ({gamedb} new name-only gamedb.yaml entries); "
+        f"{not_added} new discs aren't added.",
+        "",
+    ]
+    if plan.added:
+        lines += ["| Category | Added |", "| --- | --- |"]
+        categories = Counter(a.disc.category for a in plan.added)
+        lines += [f"| {category} | {count} |" for category, count in sorted(categories.items())]
+        lines.append("")
+    for title, items in _sections(plan):
+        lines.append(f"### {title} ({len(items)})")
+        lines.append("")
+        if shown is None or len(items) <= shown:
+            lines += items
+        else:
+            lines += items[:shown]
+            lines.append(f"- …and {len(items) - shown} more (the run's summary has the full list)")
+        lines.append("")
+    lines.append(
+        "The list is redump.org's (http://redump.org/datfile/psx/serial,version); existing entries are unchanged. "
+        "To reject a disc, add its name or serial to scripts/gamedb/redump-skip.txt on master. "
+        "This job never merges; see docs/gamedb.md."
+    )
+    return "\n".join(lines) + "\n"
+
+
+def render_summary(plan: ImportPlan, limit: int | None = PR_BODY_LIMIT) -> str:
+    full = _render(plan, None)
+    if limit is None or len(full) <= limit:
+        return full
+    low, high = 0, max((len(items) for _, items in _sections(plan)), default=0)
+    while low < high:  # the most items per list that fit
+        middle = (low + high + 1) // 2
+        if len(_render(plan, middle)) <= limit:
+            low = middle
+        else:
+            high = middle - 1
+    return _render(plan, low)[:limit]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Add redump.org's new PS1 discs to the game database.")
+    parser.add_argument("--list", type=Path, required=True, help="the downloaded serial,version list (zip)")
+    parser.add_argument("--resources", type=Path, default=DEFAULT_RESOURCES, help="folder with the two files")
+    parser.add_argument("--skip", type=Path, default=DEFAULT_SKIP, help="discs not to add")
+    parser.add_argument("--known-clashes", type=Path, default=DEFAULT_KNOWN_CLASHES)
+    parser.add_argument("--summary", type=Path, help="write the pull request's description here")
+    parser.add_argument("--full-summary", type=Path, help="append the untruncated summary here")
+    parser.add_argument("--github-output", type=Path, help="append added=<n> and title=<title> here")
+    parser.add_argument("--min-discs", type=int, default=MIN_DISCS, help=argparse.SUPPRESS)
+    parser.add_argument("--dry-run", action="store_true", help="change no files")
+    args = parser.parse_args(argv)
+
+    try:
+        redump = read_redump_zip(args.list, args.min_discs)
+        games = parse_gamedb((args.resources / "gamedb.yaml").read_text(encoding="utf-8"))
+        discs = parse_discdb((args.resources / "discdb.yaml").read_text(encoding="utf-8"))
+        plan = plan_import(redump, games, discs, read_skip_list(args.skip))
+        if not args.dry_run:
+            apply_plan(plan, args.resources)
+    except (ListShapeError, FormatError) as error:
+        print(f"redump import: {error}", file=sys.stderr)
+        return 2
+
+    if args.summary:
+        args.summary.write_text(render_summary(plan), encoding="utf-8")
+    if args.full_summary:
+        _append(args.full_summary, render_summary(plan, limit=None))
+    if args.github_output:
+        _append(args.github_output, f"added={len(plan.added)}\ntitle={pr_title(plan)}\n")
+
+    not_added = plan.total - plan.known - len(plan.added)
+    gamedb = sum(a.gamedb for a in plan.added)
+    print(
+        f"{plan.list_version}: {len(plan.added)} discs added ({gamedb} gamedb.yaml entries), "
+        f"{plan.known} known, {not_added} not added"
+    )
+
+    if not args.dry_run:
+        games = parse_gamedb((args.resources / "gamedb.yaml").read_text(encoding="utf-8"))
+        discs = parse_discdb((args.resources / "discdb.yaml").read_text(encoding="utf-8"))
+        problems = find_problems(games, discs, read_known_clashes(args.known_clashes))
+        for problem in problems:
+            print(f"redump import: after writing: {problem}", file=sys.stderr)
+        if problems:
+            return 3
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

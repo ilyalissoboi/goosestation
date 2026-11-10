@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2026 GooseStation contributors
 # SPDX-License-Identifier: GPL-3.0
 
+import contextlib
+import io
 import tempfile
 import unittest
 import zipfile
@@ -8,9 +10,16 @@ import zlib
 from pathlib import Path
 from xml.sax.saxutils import quoteattr
 
-from gamedb_check import DiscEntry, GameEntry
+from gamedb_check import DiscEntry, GameEntry, parse_discdb, parse_gamedb
 from redump_import import (
     Added,
+    apply_plan,
+    main,
+    pr_title,
+    render_discdb_entry,
+    render_gamedb_entry,
+    render_summary,
+    yaml_quote,
     Disc,
     ImportPlan,
     ListShapeError,
@@ -278,6 +287,168 @@ class PlanTests(unittest.TestCase):
         discs = [rdisc(f"Game {i} (USA)", f"SLUS-{i + 200:05d}") for i in range(5)] + [rdisc("Z (USA)")]
         self.assertEqual(plan(*discs), plan(*reversed(discs)))
         self.assertEqual([a.disc.name for a in plan(*reversed(discs)).added], [f"Game {i} (USA)" for i in range(5)])
+
+
+GAMEDB_TEXT = 'SLUS-00010:\n  name: "Known (USA)"\n'
+DISCDB_TEXT = 'SLUS-00010:\n  name: "Known (USA)"\n  trackData:\n    - tracks:\n        - size: 5000\n          md5: "%s"\n' % md5(5000)
+
+
+def resources(tmp):
+    folder = Path(tmp) / "resources"
+    folder.mkdir()
+    (folder / "gamedb.yaml").write_text(GAMEDB_TEXT)
+    (folder / "discdb.yaml").write_text(DISCDB_TEXT)
+    return folder
+
+
+class WriteTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_render_discdb_entry(self):
+        disc = rdisc("New (Japan)", "SLPS 00001", tracks=((100, md5(1)), (200, md5(2))))
+        self.assertEqual(
+            render_discdb_entry(Added("SLPS-00001", disc, True)),
+            "SLPS-00001:\n"
+            '  name: "New (Japan)"\n'
+            "  trackData:\n"
+            "    - tracks:\n"
+            "        - size: 100\n"
+            f'          md5: "{md5(1)}"\n'
+            "        - size: 200\n"
+            f'          md5: "{md5(2)}"\n',
+        )
+
+    def test_render_discdb_entry_with_version(self):
+        disc = rdisc("New (Japan) (Rev 1)", "SLPS-00001", tracks=((100, md5(1)),), version="Rev 1")
+        self.assertEqual(
+            render_discdb_entry(Added("SLPS-00001", disc, True)),
+            "SLPS-00001:\n"
+            '  name: "New (Japan) (Rev 1)"\n'
+            "  trackData:\n"
+            '    - version: "Rev 1"\n'
+            "      tracks:\n"
+            "        - size: 100\n"
+            f'          md5: "{md5(1)}"\n',
+        )
+
+    def test_render_gamedb_entry(self):
+        added = Added("SLPS-00001", rdisc("New (Japan)", "SLPS-00001"), True)
+        self.assertEqual(render_gamedb_entry(added), 'SLPS-00001:\n  name: "New (Japan)"\n')
+
+    def test_name_escaping(self):
+        for name in ['A "B" C', "C:\\X", "Key: value # not a comment", "'quoted", "Back\\\"slash"]:
+            added = Added("SLPS-00001", rdisc(name, "SLPS-00001"), True)
+            self.assertEqual(parse_discdb(render_discdb_entry(added))[0].name, name)
+            self.assertEqual(parse_gamedb(render_gamedb_entry(added))[0].key, "SLPS-00001")
+        with self.assertRaises(ListShapeError):
+            yaml_quote("Tab\there")
+
+    def test_apply_plan_appends_only(self):
+        folder = resources(self.tmp)
+        new = rdisc("New (Japan)", "SLPS 00001", tracks=((100, md5(1)),))
+        known_code = rdisc("Also New (USA)", "SLUS-00010B", "SLUS-00011")
+        result = plan(new, known_code, games=[GameEntry("SLUS-00010", 1, ("SLUS-00010", "SLUS-00011"))], known=[])
+        apply_plan(result, folder)
+        discdb = (folder / "discdb.yaml").read_text()
+        gamedb = (folder / "gamedb.yaml").read_text()
+        self.assertEqual(discdb, DISCDB_TEXT + "".join(render_discdb_entry(a) for a in result.added))
+        self.assertEqual(gamedb, GAMEDB_TEXT + render_gamedb_entry(result.added[1]))
+        self.assertEqual([a.serial for a in result.added], ["SLUS-00011", "SLPS-00001"])
+
+    def test_apply_nothing_leaves_files(self):
+        folder = resources(self.tmp)
+        apply_plan(plan(), folder)
+        self.assertEqual((folder / "discdb.yaml").read_text(), DISCDB_TEXT)
+        self.assertEqual((folder / "gamedb.yaml").read_text(), GAMEDB_TEXT)
+
+
+class SummaryTests(unittest.TestCase):
+    def test_pr_title(self):
+        self.assertEqual(pr_title(plan()), "GameDB: redump import 2026-06-15")
+
+    def test_summary_sections(self):
+        result = plan(
+            rdisc("New Game (Japan)", "SLPS-00001"),
+            rdisc("New Demo (Japan)", "SLPM-80001", category="Demos"),
+            rdisc("Known Again (Europe)", "SLES-00001", tracks=KNOWN_TRACKS),
+            rdisc("Prototype (USA)", category="Preproduction"),
+            rdisc("Greatest Hits (USA)", "SLUS-01041GH"),
+        )
+        summary = render_summary(result)
+        self.assertIn("2026-06-15 11-55-46", summary)
+        self.assertIn("5 discs", summary)
+        self.assertIn("| Demos | 1 |", summary)
+        self.assertIn("| Games | 1 |", summary)
+        self.assertIn("- `SLPS-00001` New Game (Japan) (Games)", summary)
+        self.assertIn("### Not added: no serial (1)", summary)
+        self.assertIn("- Prototype (USA) (Preproduction)", summary)
+        self.assertIn("### Not added: serial not in the core's form (1)", summary)
+        self.assertIn("SLUS-01041GH", summary)
+        self.assertNotIn("known serial, new tracks", summary)
+        self.assertNotIn("Skipped", summary)
+        self.assertIn("redump-skip.txt", summary)
+
+    def test_summary_known_serial_and_skipped(self):
+        summary = render_summary(
+            plan(rdisc("Known (USA) (Beta)", "SLUS-00010"), rdisc("No (USA)", "SLUS-00500"), skip={"No (USA)"})
+        )
+        self.assertIn("### Not added: known serial, new tracks (1)", summary)
+        self.assertIn("- `SLUS-00010` Known (USA) (Beta)", summary)
+        self.assertIn("### Skipped (redump-skip.txt) (1)", summary)
+
+    def test_summary_truncates(self):
+        result = plan(*[rdisc(f"Unlabelled Prototype Number {i:04d} (USA)") for i in range(2000)])
+        summary = render_summary(result, limit=5_000)
+        self.assertLessEqual(len(summary), 5_000)
+        self.assertRegex(summary, r"- …and \d+ more")
+        self.assertIn("Unlabelled Prototype Number 1999", render_summary(result, limit=None))
+
+
+class MainTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.folder = resources(self.tmp)
+        self.skip = self.tmp / "skip.txt"
+        self.skip.write_text("# nothing\n")
+        self.list = make_list(self.tmp, [game_xml("New (Japan)", serial="SLPS 00001")])
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def run_main(self, *extra):
+        args = ["--list", str(self.list), "--resources", str(self.folder), "--skip", str(self.skip)]
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return main(args + ["--min-discs", "1", *extra])
+
+    def test_main_dry_run(self):
+        output = self.tmp / "output.txt"
+        summary = self.tmp / "summary.md"
+        self.assertEqual(self.run_main("--dry-run", "--summary", str(summary), "--github-output", str(output)), 0)
+        self.assertEqual((self.folder / "discdb.yaml").read_text(), DISCDB_TEXT)
+        self.assertIn("`SLPS-00001` New (Japan)", summary.read_text())
+        self.assertEqual(output.read_text(), "added=1\ntitle=GameDB: redump import 2026-06-15\n")
+
+    def test_main_writes(self):
+        full = self.tmp / "full.md"
+        self.assertEqual(self.run_main("--full-summary", str(full)), 0)
+        self.assertIn("SLPS-00001:", (self.folder / "discdb.yaml").read_text())
+        self.assertIn("SLPS-00001:", (self.folder / "gamedb.yaml").read_text())
+        self.assertIn("New (Japan)", full.read_text())
+
+    def test_main_bad_list(self):
+        self.list.write_text("<html>not a zip</html>")
+        self.assertEqual(self.run_main(), 2)
+        self.assertEqual((self.folder / "discdb.yaml").read_text(), DISCDB_TEXT)
+
+    def test_main_bad_database(self):
+        (self.folder / "gamedb.yaml").write_text("SLUS-00010:\n  codes: [A]\n")
+        self.assertEqual(self.run_main(), 2)
 
 
 if __name__ == "__main__":

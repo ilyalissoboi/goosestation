@@ -130,8 +130,10 @@ signed with it. For a fork of your own, or if the key is ever lost, the steps ar
 - `create-release` attaches the signed APK as `goosestation-android-arm64.apk`.
 
 The first signed run is the maintainer's check: run the workflow on `master` once the secrets are in, then install
-the APK on a device that has never had GooseStation's release (an earlier debug install there has another ID,
-`io.github.ilyalissoboi.goosestation.debug`, and stays).
+the APK. It went out on 2026-11-10, as Preview `0.1-592-ga6f1b03f7`. A debug install made before the debug ID existed
+has the release's ID; one built on the maintainer's Mac takes the release as an update, since the release key is that
+Mac's debug keystore. Today's debug builds have their own ID (`io.github.ilyalissoboi.goosestation.debug`) and stay
+beside it.
 
 ### Versions on Android
 

@@ -2556,15 +2556,18 @@ adb logcat -v time > thor.log
    - [ ] `settings.ini` has `[Covers] SourceCount`, `Source1` and `UseSerial`.
 18. **Release APKs and updates.** The maintainer's, once the release key is in the `release` environment and a
     signed release is published (`docs/releasing.md`). Nothing here uses the real key off GitHub.
-   - [ ] **Once, before the first release:** the debug install made before the debug ID existed has the release's
-     ID (`io.github.ilyalissoboi.goosestation`), signed with the debug key, so the release can't install over it.
-     Uninstall it (`adb uninstall io.github.ilyalissoboi.goosestation`). Its app-only data goes with it: the working
-     copy (it comes back from the data folder), the folder grants (setup runs again), the install ID (the release
-     reads the folder's `settings.ini` as another install's: renderer, bindings, hotkeys and controllers reset), and
-     the RetroAchievements token and memory card sync's keys in the Keystore, which are entered again.
-   - [ ] Install the previous release's `goosestation-android-arm64.apk` (from the channel's release, or a run's
-     artifact). The launcher shows GooseStation; GooseStation Debug, if installed, stays beside it with its own data
-     folder.
+   - [x] **The first release, over the old debug install** (2026-11-10, Preview `0.1-592-ga6f1b03f7`). The debug
+     install made before the debug ID existed has the release's ID (`io.github.ilyalissoboi.goosestation`), and was
+     signed with the maintainer's Mac's debug keystore, which is the release key (`docs/releasing.md`). So the release
+     installs over it as an update, `adb install -r goosestation-android-arm64.apk` (code 1 to 100592), with nothing
+     uninstalled: the working copy, the folder grants, the install ID and the Keystore's secrets carry over. On the
+     Thor it opened on the library, scanned the games folder, signed in to RetroAchievements and asked GitHub for
+     `preview` (200), with nothing in the crash log. A debug install built on another machine has another key: it
+     must be uninstalled first, and its app-only data goes with it (the working copy comes back from the data folder;
+     setup runs again; the install ID changes, so the folder's `settings.ini` is read as another install's and its
+     renderer, bindings, hotkeys and controllers reset; the RetroAchievements token and memory card sync's keys are
+     entered again).
+   - [ ] GooseStation Debug (`.debug`) installs beside the release, with its own data folder.
    - [ ] After a newer signed release: at start the library shows "GooseStation 0.1-N is available". What's new lists
      the commits; B hides the banner until the next start.
    - [ ] Update: the progress and Cancel; Cancel offers it again. Update again: Android asks to allow GooseStation to

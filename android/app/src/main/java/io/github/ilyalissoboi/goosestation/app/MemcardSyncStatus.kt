@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -21,6 +22,7 @@ class MemcardSyncStatus(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher,
     private val api: CoreApi,
+    private val log: (String, Throwable) -> Unit = { message, e -> Log.w(TAG, message, e) },
 ) {
     /** The state, as last read; null until it is. */
     var state by mutableStateOf<MemcardSyncState?>(null)
@@ -36,11 +38,21 @@ class MemcardSyncStatus(
         }
         reading = true
         scope.launch {
-            do {
-                again = false
-                state = withContext(io) { api.getMemcardSyncState() }
-            } while (again)
-            reading = false
+            try {
+                do {
+                    again = false
+                    state = withContext(io) { api.getMemcardSyncState() }
+                } while (again)
+            } catch (e: RuntimeException) {
+                // The state as last read stays; the next refresh reads again.
+                log("Can't read memory card sync's state.", e)
+            } finally {
+                reading = false
+            }
         }
+    }
+
+    private companion object {
+        const val TAG = "MemcardSyncStatus"
     }
 }

@@ -579,8 +579,19 @@ class FakeCoreApi(
         )
     var conflicts = emptyList<SyncConflict>()
 
+    // Set: reading the state throws it.
+    var syncStateFails: RuntimeException? = null
+
+    // Called as the state is read, before it's returned: a change sync reports meanwhile.
+    var whileReadingSyncState: (() -> Unit)? = null
+
     override fun getMemcardSyncState(): MemcardSyncState {
         calls += "getMemcardSyncState"
+        whileReadingSyncState?.let {
+            whileReadingSyncState = null
+            it()
+        }
+        syncStateFails?.let { throw it }
         return syncState
     }
 

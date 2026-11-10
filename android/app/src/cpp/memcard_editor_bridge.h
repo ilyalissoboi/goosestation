@@ -29,6 +29,7 @@ enum class CardKind : u8
   Game,
   Shared,
   Other,
+  Count, ///< Not a value: how many there are.
 };
 
 /// A card the editor lists: its file's full path, its name, its kind, and whether the file exists.
@@ -130,6 +131,7 @@ enum class WriteOutcome : u8
   Changed,
   Busy,
   Failed,
+  Count, ///< Not a value: how many there are.
 };
 
 struct WriteResult

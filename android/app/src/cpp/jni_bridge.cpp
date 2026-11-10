@@ -122,7 +122,9 @@ jobject s_pad_binding_kinds[3] = {}; // PadBindingKind's Button, Axis and HalfAx
 jclass s_memcard_sync_state_class = nullptr;
 jmethodID s_memcard_sync_state_constructor = nullptr;
 jobject s_sync_status_kinds[7] = {}; // SyncStatusKind's values, in MemcardSync::StatusKind's order (global references)
-jobject s_sync_activities[7] = {};   // SyncActivity's values, in MemcardSync::Activity's order (global references)
+// SyncActivity's values, in MemcardSync::Activity's order (global references). Sized by the C++ enum, so a value added
+// there and not in SYNC_ACTIVITY_NAMES (LoadEnumValues takes one name for each) fails the build.
+jobject s_sync_activities[static_cast<size_t>(MemcardSync::Activity::Count)] = {};
 jclass s_sync_version_class = nullptr;
 jmethodID s_sync_version_constructor = nullptr;
 jclass s_sync_conflict_class = nullptr;
@@ -130,7 +132,8 @@ jmethodID s_sync_conflict_constructor = nullptr;
 jmethodID s_runnable_run = nullptr;
 jclass s_memcard_file_class = nullptr;
 jmethodID s_memcard_file_constructor = nullptr;
-jobject s_memcard_kinds[3] = {}; // MemcardKind's values, in MemcardEditorBridge::CardKind's order (global references)
+// MemcardKind's values, in MemcardEditorBridge::CardKind's order (global references), sized by it, as above.
+jobject s_memcard_kinds[static_cast<size_t>(MemcardEditorBridge::CardKind::Count)] = {};
 jclass s_memcard_save_class = nullptr;
 jmethodID s_memcard_save_constructor = nullptr;
 jclass s_memcard_contents_class = nullptr;
@@ -141,7 +144,8 @@ jclass s_memcard_rename_check_class = nullptr;
 jmethodID s_memcard_rename_check_constructor = nullptr;
 jclass s_memcard_write_class = nullptr;
 jmethodID s_memcard_write_constructor = nullptr;
-jobject s_memcard_write_outcomes[4] = {}; // MemcardWriteOutcome's values, in WriteOutcome's order (global references)
+// MemcardWriteOutcome's values, in WriteOutcome's order (global references), sized by it, as above.
+jobject s_memcard_write_outcomes[static_cast<size_t>(MemcardEditorBridge::WriteOutcome::Count)] = {};
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
@@ -758,6 +762,18 @@ void AndroidHost::NotifyPadKindChanged(s32 kind)
 }
 
 namespace {
+// values[value], or null, logged, for a value it has none for: a C++ enum that grew without its Kotlin twin (one the
+// build can't check, as MemcardSync::StatusKind, which desktop shares, has no Count).
+template<size_t N, typename E>
+jobject EnumValue(jobject (&values)[N], E value, const char* what)
+{
+  const size_t index = static_cast<size_t>(value);
+  if (index < N)
+    return values[index];
+  ERROR_LOG("No {} for value {}.", what, index);
+  return nullptr;
+}
+
 // Global references to the constants called names of the enum class_name, in that order, in out.
 template<size_t N>
 bool LoadEnumValues(JNIEnv* env, const char* class_name, const char* const (&names)[N], jobject (&out)[N])
@@ -876,12 +892,14 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   s_on_leaderboard =
     env->GetMethodID(s_callbacks_class, "onLeaderboard",
                      "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey || !s_on_rumble ||
-      !s_on_osd_message ||
-      !s_on_fast_forward_changed || !s_on_pad_kind_changed || !s_on_achievements_token || !s_on_achievements_changed ||
+  // Every one is checked: a missing one leaves its NoSuchMethodError pending, and the next lookup would be refused.
+  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey ||
+      !s_on_rumble || !s_on_osd_message || !s_on_fast_forward_changed || !s_on_pad_kind_changed ||
+      !s_on_achievements_token || !s_store_memcard_sync_secret || !s_load_memcard_sync_secret ||
+      !s_has_memcard_sync_secret || !s_on_memcard_sync_changed || !s_on_achievements_changed ||
       !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
-      !s_on_achievement_notification || !s_on_achievement_toast ||
-      !s_on_achievement_indicator || !s_on_achievement_image || !s_on_play_sound || !s_on_leaderboard)
+      !s_on_achievement_notification || !s_on_achievement_toast || !s_on_achievement_indicator ||
+      !s_on_achievement_image || !s_on_play_sound || !s_on_leaderboard)
   {
     ClearException(env);
     return JNI_ERR;
@@ -1937,17 +1955,19 @@ NATIVE_LIBRARY_FUNCTION(jobject, getMemcardSyncState)(JNIEnv* env, jobject)
                                   &state.default_device_name, &state.start_error, &state.status};
   jstring jstrings[std::size(strings)] = {};
   jobject ret = nullptr;
-  bool made = true;
+  jobject kind = EnumValue(s_sync_status_kinds, state.kind, "SyncStatusKind");
+  jobject activity = EnumValue(s_sync_activities, state.activity, "SyncActivity");
+  bool made = kind && activity;
   for (size_t i = 0; i < std::size(strings); i++)
     made = made && (jstrings[i] = ToJString(env, *strings[i])) != nullptr;
   if (made)
   {
-    ret = env->NewObject(s_memcard_sync_state_class, s_memcard_sync_state_constructor,
-                         s_sync_status_kinds[static_cast<size_t>(state.kind)], static_cast<jboolean>(state.enabled),
+    ret = env->NewObject(s_memcard_sync_state_class, s_memcard_sync_state_constructor, kind,
+                         static_cast<jboolean>(state.enabled),
                          static_cast<jboolean>(state.running), static_cast<jboolean>(state.applying), jstrings[0],
                          jstrings[1], jstrings[2], jstrings[3], static_cast<jboolean>(state.has_secret),
                          static_cast<jboolean>(state.has_passphrase), static_cast<jboolean>(state.passphrase_recorded),
-                         jstrings[4], jstrings[5], s_sync_activities[state.activity],
+                         jstrings[4], jstrings[5], activity,
                          static_cast<jint>(state.conflicts));
   }
   if (!ret)

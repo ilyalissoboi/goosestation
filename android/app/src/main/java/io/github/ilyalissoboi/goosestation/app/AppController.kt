@@ -625,8 +625,9 @@ object AppController : NativeCallbacks {
         filePicker: DocumentPicker,
     ) {
         currentActivity.attach(activity)
-        picker = folderPicker
         // A pick under way in the activity this one replaces gets no result: it ends with nothing.
+        picker?.takeIf { it !== folderPicker }?.abandon()
+        picker = folderPicker
         documentPicker?.takeIf { it !== filePicker }?.abandon()
         documentPicker = filePicker
     }
@@ -634,6 +635,7 @@ object AppController : NativeCallbacks {
     fun detach(activity: Activity) {
         if (!currentActivity.isCurrent(activity)) return
         currentActivity.detach(activity)
+        picker?.abandon()
         picker = null
         documentPicker?.abandon()
         documentPicker = null

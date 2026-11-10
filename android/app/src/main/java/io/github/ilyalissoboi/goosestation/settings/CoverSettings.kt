@@ -51,8 +51,17 @@ object CoverUseSerial {
 
 private val COVER_VARIABLES = listOf("\${serial}", "\${title}", "\${filetitle}")
 
-/** What a source's row says when it has no variable (it would fetch one image for every game); null when it's fine. */
-fun coverSourceProblem(source: String): String? {
-    val fine = source.isBlank() || COVER_VARIABLES.any { it in source }
-    return if (fine) null else "Needs \${serial}, \${title} or \${filetitle}."
-}
+/**
+ * What a source's row says when it can't work: an http:// one (Android refuses plain HTTP, so it would fail as if the
+ * network were down), or one with no variable (it would fetch one image for every game). Null when it's fine.
+ */
+fun coverSourceProblem(source: String): String? =
+    when {
+        source.isBlank() -> null
+        isPlainHttp(source) -> "Needs an https:// address."
+        COVER_VARIABLES.none { it in source } -> "Needs \${serial}, \${title} or \${filetitle}."
+        else -> null
+    }
+
+/** Whether [source] is a plain http:// address, which Android won't fetch. */
+fun isPlainHttp(source: String): Boolean = source.trim().startsWith("http://", ignoreCase = true)

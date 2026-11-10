@@ -38,12 +38,6 @@ class TouchLayoutTest {
         }
     }
 
-    private fun Rect.overlaps(other: Rect) =
-        left < other.right - EPSILON &&
-            other.left < right - EPSILON &&
-            top < other.bottom - EPSILON &&
-            other.top < bottom - EPSILON
-
     private fun Rect.encloses(other: Rect) =
         other.left >= left - EPSILON &&
             other.top >= top - EPSILON &&
@@ -63,6 +57,16 @@ class TouchLayoutTest {
             assertTrue("$name D-pad reach", layout.getValue(DPad).touch.width / 2 >= 48f)
         }
 
+    // From review: Compose's own Rect.overlaps shadowed the layout's, so a hair of rounding counted as an overlap.
+    @Test
+    fun touchAreasMeetingWithinARoundingHairDontOverlap() {
+        val left = Rect(0f, 0f, 10f, 10f)
+        assertFalse(left.overlapsBeyondEpsilon(Rect(9.995f, 0f, 20f, 10f)))
+        assertFalse(left.overlapsBeyondEpsilon(Rect(0f, 9.995f, 10f, 20f)))
+        assertTrue(left.overlapsBeyondEpsilon(Rect(9.5f, 0f, 20f, 10f)))
+        assertTrue(left.overlapsBeyondEpsilon(Rect(2f, 2f, 8f, 8f)))
+    }
+
     @Test
     fun noTouchAreasOverlap() =
         each { layout, name ->
@@ -71,7 +75,7 @@ class TouchLayoutTest {
                 for (j in i + 1 until controls.size) {
                     assertFalse(
                         "$name ${controls[i].id} ${controls[i].touch} and ${controls[j].id} ${controls[j].touch}",
-                        controls[i].touch.overlaps(controls[j].touch),
+                        controls[i].touch.overlapsBeyondEpsilon(controls[j].touch),
                     )
                 }
             }

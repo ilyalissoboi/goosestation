@@ -147,8 +147,9 @@ redump.org publishes the PS1 discs it has verified, with each track's MD5, as a 
 `.github/workflows/gamedb-import.yml` runs every Monday at 05:23 UTC, and by hand from the Actions tab
 (*GameDB redump import*, *Run workflow*). It:
 
-1. downloads `http://redump.org/datfile/psx/serial,version` (the list with serials and versions; HTTPS first, plain
-   HTTP if that fails), once, as `GooseStation gamedb import`;
+1. downloads `http://redump.org/datfile/psx/serial,version` (the list with serials and versions), once, as
+   `GooseStation gamedb import`. It tries HTTPS first and falls back to plain HTTP; on 2026-11-10 HTTPS failed from
+   GitHub's runners too, so expect "Downloaded over http." in the log;
 2. checks the list's shape: a zip holding one `.dat` of at most 64 MiB, a Logiqx datafile named "Sony - PlayStation"
    whose disc count matches its header and is at least 10,900, a date as its version, valid tracks, and serials.
    Anything else stops the job with a message and opens nothing;
@@ -162,8 +163,8 @@ redump.org publishes the PS1 discs it has verified, with each track's MD5, as a 
    - entries are appended at the end of each file, sorted by name, so the diff is only additions;
 4. runs yamllint and the check on the result;
 5. pushes the branch `gamedb/redump-import` (rebuilt from `master` each time) and opens one pull request,
-   "GameDB: redump import <list date>", or updates the open one, then starts `gamedb-lint.yml` on it (a pull
-   request made with the job's own token starts no other workflows). If nothing is new, it closes an open import
+   "GameDB: redump import <list date>", or updates the open one, then starts `gamedb-lint.yml` on the branch (a
+   push made with the job's own token starts no other workflows). If nothing is new, it closes an open import
    pull request; if the files are the same as last run's and that run's pull request exists (open or closed), it
    leaves the branch and pull request alone.
 
@@ -173,12 +174,15 @@ redump's list doesn't have), discs whose serials aren't in the core's form (`SLU
 discs whose serial `discdb.yaml` already has for other tracks (adding them would change an existing entry). Over
 60,000 characters the lists are cut short; the run's summary page has them in full.
 
-**Reviewing an import:** check a few added entries against redump.org's pages, and that the diff only adds. To
-reject a disc, add its redump name or serial to `scripts/gamedb/redump-skip.txt` **on `master`**, with the reason
-after ` # ` (`SLPM-80001 # a bad dump`), in its own pull request or in the import's before merging it. Each run
-rebuilds the import branch from `master`, so edits made only on the import branch last until the next run.
-Closing the import pull request without a skip-list entry proposes the same discs again once the list or `master`
-changes.
+**Reviewing an import:** the pull request is the bot's, so GitHub holds its own lint run ("action_required"):
+approve it from the banner on the pull request asking a maintainer to approve the workflow run, and the result shows
+in its checks. The lint run the job started is on the Actions tab (*GameDB Lint*, branch `gamedb/redump-import`) and
+on the pull request's commit, but not in its checks. Then check a few added entries against redump.org's pages, and
+that the diff only adds. To reject a disc, add its redump name or serial to `scripts/gamedb/redump-skip.txt` **on
+`master`**, with the reason after ` # ` (`SLPM-80001 # a bad dump`), in its own pull request or in the import's
+before merging it. Each run rebuilds the import branch from `master`, so edits made only on the import branch last
+until the next run. Closing the import pull request without a skip-list entry proposes the same discs again once the
+list or `master` changes.
 
 **Running it by hand** on a downloaded list (keep the download in a folder of its own; it is untrusted data):
 

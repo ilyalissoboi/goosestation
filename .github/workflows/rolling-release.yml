@@ -491,6 +491,10 @@ jobs:
         python3 -m unittest discover -s android/scripts/tests -p 'test_*.py'
         python3 android/scripts/check-jni-keeps.py android/app/build/outputs/mapping/release/seeds.txt android/app/src/cpp
 
+    # sign-apk.sh, which android-sign runs on a release, checked here on every run: with the test key only.
+    - name: Check the signing script
+      run: android/scripts/tests/test-sign-apk.sh android/app/build/outputs/apk/release/app-release-unsigned.apk
+
     - name: Upload the unsigned APK
       uses: actions/upload-artifact@v4.3.3
       with:

@@ -239,7 +239,8 @@ python3 android/scripts/check-jni-keeps.py android/app/build/outputs/mapping/rel
 
 The last line checks that R8 kept every class and member the native code finds by name (`JNI_OnLoad` fails at
 launch on one it didn't); the release workflow runs it too. A new JNI lookup needs its keep rule in
-`proguard-rules.pro`. `-Pgoose.updateChannel=preview` (or `latest`) makes a release build that checks for updates,
+`proguard-rules.pro`. The release workflow also runs `android/scripts/tests/test-sign-apk.sh` on that unsigned APK,
+which checks `sign-apk.sh` with the test key alone. `-Pgoose.updateChannel=preview` (or `latest`) makes a release build that checks for updates,
 and `-Pgoose.updateApi=<url>` points its check at another server, as the test tiers' release part does.
 
 ## The app's look

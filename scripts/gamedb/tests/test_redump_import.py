@@ -4,15 +4,22 @@
 import tempfile
 import unittest
 import zipfile
+import zlib
 from pathlib import Path
 from xml.sax.saxutils import quoteattr
 
+from gamedb_check import DiscEntry, GameEntry
 from redump_import import (
+    Added,
     Disc,
+    ImportPlan,
     ListShapeError,
+    RedumpList,
     core_serial,
     first_core_serial,
+    plan_import,
     read_redump_zip,
+    read_skip_list,
 )
 
 VERSION = "2026-06-15 11-55-46"
@@ -177,6 +184,100 @@ class SerialTests(unittest.TestCase):
         self.assertEqual(first_core_serial(disc), "SLUS-01041")
         self.assertIsNone(first_core_serial(Disc("X", "Games", ("DTL-S1234",), "", ((1, md5(1)),))))
         self.assertIsNone(first_core_serial(Disc("X", "Games", (), "", ((1, md5(1)),))))
+
+
+def rdisc(name, *serials, tracks=None, category="Games", version=""):
+    return Disc(name, category, tuple(serials), version, tracks or ((1000, md5(zlib.crc32(name.encode()))),))
+
+
+KNOWN_TRACKS = ((5000, md5(5000)), (60, md5(60)))
+DISCS = [
+    DiscEntry("SLUS-00010", 1, "Known (USA)", (((10, md5(10)),), KNOWN_TRACKS)),
+]
+GAMES = [
+    GameEntry("SLUS-00010", 1, ()),
+    GameEntry("SLUS-00020", 3, ()),
+    GameEntry("SLUS-00030", 5, ("SLUS-00030", "SLUS-00031")),
+]
+
+
+def plan(*discs, games=GAMES, known=DISCS, skip=frozenset()):
+    return plan_import(RedumpList(VERSION, tuple(discs)), list(games), list(known), set(skip))
+
+
+class PlanTests(unittest.TestCase):
+    def test_known_disc_is_not_added(self):
+        result = plan(rdisc("Known Again (Europe)", "SLES-00001", tracks=KNOWN_TRACKS))
+        self.assertEqual(result.added, ())
+        self.assertEqual((result.total, result.known), (1, 1))
+
+    def test_partly_known_disc_is_added(self):
+        disc = rdisc("Partly (Japan)", "SLPS-00001", tracks=((5000, md5(5000)), (70, md5(70))))
+        self.assertEqual(plan(disc).added, (Added("SLPS-00001", disc, True),))
+
+    def test_track_order_matters(self):
+        disc = rdisc("Swapped (Japan)", "SLPS-00001", tracks=tuple(reversed(KNOWN_TRACKS)))
+        self.assertEqual(len(plan(disc).added), 1)
+
+    def test_spaced_serial_added_normalised(self):
+        disc = rdisc("Bio Hazard (Japan)", "SLPM 86770", "SLPS 00222")
+        self.assertEqual(plan(disc).added, (Added("SLPM-86770", disc, True),))
+
+    def test_gamedb_entry_only_when_unknown(self):
+        as_key = rdisc("A (USA)", "SLUS-00020")
+        as_code = rdisc("B (USA)", "SLUS-00031")
+        result = plan(as_key, as_code)
+        self.assertEqual(result.added, (Added("SLUS-00020", as_key, False), Added("SLUS-00031", as_code, False)))
+
+    def test_no_serial(self):
+        disc = rdisc("Prototype (USA)")
+        result = plan(disc)
+        self.assertEqual((result.added, result.no_serial), ((), (disc,)))
+
+    def test_odd_serial(self):
+        disc = rdisc("Greatest Hits (USA)", "SLUS-01041GH")
+        result = plan(disc)
+        self.assertEqual((result.added, result.odd_serial), ((), (disc,)))
+
+    def test_known_serial_new_tracks(self):
+        disc = rdisc("Known (USA) (Beta)", "SLUS-00010")
+        result = plan(disc)
+        self.assertEqual((result.added, result.known_serial), ((), (("SLUS-00010", disc),)))
+
+    def test_two_new_discs_one_serial(self):
+        first = rdisc("Same (Japan)", "SLPS-00009")
+        second = rdisc("Same (Japan) (Rev 1)", "SLPS-00009", version="Rev 1")
+        result = plan(second, first)
+        self.assertEqual(result.added, (Added("SLPS-00009", first, True),))
+        self.assertEqual(result.known_serial, (("SLPS-00009", second),))
+
+    def test_skip_list(self):
+        by_name = rdisc("Rejected (USA)", "SLUS-00101")
+        by_printed = rdisc("Spaced (Japan)", "SLPM 86770")
+        by_core = rdisc("Spaced Too (Japan)", "SLPM 86771")
+        kept = rdisc("Kept (USA)", "SLUS-00102")
+        result = plan(by_name, by_printed, by_core, kept, skip={"Rejected (USA)", "SLPM 86770", "SLPM-86771"})
+        self.assertEqual(result.added, (Added("SLUS-00102", kept, True),))
+        self.assertEqual(result.skipped, (by_name, by_printed, by_core))
+
+    def test_known_disc_on_skip_list_counts_as_known(self):
+        result = plan(rdisc("Known Again (Europe)", "SLES-00001", tracks=KNOWN_TRACKS), skip={"SLES-00001"})
+        self.assertEqual((result.known, result.skipped), (1, ()))
+
+    def test_read_skip_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "skip.txt"
+            path.write_text("# comment\n\nRejected (USA)\n  SLPM 86770  \n")
+            self.assertEqual(read_skip_list(path), {"Rejected (USA)", "SLPM 86770"})
+
+    def test_nothing_new(self):
+        result = plan(rdisc("Known Again (Europe)", "SLES-00001", tracks=KNOWN_TRACKS))
+        self.assertEqual(result, ImportPlan(VERSION, 1, 1, (), (), (), (), ()))
+
+    def test_plan_is_stable(self):
+        discs = [rdisc(f"Game {i} (USA)", f"SLUS-{i + 200:05d}") for i in range(5)] + [rdisc("Z (USA)")]
+        self.assertEqual(plan(*discs), plan(*reversed(discs)))
+        self.assertEqual([a.disc.name for a in plan(*reversed(discs)).added], [f"Game {i} (USA)" for i in range(5)])
 
 
 if __name__ == "__main__":

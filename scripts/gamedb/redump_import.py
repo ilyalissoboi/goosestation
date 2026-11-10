@@ -22,6 +22,8 @@ from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from gamedb_check import DiscEntry, GameEntry  # noqa: E402
+
 MIN_DISCS = 10_900
 MAX_DAT_BYTES = 64 * 1024 * 1024
 HEADER_NAME = "Sony - PlayStation"
@@ -48,6 +50,25 @@ class Disc:
 class RedumpList:
     version: str
     discs: tuple[Disc, ...]
+
+
+@dataclass(frozen=True)
+class Added:
+    serial: str
+    disc: Disc
+    gamedb: bool  # a name-only gamedb.yaml entry is added too
+
+
+@dataclass(frozen=True)
+class ImportPlan:
+    list_version: str
+    total: int
+    known: int
+    added: tuple[Added, ...]
+    no_serial: tuple[Disc, ...]
+    odd_serial: tuple[Disc, ...]
+    known_serial: tuple[tuple[str, Disc], ...]  # the serial is taken: discdb.yaml has it, or an earlier new disc
+    skipped: tuple[Disc, ...]
 
 
 def core_serial(printed: str) -> str | None:
@@ -129,3 +150,51 @@ def read_redump_zip(path: Path, min_discs: int = MIN_DISCS) -> RedumpList:
     if not any(disc.serials for disc in discs):
         raise ListShapeError("no disc has a serial: this is the list without serials; download /datfile/psx/serial,version")
     return RedumpList(version=(header.findtext("version") or "").strip(), discs=discs)
+
+
+def read_skip_list(path: Path) -> set[str]:
+    entries = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            entries.add(line)
+    return entries
+
+
+def _is_skipped(disc: Disc, skip: set[str]) -> bool:
+    names = {disc.name, *disc.serials, *filter(None, map(core_serial, disc.serials))}
+    return not names.isdisjoint(skip)
+
+
+def plan_import(redump: RedumpList, games: list[GameEntry], discs: list[DiscEntry], skip: set[str]) -> ImportPlan:
+    known_tracks = {track_set for entry in discs for track_set in entry.track_sets}
+    taken = {entry.key for entry in discs}
+    in_gamedb = {entry.key for entry in games} | {code for entry in games for code in entry.codes}
+
+    known = 0
+    added, no_serial, odd_serial, known_serial, skipped = [], [], [], [], []
+    for disc in sorted(redump.discs, key=lambda disc: (disc.name, disc.tracks)):
+        if disc.tracks in known_tracks:
+            known += 1
+        elif _is_skipped(disc, skip):
+            skipped.append(disc)
+        elif not disc.serials:
+            no_serial.append(disc)
+        elif (serial := first_core_serial(disc)) is None:
+            odd_serial.append(disc)
+        elif serial in taken:
+            known_serial.append((serial, disc))
+        else:
+            taken.add(serial)
+            added.append(Added(serial, disc, serial not in in_gamedb))
+
+    return ImportPlan(
+        list_version=redump.version,
+        total=len(redump.discs),
+        known=known,
+        added=tuple(added),
+        no_serial=tuple(no_serial),
+        odd_serial=tuple(odd_serial),
+        known_serial=tuple(known_serial),
+        skipped=tuple(skipped),
+    )

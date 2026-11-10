@@ -46,6 +46,7 @@ DEFAULT_SKIP = REPO / "scripts" / "gamedb" / "redump-skip.txt"
 _CORE_SERIAL = re.compile(r"^([A-Z]{4})[ -](\d{5})$")
 _MD5 = re.compile(r"^[0-9a-f]{32}$")
 _COUNT = re.compile(r"\((\d+)\) \([^()]*\)$")
+_LIST_VERSION = re.compile(r"^\d{4}-\d{2}-\d{2}( \d{2}-\d{2}-\d{2})?$")
 
 
 class ListShapeError(Exception):
@@ -161,10 +162,14 @@ def read_redump_zip(path: Path, min_discs: int = MIN_DISCS) -> RedumpList:
     if len(games) < min_discs:
         raise ListShapeError(f"the list has {len(games)} discs, fewer than {min_discs}")
 
+    version = (header.findtext("version") or "").strip()
+    if not _LIST_VERSION.match(version):
+        raise ListShapeError(f"the list's version {version!r} isn't a date")
+
     discs = tuple(_read_disc(game) for game in games)
     if not any(disc.serials for disc in discs):
         raise ListShapeError("no disc has a serial: this is the list without serials; download /datfile/psx/serial,version")
-    return RedumpList(version=(header.findtext("version") or "").strip(), discs=discs)
+    return RedumpList(version=version, discs=discs)
 
 
 def read_skip_list(path: Path) -> set[str]:

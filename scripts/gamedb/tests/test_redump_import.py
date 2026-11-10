@@ -53,7 +53,7 @@ def game_xml(name, *, category="Games", serial=None, version=None, tracks=((1000
     return "\n".join(parts)
 
 
-def dat_xml(games, *, name="Sony - PlayStation", count=None):
+def dat_xml(games, *, name="Sony - PlayStation", count=None, version=VERSION):
     count = len(games) if count is None else count
     return "\n".join(
         [
@@ -62,7 +62,7 @@ def dat_xml(games, *, name="Sony - PlayStation", count=None):
             "\t<header>",
             f"\t\t<name>{name}</name>",
             f"\t\t<description>{name} - Discs ({count}) ({VERSION})</description>",
-            f"\t\t<version>{VERSION}</version>",
+            f"\t\t<version>{version}</version>",
             "\t</header>",
             *games,
             "</datafile>",
@@ -114,6 +114,11 @@ class ReadListTests(unittest.TestCase):
             ),
         )
         self.assertEqual(redump.discs[1], Disc("Demo Disc (Europe)", "Demos", (), "", ((1000, md5(1)),)))
+
+    def test_rejects_version_not_a_date(self):
+        path = make_list(self.tmp, TWO_GAMES, members={"list.dat": dat_xml(TWO_GAMES, version="2026-06-15\nadded=999")})
+        with self.assertRaisesRegex(ListShapeError, "version"):
+            read_redump_zip(path, min_discs=1)
 
     def test_rejects_wrong_header_name(self):
         with self.assertRaisesRegex(ListShapeError, "Sony - PlayStation 2"):

@@ -24,14 +24,21 @@ class AchievementsTokenTest {
             }
         }
 
-    // Stands in for the Keystore: reversible, but not the plain bytes. [broken] makes decrypting fail.
+    // Stands in for the Keystore: reversible, but not the plain bytes. [broken]: what's sealed won't open (its key is
+    // gone); [failing]: the Keystore fails for now, to open or to seal.
     private var broken = false
+    private var failing = false
     private val cipher =
         object : TokenCipher {
-            override fun encrypt(plain: ByteArray) = plain.map { (it.toInt() xor 0x5a).toByte() }.toByteArray()
+            override fun encrypt(plain: ByteArray) =
+                if (failing) null else plain.map { (it.toInt() xor 0x5a).toByte() }.toByteArray()
 
             override fun decrypt(sealed: ByteArray) =
-                if (broken) null else sealed.map { (it.toInt() xor 0x5a).toByte() }.toByteArray()
+                when {
+                    failing -> Opening.Failed
+                    broken -> Opening.WontOpen
+                    else -> Opening.Opened(sealed.map { (it.toInt() xor 0x5a).toByte() }.toByteArray())
+                }
         }
 
     private val token = AchievementsToken(cipher, store)
@@ -57,6 +64,26 @@ class AchievementsTokenTest {
         broken = true
         assertNull(token.load())
         assertEquals(emptyMap<String, String>(), values)
+    }
+
+    // From review: a Keystore that fails for a moment isn't a key that's gone; the token stays for the next try.
+    @Test
+    fun aKeystoreFailureKeepsTheToken() {
+        token.store("fake-token-1")
+        failing = true
+        assertNull(token.load())
+        failing = false
+        assertEquals("fake-token-1", token.load())
+    }
+
+    // A new token the Keystore can't seal leaves the stored one, rather than deleting it.
+    @Test
+    fun aTokenThatCantBeSealedKeepsTheOneStored() {
+        token.store("fake-token-1")
+        failing = true
+        token.store("fake-token-2")
+        failing = false
+        assertEquals("fake-token-1", token.load())
     }
 
     @Test

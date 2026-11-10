@@ -19,6 +19,7 @@ import io.github.ilyalissoboi.goosestation.update.UpdateSourceApi
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -212,6 +213,7 @@ class Updates(
                 is UpdateState.Failed -> s.release
                 else -> return
             }
+        dropApk()
         val mine = ++attempt
         val cancel = AtomicBoolean(false).also { cancelAttempt = it }
         val file = File(apkFolder, "update-$mine.apk")
@@ -274,7 +276,15 @@ class Updates(
         installing = null
         question = null
         installDue = null
+        dropApk()
         state = UpdateState.Available(release)
+    }
+
+    // The checked APK, once the installer is done with it however it ended: a retry downloads afresh.
+    private fun dropApk() {
+        val file = apk ?: return
+        apk = null
+        scope.launch { withContext(io) { file.delete() } }
     }
 
     private fun install(
@@ -288,7 +298,11 @@ class Updates(
         state = UpdateState.Installing(release)
         installing =
             scope.launch {
-                when (val outcome = installer.install(file, ::ask)) {
+                val outcome = installer.install(file, ::ask)
+                // Cancelled as the installer ended: cancel() has said how it ended.
+                if (!isActive) return@launch
+                dropApk()
+                when (outcome) {
                     InstallOutcome.Installed -> state = UpdateState.None
                     InstallOutcome.Aborted -> state = UpdateState.Available(release)
                     is InstallOutcome.Failed -> {

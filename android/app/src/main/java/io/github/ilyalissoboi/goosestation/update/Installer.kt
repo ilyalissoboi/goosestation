@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -72,12 +73,14 @@ class Installer(
         ask: (show: () -> Unit) -> Unit,
     ): InstallOutcome {
         val installer = context.packageManager.packageInstaller
+        // The session's id once made: one the copy didn't finish is abandoned, never left holding a staged APK.
+        var id = NO_SESSION
         val session =
             try {
                 withContext(Dispatchers.IO) {
                     val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
                     params.setAppPackageName(context.packageName)
-                    val id = installer.createSession(params)
+                    id = installer.createSession(params)
                     installer.openSession(id).also { session ->
                         session.openWrite(APK_ASSET, 0, apk.length()).use { out ->
                             apk.inputStream().use { it.copyTo(out) }
@@ -85,9 +88,15 @@ class Installer(
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Cancel during the copy: the session goes, and the cancel carries on, never named as a failure.
+                abandon(installer, id)
+                throw e
             } catch (e: IOException) {
+                abandon(installer, id)
                 return InstallOutcome.Failed(e.message ?: "couldn't write the update")
             } catch (e: RuntimeException) {
+                abandon(installer, id)
                 // A SecurityException, or the session refusing a write: a failure the banner names, never a crash.
                 return InstallOutcome.Failed(e.message ?: e.javaClass.simpleName)
             }
@@ -148,6 +157,13 @@ class Installer(
         }
     }
 
+    private fun abandon(
+        installer: PackageInstaller,
+        id: Int,
+    ) {
+        if (id != NO_SESSION) runCatching { installer.abandonSession(id) }
+    }
+
     private fun userAction(intent: Intent): Intent? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
@@ -158,5 +174,6 @@ class Installer(
 
     private companion object {
         const val TAG = "GooseStationUpdate"
+        const val NO_SESSION = -1
     }
 }

@@ -109,6 +109,8 @@ fun GameMenu(
             shown.slots?.switching != null -> actions.cancelSwitch()
             shown.slots?.deleting != null -> actions.cancelDelete()
             shown.slots?.replacing != null -> actions.cancelReplace()
+            // A save, load, delete or disc change under way ends in its panel, which stays until it has.
+            shown.slots?.busy == true || shown.discs?.busy == true -> Unit
             shown.slots != null -> {
                 (if (shown.slots.mode == SlotMode.Save) cameFrom.saveRow else cameFrom.loadRow).requestFocus()
                 actions.closeSlots()

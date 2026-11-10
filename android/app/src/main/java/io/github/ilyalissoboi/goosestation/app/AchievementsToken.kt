@@ -4,21 +4,37 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
+import android.util.Log
 import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
 import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.util.Base64
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Seals and opens a secret. Either gives null when it can't. */
+/** What opening a sealed secret gave. */
+sealed interface Opening {
+    class Opened(
+        val bytes: ByteArray,
+    ) : Opening
+
+    /** It never will: its key is gone (a restored backup, a new phone), or it was changed. */
+    data object WontOpen : Opening
+
+    /** Not now: the Keystore failed. What's sealed is kept for the next try. */
+    data object Failed : Opening
+}
+
+/** Seals and opens a secret. Sealing gives null when it can't. */
 interface TokenCipher {
     fun encrypt(plain: ByteArray): ByteArray?
 
-    fun decrypt(sealed: ByteArray): ByteArray?
+    fun decrypt(sealed: ByteArray): Opening
 }
 
 /**
@@ -33,26 +49,34 @@ class KeystoreCipher(
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, key(create = true))
             cipher.iv + cipher.doFinal(plain)
-        } catch (_: GeneralSecurityException) {
+        } catch (e: GeneralSecurityException) {
+            Log.w(TAG, "The Keystore can't seal a secret.", e)
             null
-        } catch (_: RuntimeException) {
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "The Keystore can't seal a secret.", e)
             null
         }
 
-    override fun decrypt(sealed: ByteArray): ByteArray? =
+    override fun decrypt(sealed: ByteArray): Opening =
         try {
             val key = key(create = false)
             if (key == null || sealed.size <= IV_BYTES) {
-                null
+                Opening.WontOpen
             } else {
                 val cipher = Cipher.getInstance(TRANSFORMATION)
                 cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, sealed, 0, IV_BYTES))
-                cipher.doFinal(sealed, IV_BYTES, sealed.size - IV_BYTES)
+                Opening.Opened(cipher.doFinal(sealed, IV_BYTES, sealed.size - IV_BYTES))
             }
-        } catch (_: GeneralSecurityException) {
-            null
-        } catch (_: RuntimeException) {
-            null
+        } catch (_: AEADBadTagException) {
+            Opening.WontOpen
+        } catch (_: KeyPermanentlyInvalidatedException) {
+            Opening.WontOpen
+        } catch (e: GeneralSecurityException) {
+            Log.w(TAG, "The Keystore can't open a secret for now.", e)
+            Opening.Failed
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "The Keystore can't open a secret for now.", e)
+            Opening.Failed
         }
 
     private fun key(create: Boolean): SecretKey? {
@@ -72,6 +96,7 @@ class KeystoreCipher(
     }
 
     private companion object {
+        const val TAG = "GooseStationKeystore"
         const val KEYSTORE = "AndroidKeyStore"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_BYTES = 12
@@ -87,21 +112,31 @@ class AchievementsToken(
     private val cipher: TokenCipher,
     private val store: KeyValueStore,
 ) {
-    /** The token, or null for none. One that won't open (a restored backup, a new phone) is deleted: signed out. */
+    /**
+     * The token, or null for none. One that won't open (a restored backup, a new phone) is deleted: signed out. One the
+     * Keystore can't open for now is kept, for the next try.
+     */
     fun load(): String? {
         val sealed = store.getString(KEY) ?: return null
-        val plain = runCatching { Base64.getDecoder().decode(sealed) }.getOrNull()?.let(cipher::decrypt)
-        if (plain == null) {
-            store.putString(KEY, null)
-            return null
+        val bytes = runCatching { Base64.getDecoder().decode(sealed) }.getOrNull()
+        return when (val opening = bytes?.let(cipher::decrypt) ?: Opening.WontOpen) {
+            is Opening.Opened -> opening.bytes.decodeToString()
+            Opening.WontOpen -> {
+                store.putString(KEY, null)
+                null
+            }
+            Opening.Failed -> null
         }
-        return plain.decodeToString()
     }
 
-    /** Keeps [token], or deletes the stored one with null or an empty one. */
+    /** Keeps [token], or deletes the stored one with null or an empty one. One the Keystore can't seal leaves it. */
     fun store(token: String?) {
-        val sealed = token?.takeIf { it.isNotEmpty() }?.let { cipher.encrypt(it.encodeToByteArray()) }
-        store.putString(KEY, sealed?.let { Base64.getEncoder().encodeToString(it) })
+        if (token.isNullOrEmpty()) {
+            store.putString(KEY, null)
+            return
+        }
+        val sealed = cipher.encrypt(token.encodeToByteArray()) ?: return
+        store.putString(KEY, Base64.getEncoder().encodeToString(sealed))
     }
 
     private companion object {

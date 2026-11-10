@@ -460,7 +460,10 @@ class InGameMenu(
         state = state.copy(fastForward = enabled)
     }
 
-    /** Back to the game, unless Exit game is saving the resume state: the game stops once that's done. */
+    /**
+     * Back to the game, closing its settings, unless Exit game is saving the resume state: the game stops once that's
+     * done. Every action that goes back to the game, a save or a disc change done, comes here.
+     */
     override fun resume() {
         if (state.exiting) return
         if (state.settings) {
@@ -618,7 +621,7 @@ class InGameMenu(
         val entry = panel.switching ?: return
         val path = entry.holds?.path ?: return
         switchTo = StateStart(path, entry.ref(serial.orEmpty()))
-        closeSlots()
+        dropSlots()
         exit()
     }
 
@@ -672,7 +675,13 @@ class InGameMenu(
         }
     }
 
+    // A save, load or delete under way ends in its panel, which shows its progress, then how it went.
     override fun closeSlots() {
+        if (state.slots?.busy == true) return
+        dropSlots()
+    }
+
+    private fun dropSlots() {
         panelId++
         state = state.copy(slots = null)
     }
@@ -778,7 +787,9 @@ class InGameMenu(
         state = state.copy(slots = null, codes = null, discs = DiscChoice(discs, state.disc), confirmingReset = false)
     }
 
+    // A disc going in ends in its panel, as a save does.
     override fun closeDiscs() {
+        if (state.discs?.busy == true) return
         state = state.copy(discs = null)
     }
 
@@ -793,14 +804,19 @@ class InGameMenu(
                 withContext(game) {
                     api.changeDisc(number).also { if (it == null && key.isNotBlank()) records.setLastDisc(key, number) }
                 }
-            val open = state.discs ?: return@launch
+            // The panel inserting it, unless another row has taken its place: the disc put in is known all the same.
+            val open = state.discs?.takeIf { it.busy }
             if (error != null) {
-                state = state.copy(discs = open.copy(busy = false, error = error))
+                if (open != null) {
+                    state = state.copy(discs = open.copy(busy = false, error = error))
+                } else {
+                    onMessage(error)
+                }
                 return@launch
             }
-            state = state.copy(disc = number, discs = null)
+            state = state.copy(disc = number, discs = if (open != null) null else state.discs)
             onMessage("Disc $number inserted")
-            onResume()
+            resume()
         }
     }
 
@@ -975,14 +991,20 @@ class InGameMenu(
                 }
             if (disc > 0) state = state.copy(disc = disc)
             if (error != null) {
-                updatePanel(id) { it.copy(busy = false, error = failed(error)) }
+                // Said in the panel, or once another row has taken its place, as a message: never lost with it.
+                val reason = failed(error)
+                if (id == panelId && state.slots != null) {
+                    updatePanel(id) { it.copy(busy = false, error = reason) }
+                } else {
+                    onMessage(reason)
+                }
                 return@launch
             }
             // The save state hotkeys' slot follows the menu's too.
             if (remember) selectedSlot = slot
-            if (id == panelId) closeSlots()
+            if (id == panelId) dropSlots()
             onMessage(done)
-            onResume()
+            resume()
         }
     }
 
@@ -990,7 +1012,7 @@ class InGameMenu(
     private fun thenResume(call: () -> Unit) {
         scope.launch {
             withContext(game) { call() }
-            onResume()
+            resume()
         }
     }
 
@@ -1057,7 +1079,7 @@ class InGameMenu(
         val id = gameId
         scope.launch {
             undo(id, key)
-            if (id == gameId) onResume()
+            if (id == gameId) resume()
         }
     }
 

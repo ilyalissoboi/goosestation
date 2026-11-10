@@ -7,15 +7,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertTouchHeightIsEqualTo
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
@@ -119,6 +126,37 @@ class SavesScreenTest {
         press(Key.ButtonL1)
         rule.onNode(isFocused() and hasText("Slot 2", substring = true)).assertExists()
         assertEquals(listOf("switchTab", "switchTab"), calls)
+    }
+
+    // From review: a tab's tap kept the first page's state, so tapping back to This game did nothing.
+    @Test
+    fun tappingATabSwitchesToItEachTime() {
+        page = page.copy(entries = saved(2), shared = emptyList())
+        show()
+
+        rule.onNodeWithText("Shared").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("This game").performClick()
+        rule.waitForIdle()
+        // The tab already shown stays.
+        rule.onNodeWithText("This game").performClick()
+        rule.waitForIdle()
+
+        assertEquals(listOf("switchTab", "switchTab"), calls)
+    }
+
+    // A screen reader can pick a tab, and a finger has a full-size target, though the tabs take no focus.
+    @Test
+    fun aTabIsAButtonToAScreenReaderWithAFullTouchTarget() {
+        page = page.copy(entries = saved(2), shared = emptyList())
+        show()
+
+        rule.onNodeWithText("Shared").assert(SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick))
+        rule.onNodeWithText("Shared").assertTouchHeightIsEqualTo(48.dp)
+        rule.onNodeWithText("Shared").performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+
+        assertEquals(listOf("switchTab"), calls)
     }
 
     @Test

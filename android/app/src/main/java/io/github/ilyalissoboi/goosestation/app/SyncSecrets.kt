@@ -16,16 +16,22 @@ class SyncSecrets(
     private val cipher: TokenCipher,
     private val store: KeyValueStore,
 ) {
-    /** [name]'s secret, or null for none. One that won't open (a restored backup, a new phone) is deleted. */
+    /**
+     * [name]'s secret, or null for none. One that won't open (a restored backup, a new phone) is deleted. One the
+     * Keystore can't open for now is kept, for the next try: a passphrase lost is lost for good.
+     */
     fun load(name: String): String? {
         if (name !in NAMES) return null
         val sealed = store.getString(name) ?: return null
-        val plain = runCatching { Base64.getDecoder().decode(sealed) }.getOrNull()?.let(cipher::decrypt)
-        if (plain == null) {
-            store.putString(name, null)
-            return null
+        val bytes = runCatching { Base64.getDecoder().decode(sealed) }.getOrNull()
+        return when (val opening = bytes?.let(cipher::decrypt) ?: Opening.WontOpen) {
+            is Opening.Opened -> opening.bytes.decodeToString()
+            Opening.WontOpen -> {
+                store.putString(name, null)
+                null
+            }
+            Opening.Failed -> null
         }
-        return plain.decodeToString()
     }
 
     /** Keeps [value] as [name]'s secret, or deletes it with null or an empty one. False if it couldn't. */

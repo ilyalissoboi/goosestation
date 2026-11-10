@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -26,8 +29,8 @@ import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 
 /**
  * A panel's tabs: the L1 key chip, the [tabs]' labels, the [current] one on `beak-soft`, then R1. L1 and R1 switch
- * them (the panel handles the keys); a tap on a label selects it ([onSelect]). Nothing in it takes focus, so the D-pad
- * stays on the panel's rows.
+ * them (the panel handles the keys); a tap on a label selects it ([onSelect]), and so does a screen reader. Nothing in
+ * it takes focus, so the D-pad stays on the panel's rows.
  */
 @Composable
 fun PanelTabs(
@@ -37,6 +40,8 @@ fun PanelTabs(
     modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
+    // The tap's gesture outlives a composition: it calls the latest onSelect, which reads the panel as it is now.
+    val select by rememberUpdatedState(onSelect)
     FlowRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -55,7 +60,14 @@ fun PanelTabs(
                         .semantics {
                             role = Role.Tab
                             selected = on
-                        }.pointerInput(index) { detectTapGestures { onSelect(index) } }
+                            onClick {
+                                select(index)
+                                true
+                            }
+                            notAFocusStop = "L1 and R1 switch tabs"
+                        }
+                        // Under 48 dp tall, but its touch target is 48 dp: Compose widens a small one for a finger.
+                        .pointerInput(index) { detectTapGestures { select(index) } }
                         .background(if (on) colors.beakSoft else Color.Transparent, GsShapes.small)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                         .wrapContentSize(),

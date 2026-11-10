@@ -1291,6 +1291,45 @@ class InGameMenuTest {
             listOf(AchievementSection(2, "Unlocked", arrayOf(Achievement(7, "First", "", 5, "", 100, "", 0f))))
     }
 
+    // From review: another panel opened over Achievements left it set, so B brought it back, on Loading… for good.
+    @Test
+    fun anotherPanelOverAchievementsClosesThem() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+            menu.openAchievements()
+
+            menu.openCodes()
+            runCurrent()
+            assertNull(menu.state.cheevos)
+
+            menu.closeCodes()
+            assertNull(menu.state.cheevos)
+            assertNull(menu.state.codes)
+        }
+
+    // Each side panel takes the place of what showed beside the menu, and of a question: one at a time.
+    @Test
+    fun eachSidePanelReplacesTheOthersAndTheQuestions() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+
+            menu.askReset()
+            menu.openSettings()
+            assertFalse(menu.state.confirmingReset)
+
+            menu.closeSettings()
+            menu.openAchievements()
+            menu.openSlots(SlotMode.Save)
+            assertNull(menu.state.cheevos)
+
+            menu.askReset()
+            menu.openCodes()
+            assertNull(menu.state.slots)
+            assertFalse(menu.state.confirmingReset)
+        }
+
     @Test
     fun achievementsOpenOnTheirTab() =
         runTest {

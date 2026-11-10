@@ -1,0 +1,107 @@
+name: GameDB redump import
+
+# Once a week, downloads redump.org's public PS1 list, adds the discs the game database doesn't know (only additions;
+# existing entries never change) and opens or updates one pull request for review. It never merges. It uses only the
+# job's own token, which may open pull requests only once "Allow GitHub Actions to create and approve pull requests"
+# is on (Settings > Actions > General). See docs/gamedb.md.
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency: gamedb-import
+
+jobs:
+  import:
+    if: github.repository == 'ilyalissoboi/goosestation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write        # push the import branch
+      pull-requests: write   # open or update its pull request
+      actions: write         # start gamedb-lint.yml on it (a push with this token starts no workflows)
+    env:
+      BRANCH: gamedb/redump-import
+      BASE: master
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@v4.1.1
+      with:
+        ref: master
+
+    - name: Download redump's list
+      shell: bash
+      run: |
+        mkdir "$RUNNER_TEMP/redump"
+        ua="GooseStation gamedb import (+https://github.com/${GITHUB_REPOSITORY})"
+        for scheme in https http; do
+          if curl --fail --silent --show-error --max-time 300 --max-filesize 67108864 --user-agent "$ua" \
+              --output "$RUNNER_TEMP/redump/list.zip" "$scheme://redump.org/datfile/psx/serial,version"; then
+            echo "Downloaded over $scheme."
+            exit 0
+          fi
+        done
+        echo "::error::Couldn't download redump's list."
+        exit 1
+
+    - name: Import new discs
+      id: import
+      shell: bash
+      run: |
+        python3 -I scripts/gamedb/redump_import.py --list "$RUNNER_TEMP/redump/list.zip" \
+          --summary "$RUNNER_TEMP/pr-body.md" --full-summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT" ||
+          { echo "::error::The import stopped (exit $?); its log says why."; exit 1; }
+
+    - name: Check the result
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install yamllint
+        yamllint -c extras/yamllint-config.yaml -s -f github data/resources/gamedb.yaml
+        yamllint -c extras/yamllint-config.yaml -s -f github data/resources/discdb.yaml
+        python3 scripts/gamedb/gamedb_check.py
+
+    - name: Open or update the pull request
+      shell: bash
+      env:
+        ADDED: ${{ steps.import.outputs.added }}
+        TITLE: ${{ steps.import.outputs.title }}
+      run: |
+        open_pr=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')
+        if [ "$ADDED" = "0" ]; then
+          echo "Nothing new."
+          if [ -n "$open_pr" ]; then
+            gh pr close "$open_pr" --comment "The latest redump list has nothing new for the game database any more."
+          fi
+          exit 0
+        fi
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+        git switch -C "$BRANCH"
+        git add data/resources/gamedb.yaml data/resources/discdb.yaml
+        git commit --quiet --message "$TITLE"
+
+        # The same files as the last run's (the list or master hasn't changed), and a pull request (open or closed)
+        # has the branch's current commit as its head: leave them alone, including a PR a reviewer closed. A PR from
+        # an earlier import (another head commit), or none (the last run couldn't open one): go on and open one.
+        if git fetch --quiet origin "$BRANCH" 2>/dev/null &&
+            [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'FETCH_HEAD^{tree}')" ]; then
+          pushed=$(git rev-parse FETCH_HEAD)
+          same_pr=$(gh pr list --head "$BRANCH" --base "$BASE" --state all --json number,headRefOid \
+            --jq '.[] | "\(.number) \(.headRefOid)"' | awk -v oid="$pushed" '$2 == oid { print $1; exit }')
+          if [ -n "$same_pr" ]; then
+            echo "Nothing changed since the last run (pull request #$same_pr)."
+            exit 0
+          fi
+        fi
+        git push --force origin "$BRANCH"
+
+        if [ -n "$open_pr" ]; then
+          gh pr edit "$open_pr" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
+        else
+          gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
+        fi
+        gh workflow run gamedb-lint.yml --ref "$BRANCH"

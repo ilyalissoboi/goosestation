@@ -17,6 +17,7 @@ add_executable(common-tests
   content_uri_tests.cpp
   core_host_stubs.cpp
   fallback_fonts_tests.cpp
+  game_database_tests.cpp
   ../util/fallback_fonts.cpp
   file_system_tests.cpp
   gsvector_yuvtorgb_test.cpp
@@ -64,3 +65,7 @@ if(ANDROID)
 endif()
 
 target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip gtest gtest_main)
+
+# game_database_tests.cpp loads the shipped database from the source tree (and skips where it isn't there).
+target_compile_definitions(common-tests PRIVATE
+  GOOSESTATION_TEST_RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../data/resources")

@@ -5,6 +5,7 @@ on:
     paths:
       - 'data/resources/gamedb.yaml'
       - 'data/resources/discdb.yaml'
+      - 'scripts/gamedb/**'
   push:
     branches:
       - master
@@ -12,6 +13,7 @@ on:
     paths:
       - 'data/resources/gamedb.yaml'
       - 'data/resources/discdb.yaml'
+      - 'scripts/gamedb/**'
   workflow_dispatch:
 
 jobs:
@@ -36,3 +38,11 @@ jobs:
     - name: Check DiscDB
       shell: bash
       run: yamllint -c extras/yamllint-config.yaml -s -f github data/resources/discdb.yaml
+
+    - name: Test GameDB scripts
+      shell: bash
+      run: python3 -m unittest discover -s scripts/gamedb/tests -t scripts/gamedb
+
+    - name: Check GameDB keys and codes
+      shell: bash
+      run: python3 scripts/gamedb/gamedb_check.py

@@ -3,7 +3,10 @@
 
 // No-op frontend for linking the core library into common-tests. The core calls these functions on its host (the Qt
 // app, the Android app); tests that use the core's pure parts, such as Settings::Load, never reach them. Resources
-// aren't found, so ImGuiFullscreen's textures fail to load without a GPU device.
+// aren't found, so ImGuiFullscreen's textures fail to load without a GPU device, unless a test sets a resource
+// directory (core_host_stubs.h).
+
+#include "core_host_stubs.h"
 
 #include "core/achievements.h"
 #include "core/fullscreen_ui.h"
@@ -20,7 +23,9 @@
 #include "util/input_manager.h"
 
 #include "common/error.h"
+#include "common/file_system.h"
 #include "common/heap_array.h"
+#include "common/path.h"
 #include "common/small_string.h"
 
 #include <functional>
@@ -33,19 +38,31 @@
 
 // Resources, translation and messages.
 
+static std::string s_resource_directory;
+
+void CoreHostStubs::SetResourceDirectory(std::string directory)
+{
+  s_resource_directory = std::move(directory);
+}
+
 bool Host::ResourceFileExists(std::string_view filename, bool allow_override)
 {
-  return false;
+  return !s_resource_directory.empty() &&
+         FileSystem::FileExists(Path::Combine(s_resource_directory, filename).c_str());
 }
 
 std::optional<DynamicHeapArray<u8>> Host::ReadResourceFile(std::string_view filename, bool allow_override)
 {
-  return std::nullopt;
+  if (s_resource_directory.empty())
+    return std::nullopt;
+  return FileSystem::ReadBinaryFile(Path::Combine(s_resource_directory, filename).c_str());
 }
 
 std::optional<std::string> Host::ReadResourceFileToString(std::string_view filename, bool allow_override)
 {
-  return std::nullopt;
+  if (s_resource_directory.empty())
+    return std::nullopt;
+  return FileSystem::ReadFileToString(Path::Combine(s_resource_directory, filename).c_str());
 }
 
 std::optional<std::time_t> Host::GetResourceFileTimestamp(std::string_view filename, bool allow_override)

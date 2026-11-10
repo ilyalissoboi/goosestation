@@ -700,9 +700,11 @@ class PostProcessingPage(
 
     private fun settingsFor(key: String?): CoreSettings = if (key == null) global else layer(key)
 
-    // Runs [change] on core, applies it in a running game, then reads the chains it left, and [after] with them.
+    // Runs [change] on core, applies it in a running game, reads the chains it left, then runs [after]. The chains are
+    // shown unless a later read was asked for meanwhile, which has them too; [after] runs either way: it ends the edit
+    // (closes the name form, moves the focus, says why the core refused).
     private fun edit(
-        after: (Map<Chain, ChainView>) -> Unit = {},
+        after: () -> Unit = {},
         change: () -> Unit,
     ) {
         val read = ++reads
@@ -715,10 +717,11 @@ class PostProcessingPage(
                     if (apply && key != null) api.applyGameSettings(key)
                     readChains(key) to api.getPostProcessingFavourites()
                 }
-            if (read != reads) return@launch
-            chains = loaded
-            favourites = saved
-            after(loaded)
+            if (read == reads) {
+                chains = loaded
+                favourites = saved
+            }
+            after()
         }
     }
 

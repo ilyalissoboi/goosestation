@@ -153,6 +153,24 @@ class PostProcessingFavouritesTest {
             assertEquals(1, page.focusFavourite)
         }
 
+    // From review: a read asked for meanwhile (a pack installed, a pull) dropped the save's end, and the form stayed.
+    @Test
+    fun aSaveOvertakenByAReadStillClosesTheForm() =
+        runTest {
+            globalStages("crt-lottes")
+            favourites("CRT")
+            val page = page()
+
+            page.startSaving()
+            page.submitName("Lottes")
+            page.reread()
+            runCurrent()
+
+            assertTrue("savePostProcessingFavourite null Lottes false" in calls)
+            assertNull(page.naming)
+            assertEquals(listOf("CRT", "Lottes"), page.names())
+        }
+
     @Test
     fun savingATakenNameAsksToReplace() =
         runTest {

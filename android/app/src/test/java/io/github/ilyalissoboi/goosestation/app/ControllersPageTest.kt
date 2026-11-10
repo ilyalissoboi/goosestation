@@ -233,6 +233,27 @@ class ControllersPageTest {
             assertEquals(mapOf("Pad1/AnalogDeadzone" to "0.3"), settings.values)
         }
 
+    // From review: back from a macro the port reads its values again; a change made before that read came back was
+    // saved, then the read put the old value back on the page.
+    @Test
+    fun aPortChangeWhileItsValuesAreReadAgainKeepsTheChange() =
+        runTest {
+            api.typeSettings = mapOf("AnalogController" to listOf(deadzone))
+            val page = openPage()
+            page.openPort(0)
+            runCurrent()
+            page.openMacro(0, 1)
+            runCurrent()
+
+            page.back()
+            val setting = PortSettings.setting(0, deadzone) as FloatSetting
+            page.changePort(page.state.portValues!!.with(setting, 0.3f))
+            runCurrent()
+
+            assertEquals("0.3", settings.values["Pad1/AnalogDeadzone"])
+            assertEquals(0.3f, page.state.portValues!![setting])
+        }
+
     @Test
     fun aStaleBindingsReadIsDropped() =
         runTest {

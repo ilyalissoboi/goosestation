@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.core
 
+import android.util.Log
 import android.view.Surface
 import io.github.ilyalissoboi.goosestation.BuildConfig
 
@@ -14,7 +15,15 @@ import io.github.ilyalissoboi.goosestation.BuildConfig
 object NativeLibrary {
     init {
         System.loadLibrary("goosestation")
+        // The test tiers' release build waits for this line: JNI_OnLoad, which finds the app's classes by name, passed.
+        Log.i("GooseStation", "Loaded libgoosestation.so.")
     }
+
+    /**
+     * Loads the library, if it isn't yet, so JNI_OnLoad runs at every launch, setup included: a class R8 stripped fails
+     * there, at once, rather than once setup is done.
+     */
+    fun load() {}
 
     /**
      * Where shader packs are installed: the app's own storage, apart from the data folder (never mirrored). A stage's

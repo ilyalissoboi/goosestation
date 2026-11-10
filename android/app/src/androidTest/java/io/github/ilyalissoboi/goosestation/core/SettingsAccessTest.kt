@@ -275,7 +275,7 @@ class SettingsAccessTest {
         val file = readSettings()
         for (setting in settings) {
             val name = "${setting.section}/${setting.key}"
-            if (name in ADAPTED_AWAY) continue
+            if (name in ADAPTED_AWAY || name in THE_APPS_OWN) continue
             assertTrue("$name isn't in a new settings.ini", file.value(setting.section, setting.key) != null)
             assertEquals(name, setting.default, setting.read(NativeCoreSettings))
         }
@@ -283,6 +283,12 @@ class SettingsAccessTest {
 
     private companion object {
         const val INSTALL_ID = "test-install"
+
+        /**
+         * Read by the app alone, never by the core, which doesn't write them (desktop's frontend writes its own): the
+         * page's defaults are the ones that count.
+         */
+        val THE_APPS_OWN = setOf("AutoUpdater/CheckAtStartup", "AutoUpdater/UpdateTag")
 
         /** The keys a new settings.ini doesn't hold at their default: the device-specific ones its adapting deletes, and the card paths it leaves out. */
         val ADAPTED_AWAY =

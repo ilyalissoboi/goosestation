@@ -4,6 +4,7 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,6 +51,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.pressKey
@@ -66,6 +68,7 @@ import androidx.compose.ui.unit.width
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.CoverJob
@@ -90,6 +93,8 @@ import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
+import io.github.ilyalissoboi.goosestation.app.UpdateFailure
+import io.github.ilyalissoboi.goosestation.app.UpdateState
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
@@ -133,6 +138,10 @@ import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import io.github.ilyalissoboi.goosestation.update.Change
+import io.github.ilyalissoboi.goosestation.update.Changes
+import io.github.ilyalissoboi.goosestation.update.ChannelRelease
+import io.github.ilyalissoboi.goosestation.update.CheckResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -833,7 +842,17 @@ class OrientationLayoutTest {
         settingsPageFits(
             {
                 var values by remember { mutableStateOf(pageValues(InterfaceSettings.all)) }
-                InterfaceScreen(values, onChange = { values = it }, onBack = {})
+                InterfaceScreen(
+                    values,
+                    onChange = { values = it },
+                    onBack = {},
+                    updates =
+                        InterfaceUpdates(
+                            CheckNowState.Done(CheckResult.Unreadable(403)),
+                            onCheckNow = {},
+                        ),
+                    version = "0.1-575-g9c532cd4f-dirty",
+                )
             },
             rows =
                 listOf(
@@ -841,6 +860,9 @@ class OrientationLayoutTest {
                     "Pause when a controller disconnects",
                     "Save state on exit",
                     "Create save state backups",
+                    "Check for updates at start",
+                    "Update channel",
+                    "Check now",
                 ),
         )
 
@@ -2439,6 +2461,128 @@ class OrientationLayoutTest {
                 press(Key.Enter)
                 assertTrue(focusedIsTheField())
             }
+        }
+    }
+
+    private val updateRelease =
+        ChannelRelease("preview", "0.1-512-g1a2b3c4", 100_512, "a".repeat(40), "http://x/apk", 48L * 1024 * 1024)
+
+    private fun updateBanner(state: UpdateState = UpdateState.Available(updateRelease)) =
+        UpdateBannerModel(
+            state = state,
+            ownVersion = "0.1-498-gfffffff",
+            failureMessage = "INSTALL_FAILED_INSUFFICIENT_STORAGE",
+            onUpdate = {},
+            onSkip = {},
+            onHide = {},
+            onCancel = {},
+            onOpenSettings = {},
+            loadChanges = {
+                Changes(
+                    (1..12).map { Change("Android: change number $it, with a title long enough to wrap", "Ada") },
+                    40,
+                )
+            },
+        )
+
+    // The banner's own layout in each state, on its own as the other components are: in the library a short screen
+    // takes its room from the games (theUpdateBannerTakesItsRoomFromTheGames).
+    @Test
+    fun theUpdateBannerInEachState() {
+        val states =
+            listOf(
+                UpdateState.Downloading(updateRelease, 12L * 1024 * 1024, 48L * 1024 * 1024),
+                UpdateState.NeedsPermission(updateRelease, refused = true),
+                UpdateState.Failed(updateRelease, UpdateFailure.Installer),
+                UpdateState.Installing(updateRelease),
+                UpdateState.Available(updateRelease),
+            )
+        var state by mutableStateOf<UpdateState>(states.last())
+        eachConfig({
+            Column(Modifier.padding(horizontal = 32.dp, vertical = 20.dp)) {
+                UpdateBanner(updateBanner(state), onWhatsNew = {})
+            }
+        }) {
+            for (each in states) {
+                state = each
+                rule.waitForIdle()
+                assertTextsLaidOut()
+            }
+        }
+    }
+
+    // Alone, as the other panels are: over the library, the scrim's texts would count as overlapping the panel's.
+    @Test
+    fun whatsNewScrollsOnEachScreen() {
+        val changes = (1..12).map { Change("Android: change number $it, with a title long enough to wrap", "Ada") }
+        eachConfig({ WhatsNewPanel("0.1-512", load = { Changes(changes, 40) }, onClose = {}) }) {
+            assertTextsLaidOut()
+            assertTrue(focusedHas("change number 1,"))
+            // Down through every change to Close, each in view.
+            repeat(12) {
+                press(Key.DirectionDown)
+                assertFocusedInView(screen())
+            }
+            assertTrue(focusedHas("Close"))
+        }
+    }
+
+    // On a handheld the banner takes its room from the games, as notices do (docs/design-system.md): the focused tile
+    // stays in view as far as the grid has room, and B, hiding the banner, gives a whole tile its room back.
+    @Test
+    fun theUpdateBannerTakesItsRoomFromTheGames() {
+        val games = (1..8).map { LONG_GAME.copy(path = "content://test/tree/games/document/long-$it.cue") }
+        val configs =
+            listOf(DpSize(832.dp, 468.dp), DpSize(960.dp, 540.dp)).flatMap { size ->
+                listOf(1f, 1.3f).map {
+                    Config("landscape ${size.width.value.toInt()}x${size.height.value.toInt()}", size, it)
+                }
+            }
+        var shown by mutableStateOf(true)
+        eachConfig(
+            {
+                Box(
+                    Modifier
+                        .consumeWindowInsets(WindowInsets.safeDrawing)
+                        .padding(top = 30.dp, bottom = 24.dp),
+                ) {
+                    LibraryScreen(
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        update = if (shown) updateBanner().copy(onHide = { shown = false }) else null,
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = games[0].path,
+                    )
+                }
+            },
+            configs,
+        ) {
+            shown = true
+            rule.waitForIdle()
+            repeat(2) { row ->
+                val tile = rule.onNode(isFocused()).fetchSemanticsNode().boxInRoot()
+                assertTrue(
+                    "row ${row + 1}: the tile ${tile.describe()} isn't in the grid ${viewport().describe()}",
+                    viewport().overlaps(tile),
+                )
+                press(Key.DirectionDown)
+            }
+
+            // Up to the banner, B: it's gone, and the focused tile is whole in the grid.
+            fun onBanner() = listOf("Update", "What's new", "Skip this version").any(::focusedHas)
+            repeat(4) { if (!onBanner()) press(Key.DirectionUp) }
+            assertTrue("didn't reach the banner", onBanner())
+            press(Key.ButtonB)
+            assertTrue(!shown)
+            press(Key.DirectionDown)
+            val tile = rule.onNode(isFocused()).fetchSemanticsNode().boxInRoot()
+            assertTrue("the tile ${tile.describe()} isn't whole in ${viewport().describe()}", viewport().contains(tile))
         }
     }
 

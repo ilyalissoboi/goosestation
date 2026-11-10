@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 GooseStation contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0 -->
+<resources>
+    <!-- The launcher's name. GooseStation Debug's is in src/debug/res. -->
+    <string name="app_name" translatable="false">GooseStation</string>
+</resources>

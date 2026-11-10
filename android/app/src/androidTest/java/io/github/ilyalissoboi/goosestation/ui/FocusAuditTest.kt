@@ -9,7 +9,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -25,6 +28,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
@@ -33,6 +37,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
+import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
 import io.github.ilyalissoboi.goosestation.app.CoverJob
@@ -56,6 +61,8 @@ import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
+import io.github.ilyalissoboi.goosestation.app.UpdateFailure
+import io.github.ilyalissoboi.goosestation.app.UpdateState
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
@@ -97,6 +104,10 @@ import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import io.github.ilyalissoboi.goosestation.update.Change
+import io.github.ilyalissoboi.goosestation.update.Changes
+import io.github.ilyalissoboi.goosestation.update.ChannelRelease
+import io.github.ilyalissoboi.goosestation.update.CheckResult
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -252,6 +263,50 @@ class FocusAuditTest {
         rule.assertControllerReady()
     }
 
+    private val updateRelease =
+        ChannelRelease("preview", "0.1-512-g1a2b3c4", 100_512, "a".repeat(40), "http://x/apk", 48L * 1024 * 1024)
+
+    private fun updateBanner(state: UpdateState) =
+        UpdateBannerModel(
+            state = state,
+            ownVersion = "0.1-498-gfffffff",
+            failureMessage = "INSTALL_FAILED_INSUFFICIENT_STORAGE",
+            onUpdate = {},
+            onSkip = {},
+            onHide = {},
+            onCancel = {},
+            onOpenSettings = {},
+            loadChanges = { Changes(listOf(Change("Android: a banner", "Ada"), Change("Fix it", "Grace")), total = 5) },
+        )
+
+    @Test
+    fun libraryWithAnUpdate() {
+        val states =
+            listOf(
+                UpdateState.Available(updateRelease),
+                UpdateState.Downloading(updateRelease, 12L * 1024 * 1024, 48L * 1024 * 1024),
+                UpdateState.NeedsPermission(updateRelease, refused = true),
+                UpdateState.Installing(updateRelease),
+                UpdateState.Failed(updateRelease, UpdateFailure.Installer),
+            )
+        var state by mutableStateOf<UpdateState>(states[0])
+        showLibrary(GAMES, gridView = true, update = { updateBanner(state) })
+        for (each in states) {
+            state = each
+            rule.waitForIdle()
+            rule.assertControllerReady()
+        }
+    }
+
+    @Test
+    fun libraryWhatsNew() {
+        showLibrary(GAMES, gridView = true, update = { updateBanner(UpdateState.Available(updateRelease)) })
+        rule.onNodeWithText("What's new").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("What's new in 0.1-512").assertExists()
+        rule.assertControllerReady()
+    }
+
     @Test
     fun libraryLongPressChoice() {
         showLibrary(GAMES, gridView = true)
@@ -384,6 +439,20 @@ class FocusAuditTest {
     @Test
     fun interfacePage() {
         show { InterfaceScreen(pageValues(InterfaceSettings.all), onChange = {}, onBack = {}) }
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun interfacePageWithUpdates() {
+        show {
+            InterfaceScreen(
+                pageValues(InterfaceSettings.all),
+                onChange = {},
+                onBack = {},
+                updates = InterfaceUpdates(CheckNowState.Done(CheckResult.UpToDate), onCheckNow = {}),
+                version = "0.1-575-g9c532cd4f",
+            )
+        }
         rule.assertControllerReady()
     }
 
@@ -1520,8 +1589,10 @@ class FocusAuditTest {
         gridView: Boolean,
         syncBadge: SyncBadge? = null,
         search: String = "",
+        update: () -> UpdateBannerModel? = { null },
     ) = show {
         LibraryScreen(
+            update = update(),
             search = remember { TextFieldState(search) },
             games = games,
             gridView = gridView,

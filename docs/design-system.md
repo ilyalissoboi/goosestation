@@ -254,6 +254,30 @@ A message in the page, on its status's `-soft` ground, with the status icon: `In
 first, and leave when their cause does. A notice never holds a primary button. `MessageBar` in `LibraryScreen.kt` is
 the app's passing status line, an info or danger notice.
 
+### `UpdateBanner` (`UpdateBanner.kt`)
+
+```kotlin
+UpdateBanner(UpdateBannerModel(state = UpdateState.Available(release), …), onWhatsNew = { whatsNewOpen = true })
+```
+
+The library's notice for a newer GooseStation, after the folder banners: an `Info` notice ("GooseStation 0.1-512 is
+available", "You have 0.1-498.") with three `Secondary` buttons, Update, What's new and Skip this version, and no
+primary one. From 700 dp wide (times the font scale) the buttons sit beside the words, so on a handheld the banner
+takes half the height from the games; narrower, they wrap under them. Pressing Update turns it into the update's progress, in the same place. Downloading has a `ProgressBar`,
+"12 of 48 MB" and Cancel. Then come "Checking the download…", the permission prompt (Open settings, and where to find
+it once the player came back without it), and "Installing GooseStation 0.1-512…" with "Android's installer may need
+touch.". Each state keeps a button (Cancel while checking and installing too), so the focus stays in the banner as it
+moves on. A failure is a `Danger` notice with Try again, and the installer's own words (its code may wrap at its
+underscores). It never takes the focus. While the focus is in it, an offer or
+a failure hides on B or Back, as the ✕ does by touch: a 48 dp target that is no focus stop (a button named Hide to a
+screen reader). The foot says "A Choose", "B Hide". In the other states B does nothing. Hidden or skipped, the
+focus goes back to the game it came from.
+
+What's new is an `OverlayPanel`: "What's new in 0.1-512", each commit's first line in `body-lg` with its author under
+it in `body-sm` `ink-muted`, each a focusable line so the D-pad scrolls them, then "And 12 more." and Close (`Ghost`).
+The first commit takes the focus once they're in. Without them it's a `Danger` notice, with Close focused. Closed, the
+focus is back on What's new.
+
 ### `SyncStatusBadge` (`SyncStatusBadge.kt`)
 
 ```kotlin

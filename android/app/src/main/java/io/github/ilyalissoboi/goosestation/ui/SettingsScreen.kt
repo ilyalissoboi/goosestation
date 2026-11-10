@@ -21,7 +21,7 @@ enum class SettingsEntry(
     val summary: String,
     val needsCore: Boolean = true,
 ) {
-    Interface("Interface", "Pausing, resume states, backups"),
+    Interface("Interface", "Pausing, resume states, backups, updates"),
     Console("Console", "Region, CPU, CD-ROM speed"),
     Emulation("Emulation", "Speed, frame pacing, rewind, run-ahead"),
     Bios("BIOS", "Which BIOS each region uses, fast boot"),

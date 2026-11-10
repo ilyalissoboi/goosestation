@@ -24,8 +24,10 @@ import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.app.SyncBadges
 import io.github.ilyalissoboi.goosestation.app.TouchVisibility
+import io.github.ilyalissoboi.goosestation.app.Updates
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
@@ -45,6 +47,7 @@ import io.github.ilyalissoboi.goosestation.ui.GameSettingsHost
 import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.HotkeysScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
+import io.github.ilyalissoboi.goosestation.ui.InterfaceUpdates
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
 import io.github.ilyalissoboi.goosestation.ui.MacroScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
@@ -56,6 +59,7 @@ import io.github.ilyalissoboi.goosestation.ui.SavesScreen
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
+import io.github.ilyalissoboi.goosestation.ui.UpdateBannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.deviceTicker
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -146,7 +150,18 @@ class MainActivity : ComponentActivity() {
                         )
                     Screen.Interface ->
                         CorePageRoute(CorePage.Interface) { values, onChange ->
-                            InterfaceScreen(values, onChange, onBack = AppController::closeSettingsPage)
+                            val updates = AppController.updates?.takeIf { it.build.canUpdate }
+                            InterfaceScreen(
+                                values,
+                                onChange,
+                                onBack = AppController::closeSettingsPage,
+                                updates =
+                                    updates?.let {
+                                        InterfaceUpdates(it.checkNowState) {
+                                            it.checkNow(values[InterfaceSettings.UPDATE_CHANNEL])
+                                        }
+                                    },
+                            )
                         }
                     Screen.Console ->
                         CorePageRoute(CorePage.Console) { values, onChange ->
@@ -470,6 +485,7 @@ class MainActivity : ComponentActivity() {
                             onSort = AppController::sortLibrary,
                             search = AppController.librarySearch,
                             overlayOpen = AppController.gameStarts.offer != null,
+                            update = AppController.updates?.takeIf { it.bannerShown }?.let(::updateBanner),
                         )
                         val starts = AppController.gameStarts
                         starts.offer?.let { offer ->
@@ -563,3 +579,17 @@ private fun CorePageRoute(
 
 // The connected controllers before the core has started: none.
 private val NO_CONTROLLERS = MutableStateFlow(emptyList<ConnectedController>())
+
+/** The library's update banner, over [updates]. */
+private fun updateBanner(updates: Updates) =
+    UpdateBannerModel(
+        state = updates.state,
+        ownVersion = updates.build.versionName,
+        failureMessage = updates.failureMessage,
+        onUpdate = updates::update,
+        onSkip = updates::skip,
+        onHide = updates::hide,
+        onCancel = updates::cancel,
+        onOpenSettings = updates::openPermissionSettings,
+        loadChanges = updates::changes,
+    )

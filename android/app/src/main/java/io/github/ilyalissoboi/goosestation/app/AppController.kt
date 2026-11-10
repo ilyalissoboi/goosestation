@@ -18,8 +18,10 @@ import androidx.compose.foundation.text.input.clearText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.core.content.ContextCompat
 import io.github.ilyalissoboi.emusync.SyncSettings
+import io.github.ilyalissoboi.goosestation.BuildConfig
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
@@ -45,6 +47,7 @@ import io.github.ilyalissoboi.goosestation.mirror.PackMarkers
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
 import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
+import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.NativeCoreSettings
 import io.github.ilyalissoboi.goosestation.storage.BiosImportResult
 import io.github.ilyalissoboi.goosestation.storage.BiosImporter
@@ -66,6 +69,10 @@ import io.github.ilyalissoboi.goosestation.storage.persistedGrants
 import io.github.ilyalissoboi.goosestation.ui.DataFolderCandidate
 import io.github.ilyalissoboi.goosestation.ui.SettingsEntry
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
+import io.github.ilyalissoboi.goosestation.update.ApkCheck
+import io.github.ilyalissoboi.goosestation.update.Installer
+import io.github.ilyalissoboi.goosestation.update.UpdatePrefs
+import io.github.ilyalissoboi.goosestation.update.UpdateSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -201,6 +208,10 @@ object AppController : NativeCallbacks {
 
     /** The library focuses its Settings button when it opens, as it does coming back from the settings. */
     var focusSettings by mutableStateOf(false)
+        private set
+
+    /** The update check and an update under way; made in [start]. */
+    var updates by mutableStateOf<Updates?>(null)
         private set
 
     /** The hub's entry for the page last left, which the hub focuses; null on opening it from the library. */
@@ -552,10 +563,55 @@ object AppController : NativeCallbacks {
         // The core calls it for content:// paths from its first use on.
         ContentBridge.init(appContext)
         watchVolumes(appContext)
+        // JNI_OnLoad at every launch, setup included (NativeLibrary.load).
+        scope.launch(Dispatchers.IO) { NativeLibrary.load() }
+        updates =
+            makeUpdates(appContext).also { made ->
+                // A game left is still shutting down (its resume state, its cards) until the core says it stopped: no
+                // installer meanwhile.
+                scope.launch { snapshotFlow { screen == Screen.Game || gameActive }.collect { made.onScreen(it) } }
+            }
         scope.launch {
             val (saved, images) = withContext(Dispatchers.IO) { prefs.load() to prefs.biosImages() }
             biosImages = images
             coldStart(saved)
+        }
+    }
+
+    private fun makeUpdates(appContext: Context) =
+        Updates(
+            scope = scope,
+            io = Dispatchers.IO,
+            source = UpdateSource(),
+            prefs = UpdatePrefs(SharedPreferencesStore(appContext, UpdatePrefs.NAME)),
+            apkFolder = File(appContext.cacheDir, "updates"),
+            own = { ApkCheck.own(appContext) },
+            archive = { ApkCheck.ofArchive(appContext, it) },
+            // The installer's question and Android's settings, over the app: from the activity when there is one.
+            installer =
+                Installer(appContext) { intent ->
+                    activity?.startActivity(intent)
+                        ?: appContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                },
+            build =
+                UpdateBuild(
+                    canUpdate = !BuildConfig.DEBUG && BuildConfig.UPDATE_CHANNEL.isNotEmpty(),
+                    commit = BuildConfig.GIT_COMMIT,
+                    code = BuildConfig.GIT_VERSION_CODE,
+                    versionName = BuildConfig.VERSION_NAME,
+                ),
+        )
+
+    /** The check at start, with the Interface page's settings (desktop's keys), once the core has read them. */
+    private fun checkForUpdatesAtStart() {
+        val made = updates ?: return
+        scope.launch {
+            val (enabled, tag) =
+                withContext(coreDispatcher) {
+                    InterfaceSettings.CHECK_UPDATES_AT_START.read(NativeCoreSettings) to
+                        InterfaceSettings.UPDATE_CHANNEL.read(NativeCoreSettings)
+                }
+            made.startupCheck(tag, enabled)
         }
     }
 
@@ -612,6 +668,8 @@ object AppController : NativeCallbacks {
             }
         }
         networkWatch.start()
+        // Back in front: an update waiting to be allowed carries on, and the installer's question comes back.
+        updates?.onShown(true)
     }
 
     /**
@@ -628,6 +686,8 @@ object AppController : NativeCallbacks {
         // After the pause's card writes, which the core has queued already: sync pushes them, then rests.
         syncVisibility.stopped()
         networkWatch.stop()
+        // Android won't show the installer's question from the background: the update waits for the app.
+        updates?.onShown(false)
     }
 
     // --- Setup ---
@@ -1364,6 +1424,8 @@ object AppController : NativeCallbacks {
         if (StartupStep.ShowSetup in steps) {
             message = null
             screen = Screen.Setup
+            // No settings.ini yet: the defaults, on the build's own channel.
+            updates?.startupCheck(InterfaceSettings.UPDATE_CHANNEL.default, enabled = true)
             return
         }
         screen = Screen.Library
@@ -1385,6 +1447,7 @@ object AppController : NativeCallbacks {
                 StartupStep.ShowSetup, StartupStep.ReloadSettings, StartupStep.ReadCorePaths -> {}
             }
         }
+        checkForUpdatesAtStart()
     }
 
     /** Back in front: grants again, then a pull, settings.ini reloaded if it changed, and the library refreshed. */

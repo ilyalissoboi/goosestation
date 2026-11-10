@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
+import io.github.ilyalissoboi.goosestation.app.UpdateState
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.library.LibrarySort
 import io.github.ilyalissoboi.goosestation.library.SortKey
@@ -66,6 +67,9 @@ import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
+import io.github.ilyalissoboi.goosestation.update.Change
+import io.github.ilyalissoboi.goosestation.update.Changes
+import io.github.ilyalissoboi.goosestation.update.ChannelRelease
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -133,6 +137,7 @@ class LibraryScreenTest {
         search: TextFieldState = TextFieldState(),
         shownGames: (() -> List<GameEntry>)? = null,
         banners: List<BannerModel> = emptyList(),
+        update: UpdateBannerModel? = null,
     ) {
         this.sort = sort
         rule.setContent {
@@ -149,6 +154,7 @@ class LibraryScreenTest {
                         games = shownGames?.invoke() ?: games,
                         gridView = gridView(),
                         banners = banners,
+                        update = update,
                         message = null,
                         isError = false,
                         onToggleView = onToggleView,
@@ -801,6 +807,90 @@ class LibraryScreenTest {
         hint(PadGlyphs.confirm, "Choose").assertExists()
         hint(PadGlyphs.back, "Close").assertExists()
         hint(PadGlyphs.select, "Search").assertDoesNotExist()
+    }
+
+    private val release = ChannelRelease("preview", "0.1-512-g1a2b3c4", 100_512, "a".repeat(40), "http://x/apk", 4)
+
+    private fun updateModel(onHide: () -> Unit = {}) =
+        UpdateBannerModel(
+            state = UpdateState.Available(release),
+            ownVersion = "0.1-498-gfffffff",
+            failureMessage = null,
+            onUpdate = {},
+            onSkip = {},
+            onHide = onHide,
+            onCancel = {},
+            onOpenSettings = {},
+            loadChanges = { Changes(listOf(Change("Android: a banner", "Ada")), total = 1) },
+        )
+
+    @Test
+    fun theUpdateBannerSitsAfterTheFolderBanners() {
+        show(
+            banners = listOf(BannerModel("The games folder can't be reached.", listOf("Pick again" to {}))),
+            update = updateModel(),
+        )
+        val folder = rule.onNodeWithText("Pick again").fetchSemanticsNode().boundsInRoot
+        val update = rule.onNodeWithText("Skip this version").fetchSemanticsNode().boundsInRoot
+        assertTrue("$folder, $update", folder.bottom <= update.top)
+    }
+
+    @Test
+    fun theUpdateBannerDoesntTakeTheFocus() {
+        show(update = updateModel())
+        hint(PadGlyphs.confirm, "Play").assertExists()
+    }
+
+    @Test
+    fun anUpdateBannersButtonSaysBHide() {
+        var hidden = 0
+        show(update = updateModel(onHide = { hidden++ }))
+        rule.onNodeWithText("Update").requestFocus()
+        rule.waitForIdle()
+        hint(PadGlyphs.confirm, "Choose").assertExists()
+        hint(PadGlyphs.back, "Hide").assertExists()
+        press(Key.ButtonB)
+        assertEquals(1, hidden)
+    }
+
+    // B hides the banner, which had the focus: the focus goes back to the game, not to the top of the screen.
+    @Test
+    fun hidingTheUpdateBannerGivesTheFocusBackToTheGame() {
+        var shown by mutableStateOf(true)
+        rule.setContent {
+            GooseStationTheme {
+                LibraryScreen(
+                    games = games,
+                    gridView = true,
+                    banners = emptyList(),
+                    update = if (shown) updateModel(onHide = { shown = false }) else null,
+                    message = null,
+                    isError = false,
+                    onToggleView = {},
+                    onOpenSettings = {},
+                    onRefresh = {},
+                    onStartGame = {},
+                    focusPath = games[1].path,
+                )
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText("Update").requestFocus()
+        press(Key.ButtonB)
+        assertFalse(shown)
+        rule.onNodeWithText(games[1].title).assertIsFocused()
+    }
+
+    @Test
+    fun whatsNewOpensOverTheLibraryAndGivesTheFocusBack() {
+        show(update = updateModel())
+        rule.onNodeWithText("What's new").requestFocus()
+        press(Key.Enter)
+        rule.onNodeWithText("What's new in 0.1-512").assertExists()
+        rule.onNodeWithText("Android: a banner", substring = true).assertIsFocused()
+        press(Key.ButtonB)
+        rule.onNodeWithText("What's new in 0.1-512").assertDoesNotExist()
+        rule.onNodeWithText("What's new").assertIsFocused()
     }
 
     @Test

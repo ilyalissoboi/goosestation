@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Updates: Android's installer takes the APK the player chose to download. The player allows it once, in
+         Android's settings (Install unknown apps); without that, nothing installs. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!-- Rumble, on the controllers' own motors. A normal permission too. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
@@ -18,15 +22,18 @@
         android:name="android.hardware.gamepad"
         android:required="false" />
 
+    <!-- usesCleartextTraffic is false except in a build whose update check goes to an http:// server (the test
+         tiers' local one, build.gradle.kts). Debug builds' network security config allows their tests' servers. -->
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:appCategory="game"
         android:icon="@mipmap/ic_launcher"
         android:isGame="true"
-        android:label="GooseStation"
+        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:usesCleartextTraffic="${cleartext}">
 
         <!-- One activity, landscape, which handles rotation and controllers coming and going itself. -->
         <activity

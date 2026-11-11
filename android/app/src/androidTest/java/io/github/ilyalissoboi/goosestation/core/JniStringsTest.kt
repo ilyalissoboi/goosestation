@@ -12,7 +12,10 @@ import org.junit.runner.RunWith
 /** The bridge's UTF-8 to Java strings (titles, paths, messages), strict about bytes that aren't UTF-8. */
 @RunWith(AndroidJUnit4::class)
 class JniStringsTest {
-    private fun decode(vararg bytes: Int) = NativeLibrary.decodeUtf8ForTest(ByteArray(bytes.size) { bytes[it].toByte() })
+    private fun decode(vararg bytes: Int): String {
+        val raw = ByteArray(bytes.size) { bytes[it].toByte() }
+        return NativeLibrary.decodeUtf8ForTest(raw)
+    }
 
     @Test
     fun utf8ComesThroughWhole() {

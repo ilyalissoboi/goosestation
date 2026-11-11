@@ -1652,10 +1652,7 @@ NATIVE_LIBRARY_FUNCTION(jintArray, downloadCovers)(JNIEnv* env, jobject, jobject
   constexpr jsize fields = static_cast<jsize>(std::size(values));
   jintArray result = env->NewIntArray(fields);
   if (!result)
-  {
-    ClearException(env);
-    return env->NewIntArray(0);
-  }
+    return Made(env, result, "downloadCovers");
   env->SetIntArrayRegion(result, 0, fields, values);
   return result;
 }

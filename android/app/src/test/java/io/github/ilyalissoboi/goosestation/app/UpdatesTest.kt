@@ -160,6 +160,37 @@ class UpdatesTest {
         )
     }
 
+    // From review: the installer waited only for "not in a game", so it came over Settings or the Covers page (a
+    // cover download, an edit not yet saved). It waits for the library itself.
+    @Test
+    fun theInstallerWaitsForTheLibrary() {
+        assertFalse(installerWaits(Screen.Library, gameActive = false))
+        assertTrue(installerWaits(Screen.Library, gameActive = true))
+        assertTrue(installerWaits(Screen.Game, gameActive = true))
+        for (away in listOf(Screen.Settings, Screen.Covers, Screen.Interface, Screen.Saves)) {
+            assertTrue("$away", installerWaits(away, gameActive = false))
+        }
+    }
+
+    // Over Settings, say, the check at start runs (Setup checks on the build's channel), but the installer waits.
+    @Test
+    fun awayFromTheLibraryTheCheckRunsAndTheInstallWaits() =
+        runTest {
+            val updates = updates()
+            updates.onScreen(inGame = false)
+            updates.onLibrary(awayFromLibrary = true)
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            assertEquals(listOf("preview"), source.checks)
+
+            updates.update()
+            runCurrent()
+            assertEquals(emptyList<File>(), installer.installs)
+            updates.onLibrary(awayFromLibrary = false)
+            runCurrent()
+            assertInstalledOnce()
+        }
+
     @Test
     fun noCheckInADebugBuild() =
         runTest {
@@ -329,10 +360,10 @@ class UpdatesTest {
             updates.startupCheck("preview", enabled = true)
             runCurrent()
             updates.update()
-            updates.onScreen(inGame = true)
+            updates.onLibrary(awayFromLibrary = true)
             runCurrent()
             assertEquals(emptyList<File>(), installer.installs)
-            updates.onScreen(inGame = false)
+            updates.onLibrary(awayFromLibrary = false)
             runCurrent()
             assertInstalledOnce()
         }
@@ -638,11 +669,11 @@ class UpdatesTest {
             runCurrent()
             updates.update()
             runCurrent()
-            updates.onScreen(inGame = true)
+            updates.onLibrary(awayFromLibrary = true)
             installer.question!!.complete(Unit)
             runCurrent()
             assertEquals(0, installer.asked)
-            updates.onScreen(inGame = false)
+            updates.onLibrary(awayFromLibrary = false)
             assertEquals(1, installer.asked)
         }
 

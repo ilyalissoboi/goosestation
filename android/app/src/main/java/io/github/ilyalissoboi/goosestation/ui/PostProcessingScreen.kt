@@ -3,9 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -38,6 +36,7 @@ import io.github.ilyalissoboi.goosestation.settings.Stage
 import io.github.ilyalissoboi.goosestation.settings.optionRows
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LazySettingsPage
@@ -235,10 +234,7 @@ private fun ChainsPage(
             modifier = Modifier.focusRequester(packsRow),
         )
         if (model.running) {
-            FlowRow(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            ButtonRow(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 ActionButton("Reload shaders", onClick = model::reload)
             }
             Text(
@@ -269,7 +265,7 @@ fun UseGlobalChainPanel(
             style = MaterialTheme.typography.bodyLarge,
             color = GooseStationTheme.colors.ink,
         )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ButtonRow {
             ActionButton("Use global", onClick = model::confirmUseGlobal, kind = ButtonKind.Danger)
             ActionButton(
                 "Cancel",
@@ -463,11 +459,7 @@ private fun StagePage(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
-        FlowRow(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        ButtonRow(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             ActionButton(
                 "Move up",
                 onClick = {

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,6 +67,7 @@ import io.github.ilyalissoboi.goosestation.library.SearchIndex
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.Banner
 import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
@@ -577,7 +577,7 @@ private fun GameChoicePanel(
         val saves = remember { FocusRequester() }
         LaunchedEffect(game) { saves.requestFocus() }
         Text(game.title, style = MaterialTheme.typography.titleLarge, color = GooseStationTheme.colors.ink)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ButtonRow {
             ActionButton("Saves", onClick = onSaves, modifier = Modifier.focusRequester(saves))
             ActionButton("Game settings", onClick = onGameSettings)
         }

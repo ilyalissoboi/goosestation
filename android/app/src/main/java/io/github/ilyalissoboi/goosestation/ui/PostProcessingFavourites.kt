@@ -6,7 +6,6 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -32,6 +31,7 @@ import io.github.ilyalissoboi.goosestation.app.PostProcessingModel
 import io.github.ilyalissoboi.goosestation.core.FavouriteInfo
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
@@ -152,7 +152,7 @@ private fun QuestionContent(
             is FavouriteQuestion.Replace -> "Replace" to ButtonKind.Danger
             is FavouriteQuestion.Delete -> "Delete" to ButtonKind.Danger
         }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ButtonRow {
         ActionButton(confirm, onClick = model::confirmFavourite, kind = kind)
         ActionButton(
             "Cancel",
@@ -189,7 +189,7 @@ private fun NameForm(
             Text(naming.error, style = MaterialTheme.typography.titleMedium, color = colors.ink)
         }
     }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ButtonRow {
         ActionButton(if (naming.renaming == null) "Save" else "Rename", onClick = submit, kind = ButtonKind.Primary)
         ActionButton("Cancel", onClick = model::cancelNaming, kind = ButtonKind.Ghost)
     }

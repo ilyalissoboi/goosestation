@@ -3,8 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,6 +23,7 @@ import io.github.ilyalissoboi.goosestation.app.GameSummary
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
@@ -97,11 +96,7 @@ fun GameSettingsScreen(
                     modifier = Modifier.focusRequester(entries.getValue(page)),
                 )
             }
-            FlowRow(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            ButtonRow(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 ActionButton(
                     "Copy global settings",
                     onClick = { ask(GameQuestion.Copy) },
@@ -150,7 +145,7 @@ fun GameQuestionPanel(
             style = MaterialTheme.typography.bodyLarge,
             color = GooseStationTheme.colors.ink,
         )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ButtonRow {
             ActionButton(
                 if (question == GameQuestion.Copy) "Copy" else "Clear",
                 onClick = onConfirm,

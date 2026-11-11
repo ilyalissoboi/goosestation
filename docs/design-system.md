@@ -193,7 +193,7 @@ A command: a label (a verb, sentence case), an optional leading icon, at least 4
 - `Ghost` (no fill): Back, Cancel, Remove, low-stakes commands beside a primary.
 - `Danger` (secondary with a `danger` label): deletes or overwrites. Ask first, or offer Undo afterwards.
 - Disabled: `ink-faint` on `surface`, and it can't take focus. Say nearby why it's disabled.
-- Buttons in a row sit 8 dp apart; use a `FlowRow` so they wrap on a narrow screen.
+- Buttons in a row sit 8 dp apart and wrap on a narrow screen: use `ButtonRow`, which does both.
 
 ### `Modifier.focusRing` and `Modifier.focusIndicator` (`FocusRing.kt`)
 

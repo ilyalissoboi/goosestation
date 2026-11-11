@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -61,6 +60,7 @@ import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
@@ -626,7 +626,7 @@ internal fun Question(
     LaunchedEffect(Unit) { cancelFocus.requestFocus() }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(text, style = MaterialTheme.typography.headlineSmall, color = GooseStationTheme.colors.ink)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ButtonRow {
             ActionButton(confirm, onClick = onConfirm, kind = ButtonKind.Danger)
             ActionButton(cancel, onClick = onCancel, kind = cancelKind, modifier = Modifier.focusRequester(cancelFocus))
         }

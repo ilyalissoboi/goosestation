@@ -325,6 +325,24 @@ class SavesPageTest {
             assertEquals(1, calls.count { it == "getStatePreview $SERIAL 8" })
         }
 
+    // From review: a shared pick queued as the page closes starts nothing, though its game was read already.
+    @Test
+    fun aSharedPickStartsNothingOnceThePageCloses() =
+        runTest {
+            api.sharedTimes[4] = 400
+            api.sharedHolds[4] = SaveStatePreview(null, 0, "SCUS-94228", "SPYRO", spyro.path, spyro.title)
+            val page = opened()
+            page.switchTab()
+            val row = page.state!!.lists.shared!!.single()
+            assertEquals(spyro.path, row.holds?.path)
+
+            page.pick(row)
+            page.close()
+            runCurrent()
+
+            assertTrue(calls.none { it.startsWith("play") })
+        }
+
     private companion object {
         const val SERIAL = "SCUS-94900"
     }

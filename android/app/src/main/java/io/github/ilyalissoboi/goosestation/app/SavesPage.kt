@@ -55,7 +55,7 @@ class SavesPage(
     var state by mutableStateOf<SavesPageState?>(null)
         private set
 
-    /** Changes as the page opens and closes, so the hardcore check for an earlier one is dropped. */
+    /** Changes as the page opens and closes, so the hardcore check or a shared pick for an earlier one is dropped. */
     private var pageId = 0
 
     // The page's game, and whether hardcore mode would start, while it's open.
@@ -96,9 +96,13 @@ class SavesPage(
         if (page.hardcore) return lists.fail(GameStarts.HARDCORE_LOAD)
         val key = page.game.serial
         if (!entry.shared) return play(page.game, entry.ref(key), lists::fail)
+        val id = pageId
         scope.launch {
-            // A shared slot's game is read first if it hasn't been yet: it decides which game starts.
+            // A shared slot's game is read first if it hasn't been yet: it decides which game starts. A page closed or
+            // opened again since the pick, even before this ran, starts nothing.
+            if (id != pageId) return@launch
             val read = lists.readHolds(entry) ?: return@launch
+            if (id != pageId) return@launch
             val holds = read.holds
             val target = holds?.path?.let { path -> games().firstOrNull { it.path == path } }
             when {

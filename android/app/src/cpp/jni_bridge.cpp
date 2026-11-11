@@ -2052,11 +2052,20 @@ NATIVE_LIBRARY_FUNCTION(void, resolveMemcardSyncConflict)(JNIEnv*, jobject, jlon
 
 NATIVE_LIBRARY_FUNCTION(jboolean, memcardSyncHoldCard)(JNIEnv* env, jobject, jstring relative_path, jobject action)
 {
-  // An exception from the action stays pending, so it reaches the caller once the card is let go.
-  return MemcardSyncBridge::HoldCard(FromJString(env, relative_path),
-                                     [env, action]() { env->CallVoidMethod(action, s_runnable_run); }) ?
-           JNI_TRUE :
-           JNI_FALSE;
+  // An exception from the action is taken off while the card is let go, which may call into Java (sync says it
+  // changed), then thrown again, so it reaches the caller.
+  jthrowable thrown = nullptr;
+  const bool held = MemcardSyncBridge::HoldCard(FromJString(env, relative_path), [env, action, &thrown]() {
+    env->CallVoidMethod(action, s_runnable_run);
+    if ((thrown = env->ExceptionOccurred()) != nullptr)
+      env->ExceptionClear();
+  });
+  if (thrown)
+  {
+    env->Throw(thrown);
+    env->DeleteLocalRef(thrown);
+  }
+  return held ? JNI_TRUE : JNI_FALSE;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, memcardCardOpenedForTest)(JNIEnv* env, jobject, jstring path)

@@ -142,11 +142,8 @@ private fun ChainsPage(
     val favouriteRows = remember { mutableMapOf<Int, FocusRequester>() }
     val focusFavourite = model.focusFavourite
     LaunchedEffect(focusFavourite) {
-        if (focusFavourite !=
-            null
-        ) {
-            runCatching { favouriteRows.getOrPut(focusFavourite) { FocusRequester() }.requestFocus() }
-        }
+        val row = focusFavourite ?: return@LaunchedEffect
+        runCatching { favouriteRows.getOrPut(row) { FocusRequester() }.requestFocus() }
     }
 
     // Once a question is gone, the focus goes back to the row that asked it.

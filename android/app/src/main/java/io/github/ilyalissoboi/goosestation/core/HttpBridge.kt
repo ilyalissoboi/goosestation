@@ -269,7 +269,7 @@ object HttpBridge {
             }
         }
 
-    private fun logRequest(line: String) {
+    internal fun logRequest(line: String) {
         Log.i(TAG, line)
     }
 }

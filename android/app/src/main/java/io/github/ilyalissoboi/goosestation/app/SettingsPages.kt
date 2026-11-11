@@ -151,13 +151,8 @@ class SettingsPages(
                     new.save(settings, old)
                     api.applySettings()
                     // The core estimates from the settings it has: these, now applied.
-                    if (page ==
-                        CorePage.Emulation
-                    ) {
-                        api.getRewindMemoryUsage(new[EmulationSettings.REWIND_SLOTS])
-                    } else {
-                        null
-                    }
+                    val emulation = page == CorePage.Emulation
+                    if (emulation) api.getRewindMemoryUsage(new[EmulationSettings.REWIND_SLOTS]) else null
                 }
             if (usage != null && new == shown[page]) rewindUsage = usage
         }

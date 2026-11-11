@@ -75,13 +75,8 @@ object EmulationSettings {
             listOf(0, 5, 10, 25, 50, 100, 200, 500, 1000, 1500, 3000, 6000),
             presets = listOf(0, 10, 50, 100, 500, 1000),
         ) {
-            if (it ==
-                0
-            ) {
-                "Every frame"
-            } else {
-                "${BigDecimal(it).movePointLeft(2).stripTrailingZeros().toPlainString()} s"
-            }
+            val seconds = BigDecimal(it).movePointLeft(2).stripTrailingZeros().toPlainString()
+            if (it == 0) "Every frame" else "$seconds s"
         }
 
     val REWIND_SLOT_COUNTS =

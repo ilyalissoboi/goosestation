@@ -7,30 +7,20 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
-import io.github.ilyalissoboi.goosestation.input.BindingLabels
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.BoolSetting
 import io.github.ilyalissoboi.goosestation.settings.FloatSetting
@@ -43,18 +33,9 @@ import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
-import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
-import io.github.ilyalissoboi.goosestation.ui.components.Notice
-import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
-import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
-import io.github.ilyalissoboi.goosestation.ui.components.PsGlyph
-import io.github.ilyalissoboi.goosestation.ui.components.PsGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
-import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
-import io.github.ilyalissoboi.goosestation.ui.components.focusRing
-import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 
 /**
  * The Port 1 controller types whose inputs show as PlayStation glyphs (`[Pad1] Type`, as the core names it). Other

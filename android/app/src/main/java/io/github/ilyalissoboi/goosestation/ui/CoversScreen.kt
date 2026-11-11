@@ -175,11 +175,8 @@ fun CoversScreen(
                 Progress(
                     job,
                     Modifier.focusRequester(cancel).onFocusChanged {
-                        if (model.job !=
-                            null
-                        ) {
-                            cancelFocused[0] = it.isFocused
-                        }
+                        val running = model.job != null
+                        if (running) cancelFocused[0] = it.isFocused
                     },
                     model::cancel,
                 )

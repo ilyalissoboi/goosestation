@@ -4,7 +4,6 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
-import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.LayerSettings
 import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings

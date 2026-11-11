@@ -3624,7 +3624,10 @@ jbyteArray ToJByteArray(JNIEnv* env, std::span<const u8> bytes)
 {
   jbyteArray ret = env->NewByteArray(static_cast<jsize>(bytes.size()));
   if (!ret)
-    return Made(env, ret, "getMemcardFiles");
+  {
+    ClearException(env);
+    return nullptr;
+  }
   env->SetByteArrayRegion(ret, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
   return ret;
 }

@@ -1223,17 +1223,37 @@ object AppController : NativeCallbacks {
         gameStarts.play(game)
     }
 
-    // The start itself, on its disc or from its resume state. Checked again: things may have changed while the player
-    // answered.
+    // The start itself, on its disc or from its resume state.
     private fun startGameNow(
         game: GameEntry,
         disc: Int,
         resume: Boolean,
     ) {
-        if (!ready || gameActive) return
+        // It boots once the game screen's surface exists.
+        if (beginGame(game)) NativeLibrary.startGame(game.path, disc, resume)
+    }
+
+    // A start from a state (a save on the Saves page, or a shared slot of another game), as startGameNow() starts.
+    private fun startGameFromStateNow(
+        game: GameEntry,
+        state: StateRef,
+    ) {
+        if (beginGame(game)) NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared)
+    }
+
+    // Both starts, checked again: things may have changed while the player answered, or while a switch to another
+    // game waited for the last one's cards. A start goes from the library or the Saves page, where it's asked for, and
+    // never during a data folder change; one that finds the player elsewhere by then says so rather than start over
+    // the page. True when the game screen is up for the core to boot on.
+    private fun beginGame(game: GameEntry): Boolean {
+        if (!ready || gameActive) return false
         if (!catchUps.startsAllowed) {
             showMessage(COPYING)
-            return
+            return false
+        }
+        if (dataChange != null || (screen != Screen.Library && screen != Screen.Saves)) {
+            showMessage("${game.title} didn't start. Start it again from the library.")
+            return false
         }
         lastGamePath = game.path
         libraryFocus = null
@@ -1247,35 +1267,9 @@ object AppController : NativeCallbacks {
         holdMemcards = true
         // A cover download stops for the game, keeping the covers it found.
         covers.stop()
-        screen = Screen.Game
-        // It boots once the game screen's surface exists.
-        NativeLibrary.startGame(game.path, disc, resume)
-    }
-
-    // A start from a state (a save on the Saves page, or a shared slot of another game), as startGameNow() starts.
-    private fun startGameFromStateNow(
-        game: GameEntry,
-        state: StateRef,
-    ) {
-        if (!ready || gameActive) return
-        if (!catchUps.startsAllowed) {
-            showMessage(COPYING)
-            return
-        }
-        lastGamePath = game.path
-        libraryFocus = null
-        // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
-        librarySearch.clearText()
-        runningGame = game
-        focusSettings = false
-        message = null
-        messageIsError = false
-        gameActive = true
-        holdMemcards = true
-        covers.stop()
         if (screen == Screen.Saves) savesPage.close()
         screen = Screen.Game
-        NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared)
+        return true
     }
 
     // The game the in-game menu left for, from its shared slot, now that the last one has stopped.

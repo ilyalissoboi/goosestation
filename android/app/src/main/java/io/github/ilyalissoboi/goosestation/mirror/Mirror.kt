@@ -115,10 +115,10 @@ class Mirror(
     private val guard: CopyGuard = CopyGuard.NONE,
     private val packMarkers: () -> PackMarkers? = { null },
     private val layout: () -> DataLayout,
-) {
+) : MirrorRuns {
     private val dispatcher = Dispatchers.IO.limitedParallelism(1)
     private val mutableState = MutableStateFlow<MirrorState>(MirrorState.Idle)
-    val state: StateFlow<MirrorState> = mutableState.asStateFlow()
+    override val state: StateFlow<MirrorState> = mutableState.asStateFlow()
 
     // Touched only on the dispatcher. Every action is idempotent, so a manifest that lags behind is only replayed.
     private var manifest: Manifest? = null
@@ -132,7 +132,7 @@ class Mirror(
     private var failedRuns = 0
 
     /** Folder to working copy, except the [deferred] paths. */
-    suspend fun pull(deferred: (String) -> Boolean): PullResult =
+    override suspend fun pull(deferred: (String) -> Boolean): PullResult =
         withContext(dispatcher) {
             val result =
                 sync(deferred, saves = false) { folder, local, manifest, layout ->
@@ -145,7 +145,7 @@ class Mirror(
      * Working copy to folder, without waiting for files to settle when [force]. A file the folder changed as well is
      * copied in instead, so the result says which working-copy files changed, as a pull's does.
      */
-    suspend fun push(
+    override suspend fun push(
         force: Boolean,
         deferred: (String) -> Boolean,
     ): PushResult =
@@ -175,7 +175,7 @@ class Mirror(
     }
 
     /** Ends a [hold]: the next run tries the folder again. */
-    fun letGo() {
+    override fun letGo() {
         heldReason = null
     }
 

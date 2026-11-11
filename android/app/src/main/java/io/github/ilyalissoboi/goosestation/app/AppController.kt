@@ -353,17 +353,17 @@ object AppController : NativeCallbacks {
         private set
 
     /**
-     * The game's prompt (Resume or Quit to library) shows over it: the game is paused, and the controllers move the
-     * prompt's focus rather than play.
+     * The in-game menu shows over the game: the game is paused, and the controllers move the menu's focus rather than
+     * play.
      */
-    var promptOpen: Boolean
-        get() = promptShown
+    var menuOpen: Boolean
+        get() = menuShown
         private set(value) {
-            promptShown = value
+            menuShown = value
             // Unlock cards wait, and the live indicators hide, while the menu is open.
             achievementOverlay.menuOpen(value)
         }
-    private var promptShown by mutableStateOf(false)
+    private var menuShown by mutableStateOf(false)
 
     /** Saved folders whose grant is gone, as the last check found. */
     var missingGrants by mutableStateOf(emptyList<MissingGrant>())
@@ -470,7 +470,7 @@ object AppController : NativeCallbacks {
             lastSlots,
             gameRecords,
             onMessage = { osd.post(it) },
-            onResume = ::resumeFromPrompt,
+            onResume = ::closeMenu,
             onExit = ::exitGame,
             // The running game's own settings, each change applied straight away.
             onSettings = { game ->
@@ -1281,20 +1281,20 @@ object AppController : NativeCallbacks {
 
     // Back to the library, which waits for the game's onGameStopped() before it starts another.
     fun leaveGame() {
-        promptOpen = false
+        menuOpen = false
         screen = Screen.Library
         if (!messageIsError) message = "Stopping the game…"
         NativeLibrary.shutdownGame()
     }
 
     /**
-     * Pauses the game and shows its prompt, from Back, Mode or Select + Start held. Everything the controllers hold is
+     * Pauses the game and shows its menu, from Back, Mode or Select + Start held. Everything the controllers hold is
      * let go first, so nothing pressed now is still pressed after Resume. The pause writes the memory cards. A game
      * still booting is paused once it has booted ([onGameStarted]).
      */
-    fun openPrompt() {
-        if (screen != Screen.Game || promptOpen) return
-        promptOpen = true
+    fun openMenu() {
+        if (screen != Screen.Game || menuOpen) return
+        menuOpen = true
         gameMenu.opened()
         controllers?.releaseAll()
         rumble.stopAll()
@@ -1303,37 +1303,37 @@ object AppController : NativeCallbacks {
 
     // A controller went: with PauseOnControllerDisconnection, the game pauses into its menu, as Back does.
     private fun controllerDisconnected(name: String) {
-        if (!PausePolicy.pausesOnDisconnect(pausesOnDisconnect, gameRunning, screen == Screen.Game, promptOpen)) return
-        openPrompt()
+        if (!PausePolicy.pausesOnDisconnect(pausesOnDisconnect, gameRunning, screen == Screen.Game, menuOpen)) return
+        openMenu()
         osd.post("$name disconnected")
     }
 
-    /** Pauses the game, which writes its memory cards: for the prompt, or the app going to the background. */
+    /** Pauses the game, which writes its memory cards: for the menu, or the app going to the background. */
     fun pauseGame() {
         if (gameActive && !gameRunning) pausedDuringBoot = true
         NativeLibrary.setPaused(true)
     }
 
-    /** Closes the prompt, and carries on with the game if the app is in front ([PausePolicy]). */
-    fun resumeFromPrompt() {
-        if (!promptOpen) return
-        promptOpen = false
-        // As the prompt opened: an axis the core still had, such as a trigger let go once the stick it came with was
+    /** Closes the menu, and carries on with the game if the app is in front ([PausePolicy]). */
+    fun closeMenu() {
+        if (!menuOpen) return
+        menuOpen = false
+        // As the menu opened: an axis the core still had, such as a trigger let go once the stick it came with was
         // back at rest, isn't left held in the game.
         controllers?.releaseAll()
-        if (gameRunning && PausePolicy.running(resumed, promptOpen = false)) NativeLibrary.setPaused(false)
+        if (gameRunning && PausePolicy.running(resumed, menuOpen = false)) NativeLibrary.setPaused(false)
     }
 
-    /** Closes the prompt, and stops the game. */
-    fun quitFromPrompt() {
-        if (!promptOpen) return
-        promptOpen = false
+    /** Closes the menu, and stops the game: back to the library. */
+    fun exitToLibrary() {
+        if (!menuOpen) return
+        menuOpen = false
         leaveGame()
     }
 
     // Exit game, once the menu has saved the resume state, or failed to ([InGameMenu.exit]).
     private fun exitGame(resumeError: String?) {
-        quitFromPrompt()
+        exitToLibrary()
         resumeError?.let { showError("Couldn't save your place: $it") }
     }
 
@@ -1701,7 +1701,7 @@ object AppController : NativeCallbacks {
         // Reported once the core takes input; it keeps connections made before then anyway.
         controllers =
             ControllerInput(context).also {
-                it.onMenuRequested = ::openPrompt
+                it.onMenuRequested = ::openMenu
                 it.onControllerDisconnected = ::controllerDisconnected
                 it.start()
             }
@@ -1846,14 +1846,14 @@ object AppController : NativeCallbacks {
             // Release on this thread, after any input it already sent during the boot, so nothing pressed
             // while booting can stay held.
             controllers?.releaseAll()
-            // Booted in the background or with the prompt open, it waits paused. One the app paused while it booted
+            // Booted in the background or with the menu open, it waits paused. One the app paused while it booted
             // runs if it may by now, as that pause may have reached the core just after the boot. One the user left
             // while it booted is shut down next anyway.
-            val paused = PausePolicy.atBoot(pausedDuringBoot, PausePolicy.running(resumed, promptOpen))
+            val paused = PausePolicy.atBoot(pausedDuringBoot, PausePolicy.running(resumed, menuOpen))
             pausedDuringBoot = false
             if (screen == Screen.Game && paused != null) NativeLibrary.setPaused(paused)
             // Booted paused, with nothing on screen to resume from: the game's menu is that.
-            if (screen == Screen.Game && PausePolicy.opensMenuAtBoot(startPaused, paused)) openPrompt()
+            if (screen == Screen.Game && PausePolicy.opensMenuAtBoot(startPaused, paused)) openMenu()
             // The cards its own settings name are held back from now on, and mirrored.
             scope.launch { withContext(coreDispatcher) { readCorePaths() } }
         }
@@ -1867,7 +1867,7 @@ object AppController : NativeCallbacks {
             pausesOnDisconnect = false
             // Same as on start: release in order with this thread's input.
             controllers?.releaseAll()
-            promptOpen = false
+            menuOpen = false
             gameActive = false
             runningGame = null
             holdMemcards = false

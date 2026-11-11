@@ -4,7 +4,9 @@
 package io.github.ilyalissoboi.goosestation.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -26,6 +28,8 @@ fun Modifier.backKeys(
 ): Modifier {
     // The keys whose key-down this has seen, and whose key-up hasn't come yet.
     val down = remember { HashSet<Key>() }
+    // The latest onBack: what it does can change between a key's down and up (a choice shown, say).
+    val back by rememberUpdatedState(onBack)
     val handle = { event: KeyEvent ->
         val key = event.key
         if (key != Key.Back && key != Key.ButtonB) {
@@ -33,7 +37,7 @@ fun Modifier.backKeys(
         } else {
             when (event.type) {
                 KeyEventType.KeyDown -> down += key
-                KeyEventType.KeyUp -> if (down.remove(key)) onBack()
+                KeyEventType.KeyUp -> if (down.remove(key)) back()
             }
             true
         }

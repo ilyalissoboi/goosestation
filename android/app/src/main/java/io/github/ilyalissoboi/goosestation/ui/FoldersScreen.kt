@@ -132,7 +132,7 @@ fun FoldersScreen(
                             primary().requestFocus()
                         }
                     }
-                }.backKeys(onBack = ::back)
+                }.backKeys { back() }
                 .verticalScroll(scroll)
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),

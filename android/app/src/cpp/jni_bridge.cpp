@@ -156,47 +156,111 @@ thread_local JNIEnv* s_attached_env = nullptr;
 
 AndroidContentProvider s_content_provider;
 
-// Calls a NativeCallbacks method on the registered object, from any thread.
-void CallCallback(jmethodID method, std::optional<std::string_view> arg)
-{
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = nullptr;
-  {
-    std::unique_lock lock(s_callbacks_mutex);
-    if (s_callbacks)
-      callbacks = env->NewLocalRef(s_callbacks);
-  }
-
-  if (!callbacks)
-    return;
-
-  if (arg.has_value())
-  {
-    jstring jarg = ToJString(env.get(), arg.value());
-    if (jarg)
-    {
-      env->CallVoidMethod(callbacks, method, jarg);
-      ClearException(env.get());
-      env->DeleteLocalRef(jarg);
-    }
-  }
-  else
-  {
-    env->CallVoidMethod(callbacks, method);
-    ClearException(env.get());
-  }
-
-  env->DeleteLocalRef(callbacks);
-}
 
 // The registered NativeCallbacks as a local reference, or null with none.
 jobject GetCallbacks(JNIEnv* env)
 {
   std::unique_lock lock(s_callbacks_mutex);
   return s_callbacks ? env->NewLocalRef(s_callbacks) : nullptr;
+}
+
+/// Java strings for a callback's arguments, deleted with this. ok() is false if one didn't convert.
+class LocalStrings
+{
+public:
+  LocalStrings(JNIEnv* env, std::initializer_list<std::string_view> strings) : m_env(env)
+  {
+    for (std::string_view str : strings)
+      m_strings.push_back(ToJString(env, str));
+  }
+
+  ~LocalStrings()
+  {
+    for (jstring str : m_strings)
+    {
+      if (str)
+        m_env->DeleteLocalRef(str);
+    }
+  }
+
+  bool ok() const
+  {
+    return std::all_of(m_strings.begin(), m_strings.end(), [](jstring str) { return str != nullptr; });
+  }
+
+  jstring operator[](size_t index) const { return m_strings[index]; }
+
+private:
+  JNIEnv* m_env;
+  std::vector<jstring> m_strings;
+};
+
+// For a native Kotlin declares never null: result, or, when it couldn't be made (out of memory, as a rule), null with
+// an exception pending, which Kotlin throws at the call, rather than a null that fails later far from it: the one
+// that stopped it, if it's still pending, else one naming the call.
+template<typename T>
+T Made(JNIEnv* env, T result, const char* call)
+{
+  if (result || env->ExceptionCheck())
+    return result;
+  if (jclass cls = env->FindClass("java/lang/IllegalStateException"))
+  {
+    env->ThrowNew(cls, fmt::format("{} couldn't make its result.", call).c_str());
+    env->DeleteLocalRef(cls);
+  }
+  return nullptr;
+}
+
+/// Runs call(env, callbacks) if the app has set its callbacks, on any thread.
+template<typename F>
+void WithCallbacks(F&& call)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return;
+
+  call(env.get(), callbacks);
+  ClearException(env.get());
+  env->DeleteLocalRef(callbacks);
+}
+
+/// Runs call(env, callbacks) and returns what it returned, if the app has set its callbacks, on any thread; fallback
+/// without them, or if the call threw (its exception cleared).
+template<typename T, typename F>
+T WithCallbacksOr(T fallback, F&& call)
+{
+  ScopedJNIEnv env;
+  if (!env)
+    return fallback;
+
+  jobject callbacks = GetCallbacks(env.get());
+  if (!callbacks)
+    return fallback;
+
+  T result = call(env.get(), callbacks);
+  if (ClearException(env.get()))
+    result = std::move(fallback);
+  env->DeleteLocalRef(callbacks);
+  return result;
+}
+
+// Calls a NativeCallbacks method that takes nothing, or one string, on the registered object, from any thread.
+void CallCallback(jmethodID method, std::optional<std::string_view> arg)
+{
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    if (!arg.has_value())
+    {
+      env->CallVoidMethod(callbacks, method);
+      return;
+    }
+    const LocalStrings strings(env, {arg.value()});
+    if (strings.ok())
+      env->CallVoidMethod(callbacks, method, strings[0]);
+  });
 }
 
 // An ArgbImage of width x height RGBA8 pixels (0xAABBGGRR), or null (with no exception pending) if it can't be made.
@@ -335,28 +399,14 @@ void AndroidHost::DetachCurrentThreadFromJVM()
 void AndroidHost::NotifyGameStarted(std::string_view title, std::string_view serial, bool start_paused,
                                     bool pause_on_disconnect)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return;
-
-  jstring jtitle = ToJString(env.get(), title);
-  jstring jserial = ToJString(env.get(), serial);
-  if (jtitle && jserial)
-  {
-    env->CallVoidMethod(callbacks, s_on_game_started, jtitle, jserial, start_paused ? JNI_TRUE : JNI_FALSE,
-                        pause_on_disconnect ? JNI_TRUE : JNI_FALSE);
-    ClearException(env.get());
-  }
-
-  if (jserial)
-    env->DeleteLocalRef(jserial);
-  if (jtitle)
-    env->DeleteLocalRef(jtitle);
-  env->DeleteLocalRef(callbacks);
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {title, serial});
+    if (strings.ok())
+    {
+      env->CallVoidMethod(callbacks, s_on_game_started, strings[0], strings[1], start_paused ? JNI_TRUE : JNI_FALSE,
+                          pause_on_disconnect ? JNI_TRUE : JNI_FALSE);
+    }
+  });
 }
 
 void AndroidHost::NotifyGameStopped()
@@ -376,17 +426,9 @@ void AndroidHost::NotifyBindingCaptured(std::string_view binding)
 
 void AndroidHost::NotifyRumble(s32 device_id, float large, float small)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return;
-
-  env->CallVoidMethod(callbacks, s_on_rumble, static_cast<jint>(device_id), large, small);
-  ClearException(env.get());
-  env->DeleteLocalRef(callbacks);
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    env->CallVoidMethod(callbacks, s_on_rumble, static_cast<jint>(device_id), large, small);
+  });
 }
 
 void AndroidHost::NotifyHotkey(std::string_view name)
@@ -397,180 +439,65 @@ void AndroidHost::NotifyHotkey(std::string_view name)
 void AndroidHost::NotifyOsdMessage(std::string_view key, std::string_view text, float seconds, const u32* image_pixels,
                                    u32 image_width, u32 image_height)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return;
-
-  jstring jkey = ToJString(env.get(), key);
-  jstring jtext = ToJString(env.get(), text);
-  jobject icon = image_pixels ? ToArgbImage(env.get(), image_pixels, image_width, image_height, false) : nullptr;
-  if (jkey && jtext)
-  {
-    env->CallVoidMethod(callbacks, s_on_osd_message, jkey, jtext, static_cast<jfloat>(seconds), icon);
-    ClearException(env.get());
-  }
-
-  if (icon)
-    env->DeleteLocalRef(icon);
-  if (jtext)
-    env->DeleteLocalRef(jtext);
-  if (jkey)
-    env->DeleteLocalRef(jkey);
-  env->DeleteLocalRef(callbacks);
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    const LocalStrings strings(env, {key, text});
+    if (!strings.ok())
+      return;
+    jobject icon = image_pixels ? ToArgbImage(env, image_pixels, image_width, image_height, false) : nullptr;
+    env->CallVoidMethod(callbacks, s_on_osd_message, strings[0], strings[1], static_cast<jfloat>(seconds), icon);
+    if (icon)
+      env->DeleteLocalRef(icon);
+  });
 }
 
 void AndroidHost::NotifyAchievementsToken(std::optional<std::string_view> token)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return;
-
-  jstring jtoken = token.has_value() ? ToJString(env.get(), token.value()) : nullptr;
-  if (!token.has_value() || jtoken)
-  {
+  WithCallbacks([&](JNIEnv* env, jobject callbacks) {
+    // Null clears the stored token.
+    jstring jtoken = token.has_value() ? ToJString(env, token.value()) : nullptr;
+    if (token.has_value() && !jtoken)
+      return;
     env->CallVoidMethod(callbacks, s_on_achievements_token, jtoken);
-    ClearException(env.get());
-  }
-
-  if (jtoken)
-    env->DeleteLocalRef(jtoken);
-  env->DeleteLocalRef(callbacks);
+    if (jtoken)
+      env->DeleteLocalRef(jtoken);
+  });
 }
 
-namespace {
-/// Java strings for a callback's arguments, deleted with this. ok() is false if one didn't convert.
-class LocalStrings
-{
-public:
-  LocalStrings(JNIEnv* env, std::initializer_list<std::string_view> strings) : m_env(env)
-  {
-    for (std::string_view str : strings)
-      m_strings.push_back(ToJString(env, str));
-  }
-
-  ~LocalStrings()
-  {
-    for (jstring str : m_strings)
-    {
-      if (str)
-        m_env->DeleteLocalRef(str);
-    }
-  }
-
-  bool ok() const
-  {
-    return std::all_of(m_strings.begin(), m_strings.end(), [](jstring str) { return str != nullptr; });
-  }
-
-  jstring operator[](size_t index) const { return m_strings[index]; }
-
-private:
-  JNIEnv* m_env;
-  std::vector<jstring> m_strings;
-};
-
-// For a native Kotlin declares never null: result, or, when it couldn't be made (out of memory, as a rule), null with
-// an exception pending, which Kotlin throws at the call, rather than a null that fails later far from it: the one
-// that stopped it, if it's still pending, else one naming the call.
-template<typename T>
-T Made(JNIEnv* env, T result, const char* call)
-{
-  if (result || env->ExceptionCheck())
-    return result;
-  if (jclass cls = env->FindClass("java/lang/IllegalStateException"))
-  {
-    env->ThrowNew(cls, fmt::format("{} couldn't make its result.", call).c_str());
-    env->DeleteLocalRef(cls);
-  }
-  return nullptr;
-}
-
-/// Runs call(env, callbacks) if the app has set its callbacks, on any thread.
-template<typename F>
-void WithCallbacks(F&& call)
-{
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return;
-
-  call(env.get(), callbacks);
-  ClearException(env.get());
-  env->DeleteLocalRef(callbacks);
-}
-} // namespace
 
 bool AndroidHost::StoreMemcardSyncSecret(std::string_view name, std::optional<std::string_view> value)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return false;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return false;
-
-  bool stored = false;
-  jstring jname = ToJString(env.get(), name);
-  jstring jvalue = value.has_value() ? ToJString(env.get(), value.value()) : nullptr;
-  if (jname && (!value.has_value() || jvalue))
-  {
-    stored = env->CallBooleanMethod(callbacks, s_store_memcard_sync_secret, jname, jvalue) == JNI_TRUE;
-    if (ClearException(env.get()))
-      stored = false;
-  }
-  else
-  {
-    ClearException(env.get());
-  }
-
-  if (jvalue)
-    env->DeleteLocalRef(jvalue);
-  if (jname)
-    env->DeleteLocalRef(jname);
-  env->DeleteLocalRef(callbacks);
-  return stored;
+  return WithCallbacksOr(false, [&](JNIEnv* env, jobject callbacks) {
+    // Null deletes the secret.
+    jstring jname = ToJString(env, name);
+    jstring jvalue = value.has_value() ? ToJString(env, value.value()) : nullptr;
+    bool stored = false;
+    if (jname && (!value.has_value() || jvalue))
+      stored = env->CallBooleanMethod(callbacks, s_store_memcard_sync_secret, jname, jvalue) == JNI_TRUE;
+    for (jstring ref : {jvalue, jname})
+    {
+      if (ref)
+        env->DeleteLocalRef(ref);
+    }
+    return stored;
+  });
 }
 
 std::optional<std::string> AndroidHost::LoadMemcardSyncSecret(std::string_view name)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return std::nullopt;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return std::nullopt;
-
-  std::optional<std::string> value;
-  jstring jname = ToJString(env.get(), name);
-  if (jname)
-  {
+  return WithCallbacksOr(std::optional<std::string>(), [&](JNIEnv* env, jobject callbacks) {
+    std::optional<std::string> value;
+    jstring jname = ToJString(env, name);
+    if (!jname)
+      return value;
     jstring jvalue = static_cast<jstring>(env->CallObjectMethod(callbacks, s_load_memcard_sync_secret, jname));
-    if (!ClearException(env.get()) && jvalue)
-      value = FromJString(env.get(), jvalue);
+    // Nothing is read with an exception pending: WithCallbacksOr gives nothing for it.
+    if (jvalue && !env->ExceptionCheck())
+      value = FromJString(env, jvalue);
     if (jvalue)
       env->DeleteLocalRef(jvalue);
     env->DeleteLocalRef(jname);
-  }
-  else
-  {
-    ClearException(env.get());
-  }
-
-  env->DeleteLocalRef(callbacks);
-  return value;
+    return value;
+  });
 }
 
 void AndroidHost::NotifyMemcardSyncChanged()
@@ -580,30 +507,14 @@ void AndroidHost::NotifyMemcardSyncChanged()
 
 bool AndroidHost::HasMemcardSyncSecret(std::string_view name)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return false;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return false;
-
-  bool has = false;
-  jstring jname = ToJString(env.get(), name);
-  if (jname)
-  {
-    has = env->CallBooleanMethod(callbacks, s_has_memcard_sync_secret, jname) == JNI_TRUE;
-    if (ClearException(env.get()))
-      has = false;
+  return WithCallbacksOr(false, [&](JNIEnv* env, jobject callbacks) {
+    jstring jname = ToJString(env, name);
+    if (!jname)
+      return false;
+    const bool has = env->CallBooleanMethod(callbacks, s_has_memcard_sync_secret, jname) == JNI_TRUE;
     env->DeleteLocalRef(jname);
-  }
-  else
-  {
-    ClearException(env.get());
-  }
-
-  env->DeleteLocalRef(callbacks);
-  return has;
+    return has;
+  });
 }
 
 void AndroidHost::NotifyAchievementsChanged()
@@ -749,32 +660,16 @@ void AndroidHost::NotifyPlaySound(const char* path)
 
 void AndroidHost::NotifyFastForwardChanged(bool enabled)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return;
-
-  env->CallVoidMethod(callbacks, s_on_fast_forward_changed, static_cast<jboolean>(enabled));
-  ClearException(env.get());
-  env->DeleteLocalRef(callbacks);
+  WithCallbacks([enabled](JNIEnv* env, jobject callbacks) {
+    env->CallVoidMethod(callbacks, s_on_fast_forward_changed, static_cast<jboolean>(enabled));
+  });
 }
 
 void AndroidHost::NotifyPadKindChanged(s32 kind)
 {
-  ScopedJNIEnv env;
-  if (!env)
-    return;
-
-  jobject callbacks = GetCallbacks(env.get());
-  if (!callbacks)
-    return;
-
-  env->CallVoidMethod(callbacks, s_on_pad_kind_changed, static_cast<jint>(kind));
-  ClearException(env.get());
-  env->DeleteLocalRef(callbacks);
+  WithCallbacks([kind](JNIEnv* env, jobject callbacks) {
+    env->CallVoidMethod(callbacks, s_on_pad_kind_changed, static_cast<jint>(kind));
+  });
 }
 
 namespace {

@@ -681,14 +681,15 @@ std::vector<std::string> AndroidHost::GetSharedCardNames()
 
 std::pair<u64, u64> AndroidHost::GetRewindMemoryUsage(u32 num_saves)
 {
-  std::pair<u64, u64> usage{0, 0};
   if (!s_initialized)
-    return usage;
+    return {0, 0};
 
   // The core reads the resolution and multisampling from g_settings, which the CPU thread owns.
-  EmuThread::RunOnThread([&]() { System::CalculateRewindMemoryUsage(num_saves, 0, &usage.first, &usage.second); },
-                         true);
-  return usage;
+  return EmuThread::Call(std::pair<u64, u64>{0, 0}, [num_saves]() {
+    std::pair<u64, u64> usage{0, 0};
+    System::CalculateRewindMemoryUsage(num_saves, 0, &usage.first, &usage.second);
+    return usage;
+  });
 }
 
 void AndroidHost::ApplySettings()
@@ -1011,13 +1012,11 @@ static std::vector<AndroidHost::PostProcessingStage> ReadStages(const std::optio
 std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStages(const std::optional<std::string>& key,
                                                                                 const char* section)
 {
-  std::vector<PostProcessingStage> result;
   if (!s_initialized)
-    return result;
+    return {};
 
   // On the CPU thread, as GetPostProcessingShaders(): ShaderLoads() and ShaderKind() read the shader folders.
-  EmuThread::RunOnThread([&]() { result = ReadStages(key, section); }, true);
-  return result;
+  return EmuThread::Call([&]() { return ReadStages(key, section); });
 }
 
 std::string AndroidHost::AddPostProcessingStage(const std::optional<std::string>& key, const char* section,
@@ -2062,9 +2061,7 @@ u32 AndroidHost::GetCurrentDisc()
   if (!s_initialized)
     return 0;
 
-  u32 number = 0;
-  EmuThread::RunOnThread([&number]() { number = CurrentDiscNumber(); }, true);
-  return number;
+  return EmuThread::Call(0u, []() { return CurrentDiscNumber(); });
 }
 
 std::optional<std::string> AndroidHost::ChangeDisc(u32 number)
@@ -2213,9 +2210,7 @@ bool AndroidHost::IsSavingMemoryCards()
   if (!s_initialized)
     return false;
 
-  bool saving = false;
-  EmuThread::RunOnThread([&saving]() { saving = System::IsValid() && System::IsSavingMemoryCards(); }, true);
-  return saving;
+  return EmuThread::Call(false, []() { return System::IsValid() && System::IsSavingMemoryCards(); });
 }
 
 s32 AndroidHost::GetAnalogMode()
@@ -3375,9 +3370,7 @@ std::optional<u32> AndroidHost::GetControllerIndex(std::string descriptor)
   if (!s_initialized)
     return std::nullopt;
 
-  std::optional<u32> result;
-  EmuThread::RunOnThread([&descriptor, &result]() { result = FindDescriptorIndex(descriptor); }, true);
-  return result;
+  return EmuThread::Call([&descriptor]() { return FindDescriptorIndex(descriptor); });
 }
 
 void AndroidHost::SetPadBinding(std::string descriptor, std::string name, std::string binding)
@@ -3492,11 +3485,9 @@ bool AndroidHost::CanUndoLoadState()
   if (!s_initialized)
     return false;
 
-  bool can = false;
-  EmuThread::RunOnThread(
-    [&can]() { can = System::IsValid() && !Achievements::IsHardcoreModeActive() && System::CanUndoLoadState(); },
-    true);
-  return can;
+  return EmuThread::Call(false, []() {
+    return System::IsValid() && !Achievements::IsHardcoreModeActive() && System::CanUndoLoadState();
+  });
 }
 
 // Moves [Pad1] Analog's Android bindings (the old Analog Toggle row's) to the analog mode hotkey, under the settings

@@ -61,6 +61,7 @@ import io.github.ilyalissoboi.goosestation.core.MemcardFile
 import io.github.ilyalissoboi.goosestation.core.MemcardSave
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.ChoiceList
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
@@ -300,7 +301,7 @@ private fun Header(
                 )
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ButtonRow {
             ActionButton(
                 "Discard",
                 onClick = onDiscard,
@@ -521,11 +522,7 @@ private fun CardActions(
     memory: FocusMemory,
     actions: MemcardEditorActions,
 ) {
-    FlowRow(
-        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    ButtonRow(modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
         if (state != CardState.Unreadable) {
             ActionButton(
                 "Import save",

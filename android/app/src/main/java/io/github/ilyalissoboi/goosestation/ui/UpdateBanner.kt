@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -38,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.UpdateFailure
 import io.github.ilyalissoboi.goosestation.app.UpdateState
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.ProgressBar
@@ -129,10 +129,7 @@ fun UpdateBanner(
         }
 
     val buttons: @Composable () -> Unit = {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        ButtonRow {
             actions.forEach { (label, action) ->
                 ActionButton(
                     text = label,

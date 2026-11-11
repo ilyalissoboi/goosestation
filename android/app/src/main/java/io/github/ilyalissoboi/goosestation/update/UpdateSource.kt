@@ -85,12 +85,10 @@ class UpdateSource(
     private val timeoutMs: Int = TIMEOUT_MS,
     private val log: ((String) -> Unit)? = null,
 ) : UpdateSourceApi {
-    private fun get(url: String) =
-        if (log != null) {
-            HttpBridge.run(url, null, userAgent, timeoutMs, log = log)
-        } else {
-            HttpBridge.run(url, null, userAgent, timeoutMs)
-        }
+    // HttpBridge's own log line, unless a test gives its own.
+    private val logLine: (String) -> Unit = log ?: HttpBridge::logRequest
+
+    private fun get(url: String) = HttpBridge.run(url, null, userAgent, timeoutMs, log = logLine)
 
     override fun check(
         tag: String,
@@ -130,12 +128,7 @@ class UpdateSource(
         onProgress: (done: Long, total: Long) -> Boolean,
     ): DownloadResult {
         file.parentFile?.mkdirs()
-        val status =
-            if (log != null) {
-                HttpBridge.stream(release.apkUrl, file, userAgent, timeoutMs, MAX_APK_BYTES, onProgress, log)
-            } else {
-                HttpBridge.stream(release.apkUrl, file, userAgent, timeoutMs, MAX_APK_BYTES, onProgress)
-            }
+        val status = HttpBridge.stream(release.apkUrl, file, userAgent, timeoutMs, MAX_APK_BYTES, onProgress, logLine)
         val result =
             when {
                 status == HttpBridge.STATUS_CANCELLED -> DownloadResult.Cancelled

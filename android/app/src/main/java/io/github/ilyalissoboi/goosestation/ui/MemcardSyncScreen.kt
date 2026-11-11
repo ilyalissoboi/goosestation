@@ -35,7 +35,6 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
-import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage

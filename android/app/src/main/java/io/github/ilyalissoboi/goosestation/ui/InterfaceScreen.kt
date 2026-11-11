@@ -3,7 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -96,21 +95,16 @@ data class InterfaceUpdates(
 fun checkNowLine(result: CheckResult): String =
     when (result) {
         CheckResult.UpToDate -> "GooseStation is up to date."
-        is CheckResult.Newer -> "GooseStation ${AppVersion.short(
-            result.release.versionName,
-        )} is available. Update from the library."
+        is CheckResult.Newer -> {
+            val version = AppVersion.short(result.release.versionName)
+            "GooseStation $version is available. Update from the library."
+        }
         is CheckResult.Older -> "This channel's build is older than yours."
         CheckResult.NoRelease -> "This channel has no release yet."
         CheckResult.NoAndroidBuild -> "This channel's release has no Android build yet."
         CheckResult.Unreachable -> "GitHub couldn't be reached. Check your network connection."
         is CheckResult.Unreadable ->
-            if (result.status !=
-                null
-            ) {
-                "GitHub's answer couldn't be read (HTTP ${result.status})."
-            } else {
-                "GitHub's answer couldn't be read."
-            }
+            result.status?.let { "GitHub's answer couldn't be read (HTTP $it)." } ?: "GitHub's answer couldn't be read."
     }
 
 // The Updates section: the check at start, the channel, the version and Check now, its result brought into view as it

@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
 
     // The controllers' input goes to the core: in a game with its prompt closed, or while a capture takes the next
     // input as a binding.
-    private val padInput get() = (inGame && !AppController.promptOpen) || AppController.capturingInput
+    private val padInput get() = (inGame && !AppController.menuOpen) || AppController.capturingInput
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,8 +103,8 @@ class MainActivity : ComponentActivity() {
                         val pads by (AppController.controllers?.connected ?: NO_CONTROLLERS).collectAsState()
                         val ticker = remember { deviceTicker(applicationContext) }
                         GameScreen(
-                            menuOpen = AppController.promptOpen,
-                            onOpenMenu = AppController::openPrompt,
+                            menuOpen = AppController.menuOpen,
+                            onOpenMenu = AppController::openMenu,
                             menu = AppController.gameMenu.state,
                             actions = AppController.gameMenu,
                             game = AppController.games.firstOrNull { it.path == AppController.lastGamePath },
@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                                     onBack = AppController.gameMenu::closeSettings,
                                 )
                             },
-                            touch = TouchVisibility.of(touch.settings, pads.size, true, false, touch.kind),
+                            touch = TouchVisibility.of(touch.settings, pads.size, touch.kind),
                             touchSettings = touch.settings,
                             touchSink = {
                                 NativeLibrary.setTouchPad(
@@ -511,7 +511,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         AppController.resumed = true
         // A game left paused under its prompt stays so.
-        val running = PausePolicy.running(AppController.resumed, AppController.promptOpen)
+        val running = PausePolicy.running(AppController.resumed, AppController.menuOpen)
         if (inGame && AppController.gameRunning && running) NativeLibrary.setPaused(false)
     }
 

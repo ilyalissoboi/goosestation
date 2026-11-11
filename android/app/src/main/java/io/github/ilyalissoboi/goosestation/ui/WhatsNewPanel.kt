@@ -17,14 +17,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
-import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.components.focusStop
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.update.Changes
 
@@ -82,11 +81,11 @@ fun WhatsNewPanel(
                         Modifier
                             .fillMaxWidth()
                             .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
-                            .focusRing(role = Role.Button, onClick = {})
+                            .focusStop()
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Text(change.title, style = MaterialTheme.typography.bodyLarge, color = colors.ink)
-                        Text(change.author, style = MaterialTheme.typography.bodySmall, color = colors.inkMuted)
+                        Text(change.author, style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
                     }
                 }
                 val more = changes.total - changes.commits.size

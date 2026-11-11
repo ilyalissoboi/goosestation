@@ -352,6 +352,12 @@ val checkNoWindowDialogs =
 
 tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
 
+// The JVM tests drive coroutines with kotlinx-coroutines-test (StandardTestDispatcher, runCurrent), still marked
+// experimental: one opt-in for them all, rather than a warning at each use, which buried the compiler's other warnings.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    if (name.contains("UnitTest")) compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
+}
+
 androidComponents {
     onVariants { variant ->
         if (variant.buildType == "release") variant.outputs.forEach { it.versionCode.set(gitVersionCode) }

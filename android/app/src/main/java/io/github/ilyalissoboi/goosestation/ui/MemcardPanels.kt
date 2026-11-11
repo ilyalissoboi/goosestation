@@ -5,7 +5,6 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.core.MemcardSave
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
@@ -76,7 +76,7 @@ private fun QuestionContent(
     val safe = remember { FocusRequester() }
     LaunchedEffect(question) { safe.requestFocus() }
     Text(question.text, style = MaterialTheme.typography.bodyLarge, color = colors.ink)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ButtonRow {
         ActionButton(question.confirm, onClick = { actions.answer(true) }, kind = ButtonKind.Danger)
         question.choices.forEachIndexed { index, choice ->
             ActionButton(
@@ -164,7 +164,7 @@ private fun RenameForm(
     error?.let {
         Notice(NoticeStatus.Danger) { Text(it, style = MaterialTheme.typography.titleMedium, color = colors.ink) }
     }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ButtonRow {
         ActionButton("Rename", onClick = rename)
         ActionButton("Cancel", onClick = actions::closePanel, kind = ButtonKind.Ghost)
     }

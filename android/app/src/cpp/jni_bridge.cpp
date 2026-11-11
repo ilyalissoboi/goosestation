@@ -292,7 +292,7 @@ jobjectArray ToPadBindingArray(JNIEnv* env, const std::optional<std::vector<Andr
 
     if (!entry)
     {
-      ERROR_LOG("Failed to pass Port 1's input '{}' to Java.", binding.name);
+      ERROR_LOG("Failed to pass the input '{}' to Java.", binding.name);
       env->DeleteLocalRef(result);
       return nullptr;
     }

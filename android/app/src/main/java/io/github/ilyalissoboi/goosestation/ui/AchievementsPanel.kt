@@ -69,6 +69,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.components.focusStop
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 import java.time.ZonedDateTime
@@ -284,7 +285,7 @@ private fun AchievementRow(
         modifier =
             modifier
                 .fillMaxWidth()
-                .focusRing(onClick = {})
+                .focusStop()
                 .semantics { stateDescription = if (unlocked) "Unlocked" else "Locked" }
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -477,7 +478,7 @@ private fun EntryRow(
             modifier
                 .fillMaxWidth()
                 .background(if (row.isYou) colors.beakSoft else Color.Transparent, GsShapes.medium)
-                .focusRing(onClick = {})
+                .focusStop()
                 .semantics { if (row.isYou) stateDescription = "You" }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),

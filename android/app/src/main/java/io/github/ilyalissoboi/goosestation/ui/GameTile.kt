@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +79,7 @@ fun GameTile(
     BoxWithConstraints(
         modifier =
             modifier.focusRing(
+                role = Role.Button,
                 focusedFill = null,
                 ring = false,
                 onFocusChange = { focused = it },

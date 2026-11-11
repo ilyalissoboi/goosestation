@@ -5,11 +5,11 @@ package io.github.ilyalissoboi.goosestation.app
 
 /** When a game runs rather than stays paused. Everything that unpauses one asks this first. */
 object PausePolicy {
-    /** Only with the app in front ([resumed]) and the game's prompt closed. */
+    /** Only with the app in front ([resumed]) and the game's menu closed. */
     fun running(
         resumed: Boolean,
-        promptOpen: Boolean,
-    ): Boolean = resumed && !promptOpen
+        menuOpen: Boolean,
+    ): Boolean = resumed && !menuOpen
 
     /**
      * What a game that has just booted is set to: paused (true) if it may not run, unpaused (false) if it may but the
@@ -43,6 +43,6 @@ object PausePolicy {
         setting: Boolean,
         gameRunning: Boolean,
         onGameScreen: Boolean,
-        promptOpen: Boolean,
-    ): Boolean = setting && gameRunning && onGameScreen && !promptOpen
+        menuOpen: Boolean,
+    ): Boolean = setting && gameRunning && onGameScreen && !menuOpen
 }

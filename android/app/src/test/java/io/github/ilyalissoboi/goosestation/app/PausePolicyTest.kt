@@ -13,17 +13,17 @@ import org.junit.Test
 class PausePolicyTest {
     @Test
     fun runsWhenResumedWithThePromptClosed() {
-        assertTrue(PausePolicy.running(resumed = true, promptOpen = false))
+        assertTrue(PausePolicy.running(resumed = true, menuOpen = false))
     }
 
     @Test
     fun staysPausedWithThePromptOpen() {
-        assertFalse(PausePolicy.running(resumed = true, promptOpen = true))
+        assertFalse(PausePolicy.running(resumed = true, menuOpen = true))
     }
 
     @Test
     fun staysPausedInTheBackground() {
-        assertFalse(PausePolicy.running(resumed = false, promptOpen = false))
+        assertFalse(PausePolicy.running(resumed = false, menuOpen = false))
     }
 
     @Test
@@ -64,14 +64,14 @@ class PausePolicyTest {
     @Test
     fun aDisconnectPausesARunningGame() {
         assertTrue(
-            PausePolicy.pausesOnDisconnect(setting = true, gameRunning = true, onGameScreen = true, promptOpen = false),
+            PausePolicy.pausesOnDisconnect(setting = true, gameRunning = true, onGameScreen = true, menuOpen = false),
         )
     }
 
     @Test
     fun noPauseWhileTheMenuIsOpen() {
         assertFalse(
-            PausePolicy.pausesOnDisconnect(setting = true, gameRunning = true, onGameScreen = true, promptOpen = true),
+            PausePolicy.pausesOnDisconnect(setting = true, gameRunning = true, onGameScreen = true, menuOpen = true),
         )
     }
 
@@ -82,7 +82,7 @@ class PausePolicyTest {
                 setting = true,
                 gameRunning = false,
                 onGameScreen = true,
-                promptOpen = false,
+                menuOpen = false,
             ),
         )
         assertFalse(
@@ -90,7 +90,7 @@ class PausePolicyTest {
                 setting = true,
                 gameRunning = true,
                 onGameScreen = false,
-                promptOpen = false,
+                menuOpen = false,
             ),
         )
     }
@@ -102,7 +102,7 @@ class PausePolicyTest {
                 setting = false,
                 gameRunning = true,
                 onGameScreen = true,
-                promptOpen = false,
+                menuOpen = false,
             ),
         )
     }

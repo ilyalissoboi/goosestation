@@ -14,8 +14,6 @@ import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.settings.offered
-import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
-import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 

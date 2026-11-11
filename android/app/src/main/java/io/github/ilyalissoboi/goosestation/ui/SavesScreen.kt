@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -44,6 +43,7 @@ import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
@@ -218,11 +218,7 @@ internal fun SavesDeleteQuestion(
             style = MaterialTheme.typography.bodyLarge,
             color = GooseStationTheme.colors.ink,
         )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        ButtonRow(modifier = Modifier.fillMaxWidth()) {
             ActionButton("Delete", onClick = onConfirm, kind = ButtonKind.Danger)
             ActionButton(
                 "Cancel",

@@ -25,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.app.ShaderPacksModel
 import io.github.ilyalissoboi.goosestation.app.packProgressText
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.ProgressBar
@@ -102,10 +103,7 @@ fun ShaderPacksPanel(
                 style = MaterialTheme.typography.bodyLarge,
                 color = GooseStationTheme.colors.ink,
             )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            ButtonRow {
                 ActionButton("Remove", onClick = model::confirmRemove, kind = ButtonKind.Danger)
                 ActionButton(
                     "Cancel",
@@ -182,7 +180,7 @@ private fun PackActions(
     first: FocusRequester,
 ) {
     row.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = GooseStationTheme.colors.inkMuted) }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ButtonRow {
         var focused = false
 
         fun firstOne(): Modifier =

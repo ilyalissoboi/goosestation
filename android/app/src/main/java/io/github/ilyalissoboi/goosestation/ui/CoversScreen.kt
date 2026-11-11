@@ -37,6 +37,7 @@ import io.github.ilyalissoboi.goosestation.app.coverProgressText
 import io.github.ilyalissoboi.goosestation.settings.coverSourceProblem
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
+import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.ProgressBar
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
@@ -175,11 +176,8 @@ fun CoversScreen(
                 Progress(
                     job,
                     Modifier.focusRequester(cancel).onFocusChanged {
-                        if (model.job !=
-                            null
-                        ) {
-                            cancelFocused[0] = it.isFocused
-                        }
+                        val running = model.job != null
+                        if (running) cancelFocused[0] = it.isFocused
                     },
                     model::cancel,
                 )
@@ -268,11 +266,7 @@ internal fun CoversRestoreQuestion(
             style = MaterialTheme.typography.bodyLarge,
             color = GooseStationTheme.colors.ink,
         )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        ButtonRow(modifier = Modifier.fillMaxWidth()) {
             ActionButton("Replace", onClick = onReplace, kind = ButtonKind.Danger)
             ActionButton(
                 "Keep mine",
@@ -287,11 +281,7 @@ internal fun CoversRestoreQuestion(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Buttons(content: @Composable () -> Unit) {
-    FlowRow(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) { content() }
+    ButtonRow(modifier = Modifier.padding(horizontal = 16.dp)) { content() }
 }
 
 @Composable

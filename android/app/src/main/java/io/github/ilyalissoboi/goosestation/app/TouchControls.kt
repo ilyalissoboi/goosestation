@@ -79,18 +79,16 @@ object TouchVisibility {
     )
 
     /**
-     * Shown in a game ([inGame]) with its menu closed ([menuOpen] false) and Port 1 a pad the touch pad can be ([kind]
-     * digital or analog, with sticks for analog), as [settings] says: Automatic with no [controllers] connected,
-     * Always, never when Off. Null when it doesn't show.
+     * Shown over a game (the game screen composes it only while the menu is closed) with Port 1 a pad the touch pad
+     * can be ([kind] digital or analog, with sticks for analog), as [settings] says: Automatic with no [controllers]
+     * connected, Always, never when Off. Null when it doesn't show.
      */
     fun of(
         settings: TouchSettings,
         controllers: Int,
-        inGame: Boolean,
-        menuOpen: Boolean,
         kind: PadKind?,
     ): Shown? {
-        if (!inGame || menuOpen || !wanted(settings, controllers)) return null
+        if (!wanted(settings, controllers)) return null
         return when (kind) {
             PadKind.Digital -> Shown(sticks = false)
             PadKind.Analog -> Shown(sticks = true)
@@ -112,8 +110,7 @@ object TouchVisibility {
 
 /**
  * The touch controls' [settings] (Compose state, saved through [prefs] as they're set) and Port 1's [kind] in the
- * running game, as the core reports it, null with none. With [controllers] the number connected now, [shown] says
- * whether the overlay shows. A game whose Port 1 can't be a touch pad gets [MESSAGE] through [post], once after each
+ * running game, as the core reports it, null with none; [TouchVisibility.of] says whether the overlay shows. A game whose Port 1 can't be a touch pad gets [MESSAGE] through [post], once after each
  * [gameStarted], when the touch controls would otherwise show. Main thread only.
  */
 class TouchControls(
@@ -141,11 +138,6 @@ class TouchControls(
                 post(MESSAGE)
             }
         }
-
-    fun shown(
-        inGame: Boolean,
-        menuOpen: Boolean,
-    ): TouchVisibility.Shown? = TouchVisibility.of(settings, controllers(), inGame, menuOpen, kind)
 
     fun gameStarted() {
         told = false

@@ -178,7 +178,8 @@ repository (git-ignored).
   `cmake --build build-android --target goosestation`.
 - `run-native-tests.sh [gtest arguments]` configures with `BUILD_TESTS=ON`, builds `common-tests`, pushes it to
   `/data/local/tmp` on the emulator and runs it there. Its exit code is the tests'. The tests link the core, on a
-  no-op host (`src/common-tests/core_host_stubs.cpp`), so `libsoundtouch.so` from the dependency prefix goes along. It needs `ANDROID_HOME` for
+  no-op host (`src/common-tests/core_host_stubs.cpp`), so `libsoundtouch.so` and `librashader.so` from the dependency
+  prefix go along (`GOOSESTATION_LIBRASHADER_PATH` names the latter). It needs `ANDROID_HOME` for
   `adb`, and uses `ANDROID_SERIAL` (default `emulator-5554`) to pick the device. For example:
   `android/scripts/run-native-tests.sh --gtest_filter='FileSystem.*'`.
 - `check-undefined.sh` builds `goosestation` in `build-android/` (configure it first), then links all of core,
@@ -207,7 +208,8 @@ repository's top-level `CMakeLists.txt` with the same CMake arguments as `androi
 staging it in `android/app/.cxx`. The native code is built as RelWithDebInfo for both the debug and release APKs: a
 Debug core is far too slow to play. The first build compiles the whole core and takes a few minutes.
 
-The APK also carries the dependency prefix's three shared libraries (`GOOSESTATION_ANDROID_DEPS` overrides the
+The APK also carries the dependency prefix's four shared libraries, shaderc's, SPIRV-Cross's, SoundTouch's and
+librashader's (`GOOSESTATION_ANDROID_DEPS` overrides the
 prefix, as for the configure script) and `data/resources` as assets under `resources/`. The app copies the resources
 to its internal files on first run and whenever the app is reinstalled or updated: it compares the version code and
 the install's `lastUpdateTime` (`<versionCode>-<lastUpdateTime>`) with the last copy's.
@@ -270,9 +272,10 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
 GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh full    # before a pull request
 ```
 
-- **quick** leaves out the classes tagged `@LargeTest` (`androidx.test.filters.LargeTest`): `OrientationLayoutTest`,
-  `AchievementsOfflineTest` and the `MemcardSync*` classes (no other class takes over a minute; tag one that comes
-  to). It's the runner's `notAnnotation=androidx.test.filters.LargeTest`. **full** runs every test, then the classes
+- **quick** leaves out what's tagged `@LargeTest` (`androidx.test.filters.LargeTest`): the classes
+  `OrientationLayoutTest`, `AchievementsOfflineTest`, `MemcardEditorSyncTest` and the `MemcardSync*` ones, and three of
+  `GameCallsTest`'s tests (a disc change in an M3U, and the two shared slots of another game). No other class takes
+  over a minute: tag one that comes to, or a test of its own. It's the runner's `notAnnotation=androidx.test.filters.LargeTest`. **full** runs every test, then the classes
   that boot a game (tagged `@BootsGames`: `GameCallsTest`, `AchievementsSignInTest`, `AchievementsOfflineTest` and
   `SettingsSetupTest`) once more under OpenGL ES, which the host's GPU can't run (see "The test emulators"): it
   restarts `goose-test-2` with `-gpu swiftshader_indirect`, runs them there unsharded under the Orchestrator with the

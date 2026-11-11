@@ -90,14 +90,14 @@ fun SaveSlotPanel(
 ) {
     val colors = GooseStationTheme.colors
     val saving = panel.mode == SlotMode.Save
-    val sharedTab = panel.tab == SlotTab.Shared
+    val sharedTab = panel.lists.tab == SlotTab.Shared
     val entries =
         when {
-            sharedTab -> panel.shared
-            panel.hasKey -> panel.entries
+            sharedTab -> panel.lists.shared
+            panel.lists.hasKey -> panel.lists.entries
             else -> emptyList()
         }
-    val others = if (sharedTab || !panel.hasKey) emptyList() else panel.others
+    val others = if (sharedTab || !panel.lists.hasKey) emptyList() else panel.lists.others
     val title = remember { FocusRequester() }
     var titleFocused by remember { mutableStateOf(false) }
     val rows = remember { HashMap<Triple<Boolean, String?, Int>, FocusRequester>() }
@@ -116,7 +116,7 @@ fun SaveSlotPanel(
 
     // The slot to focus once the question about replacing it is answered.
     var returnTo by remember { mutableStateOf<Int?>(null) }
-    val asking = panel.question != null || panel.deleting != null
+    val asking = panel.question != null || panel.lists.deleting != null
     // Which rows the list has (not what they show, which a picture read changes): a read after a delete, without the
     // focused row, gives the focus on.
     val rowIds = (entries.orEmpty() + others).map { Triple(it.shared, it.owner, it.slot) }
@@ -124,23 +124,25 @@ fun SaveSlotPanel(
         entries == null,
         rowIds,
         panel.question,
-        panel.deleting,
-        panel.focusRow,
-        panel.tab,
+        panel.lists.deleting,
+        panel.lists.focusRow,
+        panel.lists.tab,
         switches,
     ) {
         val replacing = (panel.question as? SlotQuestion.Replace)?.slot
         when {
             // A question focuses its Cancel.
             replacing != null -> returnTo = replacing
-            panel.deleting != null || panel.question is SlotQuestion.Switch -> {}
+            panel.lists.deleting != null || panel.question is SlotQuestion.Switch -> {}
             entries == null -> title.requestFocus()
             else -> {
-                val wanted = returnTo ?: if (sharedTab) panel.sharedFocus else panel.focus
+                val wanted = returnTo ?: if (sharedTab) panel.lists.sharedFocus else panel.lists.focus
                 returnTo = null
                 // A row the menu names (after a delete) comes first, whichever list has it.
                 val named =
-                    panel.focusRow?.let { focus -> (entries + others).firstOrNull { SaveLists.sameRow(it, focus) } }
+                    panel.lists.focusRow?.let { focus ->
+                        (entries + others).firstOrNull { SaveLists.sameRow(it, focus) }
+                    }
                 val target =
                     named?.takeIf(::pickable) ?: entries.firstOrNull { it.slot == wanted && pickable(it) }
                         ?: entries.firstOrNull(::pickable) ?: others.firstOrNull()
@@ -164,7 +166,7 @@ fun SaveSlotPanel(
                     .onFocusChanged { titleFocused = it.isFocused }
                     .focusable(enabled = nothingToFocus || titleFocused),
         )
-        panel.error?.let { error ->
+        panel.lists.error?.let { error ->
             Notice(NoticeStatus.Danger) {
                 Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
             }
@@ -172,14 +174,14 @@ fun SaveSlotPanel(
         if (panel.working) {
             SlotLine(
                 when {
-                    panel.removing -> "Deleting…"
+                    panel.lists.removing -> "Deleting…"
                     panel.work == SlotWork.Saving -> "Saving…"
                     else -> "Loading…"
                 },
             )
         }
         when {
-            !sharedTab && !panel.hasKey -> SlotLine(NO_KEY_STATES)
+            !sharedTab && !panel.lists.hasKey -> SlotLine(NO_KEY_STATES)
             entries != null && !saving && entries.none { it.savedAt != null } && others.isEmpty() ->
                 SlotLine(if (sharedTab) "No shared saves yet." else "No saves yet for this game.")
         }
@@ -193,11 +195,11 @@ fun SaveSlotPanel(
                 PanelTabs(
                     listOf("This game", "Shared"),
                     current = if (sharedTab) 1 else 0,
-                    onSelect = { if (it != panel.tab.ordinal && !asking && !panel.working) switchTab() },
+                    onSelect = { if (it != panel.lists.tab.ordinal && !asking && !panel.working) switchTab() },
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
                 val replacing = (panel.question as? SlotQuestion.Replace)?.slot
-                val deleting = panel.deleting
+                val deleting = panel.lists.deleting
                 val switching = (panel.question as? SlotQuestion.Switch)?.entry
                 // Load's rows: X or a long press asks before deleting the save.
                 val delete: ((SlotEntry) -> Unit)? = if (saving) null else actions::askDelete

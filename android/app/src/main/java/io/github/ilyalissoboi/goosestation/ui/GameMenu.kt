@@ -107,7 +107,7 @@ fun GameMenu(
         val shown = current
         when {
             shown.slots?.question is SlotQuestion.Switch -> actions.cancelSwitch()
-            shown.slots?.deleting != null -> actions.cancelDelete()
+            shown.slots?.lists?.deleting != null -> actions.cancelDelete()
             shown.slots?.question is SlotQuestion.Replace -> actions.cancelReplace()
             // A save, load, delete or disc change under way ends in its panel, which stays until it has.
             shown.slots?.working == true || shown.discs?.busy == true -> Unit
@@ -144,7 +144,7 @@ fun GameMenu(
         listOf(
             state.slots?.mode,
             state.slots?.question,
-            state.slots?.deleting,
+            state.slots?.lists?.deleting,
             state.discs != null,
             state.codes != null,
             state.cheevos != null,

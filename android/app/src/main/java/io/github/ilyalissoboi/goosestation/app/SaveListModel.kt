@@ -174,6 +174,9 @@ class SaveListModel(
         return read
     }
 
+    /** [row] takes the focus, as the owner's question about it goes. */
+    fun focusOn(row: SlotEntry) = change { it.copy(focusRow = row) }
+
     /** Shows the owner's [error] in the lists' line. */
     fun fail(error: String) = change { it.copy(error = error) }
 

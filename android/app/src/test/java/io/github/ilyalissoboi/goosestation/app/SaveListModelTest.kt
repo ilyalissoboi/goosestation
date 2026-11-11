@@ -367,6 +367,18 @@ class SaveListModelTest {
             assertNull(model.lists.error)
         }
 
+    @Test
+    fun focusOnNamesTheRowToFocus() =
+        runTest {
+            api.sharedTimes[4] = 400
+            val model = opened()
+            val row = model.lists.shared!!.single()
+
+            model.focusOn(row)
+
+            assertEquals(row, model.lists.focusRow)
+        }
+
     private companion object {
         const val SERIAL = "SLPS-02020"
         const val OTHER = "SLPS-02021"

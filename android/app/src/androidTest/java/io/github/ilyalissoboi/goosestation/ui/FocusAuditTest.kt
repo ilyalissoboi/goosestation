@@ -1285,7 +1285,7 @@ class FocusAuditTest {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, if (it == 2) 1_700_000_000L else null) }
         show {
             GameMenu(
-                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, entries, focus = 2)),
+                GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, entries, focus = 2)),
                 NoMenuActions,
             )
         }
@@ -1302,7 +1302,7 @@ class FocusAuditTest {
                 GameMenuState(
                     booted = true,
                     slots =
-                        SlotPanel(
+                        slotPanel(
                             SlotMode.Save,
                             emptyList(),
                             tab = SlotTab.Shared,
@@ -1324,7 +1324,7 @@ class FocusAuditTest {
                 GameMenuState(
                     booted = true,
                     hasKey = false,
-                    slots = SlotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
+                    slots = slotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
                 ),
                 NoMenuActions,
             )
@@ -1342,7 +1342,7 @@ class FocusAuditTest {
                 GameMenuState(
                     booted = true,
                     slots =
-                        SlotPanel(
+                        slotPanel(
                             SlotMode.Load,
                             emptyList(),
                             tab = SlotTab.Shared,
@@ -1364,7 +1364,7 @@ class FocusAuditTest {
             GameMenu(
                 GameMenuState(
                     booted = true,
-                    slots = SlotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1]),
+                    slots = slotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1]),
                 ),
                 NoMenuActions,
             )
@@ -1379,7 +1379,7 @@ class FocusAuditTest {
         val others = listOf(SlotEntry(3, 1_700_000_000L, owner = "SLPS-02021", disc = 2))
         show {
             GameMenu(
-                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1, others = others)),
+                GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, entries, focus = 1, others = others)),
                 NoMenuActions,
             )
         }
@@ -1516,7 +1516,7 @@ class FocusAuditTest {
 
     @Test
     fun gameMenuLoadWithNoSaves() {
-        show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
+        show { GameMenu(GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
 
         rule.assertControllerReady()
     }
@@ -1524,7 +1524,7 @@ class FocusAuditTest {
     @Test
     fun gameMenuReplacing() {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, 1_700_000_000L) }
-        val panel = SlotPanel(SlotMode.Save, entries, focus = 1, question = SlotQuestion.Replace(1))
+        val panel = slotPanel(SlotMode.Save, entries, focus = 1, question = SlotQuestion.Replace(1))
         show { GameMenu(GameMenuState(booted = true, slots = panel), NoMenuActions) }
 
         rule.assertControllerReady()

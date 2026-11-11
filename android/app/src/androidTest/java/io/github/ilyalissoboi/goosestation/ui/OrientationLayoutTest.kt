@@ -550,7 +550,7 @@ class OrientationLayoutTest {
             assertTrue("Resume is focused, not ${focusedText()}", focusedHas("Resume"))
             pressUntilFocusedInView(Key.DirectionDown, "Exit game")
 
-            menu.value = menu.value.copy(slots = SlotPanel(SlotMode.Save, entries, focus = 1))
+            menu.value = menu.value.copy(slots = slotPanel(SlotMode.Save, entries, focus = 1))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             assertTrue("Slot 1 is focused, not ${focusedText()}", focusedHas("Slot 1"))
@@ -563,7 +563,7 @@ class OrientationLayoutTest {
             // Closed first, as the menu does between panels.
             menu.value = menu.value.copy(slots = null)
             rule.waitForIdle()
-            menu.value = menu.value.copy(slots = SlotPanel(SlotMode.Load, saved, focus = 1, others = others))
+            menu.value = menu.value.copy(slots = slotPanel(SlotMode.Load, saved, focus = 1, others = others))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             pressUntilFocusedInView(Key.DirectionDown, "Slot 9")
@@ -577,7 +577,7 @@ class OrientationLayoutTest {
             rule.waitForIdle()
             menu.value =
                 menu.value.copy(
-                    slots = SlotPanel(SlotMode.Load, saved, tab = SlotTab.Shared, shared = shared, sharedFocus = 2),
+                    slots = slotPanel(SlotMode.Load, saved, tab = SlotTab.Shared, shared = shared, sharedFocus = 2),
                 )
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)

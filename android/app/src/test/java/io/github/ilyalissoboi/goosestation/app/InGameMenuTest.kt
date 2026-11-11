@@ -57,7 +57,7 @@ class InGameMenuTest {
 
     private fun InGameMenu.slots() = state.slots!!
 
-    private fun InGameMenu.entries() = slots().entries!!
+    private fun InGameMenu.entries() = slots().lists.entries!!
 
     @Test
     fun saveFocusesTheLastSlotElseSlot1() =
@@ -66,19 +66,19 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Save)
             runCurrent()
             assertEquals((1..10).toList(), menu.entries().map { it.slot })
-            assertEquals(1, menu.slots().focus)
+            assertEquals(1, menu.slots().lists.focus)
 
             lastSlots.set(SERIAL, 4)
             menu.closeSlots()
             menu.openSlots(SlotMode.Save)
             runCurrent()
-            assertEquals(4, menu.slots().focus)
+            assertEquals(4, menu.slots().lists.focus)
 
             lastSlots.set(SERIAL, SaveSlots.RESUME)
             menu.closeSlots()
             menu.openSlots(SlotMode.Save)
             runCurrent()
-            assertEquals(1, menu.slots().focus)
+            assertEquals(1, menu.slots().lists.focus)
         }
 
     @Test
@@ -93,7 +93,7 @@ class InGameMenuTest {
 
             // Only the saved ones: an empty slot can't be loaded.
             assertEquals(listOf(SaveSlots.RESUME, 3), menu.entries().map { it.slot })
-            assertEquals(3, menu.slots().focus)
+            assertEquals(3, menu.slots().lists.focus)
             assertEquals(300L, menu.entries().first { it.slot == 3 }.savedAt)
         }
 
@@ -108,7 +108,7 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Load)
             runCurrent()
 
-            assertEquals(3, menu.slots().focus)
+            assertEquals(3, menu.slots().lists.focus)
         }
 
     @Test
@@ -121,7 +121,7 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals(emptyList<SlotEntry>(), menu.entries())
-            assertNull(menu.slots().focus)
+            assertNull(menu.slots().lists.focus)
         }
 
     @Test
@@ -220,10 +220,10 @@ class InGameMenuTest {
 
             menu.pickSlot(2)
             menu.closeSlots()
-            assertTrue(menu.slots().busy)
+            assertTrue(menu.slots().working)
             runCurrent()
 
-            assertEquals("Couldn't save to slot 2: No space left on device.", menu.slots().error)
+            assertEquals("Couldn't save to slot 2: No space left on device.", menu.slots().lists.error)
         }
 
     // Another row taken while a save runs: a failure is still said, never lost with the panel.
@@ -254,11 +254,11 @@ class InGameMenuTest {
 
             menu.pickSlot(3)
             runCurrent()
-            assertEquals(3, menu.slots().replacing)
+            assertEquals(SlotQuestion.Replace(3), menu.slots().question)
             assertEquals(emptyList<String>(), calls)
 
             menu.cancelReplace()
-            assertNull(menu.slots().replacing)
+            assertNull(menu.slots().question)
 
             menu.pickSlot(3)
             menu.confirmReplace()
@@ -282,9 +282,9 @@ class InGameMenuTest {
             assertEquals(listOf("saveState $SERIAL 2"), calls)
             assertEquals(
                 "Couldn't save to slot 2: No space left on device.",
-                menu.slots().error,
+                menu.slots().lists.error,
             )
-            assertFalse(menu.slots().busy)
+            assertFalse(menu.slots().working)
             assertEquals(5, lastSlots.get(SERIAL))
         }
 
@@ -318,7 +318,7 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals(listOf("loadState $SERIAL 1"), calls)
-            assertEquals("Couldn't load slot 1: The save state is from another version.", menu.slots().error)
+            assertEquals("Couldn't load slot 1: The save state is from another version.", menu.slots().lists.error)
             assertNull(lastSlots.get(SERIAL))
         }
 
@@ -360,7 +360,7 @@ class InGameMenuTest {
             calls.clear()
 
             menu.pickSlot(2)
-            assertTrue(menu.slots().busy)
+            assertTrue(menu.slots().working)
             menu.pickSlot(3)
             runCurrent()
 
@@ -396,7 +396,7 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Save)
             runCurrent()
 
-            val panel = menu.slots()
+            val panel = menu.slots().lists
             assertEquals(SlotTab.Shared, panel.tab)
             assertFalse(panel.hasKey)
             assertEquals(emptyList<SlotEntry>(), panel.entries)
@@ -721,7 +721,7 @@ class InGameMenuTest {
 
             assertEquals(
                 "The game is still saving to its memory card. Resume it for a moment, then save again.",
-                menu.slots().error,
+                menu.slots().lists.error,
             )
         }
 
@@ -846,7 +846,7 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals(listOf(1), menu.entries().map { it.slot })
-            val others = menu.slots().others
+            val others = menu.slots().lists.others
             assertEquals(listOf(SaveSlots.RESUME, 4), others.map { it.slot })
             assertEquals(listOf("SLPS-02021", "SLPS-02021"), others.map { it.owner })
             assertEquals(listOf(2, 2), others.map { it.disc })
@@ -885,7 +885,7 @@ class InGameMenuTest {
             menu.pickOther("SLPS-02021", SaveSlots.RESUME)
             runCurrent()
 
-            assertEquals("Couldn't load that save: Bad state.", menu.slots().error)
+            assertEquals("Couldn't load that save: Bad state.", menu.slots().lists.error)
         }
 
     @Test
@@ -912,7 +912,12 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Save)
             runCurrent()
 
-            assertTrue(menu.slots().others.isEmpty())
+            assertTrue(
+                menu
+                    .slots()
+                    .lists.others
+                    .isEmpty(),
+            )
             assertTrue(calls.none { it == "getSaveStateTimes SLPS-02021" })
         }
 
@@ -1811,7 +1816,7 @@ class InGameMenuTest {
             menu.openSlots(SlotMode.Load)
             runCurrent()
 
-            val panel = menu.slots()
+            val panel = menu.slots().lists
             assertEquals(SlotTab.ThisGame, panel.tab)
             assertTrue(panel.hasKey)
             assertEquals(listOf(1), panel.entries!!.map { it.slot })
@@ -1838,9 +1843,9 @@ class InGameMenuTest {
             runCurrent()
 
             menu.switchTab()
-            assertEquals(SlotTab.Shared, menu.slots().tab)
+            assertEquals(SlotTab.Shared, menu.slots().lists.tab)
             menu.switchTab()
-            assertEquals(SlotTab.ThisGame, menu.slots().tab)
+            assertEquals(SlotTab.ThisGame, menu.slots().lists.tab)
         }
 
     @Test
@@ -1873,7 +1878,7 @@ class InGameMenuTest {
             menu.pickShared(2)
             runCurrent()
 
-            assertEquals("Couldn't save to shared slot 2: Disk full.", menu.slots().error)
+            assertEquals("Couldn't save to shared slot 2: Disk full.", menu.slots().lists.error)
         }
 
     @Test
@@ -1888,11 +1893,11 @@ class InGameMenuTest {
             calls.clear()
 
             menu.pickShared(5)
-            assertEquals(5, menu.slots().replacing)
+            assertEquals(SlotQuestion.Replace(5), menu.slots().question)
             assertEquals(emptyList<String>(), calls)
             // The question can't move to the other tab.
             menu.switchTab()
-            assertEquals(SlotTab.Shared, menu.slots().tab)
+            assertEquals(SlotTab.Shared, menu.slots().lists.tab)
 
             menu.confirmReplace()
             runCurrent()
@@ -1928,6 +1933,7 @@ class InGameMenuTest {
             assertNull(
                 menu
                     .slots()
+                    .lists
                     .shared!!
                     .single()
                     .holds,
@@ -1964,7 +1970,7 @@ class InGameMenuTest {
             runCurrent()
 
             assertTrue(calls.none { it.startsWith("loadSharedState") })
-            assertEquals("Couldn't read that save.", menu.slots().error)
+            assertEquals("Couldn't read that save.", menu.slots().lists.error)
         }
 
     // --- Delete ---
@@ -1989,11 +1995,11 @@ class InGameMenuTest {
             loadPanel(menu)
 
             menu.askDelete(menu.entries().single())
-            assertEquals(SlotEntry(3, 300L), menu.slots().deleting)
+            assertEquals(SlotEntry(3, 300L), menu.slots().lists.deleting)
             assertEquals(emptyList<String>(), calls)
 
             menu.cancelDelete()
-            assertNull(menu.slots().deleting)
+            assertNull(menu.slots().lists.deleting)
             assertEquals(emptyList<String>(), calls)
         }
 
@@ -2006,7 +2012,7 @@ class InGameMenuTest {
             runCurrent()
 
             menu.askDelete(menu.entries().first { it.slot == 3 })
-            assertNull(menu.slots().deleting)
+            assertNull(menu.slots().lists.deleting)
         }
 
     @Test
@@ -2024,10 +2030,16 @@ class InGameMenuTest {
             runCurrent()
 
             assertEquals("deleteState $SERIAL 3", calls.first())
-            assertNull(menu.slots().deleting)
+            assertNull(menu.slots().lists.deleting)
             assertEquals(listOf(2, 5), menu.entries().map { it.slot })
             // The panel stays open, on the next row.
-            assertEquals(5, menu.slots().focusRow?.slot)
+            assertEquals(
+                5,
+                menu
+                    .slots()
+                    .lists.focusRow
+                    ?.slot,
+            )
             assertTrue(calls.none { it == "resume" })
         }
 
@@ -2040,12 +2052,17 @@ class InGameMenuTest {
             runCurrent()
             loadPanel(menu)
 
-            menu.askDelete(menu.slots().others.single())
+            menu.askDelete(
+                menu
+                    .slots()
+                    .lists.others
+                    .single(),
+            )
             menu.confirmDelete()
             runCurrent()
 
             assertEquals("deleteState SLPS-02021 4", calls.first())
-            assertEquals(emptyList<SlotEntry>(), menu.slots().others)
+            assertEquals(emptyList<SlotEntry>(), menu.slots().lists.others)
         }
 
     @Test
@@ -2056,13 +2073,18 @@ class InGameMenuTest {
             loadPanel(menu)
             menu.switchTab()
 
-            menu.askDelete(menu.slots().shared!!.single())
+            menu.askDelete(
+                menu
+                    .slots()
+                    .lists.shared!!
+                    .single(),
+            )
             menu.confirmDelete()
             runCurrent()
 
             assertEquals("deleteState shared 6", calls.first())
-            assertEquals(emptyList<SlotEntry>(), menu.slots().shared)
-            assertEquals(SlotTab.Shared, menu.slots().tab)
+            assertEquals(emptyList<SlotEntry>(), menu.slots().lists.shared)
+            assertEquals(SlotTab.Shared, menu.slots().lists.tab)
         }
 
     @Test
@@ -2077,7 +2099,7 @@ class InGameMenuTest {
             menu.confirmDelete()
             runCurrent()
 
-            assertEquals("Couldn't delete that save: Permission denied.", menu.slots().error)
+            assertEquals("Couldn't delete that save: Permission denied.", menu.slots().lists.error)
             assertEquals(listOf(3), menu.entries().map { it.slot })
         }
 
@@ -2180,15 +2202,15 @@ class InGameMenuTest {
             menu.pickShared(3)
             runCurrent()
 
-            assertEquals(3, menu.slots().switching?.slot)
+            assertEquals(3, (menu.slots().question as? SlotQuestion.Switch)?.entry?.slot)
             assertEquals(
                 "Load Spyro from shared slot 3? This game stops.",
-                SaveLists.switchQuestion(menu.slots().switching!!),
+                SaveLists.switchQuestion((menu.slots().question as SlotQuestion.Switch).entry),
             )
             assertTrue(calls.none { it.startsWith("loadSharedState") || it.startsWith("exit") })
 
             menu.cancelSwitch()
-            assertNull(menu.slots().switching)
+            assertNull(menu.slots().question)
         }
 
     @Test
@@ -2285,8 +2307,8 @@ class InGameMenuTest {
             menu.pickShared(3)
             runCurrent()
 
-            assertNull(menu.slots().switching)
-            assertEquals("Loading a state is off in hardcore mode", menu.slots().error)
+            assertNull(menu.slots().question)
+            assertEquals("Loading a state is off in hardcore mode", menu.slots().lists.error)
         }
 
     @Test
@@ -2298,10 +2320,10 @@ class InGameMenuTest {
             menu.pickShared(3)
             runCurrent()
 
-            assertNull(menu.slots().switching)
+            assertNull(menu.slots().question)
             assertEquals(
                 "Shared slot 3 needs Spyro the Dragon (SCUS-94228), which isn't in your library.",
-                menu.slots().error,
+                menu.slots().lists.error,
             )
         }
 
@@ -2356,8 +2378,167 @@ class InGameMenuTest {
             menu.pickShared(3)
             runCurrent()
 
-            assertEquals("Couldn't read that save.", menu.slots().error)
-            assertFalse(menu.slots().busy)
+            assertEquals("Couldn't read that save.", menu.slots().lists.error)
+            assertFalse(menu.slots().working)
+        }
+
+    // One question at a time: while one is asked, nothing that would ask another, or act under it, starts.
+    @Test
+    fun slotQuestionsAreOneAtATime() =
+        runTest {
+            api.times[3] = 300
+            api.sharedTimes[4] = 400
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.pickSlot(3)
+            assertEquals(SlotQuestion.Replace(3), menu.slots().question)
+
+            menu.pickShared(4)
+            menu.switchTab()
+            assertEquals(SlotQuestion.Replace(3), menu.slots().question)
+            assertEquals(SlotTab.ThisGame, menu.slots().lists.tab)
+        }
+
+    // Under the switch question (another game's shared slot), neither a delete nor another disc's save starts.
+    @Test
+    fun nothingStartsUnderTheSwitchQuestion() =
+        runTest {
+            api.serialTimes["SLPS-02021"] = mapOf(4 to 60L)
+            api.sharedTimes[5] = 500
+            api.sharedHolds[5] = SaveStatePreview(null, 0, "SCUS-94228", "SPYRO", "content://games/spyro.cue", "Spyro")
+            val menu = ac3Menu()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            menu.switchTab()
+            menu.pickShared(5)
+            runCurrent()
+            assertEquals(5, (menu.slots().question as SlotQuestion.Switch).entry.slot)
+            calls.clear()
+
+            menu.askDelete(
+                menu
+                    .slots()
+                    .lists.shared!!
+                    .single(),
+            )
+            menu.pickOther("SLPS-02021", 4)
+            runCurrent()
+
+            assertNull(menu.slots().lists.deleting)
+            assertTrue(calls.none { it.startsWith("loadState") })
+        }
+
+    // Review Focus 1: the menu closing mid-delete. The delete still runs; its re-read lands on nothing, and the panel
+    // opened again starts idle.
+    @Test
+    fun closingThePanelMidDeleteReopensIdle() =
+        runTest {
+            api.times[3] = 300
+            api.times[5] = 500
+            val menu = menu()
+            loadPanel(menu)
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            menu.confirmDelete()
+
+            menu.opened()
+            menu.openSlots(SlotMode.Load)
+            assertTrue(menu.slots().idle)
+            runCurrent()
+
+            assertTrue("deleteState $SERIAL 3" in calls)
+            assertTrue(menu.slots().idle)
+            assertNull(menu.slots().lists.focusRow)
+            assertEquals(listOf(5), menu.entries().map { it.slot })
+        }
+
+    // Review Focus 5: a shared slot's game, read after the menu closed, asks nothing and loads nothing.
+    @Test
+    fun aSharedSlotReadDroppedByACloseAsksNothing() =
+        runTest {
+            api.sharedTimes[4] = 400
+            val menu = menu()
+            loadPanel(menu)
+            menu.switchTab()
+            // Its game is read as it's picked: the panel's own read found nothing then.
+            api.sharedHolds[4] = SaveStatePreview(null, 0, "SCUS-94228", "SPYRO", "content://games/spyro.cue", "Spyro")
+
+            menu.pickShared(4)
+            menu.opened()
+            runCurrent()
+
+            assertNull(menu.state.slots)
+            assertTrue(calls.none { it.startsWith("loadSharedState") || it.startsWith("message") })
+        }
+
+    // A row to focus from one tab means nothing on the other.
+    @Test
+    fun aTabSwitchClearsTheRowToFocus() =
+        runTest {
+            api.times[3] = 300
+            api.times[5] = 500
+            val menu = menu()
+            loadPanel(menu)
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            menu.confirmDelete()
+            runCurrent()
+            assertEquals(
+                5,
+                menu
+                    .slots()
+                    .lists.focusRow
+                    ?.slot,
+            )
+
+            menu.switchTab()
+
+            assertEquals(SlotTab.Shared, menu.slots().lists.tab)
+            assertNull(menu.slots().lists.focusRow)
+        }
+
+    // A re-read after a delete stops the pictures the last read was still reading, rather than read them twice.
+    @Test
+    fun aRereadStopsTheLastPictureReads() =
+        runTest {
+            for (slot in listOf(2, 5, 8)) {
+                api.times[slot] = slot * 100L
+                api.screenshots[slot] = picture
+            }
+            val menu = menu()
+            var deleted = false
+            api.onPreview = { slot ->
+                if (slot == 2 && !deleted) {
+                    deleted = true
+                    menu.askDelete(menu.entries().first { it.slot == 2 })
+                    menu.confirmDelete()
+                }
+            }
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            // Slot 5's picture was under way as the re-read began; slot 8's, after it, is read by the re-read alone.
+            assertEquals(1, calls.count { it == "getStatePreview $SERIAL 8" })
+        }
+
+    // The deleted row stays unpickable until the lists are read again: "Deleting…" until then.
+    @Test
+    fun aDeleteIsBusyUntilTheListsAreReadAgain() =
+        runTest {
+            api.times[3] = 300
+            api.times[5] = 500
+            val menu = menu()
+            loadPanel(menu)
+            var busyDuringReread: Pair<Boolean, Boolean>? = null
+            api.onTimes = { busyDuringReread = menu.slots().working to menu.slots().lists.removing }
+
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals(true to true, busyDuringReread)
+            assertFalse(menu.slots().working)
+            assertFalse(menu.slots().lists.removing)
+            assertEquals(listOf(5), menu.entries().map { it.slot })
         }
 
     // Review: a delete under way says so, not "Loading…".
@@ -2371,11 +2552,11 @@ class InGameMenuTest {
 
             menu.askDelete(menu.entries().single())
             menu.confirmDelete()
-            assertTrue(menu.slots().busy)
-            assertTrue(menu.slots().removing)
+            assertTrue(menu.slots().working)
+            assertTrue(menu.slots().lists.removing)
 
             runCurrent()
-            assertFalse(menu.slots().busy)
-            assertFalse(menu.slots().removing)
+            assertFalse(menu.slots().working)
+            assertFalse(menu.slots().lists.removing)
         }
 }

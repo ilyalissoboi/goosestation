@@ -53,12 +53,14 @@ import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SaveListState
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SavesPageState
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotQuestion
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.app.UpdateFailure
@@ -485,7 +487,16 @@ class FocusAuditTest {
     fun savesPage() {
         show {
             SavesScreen(
-                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows),
+                SavesPageState(
+                    savesGame,
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.ThisGame,
+                        hasKey = true,
+                        entries = savedRows,
+                        shared = sharedRows,
+                    ),
+                ),
                 NoSavesActions,
                 savesNow,
                 {},
@@ -499,7 +510,16 @@ class FocusAuditTest {
     fun savesPageShared() {
         show {
             SavesScreen(
-                SavesPageState(savesGame, SlotTab.Shared, savedRows, shared = sharedRows),
+                SavesPageState(
+                    savesGame,
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.Shared,
+                        hasKey = true,
+                        entries = savedRows,
+                        shared = sharedRows,
+                    ),
+                ),
                 NoSavesActions,
                 savesNow,
                 {},
@@ -513,7 +533,17 @@ class FocusAuditTest {
     fun savesPageDeleteQuestion() {
         show {
             SavesScreen(
-                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows, deleting = savedRows[1]),
+                SavesPageState(
+                    savesGame,
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.ThisGame,
+                        hasKey = true,
+                        entries = savedRows,
+                        shared = sharedRows,
+                        deleting = savedRows[1],
+                    ),
+                ),
                 NoSavesActions,
                 savesNow,
                 {},
@@ -529,9 +559,13 @@ class FocusAuditTest {
             SavesScreen(
                 SavesPageState(
                     savesGame,
-                    SlotTab.ThisGame,
-                    emptyList(),
-                    shared = emptyList(),
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.ThisGame,
+                        hasKey = true,
+                        entries = emptyList(),
+                        shared = emptyList(),
+                    ),
                 ),
                 NoSavesActions,
                 savesNow,
@@ -1251,7 +1285,7 @@ class FocusAuditTest {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, if (it == 2) 1_700_000_000L else null) }
         show {
             GameMenu(
-                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, entries, focus = 2)),
+                GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, entries, focus = 2)),
                 NoMenuActions,
             )
         }
@@ -1268,7 +1302,7 @@ class FocusAuditTest {
                 GameMenuState(
                     booted = true,
                     slots =
-                        SlotPanel(
+                        slotPanel(
                             SlotMode.Save,
                             emptyList(),
                             tab = SlotTab.Shared,
@@ -1290,7 +1324,7 @@ class FocusAuditTest {
                 GameMenuState(
                     booted = true,
                     hasKey = false,
-                    slots = SlotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
+                    slots = slotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
                 ),
                 NoMenuActions,
             )
@@ -1308,12 +1342,12 @@ class FocusAuditTest {
                 GameMenuState(
                     booted = true,
                     slots =
-                        SlotPanel(
+                        slotPanel(
                             SlotMode.Load,
                             emptyList(),
                             tab = SlotTab.Shared,
                             shared = shared,
-                            switching = shared[0],
+                            question = SlotQuestion.Switch(shared[0]),
                         ),
                 ),
                 NoMenuActions,
@@ -1330,7 +1364,7 @@ class FocusAuditTest {
             GameMenu(
                 GameMenuState(
                     booted = true,
-                    slots = SlotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1]),
+                    slots = slotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1]),
                 ),
                 NoMenuActions,
             )
@@ -1345,7 +1379,7 @@ class FocusAuditTest {
         val others = listOf(SlotEntry(3, 1_700_000_000L, owner = "SLPS-02021", disc = 2))
         show {
             GameMenu(
-                GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1, others = others)),
+                GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, entries, focus = 1, others = others)),
                 NoMenuActions,
             )
         }
@@ -1482,7 +1516,7 @@ class FocusAuditTest {
 
     @Test
     fun gameMenuLoadWithNoSaves() {
-        show { GameMenu(GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
+        show { GameMenu(GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
 
         rule.assertControllerReady()
     }
@@ -1490,7 +1524,7 @@ class FocusAuditTest {
     @Test
     fun gameMenuReplacing() {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, 1_700_000_000L) }
-        val panel = SlotPanel(SlotMode.Save, entries, focus = 1, replacing = 1)
+        val panel = slotPanel(SlotMode.Save, entries, focus = 1, question = SlotQuestion.Replace(1))
         show { GameMenu(GameMenuState(booted = true, slots = panel), NoMenuActions) }
 
         rule.assertControllerReady()

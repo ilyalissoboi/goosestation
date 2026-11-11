@@ -15,6 +15,7 @@ import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -38,32 +39,39 @@ data class SlotEntry(
 )
 
 /**
- * The slot panel: its [mode], its [entries] (null while they're read), the slot to [focus] as it opens (null for none),
- * the slot it asks to replace, if any ([replacing], in the open [tab]), whether a save or load is under way ([busy]),
- * and the last one's failure, as shown ([error]). In Load, [others] are the states still filed under the game's other
- * discs. The Shared tab lists the [shared] slots (null while they're read), focusing [sharedFocus]. A game without a
- * key ([hasKey] false) has no slots of its own: it opens on Shared. In Load, [deleting] is the save it asks to delete,
- * and [focusRow], when set, the row to focus (the one after a deleted save), before [focus] and [sharedFocus]. A shared
- * slot of another game asks first ([switching]) whether to stop this game and start that one from it.
+ * What the slot panel asks before it acts: to replace a saved slot ([Replace], in the open tab), or, for a shared slot of
+ * another game, whether to stop this game and start that one from it ([Switch]).
+ */
+sealed interface SlotQuestion {
+    data class Replace(
+        val slot: Int,
+    ) : SlotQuestion
+
+    data class Switch(
+        val entry: SlotEntry,
+    ) : SlotQuestion
+}
+
+/** What the slot panel has under way: a save, or a load (with a shared slot's game read first). */
+enum class SlotWork { Saving, Loading }
+
+/**
+ * The slot panel: its [lists] (the game's own slots, its other discs' saves in Load, and the shared slots, with the
+ * delete and the error line), the [question] it asks, if any, and the [work] under way, if any.
  */
 data class SlotPanel(
-    val mode: SlotMode,
-    val entries: List<SlotEntry>? = null,
-    val focus: Int? = null,
-    val replacing: Int? = null,
-    val busy: Boolean = false,
-    val error: String? = null,
-    val others: List<SlotEntry> = emptyList(),
-    val tab: SlotTab = SlotTab.ThisGame,
-    val shared: List<SlotEntry>? = null,
-    val sharedFocus: Int? = null,
-    val hasKey: Boolean = true,
-    val deleting: SlotEntry? = null,
-    val focusRow: SlotEntry? = null,
-    val switching: SlotEntry? = null,
-    /** The [busy] work is a delete. */
-    val removing: Boolean = false,
-)
+    val lists: SaveListState,
+    val question: SlotQuestion? = null,
+    val work: SlotWork? = null,
+) {
+    val mode: SlotMode get() = lists.mode
+
+    /** A save, load or delete is under way: the panel stays until it's done. */
+    val working: Boolean get() = work != null || lists.removing
+
+    /** Nothing asked, nothing under way: a pick, a delete or a tab switch may start. */
+    val idle: Boolean get() = question == null && work == null && lists.idle
+}
 
 /**
  * The Change disc panel: the game's [discs], the [current] one's number, whether a disc is going in ([busy]), and why
@@ -303,6 +311,12 @@ class InGameMenu(
     /** Changes as the slot panel opens and closes, so a read for an earlier panel is dropped. */
     private var panelId = 0
 
+    /** The slot panel's lists: open while the panel is, which shows each change. */
+    private val slotLists =
+        SaveListModel(scope, game, reader, api) { lists ->
+            state = state.copy(slots = lists?.let { state.slots?.copy(lists = it) ?: SlotPanel(it) })
+        }
+
     /** Changes as a leaderboard opens or closes, so the core's answer for an earlier one is dropped. */
     private var leaderboardRequest = 0
 
@@ -323,6 +337,7 @@ class InGameMenu(
         panelId++
         running = game
         selectedSlot = null
+        slotLists.close()
         state = GameMenuState(booted = true, discCount = game.discs.size, hasKey = game.serial.isNotBlank())
         readGameState()
     }
@@ -335,6 +350,7 @@ class InGameMenu(
         switchTo = null
         selectedSlot = null
         if (state.settings) onSettings(null)
+        slotLists.close()
         state = GameMenuState()
     }
 
@@ -345,6 +361,7 @@ class InGameMenu(
     fun opened() {
         panelId++
         switchTo = null
+        slotLists.close()
         state =
             state.copy(
                 slots = null,
@@ -383,9 +400,7 @@ class InGameMenu(
 
     override fun switchTab() {
         state.slots?.let { slots ->
-            if (slots.busy || slots.replacing != null || slots.deleting != null || slots.switching != null) return
-            val tab = if (slots.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
-            state = state.copy(slots = slots.copy(tab = tab, error = null))
+            if (slots.idle) slotLists.switchTab()
             return
         }
         val panel = state.cheevos ?: return
@@ -551,59 +566,15 @@ class InGameMenu(
     override fun openSlots(mode: SlotMode) {
         val serial = serial
         if (!state.booted || serial == null || (mode == SlotMode.Load && state.hardcore)) return
-        val id = ++panelId
-        val hasKey = serial.isNotBlank()
-        val tab = if (hasKey) SlotTab.ThisGame else SlotTab.Shared
-        val entries = if (hasKey) null else emptyList<SlotEntry>()
-        state = withSide(slots = SlotPanel(mode, entries = entries, tab = tab, hasKey = hasKey))
-        readSlots(id, mode)
-    }
-
-    /**
-     * Reads slot panel [id]'s lists, the game's own, its other discs' and the shared ones, then each saved row's picture
-     * (and a shared slot's game), the open tab's first. With [focusRow], that row is to take the focus.
-     */
-    private fun readSlots(
-        id: Int,
-        mode: SlotMode,
-        focusRow: SlotEntry? = null,
-    ) {
-        val serial = serial ?: return
-        val hasKey = serial.isNotBlank()
-        val discs = running?.discs.orEmpty()
-        val multiDisc = discs.size > 1
-        val path = running?.path.orEmpty()
-        scope.launch {
-            val entries = if (hasKey) reader.own(serial, mode) else emptyList()
-            val last = if (hasKey) withContext(game) { lastSlots.get(serial) } else null
-            // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
-            val others = if (hasKey && mode == SlotMode.Load) reader.others(serial, discs) else emptyList()
-            val shared = reader.shared(mode)
-            if (id != panelId) return@launch
-            updatePanel(id) {
-                it.copy(
-                    entries = entries,
-                    focus = SaveLists.focus(mode, entries, last),
-                    others = others,
-                    shared = shared,
-                    sharedFocus = SaveLists.focus(mode, shared, null),
-                    focusRow = focusRow,
-                )
-            }
-            val own = entries.filter { it.savedAt != null } + others
-            val sharedSaved = shared.filter { it.savedAt != null }
-            val tab = state.slots?.tab ?: SlotTab.ThisGame
-            for (entry in if (tab == SlotTab.Shared) sharedSaved + own else own + sharedSaved) {
-                val read = reader.preview(entry, serial, path, multiDisc) ?: continue
-                if (id != panelId) return@launch
-                updatePanel(id) { panel -> panel.withRow(read) }
-            }
-        }
+        state = withSide()
+        panelId++
+        val game = running
+        slotLists.open(serial, game?.path.orEmpty(), game?.discs.orEmpty(), mode) { lastSlots.get(serial) }
     }
 
     override fun confirmSwitch() {
         val panel = state.slots ?: return
-        val entry = panel.switching ?: return
+        val entry = (panel.question as? SlotQuestion.Switch)?.entry ?: return
         val path = entry.holds?.path ?: return
         switchTo = StateStart(path, entry.ref(serial.orEmpty()))
         dropSlots()
@@ -612,93 +583,50 @@ class InGameMenu(
 
     override fun cancelSwitch() {
         val panel = state.slots ?: return
-        state = state.copy(slots = panel.copy(switching = null, focusRow = panel.switching))
+        val switching = (panel.question as? SlotQuestion.Switch)?.entry ?: return
+        state = state.copy(slots = panel.copy(question = null))
+        slotLists.focusOn(switching)
     }
 
     override fun askDelete(entry: SlotEntry) {
-        val panel = state.slots ?: return
-        val key = serial ?: return
-        if (panel.mode != SlotMode.Load || panel.busy || panel.replacing != null || panel.deleting != null) return
-        val rows = panel.entries.orEmpty() + panel.others + panel.shared.orEmpty()
-        if (rows.none { it.ref(key) == entry.ref(key) && it.savedAt != null }) return
-        state = state.copy(slots = panel.copy(deleting = entry, error = null))
+        if (state.slots?.idle == true) slotLists.askDelete(entry)
     }
 
-    override fun cancelDelete() {
-        val panel = state.slots ?: return
-        state = state.copy(slots = panel.copy(deleting = null, focusRow = panel.deleting))
-    }
+    override fun cancelDelete() = slotLists.cancelDelete()
 
-    /**
-     * Deletes the save asked about, by the state the question named (not whichever row has the focus now), then reads
-     * the lists again; the row after it in its list takes the focus, else the one before.
-     */
-    override fun confirmDelete() {
-        val panel = state.slots ?: return
-        val entry = panel.deleting ?: return
-        val key = serial ?: return
-        val id = panelId
-        val ref = entry.ref(key)
-        val next = SaveLists.afterDelete(entry, key, panel.entries, panel.others, panel.shared)
-        updatePanel(id) { it.copy(deleting = null, busy = true, removing = true, error = null) }
-        scope.launch {
-            val error = withContext(game) { api.deleteState(ref) }
-            if (id != panelId) return@launch
-            if (error != null) {
-                updatePanel(id) {
-                    it.copy(
-                        busy = false,
-                        removing = false,
-                        error = "Couldn't delete that save: $error",
-                        focusRow = entry,
-                    )
-                }
-                return@launch
-            }
-            updatePanel(id) { it.copy(busy = false, removing = false) }
-            readSlots(id, panel.mode, next)
-        }
-    }
+    override fun confirmDelete() = slotLists.confirmDelete()
 
     // A save, load or delete under way ends in its panel, which shows its progress, then how it went.
     override fun closeSlots() {
-        if (state.slots?.busy == true) return
+        if (state.slots?.working == true) return
         dropSlots()
     }
 
     private fun dropSlots() {
         panelId++
-        state = state.copy(slots = null)
+        slotLists.close()
     }
 
     override fun pickSlot(slot: Int) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.replacing != null || panel.deleting != null || panel.tab != SlotTab.ThisGame ||
-            !panel.hasKey
-        ) {
-            return
-        }
-        val entry = panel.entries?.firstOrNull { it.slot == slot } ?: return
+        if (!panel.idle || panel.lists.tab != SlotTab.ThisGame || !panel.lists.hasKey) return
+        val entry = panel.lists.entries?.firstOrNull { it.slot == slot } ?: return
         val saved = entry.savedAt != null
         when {
             panel.mode == SlotMode.Load -> if (saved) load(slot)
-            saved -> state = state.copy(slots = panel.copy(replacing = slot))
+            saved -> state = state.copy(slots = panel.copy(question = SlotQuestion.Replace(slot)))
             else -> save(slot)
         }
     }
 
     override fun pickShared(slot: Int) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.replacing != null || panel.deleting != null || panel.switching != null ||
-            panel.tab != SlotTab.Shared
-        ) {
-            return
-        }
-        val entry = panel.shared?.firstOrNull { it.slot == slot } ?: return
+        if (!panel.idle || panel.lists.tab != SlotTab.Shared) return
+        val entry = panel.lists.shared?.firstOrNull { it.slot == slot } ?: return
         val saved = entry.savedAt != null
         when {
             panel.mode == SlotMode.Load -> if (saved) loadShared(entry)
-            saved -> state = state.copy(slots = panel.copy(replacing = slot))
+            saved -> state = state.copy(slots = panel.copy(question = SlotQuestion.Replace(slot)))
             else -> saveShared(slot)
         }
     }
@@ -709,30 +637,30 @@ class InGameMenu(
      */
     private fun loadShared(entry: SlotEntry) {
         val id = panelId
-        val key = serial.orEmpty()
         val path = running?.path.orEmpty()
         // Busy at once, while its game is read: a second A starts nothing (a second load would take the undo state).
-        updatePanel(id) { it.copy(busy = true, error = null) }
+        updatePanel(id) { it.copy(work = SlotWork.Loading) }
+        slotLists.clearError()
         scope.launch {
-            val read = if (entry.holds != null) entry else reader.preview(entry, key, path, state.discCount > 1)
+            val read = slotLists.readHolds(entry) ?: return@launch
             if (id != panelId) return@launch
-            read?.let { updatePanel(id) { panel -> panel.withRow(it) } }
-            val holds = read?.holds
+            val holds = read.holds
             when {
-                holds == null -> updatePanel(id) { it.copy(busy = false, error = UNREADABLE) }
-                holds.path == null -> updatePanel(id) { it.copy(busy = false, error = SaveLists.notInLibrary(read)) }
+                holds == null -> failed(id, SaveLists.UNREADABLE)
+                holds.path == null -> failed(id, SaveLists.notInLibrary(read))
                 holds.path != path -> {
                     // Asked before this game is left, so a refusal loses nothing.
                     if (withContext(game) { api.hardcoreWouldStart() }) {
-                        updatePanel(id) { it.copy(busy = false, error = HARDCORE_LOAD) }
+                        failed(id, GameStarts.HARDCORE_LOAD)
                     } else {
-                        updatePanel(id) { it.copy(busy = false, switching = read, error = null) }
+                        updatePanel(id) { it.copy(work = null, question = SlotQuestion.Switch(read)) }
                     }
                 }
                 else -> {
                     val slot = entry.slot
                     run(
                         slot,
+                        SlotWork.Loading,
                         { api.loadSharedState(slot) },
                         "Loaded shared slot $slot",
                         remember = false,
@@ -743,8 +671,18 @@ class InGameMenu(
         }
     }
 
+    // Panel [id]'s work ended in [error], said in its line.
+    private fun failed(
+        id: Int,
+        error: String,
+    ) {
+        if (id != panelId || state.slots == null) return
+        updatePanel(id) { it.copy(work = null) }
+        slotLists.fail(error)
+    }
+
     private fun saveShared(slot: Int) =
-        run(slot, { api.saveSharedState(slot) }, "Saved to shared slot $slot", remember = false) {
+        run(slot, SlotWork.Saving, { api.saveSharedState(slot) }, "Saved to shared slot $slot", remember = false) {
             if (it == CARD_BUSY) CARD_BUSY_SAVE else "Couldn't save to shared slot $slot: $it"
         }
 
@@ -753,11 +691,12 @@ class InGameMenu(
         slot: Int,
     ) {
         val panel = state.slots ?: return
-        if (panel.busy || panel.deleting != null || panel.others.none { it.owner == serial && it.slot == slot }) return
+        if (!panel.idle || panel.lists.others.none { it.owner == serial && it.slot == slot }) return
         val disc = running?.discs?.firstOrNull { it.serial == serial }?.number
         val what = if (slot == SaveSlots.RESUME) "resume state" else "slot $slot"
         run(
             slot,
+            SlotWork.Loading,
             { api.loadState(serial, slot) },
             if (disc != null) "Loaded disc $disc's $what" else "Loaded that save",
             remember = false,
@@ -880,14 +819,15 @@ class InGameMenu(
 
     override fun confirmReplace() {
         val panel = state.slots ?: return
-        val slot = panel.replacing ?: return
-        state = state.copy(slots = panel.copy(replacing = null))
-        if (panel.tab == SlotTab.Shared) saveShared(slot) else save(slot)
+        val slot = (panel.question as? SlotQuestion.Replace)?.slot ?: return
+        state = state.copy(slots = panel.copy(question = null))
+        if (panel.lists.tab == SlotTab.Shared) saveShared(slot) else save(slot)
     }
 
     override fun cancelReplace() {
         val panel = state.slots ?: return
-        state = state.copy(slots = panel.copy(replacing = null))
+        if (panel.question !is SlotQuestion.Replace) return
+        state = state.copy(slots = panel.copy(question = null))
     }
 
     override fun toggleFastForward() {
@@ -931,7 +871,7 @@ class InGameMenu(
     }
 
     private fun save(slot: Int) =
-        run(slot, { api.saveState(it, slot) }, "Saved to slot $slot") {
+        run(slot, SlotWork.Saving, { api.saveState(it, slot) }, "Saved to slot $slot") {
             // The paused game can't finish its card write: it has to run for a moment first.
             if (it == CARD_BUSY) CARD_BUSY_SAVE else "Couldn't save to slot $slot: $it"
         }
@@ -940,6 +880,7 @@ class InGameMenu(
         val resume = slot == SaveSlots.RESUME
         run(
             slot,
+            SlotWork.Loading,
             { api.loadState(it, slot) },
             if (resume) "Loaded your resume state" else "Loaded slot $slot",
             loads = true,
@@ -947,12 +888,13 @@ class InGameMenu(
     }
 
     /**
-     * Runs [call] for [slot] on [game]. When it works, the slot is remembered as the last one (unless not [remember]),
+     * Runs [call] for [slot] on [game], with the panel showing [work] meanwhile. When it works, the slot is remembered as the last one (unless not [remember]),
      * the panel closes, and the game goes on with [done] shown; when it fails, the panel stays, with [failed] of the
      * reason. A load also reads which disc is in now.
      */
     private fun run(
         slot: Int,
+        work: SlotWork,
         call: (key: String) -> String?,
         done: String,
         remember: Boolean = true,
@@ -963,7 +905,8 @@ class InGameMenu(
         val id = panelId
         val multiDisc = state.discCount > 1
         var disc = 0
-        updatePanel(id) { it.copy(busy = true, error = null) }
+        updatePanel(id) { it.copy(work = work) }
+        slotLists.clearError()
         scope.launch {
             val error =
                 withContext(game) {
@@ -979,7 +922,7 @@ class InGameMenu(
                 // Said in the panel, or once another row has taken its place, as a message: never lost with it.
                 val reason = failed(error)
                 if (id == panelId && state.slots != null) {
-                    updatePanel(id) { it.copy(busy = false, error = reason) }
+                    failed(id, reason)
                 } else {
                     onMessage(reason)
                 }
@@ -1035,7 +978,11 @@ class InGameMenu(
         val key = serial
         if (key.isNullOrBlank()) return onMessage(NO_STATES)
         // An undo is a load too.
-        if ((which == StateHotkey.Load || which == StateHotkey.Undo) && state.hardcore) return onMessage(HARDCORE_LOAD)
+        if ((which == StateHotkey.Load || which == StateHotkey.Undo) &&
+            state.hardcore
+        ) {
+            return onMessage(GameStarts.HARDCORE_LOAD)
+        }
         val id = gameId
         scope.launch {
             val slot =
@@ -1125,22 +1072,16 @@ class InGameMenu(
         return disc
     }
 
-    // The panel with [read] in place of the row it was read for, whichever list has it.
-    private fun SlotPanel.withRow(read: SlotEntry): SlotPanel =
-        copy(
-            entries = entries?.let { SaveLists.withRow(it, read) },
-            others = SaveLists.withRow(others, read),
-            shared = shared?.let { SaveLists.withRow(it, read) },
-        )
-
     // The menu with the one side panel given, or none, and no reset question: the side panels take turns, so B, which
     // closes the one shown, never finds another under it.
     private fun withSide(
-        slots: SlotPanel? = null,
         discs: DiscChoice? = null,
         codes: CodePanel? = null,
         cheevos: AchievementsPanelState? = null,
-    ) = state.copy(slots = slots, discs = discs, codes = codes, cheevos = cheevos, confirmingReset = false)
+    ): GameMenuState {
+        slotLists.close()
+        return state.copy(slots = null, discs = discs, codes = codes, cheevos = cheevos, confirmingReset = false)
+    }
 
     // Changes the slot panel if it's still panel [id].
     private fun updatePanel(
@@ -1159,9 +1100,5 @@ class InGameMenu(
 
         /** What the save state hotkeys say for a game without a key, and for Load in hardcore mode. */
         const val NO_STATES = "This game can't keep save states"
-        const val HARDCORE_LOAD = "Loading a state is off in hardcore mode"
-
-        /** A shared slot whose state can't be read: nothing says which game it holds. */
-        const val UNREADABLE = "Couldn't read that save."
     }
 }

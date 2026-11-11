@@ -52,10 +52,14 @@ class FakeGameCore(
         return LongArray(SaveSlots.COUNT + 1) { sharedTimes[it] ?: 0L }.also { it[0] = 0L }
     }
 
+    /** Runs as [getStatePreview] is called, with the slot: a test's way in while the pictures are read. */
+    var onPreview: (slot: Int) -> Unit = {}
+
     override fun getStatePreview(
         state: StateRef,
         gamePath: String,
     ): SaveStatePreview? {
+        onPreview(state.slot)
         if (state.shared) {
             calls += "getStatePreview shared ${state.slot} $gamePath"
             return sharedHolds[state.slot]
@@ -121,7 +125,11 @@ class FakeGameCore(
         return sections
     }
 
+    /** Runs as [getSaveStateTimes] is called: a test's look at the state while a list is read. */
+    var onTimes: () -> Unit = {}
+
     override fun getSaveStateTimes(serial: String): LongArray {
+        onTimes()
         calls += "getSaveStateTimes $serial"
         val saved = serialTimes[serial] ?: times
         return LongArray(SaveSlots.COUNT + 1) { index -> saved[if (index == 0) SaveSlots.RESUME else index] ?: 0L }

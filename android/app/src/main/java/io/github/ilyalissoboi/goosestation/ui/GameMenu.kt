@@ -56,6 +56,7 @@ import io.github.ilyalissoboi.goosestation.app.AchievementLists
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.SlotMode
+import io.github.ilyalissoboi.goosestation.app.SlotQuestion
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
@@ -105,11 +106,11 @@ fun GameMenu(
     BackHandler {
         val shown = current
         when {
-            shown.slots?.switching != null -> actions.cancelSwitch()
-            shown.slots?.deleting != null -> actions.cancelDelete()
-            shown.slots?.replacing != null -> actions.cancelReplace()
+            shown.slots?.question is SlotQuestion.Switch -> actions.cancelSwitch()
+            shown.slots?.lists?.deleting != null -> actions.cancelDelete()
+            shown.slots?.question is SlotQuestion.Replace -> actions.cancelReplace()
             // A save, load, delete or disc change under way ends in its panel, which stays until it has.
-            shown.slots?.busy == true || shown.discs?.busy == true -> Unit
+            shown.slots?.working == true || shown.discs?.busy == true -> Unit
             shown.slots != null -> {
                 (if (shown.slots.mode == SlotMode.Save) cameFrom.saveRow else cameFrom.loadRow).requestFocus()
                 actions.closeSlots()
@@ -142,9 +143,8 @@ fun GameMenu(
     val layer =
         listOf(
             state.slots?.mode,
-            state.slots?.replacing,
-            state.slots?.deleting,
-            state.slots?.switching,
+            state.slots?.question,
+            state.slots?.lists?.deleting,
             state.discs != null,
             state.codes != null,
             state.cheevos != null,

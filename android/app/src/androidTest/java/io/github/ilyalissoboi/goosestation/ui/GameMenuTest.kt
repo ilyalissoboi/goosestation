@@ -61,6 +61,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotQuestion
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
@@ -168,7 +169,7 @@ class GameMenuTest {
 
             override fun cancelReplace() {
                 calls += "cancelReplace"
-                state = state.copy(slots = state.slots?.copy(replacing = null))
+                state = state.copy(slots = state.slots?.copy(question = null))
             }
 
             override fun toggleFastForward() {
@@ -239,8 +240,8 @@ class GameMenuTest {
                 calls += "switchTab"
                 // The slot panel's tabs, as InGameMenu switches them.
                 state.slots?.let { slots ->
-                    val tab = if (slots.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
-                    state = state.copy(slots = slots.copy(tab = tab))
+                    val tab = if (slots.lists.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
+                    state = state.copy(slots = slots.lists { it.copy(tab = tab) })
                     return
                 }
                 if (switchingTabs) {
@@ -259,7 +260,7 @@ class GameMenuTest {
 
             override fun askDelete(entry: SlotEntry) {
                 calls += "askDelete ${entry.slot}"
-                state = state.copy(slots = state.slots?.copy(deleting = entry))
+                state = state.copy(slots = state.slots?.lists { it.copy(deleting = entry) })
             }
 
             override fun confirmSwitch() {
@@ -268,7 +269,7 @@ class GameMenuTest {
 
             override fun cancelSwitch() {
                 calls += "cancelSwitch"
-                state = state.copy(slots = state.slots?.copy(switching = null))
+                state = state.copy(slots = state.slots?.copy(question = null))
             }
 
             override fun confirmDelete() {
@@ -278,7 +279,7 @@ class GameMenuTest {
             override fun cancelDelete() {
                 calls += "cancelDelete"
                 val slots = state.slots
-                state = state.copy(slots = slots?.copy(deleting = null, focusRow = slots.deleting))
+                state = state.copy(slots = slots?.lists { it.copy(deleting = null, focusRow = it.deleting) })
             }
 
             override fun openLeaderboard(id: Int) {
@@ -813,7 +814,7 @@ class GameMenuTest {
 
     @Test
     fun saveStateOpensThePanelOnTheFocusedSlot() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(3), focus = 3))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(3), focus = 3))
         show()
 
         rule.onNode(isFocused() and hasText("Slot 3", substring = true)).assertExists()
@@ -824,7 +825,7 @@ class GameMenuTest {
 
     @Test
     fun aSlotIsPicked() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
         show()
 
         press(Key.DirectionDown)
@@ -836,7 +837,7 @@ class GameMenuTest {
     @Test
     fun loadListsTheSavedSlots() {
         val entries = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) + saved(4).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = SaveSlots.RESUME))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, entries, focus = SaveSlots.RESUME))
         show()
         rule
             .onNode(isFocused() and hasText("Resume", substring = true) and hasText("Saved", substring = true))
@@ -852,7 +853,7 @@ class GameMenuTest {
     fun otherSavesShowUnderTheirHeading() {
         val others = listOf(SlotEntry(4, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
         state =
-            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, saved(1).take(1), focus = 1, others = others))
+            GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, saved(1).take(1), focus = 1, others = others))
         show()
 
         rule.onNodeWithText("OTHER SAVES").assertExists()
@@ -877,7 +878,7 @@ class GameMenuTest {
         state =
             GameMenuState(
                 booted = true,
-                slots = SlotPanel(SlotMode.Load, saved(1).take(1), focus = 1, shared = shared(4, 6), sharedFocus = 6),
+                slots = slotPanel(SlotMode.Load, saved(1).take(1), focus = 1, shared = shared(4, 6), sharedFocus = 6),
             )
         show()
         rule.onNode(isFocused() and hasText("Slot 1", substring = true)).assertExists()
@@ -904,7 +905,7 @@ class GameMenuTest {
             GameMenuState(
                 booted = true,
                 slots =
-                    SlotPanel(
+                    slotPanel(
                         SlotMode.Load,
                         emptyList(),
                         tab = SlotTab.Shared,
@@ -931,7 +932,7 @@ class GameMenuTest {
                 booted = true,
                 hasKey = false,
                 slots =
-                    SlotPanel(
+                    slotPanel(
                         SlotMode.Save,
                         emptyList(),
                         tab = SlotTab.ThisGame,
@@ -952,7 +953,7 @@ class GameMenuTest {
         state =
             GameMenuState(
                 booted = true,
-                slots = SlotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+                slots = slotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
             )
         show()
         rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertExists()
@@ -974,7 +975,14 @@ class GameMenuTest {
         state =
             GameMenuState(
                 booted = true,
-                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+                slots =
+                    slotPanel(
+                        SlotMode.Load,
+                        emptyList(),
+                        tab = SlotTab.Shared,
+                        shared = rows,
+                        question = SlotQuestion.Switch(rows[0]),
+                    ),
             )
         show()
 
@@ -991,7 +999,14 @@ class GameMenuTest {
         state =
             GameMenuState(
                 booted = true,
-                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+                slots =
+                    slotPanel(
+                        SlotMode.Load,
+                        emptyList(),
+                        tab = SlotTab.Shared,
+                        shared = rows,
+                        question = SlotQuestion.Switch(rows[0]),
+                    ),
             )
         show()
 
@@ -1003,7 +1018,7 @@ class GameMenuTest {
 
     @Test
     fun saveHasNoDelete() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(2), focus = 2))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(2), focus = 2))
         show()
         rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertDoesNotExist()
 
@@ -1014,11 +1029,11 @@ class GameMenuTest {
     @Test
     fun afterADeleteTheNextRowIsFocused() {
         val rows = saved(2, 5, 7).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[1]))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[1]))
         show()
 
         // The core's list comes back without slot 5, the row after it named.
-        state = state.copy(slots = SlotPanel(SlotMode.Load, rows - rows[1], focus = 2, focusRow = rows[2]))
+        state = state.copy(slots = slotPanel(SlotMode.Load, rows - rows[1], focus = 2, focusRow = rows[2]))
         rule.waitForIdle()
 
         rule.onNode(isFocused() and hasText("Slot 7", substring = true)).assertExists()
@@ -1028,13 +1043,13 @@ class GameMenuTest {
     @Test
     fun deletingTheLastSaveFocusesTheHeading() {
         val rows = saved(2).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[0]))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[0]))
         show()
 
         // As InGameMenu does: the question goes, the panel is busy with the old rows, then the list comes back empty.
-        state = state.copy(slots = state.slots!!.copy(deleting = null, busy = true))
+        state = state.copy(slots = state.slots!!.lists { it.copy(deleting = null, removing = true) })
         rule.waitForIdle()
-        state = state.copy(slots = SlotPanel(SlotMode.Load, emptyList()))
+        state = state.copy(slots = slotPanel(SlotMode.Load, emptyList()))
         rule.waitForIdle()
 
         rule.onNode(isFocused() and hasText("Load state")).assertExists()
@@ -1047,12 +1062,11 @@ class GameMenuTest {
             GameMenuState(
                 booted = true,
                 slots =
-                    SlotPanel(
+                    slotPanel(
                         SlotMode.Load,
                         saved(2).filter {
                             it.savedAt != null
                         },
-                        busy = true,
                         removing = true,
                     ),
             )
@@ -1067,7 +1081,7 @@ class GameMenuTest {
         state =
             GameMenuState(
                 booted = true,
-                slots = SlotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+                slots = slotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
             )
         show()
 
@@ -1080,7 +1094,7 @@ class GameMenuTest {
     @Test
     fun bCancelsTheDelete() {
         val rows = saved(2, 5).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, rows, focus = 2))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, rows, focus = 2))
         show()
         press(Key.DirectionDown)
         press(Key.ButtonX)
@@ -1096,7 +1110,7 @@ class GameMenuTest {
     fun onlyOtherSavesAreStillSaves() {
         val others = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
         state =
-            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList(), focus = null, others = others))
+            GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, emptyList(), focus = null, others = others))
         show()
 
         rule.onNodeWithText("No saves yet for this game.").assertDoesNotExist()
@@ -1106,7 +1120,7 @@ class GameMenuTest {
     @Test
     fun aRowShowsItsDisc() {
         val entries = listOf(SlotEntry(1, now.toEpochSecond() - 600, disc = 2))
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, entries, focus = 1))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, entries, focus = 1))
         show()
 
         rule.onNodeWithText("Saved · Disc 2").assertExists()
@@ -1336,7 +1350,7 @@ class GameMenuTest {
 
     @Test
     fun noSavesSaysSo() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Load, emptyList(), focus = null))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, emptyList(), focus = null))
         show()
 
         rule.onNodeWithText("No saves yet for this game.").assertExists()
@@ -1346,7 +1360,10 @@ class GameMenuTest {
     @Test
     fun bStepsOutOneLayerAtATime() {
         state =
-            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(3), focus = 3, replacing = 3))
+            GameMenuState(
+                booted = true,
+                slots = slotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+            )
         show()
 
         press(Key.ButtonB)
@@ -1365,7 +1382,7 @@ class GameMenuTest {
     fun aHeldBDoesNothingOnTheLayerItOpened() {
         show()
         rule.onRoot().performKeyInput { keyDown(Key.ButtonB) }
-        state = state.copy(slots = SlotPanel(SlotMode.Save, saved(), focus = 1))
+        state = state.copy(slots = slotPanel(SlotMode.Save, saved(), focus = 1))
         rule.waitForIdle()
 
         rule.onRoot().performKeyInput { keyUp(Key.ButtonB) }
@@ -1379,7 +1396,11 @@ class GameMenuTest {
 
     @Test
     fun replacingAsksWithCancelFocused() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(3), focus = 3, replacing = 3))
+        state =
+            GameMenuState(
+                booted = true,
+                slots = slotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+            )
         show()
 
         rule.onNodeWithText("Replace the save in slot 3?").assertExists()
@@ -1455,7 +1476,7 @@ class GameMenuTest {
     @Test
     fun anErrorShowsInThePanel() {
         val error = "Couldn't save to slot 2: Cannot save state while memory card is being saved."
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(), focus = 2, error = error))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 2, error = error))
         show()
 
         rule.onNodeWithText(error).assertExists()
@@ -1463,7 +1484,7 @@ class GameMenuTest {
 
     @Test
     fun focusStaysInTheSlotPanel() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
         show()
 
         press(Key.DirectionLeft)
@@ -1474,7 +1495,7 @@ class GameMenuTest {
 
     @Test
     fun aNarrowScreenStacksThePanels() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
         show(width = 411, height = 891)
 
         val menu = rule.onNode(hasText("Save state") and hasClickAction()).getUnclippedBoundsInRoot()
@@ -1492,7 +1513,7 @@ class GameMenuTest {
     // The AYN Thor at 480 dpi: the menu narrows while the slot panel shows, so the pictures stay full size.
     @Test
     fun theThorsSlotPicturesAreFullSize() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(1), focus = 1))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(1), focus = 1))
         show(width = 640, height = 360)
 
         val picture = rule.onAllNodesWithTag(SLOT_PICTURE, useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
@@ -1519,7 +1540,7 @@ class GameMenuTest {
 
     @Test
     fun modeResumesFromAnyLayer() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
         show()
 
         press(Key.ButtonMode)

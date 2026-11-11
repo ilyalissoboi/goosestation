@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -96,6 +97,7 @@ fun SaveSlotPanel(
         }
     val others = if (sharedTab || !panel.hasKey) emptyList() else panel.others
     val title = remember { FocusRequester() }
+    var titleFocused by remember { mutableStateOf(false) }
     val rows = remember { HashMap<Triple<Boolean, String?, Int>, FocusRequester>() }
 
     fun row(entry: SlotEntry) = rows.getOrPut(Triple(entry.shared, entry.owner, entry.slot)) { FocusRequester() }
@@ -161,13 +163,19 @@ fun SaveSlotPanel(
                 .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Focusable while nothing else in the panel can take the focus, so it stays in the panel and B reaches it.
+        // Focusable while nothing else in the panel can take the focus, so it stays in the panel and B reaches it. It
+        // stays focusable while it has the focus, as rows arrive until one takes it: were it to stop first, Android
+        // would put the focus on the window's first focusable, the menu's top, scrolling the menu (as Achievements).
         val nothingToFocus = !asking && (entries == null || entries.none(::pickable)) && others.isEmpty()
         Text(
             if (saving) "Save state" else "Load state",
             style = MaterialTheme.typography.headlineSmall,
             color = colors.ink,
-            modifier = Modifier.focusRequester(title).focusable(enabled = nothingToFocus),
+            modifier =
+                Modifier
+                    .focusRequester(title)
+                    .onFocusChanged { titleFocused = it.isFocused }
+                    .focusable(enabled = nothingToFocus || titleFocused),
         )
         panel.error?.let { error ->
             Notice(NoticeStatus.Danger) {

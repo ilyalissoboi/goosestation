@@ -16,12 +16,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -57,6 +61,7 @@ fun PatchCodePanel(
 ) {
     val colors = GooseStationTheme.colors
     val title = remember { FocusRequester() }
+    var titleFocused by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
     val groups = panel.groups
     val empty = groups != null && groups.isEmpty()
@@ -76,12 +81,19 @@ fun PatchCodePanel(
                 .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Focusable while there's no code to focus, so the focus stays in the panel and B reaches it.
+        // Focusable while there's no code to focus, so the focus stays in the panel and B reaches it. It stays
+        // focusable while it has the focus, as the codes arrive until the first takes it: were it to stop first,
+        // Android would put the focus on the window's first focusable, the menu's top, scrolling the menu (as
+        // Achievements).
         Text(
             "Patch codes",
             style = MaterialTheme.typography.headlineSmall,
             color = colors.ink,
-            modifier = Modifier.focusRequester(title).focusable(enabled = groups.isNullOrEmpty()),
+            modifier =
+                Modifier
+                    .focusRequester(title)
+                    .onFocusChanged { titleFocused = it.isFocused }
+                    .focusable(enabled = groups.isNullOrEmpty() || titleFocused),
         )
         panel.error?.let { error ->
             Notice(NoticeStatus.Danger) {

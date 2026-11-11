@@ -71,9 +71,9 @@ fun SavesScreen(
     val entries = lists.shownEntries
     val others = lists.shownOthers
     val title = remember { FocusRequester() }
-    val rows = remember { HashMap<Triple<Boolean, String?, Int>, FocusRequester>() }
+    val rows = rememberSaveRowFocus()
 
-    fun row(entry: SlotEntry) = rows.getOrPut(Triple(entry.shared, entry.owner, entry.slot)) { FocusRequester() }
+    fun row(entry: SlotEntry) = rows.requester(entry)
 
     BackHandler(onBack = onBack)
     val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -140,36 +140,17 @@ fun SavesScreen(
                         }
                     }
                     if (lists.removing) SlotLine("Deleting…")
-                    when {
-                        !sharedTab && !lists.hasKey -> SlotLine(NO_KEY_STATES)
-                        entries != null && entries.isEmpty() && others.isEmpty() ->
-                            SlotLine(if (sharedTab) "No shared saves yet." else "No saves yet for this game.")
-                    }
-                    entries?.forEach { entry ->
-                        SlotRow(
-                            entry,
-                            now,
-                            enabled = true,
-                            onClick = { actions.pick(entry) },
-                            modifier = Modifier.focusRequester(row(entry)),
-                            short = short,
-                            onDelete = { actions.askDelete(entry) },
-                        )
-                    }
-                    if (others.isNotEmpty()) {
-                        Eyebrow("Other saves", Modifier.padding(top = 12.dp, start = 8.dp))
-                        others.forEach { entry ->
-                            SlotRow(
-                                entry,
-                                now,
-                                enabled = true,
-                                onClick = { actions.pick(entry) },
-                                modifier = Modifier.focusRequester(row(entry)),
-                                short = short,
-                                onDelete = { actions.askDelete(entry) },
-                            )
-                        }
-                    }
+                    SaveListEmptyLine(lists)
+                    SaveRows(
+                        entries,
+                        others,
+                        now,
+                        short,
+                        rows,
+                        enabled = { true },
+                        onPick = actions::pick,
+                        onDelete = actions::askDelete,
+                    )
                 }
             }
             KeyHints(

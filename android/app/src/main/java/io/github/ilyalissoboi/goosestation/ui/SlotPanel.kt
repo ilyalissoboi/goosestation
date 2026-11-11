@@ -100,9 +100,9 @@ fun SaveSlotPanel(
     val others = if (sharedTab || !panel.lists.hasKey) emptyList() else panel.lists.others
     val title = remember { FocusRequester() }
     var titleFocused by remember { mutableStateOf(false) }
-    val rows = remember { HashMap<Triple<Boolean, String?, Int>, FocusRequester>() }
+    val rows = rememberSaveRowFocus()
 
-    fun row(entry: SlotEntry) = rows.getOrPut(Triple(entry.shared, entry.owner, entry.slot)) { FocusRequester() }
+    fun row(entry: SlotEntry) = rows.requester(entry)
 
     fun pickable(entry: SlotEntry) = saving || entry.savedAt != null
 
@@ -180,11 +180,7 @@ fun SaveSlotPanel(
                 },
             )
         }
-        when {
-            !sharedTab && !panel.lists.hasKey -> SlotLine(NO_KEY_STATES)
-            entries != null && !saving && entries.none { it.savedAt != null } && others.isEmpty() ->
-                SlotLine(if (sharedTab) "No shared saves yet." else "No saves yet for this game.")
-        }
+        SaveListEmptyLine(panel.lists)
         BoxWithConstraints(Modifier.weight(1f)) {
             val short = maxHeight < SHORT_SLOT_LIST
             Column(
@@ -228,33 +224,22 @@ fun SaveSlotPanel(
                         textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 } else {
-                    entries?.forEach { entry ->
-                        SlotRow(
-                            entry,
-                            now,
-                            short = short,
-                            enabled = pickable(entry),
-                            onClick = {
-                                if (entry.shared) actions.pickShared(entry.slot) else actions.pickSlot(entry.slot)
-                            },
-                            modifier = Modifier.focusRequester(row(entry)),
-                            onDelete = delete?.takeIf { entry.savedAt != null }?.let { { it(entry) } },
-                        )
-                    }
-                    if (others.isNotEmpty()) {
-                        Eyebrow("Other saves", Modifier.padding(top = 12.dp, start = 8.dp))
-                        others.forEach { entry ->
-                            SlotRow(
-                                entry,
-                                now,
-                                short = short,
-                                enabled = true,
-                                onClick = { actions.pickOther(entry.owner.orEmpty(), entry.slot) },
-                                modifier = Modifier.focusRequester(row(entry)),
-                                onDelete = delete?.let { { it(entry) } },
-                            )
-                        }
-                    }
+                    SaveRows(
+                        entries,
+                        others,
+                        now,
+                        short,
+                        rows,
+                        enabled = ::pickable,
+                        onPick = { entry ->
+                            when {
+                                entry.owner != null -> actions.pickOther(entry.owner, entry.slot)
+                                entry.shared -> actions.pickShared(entry.slot)
+                                else -> actions.pickSlot(entry.slot)
+                            }
+                        },
+                        onDelete = delete,
+                    )
                 }
             }
         }

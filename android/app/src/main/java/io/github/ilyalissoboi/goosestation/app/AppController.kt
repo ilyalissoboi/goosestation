@@ -37,13 +37,10 @@ import io.github.ilyalissoboi.goosestation.input.Rumble
 import io.github.ilyalissoboi.goosestation.library.LibraryPrefs
 import io.github.ilyalissoboi.goosestation.library.LibrarySort
 import io.github.ilyalissoboi.goosestation.library.LibrarySortState
-import io.github.ilyalissoboi.goosestation.mirror.CopyGuard
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChange
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
-import io.github.ilyalissoboi.goosestation.mirror.DataLayout
 import io.github.ilyalissoboi.goosestation.mirror.Mirror
 import io.github.ilyalissoboi.goosestation.mirror.MirrorState
-import io.github.ilyalissoboi.goosestation.mirror.PackMarkers
 import io.github.ilyalissoboi.goosestation.mirror.SafFolderStore
 import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
 import io.github.ilyalissoboi.goosestation.settings.GameCoreSettings
@@ -77,9 +74,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -175,8 +170,6 @@ object AppController : NativeCallbacks {
     private val activity get() = currentActivity.current
     private var picker: FolderPicker? = null
     private var documentPicker: DocumentPicker? = null
-    private var mirror: Mirror? = null
-    private var mirrorStateJob: Job? = null
     private var pushTicker: Job? = null
     private var refreshJob: Job? = null
     private var biosJob: Job? = null
@@ -325,7 +318,7 @@ object AppController : NativeCallbacks {
             NativeMemcardEditorApi,
             documents,
             syncOn = { memcardSyncStatus.state?.enabled == true },
-            onSaved = { scope.launch { push(force = true) } },
+            onSaved = { scope.launch { dataSync.push(force = true) } },
         )
     }
 
@@ -369,8 +362,7 @@ object AppController : NativeCallbacks {
     var missingGrants by mutableStateOf(emptyList<MissingGrant>())
         private set
 
-    private val mutableMirrorState = MutableStateFlow<MirrorState>(MirrorState.Idle)
-    val mirrorState: StateFlow<MirrorState> = mutableMirrorState.asStateFlow()
+    val mirrorState: StateFlow<MirrorState> get() = dataSync.mirrorState
 
     /** The game list, as the last refresh found it. */
     var games by mutableStateOf(emptyList<GameEntry>())
@@ -411,31 +403,70 @@ object AppController : NativeCallbacks {
     var gameActive by mutableStateOf(false)
         private set
 
-    /**
-     * [gameActive], for the mirror's thread: set before a game starts, cleared once it has stopped. While it's set,
-     * the working copy's memory cards are never replaced.
-     */
-    @Volatile private var holdMemcards = false
+    // What the mirror's runs tell the app, or ask it ([DataSync]).
+    private val syncHooks =
+        object : SyncHooks {
+            override fun coreStarted() = coreStarted
 
-    /**
-     * Where the memory cards are in the working copy ([MemoryCardPaths]), as the core last said, with the card files
-     * it said earlier in this run ([MemoryCardPaths.merge]). Read again as a game starts and stops: a running game's
-     * own settings can name other cards.
-     */
-    @Volatile private var memcardPaths = MemoryCardPaths.DEFAULT
+            override fun dataGranted() = dataGranted
 
-    /** What the mirror copies ([DataLayout]): the defaults until the core, once it has started, says otherwise. */
-    @Volatile private var dataLayout = DataLayout.DEFAULT
+            override fun readableGameFolders() = this@AppController.readableGameFolders()
 
-    /**
-     * Whether a complete pull has found nothing that grows the [dataLayout] since it last grew: until then, the mirror
-     * leaves the working copy's strays alone, as the layout may still lack the memory cards of game settings not yet
-     * pulled. Asked on the mirror's thread.
-     */
-    private val layoutSettling = LayoutSettling()
+            override suspend fun onSettingsReloadedOnCore() = readLibraryView()
 
-    /** The pulls that follow a growth of the layout ([catchUp]), one at a time, and whether a game may start. */
-    private val catchUps = CatchUpRunner { Log.w(TAG, it) }
+            override fun onLibraryRead(games: List<GameEntry>) {
+                this@AppController.games = games
+            }
+
+            override fun onSettingsReloaded(steps: List<StartupStep>) {
+                if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
+                if (StartupStep.ReloadSettings in steps && screen == Screen.PostProcessing) postProcessingPage.reread()
+                if (StartupStep.ReloadSettings in steps) controllersPage.reloadShown()
+                // settings.ini, or a game's own file, pulled from the data folder while that game's pages show.
+                if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) {
+                    gameSettingsPages.reloadShown()
+                    gameMenuSettings.reloadShown()
+                }
+            }
+
+            override fun refreshEditor() = this@AppController.refreshEditor()
+
+            override fun showCopying(progress: Pair<Int, Int>?) {
+                message = if (progress == null) COPYING else "$COPYING (${progress.first} of ${progress.second})"
+            }
+
+            override fun copyingShown() = message == COPYING
+
+            override fun clearCopying() {
+                message = null
+            }
+        }
+
+    /** The data folder mirror's runs, and the state they decide by ([DataSync]). Built once [start] has the context. */
+    private val dataSync by lazy {
+        DataSync(
+            scope,
+            coreDispatcher,
+            Dispatchers.IO,
+            NativeSyncCore,
+            syncHooks,
+            workingCopy,
+            manifestFile,
+            SharedPreferencesStore(context, "memcard_sync"),
+            makeMirror = { data, guard, packMarkers, removeStrays, layout ->
+                Mirror(
+                    SafFolderStore(context.contentResolver, data),
+                    workingCopy,
+                    manifestFile,
+                    System::currentTimeMillis,
+                    removeStrays = removeStrays,
+                    guard = guard,
+                    packMarkers = packMarkers,
+                    layout = layout,
+                )
+            },
+        ) { priority, line -> Log.println(priority, TAG, line) }
+    }
 
     /** The messages shown over the game, the app's and the core's ([CoreMessages]). */
     val osd = OsdMessages(SystemClock::uptimeMillis)
@@ -656,7 +687,7 @@ object AppController : NativeCallbacks {
             scope.launch {
                 while (isActive) {
                     delay(PUSH_INTERVAL_MS)
-                    push(force = false)
+                    dataSync.push(force = false)
                 }
             }
         // Memory card sync resumes once the pull has brought what the data folder has, if the app is still in front.
@@ -685,7 +716,7 @@ object AppController : NativeCallbacks {
         covers.stop()
         pushTicker?.cancel()
         pushTicker = null
-        scope.launch { push(force = true) }
+        scope.launch { dataSync.push(force = true) }
         // After the pause's card writes, which the core has queued already: sync pushes them, then rests.
         syncVisibility.stopped()
         networkWatch.stop()
@@ -778,7 +809,7 @@ object AppController : NativeCallbacks {
             }
             checkGrants()
             when (grant.kind) {
-                FolderKind.Data -> if (dataGranted) pull(onlyMemcards = false)
+                FolderKind.Data -> if (dataGranted) dataSync.pull(onlyMemcards = false)
                 FolderKind.Games -> updateLibrary()
                 FolderKind.Bios -> {}
             }
@@ -868,7 +899,7 @@ object AppController : NativeCallbacks {
         if (page == SettingsEntry.PostProcessing) postProcessingPage.close()
         if (page == SettingsEntry.Covers) covers.close()
         // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before this.
-        if (page == SettingsEntry.Advanced) scope.launch { withContext(coreDispatcher) { readCorePaths() } }
+        if (page == SettingsEntry.Advanced) scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
         settingsEntry = page
         screen = Screen.Settings
     }
@@ -1087,7 +1118,7 @@ object AppController : NativeCallbacks {
         // A game left a moment ago may still be stopping, and the start may still be pulling the old folder. Until the
         // core has started, the layout is only the defaults: a push to the old folder would leave out the folders its
         // settings.ini names, and still count as complete.
-        if (gameActive || coldStarting || !dataLayout.fromCore) {
+        if (gameActive || coldStarting || !dataSync.dataLayout.fromCore) {
             showMessage("GooseStation is busy. Try again in a moment.")
             return
         }
@@ -1099,9 +1130,10 @@ object AppController : NativeCallbacks {
             val failure =
                 try {
                     val store = SafFolderStore(context.contentResolver, candidate.uri)
+                    val change = DataFolderChange(workingCopy, manifestFile, dataSync.dataLayout, dataSync::packMarkers)
                     val applied =
-                        DataFolderChange(workingCopy, manifestFile, dataLayout, ::packMarkers).switchFrom(
-                            mirror,
+                        change.switchFrom(
+                            dataSync.mirror,
                             pushOld = dataGranted,
                             lossAccepted = lossAccepted,
                             newTree = candidate.uri,
@@ -1160,10 +1192,10 @@ object AppController : NativeCallbacks {
         release(uri)
         showError("Can't change the data folder ($error). The old one is still your data folder.")
         old ?: return
-        useMirror(old)
+        dataSync.useMirror(old)
         // The working copy may be part-way changed: a full pull makes it match the old folder again, and reloads
         // settings.ini if it came back.
-        pull(onlyMemcards = false)
+        dataSync.pull(onlyMemcards = false)
     }
 
     /**
@@ -1247,7 +1279,7 @@ object AppController : NativeCallbacks {
     // the page. True when the game screen is up for the core to boot on.
     private fun beginGame(game: GameEntry): Boolean {
         if (!ready || gameActive) return false
-        if (!catchUps.startsAllowed) {
+        if (!dataSync.startsAllowed) {
             showMessage(COPYING)
             return false
         }
@@ -1264,7 +1296,7 @@ object AppController : NativeCallbacks {
         message = null
         messageIsError = false
         gameActive = true
-        holdMemcards = true
+        dataSync.holdMemcards = true
         // A cover download stops for the game, keeping the covers it found.
         covers.stop()
         if (screen == Screen.Saves) savesPage.close()
@@ -1386,7 +1418,7 @@ object AppController : NativeCallbacks {
             if (screen == Screen.Game) screen = Screen.Library
             NativeLibrary.shutdownGame()
         }
-        if (EjectAction.StopMirror in actions) mirror?.hold(CARD_REMOVED)
+        if (EjectAction.StopMirror in actions) dataSync.mirror?.hold(CARD_REMOVED)
     }
 
     /**
@@ -1397,9 +1429,9 @@ object AppController : NativeCallbacks {
         if (!ejectedVolumes.remove(volumeId)) return
         val data = folders.data ?: return
         if (!VolumeMatch.treeOnVolume(data, volumeId)) return
-        val mirror = mirror ?: return
+        val mirror = dataSync.mirror ?: return
         mirror.letGo()
-        push(force = false)
+        dataSync.push(force = false)
     }
 
     // --- The sequences ---
@@ -1427,16 +1459,16 @@ object AppController : NativeCallbacks {
         }
         screen = Screen.Library
         // A missing grant still has a mirror, for when the folder is picked again.
-        saved.data?.let(::useMirror)
+        saved.data?.let(dataSync::useMirror)
         for (step in steps) {
             when (step) {
-                StartupStep.Pull -> firstPull()
+                StartupStep.Pull -> dataSync.firstPull()
                 StartupStep.InitializeCore -> {
                     if (!initializeCore()) return
                     // The folders the core's settings.ini names beyond the defaults, which the first pull left out,
                     // then the cards the game settings in them name: no game starts before they're in.
                     if (!messageIsError) message = COPYING
-                    catchUp()?.join()
+                    dataSync.catchUp()?.join()
                     ready = true
                 }
                 StartupStep.SetGameFolders -> applyGameFolders()
@@ -1454,7 +1486,7 @@ object AppController : NativeCallbacks {
         var refreshed = false
         for (step in StartupPlan.steps(folders, missingGrants, coreStarted = true)) {
             when (step) {
-                StartupStep.Pull -> refreshed = pull(onlyMemcards = false)
+                StartupStep.Pull -> refreshed = dataSync.pull(onlyMemcards = false)
                 StartupStep.RefreshLibrary -> if (screen == Screen.Library && !refreshed) refreshLibrary()
                 else -> {}
             }
@@ -1463,196 +1495,6 @@ object AppController : NativeCallbacks {
 
     // Whether memory card sync rests in the background, as the app is shown and hidden.
     private val syncVisibility = SyncVisibility { NativeLibrary.setMemcardSyncBackgrounded(it) }
-
-    // Memory card sync never writes a card while the mirror replaces or deletes it: sync holds the card meanwhile.
-    // Before the core starts, nothing syncs.
-    private val cardGuard =
-        CopyGuard { path, action ->
-            if (coreStarted && MemoryCardPaths.matches(path, memcardPaths)) {
-                NativeLibrary.memcardSyncHoldCard(path) { action() }
-            } else {
-                action()
-                true
-            }
-        }
-
-    // A desktop's shader packs in the data folder: the mirror leaves them, and their markers, out. The core names its
-    // shaders folder once it's started; "shaders", its default, before.
-    private val shaderPackIds by lazy { NativeLibrary.shaderPackIds().toList() }
-
-    private fun packMarkers(): PackMarkers? {
-        val shaders = if (coreStarted) NativeLibrary.getShadersFolder() ?: return null else "shaders"
-        return PackMarkers(shaders, shaderPackIds) { NativeLibrary.shaderPackMarkerFiles(it)?.toList() }
-    }
-
-    /** A mirror of [data], whose state the app shows from now on. */
-    private fun useMirror(data: String) {
-        mirrorStateJob?.cancel()
-        val store = SafFolderStore(context.contentResolver, data)
-        val created =
-            Mirror(
-                store,
-                workingCopy,
-                manifestFile,
-                System::currentTimeMillis,
-                removeStrays = { layoutSettling.settled },
-                guard = cardGuard,
-                packMarkers = ::packMarkers,
-            ) { dataLayout }
-        mirror = created
-        mirrorStateJob = scope.launch { created.state.collect { mutableMirrorState.value = it } }
-    }
-
-    // The first pull, before the core reads settings.ini, with its progress shown.
-    private suspend fun firstPull() {
-        val mirror = mirror ?: return
-        prepareWorkingCopy()
-        message = COPYING
-        val progress =
-            scope.launch {
-                mirror.state.collect { state ->
-                    // done counts the actions finished, so the one under way is done + 1.
-                    if (state is MirrorState.Syncing) message = "$COPYING (${state.done + 1} of ${state.total})"
-                }
-            }
-        mirror.pull { false }
-        progress.cancel()
-    }
-
-    /**
-     * Creates the working copy if it's missing (a fresh install), which the mirror needs to run. A manifest without
-     * one describes files that are gone: it's deleted, so the folder's files all come in rather than read as deleted
-     * here.
-     */
-    private suspend fun prepareWorkingCopy() =
-        withContext(Dispatchers.IO) {
-            EmusyncCarryOver.drop(workingCopy, SharedPreferencesStore(context, "memcard_sync"))
-            if (workingCopy.isDirectory) return@withContext
-            if (manifestFile.delete()) Log.w(TAG, "The working copy is gone: pulling the data folder in full.")
-            if (!workingCopy.mkdirs()) Log.e(TAG, "Can't create $workingCopy")
-        }
-
-    /**
-     * A pull of everything but the running game's memory cards (only the memory cards when [onlyMemcards]), then what
-     * [StartupPlan.afterPull] says, and a [catchUp] if that grew the layout, however it ends
-     * ([CatchUpRunner.guardGrowth]). Only once the core runs, so never before the first pull, and never without the
-     * data grant. Returns whether that refreshed the library.
-     */
-    private suspend fun pull(onlyMemcards: Boolean): Boolean =
-        catchUps.guardGrowth(::catchUp) { onGrowth -> pullOnce(onlyMemcards, onGrowth).refreshed }
-
-    /**
-     * A catch-up's pull ([CatchUp.run]): as [pull], but returns whether it grew the layout, for the next one. Its
-     * growth isn't flagged: the run refuses starts while it lasts.
-     */
-    private suspend fun pullGrew(): Boolean {
-        val grew = pullOnce(onlyMemcards = false, onGrowth = {}).layoutGrew
-        Log.i(TAG, "Catch-up pull: the data layout ${if (grew) "grew" else "stopped growing"}.")
-        return grew
-    }
-
-    /**
-     * A pull, then [applyChanged], with [onGrowth]. A pull of everything that did its whole plan settles the layout,
-     * unless it grew meanwhile ([LayoutSettling.pulled]).
-     */
-    private suspend fun pullOnce(
-        onlyMemcards: Boolean,
-        onGrowth: () -> Unit,
-    ): Applied {
-        val mirror = mirror ?: return Applied.NOTHING
-        if (!coreStarted || !dataGranted) return Applied.NOTHING
-        val pull = layoutSettling.pullStarting()
-        // Asked for each file as the mirror acts, so a game started meanwhile keeps its cards.
-        val result = mirror.pull { path -> MemoryCardPaths.leftByPull(path, memcardPaths, onlyMemcards, holdMemcards) }
-        val applied = applyChanged(result.changed, onGrowth)
-        if (result.changed.isNotEmpty()) refreshEditor()
-        // Only the memory cards: game settings that name more files may be among those it left.
-        if (!onlyMemcards) layoutSettling.pulled(pull, result.complete)
-        return applied
-    }
-
-    // As pull(): a push can copy files in as well, where the folder's side changed too. The ticker's is cancelled as
-    // the app goes to the background, maybe just after it grew the layout.
-    private suspend fun push(force: Boolean) {
-        val mirror = mirror ?: return
-        if (!coreStarted || !dataGranted) return
-        catchUps.guardGrowth(::catchUp) { onGrowth ->
-            val result = mirror.push(force) { MemoryCardPaths.deferred(it, memcardPaths, holdMemcards) }
-            applyChanged(result.changed, onGrowth)
-            if (result.changed.isNotEmpty()) refreshEditor()
-        }
-    }
-
-    /**
-     * Pulls until the layout stops growing ([CatchUp]): the folders and cards that new settings.ini or game settings
-     * name, which the run that brought them left out. Until it's done no game starts ([CatchUpRunner]), and strays
-     * stay until a complete pull settles the layout ([layoutSettling]), maybe after it's done. One under way pulls
-     * again once it's done instead, from the layout as it is then: its job is returned. Main thread only.
-     */
-    private fun catchUp(): Job? {
-        layoutSettling.unsettle()
-        return catchUps.launch(
-            scope,
-            // Not while starts are still refused, as by a catch-up run again: a start refused meanwhile says why.
-            onEnd = { if (message == COPYING && !catchUps.keepsLine(message, COPYING)) message = null },
-        ) { pullGrew() }
-    }
-
-    /** What [applyChanged] did: whether it [refreshed] the library, and whether the core's paths [layoutGrew]. */
-    private class Applied(
-        val refreshed: Boolean,
-        val layoutGrew: Boolean,
-    ) {
-        companion object {
-            val NOTHING = Applied(refreshed = false, layoutGrew = false)
-        }
-    }
-
-    /**
-     * A settings.ini the mirror replaced is read again, before the core can save its old settings over it, then the
-     * game folders are set again and the library rescanned, as [StartupPlan.afterPull] says: in one go on
-     * [coreDispatcher], so no scan runs between the reload and the folders. A game's settings it replaced have the
-     * core's paths read again, as they can name a memory card. If that grows the layout, [onGrowth] runs at once, on
-     * [coreDispatcher], before the steps that follow: from outside a catch-up, it refuses starts until the catch-up
-     * the caller then asks for is done.
-     */
-    private suspend fun applyChanged(
-        changed: Set<String>,
-        onGrowth: () -> Unit,
-    ): Applied {
-        val steps = StartupPlan.afterPull(changed)
-        if (steps.isEmpty()) return Applied.NOTHING
-        val readable = readableGameFolders()
-        var layoutGrew = false
-        val refreshed =
-            withContext(coreDispatcher) {
-                layoutGrew =
-                    StartupPlan.carryOut(steps, onGrowth) { step ->
-                        when (step) {
-                            StartupStep.ReloadSettings -> {
-                                NativeLibrary.reloadSettings()
-                                readLibraryView()
-                                readCorePaths()
-                            }
-                            StartupStep.ReadCorePaths -> readCorePaths()
-                            StartupStep.SetGameFolders -> false.also { NativeLibrary.setGameFolders(readable) }
-                            StartupStep.RefreshLibrary -> false.also { NativeLibrary.refreshGameList(false) }
-                            else -> false
-                        }
-                    }
-                if (StartupStep.RefreshLibrary in steps) NativeLibrary.getGameList().toList() else null
-            }
-        refreshed?.let { games = it }
-        if (StartupStep.ReloadSettings in steps) settingsPages.reloadShown(screen.page)
-        if (StartupStep.ReloadSettings in steps && screen == Screen.PostProcessing) postProcessingPage.reread()
-        if (StartupStep.ReloadSettings in steps) controllersPage.reloadShown()
-        // settings.ini, or a game's own file, pulled from the data folder while that game's pages show.
-        if (StartupStep.ReloadSettings in steps || StartupStep.ReadCorePaths in steps) {
-            gameSettingsPages.reloadShown()
-            gameMenuSettings.reloadShown()
-        }
-        return Applied(refreshed != null, layoutGrew)
-    }
 
     // initialize() waits for the core's thread to start, and the resources are copied out first.
     private suspend fun initializeCore(): Boolean {
@@ -1678,7 +1520,7 @@ object AppController : NativeCallbacks {
                         ).also {
                             if (it) {
                                 readLibraryView()
-                                readCorePaths()
+                                dataSync.readCorePaths()
                             }
                         }
                 }
@@ -1732,23 +1574,6 @@ object AppController : NativeCallbacks {
             gridView = grid
             librarySorts.read(sort)
         }
-    }
-
-    /**
-     * The memory card paths and the [dataLayout], as the core has them; returns whether the layout gained a folder or
-     * file, which unsettles it ([layoutSettling]). On coreDispatcher, once the core has read settings.ini.
-     */
-    private fun readCorePaths(): Boolean {
-        val reported = NativeLibrary.getMemoryCardPaths()?.toList() ?: MemoryCardPaths.DEFAULT
-        memcardPaths = MemoryCardPaths.merge(reported, memcardPaths)
-        val folders = NativeLibrary.getDataFolders() ?: return false
-        val files = NativeLibrary.getDataFiles()?.toList().orEmpty()
-        val layout = DataLayout.withCorePaths(folders.toList() + files + memcardPaths, NativeLibrary.getCacheFolder())
-        val grew = layout.addsTo(dataLayout)
-        // Before a mirror run can start with it.
-        if (grew) layoutSettling.unsettle()
-        dataLayout = layout
-        return grew
     }
 
     // The games folders the app can read: one without its grant is left out until it's picked again.
@@ -1855,7 +1680,7 @@ object AppController : NativeCallbacks {
             // Booted paused, with nothing on screen to resume from: the game's menu is that.
             if (screen == Screen.Game && PausePolicy.opensMenuAtBoot(startPaused, paused)) openMenu()
             // The cards its own settings name are held back from now on, and mirrored.
-            scope.launch { withContext(coreDispatcher) { readCorePaths() } }
+            scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
         }
     }
 
@@ -1870,7 +1695,7 @@ object AppController : NativeCallbacks {
             menuOpen = false
             gameActive = false
             runningGame = null
-            holdMemcards = false
+            dataSync.holdMemcards = false
             osd.clear()
             achievementOverlay.clear()
             gameMenu.gameStopped()
@@ -1878,13 +1703,13 @@ object AppController : NativeCallbacks {
             rumble.stopAll()
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
-            if (!messageIsError && !catchUps.keepsLine(message, COPYING)) message = null
+            if (!messageIsError && !dataSync.keepsLine(message, COPYING)) message = null
             // The memory cards held back while it ran come in now, then the game's own writes go out; a game the menu
             // left for starts after that, on the cards as they are now.
             gameSwitch.stopped {
-                withContext(coreDispatcher) { readCorePaths() }
-                pull(onlyMemcards = true)
-                push(force = true)
+                withContext(coreDispatcher) { dataSync.readCorePaths() }
+                dataSync.pull(onlyMemcards = true)
+                dataSync.push(force = true)
             }
         }
     }

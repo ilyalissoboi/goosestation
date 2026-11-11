@@ -5,7 +5,6 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,9 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -61,6 +58,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
 import io.github.ilyalissoboi.goosestation.ui.components.Question
+import io.github.ilyalissoboi.goosestation.ui.components.SidePanel
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.components.tabKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -149,18 +147,7 @@ fun SaveSlotPanel(
         }
     }
 
-    Column(
-        modifier =
-            modifier
-                .tabKeys { if (!asking && !panel.busy) switchTab() }
-                .focusProperties {
-                    // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
-                    onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
-                }.focusGroup()
-                .background(colors.surface, GsShapes.large)
-                .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    SidePanel(modifier = modifier.tabKeys { if (!asking && !panel.busy) switchTab() }) {
         // Focusable while nothing else in the panel can take the focus, so it stays in the panel and B reaches it. It
         // stays focusable while it has the focus, as rows arrive until one takes it: were it to stop first, Android
         // would put the focus on the window's first focusable, the menu's top, scrolling the menu (as Achievements).

@@ -182,12 +182,14 @@ class DataSyncTest {
             assertTrue(sync.keepsLine(COPYING, COPYING))
             assertTrue(sync.dataLayout.mirrored("extra/save.dat"))
             assertEquals(1, mirror.runs)
+            assertFalse(mirror.removeStrays())
 
             runCurrent()
 
             assertEquals(2, mirror.runs)
             assertTrue(sync.startsAllowed)
             assertEquals(null, hooks.line)
+            assertTrue(mirror.removeStrays())
         }
 
     @Test
@@ -252,6 +254,62 @@ class DataSyncTest {
             assertEquals(emptyList<String>(), mirror.left)
             // The core hasn't started: nothing follows the pull.
             assertEquals(emptyList<String>(), calls)
+        }
+
+    // Strays stay until a complete pull of everything finds nothing that grows the layout: a cards-only pull may
+    // leave game settings that name more cards.
+    @Test
+    fun onlyACompleteFullPullSettlesTheLayout() =
+        runTest {
+            val sync = running()
+
+            sync.pull(onlyMemcards = true)
+            assertFalse(mirror.removeStrays())
+            mirror.complete = false
+            sync.pull(onlyMemcards = false)
+            assertFalse(mirror.removeStrays())
+            mirror.complete = true
+            sync.pull(onlyMemcards = false)
+            assertTrue(mirror.removeStrays())
+
+            core.folders = listOf("extra/")
+            assertTrue(sync.readCorePaths())
+            assertFalse(mirror.removeStrays())
+
+            // A catch-up unsettles it as it's asked for, until a complete pull of its own.
+            sync.pull(onlyMemcards = false)
+            assertTrue(mirror.removeStrays())
+            sync.catchUp()
+            assertFalse(mirror.removeStrays())
+            runCurrent()
+            assertTrue(mirror.removeStrays())
+        }
+
+    // A catch-up cancelled with a request still owed runs again, and starts stay refused meanwhile: the "Copying…" a
+    // refused start showed stays until the last one ends.
+    @Test
+    fun aCatchUpEndingWhileStartsAreRefusedKeepsCopying() =
+        runTest {
+            val sync = running()
+            hooks.line = COPYING
+            val lines = mutableListOf<String?>()
+            mirror.during = {
+                lines += hooks.line
+                if (mirror.runs == 1) {
+                    // Asked again while it runs, then cancelled before it takes that request.
+                    val job = sync.catchUp()
+                    job?.cancel()
+                    yield()
+                }
+            }
+
+            sync.catchUp()
+            runCurrent()
+
+            assertEquals(2, mirror.runs)
+            assertEquals(listOf(COPYING, COPYING), lines)
+            assertTrue(sync.startsAllowed)
+            assertEquals(null, hooks.line)
         }
 
     // --- The plan's Review Focus ---

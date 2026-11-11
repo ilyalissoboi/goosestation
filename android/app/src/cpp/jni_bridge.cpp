@@ -2052,11 +2052,20 @@ NATIVE_LIBRARY_FUNCTION(void, resolveMemcardSyncConflict)(JNIEnv*, jobject, jlon
 
 NATIVE_LIBRARY_FUNCTION(jboolean, memcardSyncHoldCard)(JNIEnv* env, jobject, jstring relative_path, jobject action)
 {
-  // An exception from the action stays pending, so it reaches the caller once the card is let go.
-  return MemcardSyncBridge::HoldCard(FromJString(env, relative_path),
-                                     [env, action]() { env->CallVoidMethod(action, s_runnable_run); }) ?
-           JNI_TRUE :
-           JNI_FALSE;
+  // An exception from the action is taken off while the card is let go, which may call into Java (sync says it
+  // changed), then thrown again, so it reaches the caller.
+  jthrowable thrown = nullptr;
+  const bool held = MemcardSyncBridge::HoldCard(FromJString(env, relative_path), [env, action, &thrown]() {
+    env->CallVoidMethod(action, s_runnable_run);
+    if ((thrown = env->ExceptionOccurred()) != nullptr)
+      env->ExceptionClear();
+  });
+  if (thrown)
+  {
+    env->Throw(thrown);
+    env->DeleteLocalRef(thrown);
+  }
+  return held ? JNI_TRUE : JNI_FALSE;
 }
 
 NATIVE_LIBRARY_FUNCTION(void, memcardCardOpenedForTest)(JNIEnv* env, jobject, jstring path)
@@ -2721,6 +2730,27 @@ NATIVE_LIBRARY_FUNCTION(void, setTouchPad)(JNIEnv*, jobject, jint buttons, jfloa
                                            jfloat right_y)
 {
   AndroidHost::QueueTouchPad(TouchPad::State{static_cast<u32>(buttons), {left_x, left_y, right_x, right_y}});
+}
+
+NATIVE_LIBRARY_FUNCTION(void, queueTouchPadsForTest)(JNIEnv* env, jobject, jintArray buttons)
+{
+  std::vector<u32> states(static_cast<size_t>(env->GetArrayLength(buttons)));
+  if (!states.empty())
+    env->GetIntArrayRegion(buttons, 0, static_cast<jsize>(states.size()), reinterpret_cast<jint*>(states.data()));
+  AndroidHost::QueueTouchPadsForTest(states);
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, decodeUtf8ForTest)(JNIEnv* env, jobject, jbyteArray bytes)
+{
+  std::string text(static_cast<size_t>(env->GetArrayLength(bytes)), '\0');
+  if (!text.empty())
+    env->GetByteArrayRegion(bytes, 0, static_cast<jsize>(text.size()), reinterpret_cast<jbyte*>(text.data()));
+  return Made(env, ToJString(env, text), "decodeUtf8ForTest");
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, takeTouchPressesForTest)(JNIEnv*, jobject)
+{
+  return static_cast<jint>(AndroidHost::TakeTouchPressesForTest());
 }
 
 NATIVE_LIBRARY_FUNCTION(void, setPictureAtTop)(JNIEnv*, jobject, jboolean top)

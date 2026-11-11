@@ -484,6 +484,13 @@ void BootPendingGame();
 /// thread runs, and forgotten when a game ends.
 void QueueTouchPad(const TouchPad::State& state);
 
+/// For GameCallsTest only: queues button states one after another, in one go, so no pass of the input queue comes
+/// between them (a tap shorter than a frame).
+void QueueTouchPadsForTest(std::span<const u32> buttons);
+
+/// For GameCallsTest only: the touch pad's buttons Port 1 was given as pressed since the last call.
+u32 TakeTouchPressesForTest();
+
 /// While top, the picture is drawn at the top of the screen ([Display] Alignment as LeftOrTop, never saved), for the
 /// touch pad under it in portrait; false gives it back its setting. Queues and returns.
 void SetPictureAtTop(bool top);

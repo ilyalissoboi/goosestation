@@ -233,8 +233,7 @@ class FakeMemcardEditorApi : MemcardEditorApi {
         calls += "writeCard $path force=$force"
         writeOutcomes[path]?.let { return MemcardWrite(it, if (it == MemcardWriteOutcome.Failed) "Disk full." else "") }
         val current = files[path]
-        val same = if (current == null || expected == null) current == expected else current.contentEquals(expected)
-        if (!force && !same) return MemcardWrite(MemcardWriteOutcome.Changed, "")
+        if (!force && !sameBytes(current, expected)) return MemcardWrite(MemcardWriteOutcome.Changed, "")
         files[path] = card.copyOf()
         return MemcardWrite(MemcardWriteOutcome.Saved, "")
     }

@@ -33,10 +33,8 @@ class TouchControlsTest {
     private fun shown(
         settings: TouchSettings = TouchSettings(),
         controllers: Int = 0,
-        inGame: Boolean = true,
-        menuOpen: Boolean = false,
         kind: PadKind? = PadKind.Digital,
-    ) = TouchVisibility.of(settings, controllers, inGame, menuOpen, kind)
+    ) = TouchVisibility.of(settings, controllers, kind)
 
     @Test
     fun defaults() {
@@ -81,10 +79,9 @@ class TouchControlsTest {
         )
     }
 
+    // No game, no kind: nothing to drive. (Over the menu the game screen doesn't compose it.)
     @Test
-    fun notOverTheMenuNorOutOfAGame() {
-        assertNull(shown(menuOpen = true))
-        assertNull(shown(inGame = false))
+    fun notWithoutAGamesPad() {
         assertNull(shown(kind = null))
     }
 
@@ -132,11 +129,11 @@ class TouchControlsTest {
 
     @Test
     fun theOverlayFollowsTheKind() {
-        assertNull(touch.shown(inGame = true, menuOpen = false))
+        assertNull(TouchVisibility.of(touch.settings, controllers, touch.kind))
         touch.kind = PadKind.Analog
-        assertEquals(TouchVisibility.Shown(sticks = true), touch.shown(inGame = true, menuOpen = false))
+        assertEquals(TouchVisibility.Shown(sticks = true), TouchVisibility.of(touch.settings, controllers, touch.kind))
         controllers = 1
-        assertNull(touch.shown(inGame = true, menuOpen = false))
+        assertNull(TouchVisibility.of(touch.settings, controllers, touch.kind))
     }
 
     // Each release (the app paused, the window's focus lost) is a new count, which makes the overlay anew.

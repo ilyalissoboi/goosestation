@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                                     onBack = AppController.gameMenu::closeSettings,
                                 )
                             },
-                            touch = TouchVisibility.of(touch.settings, pads.size, true, false, touch.kind),
+                            touch = TouchVisibility.of(touch.settings, pads.size, touch.kind),
                             touchSettings = touch.settings,
                             touchSink = {
                                 NativeLibrary.setTouchPad(

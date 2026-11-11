@@ -70,6 +70,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
+import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
@@ -182,17 +183,10 @@ fun MemcardEditorScreen(
                 modifier =
                     Modifier
                         .fillMaxSize()
+                        // B, and a Back key reaching Compose, go to the back handlers, the innermost first.
+                        .backKeys { dispatcher?.onBackPressed() ?: actions.back(onLeave) }
                         .onPreviewKeyEvent { event ->
                             when (event.key) {
-                                // B, and a Back key reaching Compose, go to the back handlers, the innermost first.
-                                Key.Back, Key.ButtonB -> {
-                                    if (event.type ==
-                                        KeyEventType.KeyUp
-                                    ) {
-                                        dispatcher?.onBackPressed() ?: actions.back(onLeave)
-                                    }
-                                    true
-                                }
                                 Key.ButtonL1, Key.ButtonR1 -> {
                                     // Not while a panel or question is over the screen, which keeps the focus.
                                     if (overlay) return@onPreviewKeyEvent false

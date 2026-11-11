@@ -40,7 +40,6 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -63,6 +62,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
 import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.components.tabKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
@@ -152,11 +152,8 @@ fun SaveSlotPanel(
     Column(
         modifier =
             modifier
-                .onPreviewKeyEvent { event ->
-                    if (event.key != Key.ButtonL1 && event.key != Key.ButtonR1) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp && !asking && !panel.busy) switchTab()
-                    true
-                }.focusProperties {
+                .tabKeys { if (!asking && !panel.busy) switchTab() }
+                .focusProperties {
                     // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
                     onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
                 }.focusGroup()

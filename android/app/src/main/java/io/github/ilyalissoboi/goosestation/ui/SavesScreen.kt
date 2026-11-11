@@ -29,11 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SaveLists
 import io.github.ilyalissoboi.goosestation.app.SavesActions
@@ -49,6 +45,8 @@ import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
 import io.github.ilyalissoboi.goosestation.ui.components.QuestionPanel
+import io.github.ilyalissoboi.goosestation.ui.components.backKeys
+import io.github.ilyalissoboi.goosestation.ui.components.tabKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import java.time.ZonedDateTime
 
@@ -109,20 +107,10 @@ fun SavesScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .safeDrawingPadding()
-                    .onPreviewKeyEvent { event ->
-                        when (event.key) {
-                            // B, and a Back key reaching Compose, go to the back handlers.
-                            Key.Back, Key.ButtonB -> {
-                                if (event.type == KeyEventType.KeyUp) dispatcher?.onBackPressed() ?: onBack()
-                                true
-                            }
-                            Key.ButtonL1, Key.ButtonR1 -> {
-                                if (event.type == KeyEventType.KeyUp) switchTab()
-                                true
-                            }
-                            else -> false
-                        }
-                    }.padding(horizontal = 32.dp, vertical = 20.dp),
+                    // B, and a Back key reaching Compose, go to the back handlers.
+                    .backKeys { dispatcher?.onBackPressed() ?: onBack() }
+                    .tabKeys { switchTab() }
+                    .padding(horizontal = 32.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             BoxWithConstraints(Modifier.weight(1f)) {

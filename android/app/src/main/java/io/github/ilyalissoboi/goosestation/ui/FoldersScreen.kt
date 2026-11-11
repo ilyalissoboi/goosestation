@@ -28,11 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
 import io.github.ilyalissoboi.goosestation.storage.DataFolderInspection
@@ -41,6 +36,7 @@ import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.PICKER_HINT
+import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import kotlinx.coroutines.launch
 
@@ -136,11 +132,8 @@ fun FoldersScreen(
                             primary().requestFocus()
                         }
                     }
-                }.onPreviewKeyEvent { event ->
-                    if (event.key != Key.ButtonB) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp) back()
-                    true
-                }.verticalScroll(scroll)
+                }.backKeys(onBack = ::back)
+                .verticalScroll(scroll)
                 .padding(horizontal = 32.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

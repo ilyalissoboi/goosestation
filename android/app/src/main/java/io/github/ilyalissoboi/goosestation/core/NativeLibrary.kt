@@ -609,6 +609,9 @@ object NativeLibrary {
     /** For GameCallsTest only: the touch pad's buttons Port 1 was given as pressed since the last call, as bits. */
     external fun takeTouchPressesForTest(): Int
 
+    /** For JniStringsTest only: [bytes] as the bridge makes a Java string of UTF-8 (JNIUtil::ToJString()). */
+    external fun decodeUtf8ForTest(bytes: ByteArray): String
+
     /**
      * While [top], the picture sits at the top of the screen (`[Display] Alignment` taken as LeftOrTop, never
      * written), for the touch pad under it in portrait; false gives it back its setting. Doesn't wait.

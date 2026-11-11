@@ -2731,6 +2731,14 @@ NATIVE_LIBRARY_FUNCTION(void, queueTouchPadsForTest)(JNIEnv* env, jobject, jintA
   AndroidHost::QueueTouchPadsForTest(states);
 }
 
+NATIVE_LIBRARY_FUNCTION(jstring, decodeUtf8ForTest)(JNIEnv* env, jobject, jbyteArray bytes)
+{
+  std::string text(static_cast<size_t>(env->GetArrayLength(bytes)), '\0');
+  if (!text.empty())
+    env->GetByteArrayRegion(bytes, 0, static_cast<jsize>(text.size()), reinterpret_cast<jbyte*>(text.data()));
+  return Made(env, ToJString(env, text), "decodeUtf8ForTest");
+}
+
 NATIVE_LIBRARY_FUNCTION(jint, takeTouchPressesForTest)(JNIEnv*, jobject)
 {
   return static_cast<jint>(AndroidHost::TakeTouchPressesForTest());

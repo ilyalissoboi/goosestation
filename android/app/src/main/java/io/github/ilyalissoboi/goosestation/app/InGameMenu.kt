@@ -371,14 +371,7 @@ class InGameMenu(
         if (!state.booted || game == null || game.status != GameAchievements.READY) return
         panelId++
         val tab = if (game.hasAchievements) CheevoTab.Achievements else CheevoTab.Leaderboards
-        state =
-            state.copy(
-                slots = null,
-                discs = null,
-                codes = null,
-                cheevos = AchievementsPanelState(tab),
-                confirmingReset = false,
-            )
+        state = withSide(cheevos = AchievementsPanelState(tab))
         readTab(tab)
     }
 
@@ -478,11 +471,7 @@ class InGameMenu(
         if (!state.booted || game.serial.isBlank()) return
         panelId++
         state =
-            state.copy(
-                slots = null,
-                discs = null,
-                codes = null,
-                cheevos = null,
+            withSide().copy(
                 settings = true,
                 cameFromSettings = false,
             )
@@ -564,13 +553,8 @@ class InGameMenu(
         val id = ++panelId
         val hasKey = serial.isNotBlank()
         val tab = if (hasKey) SlotTab.ThisGame else SlotTab.Shared
-        state =
-            state.copy(
-                slots = SlotPanel(mode, entries = if (hasKey) null else emptyList(), tab = tab, hasKey = hasKey),
-                discs = null,
-                codes = null,
-                confirmingReset = false,
-            )
+        val entries = if (hasKey) null else emptyList<SlotEntry>()
+        state = withSide(slots = SlotPanel(mode, entries = entries, tab = tab, hasKey = hasKey))
         readSlots(id, mode)
     }
 
@@ -784,7 +768,7 @@ class InGameMenu(
         val discs = running?.discs.orEmpty()
         if (!state.booted || discs.size < 2) return
         panelId++
-        state = state.copy(slots = null, codes = null, discs = DiscChoice(discs, state.disc), confirmingReset = false)
+        state = withSide(discs = DiscChoice(discs, state.disc))
     }
 
     // A disc going in ends in its panel, as a save does.
@@ -823,7 +807,7 @@ class InGameMenu(
     override fun openCodes() {
         if (!state.booted || state.hardcore) return
         val id = ++panelId
-        state = state.copy(slots = null, discs = null, codes = CodePanel(), confirmingReset = false)
+        state = withSide(codes = CodePanel())
         scope.launch {
             val codes = withContext(game) { api.getPatchCodes() }
             if (id != panelId) return@launch
@@ -1147,6 +1131,15 @@ class InGameMenu(
             others = SaveLists.withRow(others, read),
             shared = shared?.let { SaveLists.withRow(it, read) },
         )
+
+    // The menu with the one side panel given, or none, and no reset question: the side panels take turns, so B, which
+    // closes the one shown, never finds another under it.
+    private fun withSide(
+        slots: SlotPanel? = null,
+        discs: DiscChoice? = null,
+        codes: CodePanel? = null,
+        cheevos: AchievementsPanelState? = null,
+    ) = state.copy(slots = slots, discs = discs, codes = codes, cheevos = cheevos, confirmingReset = false)
 
     // Changes the slot panel if it's still panel [id].
     private fun updatePanel(

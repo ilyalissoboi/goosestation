@@ -49,7 +49,9 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotQuestion
 import io.github.ilyalissoboi.goosestation.app.SlotTab
+import io.github.ilyalissoboi.goosestation.app.SlotWork
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
@@ -114,25 +116,24 @@ fun SaveSlotPanel(
 
     // The slot to focus once the question about replacing it is answered.
     var returnTo by remember { mutableStateOf<Int?>(null) }
-    val asking = panel.replacing != null || panel.deleting != null || panel.switching != null
+    val asking = panel.question != null || panel.deleting != null
     // Which rows the list has (not what they show, which a picture read changes): a read after a delete, without the
     // focused row, gives the focus on.
     val rowIds = (entries.orEmpty() + others).map { Triple(it.shared, it.owner, it.slot) }
     LaunchedEffect(
         entries == null,
         rowIds,
-        panel.replacing,
+        panel.question,
         panel.deleting,
-        panel.switching,
         panel.focusRow,
         panel.tab,
         switches,
     ) {
-        val replacing = panel.replacing
+        val replacing = (panel.question as? SlotQuestion.Replace)?.slot
         when {
             // A question focuses its Cancel.
             replacing != null -> returnTo = replacing
-            panel.deleting != null || panel.switching != null -> {}
+            panel.deleting != null || panel.question is SlotQuestion.Switch -> {}
             entries == null -> title.requestFocus()
             else -> {
                 val wanted = returnTo ?: if (sharedTab) panel.sharedFocus else panel.focus
@@ -148,7 +149,7 @@ fun SaveSlotPanel(
         }
     }
 
-    SidePanel(modifier = modifier.tabKeys { if (!asking && !panel.busy) switchTab() }) {
+    SidePanel(modifier = modifier.tabKeys { if (!asking && !panel.working) switchTab() }) {
         // Focusable while nothing else in the panel can take the focus, so it stays in the panel and B reaches it. It
         // stays focusable while it has the focus, as rows arrive until one takes it: were it to stop first, Android
         // would put the focus on the window's first focusable, the menu's top, scrolling the menu (as Achievements).
@@ -168,11 +169,11 @@ fun SaveSlotPanel(
                 Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
             }
         }
-        if (panel.busy) {
+        if (panel.working) {
             SlotLine(
                 when {
                     panel.removing -> "Deleting…"
-                    saving -> "Saving…"
+                    panel.work == SlotWork.Saving -> "Saving…"
                     else -> "Loading…"
                 },
             )
@@ -192,12 +193,12 @@ fun SaveSlotPanel(
                 PanelTabs(
                     listOf("This game", "Shared"),
                     current = if (sharedTab) 1 else 0,
-                    onSelect = { if (it != panel.tab.ordinal && !asking && !panel.busy) switchTab() },
+                    onSelect = { if (it != panel.tab.ordinal && !asking && !panel.working) switchTab() },
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
-                val replacing = panel.replacing
+                val replacing = (panel.question as? SlotQuestion.Replace)?.slot
                 val deleting = panel.deleting
-                val switching = panel.switching
+                val switching = (panel.question as? SlotQuestion.Switch)?.entry
                 // Load's rows: X or a long press asks before deleting the save.
                 val delete: ((SlotEntry) -> Unit)? = if (saving) null else actions::askDelete
                 if (switching != null) {

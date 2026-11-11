@@ -61,6 +61,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotQuestion
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.core.Achievement
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
@@ -168,7 +169,7 @@ class GameMenuTest {
 
             override fun cancelReplace() {
                 calls += "cancelReplace"
-                state = state.copy(slots = state.slots?.copy(replacing = null))
+                state = state.copy(slots = state.slots?.copy(question = null))
             }
 
             override fun toggleFastForward() {
@@ -268,7 +269,7 @@ class GameMenuTest {
 
             override fun cancelSwitch() {
                 calls += "cancelSwitch"
-                state = state.copy(slots = state.slots?.copy(switching = null))
+                state = state.copy(slots = state.slots?.copy(question = null))
             }
 
             override fun confirmDelete() {
@@ -974,7 +975,14 @@ class GameMenuTest {
         state =
             GameMenuState(
                 booted = true,
-                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+                slots =
+                    SlotPanel(
+                        SlotMode.Load,
+                        emptyList(),
+                        tab = SlotTab.Shared,
+                        shared = rows,
+                        question = SlotQuestion.Switch(rows[0]),
+                    ),
             )
         show()
 
@@ -991,7 +999,14 @@ class GameMenuTest {
         state =
             GameMenuState(
                 booted = true,
-                slots = SlotPanel(SlotMode.Load, emptyList(), tab = SlotTab.Shared, shared = rows, switching = rows[0]),
+                slots =
+                    SlotPanel(
+                        SlotMode.Load,
+                        emptyList(),
+                        tab = SlotTab.Shared,
+                        shared = rows,
+                        question = SlotQuestion.Switch(rows[0]),
+                    ),
             )
         show()
 
@@ -1032,7 +1047,7 @@ class GameMenuTest {
         show()
 
         // As InGameMenu does: the question goes, the panel is busy with the old rows, then the list comes back empty.
-        state = state.copy(slots = state.slots!!.copy(deleting = null, busy = true))
+        state = state.copy(slots = state.slots!!.copy(deleting = null, removing = true))
         rule.waitForIdle()
         state = state.copy(slots = SlotPanel(SlotMode.Load, emptyList()))
         rule.waitForIdle()
@@ -1052,7 +1067,6 @@ class GameMenuTest {
                         saved(2).filter {
                             it.savedAt != null
                         },
-                        busy = true,
                         removing = true,
                     ),
             )
@@ -1346,7 +1360,10 @@ class GameMenuTest {
     @Test
     fun bStepsOutOneLayerAtATime() {
         state =
-            GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(3), focus = 3, replacing = 3))
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+            )
         show()
 
         press(Key.ButtonB)
@@ -1379,7 +1396,11 @@ class GameMenuTest {
 
     @Test
     fun replacingAsksWithCancelFocused() {
-        state = GameMenuState(booted = true, slots = SlotPanel(SlotMode.Save, saved(3), focus = 3, replacing = 3))
+        state =
+            GameMenuState(
+                booted = true,
+                slots = SlotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+            )
         show()
 
         rule.onNodeWithText("Replace the save in slot 3?").assertExists()

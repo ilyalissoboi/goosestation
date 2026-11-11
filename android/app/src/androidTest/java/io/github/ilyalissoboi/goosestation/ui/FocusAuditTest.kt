@@ -59,6 +59,7 @@ import io.github.ilyalissoboi.goosestation.app.SavesPageState
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
+import io.github.ilyalissoboi.goosestation.app.SlotQuestion
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.app.UpdateFailure
@@ -1313,7 +1314,7 @@ class FocusAuditTest {
                             emptyList(),
                             tab = SlotTab.Shared,
                             shared = shared,
-                            switching = shared[0],
+                            question = SlotQuestion.Switch(shared[0]),
                         ),
                 ),
                 NoMenuActions,
@@ -1490,7 +1491,7 @@ class FocusAuditTest {
     @Test
     fun gameMenuReplacing() {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, 1_700_000_000L) }
-        val panel = SlotPanel(SlotMode.Save, entries, focus = 1, replacing = 1)
+        val panel = SlotPanel(SlotMode.Save, entries, focus = 1, question = SlotQuestion.Replace(1))
         show { GameMenu(GameMenuState(booted = true, slots = panel), NoMenuActions) }
 
         rule.assertControllerReady()

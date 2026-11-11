@@ -50,6 +50,7 @@ import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.app.SlotTab
+import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
@@ -309,33 +310,12 @@ internal fun SlotRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 16.dp),
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .testTag(SLOT_PICTURE)
-                        .size(if (compact) 64.dp else 112.dp, if (compact) 48.dp else 84.dp)
-                        .clip(GsShapes.small)
-                        .background(colors.sunken),
-                contentAlignment = Alignment.Center,
-            ) {
-                val picture = entry.picture
-                if (picture != null) {
-                    val bitmap = remember(picture) { picture.toImageBitmap() }
-                    Image(
-                        bitmap,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        GsIcons.memoryCard,
-                        contentDescription = null,
-                        tint = colors.inkFaint,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
+            SaveStatePicture(
+                entry.picture,
+                Modifier
+                    .testTag(SLOT_PICTURE)
+                    .size(if (compact) 64.dp else 112.dp, if (compact) 48.dp else 84.dp),
+            )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     if (entry.slot == SaveSlots.RESUME) "Resume" else "Slot ${entry.slot}",
@@ -377,4 +357,21 @@ internal fun SlotLine(text: String) {
         color = GooseStationTheme.colors.inkMuted,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/** A save state's picture, fitted in a `sunken` box at `radius-sm`, or the memory card icon without one. */
+@Composable
+internal fun SaveStatePicture(
+    picture: ArgbImage?,
+    modifier: Modifier,
+) {
+    val colors = GooseStationTheme.colors
+    Box(modifier = modifier.clip(GsShapes.small).background(colors.sunken), contentAlignment = Alignment.Center) {
+        if (picture != null) {
+            val bitmap = remember(picture) { picture.toImageBitmap() }
+            Image(bitmap, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(GsIcons.memoryCard, contentDescription = null, tint = colors.inkFaint, modifier = Modifier.size(24.dp))
+        }
+    }
 }

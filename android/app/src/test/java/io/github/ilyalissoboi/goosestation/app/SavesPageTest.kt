@@ -333,7 +333,10 @@ class SavesPageTest {
             api.sharedHolds[4] = SaveStatePreview(null, 0, "SCUS-94228", "SPYRO", spyro.path, spyro.title)
             val page = opened()
             page.switchTab()
-            val row = page.state!!.lists.shared!!.single()
+            val row =
+                page.state!!
+                    .lists.shared!!
+                    .single()
             assertEquals(spyro.path, row.holds?.path)
 
             page.pick(row)

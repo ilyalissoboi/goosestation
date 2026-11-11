@@ -61,6 +61,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
+import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
@@ -220,6 +221,7 @@ fun SaveSlotPanel(
                         "Load",
                         onConfirm = actions::confirmSwitch,
                         onCancel = actions::cancelSwitch,
+                        textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 } else if (deleting != null) {
                     Question(
@@ -227,6 +229,7 @@ fun SaveSlotPanel(
                         "Delete",
                         onConfirm = actions::confirmDelete,
                         onCancel = actions::cancelDelete,
+                        textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 } else if (replacing != null) {
                     Question(
@@ -234,6 +237,7 @@ fun SaveSlotPanel(
                         "Replace",
                         onConfirm = actions::confirmReplace,
                         onCancel = actions::cancelReplace,
+                        textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 } else {
                     entries?.forEach { entry ->

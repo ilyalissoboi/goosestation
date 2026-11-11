@@ -27,7 +27,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
-import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
+import io.github.ilyalissoboi.goosestation.ui.components.QuestionPanel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
@@ -137,28 +137,13 @@ fun GameQuestionPanel(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    OverlayPanel(onBack = onCancel) {
-        val cancel = remember { FocusRequester() }
-        LaunchedEffect(question) { cancel.requestFocus() }
-        Text(
-            GameSettingsWords.question(question, title, others),
-            style = MaterialTheme.typography.bodyLarge,
-            color = GooseStationTheme.colors.ink,
-        )
-        ButtonRow {
-            ActionButton(
-                if (question == GameQuestion.Copy) "Copy" else "Clear",
-                onClick = onConfirm,
-                kind = ButtonKind.Danger,
-            )
-            ActionButton(
-                "Cancel",
-                onClick = onCancel,
-                modifier = Modifier.focusRequester(cancel),
-                kind = ButtonKind.Ghost,
-            )
-        }
-    }
+    QuestionPanel(
+        GameSettingsWords.question(question, title, others),
+        if (question == GameQuestion.Copy) "Copy" else "Clear",
+        onConfirm = onConfirm,
+        onCancel = onCancel,
+        key = question,
+    )
 }
 
 /** What Copy and Clear say in a running game in hardcore mode, where they wait for the next start. */

@@ -31,6 +31,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.ChoiceList
 import io.github.ilyalissoboi.goosestation.ui.components.ChoiceListHost
 import io.github.ilyalissoboi.goosestation.ui.components.LocalChoiceListHost
+import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -103,6 +104,7 @@ fun SyncConflictsScreen(
                         onKeepAll()
                     },
                     onCancel = { asking = false },
+                    textStyle = MaterialTheme.typography.headlineSmall,
                 )
             }
             BackHandler { asking = false }

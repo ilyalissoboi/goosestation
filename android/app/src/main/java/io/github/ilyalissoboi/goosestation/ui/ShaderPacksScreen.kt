@@ -29,6 +29,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.ProgressBar
+import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 const val SHADER_PACKS_TITLE = "Download shader packs"
@@ -68,7 +69,6 @@ fun ShaderPacksPanel(
     fun rowRequester(id: String) = rowRequesters.getOrPut(id) { FocusRequester() }
     val firstAction = remember { FocusRequester() }
     val cancel = remember { FocusRequester() }
-    val keep = remember { FocusRequester() }
     val close = remember { FocusRequester() }
     // The pack whose actions were open last: back from them, the focus goes to its row.
     var lastActions by remember { mutableStateOf<String?>(null) }
@@ -77,7 +77,8 @@ fun ShaderPacksPanel(
     LaunchedEffect(rows.isNotEmpty(), busy, actions, removing) {
         runCatching {
             when {
-                removing != null -> keep.requestFocus()
+                // The question focuses its Cancel itself.
+                removing != null -> {}
                 actions != null -> firstAction.requestFocus()
                 job != null && !job.removing -> cancel.requestFocus()
                 rows.isNotEmpty() && !busy ->
@@ -98,20 +99,13 @@ fun ShaderPacksPanel(
         },
     ) {
         if (removing != null) {
-            Text(
+            Question(
                 model.removeQuestion(removing),
-                style = MaterialTheme.typography.bodyLarge,
-                color = GooseStationTheme.colors.ink,
+                "Remove",
+                onConfirm = model::confirmRemove,
+                onCancel = model::cancelRemove,
+                key = removing,
             )
-            ButtonRow {
-                ActionButton("Remove", onClick = model::confirmRemove, kind = ButtonKind.Danger)
-                ActionButton(
-                    "Cancel",
-                    onClick = model::cancelRemove,
-                    modifier = Modifier.focusRequester(keep),
-                    kind = ButtonKind.Ghost,
-                )
-            }
             return@OverlayPanel
         }
 

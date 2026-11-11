@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
@@ -41,9 +40,6 @@ import io.github.ilyalissoboi.goosestation.app.SavesActions
 import io.github.ilyalissoboi.goosestation.app.SavesPageState
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotTab
-import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
-import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
-import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
@@ -52,6 +48,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
+import io.github.ilyalissoboi.goosestation.ui.components.QuestionPanel
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import java.time.ZonedDateTime
 
@@ -210,22 +207,5 @@ internal fun SavesDeleteQuestion(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    OverlayPanel(onBack = onCancel) {
-        val cancel = remember { FocusRequester() }
-        LaunchedEffect(entry) { cancel.requestFocus() }
-        Text(
-            SaveLists.deleteQuestion(entry),
-            style = MaterialTheme.typography.bodyLarge,
-            color = GooseStationTheme.colors.ink,
-        )
-        ButtonRow(modifier = Modifier.fillMaxWidth()) {
-            ActionButton("Delete", onClick = onConfirm, kind = ButtonKind.Danger)
-            ActionButton(
-                "Cancel",
-                onClick = onCancel,
-                modifier = Modifier.focusRequester(cancel),
-                kind = ButtonKind.Ghost,
-            )
-        }
-    }
+    QuestionPanel(SaveLists.deleteQuestion(entry), "Delete", onConfirm = onConfirm, onCancel = onCancel, key = entry)
 }

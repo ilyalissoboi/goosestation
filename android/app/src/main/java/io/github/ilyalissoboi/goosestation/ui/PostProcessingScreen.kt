@@ -42,7 +42,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LazySettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
-import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
+import io.github.ilyalissoboi.goosestation.ui.components.QuestionPanel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
@@ -257,24 +257,13 @@ fun UseGlobalChainPanel(
     model: PostProcessingModel,
     chain: Chain,
 ) {
-    OverlayPanel(onBack = model::cancelQuestion) {
-        val cancel = remember { FocusRequester() }
-        LaunchedEffect(chain) { cancel.requestFocus() }
-        Text(
-            useGlobalQuestion(chain, model.askingStages),
-            style = MaterialTheme.typography.bodyLarge,
-            color = GooseStationTheme.colors.ink,
-        )
-        ButtonRow {
-            ActionButton("Use global", onClick = model::confirmUseGlobal, kind = ButtonKind.Danger)
-            ActionButton(
-                "Cancel",
-                onClick = model::cancelQuestion,
-                modifier = Modifier.focusRequester(cancel),
-                kind = ButtonKind.Ghost,
-            )
-        }
-    }
+    QuestionPanel(
+        useGlobalQuestion(chain, model.askingStages),
+        "Use global",
+        onConfirm = model::confirmUseGlobal,
+        onCancel = model::cancelQuestion,
+        key = chain,
+    )
 }
 
 /** "Use the global Display chain? This game's 3 shaders are removed." */

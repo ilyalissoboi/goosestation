@@ -568,8 +568,9 @@ object AppController : NativeCallbacks {
         updates =
             makeUpdates(appContext).also { made ->
                 // A game left is still shutting down (its resume state, its cards) until the core says it stopped: no
-                // installer meanwhile.
+                // check at start meanwhile, and the installer waits for the library too.
                 scope.launch { snapshotFlow { screen == Screen.Game || gameActive }.collect { made.onScreen(it) } }
+                scope.launch { snapshotFlow { installerWaits(screen, gameActive) }.collect { made.onLibrary(it) } }
             }
         scope.launch {
             val (saved, images) = withContext(Dispatchers.IO) { prefs.load() to prefs.biosImages() }

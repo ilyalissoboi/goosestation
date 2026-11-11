@@ -88,6 +88,16 @@ data class UpdateBuild(
 )
 
 /**
+ * Whether the installer waits: anywhere but the library, or while a game is still on (a game left shuts down, its
+ * resume state and cards, until the core says it stopped). Settings or the Covers page may have a download running or
+ * an edit not yet saved, and Android may replace the app without asking.
+ */
+internal fun installerWaits(
+    screen: Screen,
+    gameActive: Boolean,
+): Boolean = screen != Screen.Library || gameActive
+
+/**
  * The update check, and an update from download to Android's installer. Runs on [scope] (the main thread); the network
  * and the APK on [io]. Nothing is downloaded or installed unless the player pressed Update ([update]). The check at
  * start ([startupCheck]) runs once per process, never while a game runs ([onScreen]), and offers only a newer version
@@ -124,6 +134,7 @@ class Updates(
     private var startupAsked = false
     private var startupDue: String? = null
     private var inGame = false
+    private var awayFromLibrary = false
     private var shown = true
     private var installing: Job? = null
 
@@ -191,7 +202,7 @@ class Updates(
     // A check doesn't replace an update under way.
     private fun offerable() = state == UpdateState.None || state is UpdateState.Available || state is UpdateState.Failed
 
-    /** Whether a game is on screen: the check at start waits for the library, and so does the installer. */
+    /** Whether a game is on: the check at start waits for it to end (Setup checks, on the build's channel). */
     fun onScreen(inGame: Boolean) {
         this.inGame = inGame
         if (inGame) return
@@ -199,9 +210,14 @@ class Updates(
             startupDue = null
             runStartupCheck(it)
         }
-        if (!shown) return
+    }
+
+    /** Whether the app is away from the library ([installerWaits]): the installer, and its question, wait for it. */
+    fun onLibrary(awayFromLibrary: Boolean) {
+        this.awayFromLibrary = awayFromLibrary
+        if (awayFromLibrary || !shown) return
         runInstallDue()
-        // A question that came while a game was on.
+        // A question that came while away.
         if (state is UpdateState.Installing) showQuestion()
     }
 
@@ -330,15 +346,15 @@ class Updates(
         if (!shown) return
         when (val s = state) {
             is UpdateState.NeedsPermission -> apk?.let { file -> later(s.release, file) }
-            is UpdateState.Installing -> if (!inGame) showQuestion()
-            else -> if (!inGame) runInstallDue()
+            is UpdateState.Installing -> if (!awayFromLibrary) showQuestion()
+            else -> if (!awayFromLibrary) runInstallDue()
         }
     }
 
     // The installer's question: shown now, or kept for the app's return.
     private fun ask(show: () -> Unit) {
         question = show
-        if (shown && !inGame) showQuestion()
+        if (shown && !awayFromLibrary) showQuestion()
     }
 
     private fun showQuestion() {
@@ -352,7 +368,7 @@ class Updates(
         release: ChannelRelease,
         file: File,
     ) {
-        if (inGame || !shown) installDue = release to file else install(release, file)
+        if (awayFromLibrary || !shown) installDue = release to file else install(release, file)
     }
 
     private fun runInstallDue() {

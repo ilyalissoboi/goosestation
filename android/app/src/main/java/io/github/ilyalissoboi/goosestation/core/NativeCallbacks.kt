@@ -9,7 +9,7 @@ package io.github.ilyalissoboi.goosestation.core
  */
 interface NativeCallbacks {
     /**
-     * The game from [NativeLibrary.startGame] booted: its [title], its [serial] (blank for none), and whether it
+     * The game from [NativeLibrary.startGame] or [NativeLibrary.startGameFromState] booted: its [title], its [serial] (blank for none), and whether it
      * [startPaused] and pauses when a controller disconnects ([pauseOnDisconnect]), as the core has them for it.
      */
     fun onGameStarted(

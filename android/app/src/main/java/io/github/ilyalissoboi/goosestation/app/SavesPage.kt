@@ -30,7 +30,7 @@ data class SavesPageState(
     val hardcore: Boolean = false,
     val error: String? = null,
 ) {
-    /** The game has a key to keep save states under: a PSF or the BIOS alone doesn't. */
+    /** The game has a key to keep save states under; a PSF has none. */
     val hasKey: Boolean get() = game.serial.isNotBlank()
 }
 

@@ -8,9 +8,11 @@ import android.view.Surface
 import io.github.ilyalissoboi.goosestation.BuildConfig
 
 /**
- * The emulator core, in libgoosestation.so. The core runs on its own thread: these calls queue work for it and
- * return straight away, except [initialize], [surfaceChanged], [reloadSettings], [applySettings] and the pad binding
- * calls, which wait for it, and [refreshGameList], which scans on the calling thread.
+ * The emulator core, in libgoosestation.so. The core runs on its own thread, the CPU thread: a call that answers (a
+ * save state's time, a patch code list, the disc in, an achievements list, a memory card's files) waits for it, as do
+ * [initialize], [surfaceChanged], [reloadSettings], [applySettings] and the pad binding calls; [refreshGameList] scans
+ * on the calling thread. Calls that only ask for something (a pause, a key, a hotkey) queue it and return. Keep the
+ * waiting ones off the main thread: the core can take a while, booting a game, say.
  */
 object NativeLibrary {
     init {

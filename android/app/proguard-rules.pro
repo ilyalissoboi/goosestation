@@ -2,21 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0
 
 # libgoosestation.so finds these by name: NativeLibrary's native methods, and NativeCallbacks and its methods in
-# JNI_OnLoad (the implementations' methods are only ever called from native code).
+# JNI_OnLoad. Their implementations (AppController's) need no rule of their own: they override methods this keeps, so
+# R8 keeps them under the same names (a list of them here went stale twice).
 -keep class io.github.ilyalissoboi.goosestation.core.NativeLibrary { *; }
 -keep interface io.github.ilyalissoboi.goosestation.core.NativeCallbacks { *; }
--keepclassmembers class * implements io.github.ilyalissoboi.goosestation.core.NativeCallbacks {
-    public void onGameStarted(java.lang.String, java.lang.String);
-    public void onGameStopped();
-    public void onError(java.lang.String);
-    public void onBindingCaptured(java.lang.String);
-    public void onOsdMessage(java.lang.String, java.lang.String, float, io.github.ilyalissoboi.goosestation.core.ArgbImage);
-    public void onFastForwardChanged(boolean);
-    public boolean storeMemcardSyncSecret(java.lang.String, java.lang.String);
-    public java.lang.String loadMemcardSyncSecret(java.lang.String);
-    public boolean hasMemcardSyncSecret(java.lang.String);
-    public void onMemcardSyncChanged();
-}
 
 # jni_bridge.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().
 -keep class io.github.ilyalissoboi.goosestation.core.GameEntry {

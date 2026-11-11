@@ -29,16 +29,16 @@ struct LeaderboardPage;
 
 namespace AndroidHost {
 
+/// Where shader packs are installed (EmuFolders::ShaderPacks): the app's own storage, created if need be. Before
+/// Initialize(), on the thread that calls it: nothing guards the folder once the CPU thread runs.
+void SetShaderPacksFolder(std::string path);
+
 /// Sets the folders, loads settings.ini (defaults when it's missing or from another version, adapted when it's from
 /// another install: AdaptForeignSettings()) and starts the CPU thread. The BIOS images are read from bios_dir, whatever
 /// settings.ini says. achievements_token is the RetroAchievements login token the app stored, or empty: secrets are
 /// kept in memory only (no secrets.ini), and NotifyAchievementsToken() reports each change the core saves. device_name
 /// is this device's, for memory card sync's DeviceName when it's empty, and in a settings.ini adapted from another
 /// install. Calling it again once it succeeded does nothing and returns true.
-/// Where shader packs are installed (EmuFolders::ShaderPacks): the app's own storage, created if need be. From any
-/// thread, before or after Initialize().
-void SetShaderPacksFolder(std::string path);
-
 bool Initialize(std::string data_root, std::string resources_root, std::string bios_dir, std::string install_id,
                 std::string achievements_token, std::string achievements_folder, std::string device_name,
                 Error* error);
@@ -84,6 +84,8 @@ bool IsVulkanFailed();
 /// does, then, while a game runs, the cards it has open and the shared card paths its settings give; each if it's set,
 /// elsewhere in the data root and not listed already. Blocks until the CPU thread has read the game's. nullopt before
 /// Initialize() succeeded.
+std::optional<std::vector<std::string>> GetMemoryCardPaths();
+
 // A game's own settings: gamesettings/<key>.ini, where the core finds it for key (System::GetGameSettingsPath()), a
 // disc set's first serial for any of its discs. Each runs on the caller's thread; a write saves the file, or deletes it
 // once it's empty. Nothing happens before Initialize() or with a blank key.
@@ -173,8 +175,6 @@ bool ApplyGameSettings(const std::string& key);
 /// settings.ini where it has none. Waits for the CPU thread.
 void UpdateGameControllers(const std::string& key);
 
-std::optional<std::vector<std::string>> GetMemoryCardPaths();
-
 /// The folders the core keeps its data in, relative to the data root (RelativeToDataRoot()), each with a trailing '/'
 /// (empty if it's the data root): every EmuFolders folder but the cache, in EmuFolders::LoadConfig()'s order, if it's
 /// inside the data root. nullopt before Initialize() succeeded.
@@ -240,7 +240,8 @@ struct Picture
   std::vector<u32> pixels;
 };
 
-/// The in-game menu's calls. Each runs on the CPU thread; the first six block until it has.
+/// The in-game menu's calls. Each runs on the CPU thread; those that answer (a time, a preview, a result) block until
+/// it has.
 
 /// The modified times (Unix seconds) of serial's save states, 0 for none: [0] the resume state, [n] slot n, for
 /// System::PER_GAME_SAVE_STATE_SLOTS slots. All 0 for an empty serial, or before Initialize() succeeded.

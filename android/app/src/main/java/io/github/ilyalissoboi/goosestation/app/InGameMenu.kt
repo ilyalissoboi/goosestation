@@ -128,7 +128,7 @@ data class GameMenuState(
     val discCount: Int = 0,
     val discs: DiscChoice? = null,
     val codes: CodePanel? = null,
-    /** Hardcore mode is active: no state loads, patch codes or fast forward. */
+    /** Hardcore mode is active: no state loads, Undo load, patch codes or fast forward. */
     val hardcore: Boolean = false,
     /** The game's RetroAchievements, once read. */
     val achievements: GameAchievements? = null,
@@ -269,7 +269,8 @@ enum class StateHotkey(
 /**
  * The in-game menu's state and actions, from a game's boot to its end. Main thread only. Its [api] and [lastSlots] calls
  * run on [game], one at a time, never on the main thread. A save or load that works says so ([onMessage]) and goes back
- * to the game ([onResume]); one that fails stays in the menu, saying why. Every other action goes back to the game.
+ * to the game ([onResume]); one that fails stays in the menu, saying why. So do a disc change and the toggles; the
+ * panels (discs, codes, achievements) and a delete stay in the menu.
  */
 class InGameMenu(
     private val scope: CoroutineScope,

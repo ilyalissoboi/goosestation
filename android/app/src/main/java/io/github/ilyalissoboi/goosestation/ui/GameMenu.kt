@@ -251,7 +251,7 @@ fun GameMenu(
     }
 }
 
-/** The menu row a slot panel or the reset question came from, to focus again once it closes. */
+/** The menu row a side panel, the game's settings or a question came from, to focus again once it closes. */
 private class CameFrom {
     val resume = FocusRequester()
     val saveRow = FocusRequester()

@@ -128,7 +128,6 @@ static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY
 static constexpr const char* PORTS_KEY = AndroidInputKeys::PORTS_KEY;
 static constexpr const char* RUMBLE_KEY = AndroidInputKeys::RUMBLE_KEY;
 
-// The inputs the remap page lists (GetPadBindings()) and edits (SetPadBinding()).
 // The DualShock's Analog button, Port 1's, which the app presses with a hotkey.
 static constexpr std::string_view ANALOG_BUTTON = "Analog";
 
@@ -1079,7 +1078,7 @@ void AndroidHost::SetPostProcessingOption(const std::optional<std::string>& key,
   });
 }
 
-// Deletes section's chain from si: its stages, StageCount and Enabled.
+// Copies settings.ini's section chain into key's own file, over the one it had.
 void AndroidHost::CopyPostProcessingChain(const std::string& key, const char* section)
 {
   if (!s_initialized || key.empty())

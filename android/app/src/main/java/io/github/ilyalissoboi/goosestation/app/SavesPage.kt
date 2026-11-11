@@ -121,6 +121,10 @@ class SavesPage(
     override fun askDelete(entry: SlotEntry) {
         val page = state ?: return
         if (page.deleting != null || page.removing || entry.savedAt == null) return
+        // Only a save the lists still have: one a re-read has dropped is gone already.
+        val key = page.game.serial
+        val rows = page.entries.orEmpty() + page.others + page.shared.orEmpty()
+        if (rows.none { it.ref(key) == entry.ref(key) && it.savedAt != null }) return
         state = page.copy(deleting = entry, error = null)
     }
 

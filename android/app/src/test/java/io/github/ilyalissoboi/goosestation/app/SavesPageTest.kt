@@ -207,6 +207,20 @@ class SavesPageTest {
             assertEquals("Couldn't delete that save: Permission denied.", page.state!!.error)
         }
 
+    @Test
+    fun aDeleteIsAskedOnlyForASavedRowStillListed() =
+        runTest {
+            api.times[2] = 200
+            val page = opened()
+
+            page.askDelete(SlotEntry(7, 700))
+            assertNull(page.state!!.deleting)
+            page.askDelete(SlotEntry(2, null))
+            assertNull(page.state!!.deleting)
+            page.askDelete(page.state!!.entries!!.single())
+            assertEquals(2, page.state!!.deleting?.slot)
+        }
+
     private companion object {
         const val SERIAL = "SCUS-94900"
     }

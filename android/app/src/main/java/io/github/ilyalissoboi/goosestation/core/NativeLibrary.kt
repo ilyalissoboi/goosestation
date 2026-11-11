@@ -601,6 +601,15 @@ object NativeLibrary {
     )
 
     /**
+     * For GameCallsTest only: queues the touch pad's [buttons] states one after another in one go, so no pass of the
+     * core's input comes between them: a tap shorter than a frame.
+     */
+    external fun queueTouchPadsForTest(buttons: IntArray)
+
+    /** For GameCallsTest only: the touch pad's buttons Port 1 was given as pressed since the last call, as bits. */
+    external fun takeTouchPressesForTest(): Int
+
+    /**
      * While [top], the picture sits at the top of the screen (`[Display] Alignment` taken as LeftOrTop, never
      * written), for the touch pad under it in portrait; false gives it back its setting. Doesn't wait.
      */

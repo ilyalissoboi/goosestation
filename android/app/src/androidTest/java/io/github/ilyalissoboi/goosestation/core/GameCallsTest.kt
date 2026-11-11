@@ -1426,6 +1426,23 @@ class GameCallsTest {
             assertEquals(0f, bind("Up"))
         }
 
+    // From review: a tap let go before the core's next pass of its input was lost, the release replacing the press
+    // still queued. It's held for one pass, then let go.
+    @Test
+    fun aTapShorterThanAFrameReachesPortOne() =
+        withPadtest {
+            NativeLibrary.takeTouchPressesForTest()
+            NativeLibrary.queueTouchPadsForTest(intArrayOf(TouchButton.Cross.bit, 0))
+            var pressed = 0
+            val end = System.nanoTime() + 3_000_000_000L
+            while (pressed and TouchButton.Cross.bit == 0 && System.nanoTime() < end) {
+                pressed = pressed or NativeLibrary.takeTouchPressesForTest()
+                Thread.sleep(20)
+            }
+            assertEquals("Cross was given to Port 1", TouchButton.Cross.bit, pressed and TouchButton.Cross.bit)
+            awaitBind("Cross", 0f)
+        }
+
     // With touch controls on Always beside a controller on Port 1: letting go of the touch pad's Cross doesn't let go of
     // the controller's, still held.
     @Test

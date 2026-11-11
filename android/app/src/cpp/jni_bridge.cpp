@@ -2723,6 +2723,19 @@ NATIVE_LIBRARY_FUNCTION(void, setTouchPad)(JNIEnv*, jobject, jint buttons, jfloa
   AndroidHost::QueueTouchPad(TouchPad::State{static_cast<u32>(buttons), {left_x, left_y, right_x, right_y}});
 }
 
+NATIVE_LIBRARY_FUNCTION(void, queueTouchPadsForTest)(JNIEnv* env, jobject, jintArray buttons)
+{
+  std::vector<u32> states(static_cast<size_t>(env->GetArrayLength(buttons)));
+  if (!states.empty())
+    env->GetIntArrayRegion(buttons, 0, static_cast<jsize>(states.size()), reinterpret_cast<jint*>(states.data()));
+  AndroidHost::QueueTouchPadsForTest(states);
+}
+
+NATIVE_LIBRARY_FUNCTION(jint, takeTouchPressesForTest)(JNIEnv*, jobject)
+{
+  return static_cast<jint>(AndroidHost::TakeTouchPressesForTest());
+}
+
 NATIVE_LIBRARY_FUNCTION(void, setPictureAtTop)(JNIEnv*, jobject, jboolean top)
 {
   AndroidHost::SetPictureAtTop(top);

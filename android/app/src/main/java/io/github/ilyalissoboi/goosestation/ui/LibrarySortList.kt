@@ -16,11 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.coerceAtLeast
@@ -32,6 +28,7 @@ import io.github.ilyalissoboi.goosestation.library.LibraryWords
 import io.github.ilyalissoboi.goosestation.library.SortKey
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.ChoiceList
+import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 
 /** The sort list's width, less on a narrower screen. */
 private val LIST_WIDTH = 240.dp
@@ -70,11 +67,7 @@ internal fun LibrarySortList(
                 .width(width)
                 .heightIn(max = (maxHeight - top - EDGE).coerceAtLeast(48.dp))
                 .verticalScroll(rememberScrollState())
-                .onPreviewKeyEvent { event ->
-                    if (event.key != Key.ButtonB && event.key != Key.Back) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp) onClose()
-                    true
-                },
+                .backKeys(onBack = onClose),
         ) {
             ChoiceList(choices, selected = sort.key, onPick = { onPick(it.value) })
         }

@@ -5,7 +5,6 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,16 +30,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -54,6 +50,7 @@ import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
 import io.github.ilyalissoboi.goosestation.app.SlotTab
+import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
@@ -61,7 +58,10 @@ import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
+import io.github.ilyalissoboi.goosestation.ui.components.Question
+import io.github.ilyalissoboi.goosestation.ui.components.SidePanel
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.components.tabKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
@@ -148,21 +148,7 @@ fun SaveSlotPanel(
         }
     }
 
-    Column(
-        modifier =
-            modifier
-                .onPreviewKeyEvent { event ->
-                    if (event.key != Key.ButtonL1 && event.key != Key.ButtonR1) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp && !asking && !panel.busy) switchTab()
-                    true
-                }.focusProperties {
-                    // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
-                    onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
-                }.focusGroup()
-                .background(colors.surface, GsShapes.large)
-                .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    SidePanel(modifier = modifier.tabKeys { if (!asking && !panel.busy) switchTab() }) {
         // Focusable while nothing else in the panel can take the focus, so it stays in the panel and B reaches it. It
         // stays focusable while it has the focus, as rows arrive until one takes it: were it to stop first, Android
         // would put the focus on the window's first focusable, the menu's top, scrolling the menu (as Achievements).
@@ -220,6 +206,7 @@ fun SaveSlotPanel(
                         "Load",
                         onConfirm = actions::confirmSwitch,
                         onCancel = actions::cancelSwitch,
+                        textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 } else if (deleting != null) {
                     Question(
@@ -227,6 +214,7 @@ fun SaveSlotPanel(
                         "Delete",
                         onConfirm = actions::confirmDelete,
                         onCancel = actions::cancelDelete,
+                        textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 } else if (replacing != null) {
                     Question(
@@ -234,6 +222,7 @@ fun SaveSlotPanel(
                         "Replace",
                         onConfirm = actions::confirmReplace,
                         onCancel = actions::cancelReplace,
+                        textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 } else {
                     entries?.forEach { entry ->
@@ -321,33 +310,12 @@ internal fun SlotRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 16.dp),
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .testTag(SLOT_PICTURE)
-                        .size(if (compact) 64.dp else 112.dp, if (compact) 48.dp else 84.dp)
-                        .clip(GsShapes.small)
-                        .background(colors.sunken),
-                contentAlignment = Alignment.Center,
-            ) {
-                val picture = entry.picture
-                if (picture != null) {
-                    val bitmap = remember(picture) { picture.toImageBitmap() }
-                    Image(
-                        bitmap,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        GsIcons.memoryCard,
-                        contentDescription = null,
-                        tint = colors.inkFaint,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
+            SaveStatePicture(
+                entry.picture,
+                Modifier
+                    .testTag(SLOT_PICTURE)
+                    .size(if (compact) 64.dp else 112.dp, if (compact) 48.dp else 84.dp),
+            )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     if (entry.slot == SaveSlots.RESUME) "Resume" else "Slot ${entry.slot}",
@@ -389,4 +357,21 @@ internal fun SlotLine(text: String) {
         color = GooseStationTheme.colors.inkMuted,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/** A save state's picture, fitted in a `sunken` box at `radius-sm`, or the memory card icon without one. */
+@Composable
+internal fun SaveStatePicture(
+    picture: ArgbImage?,
+    modifier: Modifier,
+) {
+    val colors = GooseStationTheme.colors
+    Box(modifier = modifier.clip(GsShapes.small).background(colors.sunken), contentAlignment = Alignment.Center) {
+        if (picture != null) {
+            val bitmap = remember(picture) { picture.toImageBitmap() }
+            Image(bitmap, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(GsIcons.memoryCard, contentDescription = null, tint = colors.inkFaint, modifier = Modifier.size(24.dp))
+        }
+    }
 }

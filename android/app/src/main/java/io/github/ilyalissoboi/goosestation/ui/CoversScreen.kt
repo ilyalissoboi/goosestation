@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -40,6 +39,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.ProgressBar
+import io.github.ilyalissoboi.goosestation.ui.components.QuestionPanel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
@@ -258,24 +258,13 @@ internal fun CoversRestoreQuestion(
     onReplace: () -> Unit,
     onKeep: () -> Unit,
 ) {
-    OverlayPanel(onBack = onKeep) {
-        val keep = remember { FocusRequester() }
-        LaunchedEffect(Unit) { keep.requestFocus() }
-        Text(
-            "Replace your sources with the preset source?",
-            style = MaterialTheme.typography.bodyLarge,
-            color = GooseStationTheme.colors.ink,
-        )
-        ButtonRow(modifier = Modifier.fillMaxWidth()) {
-            ActionButton("Replace", onClick = onReplace, kind = ButtonKind.Danger)
-            ActionButton(
-                "Keep mine",
-                onClick = onKeep,
-                modifier = Modifier.focusRequester(keep),
-                kind = ButtonKind.Ghost,
-            )
-        }
-    }
+    QuestionPanel(
+        "Replace your sources with the preset source?",
+        "Replace",
+        onConfirm = onReplace,
+        onCancel = onKeep,
+        cancel = "Keep mine",
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)

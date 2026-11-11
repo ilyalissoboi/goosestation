@@ -27,11 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -54,23 +50,14 @@ fun OverlayPanel(
 ) {
     BackHandler(onBack = onBack)
     val colors = GooseStationTheme.colors
-    // The keys whose key-down the panel has seen, and whose key-up hasn't come yet.
-    val down = remember { HashSet<Key>() }
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
                 .background(colors.scrim)
                 .pointerInput(Unit) { detectTapGestures {} }
-                .onKeyEvent { event ->
-                    val key = event.key
-                    if (key != Key.Back && key != Key.ButtonB) return@onKeyEvent false
-                    when (event.type) {
-                        KeyEventType.KeyDown -> down += key
-                        KeyEventType.KeyUp -> if (down.remove(key)) onBack()
-                    }
-                    true
-                }.safeDrawingPadding()
+                .backKeys(preview = false, onBack = onBack)
+                .safeDrawingPadding()
                 .padding(32.dp),
         contentAlignment = Alignment.Center,
     ) {

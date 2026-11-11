@@ -150,11 +150,8 @@ fun SettingsPage(
                         }
                     }
                     // B, and a Back key reaching Compose, go to the back handlers, the innermost enabled one first.
-                    .onPreviewKeyEvent { event ->
-                        if (event.key != Key.Back && event.key != Key.ButtonB) return@onPreviewKeyEvent false
-                        if (event.type == KeyEventType.KeyUp) dispatcher?.onBackPressed() ?: onBack()
-                        true
-                    }.verticalScroll(rememberScrollState())
+                    .backKeys { dispatcher?.onBackPressed() ?: onBack() }
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 32.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -193,11 +190,8 @@ fun LazySettingsPage(
                 .background(MaterialTheme.colorScheme.background)
                 .safeDrawingPadding()
                 // B, and a Back key reaching Compose, go to the back handlers, the innermost enabled one first.
-                .onPreviewKeyEvent { event ->
-                    if (event.key != Key.Back && event.key != Key.ButtonB) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp) dispatcher?.onBackPressed() ?: onBack()
-                    true
-                }.padding(horizontal = 28.dp, vertical = 16.dp),
+                .backKeys { dispatcher?.onBackPressed() ?: onBack() }
+                .padding(horizontal = 28.dp, vertical = 16.dp),
     ) {
         val game = LocalGameContext.current
         // The title scrolls with the rows, as on every settings page, so a short screen keeps its height for them.

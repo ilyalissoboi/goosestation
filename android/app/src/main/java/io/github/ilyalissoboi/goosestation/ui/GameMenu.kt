@@ -58,14 +58,13 @@ import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
 import io.github.ilyalissoboi.goosestation.core.GameEntry
-import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
-import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
+import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
@@ -371,6 +370,7 @@ private fun MenuPanel(
                     "Reset",
                     onConfirm = actions::confirmReset,
                     onCancel = actions::cancelReset,
+                    textStyle = MaterialTheme.typography.headlineSmall,
                 )
             } else if (state.confirmingExit) {
                 Question(
@@ -378,6 +378,7 @@ private fun MenuPanel(
                     "Exit",
                     onConfirm = actions::confirmExit,
                     onCancel = actions::cancelExit,
+                    textStyle = MaterialTheme.typography.headlineSmall,
                 )
             } else if (state.replacingResume != null) {
                 // Both answers exit: Keep it leaves the resume state as it is. B stays in the game.
@@ -388,6 +389,7 @@ private fun MenuPanel(
                     onCancel = actions::keepResume,
                     cancel = "Keep it",
                     cancelKind = ButtonKind.Secondary,
+                    textStyle = MaterialTheme.typography.headlineSmall,
                 )
             } else {
                 MenuItem("Resume", GsIcons.play, actions::resume, Modifier.focusRequester(resume), quiet = quiet)
@@ -605,30 +607,6 @@ private fun MenuItem(
                     },
                 )
             }
-        }
-    }
-}
-
-/**
- * A question asked in a panel, in place of what it's about: [text], then [confirm] (it overwrites or destroys, so it's
- * `Danger`) and [cancel] (Cancel, unless it says otherwise, in [cancelKind]), which takes the focus.
- */
-@Composable
-internal fun Question(
-    text: String,
-    confirm: String,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-    cancel: String = "Cancel",
-    cancelKind: ButtonKind = ButtonKind.Ghost,
-) {
-    val cancelFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { cancelFocus.requestFocus() }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(text, style = MaterialTheme.typography.headlineSmall, color = GooseStationTheme.colors.ink)
-        ButtonRow {
-            ActionButton(confirm, onClick = onConfirm, kind = ButtonKind.Danger)
-            ActionButton(cancel, onClick = onCancel, kind = cancelKind, modifier = Modifier.focusRequester(cancelFocus))
         }
     }
 }

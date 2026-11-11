@@ -36,6 +36,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
+import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -139,28 +140,20 @@ private fun QuestionContent(
     model: PostProcessingModel,
     question: FavouriteQuestion,
 ) {
-    val cancel = remember { FocusRequester() }
-    LaunchedEffect(question) { cancel.requestFocus() }
-    Text(
-        favouriteQuestionText(question),
-        style = MaterialTheme.typography.bodyLarge,
-        color = GooseStationTheme.colors.ink,
-    )
     val (confirm, kind) =
         when (question) {
             is FavouriteQuestion.Apply -> "Apply" to ButtonKind.Primary
             is FavouriteQuestion.Replace -> "Replace" to ButtonKind.Danger
             is FavouriteQuestion.Delete -> "Delete" to ButtonKind.Danger
         }
-    ButtonRow {
-        ActionButton(confirm, onClick = model::confirmFavourite, kind = kind)
-        ActionButton(
-            "Cancel",
-            onClick = model::cancelFavourite,
-            modifier = Modifier.focusRequester(cancel),
-            kind = ButtonKind.Ghost,
-        )
-    }
+    Question(
+        favouriteQuestionText(question),
+        confirm,
+        onConfirm = model::confirmFavourite,
+        onCancel = model::cancelFavourite,
+        confirmKind = kind,
+        key = question,
+    )
 }
 
 /**

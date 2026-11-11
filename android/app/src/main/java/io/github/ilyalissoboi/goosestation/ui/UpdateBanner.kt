@@ -16,16 +16,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -41,6 +35,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.ProgressBar
+import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.components.notAFocusStop
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
@@ -95,7 +90,6 @@ fun UpdateBanner(
             is UpdateState.Failed -> state.release
         }.versionName.let(AppVersion::short)
     val hideable = state is UpdateState.Available || state is UpdateState.Failed
-    val down = remember { HashSet<Key>() }
 
     val (text, note) =
         when (state) {
@@ -179,15 +173,8 @@ fun UpdateBanner(
 
     // On a wide screen the buttons go beside the words, so the banner takes half the height from the games.
     BoxWithConstraints(
-        modifier.onKeyEvent { event ->
-            if (event.key != Key.ButtonB && event.key != Key.Back) return@onKeyEvent false
-            if (!hideable) return@onKeyEvent true
-            when (event.type) {
-                KeyEventType.KeyDown -> down += event.key
-                KeyEventType.KeyUp -> if (down.remove(event.key)) model.onHide()
-            }
-            true
-        },
+        // B and Back hide it while it can be hidden; otherwise they do nothing, and go no further.
+        modifier.backKeys(preview = false) { if (hideable) model.onHide() },
     ) {
         val wide = maxWidth >= WIDE * LocalDensity.current.fontScale
         Notice(

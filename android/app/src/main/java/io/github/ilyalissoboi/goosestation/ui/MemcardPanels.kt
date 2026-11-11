@@ -31,6 +31,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
+import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
@@ -72,12 +73,14 @@ private fun QuestionContent(
     question: EditorQuestion,
     actions: MemcardEditorActions,
 ) {
-    val colors = GooseStationTheme.colors
-    val safe = remember { FocusRequester() }
-    LaunchedEffect(question) { safe.requestFocus() }
-    Text(question.text, style = MaterialTheme.typography.bodyLarge, color = colors.ink)
-    ButtonRow {
-        ActionButton(question.confirm, onClick = { actions.answer(true) }, kind = ButtonKind.Danger)
+    Question(
+        question.text,
+        question.confirm,
+        onConfirm = { actions.answer(true) },
+        onCancel = { actions.answer(false) },
+        cancel = question.safe,
+        key = question,
+    ) {
         question.choices.forEachIndexed { index, choice ->
             ActionButton(
                 choice.label,
@@ -85,12 +88,6 @@ private fun QuestionContent(
                 kind = if (choice.danger) ButtonKind.Danger else ButtonKind.Secondary,
             )
         }
-        ActionButton(
-            question.safe,
-            onClick = { actions.answer(false) },
-            kind = ButtonKind.Ghost,
-            modifier = Modifier.focusRequester(safe),
-        )
     }
 }
 

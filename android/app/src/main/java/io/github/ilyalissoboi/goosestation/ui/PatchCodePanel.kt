@@ -3,8 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,9 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
@@ -42,10 +38,10 @@ import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
+import io.github.ilyalissoboi.goosestation.ui.components.SidePanel
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
-import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 
 /**
  * The Patch codes panel of the in-game menu, beside it as the slot panel is: the game's codes in their groups, each
@@ -70,17 +66,7 @@ fun PatchCodePanel(
         if (groups.isNullOrEmpty()) title.requestFocus() else first.requestFocus()
     }
 
-    Column(
-        modifier =
-            modifier
-                .focusProperties {
-                    // The D-pad can't leave the panel; the menu gives the focus back to its row as it closes.
-                    onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
-                }.focusGroup()
-                .background(colors.surface, GsShapes.large)
-                .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    SidePanel(modifier) {
         // Focusable while there's no code to focus, so the focus stays in the panel and B reaches it. It stays
         // focusable while it has the focus, as the codes arrive until the first takes it: were it to stop first,
         // Android would put the focus on the window's first focusable, the menu's top, scrolling the menu (as

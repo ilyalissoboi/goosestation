@@ -210,15 +210,6 @@ std::vector<MemcardEditorBridge::CardFile> MemcardEditorBridge::ListCards(std::s
 namespace MemcardEditorBridge {
 namespace {
 
-// Runs f on the CPU thread, waiting for it, and returns what it returned.
-template<typename F>
-auto OnCPUThread(F&& f) -> decltype(f())
-{
-  decltype(f()) ret{};
-  EmuThread::RunOnThread([&ret, &f]() { ret = f(); }, true);
-  return ret;
-}
-
 // The card in bytes, or null unless it's a card image.
 std::unique_ptr<MemoryCardImage::DataArray> ToCard(std::span<const u8> bytes)
 {
@@ -310,12 +301,12 @@ std::optional<std::vector<u8>> ReadFile(const std::string& path)
 
 std::optional<std::vector<u8>> MemcardEditorBridge::ReadCard(const std::string& path)
 {
-  return OnCPUThread([&path]() { return ReadFile(path); });
+  return EmuThread::Call([&path]() { return ReadFile(path); });
 }
 
 std::optional<MemcardEditorBridge::Contents> MemcardEditorBridge::GetContents(std::span<const u8> bytes)
 {
-  return OnCPUThread([bytes]() -> std::optional<Contents> {
+  return EmuThread::Call([bytes]() -> std::optional<Contents> {
     const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
     if (!card)
       return std::nullopt;
@@ -333,7 +324,7 @@ std::optional<MemcardEditorBridge::Contents> MemcardEditorBridge::GetContents(st
 
 std::vector<u8> MemcardEditorBridge::Format()
 {
-  return OnCPUThread([]() {
+  return EmuThread::Call([]() {
     auto card = std::make_unique<MemoryCardImage::DataArray>();
     MemoryCardImage::Format(card.get());
     return ToBytes(*card);
@@ -343,7 +334,7 @@ std::vector<u8> MemcardEditorBridge::Format()
 MemcardEditorBridge::Edit MemcardEditorBridge::CopySave(std::span<const u8> from_bytes, u32 from_block,
                                                         std::span<const u8> to_bytes, bool replace)
 {
-  return OnCPUThread([&]() {
+  return EmuThread::Call([&]() {
     const std::unique_ptr<MemoryCardImage::DataArray> from = ToCard(from_bytes);
     const std::unique_ptr<MemoryCardImage::DataArray> to = ToCard(to_bytes);
     if (!from || !to)
@@ -373,7 +364,7 @@ MemcardEditorBridge::Edit MemcardEditorBridge::CopySave(std::span<const u8> from
 std::optional<std::vector<u8>> MemcardEditorBridge::DeleteSave(std::span<const u8> bytes, u32 first_block,
                                                                bool permanently)
 {
-  return OnCPUThread([&]() -> std::optional<std::vector<u8>> {
+  return EmuThread::Call([&]() -> std::optional<std::vector<u8>> {
     const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
     const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
     if (!fi.has_value() || !MemoryCardImage::DeleteFile(card.get(), fi.value(), permanently))
@@ -384,7 +375,7 @@ std::optional<std::vector<u8>> MemcardEditorBridge::DeleteSave(std::span<const u
 
 std::optional<std::vector<u8>> MemcardEditorBridge::UndeleteSave(std::span<const u8> bytes, u32 first_block)
 {
-  return OnCPUThread([&]() -> std::optional<std::vector<u8>> {
+  return EmuThread::Call([&]() -> std::optional<std::vector<u8>> {
     const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
     const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
     if (!fi.has_value() || !MemoryCardImage::UndeleteFile(card.get(), fi.value()))
@@ -397,7 +388,7 @@ MemcardEditorBridge::RenameCheck MemcardEditorBridge::CheckRename(std::span<cons
                                                                   const std::optional<std::string>& title,
                                                                   const std::optional<std::string>& name)
 {
-  return OnCPUThread([&]() {
+  return EmuThread::Call([&]() {
     const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
     const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
     if (!fi.has_value())
@@ -411,7 +402,7 @@ std::optional<std::vector<u8>> MemcardEditorBridge::Rename(std::span<const u8> b
                                                            const std::optional<std::string>& title,
                                                            const std::optional<std::string>& name)
 {
-  return OnCPUThread([&]() -> std::optional<std::vector<u8>> {
+  return EmuThread::Call([&]() -> std::optional<std::vector<u8>> {
     const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
     const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
     if (!fi.has_value() || fi->deleted)
@@ -431,7 +422,7 @@ std::optional<std::vector<u8>> MemcardEditorBridge::Rename(std::span<const u8> b
 MemcardEditorBridge::Edit MemcardEditorBridge::ImportSave(std::span<const u8> bytes, const std::string& file_name,
                                                           std::span<const u8> data)
 {
-  return OnCPUThread([&]() {
+  return EmuThread::Call([&]() {
     const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
     if (!card)
       return Failed(NOT_A_CARD);
@@ -444,7 +435,7 @@ MemcardEditorBridge::Edit MemcardEditorBridge::ImportSave(std::span<const u8> by
 
 MemcardEditorBridge::Edit MemcardEditorBridge::ImportCard(const std::string& file_name, std::span<const u8> data)
 {
-  return OnCPUThread([&]() {
+  return EmuThread::Call([&]() {
     auto card = std::make_unique<MemoryCardImage::DataArray>();
     MemoryCardImage::Format(card.get());
     Error error;
@@ -456,7 +447,7 @@ MemcardEditorBridge::Edit MemcardEditorBridge::ImportCard(const std::string& fil
 
 MemcardEditorBridge::Edit MemcardEditorBridge::ExportSave(std::span<const u8> bytes, u32 first_block)
 {
-  return OnCPUThread([&]() {
+  return EmuThread::Call([&]() {
     const std::unique_ptr<MemoryCardImage::DataArray> card = ToCard(bytes);
     const std::optional<MemoryCardImage::FileInfo> fi = card ? FindSave(*card, first_block) : std::nullopt;
     if (!fi.has_value() || fi->deleted)

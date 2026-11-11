@@ -124,7 +124,7 @@ the system's fonts.
 | `eyebrow` | display 12/16, 600, +1 tracking, capitals | A small label over what it names. | `Eyebrow(text)` |
 | `key` | display 12/16, 700 | A button's glyph in a key chip. | `GooseStationTheme.type.key` |
 | `label` | text 16/20, 600 | Anything pressed or picked. | `typography.titleMedium` |
-| `label-sm` | text 14/18, 600 | Badges, a cycler's value. | `typography.titleSmall`, `labelLarge` |
+| `label-sm` | text 14/18, 600 | Badges, a cycler's value. | `typography.titleSmall`, `labelLarge`, `labelSmall` |
 | `body-lg` | text 18/26, 400 | Lead copy in setup and empty states. | (not used yet) |
 | `body` | text 16/24, 400 | Reading text. | `typography.bodyLarge` |
 | `body-sm` | text 14/20, 400 | Notes under a label, a game's details. | `typography.bodyMedium` |
@@ -273,8 +273,8 @@ a failure hides on B or Back, as the ✕ does by touch: a 48 dp target that is n
 screen reader). The foot says "A Choose", "B Hide". In the other states B does nothing. Hidden or skipped, the
 focus goes back to the game it came from.
 
-What's new is an `OverlayPanel`: "What's new in 0.1-512", each commit's first line in `body-lg` with its author under
-it in `body-sm` `ink-muted`, each a focusable line so the D-pad scrolls them, then "And 12 more." and Close (`Ghost`).
+What's new is an `OverlayPanel`: "What's new in 0.1-512", each commit's first line in `body` with its author under
+it in `body-sm` `ink-muted`, each a focusable line (nothing to activate) so the D-pad scrolls them, then "And 12 more." and Close (`Ghost`).
 The first commit takes the focus once they're in. Without them it's a `Danger` notice, with Close focused. Closed, the
 focus is back on What's new.
 

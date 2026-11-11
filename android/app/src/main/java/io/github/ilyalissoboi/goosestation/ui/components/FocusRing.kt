@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -40,6 +41,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -131,6 +133,28 @@ fun Modifier.focusRing(
                 )
             },
         ).focusIndicator(focused && ring, focusColor, shape)
+        .background(if (focused && focusedFill != null) focusedFill else Color.Transparent, shape)
+}
+
+/**
+ * Makes an element a focus stop for a D-pad, with the [focusRing]'s ring and [focusedFill], but nothing to activate:
+ * a row that's read, not pressed (an achievement, a leaderboard entry, a commit). A screen reader isn't told it's a
+ * button.
+ */
+@Composable
+fun Modifier.focusStop(
+    shape: Shape = GsShapes.medium,
+    focusedFill: Color? = GooseStationTheme.colors.raised,
+): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    val focusColor = GooseStationTheme.colors.focus
+    return this
+        .zIndex(if (focused) 1f else 0f)
+        .onFocusChanged { focused = it.isFocused }
+        // One item to a screen reader, read whole, as a clickable row is.
+        .semantics(mergeDescendants = true) {}
+        .focusable()
+        .focusIndicator(focused, focusColor, shape)
         .background(if (focused && focusedFill != null) focusedFill else Color.Transparent, shape)
 }
 

@@ -137,6 +137,8 @@ private val typography =
         titleSmall = style(atkinson, 14, 18, FontWeight.SemiBold),
         labelLarge = style(atkinson, 14, 18, FontWeight.SemiBold),
         labelMedium = style(atkinson, 12, 16, FontWeight.SemiBold),
+        // label-sm too: left out, it would be Material's own, the system font at 11 sp.
+        labelSmall = style(atkinson, 14, 18, FontWeight.SemiBold),
         // body.
         bodyLarge = style(atkinson, 16, 24, FontWeight.Normal),
         // body-sm: notes, details.

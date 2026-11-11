@@ -160,7 +160,12 @@ fun SettingsPage(
         ) {
             // A game's own pages carry its title over theirs.
             LocalGameContext.current?.let { Eyebrow(it.title) }
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
+            )
             content()
         }
     }
@@ -209,6 +214,7 @@ fun LazySettingsPage(
                         title,
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() },
                     )
                     subtitle?.let {
                         Text(it, style = MaterialTheme.typography.bodyMedium, color = GooseStationTheme.colors.inkMuted)
@@ -921,7 +927,7 @@ private const val SHORT_VALUE_SHARE = 3
 /** A row's mark on a game's page, such as "Set for this game": in the beak's ink, so it reads apart from the note. */
 @Composable
 private fun RowMark(text: String) {
-    Text(text, style = MaterialTheme.typography.labelSmall, color = GooseStationTheme.colors.beakInk)
+    Text(text, style = MaterialTheme.typography.titleSmall, color = GooseStationTheme.colors.beakInk)
 }
 
 /** A line under a row's label and value, in the row, so it's read with them. */

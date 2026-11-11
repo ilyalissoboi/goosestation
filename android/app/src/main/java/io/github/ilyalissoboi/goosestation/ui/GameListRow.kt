@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -100,7 +101,7 @@ fun GameListRow(
         modifier =
             modifier
                 .fillMaxWidth()
-                .focusRing(onLongClick = onLongClick, onClick = onClick)
+                .focusRing(role = Role.Button, onLongClick = onLongClick, onClick = onClick)
                 .padding(start = 8.dp, top = 8.dp, end = 16.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),

@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
+import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.SaveStatePreview
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -219,6 +220,30 @@ class SavesPageTest {
             assertNull(page.state!!.deleting)
             page.askDelete(page.state!!.entries!!.single())
             assertEquals(2, page.state!!.deleting?.slot)
+        }
+
+    // A re-read after a delete stops the pictures the last read was still reading, rather than read them twice.
+    @Test
+    fun aRereadStopsTheLastPictureReads() =
+        runTest {
+            for (slot in listOf(2, 5, 8)) {
+                api.times[slot] = slot * 100L
+                api.screenshots[slot] = ArgbImage(2, 1, intArrayOf(-1, -1))
+            }
+            val page = page()
+            var deleted = false
+            api.onPreview = { slot ->
+                if (slot == 2 && !deleted) {
+                    deleted = true
+                    page.askDelete(page.state!!.entries!!.first { it.slot == 2 })
+                    page.confirmDelete()
+                }
+            }
+            page.open(crash)
+            runCurrent()
+
+            // Slot 5's picture was under way as the re-read began; slot 8's, after it, is read by the re-read alone.
+            assertEquals(1, calls.count { it == "getStatePreview $SERIAL 8" })
         }
 
     private companion object {

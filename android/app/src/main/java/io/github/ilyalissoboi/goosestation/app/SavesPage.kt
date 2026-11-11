@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -70,6 +71,9 @@ class SavesPage(
     /** Changes as the page opens and closes, so a read for an earlier one is dropped. */
     private var pageId = 0
 
+    /** The lists' read under way, and their pictures': one at a time, so a re-read never reads a picture twice. */
+    private var listRead: Job? = null
+
     /** Opens [entry]'s Saves, on This game, or on Shared for a game without a key. */
     fun open(entry: GameEntry) {
         val id = ++pageId
@@ -84,6 +88,7 @@ class SavesPage(
 
     fun close() {
         pageId++
+        listRead?.cancel()
         state = null
     }
 
@@ -164,22 +169,24 @@ class SavesPage(
         val entry = state?.game ?: return
         val key = entry.serial
         val multiDisc = entry.discs.size > 1
-        scope.launch {
-            val own = if (key.isNotBlank()) reader.own(key, SlotMode.Load) else emptyList()
-            val others = if (key.isNotBlank()) reader.others(key, entry.discs) else emptyList()
-            val shared = reader.shared(SlotMode.Load)
-            if (id != pageId) return@launch
-            change {
-                it.copy(entries = own, others = others, shared = shared, focusRow = focusRow, removing = false)
-            }
-            val tab = state?.tab ?: SlotTab.ThisGame
-            val rows = if (tab == SlotTab.Shared) shared + own + others else own + others + shared
-            for (row in rows) {
-                val read = reader.preview(row, key, entry.path, multiDisc) ?: continue
+        listRead?.cancel()
+        listRead =
+            scope.launch {
+                val own = if (key.isNotBlank()) reader.own(key, SlotMode.Load) else emptyList()
+                val others = if (key.isNotBlank()) reader.others(key, entry.discs) else emptyList()
+                val shared = reader.shared(SlotMode.Load)
                 if (id != pageId) return@launch
-                change { it.withRow(read) }
+                change {
+                    it.copy(entries = own, others = others, shared = shared, focusRow = focusRow, removing = false)
+                }
+                val tab = state?.tab ?: SlotTab.ThisGame
+                val rows = if (tab == SlotTab.Shared) shared + own + others else own + others + shared
+                for (row in rows) {
+                    val read = reader.preview(row, key, entry.path, multiDisc) ?: continue
+                    if (id != pageId) return@launch
+                    change { it.withRow(read) }
+                }
             }
-        }
     }
 
     private fun change(update: (SavesPageState) -> SavesPageState) {

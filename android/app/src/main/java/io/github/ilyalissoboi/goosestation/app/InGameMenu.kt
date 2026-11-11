@@ -15,6 +15,7 @@ import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.LeaderboardPage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -303,6 +304,9 @@ class InGameMenu(
     /** Changes as the slot panel opens and closes, so a read for an earlier panel is dropped. */
     private var panelId = 0
 
+    /** The slot lists' read under way, and their pictures': one at a time, so a re-read never reads a picture twice. */
+    private var slotRead: Job? = null
+
     /** Changes as a leaderboard opens or closes, so the core's answer for an earlier one is dropped. */
     private var leaderboardRequest = 0
 
@@ -575,34 +579,36 @@ class InGameMenu(
         val discs = running?.discs.orEmpty()
         val multiDisc = discs.size > 1
         val path = running?.path.orEmpty()
-        scope.launch {
-            val entries = if (hasKey) reader.own(serial, mode) else emptyList()
-            val last = if (hasKey) withContext(game) { lastSlots.get(serial) } else null
-            // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
-            val others = if (hasKey && mode == SlotMode.Load) reader.others(serial, discs) else emptyList()
-            val shared = reader.shared(mode)
-            if (id != panelId) return@launch
-            updatePanel(id) {
-                it.copy(
-                    entries = entries,
-                    focus = SaveLists.focus(mode, entries, last),
-                    others = others,
-                    shared = shared,
-                    sharedFocus = SaveLists.focus(mode, shared, null),
-                    focusRow = focusRow,
-                    busy = it.busy && !removed,
-                    removing = it.removing && !removed,
-                )
-            }
-            val own = entries.filter { it.savedAt != null } + others
-            val sharedSaved = shared.filter { it.savedAt != null }
-            val tab = state.slots?.tab ?: SlotTab.ThisGame
-            for (entry in if (tab == SlotTab.Shared) sharedSaved + own else own + sharedSaved) {
-                val read = reader.preview(entry, serial, path, multiDisc) ?: continue
+        slotRead?.cancel()
+        slotRead =
+            scope.launch {
+                val entries = if (hasKey) reader.own(serial, mode) else emptyList()
+                val last = if (hasKey) withContext(game) { lastSlots.get(serial) } else null
+                // In Load, the states still filed under the game's other discs, as the migration left them or desktop saved them.
+                val others = if (hasKey && mode == SlotMode.Load) reader.others(serial, discs) else emptyList()
+                val shared = reader.shared(mode)
                 if (id != panelId) return@launch
-                updatePanel(id) { panel -> panel.withRow(read) }
+                updatePanel(id) {
+                    it.copy(
+                        entries = entries,
+                        focus = SaveLists.focus(mode, entries, last),
+                        others = others,
+                        shared = shared,
+                        sharedFocus = SaveLists.focus(mode, shared, null),
+                        focusRow = focusRow,
+                        busy = it.busy && !removed,
+                        removing = it.removing && !removed,
+                    )
+                }
+                val own = entries.filter { it.savedAt != null } + others
+                val sharedSaved = shared.filter { it.savedAt != null }
+                val tab = state.slots?.tab ?: SlotTab.ThisGame
+                for (entry in if (tab == SlotTab.Shared) sharedSaved + own else own + sharedSaved) {
+                    val read = reader.preview(entry, serial, path, multiDisc) ?: continue
+                    if (id != panelId) return@launch
+                    updatePanel(id) { panel -> panel.withRow(read) }
+                }
             }
-        }
     }
 
     override fun confirmSwitch() {
@@ -671,6 +677,7 @@ class InGameMenu(
 
     private fun dropSlots() {
         panelId++
+        slotRead?.cancel()
         state = state.copy(slots = null)
     }
 

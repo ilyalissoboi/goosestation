@@ -52,10 +52,14 @@ class FakeGameCore(
         return LongArray(SaveSlots.COUNT + 1) { sharedTimes[it] ?: 0L }.also { it[0] = 0L }
     }
 
+    /** Runs as [getStatePreview] is called, with the slot: a test's way in while the pictures are read. */
+    var onPreview: (slot: Int) -> Unit = {}
+
     override fun getStatePreview(
         state: StateRef,
         gamePath: String,
     ): SaveStatePreview? {
+        onPreview(state.slot)
         if (state.shared) {
             calls += "getStatePreview shared ${state.slot} $gamePath"
             return sharedHolds[state.slot]

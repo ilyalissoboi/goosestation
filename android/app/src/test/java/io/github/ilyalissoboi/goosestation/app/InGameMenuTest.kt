@@ -2360,6 +2360,30 @@ class InGameMenuTest {
             assertFalse(menu.slots().busy)
         }
 
+    // A re-read after a delete stops the pictures the last read was still reading, rather than read them twice.
+    @Test
+    fun aRereadStopsTheLastPictureReads() =
+        runTest {
+            for (slot in listOf(2, 5, 8)) {
+                api.times[slot] = slot * 100L
+                api.screenshots[slot] = picture
+            }
+            val menu = menu()
+            var deleted = false
+            api.onPreview = { slot ->
+                if (slot == 2 && !deleted) {
+                    deleted = true
+                    menu.askDelete(menu.entries().first { it.slot == 2 })
+                    menu.confirmDelete()
+                }
+            }
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+
+            // Slot 5's picture was under way as the re-read began; slot 8's, after it, is read by the re-read alone.
+            assertEquals(1, calls.count { it == "getStatePreview $SERIAL 8" })
+        }
+
     // The deleted row stays unpickable until the lists are read again: "Deleting…" until then.
     @Test
     fun aDeleteIsBusyUntilTheListsAreReadAgain() =

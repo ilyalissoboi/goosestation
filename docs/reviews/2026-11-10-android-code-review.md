@@ -19,6 +19,49 @@ finding touches one of them, it says so.
 **Sizes.** S is under an hour, M is about half a day, L is several days. Paths are relative to
 `android/app/src/main/java/io/github/ilyalissoboi/goosestation/` unless they start with `android/`, `src/` or `.github/`.
 
+## Status, 2026-11-11
+
+Most of the findings in sections 1 and 2 have since been fixed, each test-first where a test could run. Where they
+landed:
+
+| PR | Fixed |
+|---|---|
+| [#77](https://github.com/ilyalissoboi/goosestation/pull/77) | 1.1–1.6 |
+| [#80](https://github.com/ilyalissoboi/goosestation/pull/80) | 1.12; from 1.13 the touch layout's tolerance, the folder pick, `http://` cover sources and `MemcardSyncStatus`; from 2 the instrumented tests built in CI and `test-sign-apk.sh` run in CI |
+| [#81](https://github.com/ilyalissoboi/goosestation/pull/81) | 1.8, 1.9 and 1.10 |
+| [#82](https://github.com/ilyalissoboi/goosestation/pull/82) | 1.7 and 1.11 |
+| [#83](https://github.com/ilyalissoboi/goosestation/pull/83) | From 1.13: `HttpBridge` cancel, the installer waiting for the library, the delayed start's re-check, the short cover summary |
+| [#84](https://github.com/ilyalissoboi/goosestation/pull/84) | From 1.13: the lost touch tap, the strict UTF-8 decoder, `memcardSyncHoldCard`, and the focus holders in SlotPanel and PatchCodePanel |
+
+**How some of them turned out:**
+- **1.7:** fixed with one `withSide()` helper rather than a sealed `SidePanel`. The type is still worth doing with the
+  `InGameMenu` split (3.2).
+- **1.9:** multitap's stale hub read is left as it is. It only makes the page flicker for a moment before a fresh read
+  replaces it.
+- **1.10:** the shader readers run on the CPU thread. The settings lock isn't re-entrant, and the global chain is read
+  with it held, so taking it inside them would deadlock.
+- **1.13, the installer:** only the installer waits for the library. The check at start keeps "no game on", because
+  Setup checks for updates on the build's channel, and the tiers' release part relies on that.
+- **1.13, game starts:** a start found away from the library or Saves is refused rather than the page being closed.
+- **1.13, the leaderboard fetch on sign-out:** dropped, not a bug. `Achievements::DestroyClient` waits for every
+  request before `rc_client_destroy`.
+- **1.13, the focus holders:** not yet seen on the Thor. The test harness can't reproduce the refocus.
+
+**Still open:**
+- **From 1.13:**
+  - waiting for queued settings writes before a boot, and moving `signIn` off `coreDispatcher`;
+  - TalkBack reaching the screen under an overlay.
+- **From 2:**
+  - Lint in CI;
+  - `GameCallsTest`'s fixed sleeps;
+  - `run-instrumented-tests.sh`'s waits and lock;
+  - the coroutine opt-in warnings;
+  - the toolchain versions pinned in five places;
+  - the emusync download at configuration;
+  - `CheckNoWindowDialogs`' tests;
+  - the three passages of `docs/android.md`.
+- **Sections 3–6:** all of them. The exception is PanelTabs' tap and its TalkBack action (6), fixed in #77 with 1.5.
+
 ---
 
 ## 1. Bugs and risks: high value

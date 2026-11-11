@@ -36,6 +36,9 @@ fun SlotEntry.ref(key: String): StateRef = StateRef(if (shared) "" else owner ?:
 
 /** The rows of the slot lists, as the in-game slot panel and the library's Saves page show them. */
 object SaveLists {
+    /** A shared slot whose state can't be read: nothing says which game it holds. */
+    const val UNREADABLE = "Couldn't read that save."
+
     /** Save lists slots 1 to 10; Load lists the saved ones, the resume state first, when there is one. */
     fun entries(
         mode: SlotMode,

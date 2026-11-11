@@ -25,10 +25,12 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.HeldGame
+import io.github.ilyalissoboi.goosestation.app.SaveListState
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SavesActions
 import io.github.ilyalissoboi.goosestation.app.SavesPageState
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
+import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotTab
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
@@ -49,14 +51,17 @@ class SavesScreenTest {
     private val now = ZonedDateTime.of(2026, 11, 8, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
     private val game = GameEntry("content://g/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
     private val calls = mutableListOf<String>()
-    private var page by mutableStateOf(SavesPageState(game, SlotTab.ThisGame))
+    private var page by mutableStateOf(
+        SavesPageState(game, SaveListState(SlotMode.Load, SlotTab.ThisGame, hasKey = true)),
+    )
     private var backs = 0
 
     private val actions =
         object : SavesActions {
             override fun switchTab() {
                 calls += "switchTab"
-                page = page.copy(tab = if (page.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame)
+                page =
+                    page.lists { it.copy(tab = if (it.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame) }
             }
 
             override fun pick(entry: SlotEntry) {
@@ -65,7 +70,7 @@ class SavesScreenTest {
 
             override fun askDelete(entry: SlotEntry) {
                 calls += "askDelete ${entry.slot}"
-                page = page.copy(deleting = entry)
+                page = page.lists { it.copy(deleting = entry) }
             }
 
             override fun confirmDelete() {
@@ -74,13 +79,16 @@ class SavesScreenTest {
 
             override fun cancelDelete() {
                 calls += "cancelDelete"
-                page = page.copy(deleting = null, focusRow = page.deleting)
+                page = page.lists { it.copy(deleting = null, focusRow = it.deleting) }
             }
         }
 
     private fun saved(vararg slots: Int) = slots.map { SlotEntry(it, now.toEpochSecond() - 600) }
 
     private val spyro = HeldGame("Spyro the Dragon", "SCUS-94228", "content://g/spyro.cue")
+
+    /** The page with its lists changed. */
+    private fun SavesPageState.lists(change: (SaveListState) -> SaveListState) = copy(lists = change(lists))
 
     private fun show() {
         rule.setContent { GooseStationTheme { SavesScreen(page, actions, now, onBack = { backs++ }) } }
@@ -94,7 +102,7 @@ class SavesScreenTest {
 
     @Test
     fun aDeleteUnderWaySaysSo() {
-        page = page.copy(entries = saved(2), shared = emptyList(), removing = true)
+        page = page.lists { it.copy(entries = saved(2), shared = emptyList(), removing = true) }
         show()
 
         rule.onNodeWithText("Deleting…").assertExists()
@@ -103,7 +111,12 @@ class SavesScreenTest {
     @Test
     fun theFirstRowIsFocused() {
         page =
-            page.copy(entries = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) + saved(2), shared = listOf())
+            page.lists {
+                it.copy(
+                    entries = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) + saved(2),
+                    shared = listOf(),
+                )
+            }
         show()
 
         rule.onNodeWithText("CRASH BANDICOOT").assertExists()
@@ -119,10 +132,12 @@ class SavesScreenTest {
     @Test
     fun l1R1SwitchTabs() {
         page =
-            page.copy(
-                entries = saved(2),
-                shared = listOf(SlotEntry(5, now.toEpochSecond() - 600, shared = true, holds = spyro)),
-            )
+            page.lists {
+                it.copy(
+                    entries = saved(2),
+                    shared = listOf(SlotEntry(5, now.toEpochSecond() - 600, shared = true, holds = spyro)),
+                )
+            }
         show()
 
         press(Key.ButtonR1)
@@ -139,7 +154,7 @@ class SavesScreenTest {
     // From review: a tab's tap kept the first page's state, so tapping back to This game did nothing.
     @Test
     fun tappingATabSwitchesToItEachTime() {
-        page = page.copy(entries = saved(2), shared = emptyList())
+        page = page.lists { it.copy(entries = saved(2), shared = emptyList()) }
         show()
 
         rule.onNodeWithText("Shared").performClick()
@@ -156,7 +171,7 @@ class SavesScreenTest {
     // A screen reader can pick a tab, and a finger has a full-size target, though the tabs take no focus.
     @Test
     fun aTabIsAButtonToAScreenReaderWithAFullTouchTarget() {
-        page = page.copy(entries = saved(2), shared = emptyList())
+        page = page.lists { it.copy(entries = saved(2), shared = emptyList()) }
         show()
 
         rule.onNodeWithText("Shared").assert(SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick))
@@ -169,7 +184,7 @@ class SavesScreenTest {
 
     @Test
     fun xAsksInAnOverlayWithCancelFocused() {
-        page = page.copy(entries = saved(2, 4), shared = listOf())
+        page = page.lists { it.copy(entries = saved(2, 4), shared = listOf()) }
         show()
 
         press(Key.ButtonX)
@@ -186,12 +201,12 @@ class SavesScreenTest {
     @Test
     fun deletingTheLastSaveFocusesTheTitle() {
         val rows = saved(2)
-        page = page.copy(entries = rows, shared = listOf(), deleting = rows[0])
+        page = page.lists { it.copy(entries = rows, shared = listOf(), deleting = rows[0]) }
         show()
 
-        page = page.copy(deleting = null)
+        page = page.lists { it.copy(deleting = null) }
         rule.waitForIdle()
-        page = page.copy(entries = listOf())
+        page = page.lists { it.copy(entries = listOf()) }
         rule.waitForIdle()
 
         rule.onNode(isFocused() and hasText("Saves")).assertExists()
@@ -199,7 +214,7 @@ class SavesScreenTest {
 
     @Test
     fun noSavesSaysSo() {
-        page = page.copy(entries = listOf(), shared = listOf())
+        page = page.lists { it.copy(entries = listOf(), shared = listOf()) }
         show()
 
         rule.onNodeWithText("No saves yet for this game.").assertExists()
@@ -209,7 +224,11 @@ class SavesScreenTest {
 
     @Test
     fun aGameWithoutAKeySaysSo() {
-        page = SavesPageState(game.copy(serial = ""), SlotTab.ThisGame, entries = listOf(), shared = listOf())
+        page =
+            SavesPageState(
+                game.copy(serial = ""),
+                SaveListState(SlotMode.Load, SlotTab.ThisGame, hasKey = false, entries = listOf(), shared = listOf()),
+            )
         show()
 
         rule.onNodeWithText("This game can't keep save states of its own.").assertExists()
@@ -217,7 +236,7 @@ class SavesScreenTest {
 
     @Test
     fun bGoesBack() {
-        page = page.copy(entries = saved(2), shared = listOf())
+        page = page.lists { it.copy(entries = saved(2), shared = listOf()) }
         show()
 
         press(Key.ButtonB)

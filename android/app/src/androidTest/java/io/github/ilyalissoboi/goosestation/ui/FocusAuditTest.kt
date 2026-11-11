@@ -53,6 +53,7 @@ import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SaveListState
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SavesPageState
@@ -486,7 +487,16 @@ class FocusAuditTest {
     fun savesPage() {
         show {
             SavesScreen(
-                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows),
+                SavesPageState(
+                    savesGame,
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.ThisGame,
+                        hasKey = true,
+                        entries = savedRows,
+                        shared = sharedRows,
+                    ),
+                ),
                 NoSavesActions,
                 savesNow,
                 {},
@@ -500,7 +510,16 @@ class FocusAuditTest {
     fun savesPageShared() {
         show {
             SavesScreen(
-                SavesPageState(savesGame, SlotTab.Shared, savedRows, shared = sharedRows),
+                SavesPageState(
+                    savesGame,
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.Shared,
+                        hasKey = true,
+                        entries = savedRows,
+                        shared = sharedRows,
+                    ),
+                ),
                 NoSavesActions,
                 savesNow,
                 {},
@@ -514,7 +533,17 @@ class FocusAuditTest {
     fun savesPageDeleteQuestion() {
         show {
             SavesScreen(
-                SavesPageState(savesGame, SlotTab.ThisGame, savedRows, shared = sharedRows, deleting = savedRows[1]),
+                SavesPageState(
+                    savesGame,
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.ThisGame,
+                        hasKey = true,
+                        entries = savedRows,
+                        shared = sharedRows,
+                        deleting = savedRows[1],
+                    ),
+                ),
                 NoSavesActions,
                 savesNow,
                 {},
@@ -530,9 +559,13 @@ class FocusAuditTest {
             SavesScreen(
                 SavesPageState(
                     savesGame,
-                    SlotTab.ThisGame,
-                    emptyList(),
-                    shared = emptyList(),
+                    SaveListState(
+                        SlotMode.Load,
+                        SlotTab.ThisGame,
+                        hasKey = true,
+                        entries = emptyList(),
+                        shared = emptyList(),
+                    ),
                 ),
                 NoSavesActions,
                 savesNow,

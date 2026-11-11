@@ -84,6 +84,7 @@ import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
+import io.github.ilyalissoboi.goosestation.app.SaveListState
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SavesPageState
@@ -1345,16 +1346,22 @@ class OrientationLayoutTest {
             listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) +
                 (1..6).map { SlotEntry(it, now.toEpochSecond() - 86_400 * it) }
         val shared = (1..4).map { SlotEntry(it, now.toEpochSecond() - 600, shared = true, holds = held, disc = 2) }
-        val page = mutableStateOf(SavesPageState(LONG_GAME, SlotTab.ThisGame, own, shared = shared))
+        val page =
+            mutableStateOf(
+                SavesPageState(
+                    LONG_GAME,
+                    SaveListState(SlotMode.Load, SlotTab.ThisGame, hasKey = true, entries = own, shared = shared),
+                ),
+            )
         eachConfig({ SavesScreen(page.value, NoSavesActions, now, {}) }) {
-            page.value = page.value.copy(tab = SlotTab.ThisGame)
+            page.value = page.value.copy(lists = page.value.lists.copy(tab = SlotTab.ThisGame))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             assertTrue("Resume is focused, not ${focusedText()}", focusedHas("Resume"))
             pressUntilFocusedInView(Key.DirectionDown, "Slot 6")
             assertTextsLaidOut(inView = true)
 
-            page.value = page.value.copy(tab = SlotTab.Shared)
+            page.value = page.value.copy(lists = page.value.lists.copy(tab = SlotTab.Shared))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             pressUntilFocusedInView(Key.DirectionDown, "Slot 4")

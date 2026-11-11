@@ -66,14 +66,10 @@ fun SavesScreen(
     onBack: () -> Unit,
 ) {
     val colors = GooseStationTheme.colors
-    val sharedTab = page.tab == SlotTab.Shared
-    val entries =
-        when {
-            sharedTab -> page.shared
-            page.hasKey -> page.entries
-            else -> emptyList()
-        }
-    val others = if (sharedTab || !page.hasKey) emptyList() else page.others
+    val lists = page.lists
+    val sharedTab = lists.tab == SlotTab.Shared
+    val entries = lists.shownEntries
+    val others = lists.shownOthers
     val title = remember { FocusRequester() }
     val rows = remember { HashMap<Triple<Boolean, String?, Int>, FocusRequester>() }
 
@@ -93,10 +89,10 @@ fun SavesScreen(
     // Which rows the page has (not what they show, which a picture read changes): a read after a delete, without the
     // focused row, gives the focus on.
     val rowIds = listed.map { Triple(it.shared, it.owner, it.slot) }
-    LaunchedEffect(entries == null, rowIds, page.tab, page.deleting, page.focusRow, switches) {
-        if (page.deleting != null) return@LaunchedEffect
+    LaunchedEffect(entries == null, rowIds, lists.tab, lists.deleting, lists.focusRow, switches) {
+        if (lists.deleting != null) return@LaunchedEffect
         val target =
-            page.focusRow?.let { focus -> listed.firstOrNull { SaveLists.sameRow(it, focus) } } ?: listed.firstOrNull()
+            lists.focusRow?.let { focus -> listed.firstOrNull { SaveLists.sameRow(it, focus) } } ?: listed.firstOrNull()
         (target?.let { row(it) } ?: title).requestFocus()
     }
 
@@ -135,17 +131,17 @@ fun SavesScreen(
                     PanelTabs(
                         listOf("This game", "Shared"),
                         current = if (sharedTab) 1 else 0,
-                        onSelect = { if (it != page.tab.ordinal) switchTab() },
+                        onSelect = { if (it != lists.tab.ordinal) switchTab() },
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
-                    page.error?.let { error ->
+                    lists.error?.let { error ->
                         Notice(NoticeStatus.Danger) {
                             Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
                         }
                     }
-                    if (page.removing) SlotLine("Deleting…")
+                    if (lists.removing) SlotLine("Deleting…")
                     when {
-                        !sharedTab && !page.hasKey -> SlotLine(NO_KEY_STATES)
+                        !sharedTab && !lists.hasKey -> SlotLine(NO_KEY_STATES)
                         entries != null && entries.isEmpty() && others.isEmpty() ->
                             SlotLine(if (sharedTab) "No shared saves yet." else "No saves yet for this game.")
                     }
@@ -185,7 +181,7 @@ fun SavesScreen(
                 ),
             )
         }
-        page.deleting?.let { SavesDeleteQuestion(it, actions::confirmDelete, actions::cancelDelete) }
+        lists.deleting?.let { SavesDeleteQuestion(it, actions::confirmDelete, actions::cancelDelete) }
     }
 }
 

@@ -52,13 +52,13 @@ class SavesPageTest {
             api.sharedTimes[4] = 400
             val page = opened()
 
-            val state = page.state!!
+            val state = page.state!!.lists
             assertEquals(SlotTab.ThisGame, state.tab)
             assertEquals(listOf(SaveSlots.RESUME, 2), state.entries!!.map { it.slot })
             assertEquals(listOf(4), state.shared!!.map { it.slot })
 
             page.switchTab()
-            assertEquals(SlotTab.Shared, page.state!!.tab)
+            assertEquals(SlotTab.Shared, page.state!!.lists.tab)
         }
 
     @Test
@@ -66,8 +66,8 @@ class SavesPageTest {
         runTest {
             val page = opened(bios)
 
-            assertEquals(SlotTab.Shared, page.state!!.tab)
-            assertEquals(emptyList<SlotEntry>(), page.state!!.entries)
+            assertEquals(SlotTab.Shared, page.state!!.lists.tab)
+            assertEquals(emptyList<SlotEntry>(), page.state!!.lists.entries)
             assertTrue(calls.none { it.startsWith("getSaveStateTimes") })
         }
 
@@ -77,7 +77,11 @@ class SavesPageTest {
             api.times[2] = 200
             val page = opened()
 
-            page.pick(page.state!!.entries!!.single())
+            page.pick(
+                page.state!!
+                    .lists.entries!!
+                    .single(),
+            )
             runCurrent()
 
             assertEquals(listOf("play Crash Bandicoot ${StateRef(SERIAL, 2)}"), calls)
@@ -91,7 +95,11 @@ class SavesPageTest {
             val page = opened()
             page.switchTab()
 
-            page.pick(page.state!!.shared!!.single())
+            page.pick(
+                page.state!!
+                    .lists.shared!!
+                    .single(),
+            )
             runCurrent()
 
             assertEquals(listOf("play Spyro the Dragon ${StateRef("", 4, shared = true)}"), calls)
@@ -105,11 +113,18 @@ class SavesPageTest {
             val page = opened()
             page.switchTab()
 
-            page.pick(page.state!!.shared!!.single())
+            page.pick(
+                page.state!!
+                    .lists.shared!!
+                    .single(),
+            )
             runCurrent()
 
             assertTrue(calls.none { it.startsWith("play") })
-            assertEquals("Shared slot 4 needs Tekken (SLUS-00067), which isn't in your library.", page.state!!.error)
+            assertEquals(
+                "Shared slot 4 needs Tekken (SLUS-00067), which isn't in your library.",
+                page.state!!.lists.error,
+            )
         }
 
     @Test
@@ -120,16 +135,24 @@ class SavesPageTest {
             val page = opened()
             assertTrue(page.state!!.hardcore)
 
-            page.pick(page.state!!.entries!!.single())
+            page.pick(
+                page.state!!
+                    .lists.entries!!
+                    .single(),
+            )
             runCurrent()
             assertTrue(calls.none { it.startsWith("play") })
-            assertEquals("Loading a state is off in hardcore mode", page.state!!.error)
+            assertEquals("Loading a state is off in hardcore mode", page.state!!.lists.error)
 
-            page.askDelete(page.state!!.entries!!.single())
+            page.askDelete(
+                page.state!!
+                    .lists.entries!!
+                    .single(),
+            )
             page.confirmDelete()
             runCurrent()
             assertEquals("deleteState $SERIAL 2", calls.first { it.startsWith("deleteState") })
-            assertEquals(emptyList<SlotEntry>(), page.state!!.entries)
+            assertEquals(emptyList<SlotEntry>(), page.state!!.lists.entries)
         }
 
     @Test
@@ -139,17 +162,40 @@ class SavesPageTest {
             api.times[5] = 500
             val page = opened()
 
-            page.askDelete(page.state!!.entries!!.first { it.slot == 2 })
-            assertEquals(2, page.state!!.deleting?.slot)
+            page.askDelete(
+                page.state!!
+                    .lists.entries!!
+                    .first { it.slot == 2 },
+            )
+            assertEquals(
+                2,
+                page.state!!
+                    .lists.deleting
+                    ?.slot,
+            )
             assertTrue(calls.none { it.startsWith("deleteState") })
             page.cancelDelete()
-            assertNull(page.state!!.deleting)
+            assertNull(page.state!!.lists.deleting)
 
-            page.askDelete(page.state!!.entries!!.first { it.slot == 2 })
+            page.askDelete(
+                page.state!!
+                    .lists.entries!!
+                    .first { it.slot == 2 },
+            )
             page.confirmDelete()
             runCurrent()
-            assertEquals(listOf(5), page.state!!.entries!!.map { it.slot })
-            assertEquals(5, page.state!!.focusRow?.slot)
+            assertEquals(
+                listOf(5),
+                page.state!!
+                    .lists.entries!!
+                    .map { it.slot },
+            )
+            assertEquals(
+                5,
+                page.state!!
+                    .lists.focusRow
+                    ?.slot,
+            )
         }
 
     @Test
@@ -159,11 +205,15 @@ class SavesPageTest {
             api.deleteError = "Permission denied."
             val page = opened()
 
-            page.askDelete(page.state!!.entries!!.single())
+            page.askDelete(
+                page.state!!
+                    .lists.entries!!
+                    .single(),
+            )
             page.confirmDelete()
             runCurrent()
 
-            assertEquals("Couldn't delete that save: Permission denied.", page.state!!.error)
+            assertEquals("Couldn't delete that save: Permission denied.", page.state!!.lists.error)
         }
 
     // The deleted row can't be picked, nor another delete start, until the lists are read again.
@@ -173,24 +223,36 @@ class SavesPageTest {
             api.times[2] = 200
             api.times[5] = 500
             val page = opened()
-            val five = page.state!!.entries!!.first { it.slot == 5 }
+            val five =
+                page.state!!
+                    .lists.entries!!
+                    .first { it.slot == 5 }
             var busyDuringReread: Boolean? = null
-            api.onTimes = { busyDuringReread = page.state!!.removing }
+            api.onTimes = { busyDuringReread = page.state!!.lists.removing }
 
-            page.askDelete(page.state!!.entries!!.first { it.slot == 2 })
+            page.askDelete(
+                page.state!!
+                    .lists.entries!!
+                    .first { it.slot == 2 },
+            )
             page.confirmDelete()
-            assertTrue(page.state!!.removing)
+            assertTrue(page.state!!.lists.removing)
             page.pick(five)
             page.askDelete(five)
             page.switchTab()
             assertEquals(emptyList<String>(), calls)
-            assertNull(page.state!!.deleting)
-            assertEquals(SlotTab.ThisGame, page.state!!.tab)
+            assertNull(page.state!!.lists.deleting)
+            assertEquals(SlotTab.ThisGame, page.state!!.lists.tab)
 
             runCurrent()
             assertEquals(true, busyDuringReread)
-            assertFalse(page.state!!.removing)
-            assertEquals(listOf(5), page.state!!.entries!!.map { it.slot })
+            assertFalse(page.state!!.lists.removing)
+            assertEquals(
+                listOf(5),
+                page.state!!
+                    .lists.entries!!
+                    .map { it.slot },
+            )
         }
 
     @Test
@@ -200,12 +262,16 @@ class SavesPageTest {
             api.deleteError = "Permission denied."
             val page = opened()
 
-            page.askDelete(page.state!!.entries!!.single())
+            page.askDelete(
+                page.state!!
+                    .lists.entries!!
+                    .single(),
+            )
             page.confirmDelete()
             runCurrent()
 
-            assertFalse(page.state!!.removing)
-            assertEquals("Couldn't delete that save: Permission denied.", page.state!!.error)
+            assertFalse(page.state!!.lists.removing)
+            assertEquals("Couldn't delete that save: Permission denied.", page.state!!.lists.error)
         }
 
     @Test
@@ -215,11 +281,20 @@ class SavesPageTest {
             val page = opened()
 
             page.askDelete(SlotEntry(7, 700))
-            assertNull(page.state!!.deleting)
+            assertNull(page.state!!.lists.deleting)
             page.askDelete(SlotEntry(2, null))
-            assertNull(page.state!!.deleting)
-            page.askDelete(page.state!!.entries!!.single())
-            assertEquals(2, page.state!!.deleting?.slot)
+            assertNull(page.state!!.lists.deleting)
+            page.askDelete(
+                page.state!!
+                    .lists.entries!!
+                    .single(),
+            )
+            assertEquals(
+                2,
+                page.state!!
+                    .lists.deleting
+                    ?.slot,
+            )
         }
 
     // A re-read after a delete stops the pictures the last read was still reading, rather than read them twice.
@@ -235,7 +310,11 @@ class SavesPageTest {
             api.onPreview = { slot ->
                 if (slot == 2 && !deleted) {
                     deleted = true
-                    page.askDelete(page.state!!.entries!!.first { it.slot == 2 })
+                    page.askDelete(
+                        page.state!!
+                            .lists.entries!!
+                            .first { it.slot == 2 },
+                    )
                     page.confirmDelete()
                 }
             }

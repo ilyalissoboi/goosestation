@@ -45,6 +45,29 @@ class MemoryCardPathsTest {
         assertFalse(MemoryCardPaths.deferred("shared/one.mcd", paths, gameActive = false))
     }
 
+    // The pull after a game brings in only the cards, and a game started meanwhile keeps its own: its cards are left
+    // alone like every other file once it's on.
+    @Test
+    fun theCardsOnlyPullLeavesTheCardsOfAGameStartedMeanwhile() {
+        val paths = listOf("memcards/", "shared/one.mcd")
+
+        assertFalse(MemoryCardPaths.leftByPull("memcards/a.mcd", paths, onlyMemcards = true, gameActive = false))
+        assertTrue(MemoryCardPaths.leftByPull("settings.ini", paths, onlyMemcards = true, gameActive = false))
+        assertTrue(MemoryCardPaths.leftByPull("memcards/a.mcd", paths, onlyMemcards = true, gameActive = true))
+        assertTrue(MemoryCardPaths.leftByPull("shared/one.mcd", paths, onlyMemcards = true, gameActive = true))
+        assertTrue(MemoryCardPaths.leftByPull("settings.ini", paths, onlyMemcards = true, gameActive = true))
+    }
+
+    // A whole pull leaves only a running game's cards.
+    @Test
+    fun aWholePullLeavesOnlyARunningGamesCards() {
+        val paths = listOf("memcards/")
+
+        assertFalse(MemoryCardPaths.leftByPull("settings.ini", paths, onlyMemcards = false, gameActive = true))
+        assertTrue(MemoryCardPaths.leftByPull("memcards/a.mcd", paths, onlyMemcards = false, gameActive = true))
+        assertFalse(MemoryCardPaths.leftByPull("memcards/a.mcd", paths, onlyMemcards = false, gameActive = false))
+    }
+
     // Once the game stops the core no longer reports its card, which stays a card for the rest of the run: the pull
     // after the game brings in what it held back, and its last writes go out.
     @Test

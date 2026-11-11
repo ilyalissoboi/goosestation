@@ -138,6 +138,9 @@ class ControllersPage(
     /** The pad [ControllersState.portValues] were read for, while they're shown. */
     private var valuesPad: Int? = null
 
+    /** A read of the open port's values is out: a change meanwhile drops it, and reads again after its save. */
+    private var portReading = false
+
     /** The core's type and multitap names are shown: set on the main thread, read on [core]. */
     @Volatile private var namesShown = false
 
@@ -233,12 +236,17 @@ class ControllersPage(
         val old = state.portValues ?: return
         if (values == old) return
         state = state.copy(portValues = values)
+        // A read out now is from before this change: it would put the old values back.
+        val reread = portReading
+        portRead++
         scope.launch {
             withContext(core) {
                 values.save(settings, old)
                 api.applySettings()
             }
         }
+        // Read again after the save (core runs one call at a time), as the one dropped would have.
+        (state.view as? ControllersView.Port)?.takeIf { reread }?.let { readPort(it.pad) }
     }
 
     /** Saves the open macro's change to [values]. */
@@ -346,6 +354,7 @@ class ControllersPage(
     // Reads [pad]'s type and its settings, for its page.
     private fun readPort(pad: Int) {
         val read = ++portRead
+        portReading = true
         // Another port's values hold another port's settings: none show until this one's are read. The same port's
         // stay meanwhile (back from one of its macros), so its page keeps its rows and focus.
         if (valuesPad != pad) {
@@ -362,6 +371,7 @@ class ControllersPage(
                     Triple(type, info, SettingValues.read(settings, PortSettings.settings(pad, info) + macros))
                 }
             if (read != portRead || state.view != ControllersView.Port(pad)) return@launch
+            portReading = false
             valuesPad = pad
             state = state.copy(portTypes = state.portTypes + (pad to type), typeSettings = info, portValues = values)
         }
@@ -400,6 +410,21 @@ class ControllersPage(
         cancelCapture()
         controllersJob?.cancel()
         controllersJob = null
+    }
+
+    /**
+     * settings.ini was pulled from the data folder: an open page reads what it shows again (the hub, the open port or
+     * macro, and the bindings shown), as the other settings pages do. A closed one reads nothing.
+     */
+    fun reloadShown() {
+        if (controllersJob == null) return
+        readHub()
+        when (val view = state.view) {
+            is ControllersView.Port -> readPort(view.pad)
+            is ControllersView.Macro -> readMacro(view.pad, view.macro)
+            else -> {}
+        }
+        state.selected?.let { readBindings(it) }
     }
 
     /** Shows the controller with [descriptor]'s bindings, and selects it whenever it's connected from now on. */

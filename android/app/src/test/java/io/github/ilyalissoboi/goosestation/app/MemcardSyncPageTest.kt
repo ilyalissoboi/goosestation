@@ -32,7 +32,7 @@ class MemcardSyncPageTest {
             object : TokenCipher {
                 override fun encrypt(plain: ByteArray) = plain.reversedArray()
 
-                override fun decrypt(sealed: ByteArray) = sealed.reversedArray()
+                override fun decrypt(sealed: ByteArray) = Opening.Opened(sealed.reversedArray())
             },
             object : KeyValueStore {
                 override fun getString(key: String) = sealed[key]

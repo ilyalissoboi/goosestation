@@ -73,7 +73,7 @@ object HttpBridge {
                     entry.connection = it
                     // Cancelled while connecting: the connection must not be left open.
                     if (active[id] !== entry) it.disconnect()
-                })
+                }, isCancelled = { active[id] !== entry })
             if (active.remove(id, entry)) {
                 NativeLibrary.httpDone(downloader, request, result.status, result.contentType, result.body)
             }
@@ -91,7 +91,9 @@ object HttpBridge {
 
     /**
      * Runs one request on the calling thread. A body over [maxBytes] is refused ([STATUS_TOO_LARGE]) rather than held
-     * in memory: these answers are whole in memory, unlike [download]'s.
+     * in memory: these answers are whole in memory, unlike [download]'s. [isCancelled] is asked before it connects and
+     * between reads, as Android's disconnect() does nothing before a connection exists: a cancelled request stops
+     * there ([STATUS_CANCELLED]) rather than holding a pool thread to the end.
      */
     internal fun run(
         url: String,
@@ -101,6 +103,7 @@ object HttpBridge {
         log: (String) -> Unit = ::logRequest,
         onConnection: (HttpURLConnection) -> Unit = {},
         maxBytes: Long = MAX_BODY_BYTES,
+        isCancelled: () -> Boolean = { false },
     ): HttpResult {
         val method = if (post != null) "POST" else "GET"
         val parsed = runCatching { URL(url) }.getOrNull()
@@ -113,6 +116,7 @@ object HttpBridge {
                     val connection = parsed.openConnection() as HttpURLConnection
                     onConnection(connection)
                     try {
+                        if (isCancelled()) throw CancelledException()
                         connection.connectTimeout = timeoutMs
                         connection.readTimeout = timeoutMs
                         connection.requestMethod = method
@@ -126,7 +130,11 @@ object HttpBridge {
                         val status = connection.responseCode
                         val stream = if (status >= 400) connection.errorStream else connection.inputStream
                         val body =
-                            if (connection.contentLengthLong > maxBytes) null else stream?.use { read(it, maxBytes) }
+                            if (connection.contentLengthLong > maxBytes) {
+                                null
+                            } else {
+                                stream?.use { read(it, maxBytes, isCancelled) }
+                            }
                         when {
                             stream != null && body == null -> HttpResult(STATUS_TOO_LARGE, "", ByteArray(0))
                             else -> HttpResult(status, connection.contentType.orEmpty(), body ?: ByteArray(0))
@@ -134,6 +142,8 @@ object HttpBridge {
                     } finally {
                         connection.disconnect()
                     }
+                } catch (_: CancelledException) {
+                    HttpResult(STATUS_CANCELLED, "", ByteArray(0))
                 } catch (_: SocketTimeoutException) {
                     HttpResult(STATUS_TIMEOUT, "", ByteArray(0))
                 } catch (_: IOException) {
@@ -219,10 +229,12 @@ object HttpBridge {
     private fun read(
         input: InputStream,
         maxBytes: Long,
+        isCancelled: () -> Boolean,
     ): ByteArray? {
         val out = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(PROGRESS_STEP)
         while (true) {
+            if (isCancelled()) throw CancelledException()
             val read = input.read(buffer)
             if (read < 0) return out.toByteArray()
             if (out.size() + read > maxBytes) return null
@@ -261,3 +273,6 @@ object HttpBridge {
         Log.i(TAG, line)
     }
 }
+
+// A request stopped by its isCancelled, as it connects or between reads.
+private class CancelledException : IOException()

@@ -13,6 +13,7 @@ import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.CoverSources
 import io.github.ilyalissoboi.goosestation.settings.CoverUseSerial
 import io.github.ilyalissoboi.goosestation.settings.coverSourceProblem
+import io.github.ilyalissoboi.goosestation.settings.isPlainHttp
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -84,6 +85,7 @@ interface CoversModel {
 
 /** Why Download covers waits while a source has no variable. */
 const val SOURCES_NEED_A_VARIABLE = "Each source needs \${serial}, \${title} or \${filetitle}."
+const val SOURCES_NEED_HTTPS = "Each source needs an https:// address."
 
 /** A download's progress, as the page shows it ("Downloading the cover for Crash Bandicoot… 12 of 48"). */
 fun coverProgressText(job: CoverJob): String =
@@ -153,6 +155,7 @@ class Covers(
             val texts = texts()
             return when {
                 texts.isEmpty() -> "Add a source first."
+                texts.any(::isPlainHttp) -> SOURCES_NEED_HTTPS
                 texts.any { coverSourceProblem(it) != null } -> SOURCES_NEED_A_VARIABLE
                 else -> null
             }

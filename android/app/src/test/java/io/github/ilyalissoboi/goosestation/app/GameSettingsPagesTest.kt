@@ -4,9 +4,11 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
+import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -115,6 +117,25 @@ class GameSettingsPagesTest {
             assertEquals(before, global.values)
             assertFalse("applySettings" in calls)
             assertEquals(1, pages.summary!!.counts[GamePage.Graphics])
+        }
+
+    // From review: the global page asked for a new estimate after each change, a game's didn't.
+    @Test
+    fun theRewindEstimateFollowsAChangeOfSaveSlots() =
+        runTest {
+            val pages = pages()
+            pages.openPage(GamePage.Emulation)
+            runCurrent()
+
+            pages.change(
+                GamePage.Emulation,
+                pages.values(GamePage.Emulation)!!.with(EmulationSettings.REWIND_SLOTS, 30),
+            )
+            runCurrent()
+
+            assertTrue("getRewindMemoryUsage 30" in calls)
+            val perSlot = api.rewindPerSlot
+            assertEquals(RewindUsage(perSlot.ramBytes * 30, perSlot.vramBytes * 30), pages.rewindUsage)
         }
 
     @Test

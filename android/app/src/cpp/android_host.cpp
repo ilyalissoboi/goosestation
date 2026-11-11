@@ -200,6 +200,7 @@ static std::vector<InputEvent> s_input_queue;
 static std::vector<s32> s_queued_device_ids; // connected as far as the queue goes, for QueueKeyEvent()'s result
 static bool s_accept_input_events = false;   // key and axis events are dropped until the CPU thread runs
 static std::optional<TouchPad::State> s_touch_queued; // the touch pad's latest state, until the CPU thread takes it
+static u32 s_touch_tapped = 0; // buttons a replaced queued state pressed and the latest doesn't: a tap not yet seen
 
 // Each controller's descriptor, at its device index: [Android] ControllerDescriptors. It's only ever appended to, so a
 // controller's index never changes in this process, and its bindings stay its own. InitializeConfig() seeds it before
@@ -229,6 +230,7 @@ static bool s_fastmem_override_logged = false;
 static bool s_fast_forward_reported = false; // as the app was last told, CPU thread
 static TouchPad::State s_touch_state;   // what the touch pad holds, as far as the CPU thread has it
 static TouchPad::State s_touch_applied; // what Port 1's controller was last given of it
+static std::atomic<u32> s_touch_presses_for_test{0}; // the buttons given as pressed, for TakeTouchPressesForTest()
 static s32 s_pad_kind_reported = -1;    // Port 1's kind, as the app was last told, CPU thread
 static bool s_picture_at_top = false;   // SetPictureAtTop(), CPU thread
 static DisplayAlignment s_loaded_display_alignment = Settings::DEFAULT_DISPLAY_ALIGNMENT; // the setting's own value
@@ -552,9 +554,13 @@ void AndroidHost::ReloadSettings()
       // The file can put controllers on other ports.
       UpdateSourceControllers();
 
-      // Update() takes the lock itself, and loads the folders again.
+      // Update() takes the lock itself, and loads the folders again. The app's BIOS folder goes back under it too, as
+      // other threads read the folders under it (a reader in between sees settings.ini's for a moment).
       EmuFolders::Update();
-      EmuFolders::Bios = s_bios_dir;
+      {
+        const auto lock = Host::GetSettingsLock();
+        EmuFolders::Bios = s_bios_dir;
+      }
       System::ApplySettings(false);
     },
     true);
@@ -657,8 +663,14 @@ std::vector<std::string> AndroidHost::GetSharedCardNames()
   if (!s_initialized)
     return names;
 
+  // Under the lock, as EmuFolders::Update() rewrites it under it on the CPU thread.
+  std::string folder;
+  {
+    const auto lock = Host::GetSettingsLock();
+    folder = EmuFolders::MemoryCards;
+  }
   FileSystem::FindResultsArray results;
-  FileSystem::FindFiles(EmuFolders::MemoryCards.c_str(), "*.mcd",
+  FileSystem::FindFiles(folder.c_str(), "*.mcd",
                         FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES | FILESYSTEM_FIND_RELATIVE_PATHS,
                         &results);
   names.reserve(results.size());
@@ -948,30 +960,38 @@ std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingS
   if (!s_initialized)
     return shaders;
 
-  for (const PostProcessing::AvailableShader& available : PostProcessing::GetAvailableShaders())
-  {
-    const std::string& name = available.name;
-    // A pack has thousands of slang presets: they're offered by name, and one that doesn't load says so when added.
-    Error error;
-    if (!PostProcessing::Slang::IsPresetName(name) && !ShaderLoads(name, &error))
-    {
-      INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
-      continue;
-    }
-    shaders.emplace_back(name, PostProcessing::GetShaderKindName(available.kind));
-  }
+  // On the CPU thread: the shader folders are rewritten there (EmuFolders::Update()), and ShaderLoads() reads the GPU
+  // device. The Post-processing page is in the library, or under the in-game menu, with the game paused.
+  EmuThread::RunOnThread(
+    [&shaders]() {
+      for (const PostProcessing::AvailableShader& available : PostProcessing::GetAvailableShaders())
+      {
+        const std::string& name = available.name;
+        // A pack has thousands of slang presets: they're offered by name, and one that doesn't load says so when
+        // added.
+        Error error;
+        if (!PostProcessing::Slang::IsPresetName(name) && !ShaderLoads(name, &error))
+        {
+          INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
+          continue;
+        }
+        shaders.emplace_back(name, PostProcessing::GetShaderKindName(available.kind));
+      }
+    },
+    true);
   return shaders;
 }
 
-std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStages(const std::optional<std::string>& key,
-                                                                                const char* section)
+// A chain layer's stages, each with its kind and options, or why it doesn't load. On the CPU thread.
+static std::vector<AndroidHost::PostProcessingStage> ReadStages(const std::optional<std::string>& key,
+                                                               const char* section)
 {
-  return ReadChainLayer(key, std::vector<PostProcessingStage>(), [section](const SettingsInterface& si) {
-    std::vector<PostProcessingStage> stages;
+  return ReadChainLayer(key, std::vector<AndroidHost::PostProcessingStage>(), [section](const SettingsInterface& si) {
+    std::vector<AndroidHost::PostProcessingStage> stages;
     const u32 count = PostProcessing::Config::GetStageCount(si, section);
     for (u32 i = 0; i < count; i++)
     {
-      PostProcessingStage stage;
+      AndroidHost::PostProcessingStage stage;
       stage.shader = PostProcessing::Config::GetStageShaderName(si, section, i);
       Error error;
       if (!stage.shader.empty() && ShaderLoads(stage.shader, &error))
@@ -987,6 +1007,18 @@ std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStag
     }
     return stages;
   });
+}
+
+std::vector<AndroidHost::PostProcessingStage> AndroidHost::GetPostProcessingStages(const std::optional<std::string>& key,
+                                                                                const char* section)
+{
+  std::vector<PostProcessingStage> result;
+  if (!s_initialized)
+    return result;
+
+  // On the CPU thread, as GetPostProcessingShaders(): ShaderLoads() and ShaderKind() read the shader folders.
+  EmuThread::RunOnThread([&]() { result = ReadStages(key, section); }, true);
+  return result;
 }
 
 std::string AndroidHost::AddPostProcessingStage(const std::optional<std::string>& key, const char* section,
@@ -2399,21 +2431,51 @@ void AndroidHost::QueueInputEvent(InputEvent event)
     EmuThread::Wake();
 }
 
+namespace AndroidHost {
+// With s_input_mutex held: queues state, and says whether the CPU thread needs waking for it.
+static bool QueueTouchPadLocked(const TouchPad::State& state)
+{
+  if (!s_accept_input_events)
+    return false;
+
+  // Only the latest matters: a state still queued is replaced, and its wake is still to come. A press it had that the
+  // latest lets go of is kept apart, so a tap shorter than a pass still reaches the game.
+  const bool wake = !s_touch_queued.has_value() && s_input_queue.empty();
+  if (s_touch_queued.has_value())
+    s_touch_tapped |= s_touch_queued->buttons & ~state.buttons;
+  s_touch_queued = state;
+  return wake;
+}
+} // namespace AndroidHost
+
 void AndroidHost::QueueTouchPad(const TouchPad::State& state)
 {
   bool wake;
   {
     std::unique_lock lock(s_input_mutex);
-    if (!s_accept_input_events)
-      return;
-
-    // Only the latest matters: a state still queued is replaced, and its wake is still to come.
-    wake = !s_touch_queued.has_value() && s_input_queue.empty();
-    s_touch_queued = state;
+    wake = QueueTouchPadLocked(state);
   }
 
   if (wake)
     EmuThread::Wake();
+}
+
+void AndroidHost::QueueTouchPadsForTest(std::span<const u32> buttons)
+{
+  bool wake = false;
+  {
+    std::unique_lock lock(s_input_mutex);
+    for (const u32 pressed : buttons)
+      wake = QueueTouchPadLocked(TouchPad::State{pressed, {}}) || wake;
+  }
+
+  if (wake)
+    EmuThread::Wake();
+}
+
+u32 AndroidHost::TakeTouchPressesForTest()
+{
+  return s_touch_presses_for_test.exchange(0);
 }
 
 void AndroidHost::SetPictureAtTop(bool top)
@@ -2442,6 +2504,7 @@ void AndroidHost::ApplyTouchPad()
 
   if (s_touch_state != s_touch_applied)
   {
+    s_touch_presses_for_test.fetch_or(s_touch_state.buttons & ~s_touch_applied.buttons);
     TouchPad::Apply(*controller, s_touch_applied, s_touch_state);
     const bool let_go = TouchPad::LetsGo(s_touch_applied, s_touch_state);
     s_touch_applied = s_touch_state;
@@ -2481,7 +2544,16 @@ void AndroidHost::ProcessInputQueue()
     if (s_touch_queued.has_value())
     {
       s_touch_state = s_touch_queued.value();
-      s_touch_queued.reset();
+      if (s_touch_tapped != 0)
+      {
+        // A tap let go before this pass: pressed for this one, let go at the next, with the latest state, still queued.
+        s_touch_state.buttons |= s_touch_tapped;
+        s_touch_tapped = 0;
+      }
+      else
+      {
+        s_touch_queued.reset();
+      }
     }
 
     s_input_events.swap(s_input_queue);
@@ -3836,6 +3908,7 @@ void Host::OnSystemDestroyed()
   {
     std::unique_lock lock(AndroidHost::s_input_mutex);
     AndroidHost::s_touch_queued.reset();
+    AndroidHost::s_touch_tapped = 0;
   }
   AndroidHost::s_touch_state = {};
   AndroidHost::s_touch_applied = {};

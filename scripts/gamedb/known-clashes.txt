@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 GooseStation contributors
+# SPDX-License-Identifier: GPL-3.0
+#
+# Serials that already clashed in the database we forked from: a code in two or more gamedb.yaml entries, or a
+# key that is also another entry's code. The import never changes existing entries, so these stay as they are and
+# gamedb_check.py allows them. Don't add to this list: fix a new clash instead. Remove a serial once its clash is
+# fixed. See docs/gamedb.md.
+ESPM-70004
+ESPM-70005
+ESPM-70006
+ESPM-70007
+SLPM-86244
+SLPM-86375
+SLPM-87413
+SLPS-00316
+SLPS-02356
+SLPS-02359
+SLPS-02373
+SLPS-02378
+SLPS-91108
+SLUS-07013

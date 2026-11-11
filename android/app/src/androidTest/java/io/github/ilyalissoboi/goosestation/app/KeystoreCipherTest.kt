@@ -5,8 +5,8 @@ package io.github.ilyalissoboi.goosestation.app
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -18,7 +18,7 @@ class KeystoreCipherTest {
 
     @Test
     fun roundTrip() {
-        assertArrayEquals(plain, cipher.decrypt(cipher.encrypt(plain)!!))
+        assertArrayEquals(plain, (cipher.decrypt(cipher.encrypt(plain)!!) as Opening.Opened).bytes)
     }
 
     @Test
@@ -30,6 +30,6 @@ class KeystoreCipherTest {
     fun tamperedFails() {
         val sealed = cipher.encrypt(plain)!!
         sealed[sealed.size - 1] = (sealed[sealed.size - 1].toInt() xor 1).toByte()
-        assertNull(cipher.decrypt(sealed))
+        assertEquals(Opening.WontOpen, cipher.decrypt(sealed))
     }
 }

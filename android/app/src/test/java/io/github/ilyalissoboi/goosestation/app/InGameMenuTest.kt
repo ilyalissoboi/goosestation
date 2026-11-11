@@ -209,6 +209,40 @@ class InGameMenuTest {
             assertEquals(2, lastSlots.get(SERIAL))
         }
 
+    // B while a save runs: the panel stays, showing Saving…, so its result is seen.
+    @Test
+    fun aSlotPanelSavingStaysOpen() =
+        runTest {
+            api.saveError = "No space left on device."
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+
+            menu.pickSlot(2)
+            menu.closeSlots()
+            assertTrue(menu.slots().busy)
+            runCurrent()
+
+            assertEquals("Couldn't save to slot 2: No space left on device.", menu.slots().error)
+        }
+
+    // Another row taken while a save runs: a failure is still said, never lost with the panel.
+    @Test
+    fun aSaveFailingAfterItsPanelWentSaysWhy() =
+        runTest {
+            api.saveError = "No space left on device."
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            calls.clear()
+
+            menu.pickSlot(2)
+            menu.openCodes()
+            runCurrent()
+
+            assertTrue("message Couldn't save to slot 2: No space left on device." in calls)
+        }
+
     @Test
     fun aFilledSlotAsksFirst() =
         runTest {
@@ -566,6 +600,49 @@ class InGameMenuTest {
             )
         }
 
+    // Exit game tapped while a save runs: the save finishes and says so, then the game stops, never going on first.
+    @Test
+    fun exitDuringASaveExitsOnceTheSaveIsDone() =
+        runTest {
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            calls.clear()
+
+            menu.pickSlot(2)
+            menu.exit()
+            runCurrent()
+
+            assertEquals(
+                listOf(
+                    "saveState $SERIAL 2",
+                    "savesResumeState",
+                    "message Saved to slot 2",
+                    "getSaveStateTimes $SERIAL",
+                    "saveResumeState $SERIAL",
+                    "exit null",
+                ),
+                calls,
+            )
+        }
+
+    // A save that ends while the game's settings show closes them as it goes back to the game, as Resume does.
+    @Test
+    fun aSaveEndingUnderTheSettingsClosesThem() =
+        runTest {
+            val menu = menu()
+            menu.openSlots(SlotMode.Save)
+            runCurrent()
+            menu.pickSlot(2)
+            menu.openSettings()
+            calls.clear()
+
+            runCurrent()
+
+            assertFalse(menu.state.settings)
+            assertEquals(listOf("saveState $SERIAL 2", "message Saved to slot 2", "settings null", "resume"), calls)
+        }
+
     @Test
     fun theGameStoppingClearsEverything() =
         runTest {
@@ -918,6 +995,53 @@ class InGameMenuTest {
             assertEquals(2, records.lastDisc("SLPS-02020"))
         }
 
+    // B while the disc goes in: the panel stays, showing Inserting…, and the disc it put in is the one played.
+    @Test
+    fun aDiscPanelInsertingStaysOpen() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openDiscs()
+
+            menu.pickDisc(2)
+            menu.closeDiscs()
+            assertTrue(menu.state.discs!!.busy)
+            runCurrent()
+
+            assertEquals(listOf("changeDisc 2", "message Disc 2 inserted", "resume"), calls)
+            assertEquals(2, menu.state.disc)
+        }
+
+    // Another row taken while the disc goes in: the disc put in is still the one the menu knows.
+    @Test
+    fun aDiscPutInAfterItsPanelWentIsKnown() =
+        runTest {
+            val menu = ac3Menu()
+            menu.openDiscs()
+
+            menu.pickDisc(2)
+            menu.openCodes()
+            runCurrent()
+
+            assertEquals(2, menu.state.disc)
+            assertTrue("message Disc 2 inserted" in calls)
+        }
+
+    // Another row taken while a disc change fails: the reason is still said.
+    @Test
+    fun aDiscChangeFailingAfterItsPanelWentSaysWhy() =
+        runTest {
+            api.discError = "Disc 2 isn't in your library any more."
+            val menu = ac3Menu()
+            menu.openDiscs()
+
+            menu.pickDisc(2)
+            menu.openCodes()
+            runCurrent()
+
+            assertTrue("message Disc 2 isn't in your library any more." in calls)
+            assertEquals(1, menu.state.disc)
+        }
+
     @Test
     fun pickingTheCurrentDiscOnlyCloses() =
         runTest {
@@ -1166,6 +1290,45 @@ class InGameMenuTest {
         api.sections =
             listOf(AchievementSection(2, "Unlocked", arrayOf(Achievement(7, "First", "", 5, "", 100, "", 0f))))
     }
+
+    // From review: another panel opened over Achievements left it set, so B brought it back, on Loading… for good.
+    @Test
+    fun anotherPanelOverAchievementsClosesThem() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+            menu.openAchievements()
+
+            menu.openCodes()
+            runCurrent()
+            assertNull(menu.state.cheevos)
+
+            menu.closeCodes()
+            assertNull(menu.state.cheevos)
+            assertNull(menu.state.codes)
+        }
+
+    // Each side panel takes the place of what showed beside the menu, and of a question: one at a time.
+    @Test
+    fun eachSidePanelReplacesTheOthersAndTheQuestions() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+
+            menu.askReset()
+            menu.openSettings()
+            assertFalse(menu.state.confirmingReset)
+
+            menu.closeSettings()
+            menu.openAchievements()
+            menu.openSlots(SlotMode.Save)
+            assertNull(menu.state.cheevos)
+
+            menu.askReset()
+            menu.openCodes()
+            assertNull(menu.state.slots)
+            assertFalse(menu.state.confirmingReset)
+        }
 
     @Test
     fun achievementsOpenOnTheirTab() =

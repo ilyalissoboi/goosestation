@@ -117,6 +117,53 @@ class HttpBridgeTest {
         assertEquals(HttpBridge.STATUS_TIMEOUT, result.status)
     }
 
+    // From review: Android's disconnect() before a connection exists does nothing, so a request cancelled while it
+    // waited for a pool thread went on to the server. Cancelled before it connects, it never reaches it.
+    @Test
+    fun aRequestCancelledBeforeItConnectsNeverReachesTheServer() {
+        var reached = false
+        server.createContext("/never") { exchange: HttpExchange ->
+            reached = true
+            exchange.sendResponseHeaders(200, -1)
+            exchange.close()
+        }
+
+        val result = HttpBridge.run("$base/never", null, "GooseStation test", 2000, log = {}, isCancelled = { true })
+
+        assertEquals(HttpBridge.STATUS_CANCELLED, result.status)
+        assertFalse(reached)
+    }
+
+    // Cancelled while its body comes, it stops reading rather than taking the rest.
+    @Test
+    fun aRequestCancelledWhileReadingStops() {
+        server.createContext("/trickle") { exchange: HttpExchange ->
+            exchange.sendResponseHeaders(200, 0)
+            exchange.responseBody.use { out ->
+                // Three seconds of body, a chunk at a time.
+                repeat(60) {
+                    out.write(ByteArray(1024))
+                    out.flush()
+                    Thread.sleep(50)
+                }
+            }
+        }
+
+        val started = System.nanoTime()
+        val result =
+            HttpBridge.run(
+                "$base/trickle",
+                null,
+                "GooseStation test",
+                5000,
+                log = {},
+                isCancelled = { System.nanoTime() - started > 300_000_000L },
+            )
+
+        assertEquals(HttpBridge.STATUS_CANCELLED, result.status)
+        assertTrue("stopped well before the body ended", System.nanoTime() - started < 2_000_000_000L)
+    }
+
     @Test
     fun unreachableIsAnError() {
         val port = ServerSocket(0).use { it.localPort }

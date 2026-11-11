@@ -239,7 +239,8 @@ python3 android/scripts/check-jni-keeps.py android/app/build/outputs/mapping/rel
 
 The last line checks that R8 kept every class and member the native code finds by name (`JNI_OnLoad` fails at
 launch on one it didn't); the release workflow runs it too. A new JNI lookup needs its keep rule in
-`proguard-rules.pro`. `-Pgoose.updateChannel=preview` (or `latest`) makes a release build that checks for updates,
+`proguard-rules.pro`. The release workflow also runs `android/scripts/tests/test-sign-apk.sh` on that unsigned APK,
+which checks `sign-apk.sh` with the test key alone. `-Pgoose.updateChannel=preview` (or `latest`) makes a release build that checks for updates,
 and `-Pgoose.updateApi=<url>` points its check at another server, as the test tiers' release part does.
 
 ## The app's look
@@ -314,8 +315,9 @@ On GitHub, `.github/workflows/android.yml` ("Android build") runs on pull reques
 the app, the core or `scripts/deps/build-dependencies-android.sh`, and twice a week to keep its cache warm. On
 `ubuntu-24.04` it installs the SDK's NDK, CMake (with its Ninja) and platform at the versions above, builds the
 dependency prefix into `~/deps-android` (cached by the script's hash and the NDK version), then runs `assembleDebug`,
-`testDebugUnitTest`, `ktlintCheck` and `checkNoWindowDialogs`, and uploads the debug APK as `android-debug-apk`. It
-has no secrets, and isn't part of a release.
+`assembleDebugAndroidTest` (the instrumented tests are built, not run: CI has no emulator), `testDebugUnitTest`,
+`ktlintCheck` and `checkNoWindowDialogs`, and uploads the debug APK as `android-debug-apk`. It has no secrets, and
+isn't part of a release.
 
 The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
 can only be initialized once per process); with `-Pgoose.orchestrator=false` they share one, which only the `ui`
@@ -477,8 +479,9 @@ Folders the app no longer uses have their grants released, unless another saved 
 Download Covers does. GooseStation hosts no covers and sends nothing anywhere until you press **Download covers**.
 
 - **Sources**: URL templates, one per row, tried in order for each game. `${serial}`, `${title}` and `${filetitle}`
-  stand for the game's serial, title and file name, URL-encoded; a source needs at least one (one without says so on
-  its row, and Download covers waits until it's fixed or removed). **Remove** is beside each, and **Add a source**
+  stand for the game's serial, title and file name, URL-encoded; a source needs at least one, and an `https://`
+  address, as Android won't fetch plain HTTP (one that breaks either rule says so on its row, and Download covers waits
+  until it's fixed or removed). **Remove** is beside each, and **Add a source**
   after them. Until you change the list it holds one preset, xlenore's PSX cover collection
   (`https://raw.githubusercontent.com/xlenore/psx-covers/main/covers/default/${serial}.jpg`); a list you empty stays
   empty, and **Restore the preset source** puts the preset back, asking first when it would replace your sources.

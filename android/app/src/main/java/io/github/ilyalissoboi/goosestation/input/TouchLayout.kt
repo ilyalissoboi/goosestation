@@ -64,7 +64,6 @@ data class TouchLayout(
         private const val MAX_FIT = 1.4f
         private const val STEP = 0.01f
         private const val TARGET = 48f
-        private const val EPSILON = 0.01f
 
         /**
          * The layout for a [width] by [height] dp screen, with [sticks] or not, at the Size setting [size] (1 is
@@ -116,16 +115,10 @@ data class TouchLayout(
                 if (t.left < -EPSILON || t.top < -EPSILON || t.right > width + EPSILON || t.bottom > height + EPSILON) {
                     return false
                 }
-                for (b in controls.subList(i + 1, controls.size)) if (t.overlaps(b.touch)) return false
+                for (b in controls.subList(i + 1, controls.size)) if (t.overlapsBeyondEpsilon(b.touch)) return false
             }
             return true
         }
-
-        private fun Rect.overlaps(other: Rect) =
-            left < other.right - EPSILON &&
-                other.left < right - EPSILON &&
-                top < other.bottom - EPSILON &&
-                other.top < bottom - EPSILON
     }
 }
 
@@ -292,3 +285,16 @@ private class Builder(
         return top
     }
 }
+
+// What a dp measure may be out by, from rounding.
+private const val EPSILON = 0.01f
+
+/**
+ * Whether this touch area and [other] overlap by more than a rounding hair. Not named `overlaps`: Compose's [Rect] has
+ * a member of that name, which an extension can't stand in for, and it has no tolerance.
+ */
+internal fun Rect.overlapsBeyondEpsilon(other: Rect): Boolean =
+    left < other.right - EPSILON &&
+        other.left < right - EPSILON &&
+        top < other.bottom - EPSILON &&
+        other.top < bottom - EPSILON

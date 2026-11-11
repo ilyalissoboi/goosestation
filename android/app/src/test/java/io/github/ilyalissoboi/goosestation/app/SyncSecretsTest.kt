@@ -25,16 +25,22 @@ class SyncSecretsTest {
             }
         }
 
-    // Stands in for the Keystore: reversible, but not the plain bytes. [broken] makes decrypting fail.
+    // Stands in for the Keystore: reversible, but not the plain bytes. [broken]: what's sealed won't open (its key is
+    // gone); [failing]: the Keystore fails for now.
     private var broken = false
+    private var failing = false
     private var decrypts = 0
     private val cipher =
         object : TokenCipher {
             override fun encrypt(plain: ByteArray) = plain.map { (it.toInt() xor 0x5a).toByte() }.toByteArray()
 
-            override fun decrypt(sealed: ByteArray): ByteArray? {
+            override fun decrypt(sealed: ByteArray): Opening {
                 decrypts++
-                return if (broken) null else sealed.map { (it.toInt() xor 0x5a).toByte() }.toByteArray()
+                return when {
+                    failing -> Opening.Failed
+                    broken -> Opening.WontOpen
+                    else -> Opening.Opened(sealed.map { (it.toInt() xor 0x5a).toByte() }.toByteArray())
+                }
             }
         }
 
@@ -89,5 +95,16 @@ class SyncSecretsTest {
         assertNull(secrets.load(SyncSecrets.SECRET_ACCESS_KEY))
         assertFalse(secrets.has(SyncSecrets.SECRET_ACCESS_KEY))
         assertEquals(emptyMap<String, String>(), values)
+    }
+
+    // From review: a Keystore that fails for a moment isn't a key that's gone; a passphrase lost is lost for good.
+    @Test
+    fun aKeystoreFailureKeepsTheSecret() {
+        assertTrue(secrets.store(SyncSecrets.ENCRYPTION_PASSPHRASE, "not-a-real-passphrase"))
+        failing = true
+        assertNull(secrets.load(SyncSecrets.ENCRYPTION_PASSPHRASE))
+        assertTrue(secrets.has(SyncSecrets.ENCRYPTION_PASSPHRASE))
+        failing = false
+        assertEquals("not-a-real-passphrase", secrets.load(SyncSecrets.ENCRYPTION_PASSPHRASE))
     }
 }

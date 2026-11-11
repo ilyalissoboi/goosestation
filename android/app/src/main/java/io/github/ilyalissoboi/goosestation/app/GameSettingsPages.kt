@@ -271,14 +271,17 @@ class GameSettingsPages(
         val apply = running
         summaryRead++
         scope.launch {
-            val summary =
+            val (summary, usage) =
                 withContext(core) {
                     new.save(layer(key), old)
                     if (page == GamePage.Controllers) api.updateGameControllers(key)
                     if (apply) api.applyGameSettings(key)
-                    readSummary(key)
+                    // As the global page does: the estimate follows the save slots.
+                    val slots = if (page == GamePage.Emulation) new[EmulationSettings.REWIND_SLOTS] else null
+                    readSummary(key) to slots?.let { api.getRewindMemoryUsage(it) }
                 }
             showSummary(summary)
+            if (usage != null && new == shown[page]) rewindUsage = usage
         }
         // A type or multitap changed: the page's rows are another type's, or another port's.
         val retyped =

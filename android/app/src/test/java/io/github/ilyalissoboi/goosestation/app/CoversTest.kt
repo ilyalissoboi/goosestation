@@ -206,6 +206,20 @@ class CoversTest {
         }
 
     @Test
+    fun downloadIsBlockedByAnHttpSource() =
+        runTest {
+            val covers = opened()
+            covers.add()
+            covers.edit(covers.sources!![1].id, "http://a/\${serial}.jpg")
+            assertEquals("Each source needs an https:// address.", covers.blocked)
+
+            covers.download()
+            runCurrent()
+            assertNull(covers.job)
+            assertEquals(0, api.calls)
+        }
+
+    @Test
     fun downloadIsBlockedByASourceWithoutAVariable() =
         runTest {
             val covers = opened()

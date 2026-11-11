@@ -64,6 +64,14 @@ class CoverSettingsTest {
         assertEquals("false", s.values["Covers/UseSerial"])
     }
 
+    // From review: Android refuses plain HTTP, so an http:// source always failed, as if the network were down.
+    @Test
+    fun anHttpSourceHasANote() {
+        assertEquals("Needs an https:// address.", coverSourceProblem("http://a/\${serial}.jpg"))
+        assertEquals("Needs an https:// address.", coverSourceProblem("  HTTP://a/cover.jpg"))
+        assertNull(coverSourceProblem("https://a/\${serial}.jpg"))
+    }
+
     @Test
     fun aSourceWithoutAVariableHasANote() {
         assertEquals("Needs \${serial}, \${title} or \${filetitle}.", coverSourceProblem("https://a/cover.jpg"))

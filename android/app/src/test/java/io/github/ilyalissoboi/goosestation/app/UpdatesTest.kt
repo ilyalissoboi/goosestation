@@ -105,6 +105,9 @@ class UpdatesTest {
         // Set: the installer has a question for the player once it completes.
         var question: CompletableDeferred<Unit>? = null
 
+        // Set: a cancel during the install ends it as this failure, as a copy into the session cut short does.
+        var failsWhenCancelled: InstallOutcome.Failed? = null
+
         override suspend fun install(
             apk: File,
             ask: (show: () -> Unit) -> Unit,
@@ -118,6 +121,7 @@ class UpdatesTest {
                 gate?.await()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 cancelledInstalls++
+                failsWhenCancelled?.let { return it }
                 throw e
             }
             return outcome
@@ -155,6 +159,37 @@ class UpdatesTest {
             build = UpdateBuild(canUpdate, commit = "f".repeat(40), code = 100_498, versionName = "0.1-498-gfffffff"),
         )
     }
+
+    // From review: the installer waited only for "not in a game", so it came over Settings or the Covers page (a
+    // cover download, an edit not yet saved). It waits for the library itself.
+    @Test
+    fun theInstallerWaitsForTheLibrary() {
+        assertFalse(installerWaits(Screen.Library, gameActive = false))
+        assertTrue(installerWaits(Screen.Library, gameActive = true))
+        assertTrue(installerWaits(Screen.Game, gameActive = true))
+        for (away in listOf(Screen.Settings, Screen.Covers, Screen.Interface, Screen.Saves)) {
+            assertTrue("$away", installerWaits(away, gameActive = false))
+        }
+    }
+
+    // Over Settings, say, the check at start runs (Setup checks on the build's channel), but the installer waits.
+    @Test
+    fun awayFromTheLibraryTheCheckRunsAndTheInstallWaits() =
+        runTest {
+            val updates = updates()
+            updates.onScreen(inGame = false)
+            updates.onLibrary(awayFromLibrary = true)
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            assertEquals(listOf("preview"), source.checks)
+
+            updates.update()
+            runCurrent()
+            assertEquals(emptyList<File>(), installer.installs)
+            updates.onLibrary(awayFromLibrary = false)
+            runCurrent()
+            assertInstalledOnce()
+        }
 
     @Test
     fun noCheckInADebugBuild() =
@@ -325,10 +360,10 @@ class UpdatesTest {
             updates.startupCheck("preview", enabled = true)
             runCurrent()
             updates.update()
-            updates.onScreen(inGame = true)
+            updates.onLibrary(awayFromLibrary = true)
             runCurrent()
             assertEquals(emptyList<File>(), installer.installs)
-            updates.onScreen(inGame = false)
+            updates.onLibrary(awayFromLibrary = false)
             runCurrent()
             assertInstalledOnce()
         }
@@ -565,6 +600,64 @@ class UpdatesTest {
             assertEquals(1, installer.cancelledInstalls)
         }
 
+    // A cancel that reaches the installer as it ends, which says it failed: the version is offered again all the same.
+    @Test
+    fun aCancelTheInstallerEndsAsAFailureStaysCancelled() =
+        runTest {
+            installer.gate = CompletableDeferred()
+            installer.failsWhenCancelled = InstallOutcome.Failed("StandaloneCoroutine was cancelled")
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+
+            updates.cancel()
+            runCurrent()
+
+            assertEquals(UpdateState.Available(newer), updates.state)
+            assertNull(updates.failureMessage)
+        }
+
+    // The checked APK goes once the installer is done with it, however it ended: retries don't pile them up.
+    @Test
+    fun anAbortedInstallLeavesNoApk() =
+        runTest {
+            installer.outcome = InstallOutcome.Aborted
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+            assertEquals(emptyList<File>(), apkFolder.listFiles().orEmpty().toList())
+        }
+
+    @Test
+    fun aFailedInstallLeavesNoApk() =
+        runTest {
+            installer.outcome = InstallOutcome.Failed("INSTALL_FAILED_INSUFFICIENT_STORAGE")
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+            assertEquals(emptyList<File>(), apkFolder.listFiles().orEmpty().toList())
+        }
+
+    @Test
+    fun cancelWhileInstallingLeavesNoApk() =
+        runTest {
+            installer.gate = CompletableDeferred()
+            val updates = updates()
+            updates.startupCheck("preview", enabled = true)
+            runCurrent()
+            updates.update()
+            runCurrent()
+            updates.cancel()
+            runCurrent()
+            assertEquals(emptyList<File>(), apkFolder.listFiles().orEmpty().toList())
+        }
+
     // From review: a game started while the installer worked; its question came then, and showed over the game.
     @Test
     fun aQuestionThatCameDuringAGameWaitsForTheLibrary() =
@@ -576,11 +669,11 @@ class UpdatesTest {
             runCurrent()
             updates.update()
             runCurrent()
-            updates.onScreen(inGame = true)
+            updates.onLibrary(awayFromLibrary = true)
             installer.question!!.complete(Unit)
             runCurrent()
             assertEquals(0, installer.asked)
-            updates.onScreen(inGame = false)
+            updates.onLibrary(awayFromLibrary = false)
             assertEquals(1, installer.asked)
         }
 

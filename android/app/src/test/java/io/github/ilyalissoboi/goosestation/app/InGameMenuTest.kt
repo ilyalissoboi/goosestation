@@ -2360,6 +2360,25 @@ class InGameMenuTest {
             assertFalse(menu.slots().busy)
         }
 
+    // A row to focus from one tab means nothing on the other.
+    @Test
+    fun aTabSwitchClearsTheRowToFocus() =
+        runTest {
+            api.times[3] = 300
+            api.times[5] = 500
+            val menu = menu()
+            loadPanel(menu)
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            menu.confirmDelete()
+            runCurrent()
+            assertEquals(5, menu.slots().focusRow?.slot)
+
+            menu.switchTab()
+
+            assertEquals(SlotTab.Shared, menu.slots().tab)
+            assertNull(menu.slots().focusRow)
+        }
+
     // A re-read after a delete stops the pictures the last read was still reading, rather than read them twice.
     @Test
     fun aRereadStopsTheLastPictureReads() =

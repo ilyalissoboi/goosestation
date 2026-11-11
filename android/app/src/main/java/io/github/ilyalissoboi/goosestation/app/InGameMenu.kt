@@ -389,7 +389,7 @@ class InGameMenu(
         state.slots?.let { slots ->
             if (slots.busy || slots.replacing != null || slots.deleting != null || slots.switching != null) return
             val tab = if (slots.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
-            state = state.copy(slots = slots.copy(tab = tab, error = null))
+            state = state.copy(slots = slots.copy(tab = tab, error = null, focusRow = null))
             return
         }
         val panel = state.cheevos ?: return

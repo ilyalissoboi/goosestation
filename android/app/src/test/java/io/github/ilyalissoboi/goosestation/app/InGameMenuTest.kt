@@ -2360,6 +2360,27 @@ class InGameMenuTest {
             assertFalse(menu.slots().busy)
         }
 
+    // The deleted row stays unpickable until the lists are read again: "Deleting…" until then.
+    @Test
+    fun aDeleteIsBusyUntilTheListsAreReadAgain() =
+        runTest {
+            api.times[3] = 300
+            api.times[5] = 500
+            val menu = menu()
+            loadPanel(menu)
+            var busyDuringReread: Pair<Boolean, Boolean>? = null
+            api.onTimes = { busyDuringReread = menu.slots().busy to menu.slots().removing }
+
+            menu.askDelete(menu.entries().first { it.slot == 3 })
+            menu.confirmDelete()
+            runCurrent()
+
+            assertEquals(true to true, busyDuringReread)
+            assertFalse(menu.slots().busy)
+            assertFalse(menu.slots().removing)
+            assertEquals(listOf(5), menu.entries().map { it.slot })
+        }
+
     // Review: a delete under way says so, not "Loading…".
     @Test
     fun aDeleteUnderWayIsMarked() =

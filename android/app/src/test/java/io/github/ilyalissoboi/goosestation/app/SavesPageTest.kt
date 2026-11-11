@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -161,6 +162,48 @@ class SavesPageTest {
             page.confirmDelete()
             runCurrent()
 
+            assertEquals("Couldn't delete that save: Permission denied.", page.state!!.error)
+        }
+
+    // The deleted row can't be picked, nor another delete start, until the lists are read again.
+    @Test
+    fun aDeleteIsBusyUntilTheListsAreReadAgain() =
+        runTest {
+            api.times[2] = 200
+            api.times[5] = 500
+            val page = opened()
+            val five = page.state!!.entries!!.first { it.slot == 5 }
+            var busyDuringReread: Boolean? = null
+            api.onTimes = { busyDuringReread = page.state!!.removing }
+
+            page.askDelete(page.state!!.entries!!.first { it.slot == 2 })
+            page.confirmDelete()
+            assertTrue(page.state!!.removing)
+            page.pick(five)
+            page.askDelete(five)
+            page.switchTab()
+            assertEquals(emptyList<String>(), calls)
+            assertNull(page.state!!.deleting)
+            assertEquals(SlotTab.ThisGame, page.state!!.tab)
+
+            runCurrent()
+            assertEquals(true, busyDuringReread)
+            assertFalse(page.state!!.removing)
+            assertEquals(listOf(5), page.state!!.entries!!.map { it.slot })
+        }
+
+    @Test
+    fun aFailedDeleteIsNoLongerBusy() =
+        runTest {
+            api.times[2] = 200
+            api.deleteError = "Permission denied."
+            val page = opened()
+
+            page.askDelete(page.state!!.entries!!.single())
+            page.confirmDelete()
+            runCurrent()
+
+            assertFalse(page.state!!.removing)
             assertEquals("Couldn't delete that save: Permission denied.", page.state!!.error)
         }
 

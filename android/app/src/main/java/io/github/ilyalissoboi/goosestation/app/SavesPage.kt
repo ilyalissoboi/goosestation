@@ -26,6 +26,7 @@ data class SavesPageState(
     val others: List<SlotEntry> = emptyList(),
     val shared: List<SlotEntry>? = null,
     val deleting: SlotEntry? = null,
+    val removing: Boolean = false,
     val focusRow: SlotEntry? = null,
     val hardcore: Boolean = false,
     val error: String? = null,
@@ -88,14 +89,14 @@ class SavesPage(
 
     override fun switchTab() {
         val page = state ?: return
-        if (page.deleting != null) return
+        if (page.deleting != null || page.removing) return
         val tab = if (page.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
         state = page.copy(tab = tab, error = null, focusRow = null)
     }
 
     override fun pick(entry: SlotEntry) {
         val page = state ?: return
-        if (page.deleting != null || entry.savedAt == null) return
+        if (page.deleting != null || page.removing || entry.savedAt == null) return
         if (page.hardcore) return change { it.copy(error = GameStarts.HARDCORE_LOAD) }
         val key = page.game.serial
         if (!entry.shared) return play(page.game, entry.ref(key), ::refused)
@@ -119,7 +120,7 @@ class SavesPage(
 
     override fun askDelete(entry: SlotEntry) {
         val page = state ?: return
-        if (page.deleting != null || entry.savedAt == null) return
+        if (page.deleting != null || page.removing || entry.savedAt == null) return
         state = page.copy(deleting = entry, error = null)
     }
 
@@ -128,7 +129,10 @@ class SavesPage(
         state = page.copy(deleting = null, focusRow = page.deleting)
     }
 
-    /** Deletes the save asked about, by the state the question named, then reads the lists again, focusing the next row. */
+    /**
+     * Deletes the save asked about, by the state the question named, then reads the lists again, focusing the next row.
+     * Until those lists are in, nothing else starts: the deleted row is still listed.
+     */
     override fun confirmDelete() {
         val page = state ?: return
         val entry = page.deleting ?: return
@@ -136,12 +140,12 @@ class SavesPage(
         val ref = entry.ref(key)
         val id = pageId
         val next = SaveLists.afterDelete(entry, key, page.entries, page.others, page.shared)
-        state = page.copy(deleting = null)
+        state = page.copy(deleting = null, removing = true)
         scope.launch {
             val error = withContext(game) { api.deleteState(ref) }
             if (id != pageId) return@launch
             if (error != null) {
-                change { it.copy(error = "Couldn't delete that save: $error", focusRow = entry) }
+                change { it.copy(removing = false, error = "Couldn't delete that save: $error", focusRow = entry) }
             } else {
                 read(id, next)
             }
@@ -161,7 +165,9 @@ class SavesPage(
             val others = if (key.isNotBlank()) reader.others(key, entry.discs) else emptyList()
             val shared = reader.shared(SlotMode.Load)
             if (id != pageId) return@launch
-            change { it.copy(entries = own, others = others, shared = shared, focusRow = focusRow) }
+            change {
+                it.copy(entries = own, others = others, shared = shared, focusRow = focusRow, removing = false)
+            }
             val tab = state?.tab ?: SlotTab.ThisGame
             val rows = if (tab == SlotTab.Shared) shared + own + others else own + others + shared
             for (row in rows) {

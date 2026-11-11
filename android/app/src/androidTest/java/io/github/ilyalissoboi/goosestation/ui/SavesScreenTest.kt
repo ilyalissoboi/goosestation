@@ -93,6 +93,14 @@ class SavesScreenTest {
     }
 
     @Test
+    fun aDeleteUnderWaySaysSo() {
+        page = page.copy(entries = saved(2), shared = emptyList(), removing = true)
+        show()
+
+        rule.onNodeWithText("Deleting…").assertExists()
+    }
+
+    @Test
     fun theFirstRowIsFocused() {
         page =
             page.copy(entries = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) + saved(2), shared = listOf())

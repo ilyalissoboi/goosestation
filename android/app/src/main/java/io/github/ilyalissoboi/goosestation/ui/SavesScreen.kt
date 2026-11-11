@@ -143,6 +143,7 @@ fun SavesScreen(
                             Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
                         }
                     }
+                    if (page.removing) SlotLine("Deleting…")
                     when {
                         !sharedTab && !page.hasKey -> SlotLine(NO_KEY_STATES)
                         entries != null && entries.isEmpty() && others.isEmpty() ->

@@ -121,7 +121,11 @@ class FakeGameCore(
         return sections
     }
 
+    /** Runs as [getSaveStateTimes] is called: a test's look at the state while a list is read. */
+    var onTimes: () -> Unit = {}
+
     override fun getSaveStateTimes(serial: String): LongArray {
+        onTimes()
         calls += "getSaveStateTimes $serial"
         val saved = serialTimes[serial] ?: times
         return LongArray(SaveSlots.COUNT + 1) { index -> saved[if (index == 0) SaveSlots.RESUME else index] ?: 0L }

@@ -561,12 +561,14 @@ class InGameMenu(
 
     /**
      * Reads slot panel [id]'s lists, the game's own, its other discs' and the shared ones, then each saved row's picture
-     * (and a shared slot's game), the open tab's first. With [focusRow], that row is to take the focus.
+     * (and a shared slot's game), the open tab's first. With [focusRow], that row is to take the focus. A delete's re-read
+     * ([removed]) ends its busy state once the lists are in, as the deleted row is listed until then.
      */
     private fun readSlots(
         id: Int,
         mode: SlotMode,
         focusRow: SlotEntry? = null,
+        removed: Boolean = false,
     ) {
         val serial = serial ?: return
         val hasKey = serial.isNotBlank()
@@ -588,6 +590,8 @@ class InGameMenu(
                     shared = shared,
                     sharedFocus = SaveLists.focus(mode, shared, null),
                     focusRow = focusRow,
+                    busy = it.busy && !removed,
+                    removing = it.removing && !removed,
                 )
             }
             val own = entries.filter { it.savedAt != null } + others
@@ -655,8 +659,7 @@ class InGameMenu(
                 }
                 return@launch
             }
-            updatePanel(id) { it.copy(busy = false, removing = false) }
-            readSlots(id, panel.mode, next)
+            readSlots(id, panel.mode, next, removed = true)
         }
     }
 

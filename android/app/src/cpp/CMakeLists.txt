@@ -7,6 +7,7 @@ add_library(goosestation SHARED
   achievements_bridge.h
   android_host.cpp
   android_host.h
+  android_host_folders.cpp
   android_host_game_files.cpp
   android_host_settings.cpp
   android_host_state.cpp

@@ -38,7 +38,6 @@ add_library(goosestation SHARED
   jni_achievements.cpp
   jni_bios.cpp
   jni_boot.cpp
-  jni_bridge.cpp
   jni_classes.cpp
   jni_classes.h
   jni_controllers.cpp
@@ -47,6 +46,7 @@ add_library(goosestation SHARED
   jni_game_files.cpp
   jni_input.cpp
   jni_library.cpp
+  jni_memcard_editor.cpp
   jni_memcard_sync.cpp
   jni_settings.cpp
   jni_shader_packs.cpp

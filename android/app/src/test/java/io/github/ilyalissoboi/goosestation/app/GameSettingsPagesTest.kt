@@ -56,6 +56,21 @@ class GameSettingsPagesTest {
             assertNull(pages.rewindUsage)
         }
 
+    // As close() does: the last game's Post-processing page doesn't stay open under another game's settings.
+    @Test
+    fun openingAnotherGameClosesItsPostProcessing() =
+        runTest {
+            val pages = pages()
+            pages.openPage(GamePage.PostProcessing)
+            runCurrent()
+            assertEquals(KEY, pages.postProcessing.key)
+
+            pages.open(game.copy(serial = "SLUS-00002", path = "/games/other.cue"), running = false)
+            runCurrent()
+
+            assertNull(pages.postProcessing.key)
+        }
+
     @Test
     fun openReadsTheSummary() =
         runTest {

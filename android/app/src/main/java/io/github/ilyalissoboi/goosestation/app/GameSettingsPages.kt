@@ -222,6 +222,8 @@ class GameSettingsPages(
         summary = null
         controllers = null
         shown.clear()
+        // As close() does: the last game's Post-processing page doesn't stay open under this one's.
+        postProcessing.close()
         readSummary()
     }
 

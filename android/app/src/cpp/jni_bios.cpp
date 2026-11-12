@@ -62,27 +62,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring 
     return nullptr;
   }
 
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(descriptions->size()), s_string_class, nullptr);
-  if (!result)
-  {
-    ClearException(env);
-    return nullptr;
-  }
-
-  for (size_t i = 0; i < descriptions->size(); i++)
-  {
-    jstring description = ToJString(env, (*descriptions)[i]);
-    if (!description)
-    {
-      env->DeleteLocalRef(result);
-      return nullptr;
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), description);
-    env->DeleteLocalRef(description);
-  }
-
-  return result;
+  return ToJStringArray(env, descriptions.value());
 }
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getBiosImages)(JNIEnv* env, jobject)
@@ -98,43 +78,28 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getBiosImages)(JNIEnv* env, jobject)
     return empty;
   };
 
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(images.size()), s_bios_image_class, nullptr);
+  jobjectArray result = JNIUtil::ToObjectArray(
+    env, s_bios_image_class, images, [](JNIEnv* env, const BIOSImport::Image& image) -> jobject {
+      const JNIUtil::LocalRef<jstring> file_name(env, ToJString(env, image.file_name));
+      const JNIUtil::LocalRef<jstring> description(env, ToJString(env, image.description));
+      const JNIUtil::LocalRef<jstring> region(env, ToJString(env, image.region));
+      jobject entry = nullptr;
+      if (file_name && description && region)
+      {
+        entry = env->NewObject(s_bios_image_class, s_bios_image_constructor, file_name.get(), description.get(),
+                               region.get());
+        if (ClearException(env))
+          entry = nullptr;
+      }
+
+      if (!entry)
+        ERROR_LOG("Failed to pass the BIOS image '{}' to Java.", image.file_name);
+      return entry;
+    });
   if (!result)
   {
     ClearException(env);
     return empty_result();
-  }
-
-  for (size_t i = 0; i < images.size(); i++)
-  {
-    const BIOSImport::Image& image = images[i];
-    jstring file_name = ToJString(env, image.file_name);
-    jstring description = ToJString(env, image.description);
-    jstring region = ToJString(env, image.region);
-    jobject entry = nullptr;
-    if (file_name && description && region)
-    {
-      entry = env->NewObject(s_bios_image_class, s_bios_image_constructor, file_name, description, region);
-      if (ClearException(env))
-        entry = nullptr;
-    }
-
-    for (jobject ref : {static_cast<jobject>(file_name), static_cast<jobject>(description),
-                        static_cast<jobject>(region)})
-    {
-      if (ref)
-        env->DeleteLocalRef(ref);
-    }
-
-    if (!entry)
-    {
-      ERROR_LOG("Failed to pass the BIOS image '{}' to Java.", image.file_name);
-      env->DeleteLocalRef(result);
-      return empty_result();
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
   }
 
   return result;

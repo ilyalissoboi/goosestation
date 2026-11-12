@@ -52,14 +52,7 @@ extern "C" {
 NATIVE_LIBRARY_FUNCTION(jintArray, downloadCovers)(JNIEnv* env, jobject, jobjectArray jsources, jboolean use_serial,
                                                     jobject listener)
 {
-  std::vector<std::string> sources;
-  const jsize count = jsources ? env->GetArrayLength(jsources) : 0;
-  for (jsize i = 0; i < count; i++)
-  {
-    jstring source = static_cast<jstring>(env->GetObjectArrayElement(jsources, i));
-    sources.push_back(FromJString(env, source));
-    env->DeleteLocalRef(source);
-  }
+  const std::vector<std::string> sources = JNIUtil::FromJStringArray(env, jsources);
 
   const AndroidCoverDownloads::Summary summary =
     CoverDownloadsAndroid::Download(env, sources, use_serial == JNI_TRUE, listener);
@@ -133,10 +126,8 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, httpTestFetch)(JNIEnv* env, jobject, jstri
 
   for (size_t i = 0; i < std::size(values); i++)
   {
-    jstring value = ToJString(env, values[i]);
-    env->SetObjectArrayElement(ret, static_cast<jsize>(i), value);
-    if (value)
-      env->DeleteLocalRef(value);
+    const JNIUtil::LocalRef<jstring> value(env, ToJString(env, values[i]));
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), value.get());
   }
 
   return ret;
@@ -147,7 +138,8 @@ NATIVE_LIBRARY_FUNCTION(jintArray, httpTestFetchQueued)(JNIEnv* env, jobject, jo
 {
   // For HttpDownloaderTest only: GETs [urls] through the core's downloader one at a time, so each after the first
   // waits in its queue, and returns their statuses.
-  const jsize count = env->GetArrayLength(urls);
+  const std::vector<std::string> url_list = JNIUtil::FromJStringArray(env, urls);
+  const jsize count = static_cast<jsize>(url_list.size());
   std::vector<jint> statuses(static_cast<size_t>(count), HTTPDownloader::HTTP_STATUS_ERROR);
   if (std::unique_ptr<HTTPDownloader> downloader = HTTPDownloader::Create("GooseStation test"))
   {
@@ -155,12 +147,10 @@ NATIVE_LIBRARY_FUNCTION(jintArray, httpTestFetchQueued)(JNIEnv* env, jobject, jo
     downloader->SetMaxActiveRequests(1);
     for (jsize i = 0; i < count; i++)
     {
-      jstring url = static_cast<jstring>(env->GetObjectArrayElement(urls, i));
-      downloader->CreateRequest(FromJString(env, url),
+      downloader->CreateRequest(url_list[static_cast<size_t>(i)],
                                 [&statuses, i](s32 code, const std::string&, HTTPDownloader::Request::Data) {
                                   statuses[static_cast<size_t>(i)] = code;
                                 });
-      env->DeleteLocalRef(url);
     }
     downloader->WaitForAllRequests();
   }

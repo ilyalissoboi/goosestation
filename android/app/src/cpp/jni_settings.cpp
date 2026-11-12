@@ -92,15 +92,12 @@ NATIVE_LIBRARY_FUNCTION(void, setGameFolders)(JNIEnv* env, jobject, jobjectArray
   uris.reserve(static_cast<size_t>(count));
   for (jsize i = 0; i < count; i++)
   {
-    jstring uri = static_cast<jstring>(env->GetObjectArrayElement(tree_uris, i));
+    const JNIUtil::LocalRef<jstring> uri(env, static_cast<jstring>(env->GetObjectArrayElement(tree_uris, i)));
     if (ClearException(env))
       return;
 
     if (uri)
-    {
-      uris.push_back(FromJString(env, uri));
-      env->DeleteLocalRef(uri);
-    }
+      uris.push_back(FromJString(env, uri.get()));
   }
 
   AndroidHost::SetGameFolders(std::move(uris));

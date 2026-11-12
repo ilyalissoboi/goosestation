@@ -45,6 +45,10 @@ using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
 
+using JNIUtil::ToJByteArray;
+
+using JNIUtil::ToJByteArrayOrNull;
+
 using JNIUtil::ToJString;
 
 extern "C" {
@@ -54,29 +58,21 @@ namespace {
 // Element i of a String[], as UTF-8.
 std::string StringAt(JNIEnv* env, jobjectArray array, jsize i)
 {
-  jstring str = static_cast<jstring>(env->GetObjectArrayElement(array, i));
-  std::string ret = FromJString(env, str);
-  if (str)
-    env->DeleteLocalRef(str);
-  return ret;
+  const JNIUtil::LocalRef<jstring> str(env, static_cast<jstring>(env->GetObjectArrayElement(array, i)));
+  return FromJString(env, str.get());
 }
 
 // A MemcardFile, or null (with no exception pending) if it can't be made.
 jobject ToMemcardFile(JNIEnv* env, const MemcardEditorBridge::CardFile& card)
 {
-  jstring path = ToJString(env, card.path);
-  jstring name = ToJString(env, card.name);
-  jobject ret = (path && name) ? env->NewObject(s_memcard_file_class, s_memcard_file_constructor, path, name,
-                                                s_memcard_kinds[static_cast<size_t>(card.kind)],
+  const JNIUtil::LocalRef<jstring> path(env, ToJString(env, card.path));
+  const JNIUtil::LocalRef<jstring> name(env, ToJString(env, card.name));
+  jobject ret = (path && name) ? env->NewObject(s_memcard_file_class, s_memcard_file_constructor, path.get(),
+                                                name.get(), s_memcard_kinds[static_cast<size_t>(card.kind)],
                                                 static_cast<jboolean>(card.exists)) :
                                  nullptr;
   if (!ret)
     ClearException(env);
-  for (jstring ref : {path, name})
-  {
-    if (ref)
-      env->DeleteLocalRef(ref);
-  }
   return ret;
 }
 
@@ -102,14 +98,13 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardFiles)(JNIEnv* env, jobject, job
     return Made(env, ret, "getMemcardFiles");
   for (size_t i = 0; i < cards.size(); i++)
   {
-    jobject card = ToMemcardFile(env, cards[i]);
+    const JNIUtil::LocalRef<jobject> card(env, ToMemcardFile(env, cards[i]));
     if (!card)
     {
       env->DeleteLocalRef(ret);
       return Made<jobjectArray>(env, nullptr, "getMemcardFiles");
     }
-    env->SetObjectArrayElement(ret, static_cast<jsize>(i), card);
-    env->DeleteLocalRef(card);
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), card.get());
   }
   return ret;
 }
@@ -124,24 +119,6 @@ std::vector<u8> FromJByteArray(JNIEnv* env, jbyteArray array)
   return bytes;
 }
 
-// A byte[] of bytes, or null (with no exception pending) if it can't be made.
-jbyteArray ToJByteArray(JNIEnv* env, std::span<const u8> bytes)
-{
-  jbyteArray ret = env->NewByteArray(static_cast<jsize>(bytes.size()));
-  if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
-  env->SetByteArrayRegion(ret, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
-  return ret;
-}
-
-jbyteArray ToJByteArrayOrNull(JNIEnv* env, const std::optional<std::vector<u8>>& bytes)
-{
-  return bytes.has_value() ? ToJByteArray(env, std::span<const u8>(bytes.value())) : nullptr;
-}
-
 std::optional<std::string> FromOptionalJString(JNIEnv* env, jstring str)
 {
   return str ? std::optional<std::string>(FromJString(env, str)) : std::nullopt;
@@ -152,23 +129,18 @@ jobject ToMemcardSave(JNIEnv* env, const MemcardEditorBridge::Save& save)
 {
   using MemoryCardImage::ICON_HEIGHT;
   using MemoryCardImage::ICON_WIDTH;
-  jstring file_name = ToJString(env, save.file_name);
-  jstring title = ToJString(env, save.title);
-  jobject icon = save.icon.size() == ICON_WIDTH * ICON_HEIGHT ?
-                   ToArgbImage(env, save.icon.data(), ICON_WIDTH, ICON_HEIGHT, false) :
-                   nullptr;
+  const JNIUtil::LocalRef<jstring> file_name(env, ToJString(env, save.file_name));
+  const JNIUtil::LocalRef<jstring> title(env, ToJString(env, save.title));
+  const JNIUtil::LocalRef<jobject> icon(env, save.icon.size() == ICON_WIDTH * ICON_HEIGHT ?
+                                 ToArgbImage(env, save.icon.data(), ICON_WIDTH, ICON_HEIGHT, false) :
+                                 nullptr);
   jobject ret = (file_name && title) ?
                   env->NewObject(s_memcard_save_class, s_memcard_save_constructor, static_cast<jint>(save.first_block),
-                                 file_name, title, static_cast<jint>(save.blocks), static_cast<jboolean>(save.deleted),
-                                 icon) :
+                                 file_name.get(), title.get(), static_cast<jint>(save.blocks),
+                                 static_cast<jboolean>(save.deleted), icon.get()) :
                   nullptr;
   if (!ret)
     ClearException(env);
-  for (jobject ref : {static_cast<jobject>(file_name), static_cast<jobject>(title), icon})
-  {
-    if (ref)
-      env->DeleteLocalRef(ref);
-  }
   return ret;
 }
 
@@ -204,28 +176,17 @@ NATIVE_LIBRARY_FUNCTION(jobject, getMemcardContents)(JNIEnv* env, jobject, jbyte
   if (!contents.has_value())
     return nullptr;
 
-  jobjectArray saves = env->NewObjectArray(static_cast<jsize>(contents->saves.size()), s_memcard_save_class, nullptr);
+  const JNIUtil::LocalRef<jobjectArray> saves(
+    env, JNIUtil::ToObjectArray(env, s_memcard_save_class, contents->saves, ToMemcardSave));
   if (!saves)
   {
     ClearException(env);
     return nullptr;
   }
-  for (size_t i = 0; i < contents->saves.size(); i++)
-  {
-    jobject save = ToMemcardSave(env, contents->saves[i]);
-    if (!save)
-    {
-      env->DeleteLocalRef(saves);
-      return nullptr;
-    }
-    env->SetObjectArrayElement(saves, static_cast<jsize>(i), save);
-    env->DeleteLocalRef(save);
-  }
   jobject ret = env->NewObject(s_memcard_contents_class, s_memcard_contents_constructor,
-                               static_cast<jint>(contents->free_blocks), saves);
+                               static_cast<jint>(contents->free_blocks), saves.get());
   if (!ret)
     ClearException(env);
-  env->DeleteLocalRef(saves);
   return ret;
 }
 

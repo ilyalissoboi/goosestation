@@ -254,26 +254,11 @@ jobject ToArgbImage(JNIEnv* env, const u32* rgba, u32 width, u32 height, bool op
 // A String[] of strings, or null (with no exception pending) if it can't be made.
 jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& strings)
 {
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(strings.size()), s_string_class, nullptr);
+  jobjectArray result =
+    JNIUtil::ToObjectArray(env, s_string_class, strings,
+                           [](JNIEnv* env, const std::string& str) -> jobject { return ToJString(env, str); });
   if (!result)
-  {
     ClearException(env);
-    return nullptr;
-  }
-
-  for (size_t i = 0; i < strings.size(); i++)
-  {
-    jstring string = ToJString(env, strings[i]);
-    if (!string)
-    {
-      env->DeleteLocalRef(result);
-      return nullptr;
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), string);
-    env->DeleteLocalRef(string);
-  }
-
   return result;
 }
 // A PadBinding[] of bindings, or null (with no exception pending) for none or if it can't be made.
@@ -282,47 +267,28 @@ jobjectArray ToPadBindingArray(JNIEnv* env, const std::optional<std::vector<Andr
   if (!bindings.has_value())
     return nullptr;
 
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(bindings->size()), s_pad_binding_class, nullptr);
+  jobjectArray result = JNIUtil::ToObjectArray(
+    env, s_pad_binding_class, bindings.value(), [](JNIEnv* env, const AndroidHost::PadBinding& binding) -> jobject {
+      const JNIUtil::LocalRef<jstring> name(env, ToJString(env, binding.name));
+      const JNIUtil::LocalRef<jstring> display_name(env, ToJString(env, binding.display_name));
+      const JNIUtil::LocalRef<jstring> value(
+        env, binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr);
+      const JNIUtil::LocalRef<jstring> category(env, ToJString(env, binding.category));
+      jobject entry = nullptr;
+      if (name && display_name && category && (value || !binding.binding.has_value()))
+      {
+        entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name.get(), display_name.get(),
+                               s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value.get(), category.get());
+        if (ClearException(env))
+          entry = nullptr;
+      }
+
+      if (!entry)
+        ERROR_LOG("Failed to pass the input '{}' to Java.", binding.name);
+      return entry;
+    });
   if (!result)
-  {
     ClearException(env);
-    return nullptr;
-  }
-
-  for (size_t i = 0; i < bindings->size(); i++)
-  {
-    const AndroidHost::PadBinding& binding = (*bindings)[i];
-    jstring name = ToJString(env, binding.name);
-    jstring display_name = ToJString(env, binding.display_name);
-    jstring value = binding.binding.has_value() ? ToJString(env, binding.binding.value()) : nullptr;
-    jstring category = ToJString(env, binding.category);
-    jobject entry = nullptr;
-    if (name && display_name && category && (value || !binding.binding.has_value()))
-    {
-      entry = env->NewObject(s_pad_binding_class, s_pad_binding_constructor, name, display_name,
-                             s_pad_binding_kinds[static_cast<size_t>(binding.kind)], value, category);
-      if (ClearException(env))
-        entry = nullptr;
-    }
-
-    for (jobject ref : {static_cast<jobject>(name), static_cast<jobject>(display_name), static_cast<jobject>(value),
-                        static_cast<jobject>(category)})
-    {
-      if (ref)
-        env->DeleteLocalRef(ref);
-    }
-
-    if (!entry)
-    {
-      ERROR_LOG("Failed to pass the input '{}' to Java.", binding.name);
-      env->DeleteLocalRef(result);
-      return nullptr;
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
-  }
-
   return result;
 }
 
@@ -549,29 +515,19 @@ namespace {
 /// A LeaderboardEntry[] of entries, or nullptr (with no exception pending) if one can't be made.
 jobjectArray ToEntryArray(JNIEnv* env, const std::vector<AchievementsBridge::LeaderboardEntry>& entries)
 {
-  jobjectArray ret = env->NewObjectArray(static_cast<jsize>(entries.size()), s_leaderboard_entry_class, nullptr);
+  jobjectArray ret = JNIUtil::ToObjectArray(
+    env, s_leaderboard_entry_class, entries,
+    [](JNIEnv* env, const AchievementsBridge::LeaderboardEntry& entry) -> jobject {
+      const LocalStrings strings(env, {entry.user, entry.score});
+      jobject made = strings.ok() ? env->NewObject(s_leaderboard_entry_class, s_leaderboard_entry_constructor,
+                                                   static_cast<jint>(entry.rank), strings[0], strings[1]) :
+                                    nullptr;
+      if (!made)
+        ClearException(env);
+      return made;
+    });
   if (!ret)
-  {
     ClearException(env);
-    return nullptr;
-  }
-
-  for (size_t i = 0; i < entries.size(); i++)
-  {
-    const LocalStrings strings(env, {entries[i].user, entries[i].score});
-    jobject entry = strings.ok() ? env->NewObject(s_leaderboard_entry_class, s_leaderboard_entry_constructor,
-                                                  static_cast<jint>(entries[i].rank), strings[0], strings[1]) :
-                                   nullptr;
-    if (!entry)
-    {
-      ClearException(env);
-      env->DeleteLocalRef(ret);
-      return nullptr;
-    }
-    env->SetObjectArrayElement(ret, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
-  }
-
   return ret;
 }
 

@@ -73,19 +73,17 @@ NATIVE_LIBRARY_FUNCTION(jobject, getAchievementsQueue)(JNIEnv* env, jobject)
     counts.push_back(static_cast<jint>(count));
   }
 
-  jobjectArray user_array = ToJStringArray(env, users);
-  jintArray count_array = env->NewIntArray(static_cast<jsize>(counts.size()));
+  const JNIUtil::LocalRef<jobjectArray> user_array(env, ToJStringArray(env, users));
+  const JNIUtil::LocalRef<jintArray> count_array(env, env->NewIntArray(static_cast<jsize>(counts.size())));
   if (!user_array || !count_array)
   {
     ClearException(env);
     return Made<jobject>(env, nullptr, "getAchievementsQueue");
   }
-  env->SetIntArrayRegion(count_array, 0, static_cast<jsize>(counts.size()), counts.data());
+  env->SetIntArrayRegion(count_array.get(), 0, static_cast<jsize>(counts.size()), counts.data());
 
   jobject ret = env->NewObject(s_achievements_queue_class, s_achievements_queue_constructor,
-                               static_cast<jint>(queue.own), user_array, count_array);
-  env->DeleteLocalRef(user_array);
-  env->DeleteLocalRef(count_array);
+                               static_cast<jint>(queue.own), user_array.get(), count_array.get());
   return Made(env, ret, "getAchievementsQueue");
 }
 
@@ -123,9 +121,10 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getAchievementSections)(JNIEnv* env, jobje
   for (size_t i = 0; i < sections.size(); i++)
   {
     const AchievementsBridge::AchievementSection& section = sections[i];
-    jobjectArray items = env->NewObjectArray(static_cast<jsize>(section.items.size()), s_achievement_class, nullptr);
+    const JNIUtil::LocalRef<jobjectArray> items(
+      env, env->NewObjectArray(static_cast<jsize>(section.items.size()), s_achievement_class, nullptr));
     if (!items)
-      return Made(env, items, "getAchievementSections");
+      return Made<jobjectArray>(env, nullptr, "getAchievementSections");
 
     for (size_t j = 0; j < section.items.size(); j++)
     {
@@ -135,25 +134,23 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getAchievementSections)(JNIEnv* env, jobje
       if (!strings.ok())
         return Made<jobjectArray>(env, nullptr, "getAchievementSections");
 
-      jobject cheevo = env->NewObject(s_achievement_class, s_achievement_constructor, static_cast<jint>(item.id),
-                                      strings[0], strings[1], static_cast<jint>(item.points), strings[2],
-                                      static_cast<jlong>(item.unlocked_at), strings[3],
-                                      static_cast<jfloat>(item.percent));
+      const JNIUtil::LocalRef<jobject> cheevo(
+        env, env->NewObject(s_achievement_class, s_achievement_constructor, static_cast<jint>(item.id), strings[0],
+                            strings[1], static_cast<jint>(item.points), strings[2],
+                            static_cast<jlong>(item.unlocked_at), strings[3], static_cast<jfloat>(item.percent)));
       if (!cheevo)
         return Made<jobjectArray>(env, nullptr, "getAchievementSections");
-      env->SetObjectArrayElement(items, static_cast<jsize>(j), cheevo);
-      env->DeleteLocalRef(cheevo);
+      env->SetObjectArrayElement(items.get(), static_cast<jsize>(j), cheevo.get());
     }
 
     const LocalStrings label(env, {section.label});
-    jobject jsection = label.ok() ? env->NewObject(s_achievement_section_class, s_achievement_section_constructor,
-                                                    static_cast<jint>(section.bucket), label[0], items) :
-                                    nullptr;
+    const JNIUtil::LocalRef<jobject> jsection(
+      env, label.ok() ? env->NewObject(s_achievement_section_class, s_achievement_section_constructor,
+                                       static_cast<jint>(section.bucket), label[0], items.get()) :
+                        nullptr);
     if (!jsection)
       return Made<jobjectArray>(env, nullptr, "getAchievementSections");
-    env->SetObjectArrayElement(ret, static_cast<jsize>(i), jsection);
-    env->DeleteLocalRef(jsection);
-    env->DeleteLocalRef(items);
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), jsection.get());
   }
 
   return ret;
@@ -169,13 +166,13 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getLeaderboards)(JNIEnv* env, jobject)
   for (size_t i = 0; i < boards.size(); i++)
   {
     const LocalStrings strings(env, {boards[i].title, boards[i].description});
-    jobject board = strings.ok() ? env->NewObject(s_leaderboard_class, s_leaderboard_constructor,
-                                                  static_cast<jint>(boards[i].id), strings[0], strings[1]) :
-                                   nullptr;
+    const JNIUtil::LocalRef<jobject> board(env, strings.ok() ? env->NewObject(s_leaderboard_class, s_leaderboard_constructor,
+                                                                 static_cast<jint>(boards[i].id), strings[0],
+                                                                 strings[1]) :
+                                                  nullptr);
     if (!board)
       return Made<jobjectArray>(env, nullptr, "getLeaderboards");
-    env->SetObjectArrayElement(ret, static_cast<jsize>(i), board);
-    env->DeleteLocalRef(board);
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), board.get());
   }
 
   return ret;

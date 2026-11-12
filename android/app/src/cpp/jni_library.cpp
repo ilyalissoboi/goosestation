@@ -65,44 +65,23 @@ static std::unordered_map<std::string, std::pair<std::time_t, std::vector<std::s
 // The discs of a game, as Java GameDisc objects: null if one couldn't be made (the exception cleared).
 static jobjectArray ToGameDiscs(JNIEnv* env, const std::vector<AndroidDiscGroups::Disc>& discs)
 {
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(discs.size()), s_game_disc_class, nullptr);
+  jobjectArray result = JNIUtil::ToObjectArray(
+    env, s_game_disc_class, discs, [](JNIEnv* env, const AndroidDiscGroups::Disc& disc) -> jobject {
+      const JNIUtil::LocalRef<jstring> path(env, ToJString(env, disc.path));
+      const JNIUtil::LocalRef<jstring> serial(env, ToJString(env, disc.serial));
+      const JNIUtil::LocalRef<jstring> title(env, ToJString(env, disc.title));
+      jobject entry = nullptr;
+      if (path && serial && title)
+      {
+        entry = env->NewObject(s_game_disc_class, s_game_disc_constructor, path.get(), serial.get(), title.get(),
+                               static_cast<jint>(disc.number));
+        if (ClearException(env))
+          entry = nullptr;
+      }
+      return entry;
+    });
   if (!result)
-  {
     ClearException(env);
-    return nullptr;
-  }
-
-  for (size_t i = 0; i < discs.size(); i++)
-  {
-    const AndroidDiscGroups::Disc& disc = discs[i];
-    jstring path = ToJString(env, disc.path);
-    jstring serial = ToJString(env, disc.serial);
-    jstring title = ToJString(env, disc.title);
-    jobject entry = nullptr;
-    if (path && serial && title)
-    {
-      entry = env->NewObject(s_game_disc_class, s_game_disc_constructor, path, serial, title,
-                             static_cast<jint>(disc.number));
-      if (ClearException(env))
-        entry = nullptr;
-    }
-
-    for (jobject ref : {static_cast<jobject>(path), static_cast<jobject>(serial), static_cast<jobject>(title)})
-    {
-      if (ref)
-        env->DeleteLocalRef(ref);
-    }
-
-    if (!entry)
-    {
-      env->DeleteLocalRef(result);
-      return nullptr;
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
-  }
-
   return result;
 }
 
@@ -240,51 +219,36 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getGameList)(JNIEnv* env, jobject)
     return empty;
   };
 
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(games.size()), s_game_entry_class, nullptr);
-  if (!result)
-  {
-    ClearException(env);
-    ERROR_LOG("Failed to allocate the game list's {} entries.", games.size());
-    return empty_result();
-  }
-
-  for (size_t i = 0; i < games.size(); i++)
-  {
-    const Game& game = games[i];
-    jstring path = ToJString(env, game.game.path);
-    jstring title = ToJString(env, game.game.title);
-    jstring serial = ToJString(env, game.game.key);
-    jstring region = ToJString(env, game.region);
-    jstring cover_path = game.cover_path.empty() ? nullptr : ToJString(env, game.cover_path);
-    jobjectArray discs = ToGameDiscs(env, game.game.discs);
+  jobjectArray result = JNIUtil::ToObjectArray(env, s_game_entry_class, games, [](JNIEnv* env, const Game& game) -> jobject {
+    const JNIUtil::LocalRef<jstring> path(env, ToJString(env, game.game.path));
+    const JNIUtil::LocalRef<jstring> title(env, ToJString(env, game.game.title));
+    const JNIUtil::LocalRef<jstring> serial(env, ToJString(env, game.game.key));
+    const JNIUtil::LocalRef<jstring> region(env, ToJString(env, game.region));
+    const JNIUtil::LocalRef<jstring> cover_path(env,
+                                                game.cover_path.empty() ? nullptr : ToJString(env, game.cover_path));
+    const JNIUtil::LocalRef<jobjectArray> discs(env, ToGameDiscs(env, game.game.discs));
     jobject entry = nullptr;
     if (path && title && serial && region && discs && (cover_path || game.cover_path.empty()))
     {
-      entry = env->NewObject(s_game_entry_class, s_game_entry_constructor, path, title, serial, region,
-                             static_cast<jlong>(game.total_played_time), static_cast<jlong>(game.last_played_time),
-                             cover_path, discs, static_cast<jboolean>(game.game.playlist),
-                             static_cast<jlong>(game.file_size), static_cast<jlong>(game.uncompressed_size),
-                             static_cast<jint>(game.type));
+      entry = env->NewObject(s_game_entry_class, s_game_entry_constructor, path.get(), title.get(), serial.get(),
+                             region.get(), static_cast<jlong>(game.total_played_time),
+                             static_cast<jlong>(game.last_played_time), cover_path.get(), discs.get(),
+                             static_cast<jboolean>(game.game.playlist), static_cast<jlong>(game.file_size),
+                             static_cast<jlong>(game.uncompressed_size), static_cast<jint>(game.type));
       if (ClearException(env))
         entry = nullptr;
     }
 
-    for (jobject ref : {static_cast<jobject>(path), static_cast<jobject>(title), static_cast<jobject>(serial),
-                        static_cast<jobject>(region), static_cast<jobject>(cover_path), static_cast<jobject>(discs)})
-    {
-      if (ref)
-        env->DeleteLocalRef(ref);
-    }
-
     if (!entry)
-    {
       ERROR_LOG("Failed to pass the game list entry '{}' to Java.", game.game.path);
-      env->DeleteLocalRef(result);
-      return empty_result();
-    }
-
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
+    return entry;
+  });
+  if (!result)
+  {
+    // Only an array that couldn't be made leaves its exception pending: an entry clears its own.
+    if (ClearException(env))
+      ERROR_LOG("Failed to allocate the game list's {} entries.", games.size());
+    return empty_result();
   }
 
   return result;

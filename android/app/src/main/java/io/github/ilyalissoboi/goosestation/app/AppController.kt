@@ -1413,7 +1413,7 @@ object AppController : NativeCallbacks {
         if (EjectAction.ShowMessage in actions) showError(GAME_STOPPED_FOR_EJECT)
         if (EjectAction.FlushAndStopGame in actions) {
             // The shutdown saves the memory cards anyway, before it closes the disc. Pausing writes them at once
-            // (android_host.cpp), before anything else the core runs. onGameStopped() follows.
+            // (android_host_boot.cpp), before anything else the core runs. onGameStopped() follows.
             NativeLibrary.setPaused(true)
             if (screen == Screen.Game) screen = Screen.Library
             NativeLibrary.shutdownGame()

@@ -7,7 +7,7 @@
 -keep class io.github.ilyalissoboi.goosestation.core.NativeLibrary { *; }
 -keep interface io.github.ilyalissoboi.goosestation.core.NativeCallbacks { *; }
 
-# jni_bridge.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().
+# jni_classes.cpp finds GameEntry and GameDisc and their constructors by name in JNI_OnLoad, for getGameList().
 -keep class io.github.ilyalissoboi.goosestation.core.GameEntry {
     <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, long, long, java.lang.String,
         io.github.ilyalissoboi.goosestation.core.GameDisc[], boolean, long, long, int);
@@ -16,7 +16,7 @@
     <init>(java.lang.String, java.lang.String, java.lang.String, int);
 }
 
-# jni_bridge.cpp finds these and their constructors by name in JNI_OnLoad: pictures (OSD icons, save state
+# jni_classes.cpp finds these and their constructors by name in JNI_OnLoad: pictures (OSD icons, save state
 # screenshots), save state previews, and the running game's patch codes.
 -keep class io.github.ilyalissoboi.goosestation.core.ArgbImage {
     <init>(int, int, int[]);
@@ -32,7 +32,7 @@
     <init>(java.lang.String, io.github.ilyalissoboi.goosestation.core.PatchCode[]);
 }
 
-# jni_bridge.cpp finds RetroAchievements' classes and their constructors by name in JNI_OnLoad: the account, the queue
+# jni_classes.cpp finds RetroAchievements' classes and their constructors by name in JNI_OnLoad: the account, the queue
 # of unlocks waiting to be sent, a game's achievements and sections, and the leaderboards.
 -keep class io.github.ilyalissoboi.goosestation.core.AchievementsAccount { <init>(...); }
 -keep class io.github.ilyalissoboi.goosestation.core.AchievementsQueue { <init>(...); }
@@ -43,7 +43,7 @@
 -keep class io.github.ilyalissoboi.goosestation.core.LeaderboardEntry { <init>(...); }
 -keep class io.github.ilyalissoboi.goosestation.core.LeaderboardPage { <init>(...); }
 
-# jni_bridge.cpp finds MemcardSyncState and its constructor, and SyncStatusKind's and SyncActivity's values, by name in
+# jni_classes.cpp finds MemcardSyncState and its constructor, and SyncStatusKind's and SyncActivity's values, by name in
 # JNI_OnLoad, for getMemcardSyncState().
 -keep class io.github.ilyalissoboi.goosestation.core.MemcardSyncState { <init>(...); }
 -keep enum io.github.ilyalissoboi.goosestation.core.SyncStatusKind { public static final *; }
@@ -51,7 +51,7 @@
 -keep class io.github.ilyalissoboi.goosestation.core.SyncVersion { <init>(...); }
 -keep class io.github.ilyalissoboi.goosestation.core.SyncConflict { <init>(...); }
 
-# jni_bridge.cpp finds the memory card editor's classes, their constructors and MemcardKind's values by name in
+# jni_classes.cpp finds the memory card editor's classes, their constructors and MemcardKind's values by name in
 # JNI_OnLoad.
 -keep class io.github.ilyalissoboi.goosestation.core.MemcardFile { <init>(...); }
 -keep enum io.github.ilyalissoboi.goosestation.core.MemcardKind { public static final *; }
@@ -62,12 +62,12 @@
 -keep class io.github.ilyalissoboi.goosestation.core.MemcardWrite { <init>(...); }
 -keep enum io.github.ilyalissoboi.goosestation.core.MemcardWriteOutcome { public static final *; }
 
-# jni_bridge.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().
+# jni_classes.cpp finds BiosImage and its constructor by name in JNI_OnLoad, for getBiosImages().
 -keep class io.github.ilyalissoboi.goosestation.core.BiosImage {
     <init>(java.lang.String, java.lang.String, java.lang.String);
 }
 
-# jni_bridge.cpp finds PadBinding and its constructor, and PadBindingKind's values, by name in JNI_OnLoad, for
+# jni_classes.cpp finds PadBinding and its constructor, and PadBindingKind's values, by name in JNI_OnLoad, for
 # getPadBindings().
 -keep class io.github.ilyalissoboi.goosestation.core.PadBinding {
     <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.PadBindingKind, java.lang.String, java.lang.String);
@@ -93,7 +93,7 @@
 -dontwarn androidx.lifecycle.ProcessLifecycleOwner
 -dontwarn androidx.lifecycle.ProcessLifecycleOwner$Companion
 
-# jni_bridge.cpp finds these and their constructors by name in JNI_OnLoad, for getPostProcessingStages().
+# jni_classes.cpp finds these and their constructors by name in JNI_OnLoad, for getPostProcessingStages().
 -keep class io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo {
     <init>(java.lang.String, java.lang.String, java.lang.String, java.lang.String, int, int, float[], float[], float[],
         float[], float[], java.lang.String[]);
@@ -102,7 +102,7 @@
     <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo[],
         java.lang.String);
 }
-# jni_bridge.cpp finds FavouriteInfo and its constructor by name in JNI_OnLoad, for getPostProcessingFavourites().
+# jni_classes.cpp finds FavouriteInfo and its constructor by name in JNI_OnLoad, for getPostProcessingFavourites().
 -keep class io.github.ilyalissoboi.goosestation.core.FavouriteInfo {
     <init>(java.lang.String, java.lang.String[], java.lang.String[]);
 }
@@ -113,7 +113,7 @@
     public static void cancel(long, long);
     public static int download(java.lang.String, java.lang.String, java.lang.String, int, long, long);
 }
-# The progress listeners native code calls back by name (jni_bridge.cpp, cover_downloads_android.cpp).
+# The progress listeners native code calls back by name (jni_shader_packs.cpp, cover_downloads_android.cpp).
 -keep interface io.github.ilyalissoboi.goosestation.core.PackProgress { *; }
 -keepclassmembers class * implements io.github.ilyalissoboi.goosestation.core.PackProgress {
     public void status(java.lang.String);

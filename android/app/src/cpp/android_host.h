@@ -499,7 +499,7 @@ void SetPictureAtTop(bool top);
 /// CPU thread: passes the queued input to the Android input source, and the touch pad's state to Port 1.
 void ProcessInputQueue();
 
-// Implemented by jni_bridge.cpp.
+// Implemented by jni_classes.cpp.
 
 /// Attaches the calling thread (the CPU thread) to the JVM for the rest of its life, or detaches it.
 void AttachCurrentThreadToJVM(const char* name);

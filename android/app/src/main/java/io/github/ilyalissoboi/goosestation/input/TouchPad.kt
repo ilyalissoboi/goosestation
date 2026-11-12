@@ -5,7 +5,7 @@ package io.github.ilyalissoboi.goosestation.input
 
 /**
  * The touch pad's buttons, in the order of their bits in [TouchPadState.buttons]. The core takes each as the Port 1
- * input with the same generic name (`DPadUp`, …, `R3`; android_host.cpp's touch pad).
+ * input with the same generic name (`DPadUp`, …, `R3`; android_host_input.cpp's touch pad).
  */
 enum class TouchButton {
     Up,

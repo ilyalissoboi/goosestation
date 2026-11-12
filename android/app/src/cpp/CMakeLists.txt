@@ -7,6 +7,16 @@ add_library(goosestation SHARED
   achievements_bridge.h
   android_host.cpp
   android_host.h
+  android_host_boot.cpp
+  android_host_controllers.cpp
+  android_host_folders.cpp
+  android_host_game_files.cpp
+  android_host_host.cpp
+  android_host_input.cpp
+  android_host_settings.cpp
+  android_host_state.cpp
+  android_host_state.h
+  android_host_states.cpp
   bios_import.cpp
   bios_import.h
   content_bridge.cpp
@@ -25,7 +35,22 @@ add_library(goosestation SHARED
   touch_pad.cpp
   touch_pad.h
   http_downloader_android.h
-  jni_bridge.cpp
+  jni_achievements.cpp
+  jni_bios.cpp
+  jni_boot.cpp
+  jni_classes.cpp
+  jni_classes.h
+  jni_controllers.cpp
+  jni_covers.cpp
+  jni_folders.cpp
+  jni_game_files.cpp
+  jni_input.cpp
+  jni_library.cpp
+  jni_memcard_editor.cpp
+  jni_memcard_sync.cpp
+  jni_settings.cpp
+  jni_shader_packs.cpp
+  jni_states.cpp
   jni_util.cpp
   jni_util.h
   memcard_editor_bridge.cpp

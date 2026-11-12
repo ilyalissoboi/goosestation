@@ -27,7 +27,7 @@ PACKAGE = "io/github/ilyalissoboi/goosestation/"
 
 # Framework members the native code looks up by literal name, as seeds.txt would write them.
 FRAMEWORK_MEMBERS = {
-    "void run()",  # java.lang.Runnable, jni_bridge.cpp
+    "void run()",  # java.lang.Runnable, jni_classes.cpp
 }
 
 _PRIMITIVES = {

@@ -142,7 +142,7 @@ class CheckNativeSplitTest(unittest.TestCase):
         self.assertIn("missing (1): static void Start();", out)
         self.write(
             "android_host_state.h",
-            open(os.path.join(self.cpp, "android_host_state.h")).read().replace("namespace AndroidHost {\n", "namespace AndroidHost {\nvoid Start();\n", 1),
+            open(os.path.join(self.cpp, "android_host_state.h")).read().replace("namespace AndroidHost {\n", "namespace AndroidHost {\nvoid Start();\n\n", 1),
         )
         code, out = self.check()
         self.assertEqual(0, code, out)
@@ -155,6 +155,91 @@ class CheckNativeSplitTest(unittest.TestCase):
         self.write("android_host_template.h", "#pragma once\n\ntemplate<typename T>\nT Same(T x)\n{\n  return x;\n}\n")
         code, out = self.check()
         self.assertEqual(0, code, out)
+
+    # From review: a blank line added between two declarations that were adjacent, and still are.
+    def test_aBlankLineBetweenAdjacentItemsFails(self):
+        self.split()
+        self.write(
+            "android_host_state.cpp",
+            "#include \"android_host_state.h\"\n\nnamespace AndroidHost {\nstd::mutex s_mutex;\n\nint s_count = 0; // guarded by s_mutex\nbool s_started = false;\n} // namespace AndroidHost\n",
+        )
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("blank line", out)
+
+    # From review: a comment over a group of declarations must keep the whole group under it, in one file.
+    def test_aCommentedGroupSplitAcrossFilesFails(self):
+        host = HOST.replace("static std::mutex s_mutex;", "// The count's state.\nstatic std::mutex s_mutex;")
+        self.write("android_host.cpp", host)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "group"], cwd=self.repo, check=True)
+        self.split()
+        self.write(
+            "android_host_state.cpp",
+            "#include \"android_host_state.h\"\n\nnamespace AndroidHost {\n// The count's state.\nstd::mutex s_mutex;\nint s_count = 0; // guarded by s_mutex\n} // namespace AndroidHost\n",
+        )
+        self.write("android_host_other.cpp", "namespace AndroidHost {\nstatic bool s_started = false;\n} // namespace AndroidHost\n")
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("group", out)
+
+    # From review: an extern definition, a native or a global with an initialiser can't hide as a declaration.
+    def test_anAddedExternDefinitionFails(self):
+        self.split()
+        self.write(
+            "android_host_count.cpp",
+            open(os.path.join(self.cpp, "android_host_count.cpp")).read()
+            + '\nextern "C" void Sneaky()\n{\n  abort();\n}\n\nstatic const bool s_sneaky = AndroidHost::Start();\n',
+        )
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("Sneaky", out)
+        self.assertIn("s_sneaky", out)
+
+    def test_aDeclarationInANewCppFileCounts(self):
+        self.split()
+        self.write(
+            "android_host_count.cpp",
+            open(os.path.join(self.cpp, "android_host_count.cpp")).read() + "\nextern int s_other;\n",
+        )
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("s_other", out)
+
+    def test_aPrototypeThatMatchesNoDefinitionFails(self):
+        self.split()
+        self.write(
+            "android_host_state.h",
+            open(os.path.join(self.cpp, "android_host_state.h")).read().replace("extern bool s_started;", "extern bool s_started;\nint Twice(int x = 2);"),
+        )
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("Twice", out)
+
+    def test_anAddedUsingFails(self):
+        self.split()
+        self.write(
+            "android_host_count.cpp",
+            open(os.path.join(self.cpp, "android_host_count.cpp")).read().replace("// Reads", "using namespace AndroidHost;\n\n// Reads"),
+        )
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("using namespace AndroidHost;", out)
+
+    # From review: an item moved into another namespace is a change; leaving an anonymous one is the only allowed move.
+    def test_anItemMovedToAnotherNamespaceFails(self):
+        self.split()
+        self.write(
+            "android_host_state.cpp",
+            "#include \"android_host_state.h\"\n\nstd::mutex s_mutex;\nint s_count = 0; // guarded by s_mutex\nbool s_started = false;\n",
+        )
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("namespace", out)
+
+    def test_aNativesHeadAndParametersStayOneItem(self):
+        bridge = BRIDGE.replace("NATIVE_LIBRARY_FUNCTION(void, start)(JNIEnv*, jobject)", "NATIVE_LIBRARY_FUNCTION(void, start)\n(JNIEnv*, jobject)")
+        items = check_native_split.parse(bridge, "jni_bridge.cpp")[0]
+        self.assertTrue(any("start)\n(JNIEnv*" in item.text for item in items))
 
     def test_aChangedBodyFails(self):
         self.split()

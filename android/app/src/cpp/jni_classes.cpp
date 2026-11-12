@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -41,8 +43,6 @@
 
 Log_SetChannel(JNIBridge);
 
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -53,203 +53,104 @@ using JNIUtil::ToJString;
 
 // Cached at JNI_OnLoad.
 jclass s_string_class = nullptr;
-
-namespace {
 jclass s_callbacks_class = nullptr;
-
 jmethodID s_on_game_started = nullptr;
-
 jmethodID s_on_game_stopped = nullptr;
-
 jmethodID s_on_error = nullptr;
-
 jmethodID s_on_binding_captured = nullptr;
-
 jmethodID s_on_hotkey = nullptr;
-
 jmethodID s_on_rumble = nullptr;
-
 jmethodID s_on_osd_message = nullptr;
-
 jmethodID s_on_fast_forward_changed = nullptr;
-
 jmethodID s_on_pad_kind_changed = nullptr;
-
 jmethodID s_on_achievements_token = nullptr;
-
 jmethodID s_store_memcard_sync_secret = nullptr;
-
 jmethodID s_load_memcard_sync_secret = nullptr;
-
 jmethodID s_has_memcard_sync_secret = nullptr;
-
 jmethodID s_on_memcard_sync_changed = nullptr;
-
 jmethodID s_on_achievements_changed = nullptr;
-
 jmethodID s_on_achievements_login_expired = nullptr;
-
 jmethodID s_on_achievements_sent = nullptr;
-
 jmethodID s_on_achievement_refused = nullptr;
-
 jmethodID s_on_achievement_notification = nullptr;
-
 jmethodID s_on_achievement_toast = nullptr;
-
 jmethodID s_on_achievement_indicator = nullptr;
-
 jmethodID s_on_achievement_image = nullptr;
-
 jmethodID s_on_play_sound = nullptr;
-
-} // namespace
-
 jclass s_achievements_account_class = nullptr;
-
 jmethodID s_achievements_account_constructor = nullptr;
-
 jclass s_achievements_queue_class = nullptr;
-
 jmethodID s_achievements_queue_constructor = nullptr;
-
 jclass s_game_achievements_class = nullptr;
-
 jmethodID s_game_achievements_constructor = nullptr;
-
 jclass s_achievement_class = nullptr;
-
 jmethodID s_achievement_constructor = nullptr;
-
 jclass s_achievement_section_class = nullptr;
-
 jmethodID s_achievement_section_constructor = nullptr;
-
 jclass s_leaderboard_class = nullptr;
-
 jmethodID s_leaderboard_constructor = nullptr;
-
-namespace {
 jclass s_leaderboard_entry_class = nullptr;
-
 jmethodID s_leaderboard_entry_constructor = nullptr;
-
 jclass s_leaderboard_page_class = nullptr;
-
 jmethodID s_leaderboard_page_constructor = nullptr;
-
 jmethodID s_on_leaderboard = nullptr;
-
 jclass s_argb_image_class = nullptr;
-
 jmethodID s_argb_image_constructor = nullptr;
-
-} // namespace
-
 jclass s_game_entry_class = nullptr;
-
 jmethodID s_game_entry_constructor = nullptr;
-
 jclass s_game_disc_class = nullptr;
-
 jmethodID s_game_disc_constructor = nullptr;
-
 jclass s_save_state_preview_class = nullptr;
-
 jmethodID s_save_state_preview_constructor = nullptr;
-
 jclass s_patch_code_class = nullptr;
-
 jmethodID s_patch_code_constructor = nullptr;
-
 jclass s_patch_codes_class = nullptr;
-
 jmethodID s_patch_codes_constructor = nullptr;
-
 jclass s_bios_image_class = nullptr;
-
 jmethodID s_bios_image_constructor = nullptr;
-
-namespace {
 jclass s_pad_binding_class = nullptr;
-
-} // namespace
-
 jclass s_shader_option_info_class = nullptr;
-
 jmethodID s_shader_option_info_constructor = nullptr;
-
 jclass s_stage_info_class = nullptr;
-
 jmethodID s_stage_info_constructor = nullptr;
-
 jclass s_favourite_info_class = nullptr;
-
 jmethodID s_favourite_info_constructor = nullptr;
-
-namespace {
 jmethodID s_pad_binding_constructor = nullptr;
-
 jobject s_pad_binding_kinds[3] = {}; // PadBindingKind's Button, Axis and HalfAxis (global references)
-
-} // namespace
-
 jclass s_memcard_sync_state_class = nullptr;
-
 jmethodID s_memcard_sync_state_constructor = nullptr;
-
 jobject s_sync_status_kinds[7] = {}; // SyncStatusKind's values, in MemcardSync::StatusKind's order (global references)
-
 // SyncActivity's values, in MemcardSync::Activity's order (global references). Sized by the C++ enum, so a value added
 // there and not in SYNC_ACTIVITY_NAMES (LoadEnumValues takes one name for each) fails the build.
 jobject s_sync_activities[static_cast<size_t>(MemcardSync::Activity::Count)] = {};
-
 jclass s_sync_version_class = nullptr;
-
 jmethodID s_sync_version_constructor = nullptr;
-
 jclass s_sync_conflict_class = nullptr;
-
 jmethodID s_sync_conflict_constructor = nullptr;
-
 jmethodID s_runnable_run = nullptr;
-
 jclass s_memcard_file_class = nullptr;
-
 jmethodID s_memcard_file_constructor = nullptr;
-
 // MemcardKind's values, in MemcardEditorBridge::CardKind's order (global references), sized by it, as above.
 jobject s_memcard_kinds[static_cast<size_t>(MemcardEditorBridge::CardKind::Count)] = {};
-
 jclass s_memcard_save_class = nullptr;
-
 jmethodID s_memcard_save_constructor = nullptr;
-
 jclass s_memcard_contents_class = nullptr;
-
 jmethodID s_memcard_contents_constructor = nullptr;
-
 jclass s_memcard_edit_class = nullptr;
-
 jmethodID s_memcard_edit_constructor = nullptr;
-
 jclass s_memcard_rename_check_class = nullptr;
-
 jmethodID s_memcard_rename_check_constructor = nullptr;
-
 jclass s_memcard_write_class = nullptr;
-
 jmethodID s_memcard_write_constructor = nullptr;
-
 // MemcardWriteOutcome's values, in WriteOutcome's order (global references), sized by it, as above.
 jobject s_memcard_write_outcomes[static_cast<size_t>(MemcardEditorBridge::WriteOutcome::Count)] = {};
 
 // The app's NativeCallbacks (a global reference), or null.
 std::mutex s_callbacks_mutex;
-
 jobject s_callbacks = nullptr;
 
 namespace {
+
 // Set on the thread AttachCurrentThreadToJVM() attached.
 thread_local JNIEnv* s_attached_env = nullptr;
 
@@ -258,6 +159,7 @@ thread_local JNIEnv* s_attached_env = nullptr;
 AndroidContentProvider s_content_provider;
 
 namespace {
+
 // The registered NativeCallbacks as a local reference, or null with none.
 jobject GetCallbacks(JNIEnv* env)
 {
@@ -374,7 +276,6 @@ jobjectArray ToJStringArray(JNIEnv* env, const std::vector<std::string>& strings
 
   return result;
 }
-
 // A PadBinding[] of bindings, or null (with no exception pending) for none or if it can't be made.
 jobjectArray ToPadBindingArray(JNIEnv* env, const std::optional<std::vector<AndroidHost::PadBinding>>& bindings)
 {
@@ -644,6 +545,7 @@ void AndroidHost::NotifyAchievementImage(std::string_view path)
 }
 
 namespace {
+
 /// A LeaderboardEntry[] of entries, or nullptr (with no exception pending) if one can't be made.
 jobjectArray ToEntryArray(JNIEnv* env, const std::vector<AchievementsBridge::LeaderboardEntry>& entries)
 {
@@ -729,6 +631,7 @@ void AndroidHost::NotifyPadKindChanged(s32 kind)
 }
 
 namespace {
+
 // Global references to the constants called names of the enum class_name, in that order, in out.
 template<size_t N>
 bool LoadEnumValues(JNIEnv* env, const char* class_name, const char* const (&names)[N], jobject (&out)[N])
@@ -776,6 +679,7 @@ jobjectArray ToNonNullStringArray(JNIEnv* env, const std::vector<std::string>& s
 }
 
 extern "C" {
+
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
 {
   JNIEnv* env;

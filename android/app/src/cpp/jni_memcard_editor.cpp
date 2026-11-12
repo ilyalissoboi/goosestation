@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -39,10 +41,6 @@
 #include <utility>
 #include <vector>
 
-Log_SetChannel(JNIBridge);
-
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,7 +48,9 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 namespace {
+
 // Element i of a String[], as UTF-8.
 std::string StringAt(JNIEnv* env, jobjectArray array, jsize i)
 {
@@ -115,6 +115,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardFiles)(JNIEnv* env, jobject, job
 }
 
 namespace {
+
 std::vector<u8> FromJByteArray(JNIEnv* env, jbyteArray array)
 {
   std::vector<u8> bytes(array ? static_cast<size_t>(env->GetArrayLength(array)) : 0);

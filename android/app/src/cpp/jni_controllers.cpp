@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -39,10 +41,6 @@
 #include <utility>
 #include <vector>
 
-Log_SetChannel(JNIBridge);
-
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,6 +48,7 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getPadBindings)(JNIEnv* env, jobject, jstring descriptor)
 {
   return ToPadBindingArray(env, AndroidHost::GetPadBindings(FromJString(env, descriptor)));

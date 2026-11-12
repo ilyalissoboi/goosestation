@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -41,8 +43,6 @@
 
 Log_SetChannel(JNIBridge);
 
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,6 +50,7 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 NATIVE_LIBRARY_FUNCTION(jobjectArray, importBios)(JNIEnv* env, jobject, jstring source_tree_uri, jstring dest_dir)
 {
   Error error;

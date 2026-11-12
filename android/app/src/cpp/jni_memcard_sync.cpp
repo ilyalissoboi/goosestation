@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -41,15 +43,30 @@
 
 Log_SetChannel(JNIBridge);
 
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
 
 using JNIUtil::ToJString;
 
+namespace {
+
+// values[value], or null, logged, for a value it has none for: a C++ enum that grew without its Kotlin twin (one the
+// build can't check, as MemcardSync::StatusKind, which desktop shares, has no Count).
+template<size_t N, typename E>
+jobject EnumValue(jobject (&values)[N], E value, const char* what)
+{
+  const size_t index = static_cast<size_t>(value);
+  if (index < N)
+    return values[index];
+  ERROR_LOG("No {} for value {}.", what, index);
+  return nullptr;
+}
+
+} // namespace
+
 extern "C" {
+
 NATIVE_LIBRARY_FUNCTION(jboolean, isMemcardSyncAvailable)(JNIEnv*, jobject)
 {
   return MemcardSyncBridge::IsAvailable() ? JNI_TRUE : JNI_FALSE;
@@ -91,6 +108,7 @@ NATIVE_LIBRARY_FUNCTION(void, applyMemcardSync)(JNIEnv*, jobject)
 }
 
 namespace {
+
 // A SyncVersion, or null (with no exception pending) if it can't be made.
 jobject ToSyncVersion(JNIEnv* env, const MemcardSyncBridge::Version& v)
 {

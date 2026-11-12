@@ -57,14 +57,13 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
 
 static bool InitializeConfig(Error* error);
-
 static void SetDefaultSettings(SettingsInterface& si);
-
 static void LoadFolders(SettingsInterface& si);
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
@@ -107,7 +106,6 @@ private:
 };
 
 static std::string s_initial_achievements_token; // until InitializeConfig() makes the secrets layer
-
 static std::unique_ptr<AndroidSecrets> s_secrets_settings_interface;
 
 // GameList::Refresh() isn't safe to run twice at once.

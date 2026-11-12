@@ -57,6 +57,7 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;

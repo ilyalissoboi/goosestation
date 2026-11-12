@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -41,15 +43,25 @@
 
 Log_SetChannel(JNIBridge);
 
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
 
 using JNIUtil::ToJString;
 
+// Each of an enum's values, its settings.ini name then its display name, through the core's own functions.
+template<typename T>
+static void AppendSettingNames(std::vector<std::string>& names, const char* (*name)(T), const char* (*display)(T))
+{
+  for (u32 i = 0; i < static_cast<u32>(T::Count); i++)
+  {
+    names.emplace_back(name(static_cast<T>(i)));
+    names.emplace_back(display(static_cast<T>(i)));
+  }
+}
+
 extern "C" {
+
 NATIVE_LIBRARY_FUNCTION(void, setShaderPacksFolder)(JNIEnv* env, jobject, jstring path)
 {
   AndroidHost::SetShaderPacksFolder(FromJString(env, path));

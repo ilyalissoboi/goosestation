@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -39,10 +41,6 @@
 #include <utility>
 #include <vector>
 
-Log_SetChannel(JNIBridge);
-
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,6 +48,7 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jstring serial)
 {
   const std::vector<s64> times = AndroidHost::GetSaveStateTimes(FromJString(env, serial));
@@ -104,7 +103,6 @@ NATIVE_LIBRARY_FUNCTION(jobject, getSaveStatePreview)(JNIEnv* env, jobject, jstr
 }
 
 NATIVE_LIBRARY_FUNCTION(jobject, getStatePreview)
-
 (JNIEnv* env, jobject, jstring key, jint slot, jboolean shared, jstring game_path)
 {
   return ToSaveStatePreview(env, AndroidHost::GetStatePreview(FromJString(env, key), static_cast<s32>(slot),

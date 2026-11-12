@@ -57,6 +57,7 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
@@ -70,12 +71,7 @@ static std::vector<const Controller::ControllerInfo*> GetGameTypes(u32 pad);
 static std::string GetPortLabel(u32 pad, const std::array<bool, 2>& multitap);
 
 static bool PadHasAnalogButton(SettingsInterface& si, u32 pad);
-
 static std::vector<const HotkeyInfo*> GetOfferedHotkeys(SettingsInterface& si, u32 pad);
-
-static constexpr const char* PORTS_KEY = AndroidInputKeys::PORTS_KEY;
-
-static constexpr const char* RUMBLE_KEY = AndroidInputKeys::RUMBLE_KEY;
 
 // The DualShock's Analog button, Port 1's, which the app presses with a hotkey.
 static constexpr std::string_view ANALOG_BUTTON = "Analog";
@@ -93,8 +89,6 @@ static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
   return type == InputBindingInfo::Type::Button || type == InputBindingInfo::Type::Axis ||
          type == InputBindingInfo::Type::HalfAxis;
 }
-
-static u32 s_binding_capture_id = 0; // changes when a capture starts or is cancelled, so a stale report is dropped
 
 } // namespace AndroidHost
 

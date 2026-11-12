@@ -57,17 +57,10 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
-
-static std::optional<std::string> s_pending_boot_path;
-
-static AndroidDiscGroups::Game s_pending_game;     // the game the pending boot is for
-
-static u32 s_pending_playlist_index = 0;          // the pending boot's sub-image, for a playlist
-
-static std::string s_pending_boot_state; // the save state the pending boot starts from, if any
 
 } // namespace AndroidHost
 

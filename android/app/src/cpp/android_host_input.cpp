@@ -57,26 +57,15 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
 
 static void QueueInputEvent(InputEvent event);
-
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
 
 static void ApplyTouchPad();
-
-static std::vector<InputEvent> s_input_queue;
-
-static std::vector<s32> s_queued_device_ids; // connected as far as the queue goes, for QueueKeyEvent()'s result
-
-// CPU thread only.
-static std::vector<InputEvent> s_input_events;
-
-static AndroidInputSource* s_input_source = nullptr;
-
-static std::atomic<u32> s_touch_presses_for_test{0}; // the buttons given as pressed, for TakeTouchPressesForTest()
 
 } // namespace AndroidHost
 
@@ -241,6 +230,7 @@ void AndroidHost::QueueInputEvent(InputEvent event)
 }
 
 namespace AndroidHost {
+
 // With s_input_mutex held: queues state, and says whether the CPU thread needs waking for it.
 static bool QueueTouchPadLocked(const TouchPad::State& state)
 {

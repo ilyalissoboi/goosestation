@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -39,10 +41,6 @@
 #include <utility>
 #include <vector>
 
-Log_SetChannel(JNIBridge);
-
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,7 +48,9 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 namespace {
+
 // A check's or an install's progress, reported to the Kotlin PackProgress it was called with, on the calling thread.
 class JavaPackProgress final : public ProgressCallback
 {
@@ -203,6 +203,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, installShaderPacks)(JNIEnv* env, jobject, 
 }
 
 namespace {
+
 // For ShaderPacksInstallTest only: the platform's transport, with GitHub's addresses moved to a server on the device.
 class RebasedTransport final : public ShaderPacks::Transport
 {

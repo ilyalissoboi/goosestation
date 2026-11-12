@@ -57,11 +57,24 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
 
 namespace {
+
+// What memory card sync starts with, from [MemoryCardSync].
+struct MemcardSyncSettings
+{
+  bool enabled;
+  std::string remote_uri;
+  std::string access_key_id;
+  std::string device_name;
+
+  bool operator==(const MemcardSyncSettings&) const = default;
+};
+
 MemcardSyncSettings ReadMemcardSyncSettings(const SettingsInterface& si)
 {
   return {si.GetBoolValue(MemcardSync::SECTION, "Enabled", false), si.GetStringValue(MemcardSync::SECTION, "RemoteURI"),

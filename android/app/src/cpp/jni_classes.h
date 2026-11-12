@@ -94,30 +94,8 @@ T Made(JNIEnv* env, T result, const char* call)
   return nullptr;
 }
 
-// values[value], or null, logged, for a value it has none for: a C++ enum that grew without its Kotlin twin (one the
-// build can't check, as MemcardSync::StatusKind, which desktop shares, has no Count).
-template<size_t N, typename E>
-jobject EnumValue(jobject (&values)[N], E value, const char* what)
-{
-  const size_t index = static_cast<size_t>(value);
-  if (index < N)
-    return values[index];
-  ERROR_LOG("No {} for value {}.", what, index);
-  return nullptr;
-}
-
-// Each of an enum's values, its settings.ini name then its display name, through the core's own functions.
-template<typename T>
-void AppendSettingNames(std::vector<std::string>& names, const char* (*name)(T), const char* (*display)(T))
-{
-  for (u32 i = 0; i < static_cast<u32>(T::Count); i++)
-  {
-    names.emplace_back(name(static_cast<T>(i)));
-    names.emplace_back(display(static_cast<T>(i)));
-  }
-}
-
 extern "C" {
+
 #define NATIVE_LIBRARY_FUNCTION(ret, name) \
   JNIEXPORT ret JNICALL Java_io_github_ilyalissoboi_goosestation_core_NativeLibrary_##name
 

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -39,10 +41,6 @@
 #include <utility>
 #include <vector>
 
-Log_SetChannel(JNIBridge);
-
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,6 +48,7 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 // A game's own settings, by its key (AndroidHost::GetGameBoolSetting() and the rest).
 
 NATIVE_LIBRARY_FUNCTION(jboolean, hasGameSetting)(JNIEnv* env, jobject, jstring key, jstring section, jstring name)

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -41,8 +43,6 @@
 
 Log_SetChannel(JNIBridge);
 
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,6 +50,7 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 NATIVE_LIBRARY_FUNCTION(void, refreshGameList)(JNIEnv*, jobject, jboolean invalidate_cache)
 {
   // A refresh sees the folders as they are now, not as ContentBridge listed them a few seconds ago.
@@ -59,7 +60,6 @@ NATIVE_LIBRARY_FUNCTION(void, refreshGameList)(JNIEnv*, jobject, jboolean invali
 
 // Each playlist's entries, by path, with the modified time of the file they were read from.
 static std::mutex s_playlist_cache_mutex;
-
 static std::unordered_map<std::string, std::pair<std::time_t, std::vector<std::string>>> s_playlist_cache;
 
 // The discs of a game, as Java GameDisc objects: null if one couldn't be made (the exception cleared).

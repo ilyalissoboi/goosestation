@@ -57,17 +57,10 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
-
-static bool s_game_started = false;
-
-static bool s_fastmem_override_logged = false;
-
-static bool s_fast_forward_reported = false; // as the app was last told, CPU thread
-
-static s32 s_pad_kind_reported = -1;    // Port 1's kind, as the app was last told, CPU thread
 
 } // namespace AndroidHost
 
@@ -551,19 +544,12 @@ const char* InputManager::ConvertHostKeyboardCodeToIcon(u32 code)
                 })
 
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
-
 APP_STATE_HOTKEY("LoadSelectedSaveState", "Load From Selected Slot")
-
 APP_STATE_HOTKEY("SaveSelectedSaveState", "Save To Selected Slot")
-
 APP_STATE_HOTKEY("SelectPreviousSaveStateSlot", "Select Previous Save Slot")
-
 APP_STATE_HOTKEY("SelectNextSaveStateSlot", "Select Next Save Slot")
-
 APP_STATE_HOTKEY("SaveStateAndSelectNextSlot", "Save State and Select Next Slot")
-
 APP_STATE_HOTKEY("UndoLoadState", "Undo Load State")
-
 // The Controllers page's Analog mode hotkey: the DualShock's Analog button, on the chord's release, as the core's
 // toggles are.
 DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANSLATE_NOOP("Hotkeys", "Toggle Analog Mode"),
@@ -571,5 +557,4 @@ DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANS
                 if (pressed == 0)
                   AndroidHost::PressAnalogButton();
               })
-
 END_HOTKEY_LIST()

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "jni_classes.h"
+
 #include "achievements_bridge.h"
 #include "android_host.h"
 #include "bios_import.h"
@@ -39,10 +41,6 @@
 #include <utility>
 #include <vector>
 
-Log_SetChannel(JNIBridge);
-
-#include "jni_classes.h"
-
 using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
@@ -50,13 +48,13 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
+
 NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jint disc, jboolean resume)
 {
   AndroidHost::StartGame(FromJString(env, path), static_cast<u32>(std::max(disc, 0)), resume == JNI_TRUE);
 }
 
 NATIVE_LIBRARY_FUNCTION(void, startGameFromState)
-
 (JNIEnv* env, jobject, jstring path, jstring key, jint slot, jboolean shared)
 {
   AndroidHost::StartGameFromState(FromJString(env, path), FromJString(env, key), static_cast<s32>(slot),

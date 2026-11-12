@@ -57,11 +57,15 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
+
 using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
 
 } // namespace AndroidHost
+
+static constexpr const char* NO_GAME_RUNNING = "No game is running.";
+static constexpr const char* NO_SERIAL = "This game has no serial, so it can't have save states.";
 
 std::vector<s64> AndroidHost::GetSaveStateTimes(std::string serial)
 {

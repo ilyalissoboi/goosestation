@@ -312,14 +312,13 @@ class InGameMenu(
     private var panelId = 0
 
     /** The slot panel's lists: open while the panel is, which shows each change. */
-
-    /** The Patch codes panel: open while the menu shows it, which shows each change. */
-    private val codes = PatchCodesModel(scope, game, api) { state = state.copy(codes = it) }
-
     private val slotLists =
         SaveListModel(scope, game, reader, api) { lists ->
             state = state.copy(slots = lists?.let { state.slots?.copy(lists = it) ?: SlotPanel(it) })
         }
+
+    /** The Patch codes panel: open while the menu shows it, which shows each change. */
+    private val codes = PatchCodesModel(scope, game, api) { state = state.copy(codes = it) }
 
     /** Changes as a leaderboard opens or closes, so the core's answer for an earlier one is dropped. */
     private var leaderboardRequest = 0

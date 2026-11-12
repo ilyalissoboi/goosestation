@@ -148,7 +148,26 @@ class CheckJniKeepsTest(unittest.TestCase):
         self.assertIn("1 classes and 1 members", out)
         code, out = self.run_check(row.replace("Ljava/lang/String;I)V", "Ljava/lang/String;)V"))
         self.assertEqual(1, code)
-        self.assertIn("a constructor (java.lang.String,java.lang.String,java.lang.String) isn't kept by R8", out)
+        self.assertIn(
+            f"{PKG}.core.GameDisc's constructor (java.lang.String,java.lang.String,java.lang.String) isn't kept by R8", out
+        )
+
+    # Two classes can have constructors of the same shape: a row is checked against its own class's, which it names.
+    def testClassRowConstructorCheckedAgainstItsOwnClass(self):
+        seeds = (
+            f"{PKG}.core.Leaderboard\n"
+            f"{PKG}.core.LeaderboardEntry\n"
+            f"{PKG}.core.LeaderboardEntry: LeaderboardEntry(int,java.lang.String,java.lang.String)\n"
+        )
+        row = 'ClassLookup{"io/github/ilyalissoboi/goosestation/core/%s", &c, "(ILjava/lang/String;Ljava/lang/String;)V", &k},\n'
+        code, out = self.run_check(row % "LeaderboardEntry", seeds)
+        self.assertEqual(0, code, out)
+        code, out = self.run_check(row % "Leaderboard", seeds)
+        self.assertEqual(1, code, out)
+        self.assertIn(
+            f"bridge.cpp:1: {PKG}.core.Leaderboard's constructor (int,java.lang.String,java.lang.String) isn't kept by R8",
+            out,
+        )
 
     def testClassRowWithoutConstructor(self):
         code, out = self.run_check(

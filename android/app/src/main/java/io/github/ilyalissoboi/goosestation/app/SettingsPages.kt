@@ -113,10 +113,9 @@ class SettingsPages(
     var bios by mutableStateOf<BiosPage?>(null)
         private set
 
-    // As PageValues' counters: a BIOS read that comes back after another or a change is dropped, and read again once
-    // the change is saved.
-    private var biosRead = 0
-    private var biosReading = false
+    // As PageValues' reads: a BIOS read that comes back after another or a change is dropped, and read again once the
+    // change is saved.
+    private val biosRead = Latest()
 
     /** [page]'s values, as last read or changed; null until read. */
     fun values(page: CorePage): SettingValues? = pages.values(page)
@@ -160,8 +159,7 @@ class SettingsPages(
         val overrides = if (fileName == null) page.overrides - region else page.overrides + (region to fileName)
         // Now, so a second change made before this one is saved starts from it.
         bios = page.copy(overrides = overrides)
-        val reread = biosReading
-        biosRead++
+        val reread = biosRead.invalidate()
         scope.launch(core) {
             BiosOverrides.set(settings, region, fileName)
             api.applySettings()
@@ -173,8 +171,7 @@ class SettingsPages(
     fun setFastBoot(on: Boolean) {
         val page = bios ?: return
         bios = page.copy(fastBoot = on)
-        val reread = biosReading
-        biosRead++
+        val reread = biosRead.invalidate()
         scope.launch(core) {
             BiosFastBoot.save(settings, on)
             api.applySettings()
@@ -183,8 +180,7 @@ class SettingsPages(
     }
 
     private fun readBios() {
-        val read = ++biosRead
-        biosReading = true
+        val read = biosRead.next()
         scope.launch {
             val loaded =
                 withContext(core) {
@@ -195,8 +191,8 @@ class SettingsPages(
                         fastBoot = BiosFastBoot.load(settings),
                     )
                 }
-            if (read != biosRead) return@launch
-            biosReading = false
+            if (!biosRead.isLatest(read)) return@launch
+            biosRead.done()
             bios = loaded
         }
     }

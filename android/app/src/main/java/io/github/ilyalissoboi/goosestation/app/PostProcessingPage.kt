@@ -299,7 +299,7 @@ class PostProcessingPage(
         private set
 
     // Changes as each read is asked for and each edit is made: a read that comes back after either is dropped.
-    private var reads = 0
+    private val reads = Latest()
 
     // Changes as the page opens and closes: an edit that ends after either ends nothing on the page shown now.
     private var session = 0
@@ -337,7 +337,7 @@ class PostProcessingPage(
         focusPacks = false
         forgetFavourite()
         focusFavourite = null
-        reads++
+        reads.invalidate()
         session++
     }
 
@@ -713,7 +713,7 @@ class PostProcessingPage(
         after: () -> Unit = {},
         change: () -> Unit,
     ) {
-        val read = ++reads
+        val read = reads.next()
         val opened = session
         val key = key
         val apply = running
@@ -724,7 +724,7 @@ class PostProcessingPage(
                     if (apply && key != null) api.applyGameSettings(key)
                     readChains(key) to api.getPostProcessingFavourites()
                 }
-            if (read == reads) {
+            if (reads.isLatest(read)) {
                 chains = loaded
                 favourites = saved
             }
@@ -733,7 +733,7 @@ class PostProcessingPage(
     }
 
     private fun read() {
-        val read = ++reads
+        val read = reads.next()
         val key = key
         scope.launch {
             val loaded =
@@ -745,7 +745,7 @@ class PostProcessingPage(
                         }
                     Triple(gles, offered(shaders, gles), readChains(key) to api.getPostProcessingFavourites())
                 }
-            if (read != reads) return@launch
+            if (!reads.isLatest(read)) return@launch
             gles = loaded.first
             shaders = loaded.second
             chains = loaded.third.first

@@ -117,10 +117,10 @@ class ControllersPage(
     private var captureTimer: Job? = null
 
     /** The latest bindings read, so an older read that comes back later is dropped. */
-    private var bindingsRead = 0
+    private val bindingsRead = Latest()
 
     /** The latest labels read, likewise. */
-    private var labelsRead = 0
+    private val labelsRead = Latest()
 
     /** Changes as each capture starts or ends, so a report the main thread gets late is dropped. */
     private var captureId = 0
@@ -132,15 +132,13 @@ class ControllersPage(
     private var capturingHotkey = false
 
     // The latest reads of the hub, the open port and the open macro, so an older one that comes back later is dropped.
-    private var hubRead = 0
-    private var portRead = 0
-    private var macroRead = 0
+    // A change to the open port's values while a read of them is out drops it, and reads again after its save.
+    private val hubRead = Latest()
+    private val portRead = Latest()
+    private val macroRead = Latest()
 
     /** The pad [ControllersState.portValues] were read for, while they're shown. */
     private var valuesPad: Int? = null
-
-    /** A read of the open port's values is out: a change meanwhile drops it, and reads again after its save. */
-    private var portReading = false
 
     /** The core's type and multitap names are shown: set on the main thread, read on [core]. */
     @Volatile private var namesShown = false
@@ -224,7 +222,7 @@ class ControllersPage(
     ) {
         if (capturingInput || state.portTypes[pad] == type) return
         state = state.copy(portTypes = state.portTypes + (pad to type), typeSettings = emptyList(), portValues = null)
-        portRead++
+        portRead.invalidate()
         scope.launch {
             withContext(core) { api.setPortType(pad, type) }
             readPort(pad)
@@ -238,8 +236,7 @@ class ControllersPage(
         if (values == old) return
         state = state.copy(portValues = values)
         // A read out now is from before this change: it would put the old values back.
-        val reread = portReading
-        portRead++
+        val reread = portRead.invalidate()
         scope.launch {
             withContext(core) {
                 values.save(settings, old)
@@ -288,7 +285,7 @@ class ControllersPage(
             )?.descriptor
         this.state = state.copy(selected = selected)
         if (selected == null) {
-            bindingsRead++
+            bindingsRead.invalidate()
             this.state =
                 this.state.copy(bindings = emptyList(), hotkeys = emptyList(), macros = emptyList(), bindingsFor = null)
         } else if (selected != state.selected || state.bindingsFor != selected) {
@@ -312,7 +309,7 @@ class ControllersPage(
 
     // Reads each controller's port and rumble, the ports offered, their types and multitap.
     private fun readHub() {
-        val read = ++hubRead
+        val read = hubRead.next()
         val descriptors = state.controllers.map { it.descriptor }
         scope.launch {
             val hub =
@@ -329,7 +326,7 @@ class ControllersPage(
                     val modes = if (names) api.getSettingNames(NameList.MultitapMode.kind) else null
                     Hub(ports, rumble, offered, types, multitap, typeNames, modes)
                 }
-            if (read != hubRead) return@launch
+            if (!hubRead.isLatest(read)) return@launch
             val lost =
                 hub.ports.values
                     .distinct()
@@ -354,8 +351,7 @@ class ControllersPage(
 
     // Reads [pad]'s type and its settings, for its page.
     private fun readPort(pad: Int) {
-        val read = ++portRead
-        portReading = true
+        val read = portRead.next()
         // Another port's values hold another port's settings: none show until this one's are read. The same port's
         // stay meanwhile (back from one of its macros), so its page keeps its rows and focus.
         if (valuesPad != pad) {
@@ -371,8 +367,8 @@ class ControllersPage(
                     val macros = (1..MacroSettings.COUNT).map { MacroSettings.binds(pad, it) }
                     Triple(type, info, SettingValues.read(settings, PortSettings.settings(pad, info) + macros))
                 }
-            if (read != portRead || state.view != ControllersView.Port(pad)) return@launch
-            portReading = false
+            if (!portRead.isLatest(read) || state.view != ControllersView.Port(pad)) return@launch
+            portRead.done()
             valuesPad = pad
             state = state.copy(portTypes = state.portTypes + (pad to type), typeSettings = info, portValues = values)
         }
@@ -383,7 +379,7 @@ class ControllersPage(
         pad: Int,
         macro: Int,
     ) {
-        val read = ++macroRead
+        val read = macroRead.next()
         state = state.copy(macroValues = null)
         scope.launch {
             val (values, inputs) =
@@ -391,7 +387,7 @@ class ControllersPage(
                     SettingValues.read(settings, MacroSettings.settings(pad, macro)) to
                         api.getTypeInputs(api.getPortType(pad).orEmpty())
                 }
-            if (read != macroRead || state.view != ControllersView.Macro(pad, macro)) return@launch
+            if (!macroRead.isLatest(read) || state.view != ControllersView.Macro(pad, macro)) return@launch
             state = state.copy(macroValues = values, macroInputs = inputs)
         }
     }
@@ -582,7 +578,7 @@ class ControllersPage(
         readLabels(connected)
         when {
             selected == null -> {
-                bindingsRead++
+                bindingsRead.invalidate()
                 state =
                     state.copy(bindings = emptyList(), hotkeys = emptyList(), macros = emptyList(), bindingsFor = null)
             }
@@ -603,7 +599,7 @@ class ControllersPage(
      * then keeps its name.
      */
     private fun readLabels(connected: List<ConnectedController>) {
-        val read = ++labelsRead
+        val read = labelsRead.next()
         val shared =
             connected
                 .groupBy { it.name }
@@ -618,7 +614,7 @@ class ControllersPage(
                     // The core adds it after the work queued before it, this lookup's included.
                     first.mapValues { (descriptor, index) -> index ?: api.getControllerIndex(descriptor) }
                 }
-            if (read != labelsRead) return@launch
+            if (!labelsRead.isLatest(read)) return@launch
             val numbered =
                 shared.associate { pad ->
                     pad.descriptor to
@@ -650,7 +646,7 @@ class ControllersPage(
         descriptor: String,
         change: (() -> Unit)? = null,
     ) {
-        val read = ++bindingsRead
+        val read = bindingsRead.next()
         scope.launch {
             val (loaded, hotkeys, macros) =
                 withContext(core) {
@@ -662,7 +658,7 @@ class ControllersPage(
                     )
                 }
             val type = withContext(core) { api.getControllerPort(descriptor)?.let { api.getPortType(it) } }
-            if (read != bindingsRead || state.selected != descriptor) return@launch
+            if (!bindingsRead.isLatest(read) || state.selected != descriptor) return@launch
             state =
                 state.copy(
                     bindings = loaded.orEmpty(),

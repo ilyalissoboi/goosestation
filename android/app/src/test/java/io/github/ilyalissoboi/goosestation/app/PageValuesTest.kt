@@ -270,6 +270,37 @@ class PageValuesTest {
         }
 
     @Test
+    fun corePagesMapToTheirSharedPages() {
+        assertEquals(
+            listOf(null) + SharedPage.entries,
+            listOf(
+                CorePage.Interface,
+                CorePage.Console,
+                CorePage.Emulation,
+                CorePage.Graphics,
+                CorePage.Audio,
+                CorePage.MemoryCards,
+                CorePage.Advanced,
+            ).map { it.shared },
+        )
+    }
+
+    @Test
+    fun gamePagesMapToTheirSharedPages() {
+        val shared = GamePage.entries.associateWith { it.shared }
+        assertEquals(SharedPage.Console, shared[GamePage.Console])
+        assertEquals(SharedPage.Emulation, shared[GamePage.Emulation])
+        assertEquals(SharedPage.Graphics, shared[GamePage.Graphics])
+        assertEquals(SharedPage.Audio, shared[GamePage.Audio])
+        assertEquals(SharedPage.MemoryCards, shared[GamePage.MemoryCards])
+        assertEquals(SharedPage.Advanced, shared[GamePage.Advanced])
+        assertEquals(
+            listOf(GamePage.PostProcessing, GamePage.Controllers, GamePage.Achievements),
+            shared.filterValues { it == null }.keys.toList(),
+        )
+    }
+
+    @Test
     fun aPageWithNothingToReadStaysUnread() =
         runTest {
             val model =

@@ -32,19 +32,14 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
-import io.github.ilyalissoboi.goosestation.ui.AdvancedScreen
-import io.github.ilyalissoboi.goosestation.ui.AudioScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.CardSlots
-import io.github.ilyalissoboi.goosestation.ui.ConsoleScreen
 import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
 import io.github.ilyalissoboi.goosestation.ui.CoversScreen
-import io.github.ilyalissoboi.goosestation.ui.EmulationScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
 import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GameSettingsHost
-import io.github.ilyalissoboi.goosestation.ui.GraphicsScreen
 import io.github.ilyalissoboi.goosestation.ui.HotkeysScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceUpdates
@@ -58,6 +53,7 @@ import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SavesScreen
 import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
+import io.github.ilyalissoboi.goosestation.ui.SharedPageScreen
 import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
 import io.github.ilyalissoboi.goosestation.ui.UpdateBannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
@@ -163,59 +159,17 @@ class MainActivity : ComponentActivity() {
                                     },
                             )
                         }
-                    Screen.Console ->
-                        CorePageRoute(CorePage.Console) { values, onChange ->
-                            ConsoleScreen(
-                                values,
-                                AppController.settingsPages.names,
-                                onChange,
-                                onBack = AppController::closeSettingsPage,
-                            )
-                        }
-                    Screen.Emulation ->
-                        CorePageRoute(CorePage.Emulation) { values, onChange ->
-                            EmulationScreen(
-                                values,
-                                AppController.settingsPages.rewindUsage,
-                                onChange,
-                                onBack = AppController::closeSettingsPage,
-                            )
-                        }
+                    Screen.Console -> SharedPageRoute(CorePage.Console)
+                    Screen.Emulation -> SharedPageRoute(CorePage.Emulation)
                     Screen.PostProcessing ->
                         PostProcessingScreen(
                             AppController.postProcessingPage,
                             AppController.shaderPacks,
                             onBack = AppController::closeSettingsPage,
                         )
-                    Screen.Advanced ->
-                        CorePageRoute(CorePage.Advanced) { values, onChange ->
-                            AdvancedScreen(
-                                values,
-                                AppController.settingsPages.names,
-                                AppController.settingsPages.fastmemAvailable,
-                                onChange,
-                                onBack = AppController::closeSettingsPage,
-                            )
-                        }
-                    Screen.Audio ->
-                        CorePageRoute(CorePage.Audio) { values, onChange ->
-                            AudioScreen(
-                                values,
-                                AppController.settingsPages.names,
-                                onChange,
-                                onBack = AppController::closeSettingsPage,
-                            )
-                        }
-                    Screen.Graphics ->
-                        CorePageRoute(CorePage.Graphics) { values, onChange ->
-                            GraphicsScreen(
-                                values = values,
-                                names = AppController.settingsPages.names,
-                                vulkanFailed = AppController.settingsPages.vulkanFailed,
-                                onChange = onChange,
-                                onBack = AppController::closeSettingsPage,
-                            )
-                        }
+                    Screen.Advanced -> SharedPageRoute(CorePage.Advanced)
+                    Screen.Audio -> SharedPageRoute(CorePage.Audio)
+                    Screen.Graphics -> SharedPageRoute(CorePage.Graphics)
                     Screen.Achievements -> {
                         val page = AppController.achievementsPage
                         val account = page.account
@@ -574,6 +528,15 @@ private fun CorePageRoute(
         SettingsLoadingPage(page.title, onBack = AppController::closeSettingsPage)
     } else {
         content(values) { AppController.settingsPages.change(page, it) }
+    }
+}
+
+// One of the pages a game's settings have too: drawn as the game's are ([SharedPageScreen]).
+@Composable
+private fun SharedPageRoute(page: CorePage) {
+    val shared = page.shared ?: return
+    CorePageRoute(page) { values, onChange ->
+        SharedPageScreen(shared, values, AppController.settingsPages.extras, onChange, AppController::closeSettingsPage)
     }
 }
 

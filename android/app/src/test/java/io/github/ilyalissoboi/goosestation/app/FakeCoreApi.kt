@@ -510,7 +510,13 @@ class FakeCoreApi(
         return sharedCards
     }
 
+    /** Runs once, as the next rewind estimate is asked for, as if the user acted meanwhile. */
+    var onRewind: () -> Unit = {}
+
     override fun getRewindMemoryUsage(slots: Int): RewindUsage {
+        val action = onRewind
+        onRewind = {}
+        action()
         calls += "getRewindMemoryUsage $slots"
         return RewindUsage(rewindPerSlot.ramBytes * slots, rewindPerSlot.vramBytes * slots)
     }

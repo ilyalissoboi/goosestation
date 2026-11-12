@@ -405,13 +405,21 @@ class GameSettingsPages(
             val loaded =
                 withContext(core) {
                     val controllers = if (page == GamePage.Controllers) readControllers(key) else null
+                    val values = controllers?.first ?: SettingValues.readGame(global, layer(key), page.settings)
                     PageRead(
                         names = known.ifEmpty { NameList.entries.associateWith { api.getSettingNames(it.kind) } },
-                        values = controllers?.first ?: SettingValues.readGame(global, layer(key), page.settings),
+                        values = values,
                         vulkanFailed = page == GamePage.Graphics && api.isVulkanFailed(),
                         fastmemAvailable = page != GamePage.Advanced || api.isFastmemAvailable(),
                         sharedCards = if (page == GamePage.MemoryCards) api.getSharedCardNames() else null,
                         controllers = controllers?.second,
+                        // In the read, as the global page's is: it lands with the values it's for, or not at all.
+                        rewindUsage =
+                            if (page == GamePage.Emulation) {
+                                api.getRewindMemoryUsage(values[EmulationSettings.REWIND_SLOTS])
+                            } else {
+                                null
+                            },
                     )
                 }
             if (read != pageRead[page] || game?.serial != key) return@launch
@@ -421,10 +429,7 @@ class GameSettingsPages(
             if (page == GamePage.Advanced) fastmemAvailable = loaded.fastmemAvailable
             loaded.sharedCards?.let { sharedCards = it }
             loaded.controllers?.let { controllers = it }
-            if (page == GamePage.Emulation) {
-                rewindUsage =
-                    withContext(core) { api.getRewindMemoryUsage(loaded.values[EmulationSettings.REWIND_SLOTS]) }
-            }
+            loaded.rewindUsage?.let { rewindUsage = it }
             shown[page] = loaded.values
         }
     }
@@ -436,6 +441,7 @@ class GameSettingsPages(
         val fastmemAvailable: Boolean,
         val sharedCards: List<String>?,
         val controllers: GameControllers? = null,
+        val rewindUsage: RewindUsage? = null,
     )
 
     /** A file with nothing in it: a game's controller keys, while they don't count. */

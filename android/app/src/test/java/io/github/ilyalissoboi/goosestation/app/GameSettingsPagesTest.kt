@@ -42,6 +42,20 @@ class GameSettingsPagesTest {
             calls.clear()
         }
 
+    // Another game's settings opened as the first's Emulation page was read: none of the first game's shows.
+    @Test
+    fun anotherGameOpenedMidReadShowsNoneOfTheFirstsEmulation() =
+        runTest {
+            val pages = pages()
+            pages.openPage(GamePage.Emulation)
+            api.onRewind = { pages.open(game.copy(serial = "SLUS-00002", path = "/games/other.cue"), running = false) }
+
+            runCurrent()
+
+            assertNull(pages.values(GamePage.Emulation))
+            assertNull(pages.rewindUsage)
+        }
+
     @Test
     fun openReadsTheSummary() =
         runTest {

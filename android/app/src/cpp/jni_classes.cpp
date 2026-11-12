@@ -35,6 +35,7 @@
 #include <iterator>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -619,6 +620,124 @@ bool LoadEnumValues(JNIEnv* env, const char* class_name, const char* const (&nam
   return true;
 }
 
+// A class to load into a global reference and, unless constructor is null, the constructor native code makes it with.
+struct ClassLookup
+{
+  const char* name;
+  jclass* cls;
+  const char* constructor;
+  jmethodID* constructor_id;
+};
+
+// A method of a class already loaded.
+struct MethodLookup
+{
+  const char* name;
+  const char* signature;
+  jmethodID* id;
+};
+
+// The constants called names of the enum class_name, in the C++ enum's order, each into a global reference in out.
+struct EnumLookup
+{
+  const char* class_name;
+  std::span<const char* const> names;
+  std::span<jobject> out;
+};
+
+// Each loader checks every lookup as it makes it. The first that finds nothing is logged, its exception cleared, and
+// the loader returns false there, with the lookups after it untouched.
+
+bool LoadClasses(JNIEnv* env, std::span<const ClassLookup> classes)
+{
+  for (const ClassLookup& lookup : classes)
+  {
+    jclass local = env->FindClass(lookup.name);
+    if (!local)
+    {
+      ERROR_LOG("JNI_OnLoad: couldn't find the class {}.", lookup.name);
+      ClearException(env);
+      return false;
+    }
+
+    *lookup.cls = static_cast<jclass>(env->NewGlobalRef(local));
+    env->DeleteLocalRef(local);
+    if (!lookup.constructor)
+      continue;
+
+    *lookup.constructor_id = env->GetMethodID(*lookup.cls, "<init>", lookup.constructor);
+    if (!*lookup.constructor_id)
+    {
+      ERROR_LOG("JNI_OnLoad: couldn't find {}'s constructor {}.", lookup.name, lookup.constructor);
+      ClearException(env);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// class_name names cls in the log.
+bool LoadMethods(JNIEnv* env, jclass cls, const char* class_name, std::span<const MethodLookup> methods)
+{
+  for (const MethodLookup& lookup : methods)
+  {
+    *lookup.id = env->GetMethodID(cls, lookup.name, lookup.signature);
+    if (!*lookup.id)
+    {
+      ERROR_LOG("JNI_OnLoad: couldn't find {}.{}{}.", class_name, lookup.name, lookup.signature);
+      ClearException(env);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool LoadEnums(JNIEnv* env, std::span<const EnumLookup> enums)
+{
+  for (const EnumLookup& lookup : enums)
+  {
+    const JNIUtil::LocalRef<jclass> cls(env, env->FindClass(lookup.class_name));
+    if (!cls)
+    {
+      ERROR_LOG("JNI_OnLoad: couldn't find the enum {}.", lookup.class_name);
+      ClearException(env);
+      return false;
+    }
+
+    const std::string signature = std::string("L") + lookup.class_name + ";";
+    for (size_t i = 0; i < lookup.names.size(); i++)
+    {
+      jfieldID field = env->GetStaticFieldID(cls.get(), lookup.names[i], signature.c_str());
+      jobject value = field ? env->GetStaticObjectField(cls.get(), field) : nullptr;
+      if (!value)
+      {
+        ERROR_LOG("JNI_OnLoad: couldn't find {}.{}.", lookup.class_name, lookup.names[i]);
+        ClearException(env);
+        return false;
+      }
+
+      lookup.out[i] = env->NewGlobalRef(value);
+      env->DeleteLocalRef(value);
+    }
+  }
+
+  return true;
+}
+
+// For the lookup test natives: [loaded (1 or 0), rows filled].
+jintArray LookupResult(JNIEnv* env, bool loaded, size_t filled, const char* call)
+{
+  jintArray ret = env->NewIntArray(2);
+  if (ret)
+  {
+    const jint values[] = {loaded ? 1 : 0, static_cast<jint>(filled)};
+    env->SetIntArrayRegion(ret, 0, 2, values);
+  }
+  return Made(env, ret, call);
+}
+
 } // namespace
 
 // Kotlin takes these arrays as never null: a failure gives an empty one.
@@ -1054,6 +1173,82 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   FileSystem::SetContentProvider(&s_content_provider);
   PlatformMisc::SetSoundPlayer(&AndroidHost::NotifyPlaySound);
   return JNI_VERSION_1_6;
+}
+
+// For JniLookupsTest only: LoadClasses() over names, each with the constructor signature in constructors (null, read
+// as "", for none). A row is filled when its class is, and its constructor if it has one.
+NATIVE_LIBRARY_FUNCTION(jintArray, classLookupsForTest)
+(JNIEnv* env, jobject, jobjectArray jnames, jobjectArray jconstructors)
+{
+  const std::vector<std::string> names = JNIUtil::FromJStringArray(env, jnames);
+  const std::vector<std::string> constructors = JNIUtil::FromJStringArray(env, jconstructors);
+  std::vector<jclass> classes(names.size(), nullptr);
+  std::vector<jmethodID> ids(names.size(), nullptr);
+  std::vector<ClassLookup> rows;
+  for (size_t i = 0; i < names.size(); i++)
+  {
+    const bool has_constructor = i < constructors.size() && !constructors[i].empty();
+    rows.push_back({names[i].c_str(), &classes[i], has_constructor ? constructors[i].c_str() : nullptr, &ids[i]});
+  }
+
+  const bool loaded = LoadClasses(env, rows);
+  size_t filled = 0;
+  for (size_t i = 0; i < rows.size(); i++)
+    filled += (classes[i] && (!rows[i].constructor || ids[i])) ? 1 : 0;
+  for (jclass cls : classes)
+  {
+    if (cls)
+      env->DeleteGlobalRef(cls);
+  }
+  return LookupResult(env, loaded, filled, "classLookupsForTest");
+}
+
+// For JniLookupsTest only: LoadMethods() over names and signatures on the class class_name.
+NATIVE_LIBRARY_FUNCTION(jintArray, methodLookupsForTest)
+(JNIEnv* env, jobject, jstring jclass_name, jobjectArray jnames, jobjectArray jsignatures)
+{
+  const std::string class_name = FromJString(env, jclass_name);
+  const std::vector<std::string> names = JNIUtil::FromJStringArray(env, jnames);
+  const std::vector<std::string> signatures = JNIUtil::FromJStringArray(env, jsignatures);
+  const JNIUtil::LocalRef<jclass> cls(env, env->FindClass(class_name.c_str()));
+  if (!cls)
+  {
+    ClearException(env);
+    return LookupResult(env, false, 0, "methodLookupsForTest");
+  }
+
+  std::vector<jmethodID> ids(names.size(), nullptr);
+  std::vector<MethodLookup> rows;
+  for (size_t i = 0; i < names.size() && i < signatures.size(); i++)
+    rows.push_back({names[i].c_str(), signatures[i].c_str(), &ids[i]});
+
+  const bool loaded = LoadMethods(env, cls.get(), class_name.c_str(), rows);
+  const size_t filled = static_cast<size_t>(std::count_if(ids.begin(), ids.end(), [](jmethodID id) { return id; }));
+  return LookupResult(env, loaded, filled, "methodLookupsForTest");
+}
+
+// For JniLookupsTest only: LoadEnums() of the enum class_name's constants names.
+NATIVE_LIBRARY_FUNCTION(jintArray, enumLookupsForTest)(JNIEnv* env, jobject, jstring jclass_name, jobjectArray jnames)
+{
+  const std::string class_name = FromJString(env, jclass_name);
+  const std::vector<std::string> names = JNIUtil::FromJStringArray(env, jnames);
+  std::vector<const char*> name_ptrs;
+  for (const std::string& name : names)
+    name_ptrs.push_back(name.c_str());
+  std::vector<jobject> values(names.size(), nullptr);
+
+  const EnumLookup lookup{class_name.c_str(), name_ptrs, values};
+  const bool loaded = LoadEnums(env, std::span<const EnumLookup>(&lookup, 1));
+  size_t filled = 0;
+  for (jobject value : values)
+  {
+    if (value)
+    {
+      filled++;
+      env->DeleteGlobalRef(value);
+    }
+  }
+  return LookupResult(env, loaded, filled, "enumLookupsForTest");
 }
 
 } // extern "C"

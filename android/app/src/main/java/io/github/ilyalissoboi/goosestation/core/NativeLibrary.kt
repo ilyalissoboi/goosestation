@@ -614,6 +614,28 @@ object NativeLibrary {
     /** For JniStringsTest only: [bytes] as the bridge makes a Java string of UTF-8 (JNIUtil::ToJString()). */
     external fun decodeUtf8ForTest(bytes: ByteArray): String
 
+    /**
+     * For JniLookupsTest only: JNI_OnLoad's LoadClasses() over [names], each with the constructor signature in
+     * [constructors] (null for none). Returns [loaded (1 or 0), rows filled], having freed what it made.
+     */
+    external fun classLookupsForTest(
+        names: Array<String>,
+        constructors: Array<String?>,
+    ): IntArray
+
+    /** For JniLookupsTest only: LoadMethods() over [names] and [signatures] on [className]; as classLookupsForTest. */
+    external fun methodLookupsForTest(
+        className: String,
+        names: Array<String>,
+        signatures: Array<String>,
+    ): IntArray
+
+    /** For JniLookupsTest only: LoadEnums() of the enum [className]'s constants [names]; as classLookupsForTest. */
+    external fun enumLookupsForTest(
+        className: String,
+        names: Array<String>,
+    ): IntArray
+
     /** For JniArraysTest only: [strings] read by JNIUtil::FromJStringArray(), then made again by ToJStringArray(). */
     external fun stringArrayRoundTripForTest(strings: Array<String?>): Array<String>
 

@@ -157,7 +157,9 @@ class FakeCoreApi(
         calls += "applySettings"
     }
 
-    override fun isVulkanFailed(): Boolean = false
+    var vulkanFailed = false
+
+    override fun isVulkanFailed(): Boolean = vulkanFailed
 
     var fastmemAvailable = true
 

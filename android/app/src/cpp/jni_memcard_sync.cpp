@@ -127,33 +127,26 @@ jobject ToSyncVersion(JNIEnv* env, const MemcardSyncBridge::Version& v)
 // A SyncConflict, or null (with no exception pending) if it can't be made.
 jobject ToSyncConflict(JNIEnv* env, const MemcardSyncBridge::Conflict& c)
 {
-  jstring name = ToJString(env, c.name);
-  jobject local = c.local.has_value() ? ToSyncVersion(env, c.local.value()) : nullptr;
-  jobjectArray remote = env->NewObjectArray(static_cast<jsize>(c.remote.size()), s_sync_version_class, nullptr);
+  const JNIUtil::LocalRef<jstring> name(env, ToJString(env, c.name));
+  const JNIUtil::LocalRef<jobject> local(env, c.local.has_value() ? ToSyncVersion(env, c.local.value()) : nullptr);
+  const JNIUtil::LocalRef<jobjectArray> remote(
+    env, env->NewObjectArray(static_cast<jsize>(c.remote.size()), s_sync_version_class, nullptr));
   jobject ret = nullptr;
   bool made = name && remote && (local || !c.local.has_value());
   for (size_t i = 0; made && i < c.remote.size(); i++)
   {
-    jobject v = ToSyncVersion(env, c.remote[i]);
-    made = v != nullptr;
+    const JNIUtil::LocalRef<jobject> v(env, ToSyncVersion(env, c.remote[i]));
+    made = static_cast<bool>(v);
     if (v)
-    {
-      env->SetObjectArrayElement(remote, static_cast<jsize>(i), v);
-      env->DeleteLocalRef(v);
-    }
+      env->SetObjectArrayElement(remote.get(), static_cast<jsize>(i), v.get());
   }
   if (made)
   {
-    ret = env->NewObject(s_sync_conflict_class, s_sync_conflict_constructor, static_cast<jlong>(c.id), name, local,
-                         remote, static_cast<jint>(c.default_choice));
+    ret = env->NewObject(s_sync_conflict_class, s_sync_conflict_constructor, static_cast<jlong>(c.id), name.get(),
+                         local.get(), remote.get(), static_cast<jint>(c.default_choice));
   }
   if (!ret)
     ClearException(env);
-  for (jobject ref : {static_cast<jobject>(name), local, static_cast<jobject>(remote)})
-  {
-    if (ref)
-      env->DeleteLocalRef(ref);
-  }
   return ret;
 }
 
@@ -167,14 +160,13 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getMemcardSyncConflicts)(JNIEnv* env, jobj
     return Made(env, ret, "getMemcardSyncConflicts");
   for (size_t i = 0; i < conflicts.size(); i++)
   {
-    jobject c = ToSyncConflict(env, conflicts[i]);
+    const JNIUtil::LocalRef<jobject> c(env, ToSyncConflict(env, conflicts[i]));
     if (!c)
     {
       env->DeleteLocalRef(ret);
       return Made<jobjectArray>(env, nullptr, "getMemcardSyncConflicts");
     }
-    env->SetObjectArrayElement(ret, static_cast<jsize>(i), c);
-    env->DeleteLocalRef(c);
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), c.get());
   }
   return ret;
 }

@@ -126,10 +126,8 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, httpTestFetch)(JNIEnv* env, jobject, jstri
 
   for (size_t i = 0; i < std::size(values); i++)
   {
-    jstring value = ToJString(env, values[i]);
-    env->SetObjectArrayElement(ret, static_cast<jsize>(i), value);
-    if (value)
-      env->DeleteLocalRef(value);
+    const JNIUtil::LocalRef<jstring> value(env, ToJString(env, values[i]));
+    env->SetObjectArrayElement(ret, static_cast<jsize>(i), value.get());
   }
 
   return ret;

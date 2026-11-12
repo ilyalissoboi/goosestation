@@ -151,7 +151,8 @@ NATIVE_LIBRARY_FUNCTION(jstring, changeDisc)(JNIEnv* env, jobject, jint number)
 NATIVE_LIBRARY_FUNCTION(jobject, getPatchCodes)(JNIEnv* env, jobject)
 {
   const AndroidHost::PatchCodes codes = AndroidHost::GetPatchCodes();
-  jobjectArray array = env->NewObjectArray(static_cast<jsize>(codes.codes.size()), s_patch_code_class, nullptr);
+  const JNIUtil::LocalRef<jobjectArray> array(
+    env, env->NewObjectArray(static_cast<jsize>(codes.codes.size()), s_patch_code_class, nullptr));
   if (!array)
   {
     ClearException(env);
@@ -161,40 +162,32 @@ NATIVE_LIBRARY_FUNCTION(jobject, getPatchCodes)(JNIEnv* env, jobject)
   for (size_t i = 0; i < codes.codes.size(); i++)
   {
     const AndroidHost::PatchCode& code = codes.codes[i];
-    jstring group = ToJString(env, code.group);
-    jstring name = ToJString(env, code.name);
-    jobject entry = nullptr;
-    if (group && name)
+    jobject made = nullptr;
     {
-      entry = env->NewObject(s_patch_code_class, s_patch_code_constructor, static_cast<jint>(i), group, name,
-                             static_cast<jboolean>(code.manual), static_cast<jboolean>(code.on));
-      if (ClearException(env))
-        entry = nullptr;
+      const JNIUtil::LocalRef<jstring> group(env, ToJString(env, code.group));
+      const JNIUtil::LocalRef<jstring> name(env, ToJString(env, code.name));
+      if (group && name)
+      {
+        made = env->NewObject(s_patch_code_class, s_patch_code_constructor, static_cast<jint>(i), group.get(),
+                              name.get(), static_cast<jboolean>(code.manual), static_cast<jboolean>(code.on));
+        if (ClearException(env))
+          made = nullptr;
+      }
     }
 
-    for (jobject ref : {static_cast<jobject>(group), static_cast<jobject>(name)})
-    {
-      if (ref)
-        env->DeleteLocalRef(ref);
-    }
-
+    const JNIUtil::LocalRef<jobject> entry(env, made);
     if (!entry)
-    {
-      env->DeleteLocalRef(array);
       return nullptr;
-    }
 
-    env->SetObjectArrayElement(array, static_cast<jsize>(i), entry);
-    env->DeleteLocalRef(entry);
+    env->SetObjectArrayElement(array.get(), static_cast<jsize>(i), entry.get());
   }
 
-  jstring file_name = ToJString(env, codes.file_name);
-  jobject result = file_name ? env->NewObject(s_patch_codes_class, s_patch_codes_constructor, file_name, array) : nullptr;
+  const JNIUtil::LocalRef<jstring> file_name(env, ToJString(env, codes.file_name));
+  jobject result = file_name ? env->NewObject(s_patch_codes_class, s_patch_codes_constructor, file_name.get(),
+                                              array.get()) :
+                               nullptr;
   if (ClearException(env))
     result = nullptr;
-  if (file_name)
-    env->DeleteLocalRef(file_name);
-  env->DeleteLocalRef(array);
   return result;
 }
 

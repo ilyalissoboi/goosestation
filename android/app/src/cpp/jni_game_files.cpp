@@ -202,32 +202,25 @@ static jobject ToShaderOptionInfo(JNIEnv* env, const PostProcessing::ShaderOptio
       type = 2;
       break;
   }
-  jstring name = ToJString(env, option.name);
-  jstring ui_name = ToJString(env, option.ui_name);
-  jstring category = ToJString(env, option.category);
-  jstring tooltip = ToJString(env, option.tooltip);
-  jfloatArray defaults = ToOptionValues(env, option, option.default_value);
-  jfloatArray mins = ToOptionValues(env, option, option.min_value);
-  jfloatArray maxes = ToOptionValues(env, option, option.max_value);
-  jfloatArray steps = ToOptionValues(env, option, option.step_value);
-  jfloatArray values = ToOptionValues(env, option, option.value);
-  jobjectArray choices = ToNonNullStringArray(env, option.choice_options);
+  const JNIUtil::LocalRef<jstring> name(env, ToJString(env, option.name));
+  const JNIUtil::LocalRef<jstring> ui_name(env, ToJString(env, option.ui_name));
+  const JNIUtil::LocalRef<jstring> category(env, ToJString(env, option.category));
+  const JNIUtil::LocalRef<jstring> tooltip(env, ToJString(env, option.tooltip));
+  const JNIUtil::LocalRef<jfloatArray> defaults(env, ToOptionValues(env, option, option.default_value));
+  const JNIUtil::LocalRef<jfloatArray> mins(env, ToOptionValues(env, option, option.min_value));
+  const JNIUtil::LocalRef<jfloatArray> maxes(env, ToOptionValues(env, option, option.max_value));
+  const JNIUtil::LocalRef<jfloatArray> steps(env, ToOptionValues(env, option, option.step_value));
+  const JNIUtil::LocalRef<jfloatArray> values(env, ToOptionValues(env, option, option.value));
+  const JNIUtil::LocalRef<jobjectArray> choices(env, ToNonNullStringArray(env, option.choice_options));
   jobject result = nullptr;
   if (name && ui_name && category && tooltip && defaults && mins && maxes && steps && values && choices)
   {
-    result = env->NewObject(s_shader_option_info_class, s_shader_option_info_constructor, name, ui_name, category,
-                            tooltip, static_cast<jint>(type), static_cast<jint>(option.vector_size), defaults, mins,
-                            maxes, steps, values, choices);
+    result = env->NewObject(s_shader_option_info_class, s_shader_option_info_constructor, name.get(), ui_name.get(),
+                            category.get(), tooltip.get(), static_cast<jint>(type),
+                            static_cast<jint>(option.vector_size), defaults.get(), mins.get(), maxes.get(),
+                            steps.get(), values.get(), choices.get());
     if (ClearException(env))
       result = nullptr;
-  }
-  for (jobject local : {static_cast<jobject>(name), static_cast<jobject>(ui_name), static_cast<jobject>(category),
-                        static_cast<jobject>(tooltip), static_cast<jobject>(defaults), static_cast<jobject>(mins),
-                        static_cast<jobject>(maxes), static_cast<jobject>(steps), static_cast<jobject>(values),
-                        static_cast<jobject>(choices)})
-  {
-    if (local)
-      env->DeleteLocalRef(local);
   }
   return result;
 }
@@ -238,8 +231,8 @@ static jobject ToStageInfo(JNIEnv* env, const AndroidHost::PostProcessingStage& 
   for (const PostProcessing::ShaderOption& option : stage.options)
     options.push_back(&option);
 
-  jobjectArray option_array =
-    env->NewObjectArray(static_cast<jsize>(options.size()), s_shader_option_info_class, nullptr);
+  const JNIUtil::LocalRef<jobjectArray> option_array(
+    env, env->NewObjectArray(static_cast<jsize>(options.size()), s_shader_option_info_class, nullptr));
   if (!option_array)
   {
     ClearException(env);
@@ -247,33 +240,23 @@ static jobject ToStageInfo(JNIEnv* env, const AndroidHost::PostProcessingStage& 
   }
   for (size_t i = 0; i < options.size(); i++)
   {
-    jobject option = ToShaderOptionInfo(env, *options[i]);
+    const JNIUtil::LocalRef<jobject> option(env, ToShaderOptionInfo(env, *options[i]));
     if (!option)
-    {
-      env->DeleteLocalRef(option_array);
       return nullptr;
-    }
-    env->SetObjectArrayElement(option_array, static_cast<jsize>(i), option);
-    env->DeleteLocalRef(option);
+    env->SetObjectArrayElement(option_array.get(), static_cast<jsize>(i), option.get());
   }
 
-  jstring shader = ToJString(env, stage.shader);
-  jstring kind = ToJString(env, stage.kind);
-  jstring error = ToJString(env, stage.error);
+  const JNIUtil::LocalRef<jstring> shader(env, ToJString(env, stage.shader));
+  const JNIUtil::LocalRef<jstring> kind(env, ToJString(env, stage.kind));
+  const JNIUtil::LocalRef<jstring> error(env, ToJString(env, stage.error));
   jobject result = nullptr;
   if (shader && kind && error)
   {
-    result = env->NewObject(s_stage_info_class, s_stage_info_constructor, shader, kind, option_array, error);
+    result = env->NewObject(s_stage_info_class, s_stage_info_constructor, shader.get(), kind.get(), option_array.get(),
+                            error.get());
     if (ClearException(env))
       result = nullptr;
   }
-  if (shader)
-    env->DeleteLocalRef(shader);
-  if (kind)
-    env->DeleteLocalRef(kind);
-  if (error)
-    env->DeleteLocalRef(error);
-  env->DeleteLocalRef(option_array);
   return result;
 }
 
@@ -300,11 +283,10 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getPostProcessingStages)(JNIEnv* env, jobj
   }
   for (size_t i = 0; i < stages.size(); i++)
   {
-    jobject stage = ToStageInfo(env, stages[i]);
+    const JNIUtil::LocalRef<jobject> stage(env, ToStageInfo(env, stages[i]));
     if (!stage)
       return nullptr;
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), stage);
-    env->DeleteLocalRef(stage);
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), stage.get());
   }
   return result;
 }
@@ -366,23 +348,19 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getPostProcessingFavourites)(JNIEnv* env, 
   }
   for (size_t i = 0; i < favourites.size(); i++)
   {
-    jstring name = ToJString(env, favourites[i].name);
-    jobjectArray shaders = ToNonNullStringArray(env, favourites[i].shaders);
-    jobjectArray missing = ToNonNullStringArray(env, favourites[i].missing);
-    jobject favourite =
-      (name && shaders && missing) ? env->NewObject(s_favourite_info_class, s_favourite_info_constructor, name, shaders,
-                                                    missing) :
-                                     nullptr;
-    env->DeleteLocalRef(name);
-    env->DeleteLocalRef(shaders);
-    env->DeleteLocalRef(missing);
+    const JNIUtil::LocalRef<jstring> name(env, ToJString(env, favourites[i].name));
+    const JNIUtil::LocalRef<jobjectArray> shaders(env, ToNonNullStringArray(env, favourites[i].shaders));
+    const JNIUtil::LocalRef<jobjectArray> missing(env, ToNonNullStringArray(env, favourites[i].missing));
+    const JNIUtil::LocalRef<jobject> favourite(
+      env, (name && shaders && missing) ? env->NewObject(s_favourite_info_class, s_favourite_info_constructor,
+                                                         name.get(), shaders.get(), missing.get()) :
+                                          nullptr);
     if (!favourite)
     {
       ClearException(env);
       return nullptr;
     }
-    env->SetObjectArrayElement(result, static_cast<jsize>(i), favourite);
-    env->DeleteLocalRef(favourite);
+    env->SetObjectArrayElement(result, static_cast<jsize>(i), favourite.get());
   }
   return result;
 }

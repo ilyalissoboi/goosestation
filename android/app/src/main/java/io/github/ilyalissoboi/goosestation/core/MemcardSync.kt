@@ -100,7 +100,7 @@ data class SyncConflict(
     val remote: List<SyncVersion>,
     val defaultChoice: Int,
 ) {
-    // For jni_bridge.cpp, which has an array to give.
+    // For jni_memcard_sync.cpp, which has an array to give.
     constructor(id: Long, name: String, local: SyncVersion?, remote: Array<SyncVersion>, defaultChoice: Int) :
         this(id, name, local, remote.toList(), defaultChoice)
 }

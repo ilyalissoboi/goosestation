@@ -128,5 +128,58 @@ class CheckJniKeepsTest(unittest.TestCase):
         self.assertIn("int length() isn't kept by R8", out)
 
 
+    # JNI_OnLoad's table rows: MethodLookup{"name", "signature", &id} and
+    # ClassLookup{"class", &cls, "constructor signature" or nullptr, &id}.
+    def testMethodRowChecked(self):
+        code, out = self.run_check('MethodLookup{"cancel", "(JJ)V", &s_cancel},\n')
+        self.assertEqual(0, code, out)
+        self.assertIn("0 classes and 1 members", out)
+        code, out = self.run_check('\nMethodLookup{"gone", "()V", &s_gone},\n')
+        self.assertEqual(1, code)
+        self.assertIn("bridge.cpp:2: void gone() isn't kept by R8", out)
+
+    def testClassRowConstructorChecked(self):
+        row = (
+            'ClassLookup{"io/github/ilyalissoboi/goosestation/core/GameDisc", &s_game_disc_class, '
+            '"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V", &s_game_disc_constructor},\n'
+        )
+        code, out = self.run_check(row)
+        self.assertEqual(0, code, out)
+        self.assertIn("1 classes and 1 members", out)
+        code, out = self.run_check(row.replace("Ljava/lang/String;I)V", "Ljava/lang/String;)V"))
+        self.assertEqual(1, code)
+        self.assertIn("a constructor (java.lang.String,java.lang.String,java.lang.String) isn't kept by R8", out)
+
+    def testClassRowWithoutConstructor(self):
+        code, out = self.run_check(
+            'ClassLookup{"io/github/ilyalissoboi/goosestation/core/GameDisc", &s_game_disc_class, nullptr, nullptr},\n'
+        )
+        self.assertEqual(0, code, out)
+        self.assertIn("1 classes and 0 members", out)
+
+    def testRowAcrossLines(self):
+        cpp = (
+            "ClassLookup{\n"
+            '  "io/github/ilyalissoboi/goosestation/core/GameDisc", &s_game_disc_class,\n'
+            '  "(Ljava/lang/String;Ljava/lang/String;"\n'
+            '  "Ljava/lang/String;I)V",\n'
+            "  &s_game_disc_constructor},\n"
+            'MethodLookup{"start",\n'
+            '             "(JJLjava/lang/String;[BLjava/lang/String;I)V", &s_start},\n'
+        )
+        code, out = self.run_check(cpp)
+        self.assertEqual(0, code, out)
+        self.assertIn("1 classes and 2 members", out)
+
+    def testRowFromVariablesSkipped(self):
+        cpp = (
+            "rows.push_back(MethodLookup{name.c_str(), signature.c_str(), &ids[i]});\n"
+            "rows.push_back(ClassLookup{names[i].c_str(), &classes[i], constructor, &ids[i]});\n"
+        )
+        code, out = self.run_check(cpp)
+        self.assertEqual(0, code, out)
+        self.assertIn("0 classes and 0 members", out)
+
+
 if __name__ == "__main__":
     unittest.main()

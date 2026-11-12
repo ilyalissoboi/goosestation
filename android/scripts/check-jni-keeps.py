@@ -15,6 +15,8 @@ Checked, with comments left out:
 - each Get(Static)MethodID and Get(Static)FieldID whose name and signature are both literals (a call may span lines,
   and adjacent literals are joined) must be a member R8 kept in one of the app's classes, as seeds.txt writes it, or
   one of FRAMEWORK_MEMBERS. A lookup of a framework class's member that isn't there fails: add it.
+- so must each of JNI_OnLoad's table rows written with literals: MethodLookup{"name", "signature", ...} (a method),
+  and ClassLookup{"class", &cls, "signature", ...} (the class's constructor; nullptr there checks only the class).
 Names held in variables aren't checked here; JNI_OnLoad looks those up at launch, which the test tiers' release build
 covers (run-instrumented-tests.sh).
 """
@@ -45,6 +47,8 @@ _PRIMITIVES = {
 _CLASS_LITERAL = re.compile(r'"(' + re.escape(PACKAGE) + r'[\w/$]+)"')
 _LOOKUP = re.compile(r"\bGet(?:Static)?(Method|Field)ID\s*\(")
 _LITERALS = re.compile(r'\s*((?:"(?:[^"\\]|\\.)*"\s*)+)')
+_METHOD_ROW = re.compile(r"\bMethodLookup\s*\{")
+_CLASS_ROW = re.compile(r"\bClassLookup\s*\{")
 
 
 def strip_comments(text: str) -> str:
@@ -139,6 +143,44 @@ def literal_args(code: str, start: int):
     return values
 
 
+def literal(code: str, i: int):
+    """The string literal (adjacent literals joined) at code[i], after any spaces, and the index after it; or None."""
+    m = _LITERALS.match(code, i)
+    if not m:
+        return None
+    return "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1))), m.end()
+
+
+def next_argument(code: str, i: int) -> int:
+    """The index just after the comma that ends the argument starting at code[i], or -1 if the list ends first."""
+    depth = 0
+    while i < len(code):
+        c = code[i]
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth == 0:
+                return -1
+            depth -= 1
+        elif c == "," and depth == 0:
+            return i + 1
+        i += 1
+    return -1
+
+
+def class_row_constructor(code: str, start: int):
+    """A ClassLookup row's constructor signature, from just after its brace, if it's written as a literal."""
+    first = literal(code, start)
+    if first is None:
+        return None
+    i = next_argument(code, first[1])  # past the class name
+    i = next_argument(code, i) if i >= 0 else -1  # past &cls
+    if i < 0:
+        return None
+    signature = literal(code, i)
+    return signature[0] if signature else None
+
+
 def describe(kind: str, name: str, signature: str) -> str:
     if kind == "Field":
         return f"{java_type(signature)[0]} {name}"
@@ -175,6 +217,7 @@ def main(argv) -> int:
                 if name not in classes:
                     misses.append(f"{where}:{line_of(m.start())}: {name} isn't kept by R8 (proguard-rules.pro).")
 
+            lookups = []
             for m in _LOOKUP.finditer(code):
                 # The handle is the first argument; the name and signature follow it.
                 depth = 0
@@ -195,15 +238,27 @@ def main(argv) -> int:
                 args = literal_args(code, i + 1)
                 if args is None:
                     continue
-                name, signature = args
-                member = describe(m.group(1), name, signature)
+                lookups.append((m.group(1), args[0], args[1], m.start()))
+
+            for m in _METHOD_ROW.finditer(code):
+                args = literal_args(code, m.end())
+                if args is not None:
+                    lookups.append(("Method", args[0], args[1], m.start()))
+
+            for m in _CLASS_ROW.finditer(code):
+                signature = class_row_constructor(code, m.end())
+                if signature is not None:
+                    lookups.append(("Method", "<init>", signature, m.start()))
+
+            for kind, name, signature, index in sorted(lookups, key=lambda lookup: lookup[3]):
+                member = describe(kind, name, signature)
                 if member in FRAMEWORK_MEMBERS:
                     continue
                 checked_members += 1
                 if member in members:
                     continue
                 shown = f"a constructor ({member[len('<init>(') : -1]})" if name == "<init>" else member
-                misses.append(f"{where}:{line_of(m.start())}: {shown} isn't kept by R8 (proguard-rules.pro).")
+                misses.append(f"{where}:{line_of(index)}: {shown} isn't kept by R8 (proguard-rules.pro).")
 
     for miss in misses:
         print(miss)

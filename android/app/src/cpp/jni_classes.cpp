@@ -35,8 +35,8 @@
 #include <iterator>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
-#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -121,7 +121,7 @@ jclass s_memcard_sync_state_class = nullptr;
 jmethodID s_memcard_sync_state_constructor = nullptr;
 jobject s_sync_status_kinds[7] = {}; // SyncStatusKind's values, in MemcardSync::StatusKind's order (global references)
 // SyncActivity's values, in MemcardSync::Activity's order (global references). Sized by the C++ enum, so a value added
-// there and not in SYNC_ACTIVITY_NAMES (LoadEnumValues takes one name for each) fails the build.
+// there and not in SYNC_ACTIVITY_NAMES (JNI_OnLoad asserts one name for each) fails the build.
 jobject s_sync_activities[static_cast<size_t>(MemcardSync::Activity::Count)] = {};
 jclass s_sync_version_class = nullptr;
 jmethodID s_sync_version_constructor = nullptr;
@@ -588,35 +588,122 @@ void AndroidHost::NotifyPadKindChanged(s32 kind)
 
 namespace {
 
-// Global references to the constants called names of the enum class_name, in that order, in out.
-template<size_t N>
-bool LoadEnumValues(JNIEnv* env, const char* class_name, const char* const (&names)[N], jobject (&out)[N])
+// A class to load into a global reference and, unless constructor is null, the constructor native code makes it with.
+struct ClassLookup
 {
-  jclass cls = env->FindClass(class_name);
-  if (!cls)
-  {
-    ClearException(env);
-    return false;
-  }
+  const char* name;
+  jclass* cls;
+  const char* constructor;
+  jmethodID* constructor_id;
+};
 
-  const std::string signature = std::string("L") + class_name + ";";
-  for (size_t i = 0; i < N; i++)
+// A method of a class already loaded.
+struct MethodLookup
+{
+  const char* name;
+  const char* signature;
+  jmethodID* id;
+};
+
+// The constants called names of the enum class_name, in the C++ enum's order, each into a global reference in out.
+struct EnumLookup
+{
+  const char* class_name;
+  std::span<const char* const> names;
+  std::span<jobject> out;
+};
+
+// Each loader checks every lookup as it makes it. The first that finds nothing is logged, its exception cleared, and
+// the loader returns false there, with the lookups after it untouched.
+
+bool LoadClasses(JNIEnv* env, std::span<const ClassLookup> classes)
+{
+  for (const ClassLookup& lookup : classes)
   {
-    jfieldID field = env->GetStaticFieldID(cls, names[i], signature.c_str());
-    jobject value = field ? env->GetStaticObjectField(cls, field) : nullptr;
-    if (!value)
+    jclass local = env->FindClass(lookup.name);
+    if (!local)
     {
+      ERROR_LOG("JNI_OnLoad: couldn't find the class {}.", lookup.name);
       ClearException(env);
-      env->DeleteLocalRef(cls);
       return false;
     }
 
-    out[i] = env->NewGlobalRef(value);
-    env->DeleteLocalRef(value);
+    *lookup.cls = static_cast<jclass>(env->NewGlobalRef(local));
+    env->DeleteLocalRef(local);
+    if (!lookup.constructor)
+      continue;
+
+    *lookup.constructor_id = env->GetMethodID(*lookup.cls, "<init>", lookup.constructor);
+    if (!*lookup.constructor_id)
+    {
+      ERROR_LOG("JNI_OnLoad: couldn't find {}'s constructor {}.", lookup.name, lookup.constructor);
+      ClearException(env);
+      return false;
+    }
   }
 
-  env->DeleteLocalRef(cls);
   return true;
+}
+
+// class_name names cls in the log.
+bool LoadMethods(JNIEnv* env, jclass cls, const char* class_name, std::span<const MethodLookup> methods)
+{
+  for (const MethodLookup& lookup : methods)
+  {
+    *lookup.id = env->GetMethodID(cls, lookup.name, lookup.signature);
+    if (!*lookup.id)
+    {
+      ERROR_LOG("JNI_OnLoad: couldn't find {}.{}{}.", class_name, lookup.name, lookup.signature);
+      ClearException(env);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool LoadEnums(JNIEnv* env, std::span<const EnumLookup> enums)
+{
+  for (const EnumLookup& lookup : enums)
+  {
+    const JNIUtil::LocalRef<jclass> cls(env, env->FindClass(lookup.class_name));
+    if (!cls)
+    {
+      ERROR_LOG("JNI_OnLoad: couldn't find the enum {}.", lookup.class_name);
+      ClearException(env);
+      return false;
+    }
+
+    const std::string signature = std::string("L") + lookup.class_name + ";";
+    for (size_t i = 0; i < lookup.names.size(); i++)
+    {
+      jfieldID field = env->GetStaticFieldID(cls.get(), lookup.names[i], signature.c_str());
+      jobject value = field ? env->GetStaticObjectField(cls.get(), field) : nullptr;
+      if (!value)
+      {
+        ERROR_LOG("JNI_OnLoad: couldn't find {}.{}.", lookup.class_name, lookup.names[i]);
+        ClearException(env);
+        return false;
+      }
+
+      lookup.out[i] = env->NewGlobalRef(value);
+      env->DeleteLocalRef(value);
+    }
+  }
+
+  return true;
+}
+
+// For the lookup test natives: [loaded (1 or 0), rows filled].
+jintArray LookupResult(JNIEnv* env, bool loaded, size_t filled, const char* call)
+{
+  jintArray ret = env->NewIntArray(2);
+  if (ret)
+  {
+    const jint values[] = {loaded ? 1 : 0, static_cast<jint>(filled)};
+    env->SetIntArrayRegion(ret, 0, 2, values);
+  }
+  return Made(env, ret, call);
 }
 
 } // namespace
@@ -642,410 +729,169 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     return JNI_ERR;
 
-  jclass string_class = env->FindClass("java/lang/String");
-  if (!string_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
+  // This runs inside System.loadLibrary, before AndroidHost::Initialize: without this, a failed lookup's log line would
+  // go nowhere. Initialize's own call then finds it already on.
+  Log::SetDebugOutputParams(true);
 
-  s_string_class = static_cast<jclass>(env->NewGlobalRef(string_class));
-  env->DeleteLocalRef(string_class);
+  // Each class, with the constructor native code makes it with.
+  static constexpr ClassLookup CLASSES[] = {
+    ClassLookup{"java/lang/String", &s_string_class, nullptr, nullptr},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/NativeCallbacks", &s_callbacks_class, nullptr, nullptr},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/ArgbImage", &s_argb_image_class, "(II[I)V",
+                &s_argb_image_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/GameEntry", &s_game_entry_class,
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;"
+                "[Lio/github/ilyalissoboi/goosestation/core/GameDisc;ZJJI)V",
+                &s_game_entry_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/GameDisc", &s_game_disc_class,
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V", &s_game_disc_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/PatchCode", &s_patch_code_class,
+                "(ILjava/lang/String;Ljava/lang/String;ZZ)V", &s_patch_code_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/PatchCodes", &s_patch_codes_class,
+                "(Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/PatchCode;)V",
+                &s_patch_codes_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/AchievementsAccount", &s_achievements_account_class,
+                "(ILjava/lang/String;Ljava/lang/String;II)V", &s_achievements_account_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/AchievementsQueue", &s_achievements_queue_class,
+                "(I[Ljava/lang/String;[I)V", &s_achievements_queue_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/GameAchievements", &s_game_achievements_class,
+                "(IIIIIZZZZI)V", &s_game_achievements_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/Achievement", &s_achievement_class,
+                "(ILjava/lang/String;Ljava/lang/String;ILjava/lang/String;JLjava/lang/String;F)V",
+                &s_achievement_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/AchievementSection", &s_achievement_section_class,
+                "(ILjava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/Achievement;)V",
+                &s_achievement_section_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/Leaderboard", &s_leaderboard_class,
+                "(ILjava/lang/String;Ljava/lang/String;)V", &s_leaderboard_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/LeaderboardEntry", &s_leaderboard_entry_class,
+                "(ILjava/lang/String;Ljava/lang/String;)V", &s_leaderboard_entry_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/LeaderboardPage", &s_leaderboard_page_class,
+                "(I[Lio/github/ilyalissoboi/goosestation/core/LeaderboardEntry;[Lio/github/ilyalissoboi/goosestation/"
+                "core/LeaderboardEntry;I)V",
+                &s_leaderboard_page_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/SaveStatePreview", &s_save_state_preview_class,
+                "(Lio/github/ilyalissoboi/goosestation/core/ArgbImage;ILjava/lang/String;Ljava/lang/String;Ljava/lang/"
+                "String;Ljava/lang/String;)V",
+                &s_save_state_preview_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/BiosImage", &s_bios_image_class,
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", &s_bios_image_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/ShaderOptionInfo", &s_shader_option_info_class,
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II[F[F[F[F[F"
+                "[Ljava/lang/String;)V",
+                &s_shader_option_info_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/StageInfo", &s_stage_info_class,
+                "(Ljava/lang/String;Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/"
+                "ShaderOptionInfo;Ljava/lang/String;)V",
+                &s_stage_info_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/FavouriteInfo", &s_favourite_info_class,
+                "(Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;)V", &s_favourite_info_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/PadBinding", &s_pad_binding_class,
+                "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;Ljava/"
+                "lang/String;Ljava/lang/String;)V",
+                &s_pad_binding_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/MemcardSyncState", &s_memcard_sync_state_class,
+                "(Lio/github/ilyalissoboi/goosestation/core/SyncStatusKind;ZZZLjava/lang/String;Ljava/lang/"
+                "String;Ljava/lang/String;Ljava/lang/String;ZZZ"
+                "Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/SyncActivity;I)V",
+                &s_memcard_sync_state_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/SyncVersion", &s_sync_version_class,
+                "(Ljava/lang/String;JZIZ)V", &s_sync_version_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/SyncConflict", &s_sync_conflict_class,
+                "(JLjava/lang/String;Lio/github/ilyalissoboi/goosestation/core/SyncVersion;[Lio/github/ilyalissoboi/"
+                "goosestation/core/SyncVersion;I)V",
+                &s_sync_conflict_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/MemcardFile", &s_memcard_file_class,
+                "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/MemcardKind;Z)V",
+                &s_memcard_file_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/MemcardSave", &s_memcard_save_class,
+                "(ILjava/lang/String;Ljava/lang/String;IZLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V",
+                &s_memcard_save_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/MemcardContents", &s_memcard_contents_class,
+                "(I[Lio/github/ilyalissoboi/goosestation/core/MemcardSave;)V", &s_memcard_contents_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/MemcardEdit", &s_memcard_edit_class,
+                "([BLjava/lang/String;)V", &s_memcard_edit_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/MemcardRenameCheck", &s_memcard_rename_check_class,
+                "(IIZZZ)V", &s_memcard_rename_check_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/MemcardWrite", &s_memcard_write_class,
+                "(Lio/github/ilyalissoboi/goosestation/core/MemcardWriteOutcome;Ljava/lang/String;)V",
+                &s_memcard_write_constructor},
+  };
 
-  jclass callbacks_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/NativeCallbacks");
-  if (!callbacks_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
+  // NativeCallbacks' methods, called from native code.
+  static constexpr MethodLookup CALLBACKS[] = {
+    MethodLookup{"onGameStarted", "(Ljava/lang/String;Ljava/lang/String;ZZ)V", &s_on_game_started},
+    MethodLookup{"onGameStopped", "()V", &s_on_game_stopped},
+    MethodLookup{"onError", "(Ljava/lang/String;)V", &s_on_error},
+    MethodLookup{"onBindingCaptured", "(Ljava/lang/String;)V", &s_on_binding_captured},
+    MethodLookup{"onHotkey", "(Ljava/lang/String;)V", &s_on_hotkey},
+    MethodLookup{"onRumble", "(IFF)V", &s_on_rumble},
+    MethodLookup{"onOsdMessage",
+                 "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V",
+                 &s_on_osd_message},
+    MethodLookup{"onFastForwardChanged", "(Z)V", &s_on_fast_forward_changed},
+    MethodLookup{"onPadKindChanged", "(I)V", &s_on_pad_kind_changed},
+    MethodLookup{"onAchievementsToken", "(Ljava/lang/String;)V", &s_on_achievements_token},
+    MethodLookup{"storeMemcardSyncSecret", "(Ljava/lang/String;Ljava/lang/String;)Z", &s_store_memcard_sync_secret},
+    MethodLookup{"loadMemcardSyncSecret", "(Ljava/lang/String;)Ljava/lang/String;", &s_load_memcard_sync_secret},
+    MethodLookup{"hasMemcardSyncSecret", "(Ljava/lang/String;)Z", &s_has_memcard_sync_secret},
+    MethodLookup{"onMemcardSyncChanged", "()V", &s_on_memcard_sync_changed},
+    MethodLookup{"onAchievementsChanged", "()V", &s_on_achievements_changed},
+    MethodLookup{"onAchievementsLoginExpired", "()V", &s_on_achievements_login_expired},
+    MethodLookup{"onAchievementsSent", "(I)V", &s_on_achievements_sent},
+    MethodLookup{"onAchievementRefused", "(Ljava/lang/String;)V", &s_on_achievement_refused},
+    MethodLookup{"onAchievementNotification",
+                 "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FIZ)V",
+                 &s_on_achievement_notification},
+    MethodLookup{"onAchievementToast", "(Ljava/lang/String;Ljava/lang/String;F)V", &s_on_achievement_toast},
+    MethodLookup{"onAchievementIndicator", "(IIZLjava/lang/String;Ljava/lang/String;)V", &s_on_achievement_indicator},
+    MethodLookup{"onAchievementImage", "(Ljava/lang/String;)V", &s_on_achievement_image},
+    MethodLookup{"onPlaySound", "(Ljava/lang/String;)V", &s_on_play_sound},
+    MethodLookup{"onLeaderboard", "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V",
+                 &s_on_leaderboard},
+  };
 
-  s_callbacks_class = static_cast<jclass>(env->NewGlobalRef(callbacks_class));
-  env->DeleteLocalRef(callbacks_class);
-  s_on_game_started =
-    env->GetMethodID(s_callbacks_class, "onGameStarted", "(Ljava/lang/String;Ljava/lang/String;ZZ)V");
-  s_on_game_stopped = env->GetMethodID(s_callbacks_class, "onGameStopped", "()V");
-  s_on_error = env->GetMethodID(s_callbacks_class, "onError", "(Ljava/lang/String;)V");
-  s_on_binding_captured = env->GetMethodID(s_callbacks_class, "onBindingCaptured", "(Ljava/lang/String;)V");
-  s_on_hotkey = env->GetMethodID(s_callbacks_class, "onHotkey", "(Ljava/lang/String;)V");
-  s_on_rumble = env->GetMethodID(s_callbacks_class, "onRumble", "(IFF)V");
-  s_on_osd_message =
-    env->GetMethodID(s_callbacks_class, "onOsdMessage",
-                     "(Ljava/lang/String;Ljava/lang/String;FLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V");
-  s_on_fast_forward_changed = env->GetMethodID(s_callbacks_class, "onFastForwardChanged", "(Z)V");
-  s_on_pad_kind_changed = env->GetMethodID(s_callbacks_class, "onPadKindChanged", "(I)V");
-  s_on_achievements_token = env->GetMethodID(s_callbacks_class, "onAchievementsToken", "(Ljava/lang/String;)V");
-  s_store_memcard_sync_secret =
-    env->GetMethodID(s_callbacks_class, "storeMemcardSyncSecret", "(Ljava/lang/String;Ljava/lang/String;)Z");
-  s_load_memcard_sync_secret =
-    env->GetMethodID(s_callbacks_class, "loadMemcardSyncSecret", "(Ljava/lang/String;)Ljava/lang/String;");
-  s_has_memcard_sync_secret = env->GetMethodID(s_callbacks_class, "hasMemcardSyncSecret", "(Ljava/lang/String;)Z");
-  s_on_memcard_sync_changed = env->GetMethodID(s_callbacks_class, "onMemcardSyncChanged", "()V");
-  s_on_achievements_changed = env->GetMethodID(s_callbacks_class, "onAchievementsChanged", "()V");
-  s_on_achievements_login_expired = env->GetMethodID(s_callbacks_class, "onAchievementsLoginExpired", "()V");
-  s_on_achievements_sent = env->GetMethodID(s_callbacks_class, "onAchievementsSent", "(I)V");
-  s_on_achievement_refused = env->GetMethodID(s_callbacks_class, "onAchievementRefused", "(Ljava/lang/String;)V");
-  s_on_achievement_notification =
-    env->GetMethodID(s_callbacks_class, "onAchievementNotification",
-                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;FIZ)V");
-  s_on_achievement_toast =
-    env->GetMethodID(s_callbacks_class, "onAchievementToast", "(Ljava/lang/String;Ljava/lang/String;F)V");
-  s_on_achievement_indicator =
-    env->GetMethodID(s_callbacks_class, "onAchievementIndicator", "(IIZLjava/lang/String;Ljava/lang/String;)V");
-  s_on_achievement_image = env->GetMethodID(s_callbacks_class, "onAchievementImage", "(Ljava/lang/String;)V");
-  s_on_play_sound = env->GetMethodID(s_callbacks_class, "onPlaySound", "(Ljava/lang/String;)V");
-  s_on_leaderboard =
-    env->GetMethodID(s_callbacks_class, "onLeaderboard",
-                     "(ILio/github/ilyalissoboi/goosestation/core/LeaderboardPage;Ljava/lang/String;)V");
-  // Every one is checked: a missing one leaves its NoSuchMethodError pending, and the next lookup would be refused.
-  if (!s_on_game_started || !s_on_game_stopped || !s_on_error || !s_on_binding_captured || !s_on_hotkey ||
-      !s_on_rumble || !s_on_osd_message || !s_on_fast_forward_changed || !s_on_pad_kind_changed ||
-      !s_on_achievements_token || !s_store_memcard_sync_secret || !s_load_memcard_sync_secret ||
-      !s_has_memcard_sync_secret || !s_on_memcard_sync_changed || !s_on_achievements_changed ||
-      !s_on_achievements_login_expired || !s_on_achievements_sent || !s_on_achievement_refused ||
-      !s_on_achievement_notification || !s_on_achievement_toast || !s_on_achievement_indicator ||
-      !s_on_achievement_image || !s_on_play_sound || !s_on_leaderboard)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass argb_image_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/ArgbImage");
-  if (!argb_image_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_argb_image_class = static_cast<jclass>(env->NewGlobalRef(argb_image_class));
-  env->DeleteLocalRef(argb_image_class);
-  s_argb_image_constructor = env->GetMethodID(s_argb_image_class, "<init>", "(II[I)V");
-  if (!s_argb_image_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass game_entry_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/GameEntry");
-  if (!game_entry_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_game_entry_class = static_cast<jclass>(env->NewGlobalRef(game_entry_class));
-  env->DeleteLocalRef(game_entry_class);
-  s_game_entry_constructor =
-    env->GetMethodID(s_game_entry_class, "<init>",
-                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJLjava/lang/String;"
-                     "[Lio/github/ilyalissoboi/goosestation/core/GameDisc;ZJJI)V");
-  if (!s_game_entry_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass game_disc_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/GameDisc");
-  if (!game_disc_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_game_disc_class = static_cast<jclass>(env->NewGlobalRef(game_disc_class));
-  env->DeleteLocalRef(game_disc_class);
-  s_game_disc_constructor =
-    env->GetMethodID(s_game_disc_class, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
-  if (!s_game_disc_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  for (const auto& [name, signature, cls, constructor] :
-       {std::tuple("io/github/ilyalissoboi/goosestation/core/PatchCode", "(ILjava/lang/String;Ljava/lang/String;ZZ)V",
-                   &s_patch_code_class, &s_patch_code_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/PatchCodes",
-                   "(Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/PatchCode;)V", &s_patch_codes_class,
-                   &s_patch_codes_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementsAccount",
-                   "(ILjava/lang/String;Ljava/lang/String;II)V", &s_achievements_account_class,
-                   &s_achievements_account_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementsQueue", "(I[Ljava/lang/String;[I)V",
-                   &s_achievements_queue_class, &s_achievements_queue_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/GameAchievements", "(IIIIIZZZZI)V",
-                   &s_game_achievements_class, &s_game_achievements_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/Achievement",
-                   "(ILjava/lang/String;Ljava/lang/String;ILjava/lang/String;JLjava/lang/String;F)V",
-                   &s_achievement_class, &s_achievement_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/AchievementSection",
-                   "(ILjava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/Achievement;)V",
-                   &s_achievement_section_class, &s_achievement_section_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/Leaderboard", "(ILjava/lang/String;Ljava/lang/String;)V",
-                   &s_leaderboard_class, &s_leaderboard_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/LeaderboardEntry",
-                   "(ILjava/lang/String;Ljava/lang/String;)V", &s_leaderboard_entry_class,
-                   &s_leaderboard_entry_constructor),
-        std::tuple("io/github/ilyalissoboi/goosestation/core/LeaderboardPage",
-                   "(I[Lio/github/ilyalissoboi/goosestation/core/LeaderboardEntry;"
-                   "[Lio/github/ilyalissoboi/goosestation/core/LeaderboardEntry;I)V",
-                   &s_leaderboard_page_class, &s_leaderboard_page_constructor)})
-  {
-    jclass local = env->FindClass(name);
-    if (!local)
-    {
-      ClearException(env);
-      return JNI_ERR;
-    }
-
-    *cls = static_cast<jclass>(env->NewGlobalRef(local));
-    env->DeleteLocalRef(local);
-    *constructor = env->GetMethodID(*cls, "<init>", signature);
-    if (!*constructor)
-    {
-      ClearException(env);
-      return JNI_ERR;
-    }
-  }
-
-  jclass save_state_preview_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SaveStatePreview");
-  if (!save_state_preview_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_save_state_preview_class = static_cast<jclass>(env->NewGlobalRef(save_state_preview_class));
-  env->DeleteLocalRef(save_state_preview_class);
-  s_save_state_preview_constructor = env->GetMethodID(s_save_state_preview_class, "<init>",
-                                                      "(Lio/github/ilyalissoboi/goosestation/core/ArgbImage;ILjava/lang/String;"
-                                                      "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
-  if (!s_save_state_preview_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass bios_image_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/BiosImage");
-  if (!bios_image_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_bios_image_class = static_cast<jclass>(env->NewGlobalRef(bios_image_class));
-  env->DeleteLocalRef(bios_image_class);
-  s_bios_image_constructor =
-    env->GetMethodID(s_bios_image_class, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
-  if (!s_bios_image_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass shader_option_info_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/ShaderOptionInfo");
-  jclass stage_info_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/StageInfo");
-  if (!shader_option_info_class || !stage_info_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-  s_shader_option_info_class = static_cast<jclass>(env->NewGlobalRef(shader_option_info_class));
-  env->DeleteLocalRef(shader_option_info_class);
-  s_stage_info_class = static_cast<jclass>(env->NewGlobalRef(stage_info_class));
-  env->DeleteLocalRef(stage_info_class);
-  s_shader_option_info_constructor =
-    env->GetMethodID(s_shader_option_info_class, "<init>",
-                     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II[F[F[F[F[F"
-                     "[Ljava/lang/String;)V");
-  s_stage_info_constructor =
-    env->GetMethodID(s_stage_info_class, "<init>",
-                     "(Ljava/lang/String;Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/ShaderOptionInfo;"
-                     "Ljava/lang/String;)V");
-  if (!s_shader_option_info_constructor || !s_stage_info_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass favourite_info_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/FavouriteInfo");
-  if (!favourite_info_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-  s_favourite_info_class = static_cast<jclass>(env->NewGlobalRef(favourite_info_class));
-  env->DeleteLocalRef(favourite_info_class);
-  s_favourite_info_constructor =
-    env->GetMethodID(s_favourite_info_class, "<init>", "(Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;)V");
-  if (!s_favourite_info_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass pad_binding_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/PadBinding");
-  if (!pad_binding_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_pad_binding_class = static_cast<jclass>(env->NewGlobalRef(pad_binding_class));
-  env->DeleteLocalRef(pad_binding_class);
-  s_pad_binding_constructor =
-    env->GetMethodID(s_pad_binding_class, "<init>",
-                     "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;"
-                     "Ljava/lang/String;Ljava/lang/String;)V");
-  if (!s_pad_binding_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass pad_binding_kind_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/PadBindingKind");
-  if (!pad_binding_kind_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  // In AndroidHost::PadBindingKind's order.
+  // Each enum's constants, in its C++ enum's order.
   static constexpr const char* PAD_BINDING_KIND_NAMES[] = {"Button", "Axis", "HalfAxis"};
-  static_assert(std::size(PAD_BINDING_KIND_NAMES) == std::size(s_pad_binding_kinds));
-  for (size_t i = 0; i < std::size(PAD_BINDING_KIND_NAMES); i++)
-  {
-    jfieldID field = env->GetStaticFieldID(pad_binding_kind_class, PAD_BINDING_KIND_NAMES[i],
-                                           "Lio/github/ilyalissoboi/goosestation/core/PadBindingKind;");
-    jobject kind = field ? env->GetStaticObjectField(pad_binding_kind_class, field) : nullptr;
-    if (!kind)
-    {
-      ClearException(env);
-      env->DeleteLocalRef(pad_binding_kind_class);
-      return JNI_ERR;
-    }
-
-    s_pad_binding_kinds[i] = env->NewGlobalRef(kind);
-    env->DeleteLocalRef(kind);
-  }
-
-  env->DeleteLocalRef(pad_binding_kind_class);
-
   static constexpr const char* SYNC_STATUS_KIND_NAMES[] = {"Unavailable", "Applying", "StartError", "Off",
                                                            "Incomplete",  "Status",   "Idle"};
   static constexpr const char* SYNC_ACTIVITY_NAMES[] = {"None",   "Syncing", "Synced",      "Offline",
                                                         "Failed", "Locked",  "AuthRequired"};
-  if (!LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/SyncStatusKind", SYNC_STATUS_KIND_NAMES,
-                      s_sync_status_kinds) ||
-      !LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/SyncActivity", SYNC_ACTIVITY_NAMES,
-                      s_sync_activities))
-  {
-    return JNI_ERR;
-  }
-
-  jclass memcard_sync_state_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/MemcardSyncState");
-  if (!memcard_sync_state_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_memcard_sync_state_class = static_cast<jclass>(env->NewGlobalRef(memcard_sync_state_class));
-  env->DeleteLocalRef(memcard_sync_state_class);
-  s_memcard_sync_state_constructor =
-    env->GetMethodID(s_memcard_sync_state_class, "<init>",
-                     "(Lio/github/ilyalissoboi/goosestation/core/SyncStatusKind;ZZZLjava/lang/String;Ljava/lang/String;"
-                     "Ljava/lang/String;Ljava/lang/String;ZZZLjava/lang/String;Ljava/lang/String;"
-                     "Lio/github/ilyalissoboi/goosestation/core/SyncActivity;I)V");
-  if (!s_memcard_sync_state_constructor)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  jclass sync_version_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SyncVersion");
-  jclass sync_conflict_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/SyncConflict");
-  jclass runnable_class = env->FindClass("java/lang/Runnable");
-  if (!sync_version_class || !sync_conflict_class || !runnable_class)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
-  s_sync_version_class = static_cast<jclass>(env->NewGlobalRef(sync_version_class));
-  s_sync_conflict_class = static_cast<jclass>(env->NewGlobalRef(sync_conflict_class));
-  s_sync_version_constructor = env->GetMethodID(s_sync_version_class, "<init>", "(Ljava/lang/String;JZIZ)V");
-  s_sync_conflict_constructor =
-    env->GetMethodID(s_sync_conflict_class, "<init>",
-                     "(JLjava/lang/String;Lio/github/ilyalissoboi/goosestation/core/SyncVersion;"
-                     "[Lio/github/ilyalissoboi/goosestation/core/SyncVersion;I)V");
-  s_runnable_run = env->GetMethodID(runnable_class, "run", "()V");
-  env->DeleteLocalRef(sync_version_class);
-  env->DeleteLocalRef(sync_conflict_class);
-  env->DeleteLocalRef(runnable_class);
-  if (!s_sync_version_constructor || !s_sync_conflict_constructor || !s_runnable_run)
-  {
-    ClearException(env);
-    return JNI_ERR;
-  }
-
   static constexpr const char* MEMCARD_KIND_NAMES[] = {"Game", "Shared", "Other"};
-  if (!LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/MemcardKind", MEMCARD_KIND_NAMES, s_memcard_kinds))
-    return JNI_ERR;
-  jclass memcard_file_class = env->FindClass("io/github/ilyalissoboi/goosestation/core/MemcardFile");
-  if (!memcard_file_class)
+  static constexpr const char* MEMCARD_WRITE_OUTCOME_NAMES[] = {"Saved", "Changed", "Busy", "Failed"};
+  static_assert(std::size(PAD_BINDING_KIND_NAMES) == std::size(s_pad_binding_kinds));
+  static_assert(std::size(SYNC_STATUS_KIND_NAMES) == std::size(s_sync_status_kinds));
+  static_assert(std::size(SYNC_ACTIVITY_NAMES) == std::size(s_sync_activities));
+  static_assert(std::size(MEMCARD_KIND_NAMES) == std::size(s_memcard_kinds));
+  static_assert(std::size(MEMCARD_WRITE_OUTCOME_NAMES) == std::size(s_memcard_write_outcomes));
+  const EnumLookup enums[] = {
+    EnumLookup{"io/github/ilyalissoboi/goosestation/core/PadBindingKind", PAD_BINDING_KIND_NAMES, s_pad_binding_kinds},
+    EnumLookup{"io/github/ilyalissoboi/goosestation/core/SyncStatusKind", SYNC_STATUS_KIND_NAMES, s_sync_status_kinds},
+    EnumLookup{"io/github/ilyalissoboi/goosestation/core/SyncActivity", SYNC_ACTIVITY_NAMES, s_sync_activities},
+    EnumLookup{"io/github/ilyalissoboi/goosestation/core/MemcardKind", MEMCARD_KIND_NAMES, s_memcard_kinds},
+    EnumLookup{"io/github/ilyalissoboi/goosestation/core/MemcardWriteOutcome", MEMCARD_WRITE_OUTCOME_NAMES,
+               s_memcard_write_outcomes},
+  };
+
+  static constexpr MethodLookup RUNNABLE[] = {MethodLookup{"run", "()V", &s_runnable_run}};
+
+  if (!LoadClasses(env, CLASSES) ||
+      !LoadMethods(env, s_callbacks_class, "io/github/ilyalissoboi/goosestation/core/NativeCallbacks", CALLBACKS) ||
+      !LoadEnums(env, enums))
   {
-    ClearException(env);
-    return JNI_ERR;
-  }
-  s_memcard_file_class = static_cast<jclass>(env->NewGlobalRef(memcard_file_class));
-  env->DeleteLocalRef(memcard_file_class);
-  s_memcard_file_constructor =
-    env->GetMethodID(s_memcard_file_class, "<init>",
-                     "(Ljava/lang/String;Ljava/lang/String;Lio/github/ilyalissoboi/goosestation/core/MemcardKind;Z)V");
-  if (!s_memcard_file_constructor)
-  {
-    ClearException(env);
     return JNI_ERR;
   }
 
-  static constexpr const char* MEMCARD_WRITE_OUTCOME_NAMES[] = {"Saved", "Changed", "Busy", "Failed"};
-  if (!LoadEnumValues(env, "io/github/ilyalissoboi/goosestation/core/MemcardWriteOutcome", MEMCARD_WRITE_OUTCOME_NAMES,
-                      s_memcard_write_outcomes))
+  // Runnable is only needed for run(): its class stays a local reference.
+  const JNIUtil::LocalRef<jclass> runnable_class(env, env->FindClass("java/lang/Runnable"));
+  if (!runnable_class)
   {
+    ERROR_LOG("JNI_OnLoad: couldn't find the class java/lang/Runnable.");
+    ClearException(env);
     return JNI_ERR;
   }
-  // The memory card editor's classes, each with the constructor native code makes it with.
-  const auto load_class = [env](const char* name, const char* signature, jclass* cls, jmethodID* constructor) {
-    jclass local = env->FindClass(name);
-    if (local)
-    {
-      *cls = static_cast<jclass>(env->NewGlobalRef(local));
-      env->DeleteLocalRef(local);
-      *constructor = env->GetMethodID(*cls, "<init>", signature);
-    }
-    if (!local || !*constructor)
-    {
-      ClearException(env);
-      return false;
-    }
-    return true;
-  };
-  if (!load_class("io/github/ilyalissoboi/goosestation/core/MemcardSave",
-                  "(ILjava/lang/String;Ljava/lang/String;IZLio/github/ilyalissoboi/goosestation/core/ArgbImage;)V",
-                  &s_memcard_save_class, &s_memcard_save_constructor) ||
-      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardContents",
-                  "(I[Lio/github/ilyalissoboi/goosestation/core/MemcardSave;)V", &s_memcard_contents_class,
-                  &s_memcard_contents_constructor) ||
-      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardEdit", "([BLjava/lang/String;)V",
-                  &s_memcard_edit_class, &s_memcard_edit_constructor) ||
-      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardRenameCheck", "(IIZZZ)V",
-                  &s_memcard_rename_check_class, &s_memcard_rename_check_constructor) ||
-      !load_class("io/github/ilyalissoboi/goosestation/core/MemcardWrite",
-                  "(Lio/github/ilyalissoboi/goosestation/core/MemcardWriteOutcome;Ljava/lang/String;)V",
-                  &s_memcard_write_class, &s_memcard_write_constructor))
-  {
+  if (!LoadMethods(env, runnable_class.get(), "java/lang/Runnable", RUNNABLE))
     return JNI_ERR;
-  }
 
   if (!AndroidContentProvider::LoadJNIReferences(env) || !HTTPDownloaderAndroid::LoadJNIReferences(env))
     return JNI_ERR;
@@ -1054,6 +900,82 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
   FileSystem::SetContentProvider(&s_content_provider);
   PlatformMisc::SetSoundPlayer(&AndroidHost::NotifyPlaySound);
   return JNI_VERSION_1_6;
+}
+
+// For JniLookupsTest only: LoadClasses() over names, each with the constructor signature in constructors (null, read
+// as "", for none). A row is filled when its class is, and its constructor if it has one.
+NATIVE_LIBRARY_FUNCTION(jintArray, classLookupsForTest)
+(JNIEnv* env, jobject, jobjectArray jnames, jobjectArray jconstructors)
+{
+  const std::vector<std::string> names = JNIUtil::FromJStringArray(env, jnames);
+  const std::vector<std::string> constructors = JNIUtil::FromJStringArray(env, jconstructors);
+  std::vector<jclass> classes(names.size(), nullptr);
+  std::vector<jmethodID> ids(names.size(), nullptr);
+  std::vector<ClassLookup> rows;
+  for (size_t i = 0; i < names.size(); i++)
+  {
+    const bool has_constructor = i < constructors.size() && !constructors[i].empty();
+    rows.push_back({names[i].c_str(), &classes[i], has_constructor ? constructors[i].c_str() : nullptr, &ids[i]});
+  }
+
+  const bool loaded = LoadClasses(env, rows);
+  size_t filled = 0;
+  for (size_t i = 0; i < rows.size(); i++)
+    filled += (classes[i] && (!rows[i].constructor || ids[i])) ? 1 : 0;
+  for (jclass cls : classes)
+  {
+    if (cls)
+      env->DeleteGlobalRef(cls);
+  }
+  return LookupResult(env, loaded, filled, "classLookupsForTest");
+}
+
+// For JniLookupsTest only: LoadMethods() over names and signatures on the class class_name.
+NATIVE_LIBRARY_FUNCTION(jintArray, methodLookupsForTest)
+(JNIEnv* env, jobject, jstring jclass_name, jobjectArray jnames, jobjectArray jsignatures)
+{
+  const std::string class_name = FromJString(env, jclass_name);
+  const std::vector<std::string> names = JNIUtil::FromJStringArray(env, jnames);
+  const std::vector<std::string> signatures = JNIUtil::FromJStringArray(env, jsignatures);
+  const JNIUtil::LocalRef<jclass> cls(env, env->FindClass(class_name.c_str()));
+  if (!cls)
+  {
+    ClearException(env);
+    return LookupResult(env, false, 0, "methodLookupsForTest");
+  }
+
+  std::vector<jmethodID> ids(names.size(), nullptr);
+  std::vector<MethodLookup> rows;
+  for (size_t i = 0; i < names.size() && i < signatures.size(); i++)
+    rows.push_back({names[i].c_str(), signatures[i].c_str(), &ids[i]});
+
+  const bool loaded = LoadMethods(env, cls.get(), class_name.c_str(), rows);
+  const size_t filled = static_cast<size_t>(std::count_if(ids.begin(), ids.end(), [](jmethodID id) { return id; }));
+  return LookupResult(env, loaded, filled, "methodLookupsForTest");
+}
+
+// For JniLookupsTest only: LoadEnums() of the enum class_name's constants names.
+NATIVE_LIBRARY_FUNCTION(jintArray, enumLookupsForTest)(JNIEnv* env, jobject, jstring jclass_name, jobjectArray jnames)
+{
+  const std::string class_name = FromJString(env, jclass_name);
+  const std::vector<std::string> names = JNIUtil::FromJStringArray(env, jnames);
+  std::vector<const char*> name_ptrs;
+  for (const std::string& name : names)
+    name_ptrs.push_back(name.c_str());
+  std::vector<jobject> values(names.size(), nullptr);
+
+  const EnumLookup lookup{class_name.c_str(), name_ptrs, values};
+  const bool loaded = LoadEnums(env, std::span<const EnumLookup>(&lookup, 1));
+  size_t filled = 0;
+  for (jobject value : values)
+  {
+    if (value)
+    {
+      filled++;
+      env->DeleteGlobalRef(value);
+    }
+  }
+  return LookupResult(env, loaded, filled, "enumLookupsForTest");
 }
 
 } // extern "C"

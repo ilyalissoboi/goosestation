@@ -204,28 +204,17 @@ NATIVE_LIBRARY_FUNCTION(jobject, getMemcardContents)(JNIEnv* env, jobject, jbyte
   if (!contents.has_value())
     return nullptr;
 
-  jobjectArray saves = env->NewObjectArray(static_cast<jsize>(contents->saves.size()), s_memcard_save_class, nullptr);
+  const JNIUtil::LocalRef<jobjectArray> saves(
+    env, JNIUtil::ToObjectArray(env, s_memcard_save_class, contents->saves, ToMemcardSave));
   if (!saves)
   {
     ClearException(env);
     return nullptr;
   }
-  for (size_t i = 0; i < contents->saves.size(); i++)
-  {
-    jobject save = ToMemcardSave(env, contents->saves[i]);
-    if (!save)
-    {
-      env->DeleteLocalRef(saves);
-      return nullptr;
-    }
-    env->SetObjectArrayElement(saves, static_cast<jsize>(i), save);
-    env->DeleteLocalRef(save);
-  }
   jobject ret = env->NewObject(s_memcard_contents_class, s_memcard_contents_constructor,
-                               static_cast<jint>(contents->free_blocks), saves);
+                               static_cast<jint>(contents->free_blocks), saves.get());
   if (!ret)
     ClearException(env);
-  env->DeleteLocalRef(saves);
   return ret;
 }
 

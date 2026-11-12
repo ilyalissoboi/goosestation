@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
+#include "android_host_state.h"
+
 #include "android_host.h"
 #include "achievements_bridge.h"
 #include "emu_thread.h"
 #include "foreign_settings.h"
 #include "game_codes.h"
-
 #include "core/achievements.h"
 #include "core/achievements_offline.h"
 #include "core/analog_controller.h"
@@ -20,7 +21,6 @@
 #include "core/pad.h"
 #include "core/settings.h"
 #include "core/system.h"
-
 #include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
@@ -32,22 +32,17 @@
 #include "util/postprocessing.h"
 #include "util/postprocessing_shader_slang.h"
 #include "util/window_info.h"
-
 #include "common/memory_settings_interface.h"
-
 #include "common/error.h"
 #include "common/file_system.h"
 #include "common/log.h"
 #include "common/path.h"
 #include "common/small_string.h"
 #include "common/string_util.h"
-
 #include "fmt/format.h"
-
 #include <android/native_window.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
-
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -62,70 +57,39 @@
 Log_SetChannel(AndroidHost);
 
 namespace AndroidHost {
-namespace {
-struct InputEvent
-{
-  enum class Type : u8
-  {
-    Key,
-    Axis,
-    Connected,
-    Disconnected,
-    ReleaseAll,
-  };
+using AndroidInputKeys::DEVICE_PREFIX;
 
-  Type type;
-  s32 device_id;
-  s32 code;
-  float value;
-  std::string name;
-  std::string descriptor;
-};
-
-struct ConnectedDevice
-{
-  s32 device_id;
-  u32 index;
-  std::string name;
-};
-} // namespace
+using AndroidInputKeys::ParseDeviceIndex;
 
 static bool InitializeConfig(Error* error);
+
 static void SetDefaultSettings(SettingsInterface& si);
+
 static void LoadFolders(SettingsInterface& si);
+
 static void QueueInputEvent(InputEvent event);
+
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
+
 static std::optional<u32> FindDescriptorIndex(std::string_view descriptor);
-static void WriteDescriptors(SettingsInterface& si);
-static u32 GetPadOfIndex(SettingsInterface& si, u32 index);
+
 static const Controller::ControllerInfo* GetPadControllerInfo(SettingsInterface& si, u32 pad);
-static u32 AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad);
-static u32 AddDefaultBindings(SettingsInterface& si, u32 index, u32 pad, const Controller::ControllerInfo* info);
+
 static std::vector<const Controller::ControllerInfo*> GetGameTypes(u32 pad);
-static void AddRunningTypesDefaults();
-static bool HasDeviceBinding(SettingsInterface& si, u32 index, u32 pad);
-static bool AddControllerToPort(const std::string& identifier);
-static void UpdateSourceControllers();
+
 static std::string GetPortLabel(u32 pad, const std::array<bool, 2>& multitap);
-static void PostUnusedPortMessages();
-static void MapNewController(const std::string& identifier);
-static bool IsVulkanRenderer(GPURenderer renderer);
+
 static bool PadHasAnalogButton(SettingsInterface& si, u32 pad);
+
 static std::vector<const HotkeyInfo*> GetOfferedHotkeys(SettingsInterface& si, u32 pad);
-static bool MoveAnalogBindings(SettingsInterface& si);
-static void PressAnalogButton();
+
 static void ApplyTouchPad();
 
 // Plan 1's Android settings.ini: the same keys as now, so it's upgraded in place.
 static constexpr u32 PLAN1_SETTINGS_VERSION = 1;
 
-using AndroidInputKeys::DEVICE_PREFIX;
-using AndroidInputKeys::ParseDeviceIndex;
-
-// Where each controller's device index (Android-<index>) is kept, by its descriptor.
-static constexpr const char* DESCRIPTORS_SECTION = AndroidInputKeys::SETTINGS_SECTION;
-static constexpr const char* DESCRIPTORS_KEY = AndroidInputKeys::DESCRIPTORS_KEY;
 static constexpr const char* PORTS_KEY = AndroidInputKeys::PORTS_KEY;
+
 static constexpr const char* RUMBLE_KEY = AndroidInputKeys::RUMBLE_KEY;
 
 // The DualShock's Analog button, Port 1's, which the app presses with a hotkey.
@@ -146,9 +110,8 @@ static constexpr bool IsPadBindingType(InputBindingInfo::Type type)
 }
 
 static std::mutex s_initialize_mutex;
-static std::atomic_bool s_initialized{false};
+
 static bool s_startup_attempted = false; // guarded by s_initialize_mutex
-static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
 
 /// The secrets layer, in memory only: the RetroAchievements login token comes from the app's Keystore-sealed store
 /// at startup, and each change the core saves goes back to the app to store (NotifyAchievementsToken). No secrets.ini
@@ -183,64 +146,41 @@ private:
 };
 
 static std::string s_initial_achievements_token; // until InitializeConfig() makes the secrets layer
+
 static std::unique_ptr<AndroidSecrets> s_secrets_settings_interface;
 
 // GameList::Refresh() isn't safe to run twice at once.
 static std::mutex s_game_list_refresh_mutex;
 
-// Set once by Initialize(), before s_initialized.
-static std::string s_bios_dir;
-static std::string s_install_id;
-static std::string s_device_name; // memory card sync's default DeviceName
-
-// Input queued by the app's threads.
-static std::mutex s_input_mutex;
 static std::vector<InputEvent> s_input_queue;
-static std::vector<s32> s_queued_device_ids; // connected as far as the queue goes, for QueueKeyEvent()'s result
-static bool s_accept_input_events = false;   // key and axis events are dropped until the CPU thread runs
-static std::optional<TouchPad::State> s_touch_queued; // the touch pad's latest state, until the CPU thread takes it
-static u32 s_touch_tapped = 0; // buttons a replaced queued state pressed and the latest doesn't: a tap not yet seen
 
-// Each controller's descriptor, at its device index: [Android] ControllerDescriptors. It's only ever appended to, so a
-// controller's index never changes in this process, and its bindings stay its own. InitializeConfig() seeds it before
-// the CPU thread starts; only the CPU thread touches it after that.
-static std::vector<std::string> s_descriptors;
+static std::vector<s32> s_queued_device_ids; // connected as far as the queue goes, for QueueKeyEvent()'s result
 
 // CPU thread only.
 static std::vector<InputEvent> s_input_events;
-static std::vector<ConnectedDevice> s_connected_devices;
-static std::vector<u32> s_unmapped_indices; // new descriptors' indices, whose defaults aren't on Port 1 yet
+
 static AndroidInputSource* s_input_source = nullptr;
-static ANativeWindow* s_window = nullptr;
-static u32 s_window_width = 0;
-static u32 s_window_height = 0;
-static float s_window_scale = 1.0f;
-static float s_window_refresh_rate = 0.0f; // the screen's, in Hz; 0 when the app doesn't know it
+
 static std::optional<std::string> s_pending_boot_path;
+
 static AndroidDiscGroups::Game s_pending_game;     // the game the pending boot is for
+
 static u32 s_pending_playlist_index = 0;          // the pending boot's sub-image, for a playlist
-static std::optional<AndroidDiscGroups::Game> s_running_game; // from its boot to its end, CPU thread
-static std::mutex s_listed_games_mutex;
-static std::vector<AndroidDiscGroups::Game> s_listed_games; // guarded by s_listed_games_mutex
+
 static std::string s_pending_boot_state; // the save state the pending boot starts from, if any
-static std::string s_boot_path;
+
 static bool s_game_started = false;
+
 static bool s_fastmem_override_logged = false;
+
 static bool s_fast_forward_reported = false; // as the app was last told, CPU thread
-static TouchPad::State s_touch_state;   // what the touch pad holds, as far as the CPU thread has it
-static TouchPad::State s_touch_applied; // what Port 1's controller was last given of it
+
 static std::atomic<u32> s_touch_presses_for_test{0}; // the buttons given as pressed, for TakeTouchPressesForTest()
+
 static s32 s_pad_kind_reported = -1;    // Port 1's kind, as the app was last told, CPU thread
-static bool s_picture_at_top = false;   // SetPictureAtTop(), CPU thread
-static DisplayAlignment s_loaded_display_alignment = Settings::DEFAULT_DISPLAY_ALIGNMENT; // the setting's own value
+
 static u32 s_binding_capture_id = 0; // changes when a capture starts or is cancelled, so a stale report is dropped
 
-// Set when the Vulkan device didn't start: games use OpenGL ES until the process ends.
-static std::atomic_bool s_vulkan_failed{false};
-
-// The core's log in the data root (Settings::UpdateLogSettings), and the last run's, which the host keeps.
-static constexpr const char* LOG_FILE = "goosestation.log";
-static constexpr const char* PREVIOUS_LOG_FILE = "goosestation-previous.log";
 } // namespace AndroidHost
 
 bool Host::StoreMemcardSyncSecret(const char* name, std::string_view value)
@@ -470,24 +410,12 @@ void AndroidHost::RefreshGameList(bool invalidate_cache)
 }
 
 namespace AndroidHost {
-namespace {
-// What memory card sync starts with, from [MemoryCardSync].
-struct MemcardSyncSettings
-{
-  bool enabled;
-  std::string remote_uri;
-  std::string access_key_id;
-  std::string device_name;
-
-  bool operator==(const MemcardSyncSettings&) const = default;
-};
-
 MemcardSyncSettings ReadMemcardSyncSettings(const SettingsInterface& si)
 {
   return {si.GetBoolValue(MemcardSync::SECTION, "Enabled", false), si.GetStringValue(MemcardSync::SECTION, "RemoteURI"),
           si.GetStringValue(MemcardSync::SECTION, "AccessKeyID"), si.GetStringValue(MemcardSync::SECTION, "DeviceName")};
 }
-} // namespace
+
 } // namespace AndroidHost
 
 void AndroidHost::ReloadSettings()
@@ -1526,7 +1454,7 @@ std::optional<std::string> AndroidHost::GetShadersFolder()
 }
 
 // What a load or resume says when the disc a state was saved on isn't in the library.
-static std::string MissingDiscMessage(std::string_view media_path)
+std::string MissingDiscMessage(std::string_view media_path)
 {
   const size_t separator = media_path.find_last_of("/\\");
   const std::string_view name = (separator == std::string_view::npos) ? media_path : media_path.substr(separator + 1);
@@ -1554,8 +1482,6 @@ void AndroidHost::StartGameFromState(std::string path, std::string key, s32 slot
 {
   StartGame(std::move(path), 1, BootState{std::move(key), slot, shared});
 }
-
-static std::optional<ExtendedSaveStateInfo> ReadStateInfo(const std::string& path);
 
 void AndroidHost::StartGame(std::string path, u32 disc, std::optional<BootState> from)
 {
@@ -1762,9 +1688,6 @@ void AndroidHost::SetPaused(bool paused)
     false);
 }
 
-static constexpr const char* NO_GAME_RUNNING = "No game is running.";
-static constexpr const char* NO_SERIAL = "This game has no serial, so it can't have save states.";
-
 std::vector<s64> AndroidHost::GetSaveStateTimes(std::string serial)
 {
   std::vector<s64> times(System::PER_GAME_SAVE_STATE_SLOTS + 1, 0);
@@ -1813,7 +1736,7 @@ static std::string StatePath(const std::string& key, s32 slot, bool shared)
 }
 
 // The state's header, nullopt when there's no file or it can't be read (the core reports that as a zero time).
-static std::optional<ExtendedSaveStateInfo> ReadStateInfo(const std::string& path)
+std::optional<ExtendedSaveStateInfo> ReadStateInfo(const std::string& path)
 {
   if (path.empty() || !FileSystem::FileExists(path.c_str()))
     return std::nullopt;
@@ -2440,6 +2363,7 @@ static bool QueueTouchPadLocked(const TouchPad::State& state)
   s_touch_queued = state;
   return wake;
 }
+
 } // namespace AndroidHost
 
 void AndroidHost::QueueTouchPad(const TouchPad::State& state)
@@ -4150,12 +4074,19 @@ const char* InputManager::ConvertHostKeyboardCodeToIcon(u32 code)
                 })
 
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
+
 APP_STATE_HOTKEY("LoadSelectedSaveState", "Load From Selected Slot")
+
 APP_STATE_HOTKEY("SaveSelectedSaveState", "Save To Selected Slot")
+
 APP_STATE_HOTKEY("SelectPreviousSaveStateSlot", "Select Previous Save Slot")
+
 APP_STATE_HOTKEY("SelectNextSaveStateSlot", "Select Next Save Slot")
+
 APP_STATE_HOTKEY("SaveStateAndSelectNextSlot", "Save State and Select Next Slot")
+
 APP_STATE_HOTKEY("UndoLoadState", "Undo Load State")
+
 // The Controllers page's Analog mode hotkey: the DualShock's Analog button, on the chord's release, as the core's
 // toggles are.
 DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANSLATE_NOOP("Hotkeys", "Toggle Analog Mode"),
@@ -4163,4 +4094,5 @@ DEFINE_HOTKEY("ToggleAnalogMode", TRANSLATE_NOOP("Hotkeys", "Controller"), TRANS
                 if (pressed == 0)
                   AndroidHost::PressAnalogButton();
               })
+
 END_HOTKEY_LIST()

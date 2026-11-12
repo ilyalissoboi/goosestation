@@ -7,6 +7,8 @@ add_library(goosestation SHARED
   achievements_bridge.h
   android_host.cpp
   android_host.h
+  android_host_state.cpp
+  android_host_state.h
   bios_import.cpp
   bios_import.h
   content_bridge.cpp

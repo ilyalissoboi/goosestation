@@ -159,6 +159,30 @@ jstring JNIUtil::ToJString(JNIEnv* env, std::string_view str)
   return ret;
 }
 
+std::vector<std::string> JNIUtil::FromJStringArray(JNIEnv* env, jobjectArray array)
+{
+  const jsize count = array ? env->GetArrayLength(array) : 0;
+  std::vector<std::string> strings;
+  strings.reserve(static_cast<size_t>(count));
+  for (jsize i = 0; i < count; i++)
+  {
+    const LocalRef<jstring> str(env, static_cast<jstring>(env->GetObjectArrayElement(array, i)));
+    strings.push_back(FromJString(env, str.get()));
+  }
+  return strings;
+}
+
+jlongArray JNIUtil::ToJLongArray(JNIEnv* env, const std::vector<s64>& values)
+{
+  jlongArray ret = env->NewLongArray(static_cast<jsize>(values.size()));
+  if (!ret)
+    return nullptr;
+
+  const std::vector<jlong> longs(values.begin(), values.end());
+  env->SetLongArrayRegion(ret, 0, static_cast<jsize>(longs.size()), longs.data());
+  return ret;
+}
+
 ScopedJNIEnv::ScopedJNIEnv()
 {
   JavaVM* const vm = JNIUtil::GetJavaVM();

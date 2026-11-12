@@ -614,6 +614,23 @@ object NativeLibrary {
     /** For JniStringsTest only: [bytes] as the bridge makes a Java string of UTF-8 (JNIUtil::ToJString()). */
     external fun decodeUtf8ForTest(bytes: ByteArray): String
 
+    /** For JniArraysTest only: [strings] read by JNIUtil::FromJStringArray(), then made again by ToJStringArray(). */
+    external fun stringArrayRoundTripForTest(strings: Array<String?>): Array<String>
+
+    /** For JniArraysTest only: [values] read into a vector, then made again by JNIUtil::ToJLongArray(). */
+    external fun longArrayRoundTripForTest(values: LongArray): LongArray
+
+    /**
+     * For JniArraysTest only: JNIUtil::ToObjectArray() over the items 0 until [count], each made as "<item>@<call>".
+     * Making item [failAt] fails, after throwing IllegalArgumentException("item <failAt>") if [throwOnFail]. The
+     * helper's result comes back as it is.
+     */
+    external fun objectArrayForTest(
+        count: Int,
+        failAt: Int,
+        throwOnFail: Boolean,
+    ): Array<String>?
+
     /**
      * While [top], the picture sits at the top of the screen (`[Display] Alignment` taken as LeftOrTop, never
      * written), for the touch pad under it in portrait; false gives it back its setting. Doesn't wait.

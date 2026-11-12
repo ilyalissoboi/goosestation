@@ -73,6 +73,44 @@ NATIVE_LIBRARY_FUNCTION(jstring, decodeUtf8ForTest)(JNIEnv* env, jobject, jbyteA
   return Made(env, ToJString(env, text), "decodeUtf8ForTest");
 }
 
+NATIVE_LIBRARY_FUNCTION(jobjectArray, stringArrayRoundTripForTest)(JNIEnv* env, jobject, jobjectArray strings)
+{
+  return Made(env, ToJStringArray(env, JNIUtil::FromJStringArray(env, strings)), "stringArrayRoundTripForTest");
+}
+
+NATIVE_LIBRARY_FUNCTION(jlongArray, longArrayRoundTripForTest)(JNIEnv* env, jobject, jlongArray values)
+{
+  std::vector<jlong> longs(static_cast<size_t>(env->GetArrayLength(values)));
+  if (!longs.empty())
+    env->GetLongArrayRegion(values, 0, static_cast<jsize>(longs.size()), longs.data());
+  return Made(env, JNIUtil::ToJLongArray(env, std::vector<s64>(longs.begin(), longs.end())),
+              "longArrayRoundTripForTest");
+}
+
+NATIVE_LIBRARY_FUNCTION(jobjectArray, objectArrayForTest)
+(JNIEnv* env, jobject, jint count, jint fail_at, jboolean throw_on_fail)
+{
+  std::vector<jint> items(static_cast<size_t>(std::max<jint>(count, 0)));
+  for (size_t i = 0; i < items.size(); i++)
+    items[i] = static_cast<jint>(i);
+
+  jint calls = 0;
+  return JNIUtil::ToObjectArray(env, s_string_class, items, [&](JNIEnv* env, jint item) -> jobject {
+    const jint call = calls++;
+    if (item != fail_at)
+      return ToJString(env, fmt::format("{}@{}", item, call));
+    if (throw_on_fail == JNI_TRUE)
+    {
+      if (jclass cls = env->FindClass("java/lang/IllegalArgumentException"))
+      {
+        env->ThrowNew(cls, fmt::format("item {}", item).c_str());
+        env->DeleteLocalRef(cls);
+      }
+    }
+    return nullptr;
+  });
+}
+
 NATIVE_LIBRARY_FUNCTION(jint, takeTouchPressesForTest)(JNIEnv*, jobject)
 {
   return static_cast<jint>(AndroidHost::TakeTouchPressesForTest());

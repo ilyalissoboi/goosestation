@@ -330,7 +330,8 @@ SettingsPage("Graphics", onBack = onBack) {
 - A row's `note` explains a consequence ("Higher is sharper and slower.") or a fallback. Never repeat the label.
 - **Rows for a game** (a page of a game's own settings, its values a game's, `SettingValues.isGame`): the page
   shows the game's title as an `Eyebrow` over its own, and every row can use the global setting. The shared rows
-  (`Switch`, `Names`, `Number`, `Choices` in `ui/PageRows.kt`) do it themselves: a choice row's first choice is
+  (`GameSwitch`, `GameNames`, `GameNumber`, `GameChoices`, and `GameGroupChoices` and `GameGroupNumber` for a value
+  made of several settings, in `ui/PageRows.kt`) do it themselves: a choice row's first choice is
   "Use global (<the global value>)", selected while the game's file doesn't set it; an on/off row becomes a
   `CyclerRow` of "Use global (On)", On and Off; a `NumberRow` (given `global` and `onUseGlobal`) shows "Use global
   (…)" while it follows it, Right making the global value the game's own and Left from the scale's lowest value going

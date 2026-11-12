@@ -16,6 +16,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.GameControllers
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
+import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
@@ -65,7 +66,7 @@ fun GameControllersScreen(
         Names(values, onChange, names, "Multitap", PortSettings.MULTITAP, modifier = Modifier.focusRequester(first))
         val multitap = values[PortSettings.MULTITAP]
         for (pad in controllers.pads) {
-            SettingsSection(GameControllers.label(pad, multitap))
+            SettingsSection(Pads.label(pad, multitap))
             Names(values, onChange, names, "Controller type", GameControllers.type(pad))
             controllers.typeSettings[pad].orEmpty().forEach { TypeSettingRow(pad, it, values, onChange) }
         }

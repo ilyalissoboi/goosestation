@@ -22,6 +22,7 @@ import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.TouchMode
 import io.github.ilyalissoboi.goosestation.app.TouchSettings
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.settings.offered
@@ -125,7 +126,7 @@ fun ControllersScreen(
                 val on = ports[pad.descriptor] ?: 0
                 CyclerRow(
                     name,
-                    offered(offered, on) { "Port ${it + 1}" },
+                    offered(offered, on) { Pads.label(it) },
                     on,
                     onSelect = { onPort(pad.descriptor, it) },
                     modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,

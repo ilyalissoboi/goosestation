@@ -100,3 +100,48 @@ object PortSettings {
         }.getOrElse { "$shown" }
     }
 }
+
+/**
+ * The pads, as `Controller::ConvertPadToPortAndSlot` lays them out: 0 and 1 are Ports 1 and 2, 2 to 4 are Port 1's
+ * multitap slots B to D, and 5 to 7 are Port 2's.
+ */
+object Pads {
+    /** The order the core offers the pads in (desktop's): a port's slots together. */
+    val ORDER = listOf(0, 2, 3, 4, 1, 5, 6, 7)
+
+    /** The pads [multitap] (the core's mode name, [PortSettings.MULTITAP]) offers, in [ORDER]. */
+    fun of(multitap: String): List<Int> =
+        when (multitap) {
+            "Port1Only" -> listOf(0, 2, 3, 4, 1)
+            "Port2Only" -> listOf(0, 1, 5, 6, 7)
+            "BothPorts" -> ORDER
+            else -> listOf(0, 1)
+        }
+
+    /** [pad]'s label under [multitap]: "Port 1", or "Port 1A" to "Port 2D" on a port with multitap. */
+    fun label(
+        pad: Int,
+        multitap: String,
+    ): String {
+        val port = if (pad == 0 || pad in 2..4) 1 else 2
+        val slot =
+            when (pad) {
+                0, 1 -> 0
+                in 2..4 -> pad - 1
+                else -> pad - 4
+            }
+        val tapped = multitap == "BothPorts" || multitap == (if (port == 1) "Port1Only" else "Port2Only")
+        return if (tapped) "Port $port${'A' + slot}" else "Port $port"
+    }
+
+    /**
+     * [pad]'s label where the multitap mode isn't known, as for a pad the core doesn't offer: Ports 1 and 2 as
+     * themselves, 2 to 4 as Port 1B to 1D, and 5 to 7 as Port 2B to 2D.
+     */
+    fun label(pad: Int): String =
+        when (pad) {
+            0, 1 -> "Port ${pad + 1}"
+            in 2..4 -> "Port 1${'A' + (pad - 1)}"
+            else -> "Port 2${'A' + (pad - 4)}"
+        }
+}

@@ -567,15 +567,13 @@ class PostProcessingPage(
         val form = naming ?: return
         val from = form.renaming
         if (from != null) {
-            var refusal: String? = null
-            edit(after = {
-                if (refusal != null) {
-                    naming = form.copy(error = refusal.orEmpty())
-                } else {
-                    naming = null
-                    favourite = favourites.firstOrNull { it.name.equals(text.trim(), ignoreCase = true) }?.name
-                }
-            }) { refusal = api.renamePostProcessingFavourite(from, text) }
+            editOrRefuse(
+                change = { api.renamePostProcessingFavourite(from, text) },
+                onRefused = { naming = form.copy(error = it) },
+            ) {
+                naming = null
+                favourite = favourites.firstOrNull { it.name.equals(text.trim(), ignoreCase = true) }?.name
+            }
             return
         }
         val taken = favourites.firstOrNull { it.name.equals(text.trim(), ignoreCase = true) }
@@ -602,16 +600,14 @@ class PostProcessingPage(
     ) {
         val form = naming ?: return
         val key = key
-        var refusal: String? = null
-        edit(after = {
-            if (refusal != null) {
-                naming = form.copy(error = refusal.orEmpty())
-            } else {
-                naming = null
-                focusFavourite =
-                    favourites.indexOfFirst { it.name.equals(text.trim(), ignoreCase = true) }.takeIf { it >= 0 }
-            }
-        }) { refusal = api.savePostProcessingFavourite(key, text, replace) }
+        editOrRefuse(
+            change = { api.savePostProcessingFavourite(key, text, replace) },
+            onRefused = { naming = form.copy(error = it) },
+        ) {
+            naming = null
+            focusFavourite =
+                favourites.indexOfFirst { it.name.equals(text.trim(), ignoreCase = true) }.takeIf { it >= 0 }
+        }
     }
 
     override fun apply(name: String) {
@@ -626,16 +622,14 @@ class PostProcessingPage(
 
     private fun applyNow(name: String) {
         val key = key
-        var refusal: String? = null
-        edit(after = {
-            if (refusal != null) {
-                favouriteError = refusal
-            } else {
-                val index = favourites.indexOfFirst { it.name == name }
-                forgetFavourite()
-                focusFavourite = index.takeIf { it >= 0 }
-            }
-        }) { refusal = api.applyPostProcessingFavourite(key, name) }
+        editOrRefuse(
+            change = { api.applyPostProcessingFavourite(key, name) },
+            onRefused = { favouriteError = it },
+        ) {
+            val index = favourites.indexOfFirst { it.name == name }
+            forgetFavourite()
+            focusFavourite = index.takeIf { it >= 0 }
+        }
     }
 
     override fun moveFavourite(
@@ -671,15 +665,13 @@ class PostProcessingPage(
             is FavouriteQuestion.Delete -> {
                 favouriteQuestion = null
                 val index = favourites.indexOfFirst { it.name == question.name }
-                var refusal: String? = null
-                edit(after = {
-                    if (refusal != null) {
-                        favouriteError = refusal
-                    } else {
-                        forgetFavourite()
-                        focusFavourite = index.coerceIn(0, favourites.size)
-                    }
-                }) { refusal = api.deletePostProcessingFavourite(question.name) }
+                editOrRefuse(
+                    change = { api.deletePostProcessingFavourite(question.name) },
+                    onRefused = { favouriteError = it },
+                ) {
+                    forgetFavourite()
+                    focusFavourite = index.coerceIn(0, favourites.size)
+                }
             }
         }
     }
@@ -709,6 +701,20 @@ class PostProcessingPage(
     // shown unless a later read was asked for meanwhile, which has them too; [after] runs either way, unless the page
     // closed or opened again meanwhile: it ends the edit (closes the name form, moves the focus, says why the core
     // refused), and the page now shown has none.
+
+    /**
+     * [edit]s with [change], which returns the core's refusal or null. Once the page is read again, a refusal goes to
+     * [onRefused], and otherwise [onDone] runs.
+     */
+    private fun editOrRefuse(
+        change: () -> String?,
+        onRefused: (String) -> Unit,
+        onDone: () -> Unit,
+    ) {
+        var refusal: String? = null
+        edit(after = { refusal?.let(onRefused) ?: onDone() }) { refusal = change() }
+    }
+
     private fun edit(
         after: () -> Unit = {},
         change: () -> Unit,

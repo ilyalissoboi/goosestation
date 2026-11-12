@@ -147,6 +147,15 @@ class CheckNativeSplitTest(unittest.TestCase):
         code, out = self.check()
         self.assertEqual(0, code, out)
 
+    def test_aTemplatesStaticAfterItsHeadIsIgnored(self):
+        host = HOST + "\ntemplate<typename T>\nstatic T Same(T x)\n{\n  return x;\n}\n"
+        self.write("android_host.cpp", host)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "template"], cwd=self.repo, check=True)
+        self.split()
+        self.write("android_host_template.h", "#pragma once\n\ntemplate<typename T>\nT Same(T x)\n{\n  return x;\n}\n")
+        code, out = self.check()
+        self.assertEqual(0, code, out)
+
     def test_aChangedBodyFails(self):
         self.split()
         self.write(

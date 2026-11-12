@@ -9,7 +9,7 @@ Reads android_host.cpp and jni_bridge.cpp as they were at BASE_REF, and, in CPP_
 every .cpp and .h that didn't exist at BASE_REF. Each is cut into top-level items: a function, a global, a type or a
 macro, each with the comment block right above it, or a comment block standing alone. Before and after must hold the
 same items, each exactly as many times, with these only ignored: the SPDX licence header; #include, #pragma once, using and Log_SetChannel
-lines; namespace and extern "C" lines; a leading static or inline; and, in the new files, extern declarations and
+lines; namespace and extern "C" lines; a leading static or inline (a template's, after its head); and, in the new files, extern declarations and
 function prototypes (what shares the moved state). Also checked: each NATIVE_LIBRARY_FUNCTION once, before and after;
 the items a file took from one original in that original's order (so globals are still built in theirs); and each
 file's log channel, its original's. Exits 0 when all hold, else prints what differs and exits 1.
@@ -49,6 +49,9 @@ def _normalise(text: str) -> str:
     for i, line in enumerate(lines):
         if line.strip() and not line.lstrip().startswith(("//", "/*", "*")):
             lines[i] = re.sub(r"^(static|inline)\s+", "", line)
+            # A template's linkage is on the line after its template<...> head.
+            if line.startswith("template") and i + 1 < len(lines):
+                lines[i + 1] = re.sub(r"^(static|inline)\s+", "", lines[i + 1])
             break
     return "\n".join(lines)
 

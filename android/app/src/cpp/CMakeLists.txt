@@ -49,6 +49,7 @@ add_library(goosestation SHARED
   jni_library.cpp
   jni_memcard_sync.cpp
   jni_settings.cpp
+  jni_shader_packs.cpp
   jni_states.cpp
   jni_util.cpp
   jni_util.h

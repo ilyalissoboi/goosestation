@@ -320,8 +320,8 @@ class InGameMenu(
     /** The Patch codes panel: open while the menu shows it, which shows each change. */
     private val codes = PatchCodesModel(scope, game, api) { state = state.copy(codes = it) }
 
-    /** Changes as a leaderboard opens or closes, so the core's answer for an earlier one is dropped. */
-    private var leaderboardRequest = 0
+    /** The Achievements panel: open while the menu shows it, which shows each change. */
+    private val cheevos = AchievementsPanelModel(scope, game, api) { state = state.copy(cheevos = it) }
 
     private val canSave get() = state.booted && !serial.isNullOrBlank()
 
@@ -384,7 +384,7 @@ class InGameMenu(
     fun achievementsChanged() {
         if (!state.booted) return
         readGameState()
-        if (state.cheevos?.tab == CheevoTab.Achievements) readSections()
+        cheevos.achievementsChanged()
     }
 
     override fun openAchievements() {
@@ -392,13 +392,13 @@ class InGameMenu(
         if (!state.booted || game == null || game.status != GameAchievements.READY) return
         panelId++
         val tab = if (game.hasAchievements) CheevoTab.Achievements else CheevoTab.Leaderboards
-        state = withSide(cheevos = AchievementsPanelState(tab))
-        readTab(tab)
+        state = withSide()
+        cheevos.open(tab)
     }
 
     override fun closeAchievements() {
         panelId++
-        state = state.copy(cheevos = null)
+        cheevos.close()
     }
 
     override fun switchTab() {
@@ -406,66 +406,23 @@ class InGameMenu(
             if (slots.idle) slotLists.switchTab()
             return
         }
-        val panel = state.cheevos ?: return
+        if (state.cheevos == null) return
         val game = state.achievements ?: return
         if (!game.hasAchievements || !game.hasLeaderboards) return
         panelId++
-        val tab = if (panel.tab == CheevoTab.Achievements) CheevoTab.Leaderboards else CheevoTab.Achievements
-        // An open leaderboard closes; a reply for it that comes later is dropped.
-        state = state.copy(cheevos = AchievementsPanelState(tab, panel.sections, panel.leaderboards))
-        readTab(tab)
+        cheevos.switchTab()
     }
 
-    override fun openLeaderboard(id: Int) {
-        val panel = state.cheevos ?: return
-        val board = panel.leaderboards?.firstOrNull { it.id == id } ?: return
-        val request = ++leaderboardRequest
-        state = state.copy(cheevos = panel.copy(open = board, page = null, pageError = null, request = request))
-        scope.launch(game) { api.fetchLeaderboard(id, request) }
-    }
+    override fun openLeaderboard(id: Int) = cheevos.openLeaderboard(id)
 
-    override fun closeLeaderboard() {
-        val panel = state.cheevos ?: return
-        leaderboardRequest++
-        state = state.copy(cheevos = panel.copy(open = null, page = null, pageError = null))
-    }
+    override fun closeLeaderboard() = cheevos.closeLeaderboard()
 
     /** The core's answer to [request]: a leaderboard's [page], or why there's none. Dropped unless it's still open. */
     fun leaderboardFetched(
         request: Int,
         page: LeaderboardPage?,
         error: String?,
-    ) {
-        val panel = state.cheevos ?: return
-        if (panel.open == null || request != leaderboardRequest || panel.request != request) return
-        state = state.copy(cheevos = panel.copy(page = page, pageError = if (page == null) error.orEmpty() else null))
-    }
-
-    private fun readTab(tab: CheevoTab) {
-        if (tab == CheevoTab.Achievements) readSections() else readLeaderboards()
-    }
-
-    /** Reads the Leaderboards tab's list, for the panel open now. */
-    private fun readLeaderboards() {
-        val id = panelId
-        scope.launch {
-            val boards = withContext(game) { api.getLeaderboards() }
-            val panel = state.cheevos
-            if (id != panelId || panel == null) return@launch
-            state = state.copy(cheevos = panel.copy(leaderboards = boards))
-        }
-    }
-
-    /** Reads the Achievements tab's sections, for the panel open now. */
-    private fun readSections() {
-        val id = panelId
-        scope.launch {
-            val sections = withContext(game) { AchievementLists.sections(api.getAchievementSections()) }
-            val panel = state.cheevos
-            if (id != panelId || panel == null) return@launch
-            state = state.copy(cheevos = panel.copy(sections = sections))
-        }
-    }
+    ) = cheevos.leaderboardFetched(request, page, error)
 
     /** Fast forward was turned on or off, by the menu or a hotkey. */
     fun fastForwardChanged(enabled: Boolean) {
@@ -1023,18 +980,16 @@ class InGameMenu(
 
     // The menu with the one side panel given, or none, and no reset question: the side panels take turns, so B, which
     // closes the one shown, never finds another under it.
-    private fun withSide(
-        discs: DiscChoice? = null,
-        cheevos: AchievementsPanelState? = null,
-    ): GameMenuState {
+    private fun withSide(discs: DiscChoice? = null): GameMenuState {
         closeModels()
-        return state.copy(slots = null, discs = discs, codes = null, cheevos = cheevos, confirmingReset = false)
+        return state.copy(slots = null, discs = discs, codes = null, cheevos = null, confirmingReset = false)
     }
 
     // The panels' models, closed wherever the menu drops every panel.
     private fun closeModels() {
         slotLists.close()
         codes.close()
+        cheevos.close()
     }
 
     // Changes the slot panel if it's still panel [id].

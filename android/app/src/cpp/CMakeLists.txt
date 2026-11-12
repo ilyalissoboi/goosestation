@@ -38,6 +38,7 @@ add_library(goosestation SHARED
   jni_bridge.cpp
   jni_classes.cpp
   jni_classes.h
+  jni_settings.cpp
   jni_util.cpp
   jni_util.h
   memcard_editor_bridge.cpp

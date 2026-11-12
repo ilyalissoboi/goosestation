@@ -36,6 +36,8 @@ add_library(goosestation SHARED
   touch_pad.h
   http_downloader_android.h
   jni_bridge.cpp
+  jni_classes.cpp
+  jni_classes.h
   jni_util.cpp
   jni_util.h
   memcard_editor_bridge.cpp

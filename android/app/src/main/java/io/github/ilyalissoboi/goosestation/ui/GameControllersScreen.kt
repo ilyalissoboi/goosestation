@@ -63,11 +63,11 @@ fun GameControllersScreen(
             color = colors.inkMuted,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
-        Names(values, onChange, names, "Multitap", PortSettings.MULTITAP, modifier = Modifier.focusRequester(first))
+        GameNames(values, onChange, names, "Multitap", PortSettings.MULTITAP, modifier = Modifier.focusRequester(first))
         val multitap = values[PortSettings.MULTITAP]
         for (pad in controllers.pads) {
             SettingsSection(Pads.label(pad, multitap))
-            Names(values, onChange, names, "Controller type", GameControllers.type(pad))
+            GameNames(values, onChange, names, "Controller type", GameControllers.type(pad))
             controllers.typeSettings[pad].orEmpty().forEach { TypeSettingRow(pad, it, values, onChange) }
         }
     }

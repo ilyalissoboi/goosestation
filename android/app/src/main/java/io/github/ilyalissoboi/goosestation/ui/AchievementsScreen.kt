@@ -177,7 +177,7 @@ fun AchievementRows(
     val game = LocalGameContext.current
     val running = game?.running == true
     val waits = running && game.hardcoreActive
-    Switch(
+    GameSwitch(
         values,
         onChange,
         "Hardcore mode",
@@ -188,7 +188,7 @@ fun AchievementRows(
     // One row for both kinds of message, as one choice on a game's page.
     val messages = AchievementsSettings.messages(values)
     if (values.isGame) {
-        GroupChoices(
+        GameGroupChoices(
             values,
             onChange,
             MESSAGES,
@@ -200,9 +200,9 @@ fun AchievementRows(
     } else {
         SwitchRow(MESSAGES, messages, onToggle = { onChange(AchievementsSettings.withMessages(values, it)) })
     }
-    Switch(values, onChange, "Sounds", AchievementsSettings.SOUNDS)
-    Switch(values, onChange, "Live indicators", AchievementsSettings.OVERLAYS)
-    Switch(
+    GameSwitch(values, onChange, "Sounds", AchievementsSettings.SOUNDS)
+    GameSwitch(values, onChange, "Live indicators", AchievementsSettings.OVERLAYS)
+    GameSwitch(
         values,
         onChange,
         "Encore mode",
@@ -210,7 +210,7 @@ fun AchievementRows(
         note = if (waits) HARDCORE_WAIT_NOTE else "Each session starts as if nothing were unlocked.",
         enabled = !waits,
     )
-    Switch(
+    GameSwitch(
         values,
         onChange,
         "Spectator mode",
@@ -218,7 +218,7 @@ fun AchievementRows(
         note = if (waits) HARDCORE_WAIT_NOTE else "Unlocks aren't sent to RetroAchievements.",
         enabled = !waits,
     )
-    Switch(
+    GameSwitch(
         values,
         onChange,
         "Test unofficial achievements",
@@ -227,14 +227,14 @@ fun AchievementRows(
         enabled = !waits,
     )
     if (messages) {
-        Number(
+        GameNumber(
             values,
             onChange,
             "Unlock message time",
             AchievementsSettings.UNLOCK_SECONDS,
             AchievementsSettings.DURATIONS,
         )
-        Number(
+        GameNumber(
             values,
             onChange,
             "Leaderboard message time",

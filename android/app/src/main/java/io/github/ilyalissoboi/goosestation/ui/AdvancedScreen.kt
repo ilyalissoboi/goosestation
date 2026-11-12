@@ -41,7 +41,7 @@ fun AdvancedScreen(
     SettingsPage("Advanced", onBack = onBack) {
         if (logging) {
             SettingsSection("Logging")
-            Names(
+            GameNames(
                 values,
                 onChange,
                 names,
@@ -50,7 +50,7 @@ fun AdvancedScreen(
                 note = "How much the core logs. Higher levels log more, and are slower.",
                 modifier = Modifier.focusRequester(first),
             )
-            Switch(
+            GameSwitch(
                 values,
                 onChange,
                 "Log to file",
@@ -60,7 +60,7 @@ fun AdvancedScreen(
         }
 
         SettingsSection("Save states")
-        Names(
+        GameNames(
             values,
             onChange,
             names,
@@ -69,7 +69,7 @@ fun AdvancedScreen(
             note = "Makes save states smaller, compressing them as they're saved.",
             modifier = if (logging) Modifier else Modifier.focusRequester(first),
         )
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Load devices from save states",
@@ -78,14 +78,14 @@ fun AdvancedScreen(
         )
 
         SettingsSection("CD-ROM")
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "CD-ROM region check",
             AdvancedSettings.REGION_CHECK,
             "Refuses a disc from another region, as the console does.",
         )
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Allow booting without an SBI file",
@@ -94,21 +94,21 @@ fun AdvancedScreen(
         )
 
         SettingsSection("CPU")
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Recompiler memory exceptions",
             AdvancedSettings.MEMORY_EXCEPTIONS,
             "Alignment and bus exceptions. No known game needs them.",
         )
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Recompiler block linking",
             AdvancedSettings.BLOCK_LINKING,
             "Jumps straight between blocks of code instead of back through the dispatcher. Faster.",
         )
-        Names(
+        GameNames(
             values,
             onChange,
             names,

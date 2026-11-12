@@ -41,7 +41,7 @@ fun EmulationScreen(
         setting: FloatSetting,
         note: String? = null,
         modifier: Modifier = Modifier,
-    ) = Number(
+    ) = GameNumber(
         values,
         onChange,
         label,
@@ -62,15 +62,15 @@ fun EmulationScreen(
         Speed("Turbo speed", EmulationSettings.TURBO_SPEED, "While the Turbo hotkey is held.")
 
         SettingsSection("Frame pacing")
-        Switch(values, onChange, "VSync", EmulationSettings.VSYNC, "Matches the screen's refresh. Can add latency.")
-        Switch(
+        GameSwitch(values, onChange, "VSync", EmulationSettings.VSYNC, "Matches the screen's refresh. Can add latency.")
+        GameSwitch(
             values,
             onChange,
             "Sync to host refresh rate",
             EmulationSettings.SYNC_TO_HOST,
             "Runs at the screen's rate when it's within 5% of the game's.",
         )
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Optimal frame pacing",
@@ -78,7 +78,7 @@ fun EmulationScreen(
             "Shows every frame. Turn off for sound or speed problems.",
         )
         if (values[EmulationSettings.OPTIMAL_FRAME_PACING]) {
-            Switch(
+            GameSwitch(
                 values,
                 onChange,
                 "Reduce input latency",
@@ -86,7 +86,7 @@ fun EmulationScreen(
                 "Starts each frame closer to when it's shown.",
             )
             if (values[EmulationSettings.PRE_FRAME_SLEEP]) {
-                Number(
+                GameNumber(
                     values,
                     onChange,
                     "Frame time buffer",
@@ -97,7 +97,7 @@ fun EmulationScreen(
             }
         }
         if (!(values[EmulationSettings.VSYNC] && values[EmulationSettings.SYNC_TO_HOST])) {
-            Switch(
+            GameSwitch(
                 values,
                 onChange,
                 "Skip duplicate frames",
@@ -107,7 +107,7 @@ fun EmulationScreen(
         }
 
         SettingsSection("Rewind")
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Rewind",
@@ -120,7 +120,7 @@ fun EmulationScreen(
             enabled = !hardcore,
         )
         if (values[EmulationSettings.REWIND] && !hardcore) {
-            Number(
+            GameNumber(
                 values,
                 onChange,
                 "Save frequency",
@@ -128,7 +128,7 @@ fun EmulationScreen(
                 EmulationSettings.REWIND_FREQUENCIES,
                 units = 100,
             )
-            Number(
+            GameNumber(
                 values,
                 onChange,
                 "Save slots",
@@ -146,7 +146,7 @@ fun EmulationScreen(
         }
 
         SettingsSection("Run-ahead")
-        Number(
+        GameNumber(
             values,
             onChange,
             "Run-ahead",

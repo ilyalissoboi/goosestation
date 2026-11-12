@@ -52,7 +52,7 @@ fun InterfaceScreen(
     LaunchedEffect(Unit) { first.requestFocus() }
 
     SettingsPage("Interface", onBack = onBack) {
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Pause on start",
@@ -60,21 +60,21 @@ fun InterfaceScreen(
             "Each game starts paused, in its menu.",
             Modifier.focusRequester(first),
         )
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Pause when a controller disconnects",
             InterfaceSettings.PAUSE_ON_DISCONNECT,
             "Opens the game's menu.",
         )
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Save state on exit",
             InterfaceSettings.SAVE_STATE_ON_EXIT,
             "Exit game saves where you are, to resume from next time.",
         )
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Create save state backups",
@@ -119,14 +119,14 @@ private fun UpdateRows(
     val colors = GooseStationTheme.colors
     SettingsSection("Updates")
     if (updates != null) {
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Check for updates at start",
             InterfaceSettings.CHECK_UPDATES_AT_START,
             "Looks for a newer GooseStation each time the app starts.",
         )
-        Choices(
+        GameChoices(
             values,
             onChange,
             "Update channel",

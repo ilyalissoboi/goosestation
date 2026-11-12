@@ -41,7 +41,7 @@ fun GraphicsScreen(
 
     SettingsPage("Graphics", onBack = onBack) {
         SettingsSection("Rendering")
-        Names(
+        GameNames(
             values,
             onChange,
             names,
@@ -52,7 +52,7 @@ fun GraphicsScreen(
             notes = GraphicsSettings.RENDERER_NOTES,
         )
         if (hardware) {
-            Number(
+            GameNumber(
                 values,
                 onChange,
                 "Internal resolution",
@@ -65,9 +65,9 @@ fun GraphicsScreen(
                         null
                     },
             )
-            Names(values, onChange, names, "Downsampling", GraphicsSettings.DOWNSAMPLE_MODE)
+            GameNames(values, onChange, names, "Downsampling", GraphicsSettings.DOWNSAMPLE_MODE)
             if (values[GraphicsSettings.DOWNSAMPLE_MODE] == BOX) {
-                Number(
+                GameNumber(
                     values,
                     onChange,
                     "Downsampling scale",
@@ -75,7 +75,7 @@ fun GraphicsScreen(
                     GraphicsSettings.DOWNSAMPLE_SCALES,
                 )
             }
-            GroupChoices(
+            GameGroupChoices(
                 values,
                 onChange,
                 "Multisampling",
@@ -88,7 +88,7 @@ fun GraphicsScreen(
         }
         // As Automatic picks Vulkan on most devices.
         if (renderer == VULKAN || renderer == AUTOMATIC) {
-            Switch(
+            GameSwitch(
                 values,
                 onChange,
                 "Threaded presentation",
@@ -96,12 +96,12 @@ fun GraphicsScreen(
                 "Presents on another thread when fast-forwarding or without VSync.",
             )
         }
-        if (!hardware) Switch(values, onChange, "Threaded rendering", GraphicsSettings.THREADED_RENDERING)
+        if (!hardware) GameSwitch(values, onChange, "Threaded rendering", GraphicsSettings.THREADED_RENDERING)
 
         SettingsSection("Enhancements")
         if (hardware) {
-            Names(values, onChange, names, "Texture filtering", GraphicsSettings.TEXTURE_FILTER)
-            GroupChoices(
+            GameNames(values, onChange, names, "Texture filtering", GraphicsSettings.TEXTURE_FILTER)
+            GameGroupChoices(
                 values,
                 onChange,
                 "Sprite texture filtering",
@@ -110,15 +110,15 @@ fun GraphicsScreen(
                 value = GraphicsSettings::spriteFilter,
                 write = { v, filter -> v.with(GraphicsSettings.SPRITE_TEXTURE_FILTER, filter) },
             )
-            Switch(values, onChange, "True colour", GraphicsSettings.TRUE_COLOR, "No dithering, full colour.")
+            GameSwitch(values, onChange, "True colour", GraphicsSettings.TRUE_COLOR, "No dithering, full colour.")
             if (trueColor) {
-                Switch(values, onChange, "Debanding", GraphicsSettings.DEBANDING)
+                GameSwitch(values, onChange, "Debanding", GraphicsSettings.DEBANDING)
             } else {
-                Switch(values, onChange, "Scaled dithering", GraphicsSettings.SCALED_DITHERING)
-                Switch(values, onChange, "Accurate blending", GraphicsSettings.ACCURATE_BLENDING)
+                GameSwitch(values, onChange, "Scaled dithering", GraphicsSettings.SCALED_DITHERING)
+                GameSwitch(values, onChange, "Accurate blending", GraphicsSettings.ACCURATE_BLENDING)
             }
         }
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Widescreen rendering",
@@ -127,42 +127,42 @@ fun GraphicsScreen(
         )
         if (hardware) {
             if (values[GraphicsSettings.RESOLUTION_SCALE] != 1) {
-                Switch(
+                GameSwitch(
                     values,
                     onChange,
                     "Round upscaled texture coordinates",
                     GraphicsSettings.ROUND_TEXTURE_COORDINATES,
                 )
             }
-            Names(values, onChange, names, "Line detection", GraphicsSettings.LINE_DETECTION)
+            GameNames(values, onChange, names, "Line detection", GraphicsSettings.LINE_DETECTION)
         }
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Force NTSC timings",
             GraphicsSettings.FORCE_NTSC_TIMINGS,
             "PAL games run at 60 Hz. Some run too fast.",
         )
-        Switch(values, onChange, "Disable interlacing", GraphicsSettings.DISABLE_INTERLACING)
-        Switch(values, onChange, "FMV chroma smoothing", GraphicsSettings.CHROMA_SMOOTHING)
+        GameSwitch(values, onChange, "Disable interlacing", GraphicsSettings.DISABLE_INTERLACING)
+        GameSwitch(values, onChange, "FMV chroma smoothing", GraphicsSettings.CHROMA_SMOOTHING)
         if (hardware) {
-            Switch(values, onChange, "Software renderer for readbacks", GraphicsSettings.SOFTWARE_READBACKS)
+            GameSwitch(values, onChange, "Software renderer for readbacks", GraphicsSettings.SOFTWARE_READBACKS)
         }
-        Switch(values, onChange, "Use old MDEC routines", GraphicsSettings.OLD_MDEC)
+        GameSwitch(values, onChange, "Use old MDEC routines", GraphicsSettings.OLD_MDEC)
 
         if (hardware) {
             SettingsSection("PGXP")
-            Switch(values, onChange, "Geometry correction", GraphicsSettings.PGXP, "Less wobbly polygons.")
+            GameSwitch(values, onChange, "Geometry correction", GraphicsSettings.PGXP, "Less wobbly polygons.")
         }
         if (pgxp) {
-            Switch(values, onChange, "Perspective-correct textures", GraphicsSettings.PGXP_TEXTURE_CORRECTION)
-            Switch(values, onChange, "Perspective-correct colours", GraphicsSettings.PGXP_COLOR_CORRECTION)
-            Switch(values, onChange, "Culling correction", GraphicsSettings.PGXP_CULLING)
-            Switch(values, onChange, "Preserve projection precision", GraphicsSettings.PGXP_PRESERVE_PROJECTION)
+            GameSwitch(values, onChange, "Perspective-correct textures", GraphicsSettings.PGXP_TEXTURE_CORRECTION)
+            GameSwitch(values, onChange, "Perspective-correct colours", GraphicsSettings.PGXP_COLOR_CORRECTION)
+            GameSwitch(values, onChange, "Culling correction", GraphicsSettings.PGXP_CULLING)
+            GameSwitch(values, onChange, "Preserve projection precision", GraphicsSettings.PGXP_PRESERVE_PROJECTION)
             if (values[GraphicsSettings.PGXP_TEXTURE_CORRECTION]) {
-                Switch(values, onChange, "Depth buffer", GraphicsSettings.PGXP_DEPTH_BUFFER, "Low compatibility.")
+                GameSwitch(values, onChange, "Depth buffer", GraphicsSettings.PGXP_DEPTH_BUFFER, "Low compatibility.")
                 if (values[GraphicsSettings.PGXP_DEPTH_BUFFER]) {
-                    Number(
+                    GameNumber(
                         values,
                         onChange,
                         "Depth clear threshold",
@@ -172,10 +172,10 @@ fun GraphicsScreen(
                     )
                 }
             }
-            Switch(values, onChange, "CPU mode", GraphicsSettings.PGXP_CPU, "PGXP for every instruction. Slower.")
-            Switch(values, onChange, "Vertex cache", GraphicsSettings.PGXP_VERTEX_CACHE)
-            Switch(values, onChange, "Disable on 2D polygons", GraphicsSettings.PGXP_DISABLE_2D)
-            Number(
+            GameSwitch(values, onChange, "CPU mode", GraphicsSettings.PGXP_CPU, "PGXP for every instruction. Slower.")
+            GameSwitch(values, onChange, "Vertex cache", GraphicsSettings.PGXP_VERTEX_CACHE)
+            GameSwitch(values, onChange, "Disable on 2D polygons", GraphicsSettings.PGXP_DISABLE_2D)
+            GameNumber(
                 values,
                 onChange,
                 "Geometry tolerance",
@@ -186,7 +186,7 @@ fun GraphicsScreen(
         }
 
         SettingsSection("Display")
-        Names(
+        GameNames(
             values,
             onChange,
             names,
@@ -203,7 +203,7 @@ fun GraphicsScreen(
                 "Custom ratio height" to GraphicsSettings.CUSTOM_ASPECT_DENOMINATOR,
             )
             ) {
-                GroupNumber(
+                GameGroupNumber(
                     values,
                     onChange,
                     label,
@@ -214,32 +214,32 @@ fun GraphicsScreen(
                 )
             }
         }
-        Names(values, onChange, names, "Deinterlacing", GraphicsSettings.DEINTERLACING)
-        Names(values, onChange, names, "Crop", GraphicsSettings.CROP)
-        Names(values, onChange, names, "Scaling", GraphicsSettings.SCALING)
-        Names(values, onChange, names, "Screen position", GraphicsSettings.ALIGNMENT)
-        Names(values, onChange, names, "Rotation", GraphicsSettings.ROTATION)
-        Switch(values, onChange, "Stretch vertically", GraphicsSettings.STRETCH_VERTICALLY)
-        Switch(values, onChange, "Force 4:3 for FMVs", GraphicsSettings.FORCE_4_3_FOR_FMVS)
+        GameNames(values, onChange, names, "Deinterlacing", GraphicsSettings.DEINTERLACING)
+        GameNames(values, onChange, names, "Crop", GraphicsSettings.CROP)
+        GameNames(values, onChange, names, "Scaling", GraphicsSettings.SCALING)
+        GameNames(values, onChange, names, "Screen position", GraphicsSettings.ALIGNMENT)
+        GameNames(values, onChange, names, "Rotation", GraphicsSettings.ROTATION)
+        GameSwitch(values, onChange, "Stretch vertically", GraphicsSettings.STRETCH_VERTICALLY)
+        GameSwitch(values, onChange, "Force 4:3 for FMVs", GraphicsSettings.FORCE_4_3_FOR_FMVS)
 
         SettingsSection("On-screen display")
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Show messages",
             GraphicsSettings.SHOW_MESSAGES,
             "The game's messages, such as a memory card save. The app's own still show.",
         )
-        Switch(values, onChange, "Show FPS", GraphicsSettings.SHOW_FPS)
-        Switch(values, onChange, "Show speed", GraphicsSettings.SHOW_SPEED)
-        Switch(values, onChange, "Show resolution", GraphicsSettings.SHOW_RESOLUTION)
-        Switch(values, onChange, "Show CPU usage", GraphicsSettings.SHOW_CPU)
-        Switch(values, onChange, "Show GPU usage", GraphicsSettings.SHOW_GPU)
-        Switch(values, onChange, "Show GPU statistics", GraphicsSettings.SHOW_GPU_STATISTICS)
-        Switch(values, onChange, "Show latency", GraphicsSettings.SHOW_LATENCY)
-        Switch(values, onChange, "Show frame times", GraphicsSettings.SHOW_FRAME_TIMES)
-        Switch(values, onChange, "Show controller input", GraphicsSettings.SHOW_INPUTS)
-        Number(
+        GameSwitch(values, onChange, "Show FPS", GraphicsSettings.SHOW_FPS)
+        GameSwitch(values, onChange, "Show speed", GraphicsSettings.SHOW_SPEED)
+        GameSwitch(values, onChange, "Show resolution", GraphicsSettings.SHOW_RESOLUTION)
+        GameSwitch(values, onChange, "Show CPU usage", GraphicsSettings.SHOW_CPU)
+        GameSwitch(values, onChange, "Show GPU usage", GraphicsSettings.SHOW_GPU)
+        GameSwitch(values, onChange, "Show GPU statistics", GraphicsSettings.SHOW_GPU_STATISTICS)
+        GameSwitch(values, onChange, "Show latency", GraphicsSettings.SHOW_LATENCY)
+        GameSwitch(values, onChange, "Show frame times", GraphicsSettings.SHOW_FRAME_TIMES)
+        GameSwitch(values, onChange, "Show controller input", GraphicsSettings.SHOW_INPUTS)
+        GameNumber(
             values,
             onChange,
             "Statistics size",
@@ -250,12 +250,18 @@ fun GraphicsScreen(
         )
 
         SettingsSection("Screenshots")
-        Names(values, onChange, names, "Size", GraphicsSettings.SCREENSHOT_MODE)
-        Names(values, onChange, names, "Format", GraphicsSettings.SCREENSHOT_FORMAT)
-        Number(values, onChange, "Quality", GraphicsSettings.SCREENSHOT_QUALITY, GraphicsSettings.SCREENSHOT_QUALITIES)
+        GameNames(values, onChange, names, "Size", GraphicsSettings.SCREENSHOT_MODE)
+        GameNames(values, onChange, names, "Format", GraphicsSettings.SCREENSHOT_FORMAT)
+        GameNumber(
+            values,
+            onChange,
+            "Quality",
+            GraphicsSettings.SCREENSHOT_QUALITY,
+            GraphicsSettings.SCREENSHOT_QUALITIES,
+        )
 
         SettingsSection("Texture replacement")
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "VRAM write replacements",
@@ -263,7 +269,7 @@ fun GraphicsScreen(
             "From the data folder's textures folder.",
         )
         if (values[GraphicsSettings.VRAM_REPLACEMENTS]) {
-            Switch(values, onChange, "Preload replacement textures", GraphicsSettings.PRELOAD_TEXTURES)
+            GameSwitch(values, onChange, "Preload replacement textures", GraphicsSettings.PRELOAD_TEXTURES)
         }
     }
 }

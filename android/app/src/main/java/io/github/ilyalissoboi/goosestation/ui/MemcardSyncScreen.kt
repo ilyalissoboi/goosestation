@@ -219,7 +219,7 @@ internal fun CardSlotRows(
     if (first) LaunchedEffect(Unit) { firstRow.requestFocus() }
     SettingsSection("Cards")
     for (slot in 1..2) {
-        Names(
+        GameNames(
             values,
             cards.onChange,
             cards.names,
@@ -229,7 +229,7 @@ internal fun CardSlotRows(
         )
         if (values[MemoryCardSettings.type(slot)] == MemoryCardSettings.SHARED) {
             val path = MemoryCardSettings.path(slot)
-            Choices(
+            GameChoices(
                 values,
                 cards.onChange,
                 "Shared card $slot",
@@ -249,7 +249,7 @@ internal fun CardSlotRows(
         }
     }
     if (oneCardRow) {
-        Switch(
+        GameSwitch(
             values,
             cards.onChange,
             "One card for all discs of a game",

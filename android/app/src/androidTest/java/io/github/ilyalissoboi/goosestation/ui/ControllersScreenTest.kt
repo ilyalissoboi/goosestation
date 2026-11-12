@@ -159,6 +159,14 @@ class ControllersScreenTest {
         rule.onNodeWithText("Test Pad has no motors Android can drive, so it doesn't rumble.").assertExists()
     }
 
+    // A controller on a pad the core doesn't offer reads as the core would name it: pad 2 is Port 1B, never "Port 3".
+    @Test
+    fun aPortTheCoreDoesntOfferIsLabelledAsTheCoreWould() {
+        show(ports = mapOf(PAD.descriptor to 2), offered = OFFERED)
+
+        assertFocusedHas("Port 1B")
+    }
+
     // Review Focus 1: a controller left on a port nothing offers shows it, with its note.
     @Test
     fun aPortNoGameOffersShowsAsItself() {

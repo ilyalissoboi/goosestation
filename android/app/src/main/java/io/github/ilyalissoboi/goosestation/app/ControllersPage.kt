@@ -12,6 +12,7 @@ import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
+import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -333,13 +334,13 @@ class ControllersPage(
                 hub.ports.values
                     .distinct()
                     .filter { pad -> hub.offered.none { it.value == pad } }
-                    .map { Choice(it, portLabel(it), NOT_USED) }
+                    .map { Choice(it, Pads.label(it), NOT_USED) }
             state =
                 state.copy(
                     ports = hub.ports,
                     rumble = hub.rumble,
                     // The core's order, a lost port in its place in it.
-                    offered = (hub.offered + lost).sortedBy { PORT_ORDER.indexOf(it.value) },
+                    offered = (hub.offered + lost).sortedBy { Pads.ORDER.indexOf(it.value) },
                     portTypes = hub.types,
                     multitap = hub.multitap,
                     typeNames = hub.typeNames ?: state.typeNames,
@@ -709,21 +710,7 @@ class ControllersPage(
     private companion object {
         const val CAPTURE_SECONDS = 5
 
-        /** The order the core offers the pads in ([NativeLibrary.getOfferedPorts], desktop's): a port's slots together. */
-        val PORT_ORDER = listOf(0, 2, 3, 4, 1, 5, 6, 7)
-
         /** The note on a port a controller is on that no game's multitap offers. */
         const val NOT_USED = "No game uses this port"
-
-        /**
-         * A multitap slot's label, for a port the core no longer offers, as `Controller::ConvertPadToPortAndSlot` lays
-         * the pads out: 0 and 1 are Ports 1 and 2, 2 to 4 are 1B to 1D, 5 to 7 are 2B to 2D.
-         */
-        fun portLabel(pad: Int): String =
-            when (pad) {
-                0, 1 -> "Port ${pad + 1}"
-                in 2..4 -> "Port 1${'A' + (pad - 1)}"
-                else -> "Port 2${'A' + (pad - 4)}"
-            }
     }
 }

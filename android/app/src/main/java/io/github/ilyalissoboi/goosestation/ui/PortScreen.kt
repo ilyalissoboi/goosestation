@@ -191,10 +191,10 @@ internal fun TypeSettingRow(
 ) {
     val note = s.description.ifEmpty { null }
     when (val setting = PortSettings.setting(pad, s)) {
-        is BoolSetting -> Switch(values, onChange, s.label, setting, note, modifier)
+        is BoolSetting -> GameSwitch(values, onChange, s.label, setting, note, modifier)
         is IntSetting ->
             if (s.kind == TypeSetting.Kind.IntList) {
-                Choices(
+                GameChoices(
                     values,
                     onChange,
                     s.label,
@@ -205,12 +205,12 @@ internal fun TypeSettingRow(
                 )
             } else {
                 PortSettings.scale(s)?.let { scale ->
-                    Number(values, onChange, s.label, setting, scale, note, modifier)
+                    GameNumber(values, onChange, s.label, setting, scale, note, modifier)
                 }
             }
         is FloatSetting ->
             PortSettings.scale(s)?.let { scale ->
-                GroupNumber(
+                GameGroupNumber(
                     values,
                     onChange,
                     s.label,

@@ -3,6 +3,8 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,19 +12,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.NextStart
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
+import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
+import io.github.ilyalissoboi.goosestation.ui.components.NumberScale
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,6 +44,52 @@ class GameRowsTest {
     @get:Rule val rule = createComposeRule()
 
     private var shown: SettingValues? = null
+
+    // Two grouped rows over next-start settings: the region as a choice, the 8 MB RAM switch as a 0 or 1 number.
+    @Composable
+    private fun GroupedRows(
+        values: SettingValues,
+        onChange: (SettingValues) -> Unit,
+        enabled: Boolean = true,
+    ) = Column {
+        GameGroupChoices(
+            values,
+            onChange,
+            REGION_GROUP,
+            listOf(ConsoleSettings.REGION),
+            listOf(Choice("Auto", "Auto-Detect"), Choice("NTSC-J", "NTSC-J (Japan)")),
+            value = { it[ConsoleSettings.REGION] },
+            write = { v, region -> v.with(ConsoleSettings.REGION, region) },
+            enabled = enabled,
+        )
+        GameGroupNumber(
+            values,
+            onChange,
+            RAM_GROUP,
+            listOf(ConsoleSettings.RAM_8MB),
+            NumberScale.Steps(listOf(0, 1), presets = listOf(0, 1)) { "$it" },
+            value = { if (it[ConsoleSettings.RAM_8MB]) 1 else 0 },
+            write = { v, on -> v.with(ConsoleSettings.RAM_8MB, on == 1) },
+            enabled = enabled,
+        )
+    }
+
+    private fun showRows(
+        start: SettingValues,
+        context: GameContext?,
+        content: @Composable (SettingValues, (SettingValues) -> Unit) -> Unit,
+    ) {
+        rule.setContent {
+            GooseStationTheme {
+                var values by remember { mutableStateOf(start) }
+                shown = values
+                CompositionLocalProvider(LocalGameContext provides context) {
+                    content(values) { values = it }
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
 
     private fun show(
         start: SettingValues,
@@ -72,6 +124,63 @@ class GameRowsTest {
         rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
 
     private fun shownCount(text: String) = rule.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().size
+
+    // A grouped row over a setting a running game takes only at its next start says so, as a single-setting row does.
+    @Test
+    fun aGroupedRowOfANextStartSettingSaysSoInARunningGame() {
+        showRows(gamePageValues(ConsoleSettings.all), RUNNING) { values, onChange -> GroupedRows(values, onChange) }
+
+        assertEquals(2, shownCount(NextStart.NOTE))
+    }
+
+    @Test
+    fun aDisabledGroupedRowCantBeChanged() {
+        showRows(gamePageValues(ConsoleSettings.all), RUNNING) { values, onChange ->
+            GroupedRows(values, onChange, enabled = false)
+        }
+
+        for (label in listOf(REGION_GROUP, RAM_GROUP)) {
+            val row = rule.onNode(hasText(label, substring = true))
+            row.assertIsNotEnabled()
+            row.performClick()
+        }
+        rule.waitForIdle()
+        assertFalse(shown!!.isSet(ConsoleSettings.REGION))
+        assertFalse(shown!!.isSet(ConsoleSettings.RAM_8MB))
+    }
+
+    // Review Focus 2: on the global page a switch stays on or off, with no Use global.
+    @Test
+    fun aSwitchOnTheGlobalPageIsOnOrOff() {
+        showRows(pageValues(ConsoleSettings.all), context = null) { values, onChange ->
+            GameSwitch(values, onChange, "8 MB RAM", ConsoleSettings.RAM_8MB)
+        }
+        assertEquals(0, shownCount("Use global"))
+
+        rule.onNodeWithText("8 MB RAM", substring = true).performClick()
+        rule.waitForIdle()
+
+        assertTrue(shown!![ConsoleSettings.RAM_8MB])
+    }
+
+    // Review Focus 3: a game's own value and the global one, neither named by the core, are both offered.
+    @Test
+    fun aGameNamesRowOffersTheGamesAndTheGlobalUnnamedValues() {
+        // The Console page's first row is its region, a GameNames row; its list opens over the page.
+        show(
+            gamePageValues(
+                ConsoleSettings.all,
+                global = mapOf("Console/Region" to "Other"),
+                game = mapOf("Console/Region" to "Odd"),
+            ),
+        )
+        assertTrue(focusedHas("Odd"))
+
+        press(Key.ButtonA)
+
+        assertTrue("the game's own value, offered", shownCount("Odd") >= 2)
+        assertTrue("Use global (Other) and Other itself", shownCount("Other") >= 2)
+    }
 
     @Test
     fun aGameSwitchIsThreeWay() {
@@ -165,5 +274,11 @@ class GameRowsTest {
         show(pageValues(ConsoleSettings.all), context = null)
         assertEquals(0, shownCount("Use global"))
         assertEquals(0, shownCount(SET_FOR_GAME))
+    }
+
+    private companion object {
+        val RUNNING = GameContext("Pad Test", running = true, hardcoreActive = false)
+        const val REGION_GROUP = "Region group"
+        const val RAM_GROUP = "RAM group"
     }
 }

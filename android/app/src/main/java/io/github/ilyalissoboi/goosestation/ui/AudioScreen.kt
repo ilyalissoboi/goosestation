@@ -33,7 +33,7 @@ fun AudioScreen(
 
     SettingsPage("Audio", onBack = onBack) {
         SettingsSection("Volume")
-        Number(
+        GameNumber(
             values,
             onChange,
             "Output volume",
@@ -41,18 +41,24 @@ fun AudioScreen(
             AudioSettings.OUTPUT_VOLUMES,
             modifier = Modifier.focusRequester(first),
         )
-        Number(
+        GameNumber(
             values,
             onChange,
             "Fast-forward volume",
             AudioSettings.FAST_FORWARD_VOLUME,
             AudioSettings.FAST_FORWARD_VOLUMES,
         )
-        Switch(values, onChange, "Mute", AudioSettings.MUTED)
-        Switch(values, onChange, "Mute CD audio", AudioSettings.MUTE_CD_AUDIO, "Music and voices played from the disc.")
+        GameSwitch(values, onChange, "Mute", AudioSettings.MUTED)
+        GameSwitch(
+            values,
+            onChange,
+            "Mute CD audio",
+            AudioSettings.MUTE_CD_AUDIO,
+            "Music and voices played from the disc.",
+        )
 
         SettingsSection("Output")
-        Names(
+        GameNames(
             values,
             onChange,
             names,
@@ -60,8 +66,8 @@ fun AudioScreen(
             AudioSettings.STRETCH_MODE,
             note = "How sound keeps up when the game isn't at 100%.",
         )
-        Number(values, onChange, "Buffer size", AudioSettings.BUFFER_MS, AudioSettings.BUFFER_SIZES)
-        Switch(
+        GameNumber(values, onChange, "Buffer size", AudioSettings.BUFFER_MS, AudioSettings.BUFFER_SIZES)
+        GameSwitch(
             values,
             onChange,
             "Minimal output latency",
@@ -69,7 +75,13 @@ fun AudioScreen(
             "The lowest the device allows without crackling.",
         )
         if (!values[AudioSettings.MINIMAL_LATENCY]) {
-            Number(values, onChange, "Output latency", AudioSettings.OUTPUT_LATENCY_MS, AudioSettings.OUTPUT_LATENCIES)
+            GameNumber(
+                values,
+                onChange,
+                "Output latency",
+                AudioSettings.OUTPUT_LATENCY_MS,
+                AudioSettings.OUTPUT_LATENCIES,
+            )
         }
     }
 }

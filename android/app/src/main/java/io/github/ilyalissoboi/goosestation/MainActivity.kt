@@ -28,6 +28,7 @@ import io.github.ilyalissoboi.goosestation.app.Updates
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
+import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
@@ -304,7 +305,7 @@ class MainActivity : ComponentActivity() {
                             is ControllersView.Port -> {
                                 val bindings = state.bindings
                                 val title =
-                                    state.offered.firstOrNull { it.value == view.pad }?.label ?: "Port ${view.pad + 1}"
+                                    state.offered.firstOrNull { it.value == view.pad }?.label ?: Pads.label(view.pad)
                                 if (bindings == null) {
                                     SettingsLoadingPage(title, onBack = AppController::controllersBack)
                                 } else {
@@ -345,7 +346,7 @@ class MainActivity : ComponentActivity() {
                             }
                             is ControllersView.Macro -> {
                                 val port =
-                                    state.offered.firstOrNull { it.value == view.pad }?.label ?: "Port ${view.pad + 1}"
+                                    state.offered.firstOrNull { it.value == view.pad }?.label ?: Pads.label(view.pad)
                                 MacroScreen(
                                     title = "Macro ${view.macro} · $port",
                                     pad = view.pad,

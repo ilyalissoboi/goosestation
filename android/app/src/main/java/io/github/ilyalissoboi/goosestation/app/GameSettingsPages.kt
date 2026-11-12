@@ -21,6 +21,7 @@ import io.github.ilyalissoboi.goosestation.settings.LayerSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
 import io.github.ilyalissoboi.goosestation.settings.NameSetting
+import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -112,31 +113,6 @@ data class GameControllers(
         /** Each pad's type: `[PadN] Type`, with the core's default (a DualShock on Port 1, nothing elsewhere). */
         fun type(pad: Int) =
             NameSetting("Pad${pad + 1}", "Type", if (pad == 0) "AnalogController" else "None", NameList.ControllerType)
-
-        /** The pads [multitap] (the core's mode name) offers, in desktop's order: a port's slots together. */
-        fun pads(multitap: String): List<Int> =
-            when (multitap) {
-                "Port1Only" -> listOf(0, 2, 3, 4, 1)
-                "Port2Only" -> listOf(0, 1, 5, 6, 7)
-                "BothPorts" -> listOf(0, 2, 3, 4, 1, 5, 6, 7)
-                else -> listOf(0, 1)
-            }
-
-        /** [pad]'s label under [multitap]: "Port 1", or "Port 1A" to "Port 2D" on a port with multitap. */
-        fun label(
-            pad: Int,
-            multitap: String,
-        ): String {
-            val port = if (pad == 0 || pad in 2..4) 1 else 2
-            val slot =
-                when (pad) {
-                    0, 1 -> 0
-                    in 2..4 -> pad - 1
-                    else -> pad - 4
-                }
-            val tapped = multitap == "BothPorts" || multitap == (if (port == 1) "Port1Only" else "Port2Only")
-            return if (tapped) "Port $port${'A' + slot}" else "Port $port"
-        }
     }
 }
 
@@ -397,7 +373,7 @@ class GameSettingsPages(
         val game = if (counts) file else NoSettings
         val all = (0 until PADS.size).map { GameControllers.type(it) }
         val first = SettingValues.readGame(global, game, listOf(PortSettings.MULTITAP) + all)
-        val pads = GameControllers.pads(first[PortSettings.MULTITAP])
+        val pads = Pads.of(first[PortSettings.MULTITAP])
         val typeSettings = pads.associateWith { api.getTypeSettings(first[GameControllers.type(it)]) }
         val settings =
             listOf(PortSettings.MULTITAP) +

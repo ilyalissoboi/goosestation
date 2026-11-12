@@ -35,9 +35,15 @@ fun ConsoleScreen(
 
     SettingsPage("Console", onBack = onBack) {
         SettingsSection("Console")
-        Names(values, onChange, names, "Region", ConsoleSettings.REGION, modifier = Modifier.focusRequester(first))
-        Switch(values, onChange, "8 MB RAM", ConsoleSettings.RAM_8MB, "As on development consoles. Few games use it.")
-        Switch(
+        GameNames(values, onChange, names, "Region", ConsoleSettings.REGION, modifier = Modifier.focusRequester(first))
+        GameSwitch(
+            values,
+            onChange,
+            "8 MB RAM",
+            ConsoleSettings.RAM_8MB,
+            "As on development consoles. Few games use it.",
+        )
+        GameSwitch(
             values,
             onChange,
             "Disable all enhancements",
@@ -46,10 +52,10 @@ fun ConsoleScreen(
         )
 
         SettingsSection("CPU")
-        Names(values, onChange, names, "Execution mode", ConsoleSettings.EXECUTION_MODE)
-        Switch(values, onChange, "Overclocking", ConsoleSettings.OVERCLOCK)
+        GameNames(values, onChange, names, "Execution mode", ConsoleSettings.EXECUTION_MODE)
+        GameSwitch(values, onChange, "Overclocking", ConsoleSettings.OVERCLOCK)
         if (values[ConsoleSettings.OVERCLOCK]) {
-            GroupNumber(
+            GameGroupNumber(
                 values,
                 onChange,
                 "Overclocking percentage",
@@ -60,7 +66,7 @@ fun ConsoleScreen(
                 note = if (Hardcore.on(values) && percent < 100) "${Hardcore.OFF} below 100%." else null,
             )
         }
-        Switch(
+        GameSwitch(
             values,
             onChange,
             "Recompiler ICache",
@@ -69,7 +75,7 @@ fun ConsoleScreen(
         )
 
         SettingsSection("CD-ROM")
-        Number(
+        GameNumber(
             values,
             onChange,
             "Read speed-up",
@@ -77,7 +83,7 @@ fun ConsoleScreen(
             ConsoleSettings.READ_SPEEDS,
             "Faster loading in some games; breaks others.",
         )
-        Number(
+        GameNumber(
             values,
             onChange,
             "Seek speed-up",
@@ -85,7 +91,7 @@ fun ConsoleScreen(
             ConsoleSettings.SEEK_SPEEDS,
             "Faster loading in some games; breaks others.",
         )
-        Number(
+        GameNumber(
             values,
             onChange,
             "Readahead",
@@ -93,8 +99,8 @@ fun ConsoleScreen(
             ConsoleSettings.READAHEAD,
             "Reads ahead on another thread, against hitches.",
         )
-        Switch(values, onChange, "Preload disc to RAM", ConsoleSettings.PRELOAD)
-        Switch(
+        GameSwitch(values, onChange, "Preload disc to RAM", ConsoleSettings.PRELOAD)
+        GameSwitch(
             values,
             onChange,
             "Apply image patches",

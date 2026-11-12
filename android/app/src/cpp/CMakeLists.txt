@@ -43,6 +43,7 @@ add_library(goosestation SHARED
   jni_covers.cpp
   jni_folders.cpp
   jni_game_files.cpp
+  jni_library.cpp
   jni_memcard_sync.cpp
   jni_settings.cpp
   jni_util.cpp

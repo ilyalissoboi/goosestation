@@ -312,6 +312,10 @@ class InGameMenu(
     private var panelId = 0
 
     /** The slot panel's lists: open while the panel is, which shows each change. */
+
+    /** The Patch codes panel: open while the menu shows it, which shows each change. */
+    private val codes = PatchCodesModel(scope, game, api) { state = state.copy(codes = it) }
+
     private val slotLists =
         SaveListModel(scope, game, reader, api) { lists ->
             state = state.copy(slots = lists?.let { state.slots?.copy(lists = it) ?: SlotPanel(it) })
@@ -337,7 +341,7 @@ class InGameMenu(
         panelId++
         running = game
         selectedSlot = null
-        slotLists.close()
+        closeModels()
         state = GameMenuState(booted = true, discCount = game.discs.size, hasKey = game.serial.isNotBlank())
         readGameState()
     }
@@ -350,7 +354,7 @@ class InGameMenu(
         switchTo = null
         selectedSlot = null
         if (state.settings) onSettings(null)
-        slotLists.close()
+        closeModels()
         state = GameMenuState()
     }
 
@@ -361,7 +365,7 @@ class InGameMenu(
     fun opened() {
         panelId++
         switchTo = null
-        slotLists.close()
+        closeModels()
         state =
             state.copy(
                 slots = null,
@@ -746,76 +750,22 @@ class InGameMenu(
 
     override fun openCodes() {
         if (!state.booted || state.hardcore) return
-        val id = ++panelId
-        state = withSide(codes = CodePanel())
-        scope.launch {
-            val codes = withContext(game) { api.getPatchCodes() }
-            if (id != panelId) return@launch
-            val panel = state.codes ?: return@launch
-            state =
-                state.copy(
-                    codes = panel.copy(groups = PatchCodeList.groups(codes.codes.toList()), fileName = codes.fileName),
-                )
-        }
+        panelId++
+        state = withSide()
+        codes.open()
     }
 
     override fun closeCodes() {
         panelId++
-        state = state.copy(codes = null)
+        codes.close()
     }
 
     override fun setCode(
         index: Int,
         on: Boolean,
-    ) {
-        val name = codeRow(index)?.name ?: return
-        changeCode(index, on)
-        val id = panelId
-        scope.launch {
-            val error = withContext(game) { api.setPatchCode(index, on) } ?: return@launch
-            if (id != panelId) return@launch
-            changeCode(index, !on)
-            state = state.copy(codes = state.codes?.copy(error = "Couldn't switch $name: $error", applied = null))
-        }
-    }
+    ) = codes.setCode(index, on)
 
-    override fun applyCode(index: Int) {
-        val name = codeRow(index)?.name ?: return
-        val id = panelId
-        scope.launch {
-            val error = withContext(game) { api.applyPatchCode(index) }
-            if (id != panelId) return@launch
-            val panel = state.codes ?: return@launch
-            state =
-                state.copy(
-                    codes =
-                        if (error == null) {
-                            panel.copy(applied = "Applied: $name", error = null)
-                        } else {
-                            panel.copy(error = "Couldn't apply $name: $error", applied = null)
-                        },
-                )
-        }
-    }
-
-    private fun codeRow(index: Int) =
-        state.codes
-            ?.groups
-            ?.flatMap { it.codes }
-            ?.firstOrNull { it.index == index }
-
-    // Shows code [index] as [on], at once.
-    private fun changeCode(
-        index: Int,
-        on: Boolean,
-    ) {
-        val panel = state.codes ?: return
-        val groups =
-            panel.groups?.map { group ->
-                group.copy(codes = group.codes.map { if (it.index == index) it.copy(on = on) else it })
-            }
-        state = state.copy(codes = panel.copy(groups = groups, error = null))
-    }
+    override fun applyCode(index: Int) = codes.applyCode(index)
 
     override fun confirmReplace() {
         val panel = state.slots ?: return
@@ -1076,11 +1026,16 @@ class InGameMenu(
     // closes the one shown, never finds another under it.
     private fun withSide(
         discs: DiscChoice? = null,
-        codes: CodePanel? = null,
         cheevos: AchievementsPanelState? = null,
     ): GameMenuState {
+        closeModels()
+        return state.copy(slots = null, discs = discs, codes = null, cheevos = cheevos, confirmingReset = false)
+    }
+
+    // The panels' models, closed wherever the menu drops every panel.
+    private fun closeModels() {
         slotLists.close()
-        return state.copy(slots = null, discs = discs, codes = codes, cheevos = cheevos, confirmingReset = false)
+        codes.close()
     }
 
     // Changes the slot panel if it's still panel [id].

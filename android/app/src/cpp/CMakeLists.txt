@@ -8,6 +8,7 @@ add_library(goosestation SHARED
   android_host.cpp
   android_host.h
   android_host_boot.cpp
+  android_host_controllers.cpp
   android_host_folders.cpp
   android_host_game_files.cpp
   android_host_input.cpp

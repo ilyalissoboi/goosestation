@@ -244,7 +244,8 @@ def _is_declaration(item: Item, signatures) -> bool:
     defined in the split's files."""
     flat = _flat(item)
     if flat.startswith("extern "):
-        return not re.search(r'extern\s+"C"|[={(]', flat)
+        # An array's size can hold parentheses; an initialiser can't hide in it.
+        return not re.search(r'extern\s+"C"|[={(]', re.sub(r"\[[^\]]*\]", "[]", flat))
     return flat in signatures
 
 

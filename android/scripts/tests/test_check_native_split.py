@@ -195,6 +195,15 @@ class CheckNativeSplitTest(unittest.TestCase):
         self.assertIn("Sneaky", out)
         self.assertIn("s_sneaky", out)
 
+    def test_anExternArraySizedByACastIsADeclaration(self):
+        self.split()
+        self.write(
+            "android_host_state.h",
+            open(os.path.join(self.cpp, "android_host_state.h")).read().replace("extern bool s_started;", "extern bool s_started;\nextern int s_kinds[static_cast<size_t>(Kind::Count)];"),
+        )
+        code, out = self.check()
+        self.assertEqual(0, code, out)
+
     def test_aDeclarationInANewCppFileCounts(self):
         self.split()
         self.write(

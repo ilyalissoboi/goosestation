@@ -132,6 +132,21 @@ class CheckNativeSplitTest(unittest.TestCase):
         code, out = self.check()
         self.assertEqual(0, code, out)
 
+    def test_aForwardDeclarationMovedToAHeaderCounts(self):
+        host = HOST.replace("namespace AndroidHost {\nnamespace {", "namespace AndroidHost {\nstatic void Start();\nnamespace {")
+        self.write("android_host.cpp", host)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "declared"], cwd=self.repo, check=True)
+        self.split()
+        code, out = self.check()
+        self.assertEqual(1, code)
+        self.assertIn("missing (1): static void Start();", out)
+        self.write(
+            "android_host_state.h",
+            open(os.path.join(self.cpp, "android_host_state.h")).read().replace("namespace AndroidHost {\n", "namespace AndroidHost {\nvoid Start();\n", 1),
+        )
+        code, out = self.check()
+        self.assertEqual(0, code, out)
+
     def test_aChangedBodyFails(self):
         self.split()
         self.write(

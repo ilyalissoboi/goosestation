@@ -198,13 +198,16 @@ def main(argv, repo: str = None, originals=ORIGINALS) -> int:
     for item in before:
         origin.setdefault(item.key, []).append(item)
 
+    want = collections.Counter(item.key for item in before)
     after, problems = [], []
     split = [n for n in sorted(os.listdir(cpp_dir)) if n.endswith((".cpp", ".h")) and (n in originals or n not in at_base)]
     for name in split:
         with open(os.path.join(cpp_dir, name)) as f:
             items, channel, logs = parse(f.read(), name)
         new = name not in at_base
-        kept = [item for item in items if not (new and _is_declaration(item))]
+        # A declaration added to share moved state is ignored; one the originals had (a forward declaration moved to
+        # a header) counts as the item it is.
+        kept = [item for item in items if not (new and _is_declaration(item) and item.key not in want)]
         after += kept
         sources = {i.file for k in kept for i in origin.get(k.key, [])}
         if logs and channel is None and name.endswith(".cpp"):
@@ -217,7 +220,6 @@ def main(argv, repo: str = None, originals=ORIGINALS) -> int:
             if indices != sorted(indices):
                 problems.append(f"{name}: what it took from {source} isn't in {source}'s order")
 
-    want = collections.Counter(item.key for item in before)
     have = collections.Counter(item.key for item in after)
     names = {item.key: item.name for item in before + after}
     for key in want.keys() | have.keys():

@@ -201,7 +201,7 @@ class GameSettingsPages(
     val postProcessing = PostProcessingPage(scope, core, api, global, shaderFolder, layer)
 
     // Changes as the summary is read or a change reads it, so a summary read that comes back after either is dropped.
-    private var summaryRead = 0
+    private val summaryRead = Latest()
 
     /** [page]'s values, as last read or changed; null until read. */
     fun values(page: GamePage): SettingValues? = pages.values(page)
@@ -275,7 +275,7 @@ class GameSettingsPages(
                 ; { showSummary(summary) }
             }
         // Only a change that saved reads the summary: one that changed nothing leaves the read out to land.
-        if (saved) summaryRead++
+        if (saved) summaryRead.invalidate()
     }
 
     fun ask(question: GameQuestion) {
@@ -314,10 +314,10 @@ class GameSettingsPages(
 
     private fun readSummary() {
         val key = game?.serial ?: return
-        val read = ++summaryRead
+        val read = summaryRead.next()
         scope.launch {
             val summary = withContext(core) { readSummary(key) }
-            if (read == summaryRead) this@GameSettingsPages.summary = summary
+            if (summaryRead.isLatest(read)) this@GameSettingsPages.summary = summary
         }
     }
 

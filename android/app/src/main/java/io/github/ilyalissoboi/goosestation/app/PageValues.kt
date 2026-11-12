@@ -85,8 +85,7 @@ class PageValues<P : Any>(
 
     // Change as each read is asked for or a change is made, so a read that comes back after either is dropped. A
     // change made while a read is out reads again once it's saved, so the values the dropped one had still show.
-    private val pageRead = mutableMapOf<P, Int>()
-    private val pageReading = mutableMapOf<P, Boolean>()
+    private val pageRead = mutableMapOf<P, Latest>()
 
     /** [page]'s values, as last read or changed; null until read. */
     fun values(page: P): SettingValues? = shown[page]
@@ -124,8 +123,7 @@ class PageValues<P : Any>(
         if (new == old) return false
         // Now, so a second change made before this one is saved starts from it.
         shown[page] = new
-        val reread = pageReading[page] == true
-        pageRead[page] = (pageRead[page] ?: 0) + 1
+        val reread = latest(page).invalidate()
         scope.launch {
             val (after, usage) =
                 withContext(core) {
@@ -141,12 +139,12 @@ class PageValues<P : Any>(
         return true
     }
 
+    private fun latest(page: P) = pageRead.getOrPut(page, ::Latest)
+
     // Queued on core after any save launched before it, so it reads what that save wrote.
     private fun read(page: P) {
         val reader = reader(page) ?: return
-        val read = (pageRead[page] ?: 0) + 1
-        pageRead[page] = read
-        pageReading[page] = true
+        val read = latest(page).next()
         val known = names
         val kind = shared(page)
         scope.launch {
@@ -168,8 +166,8 @@ class PageValues<P : Any>(
                         sharedCards = if (kind == SharedPage.MemoryCards) api.getSharedCardNames() else null,
                     )
                 }
-            if (read != pageRead[page] || !reader.current()) return@launch
-            pageReading[page] = false
+            if (!latest(page).isLatest(read) || !reader.current()) return@launch
+            latest(page).done()
             names = loaded.names
             if (kind == SharedPage.Graphics) vulkanFailed = loaded.vulkanFailed
             if (kind == SharedPage.Advanced) fastmemAvailable = loaded.fastmemAvailable

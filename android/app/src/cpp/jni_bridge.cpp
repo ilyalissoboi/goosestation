@@ -50,24 +50,6 @@ using JNIUtil::FromJString;
 using JNIUtil::ToJString;
 
 extern "C" {
-NATIVE_LIBRARY_FUNCTION(void, startGame)(JNIEnv* env, jobject, jstring path, jint disc, jboolean resume)
-{
-  AndroidHost::StartGame(FromJString(env, path), static_cast<u32>(std::max(disc, 0)), resume == JNI_TRUE);
-}
-
-NATIVE_LIBRARY_FUNCTION(void, startGameFromState)
-
-(JNIEnv* env, jobject, jstring path, jstring key, jint slot, jboolean shared)
-{
-  AndroidHost::StartGameFromState(FromJString(env, path), FromJString(env, key), static_cast<s32>(slot),
-                                  shared == JNI_TRUE);
-}
-
-NATIVE_LIBRARY_FUNCTION(void, shutdownGame)(JNIEnv*, jobject)
-{
-  AndroidHost::ShutdownGame();
-}
-
 NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jstring serial)
 {
   const std::vector<s64> times = AndroidHost::GetSaveStateTimes(FromJString(env, serial));
@@ -314,11 +296,6 @@ NATIVE_LIBRARY_FUNCTION(void, setPictureAtTop)(JNIEnv*, jobject, jboolean top)
 NATIVE_LIBRARY_FUNCTION(void, saveScreenshot)(JNIEnv*, jobject)
 {
   AndroidHost::SaveScreenshot();
-}
-
-NATIVE_LIBRARY_FUNCTION(void, setPaused)(JNIEnv*, jobject, jboolean paused)
-{
-  AndroidHost::SetPaused(paused == JNI_TRUE);
 }
 
 NATIVE_LIBRARY_FUNCTION(void, surfaceChanged)(JNIEnv* env, jobject, jobject surface, jint width, jint height,

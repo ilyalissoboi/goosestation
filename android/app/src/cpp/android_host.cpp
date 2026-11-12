@@ -384,15 +384,6 @@ void AndroidHost::RefreshGameList(bool invalidate_cache)
   GameList::Refresh(invalidate_cache, false, nullptr);
 }
 
-namespace AndroidHost {
-MemcardSyncSettings ReadMemcardSyncSettings(const SettingsInterface& si)
-{
-  return {si.GetBoolValue(MemcardSync::SECTION, "Enabled", false), si.GetStringValue(MemcardSync::SECTION, "RemoteURI"),
-          si.GetStringValue(MemcardSync::SECTION, "AccessKeyID"), si.GetStringValue(MemcardSync::SECTION, "DeviceName")};
-}
-
-} // namespace AndroidHost
-
 std::optional<u32> AndroidHost::FindDescriptorIndex(std::string_view descriptor)
 {
   const auto it = std::find(s_descriptors.begin(), s_descriptors.end(), descriptor);

@@ -61,6 +61,15 @@ using AndroidInputKeys::DEVICE_PREFIX;
 
 using AndroidInputKeys::ParseDeviceIndex;
 
+namespace {
+MemcardSyncSettings ReadMemcardSyncSettings(const SettingsInterface& si)
+{
+  return {si.GetBoolValue(MemcardSync::SECTION, "Enabled", false), si.GetStringValue(MemcardSync::SECTION, "RemoteURI"),
+          si.GetStringValue(MemcardSync::SECTION, "AccessKeyID"), si.GetStringValue(MemcardSync::SECTION, "DeviceName")};
+}
+
+} // namespace
+
 } // namespace AndroidHost
 
 void AndroidHost::ReloadSettings()

@@ -193,8 +193,6 @@ extern DisplayAlignment s_loaded_display_alignment;
 
 extern std::atomic_bool s_vulkan_failed;
 
-MemcardSyncSettings ReadMemcardSyncSettings(const SettingsInterface& si);
-
 } // namespace AndroidHost
 
 std::string MissingDiscMessage(std::string_view media_path);

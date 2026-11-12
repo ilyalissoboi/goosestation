@@ -42,6 +42,52 @@ class GameSettingsPagesTest {
             calls.clear()
         }
 
+    // Another game's settings opened as the first's Emulation page was read: none of the first game's shows.
+    @Test
+    fun anotherGameOpenedMidReadShowsNoneOfTheFirstsEmulation() =
+        runTest {
+            val pages = pages()
+            pages.openPage(GamePage.Emulation)
+            api.onRewind = { pages.open(game.copy(serial = "SLUS-00002", path = "/games/other.cue"), running = false) }
+
+            runCurrent()
+
+            assertNull(pages.values(GamePage.Emulation))
+            assertNull(pages.rewindUsage)
+        }
+
+    // As close() does: the last game's Post-processing page doesn't stay open under another game's settings.
+    @Test
+    fun openingAnotherGameClosesItsPostProcessing() =
+        runTest {
+            val pages = pages()
+            pages.openPage(GamePage.PostProcessing)
+            runCurrent()
+            assertEquals(KEY, pages.postProcessing.key)
+
+            pages.open(game.copy(serial = "SLUS-00002", path = "/games/other.cue"), running = false)
+            runCurrent()
+
+            assertNull(pages.postProcessing.key)
+        }
+
+    // A change that changes nothing leaves the summary read already out to land.
+    @Test
+    fun aChangeThatChangesNothingLeavesTheSummaryRead() =
+        runTest {
+            val pages = pages()
+            pages.openPage(GamePage.Console)
+            runCurrent()
+            assertEquals(0, pages.summary!!.counts[GamePage.Console])
+
+            file.setString("Console", "Region", "NTSC-J")
+            pages.reloadShown()
+            pages.change(GamePage.Console, pages.values(GamePage.Console)!!)
+            runCurrent()
+
+            assertEquals(1, pages.summary!!.counts[GamePage.Console])
+        }
+
     @Test
     fun openReadsTheSummary() =
         runTest {

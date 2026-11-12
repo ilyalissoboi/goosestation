@@ -4,7 +4,6 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
@@ -14,14 +13,11 @@ import io.github.ilyalissoboi.goosestation.settings.BiosOverrides
 import io.github.ilyalissoboi.goosestation.settings.BiosPage
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
-import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.CoreSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCardSettings
-import io.github.ilyalissoboi.goosestation.settings.NameList
-import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.settings.Setting
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.SettingsEntry
@@ -46,6 +42,19 @@ enum class CorePage(
     ;
 
     val title get() = entry.label
+
+    /** The page as both settings owners have it, or null for one only the global settings have. */
+    val shared: SharedPage?
+        get() =
+            when (this) {
+                Interface -> null
+                Console -> SharedPage.Console
+                Emulation -> SharedPage.Emulation
+                Graphics -> SharedPage.Graphics
+                Audio -> SharedPage.Audio
+                MemoryCards -> SharedPage.MemoryCards
+                Advanced -> SharedPage.Advanced
+            }
 
     /** The page's settings, in its order. */
     val settings: List<Setting<*>>
@@ -77,47 +86,43 @@ class SettingsPages(
     private val api: CoreApi,
     private val settings: CoreSettings,
 ) {
-    private val shown = mutableStateMapOf<CorePage, SettingValues>()
+    private val pages =
+        PageValues<CorePage>(scope, core, api, { it.shared }) { page ->
+            PageReader({ PageLoad(SettingValues.read(settings, page.settings)) })
+        }
+
+    /** What the pages' screens show beside their values. */
+    val extras: PageExtras get() = pages
 
     /** The core's choice lists, read with the first page and kept: they don't change. Empty until then. */
-    var names by mutableStateOf<CoreNames>(emptyMap())
-        private set
+    val names get() = pages.names
 
     /** What Emulation's rewind states take, as the core said when that page was last read or changed. */
-    var rewindUsage by mutableStateOf<RewindUsage?>(null)
-        private set
+    val rewindUsage get() = pages.rewindUsage
 
     /** The memory card folder's cards, read with Memory cards' card slots. */
-    var sharedCards by mutableStateOf(emptyList<String>())
-        private set
+    val sharedCards get() = pages.sharedCards
 
     /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
-    var fastmemAvailable by mutableStateOf(true)
-        private set
+    val fastmemAvailable get() = pages.fastmemAvailable
 
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
-    var vulkanFailed by mutableStateOf(false)
-        private set
+    val vulkanFailed get() = pages.vulkanFailed
 
     /** The BIOS page's images and settings, as read on opening it; null until they are. */
     var bios by mutableStateOf<BiosPage?>(null)
         private set
 
-    // Change as each read is asked for or a change is made, so a read that comes back after either is dropped. A
-    // change made while a read is out reads again once it's saved, so the values the dropped one had still show.
-    private val pageRead = mutableMapOf<CorePage, Int>()
-    private val pageReading = mutableMapOf<CorePage, Boolean>()
+    // As PageValues' counters: a BIOS read that comes back after another or a change is dropped, and read again once
+    // the change is saved.
     private var biosRead = 0
     private var biosReading = false
 
     /** [page]'s values, as last read or changed; null until read. */
-    fun values(page: CorePage): SettingValues? = shown[page]
+    fun values(page: CorePage): SettingValues? = pages.values(page)
 
     /** Reads [page]'s values, from none shown. */
-    fun load(page: CorePage) {
-        shown.remove(page)
-        read(page)
-    }
+    fun load(page: CorePage) = pages.load(page)
 
     /** Reads the BIOS page's images and settings, from none shown. */
     fun loadBios() {
@@ -131,7 +136,7 @@ class SettingsPages(
      */
     fun reloadShown(page: SettingsEntry?) {
         if (page == SettingsEntry.Bios) return readBios()
-        CorePage.of(page)?.let { if (it in shown) read(it) }
+        CorePage.of(page)?.let(pages::reread)
     }
 
     /** Saves [page]'s change to [new], only the settings that changed, then has the core apply it. */
@@ -139,24 +144,11 @@ class SettingsPages(
         page: CorePage,
         new: SettingValues,
     ) {
-        val old = shown[page] ?: return
-        if (new == old) return
-        // Now, so a second change made before this one is saved starts from it.
-        shown[page] = new
-        val reread = pageReading[page] == true
-        pageRead[page] = (pageRead[page] ?: 0) + 1
-        scope.launch {
-            val usage =
-                withContext(core) {
-                    new.save(settings, old)
-                    api.applySettings()
-                    // The core estimates from the settings it has: these, now applied.
-                    val emulation = page == CorePage.Emulation
-                    if (emulation) api.getRewindMemoryUsage(new[EmulationSettings.REWIND_SLOTS]) else null
-                }
-            if (usage != null && new == shown[page]) rewindUsage = usage
+        pages.change(page, new) { values, old ->
+            values.save(settings, old)
+            api.applySettings()
+            ; {}
         }
-        if (reread) read(page)
     }
 
     /** Sets [region]'s BIOS image to [fileName], or back to Automatic with null, then has the core apply it. */
@@ -190,42 +182,6 @@ class SettingsPages(
         if (reread) readBios()
     }
 
-    // Queued on core after any save launched before it, so it reads what that save wrote.
-    private fun read(page: CorePage) {
-        val read = (pageRead[page] ?: 0) + 1
-        pageRead[page] = read
-        pageReading[page] = true
-        val known = names
-        scope.launch {
-            val loaded =
-                withContext(core) {
-                    PageRead(
-                        names = known.ifEmpty { NameList.entries.associateWith { api.getSettingNames(it.kind) } },
-                        values = SettingValues.read(settings, page.settings),
-                        vulkanFailed = page == CorePage.Graphics && api.isVulkanFailed(),
-                        fastmemAvailable = page != CorePage.Advanced || api.isFastmemAvailable(),
-                    ).let {
-                        when (page) {
-                            CorePage.Emulation ->
-                                it.copy(
-                                    rewindUsage = api.getRewindMemoryUsage(it.values[EmulationSettings.REWIND_SLOTS]),
-                                )
-                            CorePage.MemoryCards -> it.copy(sharedCards = api.getSharedCardNames())
-                            else -> it
-                        }
-                    }
-                }
-            if (read != pageRead[page]) return@launch
-            pageReading[page] = false
-            names = loaded.names
-            if (page == CorePage.Graphics) vulkanFailed = loaded.vulkanFailed
-            if (page == CorePage.Advanced) fastmemAvailable = loaded.fastmemAvailable
-            loaded.rewindUsage?.let { rewindUsage = it }
-            loaded.sharedCards?.let { sharedCards = it }
-            shown[page] = loaded.values
-        }
-    }
-
     private fun readBios() {
         val read = ++biosRead
         biosReading = true
@@ -245,13 +201,3 @@ class SettingsPages(
         }
     }
 }
-
-/** What a page's read found. */
-private data class PageRead(
-    val names: CoreNames,
-    val values: SettingValues,
-    val vulkanFailed: Boolean,
-    val fastmemAvailable: Boolean,
-    val rewindUsage: RewindUsage? = null,
-    val sharedCards: List<String>? = null,
-)

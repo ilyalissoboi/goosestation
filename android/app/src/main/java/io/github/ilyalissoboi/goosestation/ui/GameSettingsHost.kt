@@ -71,11 +71,8 @@ private fun GamePageScreen(
 ) {
     val back = pages::closePage
     when (page) {
-        GamePage.Console -> ConsoleScreen(values, pages.names, onChange, back)
-        GamePage.Emulation -> EmulationScreen(values, pages.rewindUsage, onChange, back)
-        GamePage.Graphics -> GraphicsScreen(values, pages.names, pages.vulkanFailed, onChange, back)
-        GamePage.Audio -> AudioScreen(values, pages.names, onChange, back)
-        GamePage.Advanced -> AdvancedScreen(values, pages.names, pages.fastmemAvailable, onChange, back)
+        GamePage.Console, GamePage.Emulation, GamePage.Graphics, GamePage.Audio, GamePage.Advanced ->
+            SharedPageScreen(page.shared!!, values, pages.extras, onChange, back)
         GamePage.MemoryCards ->
             SettingsPage(page.label, onBack = back) {
                 CardSlotRows(

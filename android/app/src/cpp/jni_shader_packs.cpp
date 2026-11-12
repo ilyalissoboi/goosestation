@@ -170,14 +170,7 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, checkShaderPacks)(JNIEnv* env, jobject, jo
 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, installShaderPacks)(JNIEnv* env, jobject, jobjectArray jids, jobject listener)
 {
-  std::vector<std::string> ids;
-  const jsize count = jids ? env->GetArrayLength(jids) : 0;
-  for (jsize i = 0; i < count; i++)
-  {
-    jstring jid = static_cast<jstring>(env->GetObjectArrayElement(jids, i));
-    ids.push_back(FromJString(env, jid));
-    env->DeleteLocalRef(jid);
-  }
+  const std::vector<std::string> ids = JNIUtil::FromJStringArray(env, jids);
 
   JavaPackProgress progress(env, listener);
   std::vector<std::string> flat;
@@ -245,14 +238,7 @@ private:
 NATIVE_LIBRARY_FUNCTION(jobjectArray, shaderPacksTestInstall)(JNIEnv* env, jobject, jstring base, jobjectArray jids,
                                                               jobject listener)
 {
-  std::vector<std::string> ids;
-  const jsize count = jids ? env->GetArrayLength(jids) : 0;
-  for (jsize i = 0; i < count; i++)
-  {
-    jstring jid = static_cast<jstring>(env->GetObjectArrayElement(jids, i));
-    ids.push_back(FromJString(env, jid));
-    env->DeleteLocalRef(jid);
-  }
+  const std::vector<std::string> ids = JNIUtil::FromJStringArray(env, jids);
 
   JavaPackProgress progress(env, listener);
   std::vector<std::string> flat;

@@ -230,18 +230,8 @@ NATIVE_LIBRARY_FUNCTION(jboolean, writeMemoryCardSaveForTest)(JNIEnv* env, jobje
 
 NATIVE_LIBRARY_FUNCTION(jbyteArray, readMemoryCardSaveForTest)(JNIEnv* env, jobject, jstring path, jstring name)
 {
-  const std::optional<std::vector<u8>> data =
-    MemcardSyncBridge::ReadSaveForTest(FromJString(env, path), FromJString(env, name));
-  if (!data.has_value())
-    return nullptr;
-  jbyteArray ret = env->NewByteArray(static_cast<jsize>(data->size()));
-  if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
-  env->SetByteArrayRegion(ret, 0, static_cast<jsize>(data->size()), reinterpret_cast<const jbyte*>(data->data()));
-  return ret;
+  return JNIUtil::ToJByteArrayOrNull(env,
+                                     MemcardSyncBridge::ReadSaveForTest(FromJString(env, path), FromJString(env, name)));
 }
 
 NATIVE_LIBRARY_FUNCTION(void, memcardSyncNow)(JNIEnv*, jobject)

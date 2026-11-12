@@ -51,14 +51,7 @@ extern "C" {
 
 NATIVE_LIBRARY_FUNCTION(jlongArray, getSaveStateTimes)(JNIEnv* env, jobject, jstring serial)
 {
-  const std::vector<s64> times = AndroidHost::GetSaveStateTimes(FromJString(env, serial));
-  jlongArray result = env->NewLongArray(static_cast<jsize>(times.size()));
-  if (!result)
-    return Made(env, result, "getSaveStateTimes");
-
-  std::vector<jlong> values(times.begin(), times.end());
-  env->SetLongArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
-  return result;
+  return Made(env, JNIUtil::ToJLongArray(env, AndroidHost::GetSaveStateTimes(FromJString(env, serial))), "getSaveStateTimes");
 }
 
 // A SaveStatePreview for Kotlin, or null.
@@ -111,14 +104,7 @@ NATIVE_LIBRARY_FUNCTION(jobject, getStatePreview)
 
 NATIVE_LIBRARY_FUNCTION(jlongArray, getSharedStateTimes)(JNIEnv* env, jobject)
 {
-  const std::vector<s64> times = AndroidHost::GetSharedStateTimes();
-  jlongArray result = env->NewLongArray(static_cast<jsize>(times.size()));
-  if (!result)
-    return Made(env, result, "getSharedStateTimes");
-
-  std::vector<jlong> values(times.begin(), times.end());
-  env->SetLongArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
-  return result;
+  return Made(env, JNIUtil::ToJLongArray(env, AndroidHost::GetSharedStateTimes()), "getSharedStateTimes");
 }
 
 // The reason a save or load failed, or null when it worked.

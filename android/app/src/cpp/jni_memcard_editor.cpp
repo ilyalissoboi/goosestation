@@ -45,6 +45,10 @@ using JNIUtil::ClearException;
 
 using JNIUtil::FromJString;
 
+using JNIUtil::ToJByteArray;
+
+using JNIUtil::ToJByteArrayOrNull;
+
 using JNIUtil::ToJString;
 
 extern "C" {
@@ -122,24 +126,6 @@ std::vector<u8> FromJByteArray(JNIEnv* env, jbyteArray array)
   if (!bytes.empty())
     env->GetByteArrayRegion(array, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<jbyte*>(bytes.data()));
   return bytes;
-}
-
-// A byte[] of bytes, or null (with no exception pending) if it can't be made.
-jbyteArray ToJByteArray(JNIEnv* env, std::span<const u8> bytes)
-{
-  jbyteArray ret = env->NewByteArray(static_cast<jsize>(bytes.size()));
-  if (!ret)
-  {
-    ClearException(env);
-    return nullptr;
-  }
-  env->SetByteArrayRegion(ret, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
-  return ret;
-}
-
-jbyteArray ToJByteArrayOrNull(JNIEnv* env, const std::optional<std::vector<u8>>& bytes)
-{
-  return bytes.has_value() ? ToJByteArray(env, std::span<const u8>(bytes.value())) : nullptr;
 }
 
 std::optional<std::string> FromOptionalJString(JNIEnv* env, jstring str)

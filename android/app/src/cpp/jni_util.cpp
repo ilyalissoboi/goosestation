@@ -183,6 +183,23 @@ jlongArray JNIUtil::ToJLongArray(JNIEnv* env, const std::vector<s64>& values)
   return ret;
 }
 
+jbyteArray JNIUtil::ToJByteArray(JNIEnv* env, std::span<const u8> bytes)
+{
+  jbyteArray ret = env->NewByteArray(static_cast<jsize>(bytes.size()));
+  if (!ret)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  env->SetByteArrayRegion(ret, 0, static_cast<jsize>(bytes.size()), reinterpret_cast<const jbyte*>(bytes.data()));
+  return ret;
+}
+
+jbyteArray JNIUtil::ToJByteArrayOrNull(JNIEnv* env, const std::optional<std::vector<u8>>& bytes)
+{
+  return bytes.has_value() ? ToJByteArray(env, std::span<const u8>(bytes.value())) : nullptr;
+}
+
 ScopedJNIEnv::ScopedJNIEnv()
 {
   JavaVM* const vm = JNIUtil::GetJavaVM();

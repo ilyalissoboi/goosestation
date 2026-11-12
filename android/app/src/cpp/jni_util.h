@@ -8,6 +8,8 @@
 #include <jni.h>
 
 #include <iterator>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -97,6 +99,12 @@ std::vector<std::string> FromJStringArray(JNIEnv* env, jobjectArray array);
 
 /// A long[] of values, or null with the exception left pending if it can't be made.
 jlongArray ToJLongArray(JNIEnv* env, const std::vector<s64>& values);
+
+/// A byte[] of bytes, or null (with no exception pending) if it can't be made.
+jbyteArray ToJByteArray(JNIEnv* env, std::span<const u8> bytes);
+
+/// ToJByteArray() of bytes, or null if there are none.
+jbyteArray ToJByteArrayOrNull(JNIEnv* env, const std::optional<std::vector<u8>>& bytes);
 
 } // namespace JNIUtil
 

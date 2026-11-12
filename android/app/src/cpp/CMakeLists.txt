@@ -41,6 +41,7 @@ add_library(goosestation SHARED
   jni_bridge.cpp
   jni_classes.cpp
   jni_classes.h
+  jni_controllers.cpp
   jni_covers.cpp
   jni_folders.cpp
   jni_game_files.cpp

@@ -697,11 +697,6 @@ class PostProcessingPage(
 
     private fun settingsFor(key: String?): CoreSettings = if (key == null) global else layer(key)
 
-    // Runs [change] on core, applies it in a running game, reads the chains it left, then runs [after]. The chains are
-    // shown unless a later read was asked for meanwhile, which has them too; [after] runs either way, unless the page
-    // closed or opened again meanwhile: it ends the edit (closes the name form, moves the focus, says why the core
-    // refused), and the page now shown has none.
-
     /**
      * [edit]s with [change], which returns the core's refusal or null. Once the page is read again, a refusal goes to
      * [onRefused], and otherwise [onDone] runs.
@@ -715,6 +710,10 @@ class PostProcessingPage(
         edit(after = { refusal?.let(onRefused) ?: onDone() }) { refusal = change() }
     }
 
+    // Runs [change] on core, applies it in a running game, reads the chains it left, then runs [after]. The chains are
+    // shown unless a later read was asked for meanwhile, which has them too; [after] runs either way, unless the page
+    // closed or opened again meanwhile: it ends the edit (closes the name form, moves the focus, says why the core
+    // refused), and the page now shown has none.
     private fun edit(
         after: () -> Unit = {},
         change: () -> Unit,

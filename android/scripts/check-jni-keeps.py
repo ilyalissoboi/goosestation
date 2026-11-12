@@ -16,7 +16,7 @@ Checked, with comments left out:
   and adjacent literals are joined) must be a member R8 kept in one of the app's classes, as seeds.txt writes it, or
   one of FRAMEWORK_MEMBERS. A lookup of a framework class's member that isn't there fails: add it.
 - so must each of JNI_OnLoad's table rows written with literals: MethodLookup{"name", "signature", ...} (a method),
-  and ClassLookup{"class", &cls, "signature", ...} (the class's constructor; nullptr there checks only the class).
+  and ClassLookup{"class", &cls, "signature", ...} (that class's own constructor; nullptr there checks only the class).
 Names held in variables aren't checked here; JNI_OnLoad looks those up at launch, which the test tiers' release build
 covers (run-instrumented-tests.sh).
 """
@@ -105,9 +105,11 @@ def method_parts(signature: str):
 
 
 def read_seeds(path: str):
-    """The app's kept classes (dotted names), and their kept members as seeds.txt writes them (without the class)."""
+    """The app's kept classes (dotted names); their kept members as seeds.txt writes them, without the class; and the
+    same members as (class, member) pairs."""
     classes = set()
     members = set()
+    class_members = set()
     prefix = PACKAGE.replace("/", ".")
     with open(path) as f:
         for line in f:
@@ -117,13 +119,15 @@ def read_seeds(path: str):
             if ": " in line:
                 cls, member = line.split(": ", 1)
                 members.add(member)
+                class_members.add((cls, member))
                 # A constructor is written as its class's simple name: kept as "<init>(params)" too.
                 simple = cls.rsplit(".", 1)[-1]
                 if member.startswith(simple + "("):
                     members.add("<init>" + member[len(simple) :])
+                    class_members.add((cls, "<init>" + member[len(simple) :]))
             else:
                 classes.add(line)
-    return classes, members
+    return classes, members, class_members
 
 
 def literal_args(code: str, start: int):
@@ -169,7 +173,7 @@ def next_argument(code: str, i: int) -> int:
 
 
 def class_row_constructor(code: str, start: int):
-    """A ClassLookup row's constructor signature, from just after its brace, if it's written as a literal."""
+    """A ClassLookup row's class and constructor signature, from just after its brace, if both are literals."""
     first = literal(code, start)
     if first is None:
         return None
@@ -178,7 +182,7 @@ def class_row_constructor(code: str, start: int):
     if i < 0:
         return None
     signature = literal(code, i)
-    return signature[0] if signature else None
+    return (first[0], signature[0]) if signature else None
 
 
 def describe(kind: str, name: str, signature: str) -> str:
@@ -195,7 +199,7 @@ def main(argv) -> int:
         print(__doc__.strip().splitlines()[2].strip())
         return 2
     seeds_path, cpp_dir = argv
-    classes, members = read_seeds(seeds_path)
+    classes, members, class_members = read_seeds(seeds_path)
     misses = []
     checked_classes = set()
     checked_members = 0
@@ -238,26 +242,32 @@ def main(argv) -> int:
                 args = literal_args(code, i + 1)
                 if args is None:
                     continue
-                lookups.append((m.group(1), args[0], args[1], m.start()))
+                lookups.append((m.group(1), args[0], args[1], m.start(), None))
 
             for m in _METHOD_ROW.finditer(code):
                 args = literal_args(code, m.end())
                 if args is not None:
-                    lookups.append(("Method", args[0], args[1], m.start()))
+                    lookups.append(("Method", args[0], args[1], m.start(), None))
 
             for m in _CLASS_ROW.finditer(code):
-                signature = class_row_constructor(code, m.end())
-                if signature is not None:
-                    lookups.append(("Method", "<init>", signature, m.start()))
+                row = class_row_constructor(code, m.end())
+                if row is not None:
+                    # The row names its class, so its constructor is checked against that class's alone.
+                    lookups.append(("Method", "<init>", row[1], m.start(), row[0].replace("/", ".")))
 
-            for kind, name, signature, index in sorted(lookups, key=lambda lookup: lookup[3]):
+            for kind, name, signature, index, cls in sorted(lookups, key=lambda lookup: lookup[3]):
                 member = describe(kind, name, signature)
                 if member in FRAMEWORK_MEMBERS:
                     continue
                 checked_members += 1
-                if member in members:
+                if (cls, member) in class_members if cls else member in members:
                     continue
-                shown = f"a constructor ({member[len('<init>(') : -1]})" if name == "<init>" else member
+                if name != "<init>":
+                    shown = member
+                elif cls:
+                    shown = f"{cls}'s constructor ({member[len('<init>(') : -1]})"
+                else:
+                    shown = f"a constructor ({member[len('<init>(') : -1]})"
                 misses.append(f"{where}:{line_of(index)}: {shown} isn't kept by R8 (proguard-rules.pro).")
 
     for miss in misses:

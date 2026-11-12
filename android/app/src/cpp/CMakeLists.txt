@@ -36,6 +36,7 @@ add_library(goosestation SHARED
   touch_pad.h
   http_downloader_android.h
   jni_achievements.cpp
+  jni_bios.cpp
   jni_bridge.cpp
   jni_classes.cpp
   jni_classes.h

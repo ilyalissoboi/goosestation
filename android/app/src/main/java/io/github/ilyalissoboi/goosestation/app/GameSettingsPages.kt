@@ -65,6 +65,19 @@ enum class GamePage(
                 Advanced -> AdvancedSettings.GAME
             }
 
+    /** The page as both settings owners have it, or null for one only a game's settings have. */
+    val shared: SharedPage?
+        get() =
+            when (this) {
+                Console -> SharedPage.Console
+                Emulation -> SharedPage.Emulation
+                Graphics -> SharedPage.Graphics
+                Audio -> SharedPage.Audio
+                MemoryCards -> SharedPage.MemoryCards
+                Advanced -> SharedPage.Advanced
+                PostProcessing, Controllers, Achievements -> null
+            }
+
     /** What the page reads: its rows, and what they depend on, such as whether hardcore mode is on. */
     val settings: List<Setting<*>>
         get() =
@@ -171,25 +184,41 @@ class GameSettingsPages(
     var asking by mutableStateOf<GameQuestion?>(null)
         private set
 
+    private val pages =
+        PageValues<GamePage>(scope, core, api, { it.shared }) { page ->
+            // The game the read is for, taken as it starts: one for a game no longer shown is dropped.
+            game?.serial?.let { key ->
+                PageReader(
+                    load = {
+                        if (page == GamePage.Controllers) {
+                            val (values, pads) = readControllers(key)
+                            PageLoad(values) { controllers = pads }
+                        } else {
+                            PageLoad(SettingValues.readGame(global, layer(key), page.settings))
+                        }
+                    },
+                    current = { game?.serial == key },
+                )
+            }
+        }
+
+    /** What the pages' screens show beside their values. */
+    val extras: PageExtras get() = pages
+
     /** The core's choice lists, read with the first page and kept. Empty until then. */
-    var names by mutableStateOf<CoreNames>(emptyMap())
-        private set
+    val names get() = pages.names
 
     /** The memory card folder's cards, read with Memory cards. */
-    var sharedCards by mutableStateOf(emptyList<String>())
-        private set
+    val sharedCards get() = pages.sharedCards
 
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
-    var vulkanFailed by mutableStateOf(false)
-        private set
+    val vulkanFailed get() = pages.vulkanFailed
 
     /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
-    var fastmemAvailable by mutableStateOf(true)
-        private set
+    val fastmemAvailable get() = pages.fastmemAvailable
 
-    /** What Emulation's rewind states take, as the core said when that page was last read. */
-    var rewindUsage by mutableStateOf<RewindUsage?>(null)
-        private set
+    /** What Emulation's rewind states take, as the core said when that page was last read or changed. */
+    val rewindUsage get() = pages.rewindUsage
 
     /** The Controllers page's pads and their types' settings, as last read; null until read. */
     var controllers by mutableStateOf<GameControllers?>(null)
@@ -198,16 +227,11 @@ class GameSettingsPages(
     /** The game's Post-processing page, while it shows. */
     val postProcessing = PostProcessingPage(scope, core, api, global, shaderFolder, layer)
 
-    private val shown = mutableStateMapOf<GamePage, SettingValues>()
-
-    // As SettingsPages': each changes as a read is asked for or a change is made, so a read that comes back after
-    // either is dropped, and read again once the change is saved.
-    private val pageRead = mutableMapOf<GamePage, Int>()
-    private val pageReading = mutableMapOf<GamePage, Boolean>()
+    // Changes as the summary is read or a change reads it, so a summary read that comes back after either is dropped.
     private var summaryRead = 0
 
     /** [page]'s values, as last read or changed; null until read. */
-    fun values(page: GamePage): SettingValues? = shown[page]
+    fun values(page: GamePage): SettingValues? = pages.values(page)
 
     /** Shows [game]'s hub and reads its summary; a [running] game's changes apply straight away. */
     fun open(
@@ -221,7 +245,7 @@ class GameSettingsPages(
         asking = null
         summary = null
         controllers = null
-        shown.clear()
+        pages.clear()
         // As close() does: the last game's Post-processing page doesn't stay open under this one's.
         postProcessing.close()
         readSummary()
@@ -235,7 +259,7 @@ class GameSettingsPages(
         asking = null
         summary = null
         controllers = null
-        shown.clear()
+        pages.clear()
         postProcessing.close()
     }
 
@@ -244,8 +268,7 @@ class GameSettingsPages(
         val game = game ?: return
         this.page = page
         if (page == GamePage.PostProcessing) return postProcessing.open(game.serial, running)
-        shown.remove(page)
-        read(page)
+        pages.load(page)
     }
 
     /** Back to the hub, which focuses the page left. */
@@ -265,30 +288,21 @@ class GameSettingsPages(
         new: SettingValues,
     ) {
         val key = game?.serial ?: return
-        val old = shown[page] ?: return
-        if (new == old) return
-        shown[page] = new
-        val reread = pageReading[page] == true
-        pageRead[page] = (pageRead[page] ?: 0) + 1
+        val old = pages.values(page) ?: return
         val apply = running
-        summaryRead++
-        scope.launch {
-            val (summary, usage) =
-                withContext(core) {
-                    new.save(layer(key), old)
-                    if (page == GamePage.Controllers) api.updateGameControllers(key)
-                    if (apply) api.applyGameSettings(key)
-                    // As the global page does: the estimate follows the save slots.
-                    val slots = if (page == GamePage.Emulation) new[EmulationSettings.REWIND_SLOTS] else null
-                    readSummary(key) to slots?.let { api.getRewindMemoryUsage(it) }
-                }
-            showSummary(summary)
-            if (usage != null && new == shown[page]) rewindUsage = usage
-        }
         // A type or multitap changed: the page's rows are another type's, or another port's.
         val retyped =
             page == GamePage.Controllers && new.changed(old).any { it.key == "Type" || it == PortSettings.MULTITAP }
-        if (reread || retyped) read(page)
+        val saved =
+            pages.change(page, new, readAgain = retyped) { values, previous ->
+                values.save(layer(key), previous)
+                if (page == GamePage.Controllers) api.updateGameControllers(key)
+                if (apply) api.applyGameSettings(key)
+                val summary = readSummary(key)
+                ; { showSummary(summary) }
+            }
+        // Only a change that saved reads the summary: one that changed nothing leaves the read out to land.
+        if (saved) summaryRead++
     }
 
     fun ask(question: GameQuestion) {
@@ -322,7 +336,7 @@ class GameSettingsPages(
         if (game == null) return
         readSummary()
         if (page == GamePage.PostProcessing) postProcessing.reread()
-        page?.let { if (it in shown) read(it) }
+        page?.let(pages::reread)
     }
 
     private fun readSummary() {
@@ -395,56 +409,6 @@ class GameSettingsPages(
                 }
         return SettingValues.readGame(global, game, settings) to GameControllers(pads, typeSettings, profile)
     }
-
-    // Queued on core after any save launched before it, so it reads what that save wrote.
-    private fun read(page: GamePage) {
-        val key = game?.serial ?: return
-        val read = (pageRead[page] ?: 0) + 1
-        pageRead[page] = read
-        pageReading[page] = true
-        val known = names
-        scope.launch {
-            val loaded =
-                withContext(core) {
-                    val controllers = if (page == GamePage.Controllers) readControllers(key) else null
-                    val values = controllers?.first ?: SettingValues.readGame(global, layer(key), page.settings)
-                    PageRead(
-                        names = known.ifEmpty { NameList.entries.associateWith { api.getSettingNames(it.kind) } },
-                        values = values,
-                        vulkanFailed = page == GamePage.Graphics && api.isVulkanFailed(),
-                        fastmemAvailable = page != GamePage.Advanced || api.isFastmemAvailable(),
-                        sharedCards = if (page == GamePage.MemoryCards) api.getSharedCardNames() else null,
-                        controllers = controllers?.second,
-                        // In the read, as the global page's is: it lands with the values it's for, or not at all.
-                        rewindUsage =
-                            if (page == GamePage.Emulation) {
-                                api.getRewindMemoryUsage(values[EmulationSettings.REWIND_SLOTS])
-                            } else {
-                                null
-                            },
-                    )
-                }
-            if (read != pageRead[page] || game?.serial != key) return@launch
-            pageReading[page] = false
-            names = loaded.names
-            if (page == GamePage.Graphics) vulkanFailed = loaded.vulkanFailed
-            if (page == GamePage.Advanced) fastmemAvailable = loaded.fastmemAvailable
-            loaded.sharedCards?.let { sharedCards = it }
-            loaded.controllers?.let { controllers = it }
-            loaded.rewindUsage?.let { rewindUsage = it }
-            shown[page] = loaded.values
-        }
-    }
-
-    private data class PageRead(
-        val names: CoreNames,
-        val values: SettingValues,
-        val vulkanFailed: Boolean,
-        val fastmemAvailable: Boolean,
-        val sharedCards: List<String>?,
-        val controllers: GameControllers? = null,
-        val rewindUsage: RewindUsage? = null,
-    )
 
     /** A file with nothing in it: a game's controller keys, while they don't count. */
     private object NoSettings : LayerSettings {

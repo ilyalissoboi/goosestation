@@ -71,6 +71,23 @@ class GameSettingsPagesTest {
             assertNull(pages.postProcessing.key)
         }
 
+    // A change that changes nothing leaves the summary read already out to land.
+    @Test
+    fun aChangeThatChangesNothingLeavesTheSummaryRead() =
+        runTest {
+            val pages = pages()
+            pages.openPage(GamePage.Console)
+            runCurrent()
+            assertEquals(0, pages.summary!!.counts[GamePage.Console])
+
+            file.setString("Console", "Region", "NTSC-J")
+            pages.reloadShown()
+            pages.change(GamePage.Console, pages.values(GamePage.Console)!!)
+            runCurrent()
+
+            assertEquals(1, pages.summary!!.counts[GamePage.Console])
+        }
+
     @Test
     fun openReadsTheSummary() =
         runTest {

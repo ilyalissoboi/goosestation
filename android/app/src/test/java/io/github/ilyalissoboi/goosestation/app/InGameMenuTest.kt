@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -1421,6 +1422,45 @@ class InGameMenuTest {
     private val board = Leaderboard(31, "Sunny Flight", "Fastest time")
     private val sunnyPage =
         LeaderboardPage(1284, arrayOf(LeaderboardEntry(1, "speedgoose", "0:42.10")), emptyArray(), -1)
+
+    // Review Focus 4: opening another panel closes the codes model, so a refusal that lands after changes nothing.
+    @Test
+    fun openingAnotherPanelClosesTheCodesModel() =
+        runTest {
+            achievementsReady()
+            api.codes = listOf(PatchCode(0, "", "A", false, false))
+            val menu = menu()
+            menu.openCodes()
+            runCurrent()
+            api.codeError = "No."
+            menu.setCode(0, true)
+
+            menu.openAchievements()
+            runCurrent()
+
+            assertNull(menu.state.codes)
+            assertNotNull(menu.state.cheevos)
+            menu.openCodes()
+            runCurrent()
+            assertNull(menu.state.codes!!.error)
+        }
+
+    // Review Focus 5: the game stopping with a panel open closes its model; the next game's menu opens with none.
+    @Test
+    fun theGameStoppingClosesAnOpenPanel() =
+        runTest {
+            achievementsReady()
+            val menu = menu()
+            menu.openAchievements()
+            menu.gameStopped()
+            runCurrent()
+            assertNull(menu.state.cheevos)
+
+            menu.gameStarted(game(SERIAL))
+            runCurrent()
+            assertNull(menu.state.cheevos)
+            assertNull(menu.state.codes)
+        }
 
     private fun TestScope.leaderboardsOpen(): InGameMenu {
         achievementsReady()

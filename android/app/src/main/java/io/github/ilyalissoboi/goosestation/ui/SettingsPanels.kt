@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
@@ -54,6 +55,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import io.github.ilyalissoboi.goosestation.ui.components.LocalOverlayHost
 import io.github.ilyalissoboi.goosestation.ui.components.RailItem
 import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -110,6 +112,7 @@ fun SettingsPanels(
         now.pageOpen = inPage
     }
     var pageHasFocus by remember { mutableStateOf(false) }
+    var panelsHaveFocus by remember { mutableStateOf(false) }
 
     fun enabled(entry: SettingsEntry) = !locked && (coreReady || !entry.needsCore)
 
@@ -209,8 +212,18 @@ fun SettingsPanels(
     }
     // The rail can't hold the focus while it's locked.
     LaunchedEffect(locked) { if (locked && !pageHasFocus) toPage() }
+    // Something always has the focus. An overlay over the page takes it, and its focus trap can refuse the page as it
+    // closes, leaving it nowhere: once no overlay shows, and the frame that drops it has passed, the focus comes back
+    // to the page it was in, or to its category.
+    val overlayShowing = LocalOverlayHost.current?.showing == true
+    LaunchedEffect(panelsHaveFocus, overlayShowing, current != null) {
+        if (panelsHaveFocus || overlayShowing || current == null) return@LaunchedEffect
+        repeat(2) { withFrameNanos {} }
+        if (panelsHaveFocus) return@LaunchedEffect
+        if (now.pageOpen) pageFocus.requestFocus() else now.current?.let { categories.getValue(it).requestFocus() }
+    }
 
-    Row(Modifier.fillMaxSize().background(colors.ground)) {
+    Row(Modifier.fillMaxSize().background(colors.ground).onFocusChanged { panelsHaveFocus = it.hasFocus }) {
         Box(Modifier.fillMaxHeight().background(colors.surface)) {
             Column(
                 modifier =

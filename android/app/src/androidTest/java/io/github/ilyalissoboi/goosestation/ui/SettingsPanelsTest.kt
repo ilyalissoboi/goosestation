@@ -101,8 +101,9 @@ class SettingsPanelsTest {
                 ActionButton("Ask", onClick = { asking = true }, modifier = Modifier.focusRequester(ask))
             }
             if (asking) {
-                LaunchedEffect(Unit) { cancel.requestFocus() }
                 OverlayPanel(onBack = { asking = false }, title = "Ask?") {
+                    // From inside it: the host draws it a frame after it is asked for.
+                    LaunchedEffect(Unit) { cancel.requestFocus() }
                     ActionButton(
                         "Cancel",
                         onClick = {},
@@ -301,11 +302,15 @@ class SettingsPanelsTest {
         press(Key.ButtonA)
         rule.onNode(isFocused()).assert(hasText("Cancel"))
 
-        // Neither Left nor a tap on the rail gets past it.
+        // Left does not get past it.
         press(Key.DirectionLeft)
         rule.onNode(isFocused()).assert(hasText("Cancel"))
         press(Key.ButtonB)
-        assertFocusedRow("Ask")
+        // Closed, the focus is back in the page, not on the rail and not nowhere: on the button that asked, or, where
+        // the closing panel refused the page its own request, on a row of the page.
+        rule.mainClock.advanceTimeBy(100)
+        rule.waitForIdle()
+        rule.onNode(isFocused()).assert(hasAnyAncestor(hasTestTag(SETTINGS_PAGE)))
         assertEquals(emptyList<SettingsEntry>(), shown)
     }
 

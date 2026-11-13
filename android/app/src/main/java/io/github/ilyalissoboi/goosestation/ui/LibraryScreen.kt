@@ -13,10 +13,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -160,6 +164,10 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val imeVisible = WindowInsets.isImeVisible
+    // The safe drawing area, but with the system bars' room whether they show or not: a game hides them, and they come
+    // back only after the library is up again, so padding by the bars as they are would lay the library out over the
+    // whole window first and then shrink it, resizing the grid's tiles on screen.
+    val safeArea = WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout).union(WindowInsets.ime)
 
     suspend fun scrollTo(index: Int) = if (gridView) gridState.scrollToItem(index) else listState.scrollToItem(index)
 
@@ -304,7 +312,7 @@ fun LibraryScreen(
                                 }
                             else -> false
                         }
-                    }.safeDrawingPadding()
+                    }.windowInsetsPadding(safeArea)
                     .padding(horizontal = 32.dp, vertical = 20.dp),
             // 8 dp, not 12: the bar, its labels, the search row and the count line need the height on a handheld.
             verticalArrangement = Arrangement.spacedBy(8.dp),

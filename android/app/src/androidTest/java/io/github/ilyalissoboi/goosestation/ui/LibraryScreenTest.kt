@@ -3,12 +3,17 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.view.View
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +26,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -53,6 +59,10 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
@@ -73,6 +83,7 @@ import io.github.ilyalissoboi.goosestation.update.ChannelRelease
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -1067,5 +1078,59 @@ class LibraryScreenTest {
         press(Key.ButtonA)
 
         assertEquals(1, badgeClicks)
+    }
+
+    // From the Thor: a game hides the system bars, and they come back only once the library is up again. The library
+    // was laid out over the whole window first and then shrank, resizing the grid's covers on screen.
+    @Test
+    fun theGridKeepsItsSizeAsTheSystemBarsComeBack() {
+        var view: View? = null
+        var library by mutableStateOf(false)
+        rule.setContent {
+            val current = LocalView.current
+            SideEffect { view = current }
+            GooseStationTheme {
+                if (library) {
+                    LibraryScreen(
+                        search = TextFieldState(),
+                        games = games,
+                        gridView = true,
+                        banners = emptyList(),
+                        message = null,
+                        isError = false,
+                        onToggleView = {},
+                        onOpenSettings = {},
+                        onRefresh = {},
+                        onStartGame = {},
+                        focusPath = null,
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        val host = view!!
+        val bars = WindowInsetsCompat.Type.systemBars()
+
+        fun insets() = ViewCompat.getRootWindowInsets(host)!!
+
+        fun controller() = WindowCompat.getInsetsController((host.context as Activity).window, host)
+        // Nothing to see on a device whose bars take no room from the window.
+        assumeTrue(insets().getInsetsIgnoringVisibility(bars) != Insets.NONE)
+
+        // Edge to edge, as the app is: the bars are drawn over the window, and take no room from it.
+        rule.runOnUiThread {
+            (host.context as ComponentActivity).enableEdgeToEdge()
+            controller().hide(bars)
+        }
+        rule.waitUntil(5_000) { insets().getInsets(bars) == Insets.NONE }
+        library = true
+        rule.waitForIdle()
+        val hidden = rule.onNodeWithText("Game 01").fetchSemanticsNode().boundsInWindow
+
+        rule.runOnUiThread { controller().show(bars) }
+        rule.waitUntil(5_000) { insets().getInsets(bars) == insets().getInsetsIgnoringVisibility(bars) }
+        rule.waitForIdle()
+
+        assertEquals(hidden, rule.onNodeWithText("Game 01").fetchSemanticsNode().boundsInWindow)
     }
 }

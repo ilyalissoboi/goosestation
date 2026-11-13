@@ -3,6 +3,8 @@
 
 package io.github.ilyalissoboi.goosestation.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
+import io.github.ilyalissoboi.goosestation.ui.theme.Motion
 
 /** The focus ring's width, and its gap from the element, so it never touches the element's fill. */
 private val FOCUS_WIDTH = 2.dp
@@ -53,20 +56,51 @@ private val FOCUS_OFFSET = 2.dp
 
 /**
  * Draws the focus ring around an element while [focused]: a `focus` outline of [shape], [FOCUS_OFFSET] outside its
- * edge. Being outside, it needs that much room around the element, or a clipping parent cuts it.
+ * edge, fading in and out over [Motion.FOCUS_MS]. Being outside, it needs that much room around the element, or a
+ * clipping parent cuts it.
  */
+@Composable
 fun Modifier.focusIndicator(
     focused: Boolean,
     color: Color,
     shape: Shape = GsShapes.medium,
-): Modifier =
-    drawBehind {
-        if (!focused) return@drawBehind
+): Modifier {
+    val shown by animateFloatAsState(if (focused) 1f else 0f, tween(Motion.FOCUS_MS), label = "focus ring")
+    return drawBehind {
+        if (shown == 0f) return@drawBehind
         val stroke = FOCUS_WIDTH.toPx()
         val inset = FOCUS_OFFSET.toPx() + stroke / 2
         val outline = shape.createOutline(Size(size.width + 2 * inset, size.height + 2 * inset), layoutDirection, this)
-        translate(-inset, -inset) { drawOutline(outline, color, style = Stroke(stroke)) }
+        translate(
+            -inset,
+            -inset,
+        ) { drawOutline(outline, color.copy(alpha = color.alpha * shown), style = Stroke(stroke)) }
     }
+}
+
+// The focused fill under an element, fading with its ring.
+@Composable
+private fun Modifier.focusFill(
+    focused: Boolean,
+    fill: Color?,
+    shape: Shape,
+): Modifier {
+    val shown by animateFloatAsState(
+        if (focused &&
+            fill != null
+        ) {
+            1f
+        } else {
+            0f
+        },
+        tween(Motion.FOCUS_MS),
+        label = "focus fill",
+    )
+    return drawBehind {
+        if (fill == null || shown == 0f) return@drawBehind
+        drawOutline(shape.createOutline(size, layoutDirection, this), fill.copy(alpha = fill.alpha * shown))
+    }
+}
 
 /**
  * Makes an element focusable and clickable for a D-pad: A, Enter, the D-pad centre or a tap call [onClick]. A
@@ -133,7 +167,7 @@ fun Modifier.focusRing(
                 )
             },
         ).focusIndicator(focused && ring, focusColor, shape)
-        .background(if (focused && focusedFill != null) focusedFill else Color.Transparent, shape)
+        .focusFill(focused, focusedFill, shape)
 }
 
 /**
@@ -155,7 +189,7 @@ fun Modifier.focusStop(
         .semantics(mergeDescendants = true) {}
         .focusable()
         .focusIndicator(focused, focusColor, shape)
-        .background(if (focused && focusedFill != null) focusedFill else Color.Transparent, shape)
+        .focusFill(focused, focusedFill, shape)
 }
 
 /** What a button is for, which sets how loud it is. */

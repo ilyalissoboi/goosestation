@@ -52,7 +52,7 @@ import io.github.ilyalissoboi.goosestation.ui.PortScreen
 import io.github.ilyalissoboi.goosestation.ui.PostProcessingScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SavesScreen
-import io.github.ilyalissoboi.goosestation.ui.SettingsScreen
+import io.github.ilyalissoboi.goosestation.ui.SettingsHub
 import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.SharedPageScreen
 import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
@@ -143,92 +143,21 @@ class MainActivity : ComponentActivity() {
                                 touchKey = touch.releases,
                             )
                         }
-                        Screen.Settings ->
-                            SettingsScreen(
-                                focusEntry = AppController.settingsEntry,
-                                coreReady = AppController.settingsReady,
-                                onOpen = AppController::openSettingsPage,
-                                onBack = AppController::closeSettings,
-                            )
-                        Screen.Interface ->
-                            CorePageRoute(CorePage.Interface) { values, onChange ->
-                                val updates = AppController.updates?.takeIf { it.build.canUpdate }
-                                InterfaceScreen(
-                                    values,
-                                    onChange,
-                                    onBack = AppController::closeSettingsPage,
-                                    updates =
-                                        updates?.let {
-                                            InterfaceUpdates(it.checkNowState) {
-                                                it.checkNow(values[InterfaceSettings.UPDATE_CHANNEL])
-                                            }
-                                        },
-                                )
-                            }
-                        Screen.Console -> SharedPageRoute(CorePage.Console)
-                        Screen.Emulation -> SharedPageRoute(CorePage.Emulation)
-                        Screen.PostProcessing ->
-                            PostProcessingScreen(
-                                AppController.postProcessingPage,
-                                AppController.shaderPacks,
-                                onBack = AppController::closeSettingsPage,
-                            )
-                        Screen.Advanced -> SharedPageRoute(CorePage.Advanced)
-                        Screen.Audio -> SharedPageRoute(CorePage.Audio)
-                        Screen.Graphics -> SharedPageRoute(CorePage.Graphics)
-                        Screen.Achievements -> {
-                            val page = AppController.achievementsPage
-                            val account = page.account
-                            val settings = page.settings
-                            if (account == null || settings == null) {
-                                SettingsLoadingPage("Achievements", onBack = AppController::closeSettingsPage)
-                            } else {
-                                AchievementsScreen(
-                                    account = account,
-                                    settings = settings,
-                                    signingIn = page.signingIn,
-                                    error = page.error,
-                                    expired = page.expired,
-                                    passwordCleared = page.passwordCleared,
-                                    queue = page.queue,
-                                    onSignIn = page::signIn,
-                                    onSignOut = page::signOut,
-                                    onChange = page::change,
-                                    onBack = AppController::closeSettingsPage,
-                                )
-                            }
-                        }
-                        Screen.MemoryCards -> {
-                            val page = AppController.memcardSyncPage
-                            val state = page.state
-                            if (state == null) {
-                                SettingsLoadingPage("Memory cards", onBack = AppController::closeSettingsPage)
-                            } else {
-                                MemcardSyncScreen(
-                                    state = state,
-                                    onEnabled = page::setEnabled,
-                                    onText = page::setText,
-                                    onSecret = page::storeSecret,
-                                    onRemovePassphrase = page::removePassphrase,
-                                    onSyncNow = page::syncNow,
-                                    onOpenConflicts = AppController::openSyncConflicts,
-                                    cardsSummary = MemcardEditorWords.cardCount(AppController.memcardEditor.cardCount),
-                                    onManageCards = AppController::openMemcardEditor,
-                                    onBack = AppController::closeSettingsPage,
-                                    cards =
-                                        AppController.settingsPages.values(CorePage.MemoryCards)?.let {
-                                            CardSlots(
-                                                it,
-                                                AppController.settingsPages.names,
-                                                AppController.settingsPages.sharedCards,
-                                                onChange = { new ->
-                                                    AppController.settingsPages.change(CorePage.MemoryCards, new)
-                                                },
-                                            )
-                                        },
-                                )
-                            }
-                        }
+                        Screen.Settings,
+                        Screen.Interface,
+                        Screen.Console,
+                        Screen.Emulation,
+                        Screen.PostProcessing,
+                        Screen.Advanced,
+                        Screen.Audio,
+                        Screen.Graphics,
+                        Screen.Achievements,
+                        Screen.MemoryCards,
+                        Screen.Bios,
+                        Screen.Controllers,
+                        Screen.Covers,
+                        Screen.Folders,
+                        -> SettingsRoute(AppController.screen)
                         Screen.GameSettings ->
                             GameSettingsHost(
                                 AppController.gameSettingsPages,
@@ -269,165 +198,6 @@ class MainActivity : ComponentActivity() {
                                     onBack = AppController::closeSyncConflicts,
                                 )
                             }
-                        }
-                        Screen.Bios -> {
-                            val bios = AppController.settingsPages.bios
-                            if (bios == null) {
-                                SettingsLoadingPage("BIOS", onBack = AppController::closeSettingsPage)
-                            } else {
-                                BiosScreen(
-                                    images = bios.images,
-                                    auto = bios.auto,
-                                    overrides = bios.overrides,
-                                    fastBoot = bios.fastBoot,
-                                    onSetOverride = AppController.settingsPages::setBiosOverride,
-                                    onFastBoot = AppController.settingsPages::setFastBoot,
-                                    onBack = AppController::closeSettingsPage,
-                                )
-                            }
-                        }
-                        Screen.Controllers -> {
-                            val page = AppController.controllersPage
-                            val state = page.state
-                            when (val view = state.view) {
-                                ControllersView.Hub ->
-                                    ControllersScreen(
-                                        controllers = state.controllers,
-                                        labels = state.labels,
-                                        ports = state.ports,
-                                        rumble = state.rumble,
-                                        offered = state.offered,
-                                        portTypes = state.portTypes,
-                                        typeNames = state.typeNames,
-                                        multitap = state.multitap,
-                                        multitapNames = state.multitapNames,
-                                        onPort = page::setPort,
-                                        onRumble = page::setRumble,
-                                        onMultitap = page::setMultitap,
-                                        onOpenPort = page::openPort,
-                                        onOpenHotkeys = page::openHotkeys,
-                                        onBack = AppController::controllersBack,
-                                        cameFrom = state.cameFrom,
-                                        touch = AppController.touchControls.settings,
-                                        onTouch = { AppController.touchControls.settings = it },
-                                    )
-                                is ControllersView.Port -> {
-                                    val bindings = state.bindings
-                                    val title =
-                                        state.offered.firstOrNull { it.value == view.pad }?.label
-                                            ?: Pads.label(view.pad)
-                                    if (bindings == null) {
-                                        SettingsLoadingPage(title, onBack = AppController::controllersBack)
-                                    } else {
-                                        PortScreen(
-                                            title = title,
-                                            controllers =
-                                                state.controllers.filter {
-                                                    (state.ports[it.descriptor] ?: 0) ==
-                                                        view.pad
-                                                },
-                                            labels = state.labels,
-                                            selected = state.selected,
-                                            bindings = bindings,
-                                            bindingsFor = state.bindingsFor,
-                                            capturing = state.capturing,
-                                            secondsLeft = state.secondsLeft,
-                                            undoFor = state.undo?.name,
-                                            onSelect = AppController::selectController,
-                                            onCapture = AppController::captureBinding,
-                                            glyphs = state.bindingsType in GLYPH_TYPES,
-                                            onCancelCapture = AppController::cancelCapture,
-                                            onClear = AppController::clearBinding,
-                                            onUndo = page::undo,
-                                            onDropUndo = page::dropUndo,
-                                            onReset = AppController::resetBindings,
-                                            onBack = AppController::controllersBack,
-                                            pad = view.pad,
-                                            type = state.portTypes[view.pad],
-                                            typeNames = state.typeNames,
-                                            onType = { page.setType(view.pad, it) },
-                                            typeSettings = state.typeSettings,
-                                            values = state.portValues,
-                                            onChange = page::changePort,
-                                            onOpenMacro = { page.openMacro(view.pad, it) },
-                                            focusMacro = (state.cameFrom as? ControllersView.Macro)?.macro,
-                                        )
-                                    }
-                                }
-                                is ControllersView.Macro -> {
-                                    val port =
-                                        state.offered.firstOrNull { it.value == view.pad }?.label
-                                            ?: Pads.label(view.pad)
-                                    MacroScreen(
-                                        title = "Macro ${view.macro} · $port",
-                                        pad = view.pad,
-                                        macro = view.macro,
-                                        controllers =
-                                            state.controllers.filter {
-                                                (state.ports[it.descriptor] ?: 0) ==
-                                                    view.pad
-                                            },
-                                        labels = state.labels,
-                                        selected = state.selected,
-                                        triggers = state.macros.orEmpty(),
-                                        triggersFor = state.bindingsFor.takeIf { state.macros != null },
-                                        inputs = state.macroInputs,
-                                        values = state.macroValues,
-                                        capturing = state.capturing,
-                                        secondsLeft = state.secondsLeft,
-                                        undoFor = state.undo?.name,
-                                        onSelect = AppController::selectController,
-                                        onCapture = AppController::captureBinding,
-                                        onCancelCapture = AppController::cancelCapture,
-                                        onClear = AppController::clearBinding,
-                                        onUndo = page::undo,
-                                        onDropUndo = page::dropUndo,
-                                        onChange = page::changeMacro,
-                                        onBack = AppController::controllersBack,
-                                        port = port,
-                                    )
-                                }
-                                ControllersView.Hotkeys ->
-                                    HotkeysScreen(
-                                        controllers = state.controllers,
-                                        labels = state.labels,
-                                        selected = state.selected,
-                                        hotkeys = state.hotkeys.orEmpty(),
-                                        hotkeysFor = state.bindingsFor.takeIf { state.hotkeys != null },
-                                        capturing = state.capturing,
-                                        secondsLeft = state.secondsLeft,
-                                        undoFor = state.undo?.name,
-                                        onSelect = AppController::selectController,
-                                        onCaptureHotkey = AppController::captureHotkey,
-                                        onCancelCapture = AppController::cancelCapture,
-                                        onClear = AppController::clearBinding,
-                                        onUndo = page::undo,
-                                        onDropUndo = page::dropUndo,
-                                        onBack = AppController::controllersBack,
-                                    )
-                            }
-                        }
-                        Screen.Covers -> CoversScreen(AppController.covers, onBack = AppController::closeSettingsPage)
-                        Screen.Folders -> {
-                            val mirrorState by AppController.mirrorState.collectAsState()
-                            FoldersScreen(
-                                folders = AppController.folders,
-                                biosImages = AppController.biosImages,
-                                dataStatus = AppController.dataStatus(mirrorState),
-                                dataReachable = AppController.dataReachable(mirrorState),
-                                candidate = AppController.dataCandidate,
-                                progress = AppController.dataChange,
-                                message = AppController.message,
-                                isError = AppController.messageIsError,
-                                onChangeBios = AppController::changeBios,
-                                onRescanBios = AppController::rescanBios,
-                                onAddGames = AppController::addGamesFolder,
-                                onSetGames = AppController::setGamesFolders,
-                                onChangeData = AppController::pickDataFolder,
-                                onChooseData = AppController::changeDataFolder,
-                                onCancelData = AppController::cancelDataChange,
-                                onBack = AppController::closeFolders,
-                            )
                         }
                         Screen.Library -> {
                             val mirrorState by AppController.mirrorState.collectAsState()
@@ -530,15 +300,293 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** [page] once its values are read ([content], given them and where its changes go), its loading page until then. */
+/**
+ * The settings: their categories, and [screen]'s page if it's one ([Screen.page]), in two panels or one at a time
+ * ([SettingsHub]).
+ */
+@Composable
+private fun SettingsRoute(screen: Screen) {
+    SettingsHub(
+        page = screen.page,
+        focusEntry = AppController.settingsEntry,
+        inPage = AppController.settingsInPage,
+        coreReady = AppController.settingsReady,
+        // A data folder change under way ends in a restart: nothing else opens meanwhile.
+        locked = AppController.dataChange != null,
+        onOpen = AppController::openSettingsPage,
+        onShow = AppController::showSettingsPage,
+        onEnterPage = AppController::enterSettingsPage,
+        onClosePage = AppController::closeSettingsPage,
+        onLeave = AppController::leaveSettings,
+    ) { onBack ->
+        SettingsPageContent(screen, onBack)
+    }
+}
+
+/** [screen]'s settings page, which goes back by [onBack]; nothing for a screen that isn't one. */
+@Composable
+private fun SettingsPageContent(
+    screen: Screen,
+    onBack: () -> Unit,
+) {
+    // One view up on the Controllers page, and out of it from its hub.
+    val controllersBack = { AppController.controllersBack(onBack) }
+    when (screen) {
+        Screen.Interface ->
+            CorePageRoute(CorePage.Interface, onBack) { values, onChange ->
+                val updates = AppController.updates?.takeIf { it.build.canUpdate }
+                InterfaceScreen(
+                    values,
+                    onChange,
+                    onBack = onBack,
+                    updates =
+                        updates?.let {
+                            InterfaceUpdates(it.checkNowState) {
+                                it.checkNow(values[InterfaceSettings.UPDATE_CHANNEL])
+                            }
+                        },
+                )
+            }
+        Screen.Console -> SharedPageRoute(CorePage.Console, onBack)
+        Screen.Emulation -> SharedPageRoute(CorePage.Emulation, onBack)
+        Screen.PostProcessing ->
+            PostProcessingScreen(
+                AppController.postProcessingPage,
+                AppController.shaderPacks,
+                onBack = onBack,
+            )
+        Screen.Advanced -> SharedPageRoute(CorePage.Advanced, onBack)
+        Screen.Audio -> SharedPageRoute(CorePage.Audio, onBack)
+        Screen.Graphics -> SharedPageRoute(CorePage.Graphics, onBack)
+        Screen.Achievements -> {
+            val page = AppController.achievementsPage
+            val account = page.account
+            val settings = page.settings
+            if (account == null || settings == null) {
+                SettingsLoadingPage("Achievements", onBack = onBack)
+            } else {
+                AchievementsScreen(
+                    account = account,
+                    settings = settings,
+                    signingIn = page.signingIn,
+                    error = page.error,
+                    expired = page.expired,
+                    passwordCleared = page.passwordCleared,
+                    queue = page.queue,
+                    onSignIn = page::signIn,
+                    onSignOut = page::signOut,
+                    onChange = page::change,
+                    onBack = onBack,
+                )
+            }
+        }
+        Screen.MemoryCards -> {
+            val page = AppController.memcardSyncPage
+            val state = page.state
+            if (state == null) {
+                SettingsLoadingPage("Memory cards", onBack = onBack)
+            } else {
+                MemcardSyncScreen(
+                    state = state,
+                    onEnabled = page::setEnabled,
+                    onText = page::setText,
+                    onSecret = page::storeSecret,
+                    onRemovePassphrase = page::removePassphrase,
+                    onSyncNow = page::syncNow,
+                    onOpenConflicts = AppController::openSyncConflicts,
+                    cardsSummary = MemcardEditorWords.cardCount(AppController.memcardEditor.cardCount),
+                    onManageCards = AppController::openMemcardEditor,
+                    onBack = onBack,
+                    cards =
+                        AppController.settingsPages.values(CorePage.MemoryCards)?.let {
+                            CardSlots(
+                                it,
+                                AppController.settingsPages.names,
+                                AppController.settingsPages.sharedCards,
+                                onChange = { new ->
+                                    AppController.settingsPages.change(CorePage.MemoryCards, new)
+                                },
+                            )
+                        },
+                )
+            }
+        }
+        Screen.Bios -> {
+            val bios = AppController.settingsPages.bios
+            if (bios == null) {
+                SettingsLoadingPage("BIOS", onBack = onBack)
+            } else {
+                BiosScreen(
+                    images = bios.images,
+                    auto = bios.auto,
+                    overrides = bios.overrides,
+                    fastBoot = bios.fastBoot,
+                    onSetOverride = AppController.settingsPages::setBiosOverride,
+                    onFastBoot = AppController.settingsPages::setFastBoot,
+                    onBack = onBack,
+                )
+            }
+        }
+        Screen.Controllers -> {
+            val page = AppController.controllersPage
+            val state = page.state
+            when (val view = state.view) {
+                ControllersView.Hub ->
+                    ControllersScreen(
+                        controllers = state.controllers,
+                        labels = state.labels,
+                        ports = state.ports,
+                        rumble = state.rumble,
+                        offered = state.offered,
+                        portTypes = state.portTypes,
+                        typeNames = state.typeNames,
+                        multitap = state.multitap,
+                        multitapNames = state.multitapNames,
+                        onPort = page::setPort,
+                        onRumble = page::setRumble,
+                        onMultitap = page::setMultitap,
+                        onOpenPort = page::openPort,
+                        onOpenHotkeys = page::openHotkeys,
+                        onBack = controllersBack,
+                        cameFrom = state.cameFrom,
+                        touch = AppController.touchControls.settings,
+                        onTouch = { AppController.touchControls.settings = it },
+                    )
+                is ControllersView.Port -> {
+                    val bindings = state.bindings
+                    val title =
+                        state.offered.firstOrNull { it.value == view.pad }?.label
+                            ?: Pads.label(view.pad)
+                    if (bindings == null) {
+                        SettingsLoadingPage(title, onBack = controllersBack)
+                    } else {
+                        PortScreen(
+                            title = title,
+                            controllers =
+                                state.controllers.filter {
+                                    (state.ports[it.descriptor] ?: 0) ==
+                                        view.pad
+                                },
+                            labels = state.labels,
+                            selected = state.selected,
+                            bindings = bindings,
+                            bindingsFor = state.bindingsFor,
+                            capturing = state.capturing,
+                            secondsLeft = state.secondsLeft,
+                            undoFor = state.undo?.name,
+                            onSelect = AppController::selectController,
+                            onCapture = AppController::captureBinding,
+                            glyphs = state.bindingsType in GLYPH_TYPES,
+                            onCancelCapture = AppController::cancelCapture,
+                            onClear = AppController::clearBinding,
+                            onUndo = page::undo,
+                            onDropUndo = page::dropUndo,
+                            onReset = AppController::resetBindings,
+                            onBack = controllersBack,
+                            pad = view.pad,
+                            type = state.portTypes[view.pad],
+                            typeNames = state.typeNames,
+                            onType = { page.setType(view.pad, it) },
+                            typeSettings = state.typeSettings,
+                            values = state.portValues,
+                            onChange = page::changePort,
+                            onOpenMacro = { page.openMacro(view.pad, it) },
+                            focusMacro = (state.cameFrom as? ControllersView.Macro)?.macro,
+                        )
+                    }
+                }
+                is ControllersView.Macro -> {
+                    val port =
+                        state.offered.firstOrNull { it.value == view.pad }?.label
+                            ?: Pads.label(view.pad)
+                    MacroScreen(
+                        title = "Macro ${view.macro} · $port",
+                        pad = view.pad,
+                        macro = view.macro,
+                        controllers =
+                            state.controllers.filter {
+                                (state.ports[it.descriptor] ?: 0) ==
+                                    view.pad
+                            },
+                        labels = state.labels,
+                        selected = state.selected,
+                        triggers = state.macros.orEmpty(),
+                        triggersFor = state.bindingsFor.takeIf { state.macros != null },
+                        inputs = state.macroInputs,
+                        values = state.macroValues,
+                        capturing = state.capturing,
+                        secondsLeft = state.secondsLeft,
+                        undoFor = state.undo?.name,
+                        onSelect = AppController::selectController,
+                        onCapture = AppController::captureBinding,
+                        onCancelCapture = AppController::cancelCapture,
+                        onClear = AppController::clearBinding,
+                        onUndo = page::undo,
+                        onDropUndo = page::dropUndo,
+                        onChange = page::changeMacro,
+                        onBack = controllersBack,
+                        port = port,
+                    )
+                }
+                ControllersView.Hotkeys ->
+                    HotkeysScreen(
+                        controllers = state.controllers,
+                        labels = state.labels,
+                        selected = state.selected,
+                        hotkeys = state.hotkeys.orEmpty(),
+                        hotkeysFor = state.bindingsFor.takeIf { state.hotkeys != null },
+                        capturing = state.capturing,
+                        secondsLeft = state.secondsLeft,
+                        undoFor = state.undo?.name,
+                        onSelect = AppController::selectController,
+                        onCaptureHotkey = AppController::captureHotkey,
+                        onCancelCapture = AppController::cancelCapture,
+                        onClear = AppController::clearBinding,
+                        onUndo = page::undo,
+                        onDropUndo = page::dropUndo,
+                        onBack = controllersBack,
+                    )
+            }
+        }
+        Screen.Covers -> CoversScreen(AppController.covers, onBack = onBack)
+        Screen.Folders -> {
+            val mirrorState by AppController.mirrorState.collectAsState()
+            FoldersScreen(
+                folders = AppController.folders,
+                biosImages = AppController.biosImages,
+                dataStatus = AppController.dataStatus(mirrorState),
+                dataReachable = AppController.dataReachable(mirrorState),
+                candidate = AppController.dataCandidate,
+                progress = AppController.dataChange,
+                message = AppController.message,
+                isError = AppController.messageIsError,
+                onChangeBios = AppController::changeBios,
+                onRescanBios = AppController::rescanBios,
+                onAddGames = AppController::addGamesFolder,
+                onSetGames = AppController::setGamesFolders,
+                onChangeData = AppController::pickDataFolder,
+                onChooseData = AppController::changeDataFolder,
+                onCancelData = AppController::cancelDataChange,
+                onBack = onBack,
+            )
+        }
+        else -> {}
+    }
+}
+
+/**
+ * [page] once its values are read ([content], given them and where its changes go), its loading page until then; it
+ * goes back by [onBack].
+ */
 @Composable
 private fun CorePageRoute(
     page: CorePage,
+    onBack: () -> Unit,
     content: @Composable (SettingValues, (SettingValues) -> Unit) -> Unit,
 ) {
     val values = AppController.settingsPages.values(page)
     if (values == null) {
-        SettingsLoadingPage(page.title, onBack = AppController::closeSettingsPage)
+        SettingsLoadingPage(page.title, onBack = onBack)
     } else {
         content(values) { AppController.settingsPages.change(page, it) }
     }
@@ -546,10 +594,13 @@ private fun CorePageRoute(
 
 // One of the pages a game's settings have too: drawn as the game's are ([SharedPageScreen]).
 @Composable
-private fun SharedPageRoute(page: CorePage) {
+private fun SharedPageRoute(
+    page: CorePage,
+    onBack: () -> Unit,
+) {
     val shared = page.shared ?: return
-    CorePageRoute(page) { values, onChange ->
-        SharedPageScreen(shared, values, AppController.settingsPages.extras, onChange, AppController::closeSettingsPage)
+    CorePageRoute(page, onBack) { values, onChange ->
+        SharedPageScreen(shared, values, AppController.settingsPages.extras, onChange, onBack)
     }
 }
 

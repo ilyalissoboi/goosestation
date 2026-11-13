@@ -39,7 +39,8 @@ The Android app's screens, in [`docs/design-system/screenshots/`](design-system/
 Compose code, off a device, at a handheld's 960 x 540 dp in landscape (the AYN Thor's) and a phone's 411 x 891 dp in
 portrait. The Controllers page, with its PlayStation glyphs, is the page's composable alone at 960 x 540 dp too,
 rendered on the emulator. The pause menu and its slot panel are from the emulator, a phone in landscape (914 x 411
-dp), over Ace Combat 3. The orange outline is the focus, where a controller is.
+dp), over Ace Combat 3. The orange outline is the focus, where a controller is. The settings' picture is of their
+list, which a narrow window still shows; from 600 dp wide they're in two panels (see Settings, below).
 
 | | |
 | --- | --- |
@@ -300,6 +301,38 @@ is `success` (a ticked square), Syncing… `info` (`sync`), Offline `warning` (`
 height, and opens what it's about: the conflicts, or Settings > Memory cards. `SyncBadges.of()` picks the badge;
 it's never Synced while nothing syncs.
 
+### The settings' two panels: `SettingsHub`, `SettingsPanels` (`ui/`), `RailItem` (`RailItem.kt`)
+
+```kotlin
+SettingsHub(page = screen.page, …) { onBack -> GraphicsScreen(…, onBack = onBack) }
+RailItem("Graphics", GsIcons.display, current = true, onClick = ::enter)
+```
+
+The settings are a list and its detail: the categories down the left, and the open one's page beside them.
+
+- **From 600 dp wide** (times the font scale: the rail, and a page at the 360 dp every layout works at) it's
+  `SettingsPanels`. The rail is the design system's nav rail: `rail-width` (232 dp) of `surface` to the window's
+  edge, with a `line` hairline on its page's side, "Settings" in `title-2` at the top, then a `RailItem` per
+  category, 4 dp apart, 12 dp from the rail's sides. The page is a `SettingsPage` as ever, its own title in `title-1`
+  on `ground`; the rail has the window's start inset and the page the others.
+- **Narrower**, it's one or the other: the categories as a list of `NavRow`s (each with its icon and a summary), and
+  the page alone once one is opened. B goes back from the page to the list.
+- `RailItem`: a category's icon at `icon` (20 dp) and its label in `label-sm`, 12 dp apart, 48 dp tall at
+  `radius-md`. `ink-muted` at rest; the current one on `beak-soft` with an `ink` label and a `beak-ink` icon; a
+  focused one in the same inks, with the focus ring, on `raised` unless it's the current one. Disabled, `ink-faint`,
+  and the focus passes it by. A screen reader hears a tab, selected while it's current.
+- **The page follows the focus down the rail**: Up and Down show each category's page as they reach it, so the page
+  beside the rail is always the focused category's. A, Enter, Right or a tap go into the page, on its first row; B,
+  Back, or Left where no row takes it, give the focus back to its category, and B from the rail leaves the settings.
+  Up, Down and Right stop at the page's edges. Until the page is gone into, it can't take the focus, though it asks
+  for it as it opens.
+- **A category that can't open** (all but Folders, before the core has started) is disabled, and one line at the
+  rail's foot says why, rather than each item: under the list, so it shows wherever the rail has scrolled to.
+- **An `OverlayPanel` over the page** covers the rail too, as it does the whole window (`OverlayHost`); once it
+  closes, the focus is back in the page.
+- A screen a page opens that isn't a page of settings (the memory card editor, the sync conflicts) takes the whole
+  window, and comes back with the focus in the page.
+
 ### Settings: `SettingsPage`, `CyclerRow`, `NumberRow`, `SwitchRow`, `NavRow`, `SettingsSection` (`SettingsRows.kt`)
 
 ```kotlin
@@ -335,7 +368,8 @@ SettingsPage("Graphics", onBack = onBack) {
   the row, and the arrows are faint while it's open.
 - `SwitchRow`: on/off, a square toggle and no word. The state is in the row's semantics (`toggleableState`), so
   screen readers say it and tests check it with `assertIsOn()`.
-- `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron. Disabled, its summary says why.
+- `NavRow`: an entry that opens a page, with a summary of what's in it and a chevron, after its icon if it has one
+  (`icon`, 20 dp, `ink-muted`, `beak-ink` while focused). Disabled, its summary says why.
 - A row's `note` explains a consequence ("Higher is sharper and slower.") or a fallback. Never repeat the label.
 - **Rows for a game** (a page of a game's own settings, its values a game's, `SettingValues.isGame`): the page
   shows the game's title as an `Eyebrow` over its own, and every row can use the global setting. The shared rows
@@ -604,6 +638,10 @@ SVG per core input name (`Triangle`, `LLeft`, …).
   for a sort's first direction, down when reversed), `list-bulleted` (the view button in grid mode: it switches to the
   list; `list`, three plain lines, stays the memory card picker's) and `refresh` (one arrow turning round an octagon,
   so it can't be taken for `sync`'s two arrows, which the sync badge uses).
+- **The settings' categories** each have one, in the rail and in the list: `window` (Interface), `console` (a
+  console from above: its lid and two ports), `gauge` (Emulation), `chip` (BIOS), `display` (Graphics), `layers`
+  (Post-processing), `speaker` (Audio), `gamepad` (Controllers), `memory-card`, `trophy` (Achievements), `terminal`
+  (Advanced), `folder` and `image` (Covers).
 - **Status icons differ in shape** (square, ticked square, triangle, octagon) so they read without colour.
 - **To add an icon:** draw it in the same style as an SVG in `docs/design-system/icons/`, using only `<polygon>`,
   `<polyline>`, `<rect>` and `<path>` with absolute `M`, `L`, `H` and `V`, stroked `#14171c`. Then run
@@ -661,6 +699,8 @@ The instrumented tests (`android/app/src/androidTest/…/ui/`) hold every screen
 
 - `FocusAuditTest`, through `assertControllerReady()`: something has focus, and everything clickable can be focused,
   but for a part marked `notAFocusStop`. Add the new screen to it.
+- A settings page is tested alone, as the composable it is; `SettingsPanelsTest` drives the two panels around a
+  page, and `OrientationLayoutTest.theSettingsInTwoPanelsWhereTheyFit` lays a page out in the narrower panel.
 - `OrientationLayoutTest`: at phone and handheld sizes, portrait and landscape, at text 1.0× and 1.3×, no text is cut
   off, broken mid-word, overlapping or off-screen, and every focusable is reached with the D-pad and scrolled into
   view. Add settings pages and anything with long, user-supplied text to it.
@@ -673,5 +713,6 @@ See [docs/android.md](android.md) for running them.
 
 The design system defines these, and the published page previews them, but no app has them yet: a light theme on
 Android; a badge for region; the
-desktop nav rail; and the whole desktop app and Big Picture. Build them from the published page's previews and the
+desktop nav rail (the Android settings' rail has its look, with their categories in place of the app's places); and
+the whole desktop app and Big Picture. Build them from the published page's previews and the
 tokens.

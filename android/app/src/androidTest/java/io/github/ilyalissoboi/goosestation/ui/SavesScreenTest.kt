@@ -91,7 +91,9 @@ class SavesScreenTest {
     private fun SavesPageState.lists(change: (SaveListState) -> SaveListState) = copy(lists = change(lists))
 
     private fun show() {
-        rule.setContent { GooseStationTheme { SavesScreen(page, actions, now, onBack = { backs++ }) } }
+        rule.setContent {
+            GooseStationTheme { InOverlayHost { SavesScreen(page, actions, now, onBack = { backs++ }) } }
+        }
         rule.waitForIdle()
     }
 

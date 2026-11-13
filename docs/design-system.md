@@ -434,16 +434,16 @@ OverlayPanel(onBack = ::close, title = "Erase every save on Shared card 1?") { T
 A small panel over a screen, drawn in the app's window, never a window dialog: a `scrim` over the whole window, past
 the system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, 24 dp
 inside, in the safe area, that scrolls (as little as it must, keeping those 24 dp beside what the focus brings into
-view, so its last button never sits against its edge). The focus can't leave it, and the caller focuses what it holds. B and Back
-call `onBack` on the key-up of a press that began in it. It scrolls the least that shows the focus, not to the middle:
-a focused text field asks to show its cursor as well as itself, which centring can't do. A question in it puts its
-destructive answer first and the focus on the safe one.
+view, so its last button never sits against its edge). The focus can't leave it while it's open, and the caller
+focuses what it holds. B and Back call `onBack` on the key-up of a press that began in it. It scrolls the least that
+shows the focus, not to the middle: a focused text field asks to show its cursor as well as itself, which centring
+can't do. A question in it puts its destructive answer first and the focus on the safe one.
 
 It's an `Overlay`, a pane titled `title` (the line at its top). An overlay draws into the nearest `OverlayHost`
 (`OverlayHostBox`, at the app's root and around the in-game settings), above the screens it holds, which are hidden from
 accessibility while it shows, so a screen reader reaches only the overlay and announces it by its title. An overlay may
-draw a frame after it's asked for: it asks for its focus from inside itself. The library's sort list is an `Overlay`
-too.
+draw a frame after it's asked for, and go a frame after it's closed: it asks for its focus from inside itself, and lets
+it go as it closes, so the screen can take it back at once. The library's sort list is an `Overlay` too.
 
 ### `ProgressBar` (`ProgressBar.kt`)
 

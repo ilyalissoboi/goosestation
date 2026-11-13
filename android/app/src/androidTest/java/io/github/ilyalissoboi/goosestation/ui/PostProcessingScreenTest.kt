@@ -54,11 +54,13 @@ class PostProcessingScreenTest {
     private fun show() {
         rule.setContent {
             GooseStationTheme {
-                PostProcessingScreen(
-                    model,
-                    model.packs,
-                    onBack = { model.calls += "back" },
-                )
+                InOverlayHost {
+                    PostProcessingScreen(
+                        model,
+                        model.packs,
+                        onBack = { model.calls += "back" },
+                    )
+                }
             }
         }
         rule.waitForIdle()
@@ -255,7 +257,7 @@ class PostProcessingScreenTest {
         rule.setContent {
             GooseStationTheme {
                 CompositionLocalProvider(LocalGameContext provides GameContext("Pad Test", false, false)) {
-                    PostProcessingScreen(model, model.packs, onBack = {})
+                    InOverlayHost { PostProcessingScreen(model, model.packs, onBack = {}) }
                 }
             }
         }

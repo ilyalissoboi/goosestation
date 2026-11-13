@@ -49,7 +49,7 @@ within() {
 
 # Starts a holder of lock $1, as root $2, in the background; it holds it until it's sent TERM. Sets HOLDER.
 hold() {
-	ROOT="$2" bash -c 'source "$0"; trap "release_emulator_lock \"$1\"" EXIT; trap "exit 143" TERM
+	ROOT="$2" bash -c 'set -e; source "$0"; trap "release_emulator_lock \"$1\"" EXIT; trap "exit 143" TERM
 		take_emulator_lock "$1" full >/dev/null; sleep 60 & wait' "$LIB" "$1" &
 	HOLDER=$!
 	within 5 grep -q "^pid=$HOLDER$" "$1/owner" 2>/dev/null || fail "the holder didn't take the lock"
@@ -58,7 +58,7 @@ hold() {
 # Starts a taker of lock $1, as root $2, in the background, writing what it prints to $3 and "taken" once it holds
 # the lock; it holds it until it's sent TERM. Sets TAKER.
 take() {
-	ROOT="$2" bash -c 'source "$0"; trap "release_emulator_lock \"$1\"" EXIT; trap "exit 143" TERM
+	ROOT="$2" bash -c 'set -e; source "$0"; trap "release_emulator_lock \"$1\"" EXIT; trap "exit 143" TERM
 		take_emulator_lock "$1" quick; echo taken; sleep 60 & wait' "$LIB" "$1" >"$3" 2>&1 &
 	TAKER=$!
 }
@@ -137,9 +137,10 @@ CASES=$((CASES + 1))
 # 6. A held lock makes a second taker wait, saying who holds it, again after a while, then take it once it's free.
 hold "$L" "$T/root-a"
 take "$L" "$T/root-b" "$T/taker6"
-sleep 1.6
-waiting=$(grep -c "The test emulators are in use by $T/root-a (pid $HOLDER, full, since " "$T/taker6" || true)
-[ "$waiting" -ge 2 ] || fail "the waiting taker said who holds the lock $waiting times, not twice: $(cat "$T/taker6")"
+said_twice() {
+	[ "$(grep -c "The test emulators are in use by $T/root-a (pid $HOLDER, full, since " "$T/taker6")" -ge 2 ]
+}
+within 5 said_twice || fail "the waiting taker didn't say twice who holds the lock: $(cat "$T/taker6")"
 ! grep -q taken "$T/taker6" || fail "the second taker took a held lock"
 kill -TERM "$HOLDER"
 within 2 grep -q taken "$T/taker6" || fail "the second taker didn't take the freed lock: $(cat "$T/taker6")"
@@ -185,7 +186,7 @@ CASES=$((CASES + 1))
 # 10. Two takers at once: one holds it, then the other, never both.
 : >"$T/turns"
 for who in one two; do
-	ROOT="$T/root-$who" bash -c 'source "$0"; take_emulator_lock "$1" quick >/dev/null
+	ROOT="$T/root-$who" bash -c 'set -e; source "$0"; take_emulator_lock "$1" quick >/dev/null
 		[ ! -e "$2.holding" ] || echo overlap >>"$2"
 		touch "$2.holding"; echo got >>"$2"; sleep 1; rm -f "$2.holding"
 		release_emulator_lock "$1"' "$LIB" "$L" "$T/turns" &
@@ -193,6 +194,30 @@ done
 wait
 [ "$(grep -c got "$T/turns")" -eq 2 ] || fail "both takers didn't get their turn: $(cat "$T/turns")"
 ! grep -q overlap "$T/turns" || fail "both takers held the lock at once"
+[ ! -e "$L" ] || fail "the takers left the lock"
+CASES=$((CASES + 1))
+
+# 11. A stale lock and two takers at once, as when a run killed with kill -9 leaves one for two waiting runs: each
+# takes it in turn, never both at once, and neither is stopped. Rounds of it, since the clearing is a race.
+for round in $(seq 1 25); do
+	sleep 0 &
+	gone=$!
+	wait "$gone"
+	rm -rf "$L"
+	mkdir "$L"
+	printf 'pid=%s\nroot=%s\ntier=full\nstarted=2026-11-13 10:00:00\n' "$gone" "$T/root-gone" >"$L/owner"
+	: >"$T/turns"
+	for who in one two; do
+		ROOT="$T/root-$who" bash -c 'set -e; source "$0"; take_emulator_lock "$1" quick >/dev/null
+			[ ! -e "$2.holding" ] || echo overlap >>"$2"
+			touch "$2.holding"; echo got >>"$2"; sleep 0.1; rm -f "$2.holding"
+			release_emulator_lock "$1"; echo released >>"$2"' "$LIB" "$L" "$T/turns" 2>>"$T/turns.err" &
+	done
+	wait
+	[ "$(grep -c released "$T/turns")" -eq 2 ] ||
+		fail "round $round: both takers didn't finish their turn: $(cat "$T/turns" "$T/turns.err")"
+	! grep -q overlap "$T/turns" || fail "round $round: both takers held the lock at once"
+done
 [ ! -e "$L" ] || fail "the takers left the lock"
 CASES=$((CASES + 1))
 

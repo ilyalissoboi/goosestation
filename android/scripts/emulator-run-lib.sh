@@ -86,9 +86,38 @@ wait_until_gone() {
 	done
 }
 
-# Field $2 of lock $1's owner file, or nothing.
+# Field $2 of lock $1's owner file, or nothing. Never false: under the tier script's set -e, a missing owner file
+# (a holder between its mkdir and writing it) would stop the run.
 _lock_field() {
-	sed -n "s/^$2=//p" "$1/owner" 2>/dev/null
+	sed -n "s/^$2=//p" "$1/owner" 2>/dev/null || true
+}
+
+# Why lock $1 is stale, or nothing: its holder no longer runs, or it has no owner file a minute after it was made.
+_lock_stale() {
+	local pid
+	pid="$(_lock_field "$1" pid)"
+	if [ -n "$pid" ]; then
+		kill -0 "$pid" 2>/dev/null || echo "left by $(_lock_field "$1" root) (pid $pid)"
+	elif [ ! -e "$1/owner" ] && [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+		echo "with no owner, made over a minute ago"
+	fi
+}
+
+# Clears lock $1 if it's stale, looked at again under a short lock of its own ($1.clearing): two runs clearing it at
+# once would otherwise have the second remove the lock the first has just taken. False if another run is clearing it.
+_clear_stale_lock() {
+	local lock="$1" why
+	if ! mkdir "$lock.clearing" 2>/dev/null; then
+		# One left by a run stopped while clearing: cleared a minute on.
+		[ -z "$(find "$lock.clearing" -maxdepth 0 -mmin +1 2>/dev/null)" ] || rmdir "$lock.clearing" 2>/dev/null || true
+		return 1
+	fi
+	why="$(_lock_stale "$lock")"
+	if [ -n "$why" ]; then
+		echo "Cleared a stale lock $why."
+		rm -rf "$lock"
+	fi
+	rmdir "$lock.clearing"
 }
 
 # Takes lock $1 (a directory) for tier $2, waiting for as long as another run holds it, and saying who that is when it
@@ -96,24 +125,14 @@ _lock_field() {
 # A lock whose holder no longer runs, or one without its owner file a minute after it was made, is cleared.
 take_emulator_lock() {
 	local lock="$1" tier="$2" poll="${GOOSE_TEST_LOCK_POLL:-5}" repeat="${GOOSE_TEST_LOCK_REPEAT:-300}"
-	local said="" pid
+	local said=""
 	while ! mkdir "$lock" 2>/dev/null; do
-		pid="$(_lock_field "$lock" pid)"
-		if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
-			# Looked at again just before: a run that cleared it meanwhile and took it isn't cleared.
-			if [ "$(_lock_field "$lock" pid)" = "$pid" ]; then
-				echo "Cleared a stale lock left by $(_lock_field "$lock" root) (pid $pid)."
-				rm -rf "$lock"
-			fi
-			continue
-		fi
-		if [ -z "$pid" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] && [ ! -e "$lock/owner" ]; then
-			echo "Cleared a stale lock with no owner, made over a minute ago."
-			rm -rf "$lock"
+		if [ -n "$(_lock_stale "$lock")" ]; then
+			_clear_stale_lock "$lock" || sleep 0.1
 			continue
 		fi
 		if [ -z "$said" ] || [ $((SECONDS - said)) -ge "$repeat" ]; then
-			echo "The test emulators are in use by $(_lock_field "$lock" root) (pid ${pid:-?}," \
+			echo "The test emulators are in use by $(_lock_field "$lock" root) (pid $(_lock_field "$lock" pid)," \
 				"$(_lock_field "$lock" tier), since $(_lock_field "$lock" started)): waiting."
 			said=$SECONDS
 		fi

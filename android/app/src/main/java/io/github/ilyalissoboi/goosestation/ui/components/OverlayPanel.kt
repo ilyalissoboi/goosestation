@@ -4,6 +4,8 @@
 package io.github.ilyalissoboi.goosestation.ui.components
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -23,16 +25,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
+import io.github.ilyalissoboi.goosestation.ui.theme.Motion
 
 /**
  * A small panel over the screen, drawn in the app's window (never a window dialog): a `scrim` over all of it, past the
@@ -50,10 +55,14 @@ fun OverlayPanel(
 ) {
     BackHandler(onBack = onBack)
     val colors = GooseStationTheme.colors
+    // The scrim and panel fade in over Motion.DIALOG_MS; what they hold is there, and focused, from the first frame.
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, tween(Motion.DIALOG_MS)) }
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
+                .graphicsLayer { alpha = appear.value }
                 .background(colors.scrim)
                 .pointerInput(Unit) { detectTapGestures {} }
                 .backKeys(preview = false, onBack = onBack)

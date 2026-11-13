@@ -5,6 +5,8 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -70,6 +73,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
+import io.github.ilyalissoboi.goosestation.ui.theme.Motion
 import java.time.ZonedDateTime
 
 /** What Reset console and Exit game say while the game is writing a memory card ([GameMenuState.cardBusy]). */
@@ -163,11 +167,16 @@ fun GameMenu(
         if (state.confirmingExit || state.replacingResume != null) cameFrom.exit = true
     }
     val colors = GooseStationTheme.colors
+    // The menu fades in over Motion.DIALOG_MS as it opens. Composed afresh on the way back from the game's settings,
+    // it was open all along, and doesn't. Above the layouts below, so changing between them doesn't fade it either.
+    val appear = remember { Animatable(if (state.cameFromSettings) 1f else 0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, tween(Motion.DIALOG_MS)) }
 
     BoxWithConstraints(
         modifier =
             Modifier
                 .fillMaxSize()
+                .graphicsLayer { alpha = appear.value }
                 .background(colors.scrim)
                 .onKeyEvent { event ->
                     val key = event.key

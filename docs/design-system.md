@@ -37,20 +37,25 @@ source for it. When a value changes, change `tokens.json` and the implementation
 
 The Android app's screens, in [`docs/design-system/screenshots/`](design-system/screenshots/): rendered from the
 Compose code, off a device, at a handheld's 960 x 540 dp in landscape (the AYN Thor's) and a phone's 411 x 891 dp in
-portrait. The Controllers page, with its PlayStation glyphs, is the page's composable alone at 960 x 540 dp too,
-rendered on the emulator. The pause menu and its slot panel are from the emulator, a phone in landscape (914 x 411
-dp), over Ace Combat 3. The orange outline is the focus, where a controller is. The settings' picture is of their
-list, which a narrow window still shows; from 600 dp wide they're in two panels (see Settings, below).
+portrait. The settings are in their two panels: as they open, on Interface with the focus on its category, then the
+Graphics and BIOS pages with the focus in the page and their category marked in the rail. Those three, and the
+settings' list (what a window under 600 dp wide shows in the panels' place), are the Compose code drawn on the Thor
+at the same sizes, two pixels to the dp for the handheld's and three for the phone's. The Controllers page, with its
+PlayStation glyphs, is the page's composable alone at 960 x 540 dp, rendered on the emulator: in the app it sits
+beside the rail, as Graphics does. The pause menu and its slot panel are from the emulator, a phone in landscape
+(914 x 411 dp), over Ace Combat 3. The orange outline is the focus, where a controller is.
 
 | | |
 | --- | --- |
 | ![The library as a grid, with a warning notice](design-system/screenshots/library-grid.png) | ![The library as a list, scanning](design-system/screenshots/library-list.png) |
-| ![The settings hub](design-system/screenshots/settings.png) | ![The Graphics page: cyclers and a toggle](design-system/screenshots/graphics.png) |
-| ![The BIOS page](design-system/screenshots/bios.png) | ![The Controllers page](design-system/screenshots/controllers.png) |
+| ![The settings as they open: the categories' rail, the focus on Interface, and its page beside it](design-system/screenshots/settings.png) | ![The Graphics page beside the rail, the focus on its first row: cyclers under a section heading](design-system/screenshots/graphics.png) |
+| ![The BIOS page beside the rail](design-system/screenshots/bios.png) | ![The Controllers page](design-system/screenshots/controllers.png) |
 | ![Setup's welcome](design-system/screenshots/setup.png) | ![The pause menu over a game](design-system/screenshots/pause.png) |
 | ![The Load state slot panel beside the pause menu](design-system/screenshots/save-slots.png) | |
 
-![The library on a phone, in portrait](design-system/screenshots/library-phone.png)
+| | |
+| --- | --- |
+| ![The library on a phone, in portrait](design-system/screenshots/library-phone.png) | ![The settings' categories as a list, each with its icon and a summary, in a narrow window](design-system/screenshots/settings-list.png) |
 
 ## Principles
 

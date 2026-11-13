@@ -105,6 +105,8 @@ import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
+import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.update.Change
 import io.github.ilyalissoboi.goosestation.update.Changes
@@ -371,6 +373,51 @@ class FocusAuditTest {
         show { SettingsScreen(focusEntry = null, coreReady = true, onOpen = {}, onBack = {}) }
 
         rule.assertControllerReady()
+    }
+
+    @Test
+    fun settingsPanels() {
+        showSettingsPanels(coreReady = true, inPage = false)
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun settingsPanelsInThePage() {
+        showSettingsPanels(coreReady = true, inPage = true)
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun settingsPanelsWithoutTheCore() {
+        showSettingsPanels(coreReady = false, inPage = false)
+
+        rule.assertControllerReady()
+    }
+
+    // The two panels over the BIOS page (or Folders', which needs no core, standing in as a page of rows).
+    private fun showSettingsPanels(
+        coreReady: Boolean,
+        inPage: Boolean,
+    ) = show {
+        DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(960.dp, 540.dp))) {
+            SettingsPanels(
+                current = if (coreReady) SettingsEntry.Bios else SettingsEntry.Folders,
+                inPage = inPage,
+                coreReady = coreReady,
+                locked = false,
+                onShow = {},
+                onEnterPage = {},
+                onBack = {},
+            ) { onBack ->
+                val first = remember { FocusRequester() }
+                LaunchedEffect(Unit) { first.requestFocus() }
+                SettingsPage("BIOS", onBack = onBack) {
+                    SwitchRow("Fast boot", false, onToggle = {}, modifier = Modifier.focusRequester(first))
+                }
+            }
+        }
     }
 
     @Test

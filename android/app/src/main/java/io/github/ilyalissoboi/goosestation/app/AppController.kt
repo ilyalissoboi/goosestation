@@ -81,7 +81,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.system.exitProcess
 
-/** The app's screens: the settings hub, and its pages ([Screen.page]), open from the library. */
+/**
+ * The app's screens: the settings' categories with no page open ([Screen.Settings], the list a narrow window shows),
+ * and their pages ([Screen.page]), open from the library.
+ */
 enum class Screen(
     /** The hub's entry for this page of the settings; null for any other screen. */
     val page: SettingsEntry? = null,
@@ -207,8 +210,15 @@ object AppController : NativeCallbacks {
     var updates by mutableStateOf<Updates?>(null)
         private set
 
-    /** The hub's entry for the page last left, which the hub focuses; null on opening it from the library. */
+    /** The category of the page last left, which the settings focus; null on opening them from the library. */
     var settingsEntry by mutableStateOf<SettingsEntry?>(null)
+        private set
+
+    /**
+     * In the settings' two panels, the focus is in the open page, not on its category beside it: set on going into
+     * the page, or opening it from elsewhere, and kept while a screen the page opened shows.
+     */
+    var settingsInPage by mutableStateOf(false)
         private set
 
     /** The Graphics and BIOS pages' values. */
@@ -786,7 +796,10 @@ object AppController : NativeCallbacks {
                 when (grant.kind) {
                     FolderKind.Data -> {
                         offerDataFolder(picked)
-                        if (dataCandidate?.uri == picked && screen == Screen.Library) screen = Screen.Folders
+                        if (dataCandidate?.uri == picked && screen == Screen.Library) {
+                            settingsInPage = true
+                            screen = Screen.Folders
+                        }
                         return@launch
                     }
                     FolderKind.Bios -> {
@@ -843,10 +856,11 @@ object AppController : NativeCallbacks {
 
     // --- The settings ---
 
-    /** Opens the settings hub, from the library. */
+    /** Opens the settings, from the library, on their categories. */
     fun openSettings() {
         if (screen != Screen.Library) return
         settingsEntry = null
+        settingsInPage = false
         screen = Screen.Settings
     }
 
@@ -861,11 +875,55 @@ object AppController : NativeCallbacks {
     val settingsReady get() = ready && !gameActive
 
     /**
-     * Opens the hub's [entry], if it can: all but Folders need [settingsReady]. A [CorePage] and BIOS show once their
-     * settings are read, on [coreDispatcher]; Controllers once its bindings are.
+     * Opens [entry]'s page from the categories' list, with the focus in it, if it can: all but Folders need
+     * [settingsReady]. A [CorePage] and BIOS show once their settings are read, on [coreDispatcher]; Controllers once
+     * its bindings are.
      */
     fun openSettingsPage(entry: SettingsEntry) {
         if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
+        loadSettingsPage(entry)
+        settingsInPage = true
+    }
+
+    /**
+     * Shows [entry]'s page beside the categories, in the settings' two panels, with the focus on its category: in
+     * place of the page that's open, if one is and it can close. The open page's own category only takes the focus
+     * back from it.
+     */
+    fun showSettingsPage(entry: SettingsEntry) {
+        if (screen != Screen.Settings && screen.page == null) return
+        if (screen.page != entry) {
+            if (entry.needsCore && !settingsReady) return
+            if (screen.page != null && unloadSettingsPage() == null) return
+            loadSettingsPage(entry)
+        }
+        settingsInPage = false
+    }
+
+    /** The focus goes into the open page, in the settings' two panels. */
+    fun enterSettingsPage() {
+        if (screen.page != null) settingsInPage = true
+    }
+
+    /** Back from a settings page to the categories' list, which focuses the page's entry, if the page can close. */
+    fun closeSettingsPage() {
+        val page = unloadSettingsPage() ?: return
+        settingsEntry = page
+        settingsInPage = false
+        screen = Screen.Settings
+    }
+
+    /** Back to the library from the settings, with a page open or not, if the page can close. */
+    fun leaveSettings() {
+        if (screen == Screen.Settings) return closeSettings()
+        unloadSettingsPage() ?: return
+        settingsInPage = false
+        focusSettings = true
+        screen = Screen.Library
+    }
+
+    // Reads what entry's page shows, and makes it the screen.
+    private fun loadSettingsPage(entry: SettingsEntry) {
         CorePage.of(entry)?.let(settingsPages::load)
         when (entry) {
             // Read as their CorePage, above.
@@ -890,18 +948,23 @@ object AppController : NativeCallbacks {
         screen = Screen.entries.first { it.page == entry }
     }
 
-    /** Back from a settings page to the hub, which focuses the page's entry. Folders goes back by [closeFolders]. */
-    fun closeSettingsPage() {
-        val page = screen.page ?: return
-        // Its own way back, which a data folder change under way keeps from running.
-        if (page == SettingsEntry.Folders) return closeFolders()
-        if (page == SettingsEntry.Controllers) controllersPage.close()
-        if (page == SettingsEntry.PostProcessing) postProcessingPage.close()
-        if (page == SettingsEntry.Covers) covers.close()
-        // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before this.
-        if (page == SettingsEntry.Advanced) scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
-        settingsEntry = page
-        screen = Screen.Settings
+    // Closes the open settings page, for another screen to take its place: its category, or null with no page open,
+    // or one that can't close (Folders, while a data folder change is under way).
+    private fun unloadSettingsPage(): SettingsEntry? {
+        val page = screen.page ?: return null
+        when (page) {
+            SettingsEntry.Folders -> {
+                if (dataChange != null) return null
+                cancelDataChange()
+            }
+            SettingsEntry.Controllers -> controllersPage.close()
+            SettingsEntry.PostProcessing -> postProcessingPage.close()
+            SettingsEntry.Covers -> covers.close()
+            // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before this.
+            SettingsEntry.Advanced -> scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
+            else -> {}
+        }
+        return page
     }
 
     // --- A game's own settings ---
@@ -996,6 +1059,7 @@ object AppController : NativeCallbacks {
         } else {
             settingsEntry = null
             screen = Screen.Settings
+            // With the focus in the page, which is what the badge is about.
             openSettingsPage(SettingsEntry.MemoryCards)
         }
     }
@@ -1009,9 +1073,9 @@ object AppController : NativeCallbacks {
 
     // --- The Controllers page ([ControllersPage]) ---
 
-    /** Back on the Controllers page: one view up, and out of the page from its hub. */
-    fun controllersBack() {
-        if (!controllersPage.back()) closeSettingsPage()
+    /** Back on the Controllers page: one view up, and out of the page ([leave]) from its hub. */
+    fun controllersBack(leave: () -> Unit) {
+        if (!controllersPage.back()) leave()
     }
 
     fun selectController(descriptor: String) = controllersPage.select(descriptor)
@@ -1025,13 +1089,6 @@ object AppController : NativeCallbacks {
     fun clearBinding(name: String) = controllersPage.clear(name)
 
     fun resetBindings() = controllersPage.reset()
-
-    fun closeFolders() {
-        if (screen != Screen.Folders || dataChange != null) return
-        cancelDataChange()
-        settingsEntry = SettingsEntry.Folders
-        screen = Screen.Settings
-    }
 
     // --- The folder settings ---
 

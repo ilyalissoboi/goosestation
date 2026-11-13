@@ -638,8 +638,8 @@ fun SwitchRow(
 }
 
 /**
- * An entry that opens a page: the [label], and a [summary] of what's in it under it. A disabled one is dimmed, and
- * can't be focused or opened.
+ * An entry that opens a page: the [label], and a [summary] of what's in it under it, after its [icon], if it has one
+ * (`ink-muted`, `beak-ink` while the entry has the focus). A disabled one is dimmed, and can't be focused or opened.
  */
 @Composable
 fun NavRow(
@@ -648,17 +648,32 @@ fun NavRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    icon: ImageVector? = null,
 ) {
     val colors = GooseStationTheme.colors
+    var focused by remember { mutableStateOf(false) }
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .focusRing(enabled = enabled, role = Role.Button, onClick = onClick)
+                .focusRing(enabled = enabled, role = Role.Button, onFocusChange = { focused = it }, onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        icon?.let {
+            Icon(
+                it,
+                contentDescription = null,
+                tint =
+                    when {
+                        !enabled -> colors.inkFaint
+                        focused -> colors.beakInk
+                        else -> colors.inkMuted
+                    },
+                modifier = Modifier.size(20.dp),
+            )
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 label,

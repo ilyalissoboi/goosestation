@@ -1448,6 +1448,62 @@ class OrientationLayoutTest {
         }
     }
 
+    // The settings as the window has room for them: two panels with the Graphics page in the narrower one, or the
+    // page alone.
+    @Test
+    fun theSettingsInTwoPanelsWhereTheyFit() {
+        eachConfig({
+            var page by remember { mutableStateOf(SettingsEntry.Graphics) }
+            var inPage by remember { mutableStateOf(false) }
+            SettingsHub(
+                page = page,
+                focusEntry = null,
+                inPage = inPage,
+                coreReady = true,
+                locked = false,
+                onOpen = {},
+                onShow = {
+                    page = it
+                    inPage = false
+                },
+                onEnterPage = { inPage = true },
+                onClosePage = {},
+                onLeave = {},
+            ) { onBack ->
+                GraphicsScreen(GRAPHICS_FROM_FILE, SampleNames.ALL, vulkanFailed = true, onChange = {}, onBack = onBack)
+            }
+        }) { config ->
+            val panels = rule.onAllNodes(hasTestTag(SETTINGS_RAIL)).fetchSemanticsNodes().isNotEmpty()
+            assertEquals("$config in two panels", config.size.width >= TWO_PANEL_MIN_WIDTH * config.fontScale, panels)
+            assertTextsLaidOut(inView = true)
+            if (!panels) {
+                assertTrue(focusedHas("Renderer"))
+                return@eachConfig
+            }
+            assertTrue(focusedHas("Graphics"))
+            pressUntilFocusedInPanels(Key.DirectionDown, "Covers")
+            assertTextsLaidOut(inView = true)
+            pressUntilFocusedInPanels(Key.DirectionUp, "Interface")
+            press(Key.DirectionRight)
+            assertTrue(focusedHas("Renderer"))
+            pressUntilFocusedInPanels(Key.DirectionDown, "Show FPS")
+            assertTextsLaidOut(inView = true)
+        }
+    }
+
+    // In the settings' two panels, the focus moves within its own panel's scroll.
+    private fun pressUntilFocusedInPanels(
+        key: Key,
+        text: String,
+    ) {
+        repeat(60) {
+            if (focusedHas(text)) return
+            press(key)
+            assertFocusedInView(scrollerAroundFocused())
+        }
+        if (!focusedHas(text)) fail("$key never focused \"$text\"")
+    }
+
     @Test
     fun theHubBeforeTheCoreStarts() {
         eachConfig({ SettingsScreen(focusEntry = null, coreReady = false, onOpen = {}, onBack = {}) }) {

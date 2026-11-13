@@ -623,13 +623,22 @@ by the ones setup picked. That happens once; other settings are kept.
 
 ### Changing settings
 
-**Settings**, in the library's top bar, opens a hub with twelve pages, in desktop's order: **Interface**, **Console**,
-**Emulation**, **BIOS**, **Graphics**, **Post-processing** (below), **Audio**, **Controllers**, **Memory cards** (see
-"Memory card sync"), **Achievements** (see "RetroAchievements"), **Advanced** and **Folders** (the folder settings
-above). Every page works with a D-pad
-alone, as setup does: the first row is focused when a page opens, A or Enter activates, and B or Back goes back. Back
-from a page focuses its entry in the hub, and Back from the hub focuses **Settings** in the library. A long page is
-split into desktop's sections, each under its name in small capitals (a heading, never a stop for the focus).
+**Settings**, in the library's top bar, opens the settings in two panels: their categories down the left, each with
+its icon, and the page of the one in focus beside them. The categories are in desktop's order: **Interface**,
+**Console**, **Emulation**, **BIOS**, **Graphics**, **Post-processing** (below), **Audio**, **Controllers**, **Memory
+cards** (see "Memory card sync"), **Achievements** (see "RetroAchievements"), **Advanced**, **Folders** (the folder
+settings above) and **Covers** (below). They open on Interface. Up and Down move through the categories, the page
+beside them changing as they go; A, Enter, Right or a tap on a category go into its page, on its first row. Every
+page works with a D-pad alone, as setup does: A or Enter activates, and B or Back goes back, a step at a time, then
+to the page's category (as Left does, from a row that doesn't step a value), and from there to **Settings** in the
+library. A long page is split into desktop's sections, each under its name in small capitals (a heading, never a stop
+for the focus). The memory card editor and the sync conflicts take the whole window, and come back to the Memory
+cards page.
+
+In a window under 600 dp wide (times the font scale: the app is landscape only, so this is a split screen, or large
+text on a small handheld), the categories are a list on their own, each with its summary, and a page opens over
+them: Back from a page focuses its entry in the list, called the hub below. `ui/SettingsScreen.kt`'s `SettingsHub`
+picks the layout, and `ui/SettingsPanels.kt` is the two panels.
 
 - **A setting with a few values** shows its current one between two arrows: left and right step through the values,
   stopping at the first and the last, and each step is the change; a tap on an arrow steps its way. A, Enter or a tap
@@ -654,7 +663,9 @@ split into desktop's sections, each under its name in small capitals (a heading,
 - **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
   pull, so the folders can still be picked again. The other pages need the core: until it has started (and its first
   catch-up pulls are done, see "The data folder and its mirror"), they're shown disabled, with "Available once
-  GooseStation has started.", and the hub's focus starts on Folders.
+  GooseStation has started." (in the two panels, one line at the rail's foot: "The other settings are available once
+  GooseStation has started."), and the settings open on Folders. While a data folder change is under way, no other
+  category can be picked.
 - **Settings change only from the library**, never while a game runs, so every change takes effect at the next game
   start. A game's own settings (below) are the exception: the running game's change from its menu.
 - **Each change is saved at once**, to the working copy's `settings.ini`, which the core then applies

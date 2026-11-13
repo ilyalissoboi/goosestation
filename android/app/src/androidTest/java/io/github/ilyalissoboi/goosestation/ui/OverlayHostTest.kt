@@ -5,11 +5,14 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -20,6 +23,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -59,7 +63,10 @@ class OverlayHostTest {
                 val host = remember { OverlayHost() }
                 OverlayHostBox(host) {
                     Box(Modifier.fillMaxSize()) {
-                        ActionButton("Under", onClick = {})
+                        // As a screen does once its question closes: it focuses its own row again.
+                        val under = remember { FocusRequester() }
+                        LaunchedEffect(first) { if (!first) under.requestFocus() }
+                        ActionButton("Under", onClick = {}, modifier = Modifier.focusRequester(under))
                         if (first) {
                             QuestionPanel("Delete?", "Delete", onConfirm = {}, onCancel = {
                                 closed += "first"
@@ -121,6 +128,18 @@ class OverlayHostTest {
         rule.waitForIdle()
 
         assertFalse(hidden("Under"))
+    }
+
+    // From the final review: the host drops a closed panel a frame later, and its focus trap mustn't refuse the screen's
+    // own request meanwhile, or nothing would be focused.
+    @Test
+    fun closingItLetsTheScreenTakeTheFocusBack() {
+        show()
+        rule.onNodeWithText("Cancel").performClick()
+        rule.waitForIdle()
+
+        assertEquals(listOf("first"), closed)
+        rule.onNodeWithText("Under").assertIsFocused()
     }
 
     // Review Focus 2: drawn in the host, the overlay still takes the focus as it opens: its safe answer.

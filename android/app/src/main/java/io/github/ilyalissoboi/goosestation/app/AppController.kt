@@ -557,8 +557,9 @@ object AppController : NativeCallbacks {
             NativeGameCoreApi,
             gameRecords,
             lastSlots,
-            ::startGameFromStateNow,
-            ::startGameNow,
+            startFrom = ::startGameFromStateNow,
+            starting = { startGate.starting },
+            start = ::startGameNow,
         )
     }
 
@@ -1259,7 +1260,7 @@ object AppController : NativeCallbacks {
 
     /** Starts [game], once it's asked whether to resume where it was left, if it has a resume state ([gameStarts]). */
     fun startGame(game: GameEntry) {
-        if (!ready || gameActive) return
+        if (!ready || gameActive || startGate.starting) return
         gameStarts.play(game)
     }
 

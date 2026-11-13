@@ -14,6 +14,8 @@ import kotlin.coroutines.CoroutineContext
  * work (library scans, covers) isn't counted, so a start doesn't wait for it.
  *
  * It counts each block dispatched, not each coroutine: a settings write runs as one block, with no suspension inside.
+ * It shares the core queue's one thread, in order: settings work queued behind a scan runs after it, so a start that
+ * waits for that work waits for the scan too. A start with none outstanding doesn't.
  */
 class SettingsQueue(
     private val core: CoroutineDispatcher,

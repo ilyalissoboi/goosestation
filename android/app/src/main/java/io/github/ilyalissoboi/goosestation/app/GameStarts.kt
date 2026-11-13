@@ -38,6 +38,8 @@ class GameStarts(
     private val lastSlots: LastSlotStore,
     /** Boots a game from a state: one of its saves, or a shared slot. */
     private val startFrom: (game: GameEntry, state: StateRef) -> Unit = { _, _ -> },
+    /** A start is waiting for the settings asked for before it: nothing is asked or started meanwhile. */
+    private val starting: () -> Boolean = { false },
     private val start: (game: GameEntry, disc: Int, resume: Boolean) -> Unit,
 ) {
     /** The question being asked, or null. */
@@ -55,7 +57,7 @@ class GameStarts(
      * and starts at once. A play while one is being looked at, or asked about, does nothing.
      */
     fun play(entry: GameEntry) {
-        if (checking || offer != null) return
+        if (checking || offer != null || starting()) return
         val serial = entry.serial
         if (serial.isBlank()) return start(entry, 1, false)
         checking = true
@@ -125,7 +127,7 @@ class GameStarts(
         state: StateRef,
         refused: (String) -> Unit,
     ) {
-        if (checking || offer != null) return
+        if (checking || offer != null || starting()) return
         checking = true
         scope.launch {
             try {

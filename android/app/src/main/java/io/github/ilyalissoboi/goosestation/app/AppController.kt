@@ -285,8 +285,11 @@ object AppController : NativeCallbacks {
             games = games.map { if (it.path == gamePath) it.copy(coverPath = coverPath) else it }
         }
 
+    // A sign-in waits for the server: on a queue of its own, so the pages don't wait behind it.
+    private val signInDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
-    val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+    val achievementsPage = AchievementsPage(scope, coreDispatcher, signInDispatcher, NativeCoreApi, NativeCoreSettings)
 
     /** Memory card sync's state, for the Memory cards page and the library's badge: read again as sync says it changed. */
     val memcardSyncStatus = MemcardSyncStatus(scope, Dispatchers.IO, NativeCoreApi)

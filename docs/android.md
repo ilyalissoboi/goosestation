@@ -660,7 +660,7 @@ picks the layout, and `ui/SettingsPanels.kt` is the two panels.
   speed below 100% says "Runs at 100% in hardcore mode."; an overclock below 100% says "Off in hardcore mode below
   100%.". Run-ahead isn't refused.
 
-- **The hub opens whenever the folder settings could**: even when the core failed to start, or during setup's first
+- **The settings open whenever the folder settings could**: even when the core failed to start, or during setup's first
   pull, so the folders can still be picked again. The other pages need the core: until it has started (and its first
   catch-up pulls are done, see "The data folder and its mirror"), they're shown disabled, with "Available once
   GooseStation has started." (in the two panels, one line at the rail's foot: "The other settings are available once
@@ -784,7 +784,7 @@ adb shell am start -n io.github.ilyalissoboi.goosestation.debug/io.github.ilyali
 
 ### Post-processing
 
-**Post-processing**, after Graphics in the hub, edits the core's two shader chains, as Qt's two tabs do, one at a
+**Post-processing**, after Graphics in the settings' categories, edits the core's two shader chains, as Qt's two tabs do, one at a
 time: its **Chain** switch, first, picks **Display** (`[PostProcessing]`, over the picture at the screen's resolution)
 or **Internal** (`[InternalPostProcessing]`, at the internal resolution, before the picture is scaled), with a line
 saying which is which, and opens on Display each time. Under it, the chosen chain's **On** switch (`Enabled`), its
@@ -2278,6 +2278,23 @@ over adb (`input -d 0 keyevent`, screenshots of display 0), on Wi-Fi. A real dow
 Step 17's other checks (Cancel mid-run, a game started or Home mid-run, Wi-Fi off, removing and restoring the preset)
 are still to do.
 
+### The settings in two panels (2026-11-14)
+
+The instrumented `ui` tests of #102, on the Thor (832 x 420 dp, text 1.0×), the debug build installed beside the
+release one and removed after. Compose tests, driven by injected keys: nobody has yet used the panels in the running
+app with a controller (step 8 of the checks below has it).
+
+| Check | Result |
+|---|---|
+| `SettingsPanelsTest` | Pass, 16 of 16: the page follows the focus down the rail; A, Enter, Right and a tap go into it; B, Back and Left come back; the D-pad stops at the page's edges; a question over the page keeps the focus and gives it back; the system's Back is the rail's once the focus is back on it; a narrow window lists the categories. |
+| `FocusAuditTest` | Pass, 105 of 105, with the panels alone, with the focus in the page, and before the core starts. |
+| `OverlayHostTest` | 5 of 6. `closingItLetsTheScreenTakeTheFocusBack` fails, as on `master` before #102: the closing panel's focus trap refuses the screen's own request, and nothing is focused. The settings' panels take the focus back themselves; a screen outside them doesn't. |
+
+The whole `ui` package ran on `goose-test-1` before `master` was merged in: 796 tests, 2 failing, both in
+`OrientationLayoutTest` (`graphicsThroughEachRowsChoices` at 640 x 360 dp and text 1.3×, and
+`aRowStaysPutAsTheFocusMovesAlongIt` at 960 x 540 dp and text 1.3×), and both failing the same way on `master` at
+`1ed569942`. It hasn't run since the merge.
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with
@@ -2406,6 +2423,14 @@ adb logcat -v time > thor.log
      Internal resolution, Aspect ratio, each BIOS region, the Controller row with a second pad connected), the
      Controllers page and a capture on it, then back to the library. The focused element always has a ring, B goes
      back a step, and each page's entry in the hub (or **Settings** in the library) has the focus again after it.
+   - [ ] The settings in two panels, with the built-in controller alone: they open on Interface, its category
+     focused and its page beside it. Down and Up change the page as they go, through every category. A, then Right,
+     go into the page on its first row; B, then Left from a toggle's row, come back to the category; Left on a
+     cycler's row steps it. In Controllers, open Port 1, come back to the rail with Left, and swipe Back: the
+     settings close (and B on the rail does the same). Touch a row of a page, then swipe Back from Port 1: one step
+     back in the page. Memory cards → Manage cards and back: the focus is in the Memory cards page.
+   - [ ] A question over a page (Post-processing, a favourite, Delete): the rail dims with the page; Cancel, and the
+     focus is back in the page, with B still working.
    - [ ] B also goes back from a page whose only focusable line does nothing: "Reading the settings…" while a page
      loads, and "Connect a controller to remap it." with no controller connected (the framework turns `BUTTON_B`
      into Back there).

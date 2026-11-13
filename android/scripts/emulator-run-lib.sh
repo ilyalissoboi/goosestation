@@ -37,7 +37,8 @@ _stop_tree() {
 # Runs the command after $1 (in the background, its input from /dev/null, without fd 3) for $1 seconds at most: its
 # status, or 124 if it ran past them, when it and everything it started are stopped and "timed out after $1 s:
 # <command>" goes to fd 3 if it's open (the tier script's terminal), else to stderr. fd 3 is closed for the command
-# so that a process it leaves running (adb's server) can't hold a pipe reading the tier's output open.
+# so that a process it leaves running (adb's server) can't hold a pipe reading the tier's output open. With
+# EMULATOR_LOCK set (to the lock this run holds), the command is noted as one of its workers (note_lock_worker).
 with_limit() {
 	local seconds="$1" flag pid watchdog status=0
 	shift
@@ -45,6 +46,9 @@ with_limit() {
 	rm -f "$flag"
 	"$@" </dev/null 3>&- &
 	pid=$!
+	if [ -n "${EMULATOR_LOCK:-}" ]; then
+		note_lock_worker "$EMULATOR_LOCK" "$pid"
+	fi
 	(
 		sleep "$seconds"
 		: >"$flag"
@@ -92,12 +96,24 @@ _lock_field() {
 	sed -n "s/^$2=//p" "$1/owner" 2>/dev/null || true
 }
 
-# Why lock $1 is stale, or nothing: its holder no longer runs, or it has no owner file a minute after it was made.
+# Notes process $2 as a worker of lock $1, if this run holds it: a process it started that uses the emulators (a shard,
+# a step), which a holder killed with kill -9 leaves running, so the lock stays held until it's gone too.
+note_lock_worker() {
+	[ "$(_lock_field "$1" pid)" = "$$" ] || return 0
+	echo "$2" >>"$1/workers"
+}
+
+# Why lock $1 is stale, or nothing: its holder and every worker it noted no longer run, or it has no owner file a
+# minute after it was made.
 _lock_stale() {
-	local pid
+	local pid worker
 	pid="$(_lock_field "$1" pid)"
 	if [ -n "$pid" ]; then
-		kill -0 "$pid" 2>/dev/null || echo "left by $(_lock_field "$1" root) (pid $pid)"
+		kill -0 "$pid" 2>/dev/null && return 0
+		for worker in $(cat "$1/workers" 2>/dev/null || true); do
+			kill -0 "$worker" 2>/dev/null && return 0
+		done
+		echo "left by $(_lock_field "$1" root) (pid $pid)"
 	elif [ ! -e "$1/owner" ] && [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
 		echo "with no owner, made over a minute ago"
 	fi

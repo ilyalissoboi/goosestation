@@ -304,7 +304,8 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
   `/tmp/goose-test-emulators.lock` (`GOOSE_TEST_LOCK` moves it), before it asks the emulators anything, and frees it
   when it ends, also when it's stopped. A second run waits for it, printing who holds it (the worktree, its process
   ID, the tier and since when) at once and every 5 minutes, then starts. A lock whose holder no longer runs (a run
-  killed with `kill -9`) is cleared, as is one with no owner file over a minute after it was made. Not under `$TMPDIR`,
+  killed with `kill -9`) is cleared once the shards and steps it started have stopped too, as is one with no owner
+  file over a minute after it was made. Not under `$TMPDIR`,
   which sessions can each have their own of, though they share the emulators.
 - **No step can hang a run**, so no run holds the emulators forever: each Gradle build is stopped after 60 minutes,
   each Gradle test part (a shard's `ui` or `core`, the OpenGL ES run) after 45, each `adb` call after 2 (the pushes of

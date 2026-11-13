@@ -113,6 +113,9 @@ trap 'exit 130' INT TERM
 # One run at a time on the emulators, from any worktree: taken before anything asks them anything, since the run
 # holding them restarts goose-test-2 in its OpenGL ES part.
 take_emulator_lock "$LOCK" "$TIER"
+# Each step under with_limit, and each shard, is noted in the lock as a worker: killed with kill -9, this run can't
+# free it, and its shards and steps would go on using the emulators, so the lock stays until they've stopped.
+EMULATOR_LOCK="$LOCK"
 
 # A step that waits on an emulator, for 2 minutes at most.
 adb_() {
@@ -255,6 +258,7 @@ pids=()
 for shard in "${!SERIALS[@]}"; do
 	run_shard "$shard" "${SERIALS[$shard]}" &
 	pids+=($!)
+	note_lock_worker "$LOCK" $!
 done
 for pid in "${pids[@]}"; do
 	wait "$pid" || status=1

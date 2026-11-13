@@ -221,4 +221,30 @@ done
 [ ! -e "$L" ] || fail "the takers left the lock"
 CASES=$((CASES + 1))
 
+# 12. A holder killed with kill -9 leaves its workers running (the tier's shards, a step under with_limit): its lock
+# is held until they've stopped too.
+rm -rf "$L"
+ROOT="$T/root-a" EMULATOR_LOCK="$L" bash -c 'set -e; source "$0"; take_emulator_lock "$1" full >/dev/null
+	sleep 60 &
+	note_lock_worker "$1" $!
+	echo $! >"$2.shard"
+	with_limit 60 sleep 60' "$LIB" "$L" "$T/workers" &
+HOLDER=$!
+within 5 test -s "$T/workers.shard" || fail "the holder didn't start its shard"
+within 5 bash -c '[ "$(grep -c . "$0/workers" 2>/dev/null)" -ge 2 ]' "$L" || fail "the holder's workers weren't noted"
+kill -KILL "$HOLDER"
+wait "$HOLDER" 2>/dev/null || true
+take "$L" "$T/root-b" "$T/taker12"
+sleep 1
+! grep -q taken "$T/taker12" || fail "a killed holder's lock was taken while its workers ran"
+grep -q "The test emulators are in use by $T/root-a" "$T/taker12" || fail "the taker didn't say who holds it"
+for pid in $(cat "$L/workers"); do
+	kill "$pid" 2>/dev/null || true
+done
+within 5 grep -q taken "$T/taker12" || fail "the lock wasn't taken once the workers stopped: $(cat "$T/taker12")"
+grep -q "Cleared a stale lock left by $T/root-a" "$T/taker12" || fail "the stale lock's clearing wasn't said"
+kill -TERM "$TAKER"
+within 3 test ! -e "$L" || fail "the taker left the lock"
+CASES=$((CASES + 1))
+
 echo "emulator-run-lib: all $CASES cases passed"

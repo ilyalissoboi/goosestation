@@ -75,6 +75,13 @@ with_limit 1 sleep 30 3>"$T/fd3" || status=$?
 grep -qF "timed out after 1 s: sleep 30" "$T/fd3" || fail "the timeout wasn't reported on fd 3: $(cat "$T/fd3")"
 CASES=$((CASES + 1))
 
+# 1b. The step doesn't get fd 3: a process it leaves running (an emulator, a daemon) would keep a pipe reading the
+# tier's output open for ever.
+status=0
+with_limit 5 bash -c '{ true >&3; } 2>/dev/null' 3>"$T/fd3" || status=$?
+[ "$status" -eq 1 ] || fail "with_limit's step has fd 3 open"
+CASES=$((CASES + 1))
+
 # 2. A timed-out step's children stop too.
 status=0
 with_limit 1 bash -c 'sleep 30 & echo $! >"$0"; wait' "$T/child" 3>/dev/null || status=$?

@@ -34,15 +34,16 @@ _stop_tree() {
 	kill -KILL $left 2>/dev/null || true
 }
 
-# Runs the command after $1 (in the background, its input from /dev/null) for $1 seconds at most: its status, or 124
-# if it ran past them, when it and everything it started are stopped and "timed out after $1 s: <command>" goes to
-# fd 3 if it's open (the tier script's terminal), else to stderr.
+# Runs the command after $1 (in the background, its input from /dev/null, without fd 3) for $1 seconds at most: its
+# status, or 124 if it ran past them, when it and everything it started are stopped and "timed out after $1 s:
+# <command>" goes to fd 3 if it's open (the tier script's terminal), else to stderr. fd 3 is closed for the command
+# so that a process it leaves running (adb's server) can't hold a pipe reading the tier's output open.
 with_limit() {
 	local seconds="$1" flag pid watchdog status=0
 	shift
 	flag="$(mktemp "${TMPDIR:-/tmp}/goose-limit.XXXXXX")"
 	rm -f "$flag"
-	"$@" </dev/null &
+	"$@" </dev/null 3>&- &
 	pid=$!
 	(
 		sleep "$seconds"

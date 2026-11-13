@@ -316,6 +316,11 @@ fun SettingsPanels(
             if (current != null) key(current) { page(pageBack) }
         }
     }
+    // While the rail has the focus back from the page, the system's Back is the rail's: out of the settings, as B
+    // is there, and not a step back in a page left on a view of its own (a controller's port, a shader's stage),
+    // whose handler would take it first. Composed as the focus comes back, so it's the newest handler, and gone
+    // once the page is gone into again, by a key or a touch.
+    if (!inPage) BackHandler(onBack = onBack)
 }
 
 /** Where [SettingsPanels] stands, as its handlers last left it: the category shown, and whether its page is gone into. */

@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -71,6 +74,15 @@ class SettingsPanelsTest {
     private var speed by mutableIntStateOf(1)
     private val shown = mutableListOf<SettingsEntry>()
     private var backs = 0
+    private var subView by mutableStateOf(false)
+    private var subViewBacks = 0
+    private var dispatcher: OnBackPressedDispatcher? = null
+
+    // The system's Back, which goes to the newest handler, not to the focus as the keys do.
+    private fun systemBack() {
+        rule.runOnUiThread { dispatcher!!.onBackPressed() }
+        rule.waitForIdle()
+    }
 
     // A page as the app's are: it focuses its first row as it opens, and has a row that takes Left and Right.
     @Composable
@@ -100,6 +112,9 @@ class SettingsPanelsTest {
                 )
                 ActionButton("Ask", onClick = { asking = true }, modifier = Modifier.focusRequester(ask))
             }
+            // A view of the page's own, with its own step back, as a controller's port has.
+            if (subView) BackHandler { subViewBacks++ }
+            dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
             if (asking) {
                 OverlayPanel(onBack = { asking = false }, title = "Ask?") {
                     // From inside it: the host draws it a frame after it is asked for.
@@ -312,6 +327,32 @@ class SettingsPanelsTest {
         rule.waitForIdle()
         rule.onNode(isFocused()).assert(hasAnyAncestor(hasTestTag(SETTINGS_PAGE)))
         assertEquals(emptyList<SettingsEntry>(), shown)
+    }
+
+    // In the page, the system's Back is the page's: a step back in its own view. Back on the rail, it's the rail's,
+    // though the page is still on that view.
+    @Test
+    fun theSystemsBackIsTheRailsOnceTheFocusIsBackOnIt() {
+        show()
+        press(Key.DirectionRight)
+        subView = true
+        rule.waitForIdle()
+
+        systemBack()
+        assertEquals(1, subViewBacks)
+        assertEquals(0, backs)
+
+        press(Key.DirectionLeft)
+        assertFocusedCategory(SettingsEntry.Interface)
+        systemBack()
+        assertEquals(1, subViewBacks)
+        assertEquals(1, backs)
+
+        // Gone into again, it's the page's once more.
+        press(Key.DirectionRight)
+        systemBack()
+        assertEquals(2, subViewBacks)
+        assertEquals(1, backs)
     }
 
     @Test

@@ -16,16 +16,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -33,6 +36,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -57,6 +61,23 @@ class SettingsRowsTest {
     private val coloursPicked = mutableListOf<Int>()
     private val toggles = mutableListOf<Boolean>()
     private var backs = 0
+
+    // A touch control is at least 48 dp (design-system.md): a near-miss on a smaller arrow opens the list instead.
+    @Test
+    fun aCyclersArrowsAndWellAreTouchSized() {
+        show()
+
+        for (tag in listOf("cycler-back", "cycler-forward")) {
+            rule
+                .onAllNodesWithTag(
+                    tag,
+                    useUnmergedTree = true,
+                )[0]
+                .assertWidthIsAtLeast(48.dp)
+                .assertHeightIsAtLeast(48.dp)
+        }
+        rule.onAllNodesWithTag("cycler-well", useUnmergedTree = true)[0].assertHeightIsAtLeast(48.dp)
+    }
 
     private fun show(size: String = "S") {
         rule.setContent {

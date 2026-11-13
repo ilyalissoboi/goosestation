@@ -81,6 +81,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -536,12 +537,14 @@ private fun Cycler(
     Row(
         modifier =
             Modifier
-                .heightIn(min = 40.dp)
+                // A touch control's height (design-system.md): the arrows in it are touch targets too.
+                .heightIn(min = 48.dp)
+                .testTag("cycler-well")
                 .background(colors.sunken, GsShapes.medium)
                 .border(1.dp, colors.lineStrong, GsShapes.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CyclerArrow(GsIcons.back, active, canGoBack, onBack)
+        CyclerArrow(GsIcons.back, active, canGoBack, onBack, Modifier.testTag("cycler-back"))
         Text(
             value,
             style = MaterialTheme.typography.titleSmall,
@@ -550,7 +553,7 @@ private fun Cycler(
             // After the arrows, so a long value wraps between them rather than pushing one out.
             modifier = Modifier.weight(1f, fill = false).widthIn(min = 96.dp).padding(vertical = 8.dp),
         )
-        CyclerArrow(GsIcons.forward, active, canGoForward, onForward)
+        CyclerArrow(GsIcons.forward, active, canGoForward, onForward, Modifier.testTag("cycler-forward"))
     }
 }
 
@@ -560,14 +563,15 @@ private fun CyclerArrow(
     active: Boolean,
     enabled: Boolean,
     onTap: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
     val tap by rememberUpdatedState(onTap)
     val canTap by rememberUpdatedState(enabled)
     Box(
         modifier =
-            Modifier
-                .size(40.dp)
+            modifier
+                .size(48.dp)
                 // Taken even at an end, where it does nothing: let through, it would reach the row and step forward.
                 .pointerInput(Unit) { detectTapGestures { if (canTap) tap() } },
         contentAlignment = Alignment.Center,

@@ -103,7 +103,7 @@ class NumberRowTest {
         val value = rule.onNodeWithText(valueText, useUnmergedTree = true).getBoundsInRoot()
         val density = rule.density.density
         val y = (value.top + value.bottom) / 2 * density
-        // Each arrow is a 40 dp box beside the value.
+        // Each arrow is a 48 dp box beside the value: 20 dp past its edge is well inside it.
         val x = (if (forward) value.right + 20.dp else value.left - 20.dp).value * density
         rule.onRoot().performTouchInput { click(Offset(x, y.value)) }
         rule.waitForIdle()

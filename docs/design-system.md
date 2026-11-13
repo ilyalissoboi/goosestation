@@ -394,7 +394,7 @@ Nothing in it takes focus, so the D-pad stays on the panel's rows. `KeyHints` sa
 ### `OverlayPanel` (`OverlayPanel.kt`)
 
 ```kotlin
-OverlayPanel(onBack = ::close) { Text("Erase every save on Shared card 1?", …); FlowRow { … } }
+OverlayPanel(onBack = ::close, title = "Erase every save on Shared card 1?") { Text("Erase every save on Shared card 1?", …); FlowRow { … } }
 ```
 
 A small panel over a screen, drawn in the app's window, never a window dialog: a `scrim` over the whole window, past
@@ -404,6 +404,12 @@ view, so its last button never sits against its edge). The focus can't leave it,
 call `onBack` on the key-up of a press that began in it. It scrolls the least that shows the focus, not to the middle:
 a focused text field asks to show its cursor as well as itself, which centring can't do. A question in it puts its
 destructive answer first and the focus on the safe one.
+
+It's an `Overlay`, a pane titled `title` (the line at its top). An overlay draws into the nearest `OverlayHost`
+(`OverlayHostBox`, at the app's root and around the in-game settings), above the screens it holds, which are hidden from
+accessibility while it shows, so a screen reader reaches only the overlay and announces it by its title. An overlay may
+draw a frame after it's asked for: it asks for its focus from inside itself. The library's sort list is an `Overlay`
+too.
 
 ### `ProgressBar` (`ProgressBar.kt`)
 

@@ -21,10 +21,15 @@ import kotlinx.coroutines.withContext
  * The Achievements page: the RetroAchievements account, signing in and out, and the page's switches, read and saved
  * through [api] and [coreSettings] on [core], one call at a time. Main thread only. Each change applies from the next game
  * start: the page can't be opened during a game.
+ *
+ * A sign-in waits for the server, so it runs on [signInQueue], not [core]: the pages' reads and writes don't wait behind
+ * it. The core signs in on its emulation thread, though, so what needs that thread still waits until the server answers:
+ * applying a change, reading the account or the queue, a game's boot.
  */
 class AchievementsPage(
     private val scope: CoroutineScope,
     private val core: CoroutineDispatcher,
+    private val signInQueue: CoroutineDispatcher,
     private val api: CoreApi,
     private val coreSettings: CoreSettings,
 ) {
@@ -78,7 +83,7 @@ class AchievementsPage(
         error = null
         scope.launch {
             val (failure, read) =
-                withContext(core) {
+                withContext(signInQueue) {
                     val failure = api.signIn(username.trim(), password)
                     failure to readAccount()
                 }

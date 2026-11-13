@@ -74,21 +74,6 @@ fun ShaderPacksPanel(
     var lastActions by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(actions) { if (actions != null) lastActions = actions }
 
-    LaunchedEffect(rows.isNotEmpty(), busy, actions, removing) {
-        runCatching {
-            when {
-                // The question focuses its Cancel itself.
-                removing != null -> {}
-                actions != null -> firstAction.requestFocus()
-                job != null && !job.removing -> cancel.requestFocus()
-                rows.isNotEmpty() && !busy ->
-                    rowRequester(lastActions?.takeIf { id -> rows.any { it.info.id == id } } ?: rows.first().info.id)
-                        .requestFocus()
-                else -> close.requestFocus()
-            }
-        }
-    }
-
     OverlayPanel(
         onBack = {
             when {
@@ -97,7 +82,25 @@ fun ShaderPacksPanel(
                 else -> onClose()
             }
         },
+        title = removing?.let(model::removeQuestion) ?: "Shader packs",
     ) {
+        LaunchedEffect(rows.isNotEmpty(), busy, actions, removing) {
+            runCatching {
+                when {
+                    // The question focuses its Cancel itself.
+                    removing != null -> {}
+                    actions != null -> firstAction.requestFocus()
+                    job != null && !job.removing -> cancel.requestFocus()
+                    rows.isNotEmpty() && !busy ->
+                        rowRequester(
+                            lastActions?.takeIf { id ->
+                                rows.any { it.info.id == id }
+                            } ?: rows.first().info.id,
+                        ).requestFocus()
+                    else -> close.requestFocus()
+                }
+            }
+        }
         if (removing != null) {
             Question(
                 model.removeQuestion(removing),

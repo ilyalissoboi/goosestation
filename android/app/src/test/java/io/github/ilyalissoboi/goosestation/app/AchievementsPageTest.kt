@@ -7,10 +7,14 @@ import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
 import io.github.ilyalissoboi.goosestation.settings.AchievementsSettings
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -24,7 +28,13 @@ class AchievementsPageTest {
     private val settings = MemoryCoreSettings()
 
     private fun TestScope.page() =
-        AchievementsPage(backgroundScope, StandardTestDispatcher(testScheduler), api, settings).also {
+        AchievementsPage(
+            backgroundScope,
+            StandardTestDispatcher(testScheduler),
+            StandardTestDispatcher(testScheduler),
+            api,
+            settings,
+        ).also {
             it.load()
             runCurrent()
             calls.clear()
@@ -68,6 +78,39 @@ class AchievementsPageTest {
                 before + mapOf("Cheevos/SpectatorMode" to "true", "Cheevos/LeaderboardsDuration" to "20"),
                 settings.values,
             )
+        }
+
+    // A sign-in waits for the server on a queue of its own: the page's reads and writes on the core queue don't wait
+    // behind it. Real threads, as the sign-in blocks its thread.
+    @Test
+    fun aSignInDoesntHoldUpASettingsRead() =
+        runBlocking {
+            val gate = java.util.concurrent.CountDownLatch(1)
+            api.signInGate = gate
+            val core =
+                java.util.concurrent.Executors
+                    .newSingleThreadExecutor()
+                    .asCoroutineDispatcher()
+            val signIn =
+                java.util.concurrent.Executors
+                    .newSingleThreadExecutor()
+                    .asCoroutineDispatcher()
+            try {
+                val page = AchievementsPage(this, core, signIn, api, settings)
+                page.signIn("goose", "not-a-real-password")
+                assertTrue(page.signingIn)
+
+                page.load()
+                withTimeout(5_000) { while (page.settings == null) delay(10) }
+                assertTrue("still signing in while the read landed", page.signingIn)
+
+                gate.countDown()
+                withTimeout(5_000) { while (page.signingIn) delay(10) }
+            } finally {
+                gate.countDown()
+                core.close()
+                signIn.close()
+            }
         }
 
     @Test
@@ -182,7 +225,14 @@ class AchievementsPageTest {
     @Test
     fun refreshDoesNothingUntilLoaded() =
         runTest {
-            val page = AchievementsPage(backgroundScope, StandardTestDispatcher(testScheduler), api, settings)
+            val page =
+                AchievementsPage(
+                    backgroundScope,
+                    StandardTestDispatcher(testScheduler),
+                    StandardTestDispatcher(testScheduler),
+                    api,
+                    settings,
+                )
 
             page.refresh()
             runCurrent()

@@ -53,6 +53,8 @@ class GameStartsTest {
             ),
         )
 
+    private var starting = false
+
     private fun TestScope.starts(): GameStarts {
         val starts =
             GameStarts(
@@ -62,6 +64,7 @@ class GameStartsTest {
                 records,
                 lastSlotStore,
                 startFrom = { game, state -> calls += "startFrom ${game.title} $state" },
+                starting = { starting },
             ) { game, disc, resume ->
                 calls += "start ${game.title} $disc $resume"
             }
@@ -78,6 +81,23 @@ class GameStartsTest {
             runCurrent()
 
             assertEquals(listOf("getSaveStateTimes SCUS-94900", "start Crash Bandicoot 1 false"), calls)
+            assertNull(starts.offer)
+        }
+
+    // From the final review: while a start waits for its settings, a second Play or a shared slot asks nothing and starts
+    // nothing, so no resume question is left behind for after the game.
+    @Test
+    fun nothingStartsWhileAStartWaits() =
+        runTest {
+            api.times[SaveSlots.RESUME] = 1_700_000_000
+            val starts = starts()
+            starting = true
+
+            starts.play(crash)
+            starts.playFromState(crash, StateRef("", 1, shared = true)) { calls += "refused $it" }
+            runCurrent()
+
+            assertEquals(emptyList<String>(), calls)
             assertNull(starts.offer)
         }
 

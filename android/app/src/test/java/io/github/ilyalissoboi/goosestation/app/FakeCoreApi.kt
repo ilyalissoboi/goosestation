@@ -544,11 +544,16 @@ class FakeCoreApi(
 
     override fun getAchievementsQueue(): AchievementsQueue = queue
 
+    /** While set, a sign-in waits for it, as one waits for the server: on its own thread, held open. */
+    @Volatile var signInGate: java.util.concurrent.CountDownLatch? = null
+
     override fun signIn(
         username: String,
         password: String,
     ): String? {
         calls += "signIn $username"
+        // The server's wait, for a test that holds the sign-in open.
+        signInGate?.await()
         signInError?.let { return it }
         account =
             AchievementsAccount(

@@ -581,7 +581,7 @@ private fun GameChoicePanel(
     onGameSettings: () -> Unit,
     onClose: () -> Unit,
 ) {
-    OverlayPanel(onBack = onClose) {
+    OverlayPanel(onBack = onClose, title = game.title) {
         val saves = remember { FocusRequester() }
         LaunchedEffect(game) { saves.requestFocus() }
         Text(game.title, style = MaterialTheme.typography.titleLarge, color = GooseStationTheme.colors.ink)

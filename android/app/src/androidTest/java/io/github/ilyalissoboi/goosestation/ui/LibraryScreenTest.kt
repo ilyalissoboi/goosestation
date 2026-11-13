@@ -576,7 +576,7 @@ class LibraryScreenTest {
                         overlayOpen = open,
                     )
                     if (open) {
-                        OverlayPanel(onBack = { open = false }) {
+                        OverlayPanel(onBack = { open = false }, title = "Panel") {
                             val cancel = remember { FocusRequester() }
                             LaunchedEffect(Unit) { cancel.requestFocus() }
                             ActionButton(

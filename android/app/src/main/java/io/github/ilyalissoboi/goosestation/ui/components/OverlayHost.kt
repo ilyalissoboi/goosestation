@@ -76,8 +76,9 @@ fun OverlayHostBox(
 /**
  * [content] over the screen, as a pane titled [title]: drawn into the nearest [OverlayHost], which hides the screen
  * under it from accessibility, or here when there's none. The caller keeps its Back handling where it is, so the order
- * Back closes things in is the order they opened. It may draw a frame after it's asked for: [content] asks for its focus
- * from inside itself.
+ * Back closes things in is the order they opened. It may draw a frame after it's asked for, and go a frame after it's
+ * closed: [content] asks for its focus from inside itself, and lets it go as it closes (as an [OverlayPanel] does), so
+ * the screen can take it back at once.
  */
 @Composable
 fun Overlay(

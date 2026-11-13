@@ -25,7 +25,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,9 +45,10 @@ import io.github.ilyalissoboi.goosestation.ui.theme.Motion
 /**
  * A small panel over the screen, drawn in the app's window (never a window dialog): a `scrim` over all of it, past the
  * system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, inside the safe
- * area, that scrolls. The focus can't leave it; the caller focuses what it holds. B, Back and the system's Back call
- * [onBack], B and Back on the key-up of a press that began in it, so a press held from the screen under it doesn't
- * close it. It's an [Overlay], a pane titled [title] (the line it shows at its top), so a screen reader reaches only it.
+ * area, that scrolls. The focus can't leave it while it's open; the caller focuses what it holds. B, Back and the
+ * system's Back call [onBack], B and Back on the key-up of a press that began in it, so a press held from the screen
+ * under it doesn't close it. It's an [Overlay], a pane titled [title] (the line it shows at its top), so a screen
+ * reader reaches only it.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -60,6 +63,10 @@ fun OverlayPanel(
     // The scrim and panel fade in over Motion.DIALOG_MS; what they hold is there, and focused, as soon as it shows.
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(Motion.DIALOG_MS)) }
+    // Closed, it still shows for a frame, till its host drops it; meanwhile the focus may leave it, so the screen can
+    // take it back as the panel closes. Kept in, it would go with the panel, and nothing would have it.
+    val open = remember { mutableStateOf(true) }
+    DisposableEffect(Unit) { onDispose { open.value = false } }
     Overlay(title) {
         Box(
             modifier =
@@ -82,7 +89,7 @@ fun OverlayPanel(
                 Column(
                     modifier =
                         modifier
-                            .focusProperties { onExit = { cancelFocusChange() } }
+                            .focusProperties { onExit = { if (open.value) cancelFocusChange() } }
                             .focusGroup()
                             .widthIn(max = 420.dp)
                             .fillMaxWidth()

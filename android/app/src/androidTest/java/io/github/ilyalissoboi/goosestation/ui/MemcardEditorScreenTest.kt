@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -22,6 +25,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.EditorQuestion
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorUi
 import io.github.ilyalissoboi.goosestation.ui.MemcardSamples.CRASH
 import io.github.ilyalissoboi.goosestation.ui.MemcardSamples.SHARED_CARD
@@ -42,13 +46,17 @@ class MemcardEditorScreenTest {
 
     private val actions = RecordingEditorActions()
 
+    // What the screen shows: a test changes it to open or close a question.
+    private var shown by mutableStateOf(MemcardSamples.ui())
+
     private fun show(
         ui: MemcardEditorUi = MemcardSamples.ui(),
         size: DpSize = WIDE,
     ) {
+        shown = ui
         rule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(size)) {
-                GooseStationTheme { MemcardEditorScreen(ui = ui, actions = actions, onLeave = {}) }
+                GooseStationTheme { InOverlayHost { MemcardEditorScreen(ui = shown, actions = actions, onLeave = {}) } }
             }
         }
         rule.waitForIdle()
@@ -123,6 +131,23 @@ class MemcardEditorScreenTest {
         press(Key.DirectionRight)
 
         assertTrue(focusedHas("Tekken 3"))
+    }
+
+    // As in the app, where a question is drawn in the overlay host and goes a frame after it closes: the focus comes
+    // back to the row that had it.
+    @Test
+    fun aQuestionClosedGivesTheFocusBack() {
+        show()
+        press(Key.DirectionRight)
+        assertTrue(focusedHas("Tekken 3"))
+
+        shown = MemcardSamples.ui(question = EditorQuestion("Delete Tekken 3?", "Delete", onConfirm = {}))
+        rule.waitForIdle()
+        assertTrue(focusedText(), focusedHas("Cancel"))
+        shown = MemcardSamples.ui()
+        rule.waitForIdle()
+
+        assertTrue(focusedText(), focusedHas("Tekken 3"))
     }
 
     @Test

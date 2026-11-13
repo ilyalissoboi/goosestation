@@ -69,6 +69,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.Question
+import io.github.ilyalissoboi.goosestation.ui.components.castsOverlayShadow
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
@@ -343,7 +344,7 @@ private fun MenuPanel(
     }
 
     Column(
-        modifier = modifier.background(colors.surface, GsShapes.large).padding(24.dp),
+        modifier = modifier.castsOverlayShadow().background(colors.surface, GsShapes.large).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

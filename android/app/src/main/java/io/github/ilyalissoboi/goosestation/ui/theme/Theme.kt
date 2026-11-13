@@ -57,6 +57,8 @@ data class GsColors(
     val danger: Color = Color(0xFFFF6B81),
     val dangerSoft: Color = Color(0xFF3D1820),
     val scrim: Color = Color(0xB805070A),
+    // shadow-overlay: what a floating panel casts, black at 60%.
+    val shadow: Color = Color(0x99000000),
     // Over the game picture, whatever the theme: an on-screen message's ground, at 82%, and its text.
     val osd: Color = Color(0xD10A0C10),
     val osdInk: Color = Color(0xFFF3F1EC),

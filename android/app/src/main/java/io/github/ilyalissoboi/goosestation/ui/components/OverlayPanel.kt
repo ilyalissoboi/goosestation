@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.key
@@ -83,6 +84,7 @@ fun OverlayPanel(
                         .focusGroup()
                         .widthIn(max = 420.dp)
                         .fillMaxWidth()
+                        .castsOverlayShadow()
                         .background(colors.surface, GsShapes.large)
                         .verticalScroll(rememberScrollState())
                         .padding(PANEL_PADDING),
@@ -94,6 +96,16 @@ fun OverlayPanel(
 }
 
 private val PANEL_PADDING = 24.dp
+
+/**
+ * The shadow a floating panel casts (`shadow-overlay`): 8 dp of elevation in the theme's shadow colour, following
+ * the panel's `radius-lg`. Before the panel's background, and on the panel only, never its scrim.
+ */
+@Composable
+fun Modifier.castsOverlayShadow(): Modifier {
+    val shadow = GooseStationTheme.colors.shadow
+    return shadow(8.dp, GsShapes.large, clip = false, ambientColor = shadow, spotColor = shadow)
+}
 
 /**
  * Scrolls the least that shows what's asked with [margin] beside it: nothing if that shows already, else its nearer

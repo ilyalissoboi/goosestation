@@ -33,6 +33,7 @@ fun SidePanel(
                 .focusProperties {
                     onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
                 }.focusGroup()
+                .castsOverlayShadow()
                 .background(GooseStationTheme.colors.surface, GsShapes.large)
                 .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),

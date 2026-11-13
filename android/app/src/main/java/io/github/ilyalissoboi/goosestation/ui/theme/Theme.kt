@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.ilyalissoboi.goosestation.R
+import kotlin.math.floor
 
 /**
  * The design system's colours, dark theme: night on the pond, the goose's white for text, its beak for the one
@@ -248,11 +249,15 @@ fun GooseStationTheme(content: @Composable () -> Unit) {
  * How a scrolling list follows the focus: it keeps the focused element in the middle, as consoles do, and stops at its
  * ends, which shows the title at the top and the padding below the last element. Something taller than the list
  * shows its start.
+ *
+ * The middle is a whole pixel: the gap beside what's centred is rounded down. A scroll lands on whole pixels, so a
+ * half-pixel target could never be reached, and with two requests pending (a row still scrolling into view as its
+ * list opens and focuses a choice) the page never settled.
  */
-private object CentredScrolling : BringIntoViewSpec {
+internal object CentredScrolling : BringIntoViewSpec {
     override fun calculateScrollDistance(
         offset: Float,
         size: Float,
         containerSize: Float,
-    ): Float = if (size >= containerSize) offset else offset - (containerSize - size) / 2
+    ): Float = if (size >= containerSize) offset else offset - floor((containerSize - size) / 2)
 }

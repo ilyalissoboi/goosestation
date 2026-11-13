@@ -55,7 +55,7 @@ internal fun MemcardOverlay(
                 ?.firstOrNull { it.firstBlock == open.firstBlock }
         }
     if (question == null && save == null) return
-    OverlayPanel(onBack = { actions.back(onLeave) }) {
+    OverlayPanel(onBack = { actions.back(onLeave) }, title = save?.title ?: "Memory card") {
         when {
             question != null -> QuestionContent(question, actions)
             panel != null && save != null && panel.renaming -> RenameForm(save, panel, ui.renameError, actions)

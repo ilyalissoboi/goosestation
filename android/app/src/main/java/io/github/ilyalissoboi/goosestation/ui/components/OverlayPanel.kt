@@ -25,13 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -50,106 +45,60 @@ import io.github.ilyalissoboi.goosestation.ui.theme.Motion
  * system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, inside the safe
  * area, that scrolls. The focus can't leave it; the caller focuses what it holds. B, Back and the system's Back call
  * [onBack], B and Back on the key-up of a press that began in it, so a press held from the screen under it doesn't
- * close it. A screen that draws it in a part of the window hears that it's open ([LocalOverlayWatch]), and dims the
- * rest.
+ * close it. It's an [Overlay], a pane titled [title] (the line it shows at its top), so a screen reader reaches only it.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OverlayPanel(
     onBack: () -> Unit,
+    title: String,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     BackHandler(onBack = onBack)
     val colors = GooseStationTheme.colors
-    val watch = LocalOverlayWatch.current
-    DisposableEffect(watch) {
-        watch?.opened()
-        onDispose { watch?.closed() }
-    }
-    // The scrim and panel fade in over Motion.DIALOG_MS; what they hold is there, and focused, from the first frame.
+    // The scrim and panel fade in over Motion.DIALOG_MS; what they hold is there, and focused, as soon as it shows.
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(Motion.DIALOG_MS)) }
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = appear.value }
-                .background(colors.scrim)
-                .pointerInput(Unit) { detectTapGestures {} }
-                .backKeys(preview = false, onBack = onBack)
-                .safeDrawingPadding()
-                .padding(32.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        // The panel scrolls only as far as it must: a focused text field asks to show its cursor as well as itself, and
-        // the screens' centring can't do both, so it would never settle. What it scrolls to keeps the panel's padding
-        // beside it, so the last button isn't against the panel's edge.
-        val density = LocalDensity.current
-        val scrolling = remember(density) { LeastScrolling(with(density) { PANEL_PADDING.toPx() }) }
-        CompositionLocalProvider(LocalBringIntoViewSpec provides scrolling) {
-            Column(
-                modifier =
-                    modifier
-                        .focusProperties { onExit = { cancelFocusChange() } }
-                        .focusGroup()
-                        .widthIn(max = 420.dp)
-                        .fillMaxWidth()
-                        .castsOverlayShadow()
-                        .background(colors.surface, GsShapes.large)
-                        .verticalScroll(rememberScrollState())
-                        .padding(PANEL_PADDING),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                content = content,
-            )
+    Overlay(title) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = appear.value }
+                    .background(colors.scrim)
+                    .pointerInput(Unit) { detectTapGestures {} }
+                    .backKeys(preview = false, onBack = onBack)
+                    .safeDrawingPadding()
+                    .padding(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            // The panel scrolls only as far as it must: a focused text field asks to show its cursor as well as itself, and
+            // the screens' centring can't do both, so it would never settle. What it scrolls to keeps the panel's padding
+            // beside it, so the last button isn't against the panel's edge.
+            val density = LocalDensity.current
+            val scrolling = remember(density) { LeastScrolling(with(density) { PANEL_PADDING.toPx() }) }
+            CompositionLocalProvider(LocalBringIntoViewSpec provides scrolling) {
+                Column(
+                    modifier =
+                        modifier
+                            .focusProperties { onExit = { cancelFocusChange() } }
+                            .focusGroup()
+                            .widthIn(max = 420.dp)
+                            .fillMaxWidth()
+                            .castsOverlayShadow()
+                            .background(colors.surface, GsShapes.large)
+                            .verticalScroll(rememberScrollState())
+                            .padding(PANEL_PADDING),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    content = content,
+                )
+            }
         }
     }
 }
 
 private val PANEL_PADDING = 24.dp
-
-/**
- * Counts the [OverlayPanel]s open under it, for a screen whose pages fill only a part of the window (the settings'
- * page, beside its categories): the panel's scrim reaches its page's edges, and the screen dims the rest while
- * [open] ([OverlayScrim]).
- */
-class OverlayWatch {
-    private var count by mutableIntStateOf(0)
-
-    /** An [OverlayPanel] is open. */
-    val open get() = count > 0
-
-    internal fun opened() {
-        count++
-    }
-
-    internal fun closed() {
-        count--
-    }
-}
-
-/** The [OverlayWatch] of the screen an [OverlayPanel] is drawn in a part of; null where it has the whole window. */
-val LocalOverlayWatch = staticCompositionLocalOf<OverlayWatch?> { null }
-
-/**
- * The scrim over what an [OverlayPanel] doesn't reach, while [watch] has one open: sized by its [modifier], it fades
- * in as the panel's own does, and takes every tap.
- */
-@Composable
-fun OverlayScrim(
-    watch: OverlayWatch,
-    modifier: Modifier = Modifier,
-) {
-    if (!watch.open) return
-    val appear = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { appear.animateTo(1f, tween(Motion.DIALOG_MS)) }
-    Box(
-        modifier
-            .graphicsLayer { alpha = appear.value }
-            .background(GooseStationTheme.colors.scrim)
-            .pointerInput(Unit) { detectTapGestures {} },
-    )
-}
 
 /**
  * The shadow a floating panel casts (`shadow-overlay`): 8 dp of elevation in the theme's shadow colour, following

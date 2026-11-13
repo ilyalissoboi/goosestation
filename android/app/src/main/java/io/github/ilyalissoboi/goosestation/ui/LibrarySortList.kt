@@ -28,6 +28,7 @@ import io.github.ilyalissoboi.goosestation.library.LibraryWords
 import io.github.ilyalissoboi.goosestation.library.SortKey
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.ChoiceList
+import io.github.ilyalissoboi.goosestation.ui.components.Overlay
 import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 
 /** The sort list's width, less on a narrower screen. */
@@ -54,22 +55,24 @@ internal fun LibrarySortList(
     val keys = if (sort.key in SortKey.OFFERED) SortKey.OFFERED else SortKey.OFFERED + sort.key
     val choices = keys.map { Choice(it, LibraryWords.sortName(it)) }
     BackHandler(onBack = onClose)
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        // Under the list: a tap anywhere else closes it, and does nothing else.
-        Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onClose() } })
-        val (right, bottom) = with(LocalDensity.current) { anchor.right.toDp() to anchor.bottom.toDp() }
-        val width = LIST_WIDTH.coerceAtMost(maxWidth - EDGE * 2)
-        val x = (right - width).coerceIn(EDGE, (maxWidth - width - EDGE).coerceAtLeast(EDGE))
-        val top = bottom + EDGE
-        Box(
-            Modifier
-                .offset(x, top)
-                .width(width)
-                .heightIn(max = (maxHeight - top - EDGE).coerceAtLeast(48.dp))
-                .verticalScroll(rememberScrollState())
-                .backKeys(onBack = onClose),
-        ) {
-            ChoiceList(choices, selected = sort.key, onPick = { onPick(it.value) })
+    Overlay("Sort by") {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Under the list: a tap anywhere else closes it, and does nothing else.
+            Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onClose() } })
+            val (right, bottom) = with(LocalDensity.current) { anchor.right.toDp() to anchor.bottom.toDp() }
+            val width = LIST_WIDTH.coerceAtMost(maxWidth - EDGE * 2)
+            val x = (right - width).coerceIn(EDGE, (maxWidth - width - EDGE).coerceAtLeast(EDGE))
+            val top = bottom + EDGE
+            Box(
+                Modifier
+                    .offset(x, top)
+                    .width(width)
+                    .heightIn(max = (maxHeight - top - EDGE).coerceAtLeast(48.dp))
+                    .verticalScroll(rememberScrollState())
+                    .backKeys(onBack = onClose),
+            ) {
+                ChoiceList(choices, selected = sort.key, onPick = { onPick(it.value) })
+            }
         }
     }
 }

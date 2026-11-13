@@ -44,6 +44,8 @@ import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayHost
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayHostBox
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
@@ -100,7 +102,7 @@ class SettingsPanelsTest {
             }
             if (asking) {
                 LaunchedEffect(Unit) { cancel.requestFocus() }
-                OverlayPanel(onBack = { asking = false }) {
+                OverlayPanel(onBack = { asking = false }, title = "Ask?") {
                     ActionButton(
                         "Cancel",
                         onClick = {},
@@ -116,20 +118,23 @@ class SettingsPanelsTest {
         rule.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(960.dp, 540.dp))) {
                 GooseStationTheme {
-                    SettingsPanels(
-                        current = current,
-                        inPage = inPage,
-                        coreReady = coreReady,
-                        locked = locked,
-                        onShow = {
-                            shown += it
-                            current = it
-                            inPage = false
-                        },
-                        onEnterPage = { inPage = true },
-                        onBack = { backs++ },
-                    ) { onBack ->
-                        current?.let { Page(it, onBack) }
+                    // As the app has it: overlays draw over the whole window, outside the page.
+                    OverlayHostBox(remember { OverlayHost() }) {
+                        SettingsPanels(
+                            current = current,
+                            inPage = inPage,
+                            coreReady = coreReady,
+                            locked = locked,
+                            onShow = {
+                                shown += it
+                                current = it
+                                inPage = false
+                            },
+                            onEnterPage = { inPage = true },
+                            onBack = { backs++ },
+                        ) { onBack ->
+                            current?.let { Page(it, onBack) }
+                        }
                     }
                 }
             }

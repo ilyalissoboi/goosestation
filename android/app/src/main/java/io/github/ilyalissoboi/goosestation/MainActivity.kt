@@ -57,6 +57,8 @@ import io.github.ilyalissoboi.goosestation.ui.SetupScreen
 import io.github.ilyalissoboi.goosestation.ui.SharedPageScreen
 import io.github.ilyalissoboi.goosestation.ui.SyncConflictsScreen
 import io.github.ilyalissoboi.goosestation.ui.UpdateBannerModel
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayHost
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayHostBox
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.deviceTicker
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -86,142 +88,150 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             GooseStationTheme {
-                when (AppController.screen) {
-                    Screen.Setup ->
-                        SetupScreen(
-                            pickFolder = folderPicker::pick,
-                            importBios = AppController::importBios,
-                            inspectDataFolder = AppController::inspectDataFolder,
-                            releaseFolder = AppController::releaseFolder,
-                            onFinish = AppController::finishSetup,
-                        )
-                    Screen.Game -> {
-                        val touch = AppController.touchControls
-                        val pads by (AppController.controllers?.connected ?: NO_CONTROLLERS).collectAsState()
-                        val ticker = remember { deviceTicker(applicationContext) }
-                        GameScreen(
-                            menuOpen = AppController.menuOpen,
-                            onOpenMenu = AppController::openMenu,
-                            menu = AppController.gameMenu.state,
-                            actions = AppController.gameMenu,
-                            game = AppController.games.firstOrNull { it.path == AppController.lastGamePath },
-                            osd = AppController.osd.shown,
-                            fastForward = AppController.fastForward,
-                            osdExpiry = AppController.osd.nextExpiry(),
-                            onOsdExpire = AppController.osd::expire,
-                            badge = AppController.badges::image,
-                            card = AppController.achievementOverlay.card,
-                            indicators = AppController.achievementOverlay.indicators,
-                            overlayExpiry = AppController.achievementOverlay.nextExpiry(),
-                            onOverlayExpire = AppController.achievementOverlay::expire,
-                            settings = {
-                                GameSettingsHost(
-                                    AppController.gameMenuSettings,
-                                    AppController.shaderPacks,
-                                    hardcoreActive = AppController.gameMenu.state.hardcore,
-                                    onBack = AppController.gameMenu::closeSettings,
-                                )
-                            },
-                            touch = TouchVisibility.of(touch.settings, pads.size, touch.kind),
-                            touchSettings = touch.settings,
-                            touchSink = {
-                                NativeLibrary.setTouchPad(
-                                    it.buttons,
-                                    it.leftX,
-                                    it.leftY,
-                                    it.rightX,
-                                    it.rightY,
-                                )
-                            },
-                            ticker = ticker.takeIf { touch.settings.vibration },
-                            onPictureAtTop = NativeLibrary::setPictureAtTop,
-                            touchKey = touch.releases,
-                        )
-                    }
-                    Screen.Settings,
-                    Screen.Interface,
-                    Screen.Console,
-                    Screen.Emulation,
-                    Screen.PostProcessing,
-                    Screen.Advanced,
-                    Screen.Audio,
-                    Screen.Graphics,
-                    Screen.Achievements,
-                    Screen.MemoryCards,
-                    Screen.Bios,
-                    Screen.Controllers,
-                    Screen.Covers,
-                    Screen.Folders,
-                    -> SettingsRoute(AppController.screen)
-                    Screen.GameSettings ->
-                        GameSettingsHost(
-                            AppController.gameSettingsPages,
-                            AppController.shaderPacks,
-                            hardcoreActive = false,
-                            onBack = AppController::closeGameSettings,
-                        )
-                    Screen.Saves -> {
-                        val page = AppController.savesPage
-                        page.state?.let {
-                            SavesScreen(it, page, ZonedDateTime.now(), onBack = AppController::closeSaves)
-                        }
-                    }
-                    Screen.MemcardEditor -> {
-                        val editor = AppController.memcardEditor
-                        val ui = editor.ui
-                        if (ui == null) {
-                            SettingsLoadingPage("Memory cards", onBack = AppController::closeMemcardEditor)
-                        } else {
-                            MemcardEditorScreen(ui = ui, actions = editor, onLeave = AppController::closeMemcardEditor)
-                        }
-                    }
-                    Screen.SyncConflicts -> {
-                        val page = AppController.memcardSyncPage
-                        val conflicts = page.conflicts
-                        if (conflicts == null) {
-                            SettingsLoadingPage("Sync conflicts", onBack = AppController::closeSyncConflicts)
-                        } else {
-                            SyncConflictsScreen(
-                                conflicts = conflicts,
-                                zone = ZoneId.systemDefault(),
-                                onResolve = page::resolve,
-                                onKeepAll = page::keepAllLocal,
-                                onBack = AppController::closeSyncConflicts,
+                // Overlays draw above the screens, which are hidden from accessibility while one shows.
+                val overlays = remember { OverlayHost() }
+                OverlayHostBox(overlays) {
+                    when (AppController.screen) {
+                        Screen.Setup ->
+                            SetupScreen(
+                                pickFolder = folderPicker::pick,
+                                importBios = AppController::importBios,
+                                inspectDataFolder = AppController::inspectDataFolder,
+                                releaseFolder = AppController::releaseFolder,
+                                onFinish = AppController::finishSetup,
+                            )
+                        Screen.Game -> {
+                            val touch = AppController.touchControls
+                            val pads by (AppController.controllers?.connected ?: NO_CONTROLLERS).collectAsState()
+                            val ticker = remember { deviceTicker(applicationContext) }
+                            GameScreen(
+                                menuOpen = AppController.menuOpen,
+                                onOpenMenu = AppController::openMenu,
+                                menu = AppController.gameMenu.state,
+                                actions = AppController.gameMenu,
+                                game = AppController.games.firstOrNull { it.path == AppController.lastGamePath },
+                                osd = AppController.osd.shown,
+                                fastForward = AppController.fastForward,
+                                osdExpiry = AppController.osd.nextExpiry(),
+                                onOsdExpire = AppController.osd::expire,
+                                badge = AppController.badges::image,
+                                card = AppController.achievementOverlay.card,
+                                indicators = AppController.achievementOverlay.indicators,
+                                overlayExpiry = AppController.achievementOverlay.nextExpiry(),
+                                onOverlayExpire = AppController.achievementOverlay::expire,
+                                settings = {
+                                    GameSettingsHost(
+                                        AppController.gameMenuSettings,
+                                        AppController.shaderPacks,
+                                        hardcoreActive = AppController.gameMenu.state.hardcore,
+                                        onBack = AppController.gameMenu::closeSettings,
+                                    )
+                                },
+                                touch = TouchVisibility.of(touch.settings, pads.size, touch.kind),
+                                touchSettings = touch.settings,
+                                touchSink = {
+                                    NativeLibrary.setTouchPad(
+                                        it.buttons,
+                                        it.leftX,
+                                        it.leftY,
+                                        it.rightX,
+                                        it.rightY,
+                                    )
+                                },
+                                ticker = ticker.takeIf { touch.settings.vibration },
+                                onPictureAtTop = NativeLibrary::setPictureAtTop,
+                                touchKey = touch.releases,
                             )
                         }
-                    }
-                    Screen.Library -> {
-                        val mirrorState by AppController.mirrorState.collectAsState()
-                        LibraryScreen(
-                            games = AppController.games,
-                            gridView = AppController.gridView,
-                            banners = AppController.banners(mirrorState),
-                            message = AppController.message,
-                            isError = AppController.messageIsError,
-                            onToggleView = AppController::toggleView,
-                            onOpenSettings = AppController::openSettings,
-                            onRefresh = AppController::refresh,
-                            onStartGame = AppController::startGame,
-                            onGameSettings = AppController::openGameSettings,
-                            onSaves = AppController::openSaves,
-                            focusPath = AppController.libraryFocus ?: AppController.lastGamePath,
-                            focusSettings = AppController.focusSettings,
-                            syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),
-                            onSyncBadge = AppController::openSyncBadge,
-                            sort = AppController.librarySort,
-                            onSort = AppController::sortLibrary,
-                            search = AppController.librarySearch,
-                            overlayOpen = AppController.gameStarts.offer != null,
-                            update = AppController.updates?.takeIf { it.bannerShown }?.let(::updateBanner),
-                        )
-                        val starts = AppController.gameStarts
-                        starts.offer?.let { offer ->
-                            ResumePrompt(
-                                offer,
-                                onResume = starts::resume,
-                                onStartOver = starts::startOver,
-                                onCancel = starts::cancel,
+                        Screen.Settings,
+                        Screen.Interface,
+                        Screen.Console,
+                        Screen.Emulation,
+                        Screen.PostProcessing,
+                        Screen.Advanced,
+                        Screen.Audio,
+                        Screen.Graphics,
+                        Screen.Achievements,
+                        Screen.MemoryCards,
+                        Screen.Bios,
+                        Screen.Controllers,
+                        Screen.Covers,
+                        Screen.Folders,
+                        -> SettingsRoute(AppController.screen)
+                        Screen.GameSettings ->
+                            GameSettingsHost(
+                                AppController.gameSettingsPages,
+                                AppController.shaderPacks,
+                                hardcoreActive = false,
+                                onBack = AppController::closeGameSettings,
                             )
+                        Screen.Saves -> {
+                            val page = AppController.savesPage
+                            page.state?.let {
+                                SavesScreen(it, page, ZonedDateTime.now(), onBack = AppController::closeSaves)
+                            }
+                        }
+                        Screen.MemcardEditor -> {
+                            val editor = AppController.memcardEditor
+                            val ui = editor.ui
+                            if (ui == null) {
+                                SettingsLoadingPage("Memory cards", onBack = AppController::closeMemcardEditor)
+                            } else {
+                                MemcardEditorScreen(
+                                    ui = ui,
+                                    actions = editor,
+                                    onLeave = AppController::closeMemcardEditor,
+                                )
+                            }
+                        }
+                        Screen.SyncConflicts -> {
+                            val page = AppController.memcardSyncPage
+                            val conflicts = page.conflicts
+                            if (conflicts == null) {
+                                SettingsLoadingPage("Sync conflicts", onBack = AppController::closeSyncConflicts)
+                            } else {
+                                SyncConflictsScreen(
+                                    conflicts = conflicts,
+                                    zone = ZoneId.systemDefault(),
+                                    onResolve = page::resolve,
+                                    onKeepAll = page::keepAllLocal,
+                                    onBack = AppController::closeSyncConflicts,
+                                )
+                            }
+                        }
+                        Screen.Library -> {
+                            val mirrorState by AppController.mirrorState.collectAsState()
+                            LibraryScreen(
+                                games = AppController.games,
+                                gridView = AppController.gridView,
+                                banners = AppController.banners(mirrorState),
+                                message = AppController.message,
+                                isError = AppController.messageIsError,
+                                onToggleView = AppController::toggleView,
+                                onOpenSettings = AppController::openSettings,
+                                onRefresh = AppController::refresh,
+                                onStartGame = AppController::startGame,
+                                onGameSettings = AppController::openGameSettings,
+                                onSaves = AppController::openSaves,
+                                focusPath = AppController.libraryFocus ?: AppController.lastGamePath,
+                                focusSettings = AppController.focusSettings,
+                                syncBadge = SyncBadges.of(AppController.memcardSyncStatus.state),
+                                onSyncBadge = AppController::openSyncBadge,
+                                sort = AppController.librarySort,
+                                onSort = AppController::sortLibrary,
+                                search = AppController.librarySearch,
+                                overlayOpen = AppController.gameStarts.offer != null,
+                                update = AppController.updates?.takeIf { it.bannerShown }?.let(::updateBanner),
+                            )
+                            val starts = AppController.gameStarts
+                            starts.offer?.let { offer ->
+                                ResumePrompt(
+                                    offer,
+                                    onResume = starts::resume,
+                                    onStartOver = starts::startOver,
+                                    onCancel = starts::cancel,
+                                )
+                            }
                         }
                     }
                 }
@@ -445,7 +455,8 @@ private fun SettingsPageContent(
                 is ControllersView.Port -> {
                     val bindings = state.bindings
                     val title =
-                        state.offered.firstOrNull { it.value == view.pad }?.label ?: Pads.label(view.pad)
+                        state.offered.firstOrNull { it.value == view.pad }?.label
+                            ?: Pads.label(view.pad)
                     if (bindings == null) {
                         SettingsLoadingPage(title, onBack = controllersBack)
                     } else {
@@ -486,7 +497,8 @@ private fun SettingsPageContent(
                 }
                 is ControllersView.Macro -> {
                     val port =
-                        state.offered.firstOrNull { it.value == view.pad }?.label ?: Pads.label(view.pad)
+                        state.offered.firstOrNull { it.value == view.pad }?.label
+                            ?: Pads.label(view.pad)
                     MacroScreen(
                         title = "Macro ${view.macro} · $port",
                         pad = view.pad,

@@ -124,6 +124,7 @@ fun FavouritePanel(
                 else -> model.closeFavourite()
             }
         },
+        title = favourite?.name ?: "Favourites",
         modifier = modifier,
     ) {
         when {

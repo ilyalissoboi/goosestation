@@ -328,8 +328,8 @@ The settings are a list and its detail: the categories down the left, and the op
   for it as it opens.
 - **A category that can't open** (all but Folders, before the core has started) is disabled, and one line at the
   rail's foot says why, rather than each item: under the list, so it shows wherever the rail has scrolled to.
-- **An `OverlayPanel` over the page** has its scrim to the page's edges; the rail dims with it (`OverlayScrim`) and
-  takes no taps until it closes.
+- **An `OverlayPanel` over the page** covers the rail too, as it does the whole window (`OverlayHost`); once it
+  closes, the focus is back in the page.
 - A screen a page opens that isn't a page of settings (the memory card editor, the sync conflicts) takes the whole
   window, and comes back with the focus in the page.
 
@@ -428,7 +428,7 @@ Nothing in it takes focus, so the D-pad stays on the panel's rows. `KeyHints` sa
 ### `OverlayPanel` (`OverlayPanel.kt`)
 
 ```kotlin
-OverlayPanel(onBack = ::close) { Text("Erase every save on Shared card 1?", …); FlowRow { … } }
+OverlayPanel(onBack = ::close, title = "Erase every save on Shared card 1?") { Text("Erase every save on Shared card 1?", …); FlowRow { … } }
 ```
 
 A small panel over a screen, drawn in the app's window, never a window dialog: a `scrim` over the whole window, past
@@ -437,8 +437,13 @@ inside, in the safe area, that scrolls (as little as it must, keeping those 24 d
 view, so its last button never sits against its edge). The focus can't leave it, and the caller focuses what it holds. B and Back
 call `onBack` on the key-up of a press that began in it. It scrolls the least that shows the focus, not to the middle:
 a focused text field asks to show its cursor as well as itself, which centring can't do. A question in it puts its
-destructive answer first and the focus on the safe one. Where its screen fills only a part of the window (a settings
-page beside the rail), the screen provides an `OverlayWatch` and draws an `OverlayScrim` over the rest.
+destructive answer first and the focus on the safe one.
+
+It's an `Overlay`, a pane titled `title` (the line at its top). An overlay draws into the nearest `OverlayHost`
+(`OverlayHostBox`, at the app's root and around the in-game settings), above the screens it holds, which are hidden from
+accessibility while it shows, so a screen reader reaches only the overlay and announces it by its title. An overlay may
+draw a frame after it's asked for: it asks for its focus from inside itself. The library's sort list is an `Overlay`
+too.
 
 ### `ProgressBar` (`ProgressBar.kt`)
 

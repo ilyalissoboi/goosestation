@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -36,6 +37,8 @@ import io.github.ilyalissoboi.goosestation.app.TouchSettings
 import io.github.ilyalissoboi.goosestation.app.TouchVisibility
 import io.github.ilyalissoboi.goosestation.core.GameEntry
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayHost
+import io.github.ilyalissoboi.goosestation.ui.components.OverlayHostBox
 
 /**
  * The running game: a full-screen surface the core draws to, with the system bars hidden and the screen kept on. Show it
@@ -131,7 +134,11 @@ fun GameScreen(
                         if (event.type == KeyEventType.KeyUp) actions.resume()
                         true
                     },
-                ) { settings() }
+                ) {
+                    // The settings' own overlays draw here, inside the Mode key's reach.
+                    val overlays = remember { OverlayHost() }
+                    OverlayHostBox(overlays) { settings() }
+                }
             menuOpen -> GameMenu(menu, actions, game, badge = badge)
         }
     }

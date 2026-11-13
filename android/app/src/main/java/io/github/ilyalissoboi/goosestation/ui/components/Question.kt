@@ -62,7 +62,7 @@ fun QuestionPanel(
     confirmKind: ButtonKind = ButtonKind.Danger,
     key: Any? = Unit,
 ) {
-    OverlayPanel(onBack = onCancel) {
+    OverlayPanel(onBack = onCancel, title = text) {
         Question(text, confirm, onConfirm, onCancel, cancel = cancel, confirmKind = confirmKind, key = key)
     }
 }

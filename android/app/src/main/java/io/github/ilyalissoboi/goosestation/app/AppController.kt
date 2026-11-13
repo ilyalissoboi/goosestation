@@ -158,6 +158,11 @@ object AppController : NativeCallbacks {
     // refreshGameList and reloadSettings never overlap: reloadSettings rewrites the folder paths a scan reads.
     private val coreDispatcher = Dispatchers.IO.limitedParallelism(1)
 
+    // The settings work on the core queue: the page models' and this class's own reads and writes. A game's start
+    // waits for it, so it boots on the settings asked for; the queue's scans and covers aren't counted.
+    private val settingsQueue = SettingsQueue(coreDispatcher)
+    private val startGate = GameStartGate(scope) { settingsQueue.settle() }
+
     // The in-game menu's core calls (GameCoreApi), one at a time, apart from coreDispatcher: a library scan running
     // there never holds up the menu.
     private val gameDispatcher = Dispatchers.IO.limitedParallelism(1)
@@ -222,7 +227,7 @@ object AppController : NativeCallbacks {
         private set
 
     /** The Graphics and BIOS pages' values. */
-    val settingsPages = SettingsPages(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+    val settingsPages = SettingsPages(scope, settingsQueue, NativeCoreApi, NativeCoreSettings)
 
     // Where the shader browser opens, kept in this device's preferences (read once they're there).
     private val shaderFolder =
@@ -238,7 +243,7 @@ object AppController : NativeCallbacks {
     val postProcessingPage =
         PostProcessingPage(
             scope,
-            coreDispatcher,
+            settingsQueue,
             NativeCoreApi,
             NativeCoreSettings,
             shaderFolder,
@@ -248,7 +253,7 @@ object AppController : NativeCallbacks {
     val gameSettingsPages =
         GameSettingsPages(
             scope,
-            coreDispatcher,
+            settingsQueue,
             NativeCoreApi,
             NativeCoreSettings,
             shaderFolder,
@@ -295,8 +300,11 @@ object AppController : NativeCallbacks {
             games = games.map { if (it.path == gamePath) it.copy(coverPath = coverPath) else it }
         }
 
+    // A sign-in waits for the server: on a queue of its own, so the pages don't wait behind it.
+    private val signInDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     /** The Achievements page: the RetroAchievements account, signing in and out, and its switches. */
-    val achievementsPage = AchievementsPage(scope, coreDispatcher, NativeCoreApi, NativeCoreSettings)
+    val achievementsPage = AchievementsPage(scope, settingsQueue, signInDispatcher, NativeCoreApi, NativeCoreSettings)
 
     /** Memory card sync's state, for the Memory cards page and the library's badge: read again as sync says it changed. */
     val memcardSyncStatus = MemcardSyncStatus(scope, Dispatchers.IO, NativeCoreApi)
@@ -304,7 +312,7 @@ object AppController : NativeCallbacks {
     val memcardSyncPage by lazy {
         MemcardSyncPage(
             scope,
-            coreDispatcher,
+            settingsQueue,
             Dispatchers.IO,
             NativeCoreApi,
             NativeCoreSettings,
@@ -334,7 +342,7 @@ object AppController : NativeCallbacks {
 
     /** The Controllers page's controllers, bindings and capture. */
     val controllersPage =
-        ControllersPage(scope, coreDispatcher, NativeCoreApi, {
+        ControllersPage(scope, settingsQueue, NativeCoreApi, {
             controllers
         }, { screen == Screen.Controllers }, NativeCoreSettings) {
             Log.i(TAG, it)
@@ -387,7 +395,7 @@ object AppController : NativeCallbacks {
 
     // The library's sort, in Big Picture's keys (LibraryPrefs), read as the core starts.
     private val librarySorts =
-        LibrarySortState { sort -> scope.launch(coreDispatcher) { LibraryPrefs.write(NativeCoreSettings, sort) } }
+        LibrarySortState { sort -> scope.launch(settingsQueue) { LibraryPrefs.write(NativeCoreSettings, sort) } }
 
     /** The library's sort: settings.ini's, or the player's latest pick, which a pick before the core starts keeps. */
     val librarySort: LibrarySort get() = librarySorts.sort
@@ -559,8 +567,9 @@ object AppController : NativeCallbacks {
             NativeGameCoreApi,
             gameRecords,
             lastSlots,
-            ::startGameFromStateNow,
-            ::startGameNow,
+            startFrom = ::startGameFromStateNow,
+            starting = { startGate.starting },
+            start = ::startGameNow,
         )
     }
 
@@ -838,7 +847,7 @@ object AppController : NativeCallbacks {
     fun toggleView() {
         val grid = !gridView
         gridView = grid
-        if (coreStarted) scope.launch(coreDispatcher) { NativeLibrary.setBoolSetting(UI, GRID_VIEW, grid) }
+        if (coreStarted) scope.launch(settingsQueue) { NativeLibrary.setBoolSetting(UI, GRID_VIEW, grid) }
     }
 
     /**
@@ -1308,7 +1317,7 @@ object AppController : NativeCallbacks {
 
     /** Starts [game], once it's asked whether to resume where it was left, if it has a resume state ([gameStarts]). */
     fun startGame(game: GameEntry) {
-        if (!ready || gameActive) return
+        if (!ready || gameActive || startGate.starting) return
         gameStarts.play(game)
     }
 
@@ -1318,8 +1327,8 @@ object AppController : NativeCallbacks {
         disc: Int,
         resume: Boolean,
     ) {
-        // It boots once the game screen's surface exists.
-        if (beginGame(game)) NativeLibrary.startGame(game.path, disc, resume)
+        // Once the settings asked for before it have landed; it boots once the game screen's surface exists.
+        startGate.start(begin = { beginGame(game) }, boot = { NativeLibrary.startGame(game.path, disc, resume) })
     }
 
     // A start from a state (a save on the Saves page, or a shared slot of another game), as startGameNow() starts.
@@ -1327,7 +1336,10 @@ object AppController : NativeCallbacks {
         game: GameEntry,
         state: StateRef,
     ) {
-        if (beginGame(game)) NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared)
+        startGate.start(
+            begin = { beginGame(game) },
+            boot = { NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared) },
+        )
     }
 
     // Both starts, checked again: things may have changed while the player answered, or while a switch to another
@@ -1613,7 +1625,7 @@ object AppController : NativeCallbacks {
      */
     private suspend fun dropStaleBiosOverrides() {
         biosOverridesToCheck = false
-        withContext(coreDispatcher) {
+        withContext(settingsQueue) {
             val copies = File(context.filesDir, "bios").list()?.toList().orEmpty()
             val stale = BiosOverrides.stale(BiosOverrides.load(NativeCoreSettings), copies)
             if (stale.isEmpty()) return@withContext
@@ -1641,7 +1653,7 @@ object AppController : NativeCallbacks {
 
     private suspend fun applyGameFolders() {
         val readable = readableGameFolders()
-        withContext(coreDispatcher) { NativeLibrary.setGameFolders(readable) }
+        withContext(settingsQueue) { NativeLibrary.setGameFolders(readable) }
     }
 
     // After a games folder change. Before the core runs, its start passes the folders itself.

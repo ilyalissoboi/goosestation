@@ -27,7 +27,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -55,9 +54,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import io.github.ilyalissoboi.goosestation.ui.components.LocalOverlayWatch
-import io.github.ilyalissoboi.goosestation.ui.components.OverlayScrim
-import io.github.ilyalissoboi.goosestation.ui.components.OverlayWatch
 import io.github.ilyalissoboi.goosestation.ui.components.RailItem
 import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -114,7 +110,6 @@ fun SettingsPanels(
         now.pageOpen = inPage
     }
     var pageHasFocus by remember { mutableStateOf(false) }
-    val overlays = remember { OverlayWatch() }
 
     fun enabled(entry: SettingsEntry) = !locked && (coreReady || !entry.needsCore)
 
@@ -215,101 +210,97 @@ fun SettingsPanels(
     // The rail can't hold the focus while it's locked.
     LaunchedEffect(locked) { if (locked && !pageHasFocus) toPage() }
 
-    CompositionLocalProvider(LocalOverlayWatch provides overlays) {
-        Row(Modifier.fillMaxSize().background(colors.ground)) {
-            Box(Modifier.fillMaxHeight().background(colors.surface)) {
+    Row(Modifier.fillMaxSize().background(colors.ground)) {
+        Box(Modifier.fillMaxHeight().background(colors.surface)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
+                        ).width(RAIL_WIDTH)
+                        .testTag(SETTINGS_RAIL)
+                        .backKeys { onBack() }
+                        .focusGroup(),
+            ) {
                 Column(
                     modifier =
                         Modifier
-                            .fillMaxHeight()
-                            .windowInsetsPadding(
-                                WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical),
-                            ).width(RAIL_WIDTH)
-                            .testTag(SETTINGS_RAIL)
-                            .backKeys { onBack() }
-                            .focusGroup(),
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            // The page's own, down; the ring's room and the items' own 12 dp, across.
+                            .padding(horizontal = 12.dp, vertical = 20.dp),
+                    // The focus rings of two items, one over the other.
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Column(
+                    Text(
+                        "Settings",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = colors.ink,
                         modifier =
                             Modifier
-                                .weight(1f)
-                                .verticalScroll(rememberScrollState())
-                                // The page's own, down; the ring's room and the items' own 12 dp, across.
-                                .padding(horizontal = 12.dp, vertical = 20.dp),
-                        // The focus rings of two items, one over the other.
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            "Settings",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = colors.ink,
-                            modifier =
-                                Modifier
-                                    .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-                                    // A page's title's line, so the two start level.
-                                    .heightIn(min = 32.dp)
-                                    .wrapContentHeight()
-                                    .semantics { heading() },
-                        )
-                        Categories()
-                    }
-                    // At the rail's foot, where it shows whichever category the rail has scrolled to.
-                    if (!coreReady) {
-                        Text(
-                            NEEDS_CORE_RAIL,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.inkMuted,
-                            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
-                        )
-                    }
+                                .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                                // A page's title's line, so the two start level.
+                                .heightIn(min = 32.dp)
+                                .wrapContentHeight()
+                                .semantics { heading() },
+                    )
+                    Categories()
                 }
-                // A question over the page dims the rail too, and keeps it from a tap.
-                OverlayScrim(overlays, Modifier.matchParentSize())
+                // At the rail's foot, where it shows whichever category the rail has scrolled to.
+                if (!coreReady) {
+                    Text(
+                        NEEDS_CORE_RAIL,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.inkMuted,
+                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
+                    )
+                }
             }
-            Box(Modifier.fillMaxHeight().width(1.dp).background(colors.line))
-            Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .testTag(SETTINGS_PAGE)
-                        // The rail has the window's start edge; the page pads the others itself.
-                        .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
-                        // Before the page sees it, and without taking it: a touch in the page goes into it, so what
-                        // it then focuses (a text field) can.
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                                    if (event.type == PointerEventType.Press && !now.pageOpen) {
-                                        now.pageOpen = true
-                                        onEnterPage()
-                                    }
+        }
+        Box(Modifier.fillMaxHeight().width(1.dp).background(colors.line))
+        Box(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag(SETTINGS_PAGE)
+                    // The rail has the window's start edge; the page pads the others itself.
+                    .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
+                    // Before the page sees it, and without taking it: a touch in the page goes into it, so what
+                    // it then focuses (a text field) can.
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.type == PointerEventType.Press && !now.pageOpen) {
+                                    now.pageOpen = true
+                                    onEnterPage()
                                 }
                             }
-                        }.onFocusChanged { pageHasFocus = it.hasFocus }
-                        // After the page's rows: Left that none of them takes, and that finds nothing in the page,
-                        // goes back to the categories.
-                        .onKeyEvent { event ->
-                            if (event.key != Key.DirectionLeft) return@onKeyEvent false
-                            if (event.type == KeyEventType.KeyDown && !focusManager.moveFocus(FocusDirection.Left)) {
-                                toCategories()
+                        }
+                    }.onFocusChanged { pageHasFocus = it.hasFocus }
+                    // After the page's rows: Left that none of them takes, and that finds nothing in the page,
+                    // goes back to the categories.
+                    .onKeyEvent { event ->
+                        if (event.key != Key.DirectionLeft) return@onKeyEvent false
+                        if (event.type == KeyEventType.KeyDown && !focusManager.moveFocus(FocusDirection.Left)) {
+                            toCategories()
+                        }
+                        true
+                    }.focusRequester(pageFocus)
+                    .focusProperties {
+                        // Asked for (FocusDirection.Enter), the focus comes in only once the page is gone into,
+                        // and goes back to the rail; the D-pad neither leaves the page nor wanders into it.
+                        onEnter = {
+                            if (!now.pageOpen || requestedFocusDirection != FocusDirection.Enter) {
+                                cancelFocusChange()
                             }
-                            true
-                        }.focusRequester(pageFocus)
-                        .focusProperties {
-                            // Asked for (FocusDirection.Enter), the focus comes in only once the page is gone into,
-                            // and goes back to the rail; the D-pad neither leaves the page nor wanders into it.
-                            onEnter = {
-                                if (!now.pageOpen || requestedFocusDirection != FocusDirection.Enter) {
-                                    cancelFocusChange()
-                                }
-                            }
-                            onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
-                        }.focusGroup(),
-            ) {
-                if (current != null) key(current) { page(pageBack) }
-            }
+                        }
+                        onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() }
+                    }.focusGroup(),
+        ) {
+            if (current != null) key(current) { page(pageBack) }
         }
     }
 }

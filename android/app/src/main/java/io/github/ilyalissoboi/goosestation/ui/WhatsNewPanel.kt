@@ -54,15 +54,15 @@ fun WhatsNewPanel(
     val close = remember { FocusRequester() }
     LaunchedEffect(Unit) { shown = WhatsNew.Loaded(load()) }
     val changes = (shown as? WhatsNew.Loaded)?.changes
-    LaunchedEffect(shown) {
-        when {
-            shown == WhatsNew.Loading -> close.requestFocus()
-            changes != null && changes.commits.isNotEmpty() -> first.requestFocus()
-            else -> close.requestFocus()
-        }
-    }
 
-    OverlayPanel(onBack = onClose) {
+    OverlayPanel(onBack = onClose, title = "What's new in $version") {
+        LaunchedEffect(shown) {
+            when {
+                shown == WhatsNew.Loading -> close.requestFocus()
+                changes != null && changes.commits.isNotEmpty() -> first.requestFocus()
+                else -> close.requestFocus()
+            }
+        }
         Text("What's new in $version", style = MaterialTheme.typography.titleLarge, color = colors.ink)
         when {
             shown == WhatsNew.Loading ->

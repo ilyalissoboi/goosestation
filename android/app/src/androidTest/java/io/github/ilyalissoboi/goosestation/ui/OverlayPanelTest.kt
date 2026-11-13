@@ -92,7 +92,7 @@ class OverlayPanelTest {
                 Box(Modifier.fillMaxSize()) {
                     ActionButton("Under", onClick = { underClicks++ })
                     if (shown) {
-                        OverlayPanel(onBack = { backs++ }) {
+                        OverlayPanel(onBack = { backs++ }, title = "Panel") {
                             val first = remember { FocusRequester() }
                             LaunchedEffect(Unit) { first.requestFocus() }
                             ActionButton("One", onClick = {}, modifier = Modifier.focusRequester(first))
@@ -168,7 +168,7 @@ class OverlayPanelTest {
         rule.setContent {
             GooseStationTheme {
                 Box(Modifier.size(420.dp, 320.dp)) {
-                    OverlayPanel(onBack = {}, modifier = Modifier.testTag("panel")) {
+                    OverlayPanel(onBack = {}, title = "Panel", modifier = Modifier.testTag("panel")) {
                         val first = remember { FocusRequester() }
                         LaunchedEffect(Unit) { first.requestFocus() }
                         ActionButton("Button 1", onClick = {}, modifier = Modifier.focusRequester(first))

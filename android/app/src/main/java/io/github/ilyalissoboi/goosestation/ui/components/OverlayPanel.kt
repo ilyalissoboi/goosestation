@@ -45,52 +45,55 @@ import io.github.ilyalissoboi.goosestation.ui.theme.Motion
  * system bars, that takes every tap, and a centred `surface` panel at `radius-lg`, at most 420 dp wide, inside the safe
  * area, that scrolls. The focus can't leave it; the caller focuses what it holds. B, Back and the system's Back call
  * [onBack], B and Back on the key-up of a press that began in it, so a press held from the screen under it doesn't
- * close it.
+ * close it. It's an [Overlay], a pane titled [title] (the line it shows at its top), so a screen reader reaches only it.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OverlayPanel(
     onBack: () -> Unit,
+    title: String,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     BackHandler(onBack = onBack)
     val colors = GooseStationTheme.colors
-    // The scrim and panel fade in over Motion.DIALOG_MS; what they hold is there, and focused, from the first frame.
+    // The scrim and panel fade in over Motion.DIALOG_MS; what they hold is there, and focused, as soon as it shows.
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(Motion.DIALOG_MS)) }
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = appear.value }
-                .background(colors.scrim)
-                .pointerInput(Unit) { detectTapGestures {} }
-                .backKeys(preview = false, onBack = onBack)
-                .safeDrawingPadding()
-                .padding(32.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        // The panel scrolls only as far as it must: a focused text field asks to show its cursor as well as itself, and
-        // the screens' centring can't do both, so it would never settle. What it scrolls to keeps the panel's padding
-        // beside it, so the last button isn't against the panel's edge.
-        val density = LocalDensity.current
-        val scrolling = remember(density) { LeastScrolling(with(density) { PANEL_PADDING.toPx() }) }
-        CompositionLocalProvider(LocalBringIntoViewSpec provides scrolling) {
-            Column(
-                modifier =
-                    modifier
-                        .focusProperties { onExit = { cancelFocusChange() } }
-                        .focusGroup()
-                        .widthIn(max = 420.dp)
-                        .fillMaxWidth()
-                        .castsOverlayShadow()
-                        .background(colors.surface, GsShapes.large)
-                        .verticalScroll(rememberScrollState())
-                        .padding(PANEL_PADDING),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                content = content,
-            )
+    Overlay(title) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = appear.value }
+                    .background(colors.scrim)
+                    .pointerInput(Unit) { detectTapGestures {} }
+                    .backKeys(preview = false, onBack = onBack)
+                    .safeDrawingPadding()
+                    .padding(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            // The panel scrolls only as far as it must: a focused text field asks to show its cursor as well as itself, and
+            // the screens' centring can't do both, so it would never settle. What it scrolls to keeps the panel's padding
+            // beside it, so the last button isn't against the panel's edge.
+            val density = LocalDensity.current
+            val scrolling = remember(density) { LeastScrolling(with(density) { PANEL_PADDING.toPx() }) }
+            CompositionLocalProvider(LocalBringIntoViewSpec provides scrolling) {
+                Column(
+                    modifier =
+                        modifier
+                            .focusProperties { onExit = { cancelFocusChange() } }
+                            .focusGroup()
+                            .widthIn(max = 420.dp)
+                            .fillMaxWidth()
+                            .castsOverlayShadow()
+                            .background(colors.surface, GsShapes.large)
+                            .verticalScroll(rememberScrollState())
+                            .padding(PANEL_PADDING),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    content = content,
+                )
+            }
         }
     }
 }

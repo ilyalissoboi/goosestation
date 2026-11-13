@@ -44,9 +44,9 @@ fun ResumePrompt(
 ) {
     val colors = GooseStationTheme.colors
     val resume = remember { FocusRequester() }
-    LaunchedEffect(Unit) { resume.requestFocus() }
 
-    OverlayPanel(onBack = onCancel) {
+    OverlayPanel(onBack = onCancel, title = offer.game.title) {
+        LaunchedEffect(Unit) { resume.requestFocus() }
         if (offer.hardcore) {
             // A boot from the resume state would end hardcore mode: the game only starts afresh.
             Text(

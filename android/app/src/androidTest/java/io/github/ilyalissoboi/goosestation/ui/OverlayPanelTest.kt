@@ -14,9 +14,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
@@ -34,6 +37,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -48,6 +52,39 @@ class OverlayPanelTest {
     private var backs = 0
     private var underClicks = 0
     private var shown by mutableStateOf(true)
+
+    // The fade doesn't hold anything back: the panel's first button is focused on the first frame, as before.
+    @Test
+    fun anOverlayShowsItsFocusedContentOnItsFirstFrame() {
+        rule.mainClock.autoAdvance = false
+        show()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+
+        assertTrue(focusedHas("One"))
+    }
+
+    // The scrim and panel fade in over 160 ms (design-system.md): part of the way at 80 ms, settled by 200.
+    @Test
+    fun anOverlayFadesIn() {
+        rule.mainClock.autoAdvance = false
+        show()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeBy(80)
+        val partway = corner()
+        rule.mainClock.advanceTimeBy(200)
+        val settled = corner()
+        rule.mainClock.advanceTimeBy(200)
+
+        assertNotEquals("still fading at 80 ms", settled, partway)
+        assertEquals("settled by 200 ms", settled, corner())
+    }
+
+    // A pixel of the scrim alone, in the screen's bottom corner.
+    private fun corner(): Color {
+        val image = rule.onRoot().captureToImage().toPixelMap()
+        return image[image.width - 2, image.height - 2]
+    }
 
     private fun show() {
         rule.setContent {

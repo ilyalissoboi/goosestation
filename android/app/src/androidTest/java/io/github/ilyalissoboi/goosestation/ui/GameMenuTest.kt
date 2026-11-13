@@ -75,6 +75,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -416,6 +417,38 @@ class GameMenuTest {
             .onNode(
                 hasText("Settings", substring = true) and hasText(NO_KEY_SETTINGS, substring = true),
             ).assertIsNotEnabled()
+    }
+
+    // The menu fades in as it opens (design-system.md, 160 ms): its scrim is lighter at the start than once settled.
+    @Test
+    fun theMenuFadesInAsItOpens() {
+        rule.mainClock.autoAdvance = false
+        state = GameMenuState(booted = true)
+        show()
+        rule.mainClock.advanceTimeByFrame()
+        val first = menuCorner()
+        rule.mainClock.advanceTimeBy(400)
+
+        assertNotEquals("fading in on its first frames", menuCorner(), first)
+    }
+
+    // Composed afresh on the way back from the game's settings, it was open all along: it doesn't fade again.
+    @Test
+    fun theMenuDoesntFadeAgainWhenComposedAgain() {
+        rule.mainClock.autoAdvance = false
+        state = GameMenuState(booted = true, cameFromSettings = true)
+        show()
+        rule.mainClock.advanceTimeByFrame()
+        val first = menuCorner()
+        rule.mainClock.advanceTimeBy(400)
+
+        assertEquals("opaque from its first frame", menuCorner(), first)
+    }
+
+    // A pixel of the scrim alone, in the bottom corner of the 960 x 540 the menu is shown in.
+    private fun menuCorner(): Color {
+        val image = rule.onRoot().captureToImage().toPixelMap()
+        return image[2, image.height - 2]
     }
 
     // Back from the game's settings: the menu is composed afresh, and focuses the row it opened them from.

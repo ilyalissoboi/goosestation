@@ -7,6 +7,9 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -62,6 +66,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -81,6 +86,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -95,10 +101,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
+import io.github.ilyalissoboi.goosestation.ui.theme.Motion
 
 /** One of a [CyclerRow]'s choices: [value] as settings.ini has it, [label] as the row shows it. */
 data class Choice<T>(
@@ -536,12 +544,14 @@ private fun Cycler(
     Row(
         modifier =
             Modifier
-                .heightIn(min = 40.dp)
+                // A touch control's height (design-system.md): the arrows in it are touch targets too.
+                .heightIn(min = 48.dp)
+                .testTag("cycler-well")
                 .background(colors.sunken, GsShapes.medium)
                 .border(1.dp, colors.lineStrong, GsShapes.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CyclerArrow(GsIcons.back, active, canGoBack, onBack)
+        CyclerArrow(GsIcons.back, active, canGoBack, onBack, Modifier.testTag("cycler-back"))
         Text(
             value,
             style = MaterialTheme.typography.titleSmall,
@@ -550,7 +560,7 @@ private fun Cycler(
             // After the arrows, so a long value wraps between them rather than pushing one out.
             modifier = Modifier.weight(1f, fill = false).widthIn(min = 96.dp).padding(vertical = 8.dp),
         )
-        CyclerArrow(GsIcons.forward, active, canGoForward, onForward)
+        CyclerArrow(GsIcons.forward, active, canGoForward, onForward, Modifier.testTag("cycler-forward"))
     }
 }
 
@@ -560,14 +570,15 @@ private fun CyclerArrow(
     active: Boolean,
     enabled: Boolean,
     onTap: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
     val tap by rememberUpdatedState(onTap)
     val canTap by rememberUpdatedState(enabled)
     Box(
         modifier =
-            Modifier
-                .size(40.dp)
+            modifier
+                .size(48.dp)
                 // Taken even at an end, where it does nothing: let through, it would reach the row and step forward.
                 .pointerInput(Unit) { detectTapGestures { if (canTap) tap() } },
         contentAlignment = Alignment.Center,
@@ -841,26 +852,36 @@ private fun Toggle(
 ) {
     val colors = GooseStationTheme.colors
     val lit = checked && enabled
+    // The thumb slides, and the colours change, over Motion.TOGGLE_MS: across the 36 dp inside the padding, less its 16.
+    val slide = tween<Dp>(Motion.TOGGLE_MS)
+    val fade = tween<Color>(Motion.TOGGLE_MS)
+    val thumbAt by animateDpAsState(if (checked) 20.dp else 0.dp, slide, label = "toggle thumb")
+    val track by animateColorAsState(if (lit) colors.beak else colors.sunken, fade, label = "toggle track")
+    val edge by animateColorAsState(if (lit) colors.beak else colors.lineStrong, fade, label = "toggle edge")
+    val thumb by animateColorAsState(
+        when {
+            !enabled -> colors.inkFaint
+            checked -> colors.onBeak
+            else -> colors.inkMuted
+        },
+        fade,
+        label = "toggle thumb colour",
+    )
     Box(
         modifier =
             Modifier
                 .size(width = 44.dp, height = 24.dp)
-                .background(if (lit) colors.beak else colors.sunken, GsShapes.small)
-                .border(1.dp, if (lit) colors.beak else colors.lineStrong, GsShapes.small)
+                .background(track, GsShapes.small)
+                .border(1.dp, edge, GsShapes.small)
                 .padding(4.dp),
-        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+        contentAlignment = Alignment.CenterStart,
     ) {
         Box(
             Modifier
+                .offset(x = thumbAt)
+                .testTag("switch-thumb")
                 .size(16.dp)
-                .background(
-                    when {
-                        !enabled -> colors.inkFaint
-                        checked -> colors.onBeak
-                        else -> colors.inkMuted
-                    },
-                    RoundedCornerShape(2.dp),
-                ),
+                .background(thumb, RoundedCornerShape(2.dp)),
         )
     }
 }

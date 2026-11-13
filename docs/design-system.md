@@ -91,6 +91,7 @@ has) and **Light** (for the desktop app, later). Values are in `tokens.json`; th
 | `danger` / `danger-soft` | `#ff6b81` / `#3d1820` | `#b01e3a` / `#f9dde2` | Failed, or destroys something. |
 | `ps-triangle`, `ps-circle`, `ps-cross`, `ps-square` | `#3fd6a6`, `#ff6b6b`, `#7aa7ff`, `#f28ad6` | `#0b7a5a`, `#c42b2b`, `#2b57c4`, `#a8338e` | The PlayStation face symbols in pad glyphs only, 3:1 or more on `sunken`. |
 | `scrim` | 72% black | 48% ink | Dims what's under a dialog or the pause menu. |
+| `shadow-overlay` | 60% black | 25% black | The shadow a floating panel casts: 8 dp of elevation, following `radius-lg`. |
 | `viewport`, `osd`, `osd-ink` | | | Over the game picture: the same in both themes. |
 | `touch`, `touch-pressed`, `touch-line` | 14%, 34% and 40% `ink` | the same | The on-screen touch controls over the game: a button's fill at rest, held, and its edge and labels. |
 
@@ -100,7 +101,9 @@ Rules:
   has more orange than that, something is wrong.
 - **Text on orange is `on-beak`**, near-black, in both themes.
 - **Grounds step up in lightness:** `sunken`, then `ground`, `surface`, `raised`. Depth comes from these steps, not
-  shadows. Only things that float (dialogs, the pause menu) cast `shadow-overlay`.
+  shadows. Only things that float cast `shadow-overlay`, 8 dp of elevation in its colour following the panel's
+  `radius-lg`: an `OverlayPanel`, the pause menu's panel and the side panels beside it
+  (`Modifier.castsOverlayShadow()`).
 - **Status always has an icon shape and a word**, never colour alone (see Icons).
 - Each token's note in `tokens.json` lists the contrast it was checked at. A new pair of colours must reach 4.5:1 for
   text (3:1 for text 24 px and up, control edges, icons and the focus ring) in both themes.
@@ -144,11 +147,17 @@ screens with 48 dp inside the overscan-safe area.
   for pointer-only desktop controls.
 - **Radii:** `radius-sm` 4 dp for small, tight things (badges, toggles, fields, covers), `radius-md` 8 dp for
   buttons, rows, notices and cards, `radius-lg` 16 dp for dialogs, the pause menu and sheets. Nothing rounder. In
-  Compose: `GsShapes.small`, `.medium`, `.large`, also set as `MaterialTheme.shapes`.
+  Compose: `GsShapes.small`, `.medium`, `.large`, also set as `MaterialTheme.shapes`. A shape inside another, with
+  padding between them, takes the outer radius less the padding, and never under 2 dp: a toggle's thumb, inside its
+  `radius-sm` track with 4 dp around it, is 2 dp.
 - **Layouts must work at 360 dp wide with text at 1.3×**, in portrait and landscape. A label and its value share a
   line when they fit and stack when they don't; `LabelValue` does this for settings rows.
 - **Motion** is brief and only where it explains something: focus moves and toggles at 120 ms, dialogs fading in at
   160 ms. Nothing moves while a game runs except on-screen messages fading. Honour the system's reduce-motion setting.
+  In Compose (`Motion` in `ui/theme`): the focus ring and focused fill fade in on what gains focus and out on what
+  loses it; a switch's thumb slides and its colours change; an `OverlayPanel`, and the pause menu as it opens, fade
+  in, and close at once. Compose scales each by the system's animator duration, so "Remove animations" makes them
+  jump.
 
 ## Focus and input
 

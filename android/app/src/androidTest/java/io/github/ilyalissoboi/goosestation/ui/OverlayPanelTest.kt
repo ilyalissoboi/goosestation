@@ -47,7 +47,10 @@ import org.junit.runner.RunWith
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class OverlayPanelTest {
-    @get:Rule val rule = createComposeRule()
+    // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
+    @Suppress("DEPRECATION")
+    @get:Rule
+    val rule = createComposeRule()
 
     private var backs = 0
     private var underClicks = 0

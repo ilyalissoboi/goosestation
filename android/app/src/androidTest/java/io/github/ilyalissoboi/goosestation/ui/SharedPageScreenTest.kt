@@ -24,7 +24,10 @@ import org.junit.runner.RunWith
 /** The pages both settings owners have ([SharedPageScreen]): each draws its own screen, with the extras it shows. */
 @RunWith(AndroidJUnit4::class)
 class SharedPageScreenTest {
-    @get:Rule val rule = createComposeRule()
+    // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
+    @Suppress("DEPRECATION")
+    @get:Rule
+    val rule = createComposeRule()
 
     private val extras =
         object : PageExtras {

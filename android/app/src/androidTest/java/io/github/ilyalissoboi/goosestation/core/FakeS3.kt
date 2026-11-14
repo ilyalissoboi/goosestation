@@ -60,7 +60,7 @@ class FakeS3 : AutoCloseable {
             }
         }
 
-    private fun serve(socket: Socket) =
+    private fun serve(socket: Socket): Unit =
         socket.use {
             val input = BufferedInputStream(it.getInputStream())
             val output = it.getOutputStream()

@@ -119,7 +119,6 @@ fun UpdateBanner(
                 listOf("Cancel" to model.onCancel)
             is UpdateState.NeedsPermission -> listOf("Open settings" to model.onOpenSettings)
             is UpdateState.Failed -> listOf("Try again" to model.onUpdate)
-            else -> emptyList()
         }
 
     val buttons: @Composable () -> Unit = {

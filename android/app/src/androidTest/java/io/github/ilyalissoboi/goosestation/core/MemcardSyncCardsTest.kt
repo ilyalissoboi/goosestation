@@ -77,8 +77,8 @@ class MemcardSyncCardsTest {
         assertTrue(conflict.name, SAVE in conflict.name && "shared_card_1" in conflict.name)
         assertEquals(SyncTestCore.DEVICE_NAME, conflict.local!!.device)
         assertEquals(listOf(OTHER), conflict.remote.map { it.device })
-        assertEquals(1, conflict.local!!.blocks)
-        val newestIsOther = conflict.remote[0].modifiedMs > conflict.local!!.modifiedMs
+        assertEquals(1, conflict.local.blocks)
+        val newestIsOther = conflict.remote[0].modifiedMs > conflict.local.modifiedMs
         assertEquals(if (newestIsOther) 1 else 0, conflict.defaultChoice)
         assertEquals(1, core.state().conflictCount)
     }

@@ -352,9 +352,11 @@ val checkNoWindowDialogs =
 
 tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
 
-// The JVM tests drive coroutines with kotlinx-coroutines-test (StandardTestDispatcher, runCurrent), still marked
-// experimental: one opt-in for them all, rather than a warning at each use, which buried the compiler's other warnings.
+// Every Kotlin compile, the app's and both tests', fails on a warning: a new one fails CI rather than piling up unread
+// (one hid a real bug, Rect.overlaps, before). The JVM tests drive coroutines with kotlinx-coroutines-test
+// (StandardTestDispatcher, runCurrent), still marked experimental: one opt-in for them all, not a warning at each use.
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions.allWarningsAsErrors.set(true)
     if (name.contains("UnitTest")) compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
 }
 

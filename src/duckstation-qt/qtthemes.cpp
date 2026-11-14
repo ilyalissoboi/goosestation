@@ -12,9 +12,85 @@
 #include <QtWidgets/QStyle>
 #include <QtWidgets/QStyleFactory>
 
+#ifdef _WIN32
+#include "common/windows_headers.h"
+
+#include <QtCore/QEvent>
+#include <QtCore/QTimer>
+#include <QtWidgets/QWidget>
+#include <dwmapi.h>
+#endif
+
 namespace QtHost {
 static void SetStyleFromSettings();
+
+#ifdef _WIN32
+static void SetTitleBarTheme(const QWidget* window, bool dark);
+static void UpdateTitleBars();
+#endif
 } // namespace QtHost
+
+#ifdef _WIN32
+
+namespace {
+
+/// Gives each window a title bar in the application theme's colours as it is shown. Qt colours title bars by the
+/// system's theme, which leaves a light bar on the dark themes (the default one included) wherever Windows is light.
+class TitleBarThemer final : public QObject
+{
+public:
+  using QObject::QObject;
+
+protected:
+  bool eventFilter(QObject* watched, QEvent* event) override
+  {
+    if (event->type() == QEvent::Show)
+    {
+      // Before the window is on screen, so it never shows the other colour.
+      if (watched->isWidgetType() && static_cast<QWidget*>(watched)->isWindow())
+        QtHost::SetTitleBarTheme(static_cast<QWidget*>(watched), QtHost::IsDarkApplicationTheme());
+    }
+    else if ((event->type() == QEvent::ThemeChange || event->type() == QEvent::ApplicationPaletteChange) &&
+             !m_update_queued)
+    {
+      // The system's theme changed, and Qt recolours every title bar to match it: put ours back once it has. Every
+      // window gets the event, so one update is queued for them all.
+      m_update_queued = true;
+      QTimer::singleShot(0, this, [this]() {
+        m_update_queued = false;
+        QtHost::UpdateTitleBars();
+      });
+    }
+
+    return false;
+  }
+
+private:
+  bool m_update_queued = false;
+};
+
+} // namespace
+
+void QtHost::SetTitleBarTheme(const QWidget* window, bool dark)
+{
+  // Only windows that already have a native handle: asking for one here would create it.
+  const HWND hwnd = reinterpret_cast<HWND>(window->internalWinId());
+  if (!hwnd)
+    return;
+
+  // Windows 10 2004 and later. Earlier builds fail the call and keep their light title bar.
+  const BOOL value = dark;
+  DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+}
+
+void QtHost::UpdateTitleBars()
+{
+  const bool dark = IsDarkApplicationTheme();
+  for (const QWidget* window : QApplication::topLevelWidgets())
+    SetTitleBarTheme(window, dark);
+}
+
+#endif // _WIN32
 
 static QString s_unthemed_style_name;
 static QPalette s_unthemed_palette;
@@ -36,6 +112,18 @@ void QtHost::UpdateApplicationTheme()
 
   SetStyleFromSettings();
   SetIconThemeFromStyle();
+
+#ifdef _WIN32
+  static TitleBarThemer* s_title_bar_themer;
+  if (!s_title_bar_themer)
+  {
+    s_title_bar_themer = new TitleBarThemer(qApp);
+    qApp->installEventFilter(s_title_bar_themer);
+  }
+
+  // Windows that are already open follow a change of theme.
+  UpdateTitleBars();
+#endif
 }
 
 void QtHost::SetStyleFromSettings()

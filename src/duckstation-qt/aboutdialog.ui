@@ -48,7 +48,7 @@
          <string/>
         </property>
         <property name="pixmap">
-         <pixmap resource="resources/icons.qrc">:/icons/goosestation.png</pixmap>
+         <pixmap resource="resources/icons.qrc">:/icons/goosestation_hero.png</pixmap>
         </property>
         <property name="alignment">
          <set>Qt::AlignCenter</set>

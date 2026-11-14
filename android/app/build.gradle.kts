@@ -39,15 +39,26 @@ val emusyncAar: File =
         val downloaded = layout.buildDirectory.file("emusync/$name")
         val aar = if (offline.isFile) offline else downloaded.get().asFile
         if (!aar.isFile) {
-            val url = "https://github.com/ilyalissoboi/emusync/releases/download/v$emusyncVersion/$name"
+            // goose.emusyncUrl stands in for the release's link, to check a stalled download by hand (docs/android.md).
+            val url =
+                providers.gradleProperty("goose.emusyncUrl").orNull
+                    ?: "https://github.com/ilyalissoboi/emusync/releases/download/v$emusyncVersion/$name"
             val part = File(aar.parentFile, "$name.part")
             try {
                 aar.parentFile.mkdirs()
-                URI(url).toURL().openStream().use { input -> part.outputStream().use { input.copyTo(it) } }
-                part.renameTo(aar)
+                // Timeouts, since this runs as Gradle configures: a stalled connection would hang every build, IDE sync
+                // included. A timeout is an IOException, caught below.
+                val connection = URI(url).toURL().openConnection()
+                connection.connectTimeout = 30_000
+                connection.readTimeout = 60_000
+                connection.getInputStream().use { input -> part.outputStream().use { input.copyTo(it) } }
             } catch (e: IOException) {
                 part.delete()
                 throw GradleException("Couldn't download $url ($e): place $name in ${offline.parentFile}.")
+            }
+            if (!part.renameTo(aar)) {
+                part.delete()
+                throw GradleException("Couldn't move the download into $aar: place $name in ${offline.parentFile}.")
             }
         }
         val digest = MessageDigest.getInstance("SHA-256")

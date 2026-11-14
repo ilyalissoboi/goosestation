@@ -51,7 +51,7 @@ distribution itself against `distributionSha256Sum`, which matches the published
 | `org.jlleitschuh.gradle.ktlint` (`./gradlew ktlintCheck`, part of `check`; latest stable on 2026-10-30) / ktlint | 14.2.0 / 1.8.0 |
 | `compileSdk` / `targetSdk` / `minSdk` | 37 / 37 / 29 |
 | NDK / CMake (`ndkVersion`, `externalNativeBuild.cmake.version`) | 30.0.16248370 / 4.1.2 |
-| emusync's Android library (memory card sync; `emusync-0.3.0.aar` from the `v0.3.0` release, SHA-256 `964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81`, checked by `build.gradle.kts`, which downloads it once into `app/build/emusync/`, or takes a copy placed in `dep/emusync/` for builds without network) | 0.3.0 |
+| emusync's Android library (memory card sync; `emusync-0.3.0.aar` from the `v0.3.0` release, SHA-256 `964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81`, checked by `build.gradle.kts`, which downloads it once into `app/build/emusync/`, with a 30 s connect and a 60 s read timeout so a stalled download fails the build rather than hanging it, or takes a copy placed in `dep/emusync/` for builds without network; `-Pgoose.emusyncUrl=` downloads it from elsewhere, to check that by hand) | 0.3.0 |
 
 ## Installing the SDK
 

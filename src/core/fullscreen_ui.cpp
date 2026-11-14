@@ -5727,7 +5727,7 @@ void FullscreenUI::DrawPostProcessingFavourites()
   std::string action_name;
 
   const auto selected = std::find_if(state.favourites.begin(), state.favourites.end(),
-                                     [](const Info& info) { return info.name == state.selected; });
+                                     [&state](const Info& info) { return info.name == state.selected; });
   if (selected == state.favourites.end() && state.view == View::Favourite)
     state.view = View::List;
 
@@ -5898,14 +5898,14 @@ void FullscreenUI::DrawPostProcessingFavourites()
     ImGuiFullscreen::ResetCloseMenuIfNeeded();
   }
 
-  const auto show = [](View view) {
+  const auto show = [&state](View view) {
     state.view = view;
     QueueResetFocus(FocusResetType::Other);
   };
   const std::string& folder = EmuFolders::PostProcessing;
 
   // The popup is drawn after the page, outside the page's hold on the settings. The order is settings.ini's.
-  const auto apply = []() {
+  const auto apply = [&state, &folder]() {
     Error error;
     bool applied;
     {
@@ -5927,7 +5927,7 @@ void FullscreenUI::DrawPostProcessingFavourites()
     ShowToast(std::string(), fmt::format(FSUI_FSTR("Post-processing: {}."), state.selected));
     ClosePostProcessingFavourites();
   };
-  const auto save = [&show](bool replace) {
+  const auto save = [&state, &folder, &show](bool replace) {
     Error error;
     bool saved;
     {
@@ -5949,7 +5949,7 @@ void FullscreenUI::DrawPostProcessingFavourites()
     state.error.clear();
     show(View::List);
   };
-  const auto edit_order = [](const auto& edit) {
+  const auto edit_order = [&state](const auto& edit) {
     Error error;
     bool done;
     {
@@ -5997,7 +5997,7 @@ void FullscreenUI::DrawPostProcessingFavourites()
       {
         std::string trimmed;
         PostProcessing::Favourites::CheckName(state.name, &trimmed, nullptr);
-        if (edit_order([](SettingsInterface& order, Error* error) {
+        if (edit_order([&state](SettingsInterface& order, Error* error) {
               return PostProcessing::Favourites::Rename(EmuFolders::PostProcessing, order, state.renaming, state.name,
                                                         error);
             }))
@@ -6050,7 +6050,7 @@ void FullscreenUI::DrawPostProcessingFavourites()
 
     case Action::MoveUp:
     case Action::MoveDown:
-      edit_order([down = (action == Action::MoveDown)](SettingsInterface& order, Error*) {
+      edit_order([&state, down = (action == Action::MoveDown)](SettingsInterface& order, Error*) {
         PostProcessing::Favourites::Move(EmuFolders::PostProcessing, order, state.selected, down);
         return true;
       });
@@ -6071,7 +6071,7 @@ void FullscreenUI::DrawPostProcessingFavourites()
           save(true);
           break;
         case Question::Delete:
-          if (edit_order([](SettingsInterface& order, Error* error) {
+          if (edit_order([&state](SettingsInterface& order, Error* error) {
                 return PostProcessing::Favourites::Delete(EmuFolders::PostProcessing, order, state.selected, error);
               }))
           {

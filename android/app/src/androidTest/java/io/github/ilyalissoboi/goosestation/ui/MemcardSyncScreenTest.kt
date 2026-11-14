@@ -18,11 +18,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.MemcardSyncState
 import io.github.ilyalissoboi.goosestation.core.SyncActivity
@@ -38,8 +35,8 @@ import org.junit.runner.RunWith
 /** The Memory cards page, driven with keys: its rows, the secrets never shown back, Sync now and the conflicts. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class MemcardSyncScreenTest {
-    @get:Rule val rule = createComposeRule()
+class MemcardSyncScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val texts = mutableListOf<Pair<String, String>>()
     private val secrets = mutableListOf<Pair<String, String>>()
@@ -81,27 +78,12 @@ class MemcardSyncScreenTest {
         rule.waitForIdle()
     }
 
-    private fun downTo(text: String) {
-        repeat(40) {
-            if (rule
-                    .onAllNodes(
-                        isFocused() and hasText(text, substring = true),
-                    ).fetchSemanticsNodes()
-                    .isNotEmpty()
-            ) {
-                return
-            }
-            press(Key.DirectionDown)
-        }
-        throw AssertionError("Down never reached $text")
-    }
-
     @Test
     fun theCardRowsComeAfterSync() {
         show(RUNNING, cards = pageValues(MemoryCardSettings.all))
 
         rule.onNode(isFocused()).assert(hasText("Manage cards", substring = true))
-        downTo("Card 1 type")
+        walkTo("Card 1 type")
         press(Key.DirectionDown)
         rule.onNode(isFocused()).assert(hasText("Card 2 type", substring = true))
         press(Key.DirectionDown)
@@ -114,7 +96,7 @@ class MemcardSyncScreenTest {
         val shared = pageValues(MemoryCardSettings.all, "MemoryCards/Card1Type" to "Shared")
         show(RUNNING, cards = shared)
 
-        downTo("Shared card 1")
+        walkTo("Shared card 1")
         rule.onNode(isFocused()).assert(hasText("(the default)", substring = true))
         press(Key.ButtonA)
         press(Key.DirectionDown)
@@ -128,28 +110,10 @@ class MemcardSyncScreenTest {
         val start = pageValues(MemoryCardSettings.all)
         show(RUNNING, cards = start)
 
-        downTo("One card for all discs of a game")
+        walkTo("One card for all discs of a game")
         press(Key.ButtonA)
 
         assertEquals(listOf(start.with(MemoryCardSettings.ONE_CARD_PER_GAME, false)), cardChanges)
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun pressUntilFocused(
-        key: Key,
-        text: String,
-    ) {
-        repeat(16) {
-            if (rule.onAllNodes(isFocused().and(hasText(text, substring = true))).fetchSemanticsNodes().isNotEmpty()) {
-                return
-            }
-            press(key)
-        }
-        rule.onNode(isFocused()).assert(hasText(text, substring = true))
     }
 
     private fun field(label: String) = hasSetTextAction().and(hasContentDescription(label))
@@ -185,7 +149,7 @@ class MemcardSyncScreenTest {
         show(RUNNING.copy(hasSecret = true, hasPassphrase = true))
         assertEquals(2, rule.onAllNodes(hasText("Saved")).fetchSemanticsNodes().size)
 
-        pressUntilFocused(Key.DirectionDown, "Secret access key")
+        walkTo("Secret access key", Key.DirectionDown)
         press(Key.ButtonA)
 
         val secret = rule.onNode(field("Secret access key")).fetchSemanticsNode()
@@ -204,7 +168,7 @@ class MemcardSyncScreenTest {
     fun aRowOpensItsFieldFocused() {
         show(RUNNING)
 
-        pressUntilFocused(Key.DirectionDown, "Storage")
+        walkTo("Storage", Key.DirectionDown)
         press(Key.ButtonA)
 
         rule.onNode(isFocused()).assert(field("Storage"))
@@ -222,7 +186,7 @@ class MemcardSyncScreenTest {
     fun doneSavesTheField() {
         show(RUNNING)
 
-        pressUntilFocused(Key.DirectionDown, "Storage")
+        walkTo("Storage", Key.DirectionDown)
         press(Key.ButtonA)
         rule.onNode(field("Storage")).performTextInput("/other")
         rule.onNode(field("Storage")).performImeAction()
@@ -237,7 +201,7 @@ class MemcardSyncScreenTest {
     fun doneHandsTheSecretOver() {
         show(RUNNING)
 
-        pressUntilFocused(Key.DirectionDown, "Secret access key")
+        walkTo("Secret access key", Key.DirectionDown)
         press(Key.ButtonA)
         rule.onNode(field("Secret access key")).performTextInput("not-a-real-secret")
         rule.onNode(field("Secret access key")).performImeAction()
@@ -250,7 +214,7 @@ class MemcardSyncScreenTest {
     fun bClosesTheFieldUnchanged() {
         show(RUNNING)
 
-        pressUntilFocused(Key.DirectionDown, "Storage")
+        walkTo("Storage", Key.DirectionDown)
         press(Key.ButtonA)
         rule.onNode(field("Storage")).performTextInput("/other")
         press(Key.ButtonB)
@@ -270,7 +234,7 @@ class MemcardSyncScreenTest {
     fun removePassphraseRemovesIt() {
         show(RUNNING.copy(hasPassphrase = true))
 
-        pressUntilFocused(Key.DirectionDown, "Remove passphrase")
+        walkTo("Remove passphrase", Key.DirectionDown)
         press(Key.ButtonA)
 
         assertEquals(1, removed)
@@ -298,7 +262,7 @@ class MemcardSyncScreenTest {
         }
         rule.waitForIdle()
 
-        pressUntilFocused(Key.DirectionDown, "Remove passphrase")
+        walkTo("Remove passphrase", Key.DirectionDown)
         press(Key.ButtonA)
 
         rule.onNode(isFocused()).assert(hasText("Encryption passphrase", substring = true))
@@ -308,7 +272,7 @@ class MemcardSyncScreenTest {
     fun syncNowSyncs() {
         show(RUNNING)
 
-        pressUntilFocused(Key.DirectionDown, "Sync now")
+        walkTo("Sync now", Key.DirectionDown)
         press(Key.ButtonA)
 
         assertEquals(1, syncs)
@@ -326,7 +290,7 @@ class MemcardSyncScreenTest {
     fun conflictsRowOpensTheScreen() {
         show(RUNNING.copy(conflictCount = 2))
 
-        pressUntilFocused(Key.DirectionDown, "2 conflicts")
+        walkTo("2 conflicts", Key.DirectionDown)
         press(Key.ButtonA)
 
         assertEquals(1, conflictsOpened)

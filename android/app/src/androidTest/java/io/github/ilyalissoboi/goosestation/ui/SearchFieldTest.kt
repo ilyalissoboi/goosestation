@@ -30,13 +30,10 @@ import androidx.compose.ui.test.isNotFocusable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -55,8 +52,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 /** The library's search field, driven as a controller drives it. */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class SearchFieldTest {
-    @get:Rule val rule = createComposeRule()
+class SearchFieldTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val state = TextFieldState()
     private lateinit var focus: SearchFocus
@@ -105,11 +102,6 @@ class SearchFieldTest {
 
     private fun focusField() {
         rule.runOnIdle { focus.focus() }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

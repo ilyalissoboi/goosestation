@@ -50,10 +50,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.then
 import androidx.compose.ui.text.TextLayoutResult
@@ -160,7 +157,7 @@ import java.time.ZonedDateTime
 @OptIn(ExperimentalTestApi::class)
 @LargeTest
 @RunWith(AndroidJUnit4::class)
-class OrientationLayoutTest {
+class OrientationLayoutTest : ControllerKeys {
     private data class Config(
         val name: String,
         val size: DpSize,
@@ -306,7 +303,7 @@ class OrientationLayoutTest {
                 ).map { (name, display, binding) -> PadBinding(name, display, PadBindingKind.HalfAxis, binding) }
     }
 
-    @get:Rule val rule = createComposeRule()
+    @get:Rule override val rule = createComposeRule()
 
     private val config = mutableStateOf(CONFIGS.first())
 
@@ -338,11 +335,6 @@ class OrientationLayoutTest {
                 throw AssertionError("$each: ${e.message}", e)
             }
         }
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
     }
 
     private fun bounds(node: SemanticsNodeInteraction): DpRect = node.getUnclippedBoundsInRoot()
@@ -392,9 +384,6 @@ class OrientationLayoutTest {
 
     private fun SemanticsNode.mergedText(): String =
         "\"" + (config.getOrNull(SemanticsProperties.Text)?.joinToString(" / ") { it.text } ?: "") + "\""
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
 
     /** Presses [key] until the focused element has [text], checking each one it reaches is in view. */
     private fun pressUntilFocused(

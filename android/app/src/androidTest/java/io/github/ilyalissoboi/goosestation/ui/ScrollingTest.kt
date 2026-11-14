@@ -40,8 +40,8 @@ import kotlin.math.abs
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class ScrollingTest {
-    @get:Rule val rule = createComposeRule()
+class ScrollingTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private fun show() {
         rule.setContent {
@@ -63,16 +63,6 @@ class ScrollingTest {
             }
         }
         rule.waitForIdle()
-    }
-
-    private fun press(
-        key: Key,
-        times: Int = 1,
-    ) {
-        repeat(times) {
-            rule.onRoot().performKeyInput { pressKey(key) }
-            rule.waitForIdle()
-        }
     }
 
     private fun viewport() = rule.onNode(hasScrollAction()).getUnclippedBoundsInRoot()

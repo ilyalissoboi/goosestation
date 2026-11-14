@@ -14,9 +14,6 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -28,19 +25,14 @@ import org.junit.runner.RunWith
 /** Post-processing's shader packs page, with a D-pad. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class ShaderPacksScreenTest {
-    @get:Rule val rule = createComposeRule()
+class ShaderPacksScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val model = SamplePostProcessing()
     private val packs = model.packs
 
     private fun show() {
         rule.setContent { GooseStationTheme { PostProcessingScreen(model, packs, onBack = { model.calls += "back" }) } }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

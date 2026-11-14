@@ -13,10 +13,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -29,12 +26,12 @@ import org.junit.runner.RunWith
 /** The settings hub, and the Graphics page, with a D-pad. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class SettingsScreenTest {
+class SettingsScreenTest : ControllerKeys {
     private companion object {
         const val UNAVAILABLE = "Available once GooseStation has started."
     }
 
-    @get:Rule val rule = createComposeRule()
+    @get:Rule override val rule = createComposeRule()
 
     private val opened = mutableListOf<SettingsEntry>()
     private var backs = 0
@@ -53,11 +50,6 @@ class SettingsScreenTest {
                 )
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

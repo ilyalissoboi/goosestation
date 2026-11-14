@@ -27,11 +27,8 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -123,7 +120,7 @@ import java.time.ZonedDateTime
 /** Every screen, on fake data, can be used with a controller alone ([assertControllerReady]). */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class FocusAuditTest {
+class FocusAuditTest : ControllerKeys {
     private companion object {
         val GAME = GameEntry("/games/padtest.psexe", "Pad Test", "SLUS-00001", "NTSC-U", 0, 0, null)
         val GAME_SUMMARY = GameSummary(mapOf(GamePage.Graphics to 2), others = 4)
@@ -170,15 +167,10 @@ class FocusAuditTest {
             )
     }
 
-    @get:Rule val rule = createComposeRule()
+    @get:Rule override val rule = createComposeRule()
 
     private fun show(content: @Composable () -> Unit) {
         rule.setContent { GooseStationTheme { content() } }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

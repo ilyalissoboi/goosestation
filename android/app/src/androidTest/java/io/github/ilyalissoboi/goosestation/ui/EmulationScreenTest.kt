@@ -15,9 +15,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings.REWIND_HOTKEY_NOTE
@@ -32,8 +29,8 @@ import org.junit.runner.RunWith
 /** The Emulation page with a D-pad. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class EmulationScreenTest {
-    @get:Rule val rule = createComposeRule()
+class EmulationScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val changes = mutableListOf<SettingValues>()
 
@@ -55,22 +52,6 @@ class EmulationScreenTest {
         rule.waitForIdle()
     }
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-
-    private fun downTo(text: String) {
-        repeat(30) {
-            if (focusedHas(text)) return
-            press(Key.DirectionDown)
-        }
-        throw AssertionError("Down never reached $text")
-    }
-
     @Test
     fun theSpeedStepsDesktopsLadderAndIsWrittenAsAFactor() {
         show()
@@ -87,7 +68,7 @@ class EmulationScreenTest {
         show("Cheevos/Enabled" to "true", "Cheevos/ChallengeMode" to "true", "Main/RewindEnable" to "true")
 
         rule.onNode(hasText("Rewind") and hasText("Off in hardcore mode")).assertIsNotEnabled()
-        downTo("Run-ahead")
+        walkTo("Run-ahead")
         press(Key.DirectionUp)
         // From run-ahead, up past the disabled rewind row and the rows it hides.
         rule.onNode(isFocused()).assert(hasText("Skip duplicate frames", substring = true))
@@ -106,7 +87,7 @@ class EmulationScreenTest {
         show()
         rule.onNodeWithText("Frame time buffer").assertDoesNotExist()
 
-        downTo("Optimal frame pacing")
+        walkTo("Optimal frame pacing")
         press(Key.ButtonA)
         press(Key.DirectionDown)
         rule.onNode(isFocused()).assert(hasText("Reduce input latency", substring = true))

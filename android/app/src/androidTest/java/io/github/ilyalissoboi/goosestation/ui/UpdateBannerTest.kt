@@ -17,10 +17,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.UpdateFailure
@@ -39,11 +36,11 @@ import org.junit.runner.RunWith
 /** The library's update banner in each state, and What's new, driven with keys. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class UpdateBannerTest {
+class UpdateBannerTest : ControllerKeys {
     // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
     @Suppress("DEPRECATION")
     @get:Rule
-    val rule = createComposeRule()
+    override val rule = createComposeRule()
 
     private val release = ChannelRelease("preview", "0.1-512-g1a2b3c4", 100_512, "a".repeat(40), "http://x/apk", 4)
     private val calls = mutableListOf<String>()
@@ -75,11 +72,6 @@ class UpdateBannerTest {
                 }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

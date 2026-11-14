@@ -17,11 +17,8 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -44,7 +41,7 @@ import org.junit.runner.RunWith
 /** A port's page with a D-pad: one controller, with three of its inputs. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class PortScreenTest {
+class PortScreenTest : ControllerKeys {
     private companion object {
         val PAD = ConnectedController(deviceId = 5, name = "Test Pad", descriptor = "pad-a")
         val OTHER_PAD = ConnectedController(deviceId = 6, name = "Other Pad", descriptor = "pad-b")
@@ -118,7 +115,7 @@ class PortScreenTest {
                 )
     }
 
-    @get:Rule val rule = createComposeRule()
+    @get:Rule override val rule = createComposeRule()
 
     private val selects = mutableListOf<String>()
     private val types = mutableListOf<String>()
@@ -231,11 +228,6 @@ class PortScreenTest {
         show(bindings = GLYPH_BINDINGS, glyphs = true, capturing = "Cross", secondsLeft = 5)
 
         rule.onNode(hasText("Press the new button for Cross", substring = true)).assertExists()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
     }
 
     private fun assertFocusedHas(vararg texts: String) {

@@ -14,9 +14,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -29,8 +26,8 @@ import org.junit.runner.RunWith
 /** The Audio page with a D-pad. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class AudioScreenTest {
-    @get:Rule val rule = createComposeRule()
+class AudioScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val changes = mutableListOf<SettingValues>()
 
@@ -49,11 +46,6 @@ class AudioScreenTest {
                 )
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

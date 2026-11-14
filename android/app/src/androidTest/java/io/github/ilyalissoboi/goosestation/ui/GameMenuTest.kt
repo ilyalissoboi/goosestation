@@ -44,7 +44,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -90,8 +89,8 @@ import java.time.ZonedDateTime
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class GameMenuTest {
-    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+class GameMenuTest : ControllerKeys {
+    @get:Rule override val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
     private val calls = mutableListOf<String>()
@@ -314,11 +313,6 @@ class GameMenuTest {
                 Box(Modifier.requiredSize(width.dp, height.dp)) { GameMenu(state, actions, game, now) }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

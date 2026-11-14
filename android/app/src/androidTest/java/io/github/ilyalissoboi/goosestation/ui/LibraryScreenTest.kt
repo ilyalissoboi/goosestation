@@ -49,14 +49,11 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.Insets
@@ -93,8 +90,8 @@ import java.io.File
 /** The library with a D-pad, on 30 fake games, the first with a real cover. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class LibraryScreenTest {
-    @get:Rule val rule = createComposeRule()
+class LibraryScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private lateinit var games: List<GameEntry>
     private val started = mutableListOf<GameEntry>()
@@ -182,14 +179,6 @@ class LibraryScreenTest {
                 }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text)).fetchSemanticsNodes().isNotEmpty()
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 
@@ -1072,8 +1061,8 @@ class LibraryScreenTest {
         show(syncBadge = SyncBadge.Synced, focusSettings = true)
 
         // Left of the five buttons, Settings the last; or beside the title, over them, on a narrow screen.
-        repeat(5) { if (!focusedHas("Synced")) press(Key.DirectionLeft) }
-        if (!focusedHas("Synced")) press(Key.DirectionUp)
+        repeat(5) { if (!focusedIs("Synced")) press(Key.DirectionLeft) }
+        if (!focusedIs("Synced")) press(Key.DirectionUp)
         rule.onNode(isFocused()).assert(hasText("Synced"))
         press(Key.ButtonA)
 

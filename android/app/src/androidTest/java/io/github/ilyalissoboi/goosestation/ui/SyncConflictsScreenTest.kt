@@ -14,9 +14,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
@@ -30,8 +27,8 @@ import java.time.ZoneOffset
 /** The sync conflict screen, driven with keys: a conflict's choices, the newest first in focus, and Keep all. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class SyncConflictsScreenTest {
-    @get:Rule val rule = createComposeRule()
+class SyncConflictsScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val resolved = mutableListOf<Pair<Long, Int>>()
     private var keptAll = 0
@@ -50,24 +47,6 @@ class SyncConflictsScreenTest {
             }
         }
         rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun pressUntilFocused(
-        key: Key,
-        text: String,
-    ) {
-        repeat(12) {
-            if (rule.onAllNodes(isFocused().and(hasText(text, substring = true))).fetchSemanticsNodes().isNotEmpty()) {
-                return
-            }
-            press(key)
-        }
-        rule.onNode(isFocused()).assert(hasText(text, substring = true))
     }
 
     @Test
@@ -109,7 +88,7 @@ class SyncConflictsScreenTest {
     fun keepAllAsksFirstWithCancelFocused() {
         show(CONFLICTS)
 
-        pressUntilFocused(Key.DirectionDown, "Keep all from this device")
+        walkTo("Keep all from this device", Key.DirectionDown)
         press(Key.ButtonA)
         rule
             .onNodeWithText(
@@ -119,9 +98,9 @@ class SyncConflictsScreenTest {
         press(Key.ButtonA)
         assertEquals(0, keptAll)
 
-        pressUntilFocused(Key.DirectionDown, "Keep all from this device")
+        walkTo("Keep all from this device", Key.DirectionDown)
         press(Key.ButtonA)
-        pressUntilFocused(Key.DirectionLeft, "Keep all")
+        walkTo("Keep all", Key.DirectionLeft)
         press(Key.ButtonA)
         assertEquals(1, keptAll)
     }

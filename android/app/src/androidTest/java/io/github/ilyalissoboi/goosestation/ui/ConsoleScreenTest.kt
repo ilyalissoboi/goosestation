@@ -14,9 +14,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -29,8 +26,8 @@ import org.junit.runner.RunWith
 /** The Console page with a D-pad. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class ConsoleScreenTest {
-    @get:Rule val rule = createComposeRule()
+class ConsoleScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val changes = mutableListOf<SettingValues>()
 
@@ -51,22 +48,6 @@ class ConsoleScreenTest {
         }
         rule.waitForIdle()
     }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun downTo(text: String) {
-        repeat(30) {
-            if (focusedHas(text)) return
-            press(Key.DirectionDown)
-        }
-        throw AssertionError("Down never reached $text")
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
 
     @Test
     fun theSectionsAreInOrder() {
@@ -96,7 +77,7 @@ class ConsoleScreenTest {
         show(pageValues(ConsoleSettings.all))
         rule.onNodeWithText("Overclocking percentage").assertDoesNotExist()
 
-        downTo("Overclocking")
+        walkTo("Overclocking")
         press(Key.ButtonA)
         press(Key.DirectionDown)
         rule.onNode(isFocused()).assert(hasText("Overclocking percentage", substring = true))
@@ -141,7 +122,7 @@ class ConsoleScreenTest {
     fun seekSpeedUpStepsDownToInstant() {
         show(pageValues(ConsoleSettings.all))
 
-        downTo("Seek speed-up")
+        walkTo("Seek speed-up")
         rule.onNode(isFocused()).assert(hasText("None (normal speed)", substring = true))
         press(Key.DirectionLeft)
 

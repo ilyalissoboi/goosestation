@@ -21,11 +21,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.FavouriteQuestion
@@ -46,8 +43,8 @@ import org.junit.runner.RunWith
 /** The Post-processing pages (the chains, Add a shader, a stage) with a D-pad. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class PostProcessingScreenTest {
-    @get:Rule val rule = createComposeRule()
+class PostProcessingScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val model = SamplePostProcessing()
 
@@ -63,11 +60,6 @@ class PostProcessingScreenTest {
                 }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

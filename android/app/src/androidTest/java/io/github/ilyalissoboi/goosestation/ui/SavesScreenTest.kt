@@ -17,11 +17,8 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.HeldGame
@@ -45,8 +42,8 @@ import java.time.ZonedDateTime
 /** A game's Saves page with a D-pad: its tabs, its rows, the delete question and Back. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class SavesScreenTest {
-    @get:Rule val rule = createComposeRule()
+class SavesScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val now = ZonedDateTime.of(2026, 11, 8, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
     private val game = GameEntry("content://g/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
@@ -94,11 +91,6 @@ class SavesScreenTest {
         rule.setContent {
             GooseStationTheme { InOverlayHost { SavesScreen(page, actions, now, onBack = { backs++ }) } }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

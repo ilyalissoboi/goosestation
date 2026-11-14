@@ -15,9 +15,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.GameControllers
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
@@ -33,8 +30,8 @@ import org.junit.runner.RunWith
 /** A game's Controllers page with a D-pad: multitap, each port's type and its settings, or a profile's note. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class GameControllersScreenTest {
-    @get:Rule val rule = createComposeRule()
+class GameControllersScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private var shown: SettingValues? = null
 
@@ -62,14 +59,6 @@ class GameControllersScreenTest {
         }
         rule.waitForIdle()
     }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
 
     @Test
     fun aGamesPortTypeCanUseGlobal() {

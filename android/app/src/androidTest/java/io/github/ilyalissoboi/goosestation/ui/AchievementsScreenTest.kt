@@ -21,10 +21,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.AchievementsAccount
 import io.github.ilyalissoboi.goosestation.core.AchievementsQueue
@@ -45,7 +42,7 @@ import org.junit.runner.RunWith
 /** The Achievements page, driven with keys: signing in, the signed-in state, and the switches. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class AchievementsScreenTest {
+class AchievementsScreenTest : ControllerKeys {
     private companion object {
         val SIGNED_OUT = AchievementsAccount(AchievementsAccount.SIGNED_OUT, "", "", 0, 0)
         val SIGNED_IN = AchievementsAccount(AchievementsAccount.SIGNED_IN, "goose", "Goose", 300, 940)
@@ -53,7 +50,7 @@ class AchievementsScreenTest {
         val SWITCHES = pageValues(AchievementsSettings.all)
     }
 
-    @get:Rule val rule = createComposeRule()
+    @get:Rule override val rule = createComposeRule()
 
     private val signIns = mutableListOf<Pair<String, String>>()
     private var signOuts = 0
@@ -91,29 +88,6 @@ class AchievementsScreenTest {
     // A text field, by its label (its content description, as TalkBack reads it).
     private fun field(label: String) = hasSetTextAction().and(hasContentDescription(label))
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun pressUntilFocused(
-        key: Key,
-        text: String,
-    ) {
-        repeat(12) {
-            if (rule
-                    .onAllNodes(
-                        isFocused().and(hasText(text, substring = true)),
-                    ).fetchSemanticsNodes()
-                    .isNotEmpty()
-            ) {
-                return
-            }
-            press(key)
-        }
-        rule.onNode(isFocused()).assert(hasText(text, substring = true))
-    }
-
     @Test
     fun signedOutFocusesUsername() {
         show(SIGNED_OUT)
@@ -127,7 +101,7 @@ class AchievementsScreenTest {
 
         rule.onNode(field("Username")).performTextInput("goose")
         rule.onNode(field("Password")).performTextInput("not-a-real-password")
-        pressUntilFocused(Key.DirectionDown, "Sign in")
+        walkTo("Sign in", Key.DirectionDown)
         press(Key.ButtonA)
 
         assertEquals(listOf("goose" to "not-a-real-password"), signIns)
@@ -175,10 +149,10 @@ class AchievementsScreenTest {
     fun switchesToggleWithA() {
         show(SIGNED_IN)
 
-        pressUntilFocused(Key.DirectionDown, "Hardcore mode")
+        walkTo("Hardcore mode", Key.DirectionDown)
         press(Key.ButtonA)
         rule.onNode(isFocused()).assertIsOn()
-        pressUntilFocused(Key.DirectionDown, "Unlock and leaderboard messages")
+        walkTo("Unlock and leaderboard messages", Key.DirectionDown)
         press(Key.ButtonA)
 
         assertEquals(
@@ -231,7 +205,7 @@ class AchievementsScreenTest {
     fun theNewRowsFollowLiveIndicators() {
         show(SIGNED_IN)
 
-        pressUntilFocused(Key.DirectionDown, "Live indicators")
+        walkTo("Live indicators", Key.DirectionDown)
         for (row in listOf(
             "Encore mode",
             "Spectator mode",
@@ -248,7 +222,7 @@ class AchievementsScreenTest {
     fun theTimesStepBySeconds() {
         show(SIGNED_IN)
 
-        pressUntilFocused(Key.DirectionDown, "Unlock message time")
+        walkTo("Unlock message time", Key.DirectionDown)
         rule.onNode(isFocused()).assert(hasText("5 s", substring = true))
         press(Key.DirectionRight)
 
@@ -259,7 +233,7 @@ class AchievementsScreenTest {
     fun theTimesGoWithTheMessages() {
         show(SIGNED_IN)
 
-        pressUntilFocused(Key.DirectionDown, "Unlock and leaderboard messages")
+        walkTo("Unlock and leaderboard messages", Key.DirectionDown)
         press(Key.ButtonA)
 
         rule.onNodeWithText("Unlock message time").assertDoesNotExist()

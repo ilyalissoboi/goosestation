@@ -22,15 +22,12 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
@@ -46,11 +43,11 @@ import org.junit.runner.RunWith
 /** A panel over the screen: the focus stays in it, B goes back, taps don't reach what's under it. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class OverlayPanelTest {
+class OverlayPanelTest : ControllerKeys {
     // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
     @Suppress("DEPRECATION")
     @get:Rule
-    val rule = createComposeRule()
+    override val rule = createComposeRule()
 
     private var backs = 0
     private var underClicks = 0
@@ -64,7 +61,7 @@ class OverlayPanelTest {
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
 
-        assertTrue(focusedHas("One"))
+        assertTrue(focusedIs("One"))
     }
 
     // The scrim and panel fade in over 160 ms (design-system.md): part of the way at 80 ms, settled by 200.
@@ -108,27 +105,19 @@ class OverlayPanelTest {
         rule.waitForIdle()
     }
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused().and(hasText(text))).fetchSemanticsNodes().isNotEmpty()
-
     @Test
     fun theFocusCantLeave() {
         show()
-        assertTrue(focusedHas("One"))
+        assertTrue(focusedIs("One"))
 
         press(Key.DirectionUp)
-        assertTrue(focusedHas("One"))
+        assertTrue(focusedIs("One"))
         press(Key.DirectionDown)
-        assertTrue(focusedHas("Two"))
+        assertTrue(focusedIs("Two"))
         press(Key.DirectionDown)
-        assertTrue(focusedHas("Two"))
+        assertTrue(focusedIs("Two"))
         press(Key.DirectionLeft)
-        assertTrue(focusedHas("Two"))
+        assertTrue(focusedIs("Two"))
     }
 
     @Test
@@ -184,7 +173,7 @@ class OverlayPanelTest {
         rule.waitForIdle()
         // Down to the last, as the D-pad goes.
         repeat(7) { press(Key.DirectionDown) }
-        assertTrue(focusedHas("Last"))
+        assertTrue(focusedIs("Last"))
 
         val panel = rule.onNodeWithTag("panel").getUnclippedBoundsInRoot()
         val last = rule.onNodeWithText("Last").getUnclippedBoundsInRoot()

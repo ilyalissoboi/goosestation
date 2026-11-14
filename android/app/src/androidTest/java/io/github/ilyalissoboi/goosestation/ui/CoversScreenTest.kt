@@ -16,10 +16,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextReplacement
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.CoverJob
 import io.github.ilyalissoboi.goosestation.settings.CoverSources
@@ -34,7 +31,7 @@ import org.junit.runner.RunWith
 /** The Covers page, driven with keys: its sources, Restore, the switch and a download. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class CoversScreenTest {
+class CoversScreenTest : ControllerKeys {
     private companion object {
         const val MINE = "https://covers.example/\${serial}.png"
     }
@@ -42,7 +39,7 @@ class CoversScreenTest {
     // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
     @Suppress("DEPRECATION")
     @get:Rule
-    val rule = createComposeRule()
+    override val rule = createComposeRule()
 
     private var backs = 0
 
@@ -55,11 +52,6 @@ class CoversScreenTest {
     // A source's field, by its label (its content description, as TalkBack reads it).
     private fun field(label: String) = hasSetTextAction().and(hasContentDescription(label))
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
     private fun focused() =
         rule.onAllNodes(isFocused()).fetchSemanticsNodes().joinToString { node ->
             val text = node.config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text }
@@ -68,28 +60,14 @@ class CoversScreenTest {
             "focused: text=$text input=$input label=$label at ${node.boundsInRoot}"
         }
 
-    private fun focusedIs(label: String) =
+    private fun focusedField(label: String) =
         rule.onAllNodes(isFocused().and(field(label))).fetchSemanticsNodes().isNotEmpty()
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused().and(hasText(text, substring = true))).fetchSemanticsNodes().isNotEmpty()
-
-    private fun pressUntilFocused(
-        key: Key,
-        text: String,
-    ) {
-        repeat(16) {
-            if (focusedHas(text)) return
-            press(key)
-        }
-        assertTrue("$key never focused $text", focusedHas(text))
-    }
 
     @Test
     fun opensOnTheFirstSource() {
         show(FakeCoversModel())
 
-        assertTrue(focused(), focusedIs("Source 1"))
+        assertTrue(focused(), focusedField("Source 1"))
         rule.onNode(field("Source 1")).assert(hasText(CoverSources.PRESET))
     }
 
@@ -116,7 +94,7 @@ class CoversScreenTest {
         show(FakeCoversModel(texts = listOf(CoverSources.PRESET, MINE)))
 
         press(Key.DirectionDown)
-        assertTrue(focused(), focusedIs("Source 2"))
+        assertTrue(focused(), focusedField("Source 2"))
         press(Key.DirectionDown)
         assertTrue(focused(), focusedHas("Add a source"))
     }
@@ -125,11 +103,11 @@ class CoversScreenTest {
     fun addASourceFocusesTheNewField() {
         val model = show(FakeCoversModel())
 
-        pressUntilFocused(Key.DirectionDown, "Add a source")
+        walkTo("Add a source", Key.DirectionDown)
         press(Key.Enter)
 
         assertEquals(2, model.sources!!.size)
-        assertTrue(focused(), focusedIs("Source 2"))
+        assertTrue(focused(), focusedField("Source 2"))
     }
 
     @Test
@@ -140,7 +118,7 @@ class CoversScreenTest {
         press(Key.Enter)
 
         assertEquals(listOf(MINE), model.sources!!.map { it.text })
-        assertTrue(focused(), focusedIs("Source 1"))
+        assertTrue(focused(), focusedField("Source 1"))
         rule.onNode(isFocused()).assert(hasText(MINE))
     }
 
@@ -169,7 +147,7 @@ class CoversScreenTest {
     fun restoreAsksFirstFocusedOnKeepMine() {
         val model = show(FakeCoversModel(texts = listOf(MINE)))
 
-        pressUntilFocused(Key.DirectionDown, "Restore the preset source")
+        walkTo("Restore the preset source", Key.DirectionDown)
         press(Key.Enter)
         assertTrue(model.restoring)
         rule.onNodeWithText("Replace your sources with the preset source?").assertExists()
@@ -184,7 +162,7 @@ class CoversScreenTest {
         assertTrue(focused(), focusedHas("Replace"))
         press(Key.Enter)
         assertEquals(listOf(CoverSources.PRESET), model.sources!!.map { it.text })
-        assertTrue(focused(), focusedIs("Source 1"))
+        assertTrue(focused(), focusedField("Source 1"))
     }
 
     @Test
@@ -207,7 +185,7 @@ class CoversScreenTest {
     fun theSwitchSavesBySerial() {
         val model = show(FakeCoversModel())
 
-        pressUntilFocused(Key.DirectionDown, "Save covers by serial")
+        walkTo("Save covers by serial", Key.DirectionDown)
         press(Key.Enter)
 
         assertFalse(model.useSerial)
@@ -218,7 +196,7 @@ class CoversScreenTest {
     fun downloadFocusesCancelAndShowsProgress() {
         val model = show(FakeCoversModel())
 
-        pressUntilFocused(Key.DirectionDown, "Download covers")
+        walkTo("Download covers", Key.DirectionDown)
         press(Key.Enter)
         assertEquals(1, model.downloads)
         rule.onNodeWithText("Starting…").assertExists()
@@ -241,7 +219,7 @@ class CoversScreenTest {
     @Test
     fun aRunEndingLeavesTheFocusWhereThePlayerMovedIt() {
         val model = show(FakeCoversModel())
-        pressUntilFocused(Key.DirectionDown, "Download covers")
+        walkTo("Download covers", Key.DirectionDown)
         press(Key.Enter)
         assertTrue(focused(), focusedHas("Cancel"))
 

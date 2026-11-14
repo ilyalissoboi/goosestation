@@ -14,11 +14,8 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -32,8 +29,8 @@ import org.junit.runner.RunWith
 /** The Hotkeys page with a D-pad: the core's hotkeys under its categories, each a Select chord. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class HotkeysScreenTest {
-    @get:Rule val rule = createComposeRule()
+class HotkeysScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val captures = mutableListOf<String>()
     private val clears = mutableListOf<String>()
@@ -66,11 +63,6 @@ class HotkeysScreenTest {
                 )
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

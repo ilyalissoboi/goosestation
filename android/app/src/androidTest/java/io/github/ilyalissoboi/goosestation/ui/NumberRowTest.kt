@@ -27,7 +27,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
@@ -48,8 +47,8 @@ import org.junit.runner.RunWith
 /** The number row, section headings and disabled rows with a D-pad. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class NumberRowTest {
-    @get:Rule val rule = createComposeRule()
+class NumberRowTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val scale = NumberScale.Range(0, 10, 1, presets = listOf(0, 5, 10)) { "$it goslings" }
     private val changes = mutableListOf<Int>()
@@ -84,11 +83,6 @@ class NumberRowTest {
         rule.waitForIdle()
         // From the switch above, past the heading.
         if (focusTheRow) press(Key.DirectionDown)
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
     }
 
     private fun assertFocusedHas(text: String) {

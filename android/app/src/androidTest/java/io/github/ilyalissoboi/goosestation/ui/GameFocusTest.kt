@@ -36,7 +36,13 @@ class GameFocusTest {
         rule.setContent {
             LazyColumn(state = list, modifier = Modifier.width(300.dp).height(300.dp).then(focus.screenModifier)) {
                 items(paths, key = { it }) { path ->
-                    Box(Modifier.fillMaxWidth().height(50.dp).then(focus.modifier(path)).focusable())
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .then(focus.modifier(path))
+                            .focusable(),
+                    )
                 }
             }
         }

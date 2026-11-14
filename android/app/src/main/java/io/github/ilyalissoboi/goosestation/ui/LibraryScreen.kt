@@ -59,6 +59,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.SyncBadge
 import io.github.ilyalissoboi.goosestation.app.UpdateState
@@ -410,7 +412,7 @@ fun LibraryScreen(
                             // A row's room: the grid's height less its padding, so a whole tile fits on a short screen.
                             val rowHeight = maxHeight - GRID_TOP - GRID_BOTTOM
                             LazyVerticalGrid(
-                                columns = GridCells.Adaptive(152.dp),
+                                columns = EvenColumns(152.dp),
                                 state = gridState,
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding =
@@ -514,6 +516,30 @@ fun LibraryScreen(
  */
 private val GRID_TOP = 4.dp
 private val GRID_BOTTOM = 16.dp
+
+/**
+ * As many columns at least [minSize] wide as fit, as [GridCells.Adaptive] counts them, but all of one width to the
+ * pixel: what doesn't divide among them is left at the grid's end (less than a pixel a column), where Adaptive gives
+ * it to the first columns. A tile's cover is as wide as its column, so columns a pixel apart make tiles a pixel
+ * apart in height, and the grid, which centres the focused tile, then moved the row by that pixel as the focus went
+ * along it.
+ */
+private class EvenColumns(
+    private val minSize: Dp,
+) : GridCells {
+    override fun Density.calculateCrossAxisCellSizes(
+        availableSize: Int,
+        spacing: Int,
+    ): List<Int> {
+        val count = maxOf((availableSize + spacing) / (minSize.roundToPx() + spacing), 1)
+        val size = (availableSize - spacing * (count - 1)) / count
+        return List(count) { size }
+    }
+
+    override fun equals(other: Any?) = other is EvenColumns && other.minSize == minSize
+
+    override fun hashCode() = minSize.hashCode()
+}
 
 /** What the library showed last, so a change of it can be told from the first time. */
 private class ShownBefore(

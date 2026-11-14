@@ -1823,10 +1823,14 @@ class OrientationLayoutTest {
             GraphicsScreen(values, SampleNames.ALL, vulkanFailed = true, onChange = { values = it }, onBack = {})
         }) {
             assertTextsLaidOut()
-            assertShows("Vulkan didn't start")
-            assertShows("Higher is sharper")
             assertTrue(focusedHas("Renderer"))
             assertFocusedInView()
+            // After the focus is checked where the page opened: on the shortest screen at text 1.3×, scrolling to the
+            // second row's note takes some of the first row out of view. Then back to the focus, which the walk below
+            // starts from in view, as a player's would.
+            assertShows("Vulkan didn't start")
+            assertShows("Higher is sharper")
+            rule.onNode(isFocused()).performScrollTo()
 
             // Each row starts on its value from settings.ini, the last of its choices, and steps back to the first.
             for (

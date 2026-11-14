@@ -470,7 +470,9 @@ A small capitalised label over what it names: "Paused" over a game's title, "Ste
 
 - `GameTile`: the cover in a square on `sunken`, fitted whole, never cropped; the disc icon, title and serial until the
   art loads; then the title (2 lines) and region · play time. Tiles are at least 152 dp wide, 16 dp apart across and 24
-  down. A whole tile always fits the grid's height: on a short screen (a handheld in landscape) the cover shrinks, still
+  down, in columns all of one width to the pixel (what doesn't divide among them is left at the grid's end): a tile
+  is as tall as its cover is wide, and the grid centres the focused tile, so columns a pixel apart moved a row by a
+  pixel as the focus went along it. A whole tile always fits the grid's height: on a short screen (a handheld in landscape) the cover shrinks, still
   square and at least 96 dp (under 140 dp, only the disc until the art loads), and the tile is centred in its column.
   The grid keeps 16 dp under its last row, so the library's `KeyHints` don't crowd it.
 - `GameListRow`: a 48 dp cover thumbnail, the title, then region · serial · play time.

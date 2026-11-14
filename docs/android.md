@@ -2295,6 +2295,18 @@ The whole `ui` package ran on `goose-test-1` before `master` was merged in: 796 
 `aRowStaysPutAsTheFocusMovesAlongIt` at 960 x 540 dp and text 1.3×), and both failing the same way on `master` at
 `1ed569942`. It hasn't run since the merge.
 
+### The `ui` tests all pass again (2026-11-14)
+
+The three tests failing above, on `master` at `4976b1ed7`, on `goose-test-1` and `goose-test-2`.
+
+| Test | What it was | Now |
+|---|---|---|
+| `OverlayHostTest.closingItLetsTheScreenTakeTheFocusBack` | The closing panel's focus trap. | Fixed by #103, before this. |
+| `OrientationLayoutTest.aRowStaysPutAsTheFocusMovesAlongIt` | A real pixel: `GridCells.Adaptive` gives the pixels that don't divide among the columns to the first ones, so covers, and tiles, were 185 px in some columns and 184 px in others, and the grid, centring the focused tile, moved the row 1 px as the focus crossed from one to the other. At the test's 1.125 px to the dp that's 0.9 dp, over its half a dp; on a denser screen it passed, the pixel still there. The library's columns are now all one width (`EvenColumns` in `ui/LibraryScreen.kt`). | Pass. |
+| `OrientationLayoutTest.graphicsThroughEachRowsChoices` | The test's own doing: it scrolled to the second row's note (`performScrollTo`) before checking the focus was in view, and at 640 x 360 dp and text 1.3×, where the two don't fit together, that took the first row partly out. It now checks the focus first, and scrolls back to it before its walk. | Pass. |
+
+The whole `ui` package then ran, half on each emulator: 805 tests, none failing.
+
 ## Checks on the AYN Thor
 
 The full checklist, on the Thor itself, with a controller and headphones. Find the Thor's serial with

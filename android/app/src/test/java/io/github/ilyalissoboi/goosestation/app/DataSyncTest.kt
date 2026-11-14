@@ -11,7 +11,7 @@ import io.github.ilyalissoboi.goosestation.mirror.MirrorState
 import io.github.ilyalissoboi.goosestation.mirror.PackMarkers
 import io.github.ilyalissoboi.goosestation.mirror.PullResult
 import io.github.ilyalissoboi.goosestation.mirror.PushResult
-import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
+import io.github.ilyalissoboi.goosestation.storage.MemoryStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -52,7 +52,7 @@ class DataSyncTest {
             hooks = hooks,
             workingCopy = workingCopy,
             manifestFile = manifestFile,
-            carryOverStore = MapStore(),
+            carryOverStore = MemoryStore(),
             makeMirror = { data, guard, packMarkers, removeStrays, layout ->
                 FakeMirror(data, guard, packMarkers, removeStrays, layout).also { mirrors += it }
             },
@@ -576,19 +576,5 @@ class FakeSyncHooks(
 
     override fun clearCopying() {
         line = null
-    }
-}
-
-private class MapStore : KeyValueStore {
-    private val values = HashMap<String, String>()
-
-    override fun getString(key: String) = values[key]
-
-    override fun putString(
-        key: String,
-        value: String?,
-    ): Boolean {
-        if (value == null) values.remove(key) else values[key] = value
-        return true
     }
 }

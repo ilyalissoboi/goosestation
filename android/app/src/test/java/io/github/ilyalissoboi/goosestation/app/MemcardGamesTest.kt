@@ -4,7 +4,7 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.core.GameDisc
-import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.testGame
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -16,7 +16,7 @@ class MemcardGamesTest {
         path: String,
         discs: List<GameDisc> = emptyList(),
         playlist: Boolean = false,
-    ) = GameEntry(path, title, serial, "NTSC-U", 0, 0, null, discs, playlist)
+    ) = testGame(title, serial, path, discs = discs, playlist = playlist)
 
     @Test
     fun aSingleDiscBootsFromItsDisc() {

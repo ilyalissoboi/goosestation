@@ -4,7 +4,7 @@
 package io.github.ilyalissoboi.goosestation.library
 
 import io.github.ilyalissoboi.goosestation.core.GameDisc
-import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.testGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -17,7 +17,7 @@ class LibrarySearchTest {
         serial: String = "SLUS-00000",
         path: String = "content://p/tree/t/document/t%2F${title.replace(" ", "%20")}.cue",
         discs: List<GameDisc> = emptyList(),
-    ) = GameEntry(path, title, serial, "NTSC-U", 0, 0, null, discs)
+    ) = testGame(title, serial, path, discs = discs)
 
     private val crash =
         game("Crash Bandicoot", serial = "SCUS-94900", path = "content://p/tree/t/document/t%2Fcrash.cue")

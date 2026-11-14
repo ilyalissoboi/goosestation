@@ -8,7 +8,7 @@ import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.SyncVersion
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
-import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
+import io.github.ilyalissoboi.goosestation.storage.MemoryStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -26,7 +26,8 @@ class MemcardSyncPageTest {
     private val calls = mutableListOf<String>()
     private val api = FakeCoreApi(calls)
     private val settings = MemoryCoreSettings()
-    private val sealed = mutableMapOf<String, String>()
+    private val sealedStore = MemoryStore()
+    private val sealed = sealedStore.values
     private val secrets =
         SyncSecrets(
             object : TokenCipher {
@@ -34,17 +35,7 @@ class MemcardSyncPageTest {
 
                 override fun decrypt(sealed: ByteArray) = Opening.Opened(sealed.reversedArray())
             },
-            object : KeyValueStore {
-                override fun getString(key: String) = sealed[key]
-
-                override fun putString(
-                    key: String,
-                    value: String?,
-                ): Boolean {
-                    if (value == null) sealed.remove(key) else sealed[key] = value
-                    return true
-                }
-            },
+            sealedStore,
         )
 
     private fun TestScope.page(): MemcardSyncPage {

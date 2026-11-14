@@ -28,9 +28,10 @@ val depsSharedLibraries =
 
 // Memory card sync's library, emusync, from its pinned release's Android library (libemusync.so for the APK, and a
 // small Kotlin helper): a copy in dep/emusync/ if there is one (builds without network), else downloaded once into
-// the build folder. Either way its SHA-256 is checked. Keep the version in step with CMakeModules/EmuSync.cmake.
-val emusyncVersion = "0.3.0"
-val emusyncAarSha256 = "964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81"
+// the build folder. Either way its SHA-256 is checked. Both are in the version catalog, as CI reads them too. Keep the
+// version in step with CMakeModules/EmuSync.cmake.
+val emusyncVersion = libs.versions.emusync.get()
+val emusyncAarSha256 = libs.versions.emusyncAarSha256.get()
 val emusyncAar: File =
     run {
         val name = "emusync-$emusyncVersion.aar"
@@ -133,8 +134,9 @@ android {
 
         externalNativeBuild {
             cmake {
-                // As android/scripts/configure-native.sh. The core is built optimised even for the debug APK: a
-                // Debug core is far too slow to play on.
+                // As android/scripts/configure-native.sh: CMAKE_BUILD_TYPE, BUILD_QT_FRONTEND and HOST_PAGE_SIZE are
+                // the ones to keep in step. The core is built optimised even for the debug APK: a Debug core is far
+                // too slow to play on.
                 arguments +=
                     listOf(
                         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",

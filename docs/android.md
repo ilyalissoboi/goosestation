@@ -8,7 +8,9 @@ with the Android command-line tools from Homebrew and JDK 17. No Android Studio 
 
 ## Versions
 
-Installed on 2026-10-25, the latest stable releases on that day:
+Installed on 2026-10-25, the latest stable releases on that day. The NDK, CMake, build-tools and emusync versions (and
+emusync's SHA-256) are set once, in `android/gradle/libs.versions.toml`: Gradle reads them there, and CI and the signing
+scripts through `android/scripts/toolchain-versions.py`. Change them there, then here.
 
 | Package | Version |
 | --- | --- |

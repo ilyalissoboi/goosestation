@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0
 
 # Configures a standalone NDK build of the native code (arm64-v8a, API 29) in build-android/ at the top of the
-# repository, with the CMake arguments the Gradle build uses. BUILD_TESTS=ON also configures common-tests.
+# repository, with the CMake arguments the Gradle build uses: CMAKE_BUILD_TYPE, BUILD_QT_FRONTEND and HOST_PAGE_SIZE
+# are the ones to keep in step with android/app/build.gradle.kts. BUILD_TESTS=ON also configures common-tests.
 # Needs ANDROID_NDK_HOME, and the dependency prefix built by scripts/deps/build-dependencies-android.sh, which
 # defaults to ~/work/goosestation-deps-android (GOOSESTATION_ANDROID_DEPS overrides it). See docs/android.md.
 

@@ -7,8 +7,13 @@
 [versions]
 agp = "9.4.1"
 kotlin = "2.4.21"
+# The NDK, CMake, the build-tools and emusync's Android library, read by CI and the signing scripts too, through
+# android/scripts/toolchain-versions.py. emusync's SHA-256 is its AAR's, which build.gradle.kts checks.
 ndk = "30.0.16248370"
 cmake = "4.1.2"
+buildTools = "37.0.0"
+emusync = "0.3.0"
+emusyncAarSha256 = "964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
 coreKtx = "1.19.1"

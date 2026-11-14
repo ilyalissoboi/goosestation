@@ -12,7 +12,8 @@
 # With GOOSE_CERT_SHA256 set (the certificate's SHA-256: hex, with or without colons, or keytool's line for it), the
 # signed APK must carry that certificate, or nothing is written: a release signed with another key couldn't update the
 # installed apps. The passwords are passed to apksigner through the environment, never on a command line, and nothing
-# here prints them. Needs ANDROID_HOME, with build-tools 37.0.0; --test-key needs keytool (a JDK).
+# here prints them. Needs ANDROID_HOME, with the build-tools at the version catalog's buildTools (read by
+# toolchain-versions.py beside it, so python3 3.11 or later); --test-key needs keytool (a JDK).
 
 set -e
 
@@ -28,10 +29,11 @@ fi
 IN="$1"
 OUT="$2"
 
-TOOLS="${ANDROID_HOME:?ANDROID_HOME must point at an Android SDK}/build-tools/37.0.0"
+BUILD_TOOLS="$(python3 "$(dirname "$0")/toolchain-versions.py" buildTools)"
+TOOLS="${ANDROID_HOME:?ANDROID_HOME must point at an Android SDK}/build-tools/$BUILD_TOOLS"
 for tool in zipalign apksigner; do
 	if [ ! -x "$TOOLS/$tool" ]; then
-		echo "$TOOLS/$tool is missing: install build-tools;37.0.0."
+		echo "$TOOLS/$tool is missing: install build-tools;$BUILD_TOOLS."
 		exit 1
 	fi
 done

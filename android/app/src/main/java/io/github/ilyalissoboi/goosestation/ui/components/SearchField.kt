@@ -5,6 +5,8 @@ package io.github.ilyalissoboi.goosestation.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +49,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -117,25 +120,19 @@ fun SearchField(
     // Asked for by A, a tap or focusAndType, until the focus leaves: Compose's field starts its text session, which the
     // keyboard needs, only for a tap or while it's to show the keyboard on focus.
     var keyboardWanted by remember { mutableStateOf(false) }
-    // Open, as far as the field knows: so a close is told once, whether by the Search action or Back.
-    var keyboardOpen by remember { mutableStateOf(false) }
+    // Tells each closing once, whether by the Search action or Back.
+    val tracker = remember { KeyboardTracker { closed() } }
 
     fun openKeyboard() {
         keyboardWanted = true
-        keyboardOpen = true
+        tracker.requested()
         keyboard?.show()
-    }
-
-    fun keyboardClosed() {
-        if (!keyboardOpen) return
-        keyboardOpen = false
-        closed()
     }
 
     LaunchedEffect(focus.typeRequests) { if (focus.typeRequests > 0) openKeyboard() }
     val imeVisible = WindowInsets.isImeVisible
     LaunchedEffect(imeVisible) {
-        if (imeVisible) keyboardOpen = true else keyboardClosed()
+        if (imeVisible) tracker.shown() else tracker.hidden()
     }
 
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -173,7 +170,17 @@ fun SearchField(
                                 .onFocusChanged {
                                     if (focused != it.isFocused) onFocusChange(it.isFocused)
                                     focused = it.isFocused
-                                    if (!it.isFocused) keyboardWanted = false
+                                    if (!it.isFocused) {
+                                        keyboardWanted = false
+                                        tracker.focusLost()
+                                    }
+                                }
+                                // A tap opens the keyboard too, by the field's own doing: as asked for as A's.
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                        tracker.requested()
+                                    }
                                 }.onPreviewKeyEvent { event ->
                                     when (event.key) {
                                         // A single-line field would move its cursor instead.
@@ -207,8 +214,7 @@ fun SearchField(
                         onKeyboardAction =
                             KeyboardActionHandler {
                                 keyboard?.hide()
-                                keyboardOpen = true
-                                keyboardClosed()
+                                tracker.searched()
                             },
                         lineLimits = TextFieldLineLimits.SingleLine,
                         cursorBrush = SolidColor(colors.beak),

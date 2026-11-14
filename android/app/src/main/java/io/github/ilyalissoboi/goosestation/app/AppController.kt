@@ -589,6 +589,7 @@ object AppController : NativeCallbacks {
         private set
 
     var resumed = false
+        private set
 
     /**
      * The app paused the game while it booted ([pauseGame]). That pause can reach the core just after the boot, so
@@ -727,6 +728,34 @@ object AppController : NativeCallbacks {
         networkWatch.start()
         // Back in front: an update waiting to be allowed carries on, and the installer's question comes back.
         updates?.onShown(true)
+    }
+
+    /**
+     * [activity] is in front: a game on screen carries on, unless its menu is open ([PausePolicy]). Ignored unless
+     * it's the current activity.
+     */
+    fun onResume(activity: Activity) {
+        if (!isCurrent(activity)) return
+        resumed = true
+        // A game left paused under its menu stays so.
+        if (screen == Screen.Game && gameRunning && PausePolicy.running(resumed, menuOpen)) {
+            NativeLibrary.setPaused(false)
+        }
+    }
+
+    /**
+     * [activity] is no longer in front: a game on screen lets go of what's held and pauses, which writes its memory
+     * cards. Ignored unless it's the current activity: an old one pausing after its replacement resumed would leave
+     * the game on screen thought paused.
+     */
+    fun onPause(activity: Activity) {
+        if (!isCurrent(activity)) return
+        resumed = false
+        if (screen == Screen.Game) {
+            controllers?.releaseAll()
+            touchControls.release()
+            pauseGame()
+        }
     }
 
     /**

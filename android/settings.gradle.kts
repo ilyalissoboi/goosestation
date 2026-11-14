@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0
 
 pluginManagement {
+    // The app's own plugins (checkNoWindowDialogs).
+    includeBuild("build-logic")
     repositories {
         google()
         mavenCentral()

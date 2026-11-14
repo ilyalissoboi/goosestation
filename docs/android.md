@@ -331,14 +331,20 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
 ```bash
 ./gradlew ktlintCheck    # the Kotlin layout rules, in android/.editorconfig; ktlintFormat fixes what it can
 ./gradlew check          # ktlintCheck, Android Lint, checkNoWindowDialogs and the JVM tests
+./gradlew :build-logic:test   # the build logic's tests (android/build-logic: checkNoWindowDialogs' matcher)
 ```
+
+`checkNoWindowDialogs`, which every build runs first (`preBuild`), fails on a call or import, in the app's Kotlin, of
+anything that opens a window of its own (`AlertDialog`, `ModalBottomSheet`, `DropdownMenu`, Compose's `Dialog` and
+`Popup`, …): such a window takes the keys, and a controller's can be lost to it. It's a plugin in `android/build-logic`,
+an included build, whose tests cover what comments and strings hide and what they don't.
 
 On GitHub, `.github/workflows/android.yml` ("Android build") runs on pull requests and pushes to `master` that touch
 the app, the core or `scripts/deps/build-dependencies-android.sh`, and twice a week to keep its cache warm. On
 `ubuntu-24.04` it installs the SDK's NDK, CMake (with its Ninja) and platform at the versions above, builds the
 dependency prefix into `~/deps-android` (cached by the script's hash and the NDK version), then runs `assembleDebug`,
 `assembleDebugAndroidTest` (the instrumented tests are built, not run: CI has no emulator), `testDebugUnitTest`,
-`ktlintCheck`, `checkNoWindowDialogs` and `lintDebug`, and uploads the debug APK as `android-debug-apk` and Lint's
+`ktlintCheck`, `checkNoWindowDialogs`, `lintDebug` and `:build-logic:test`, and uploads the debug APK as `android-debug-apk` and Lint's
 report as `android-lint-report`. Lint fails the build only on an error, as is its default; its warnings are in the
 report. `AndroidGradlePluginVersion`, `NewerVersionAvailable` and `GradleDependency` are off (`lint { }` in
 `app/build.gradle.kts`): they depend on what's been released that day, not on the change, and a version is updated as a

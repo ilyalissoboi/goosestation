@@ -10,6 +10,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ktlint)
+    // checkNoWindowDialogs, before every build: android/build-logic.
+    id("goosestation.no-window-dialogs")
 }
 
 // ktlintCheck runs over the app's Kotlin, main and tests, and with check; the rules are in android/.editorconfig.
@@ -252,125 +254,6 @@ val stageResources =
         source.from(rootProject.file("../data/resources"))
         subdirectory = "resources"
     }
-
-/**
- * Fails on a call or import, in [sources], of anything that opens a window of its own: such a window takes the keys,
- * and a controller's can be lost to it. Each is matched as a word, outside comments, and so is a wildcard import of a
- * package that has them.
- */
-@CacheableTask
-abstract class CheckNoWindowDialogs : DefaultTask() {
-    @get:InputFiles
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    @get:IgnoreEmptyDirectories
-    abstract val sources: ConfigurableFileCollection
-
-    /** What the files are named relative to, in the failure. */
-    @get:Internal
-    abstract val baseDirectory: DirectoryProperty
-
-    /** Written once the check passes, so an unchanged tree is up to date. */
-    @get:OutputFile
-    abstract val result: RegularFileProperty
-
-    private val forbidden =
-        listOf(
-            "AlertDialog",
-            "BasicAlertDialog",
-            "DatePickerDialog",
-            "TimePickerDialog",
-            "DropdownMenu",
-            "ExposedDropdownMenuBox",
-            "ModalBottomSheet",
-            "androidx.compose.ui.window.Dialog",
-            "androidx.compose.ui.window.Popup",
-            "android.app.Dialog",
-        ).map { it to Regex("""\b${Regex.escape(it)}\b""") } +
-            listOf("androidx.compose.ui.window.*", "android.app.*").map {
-                it to Regex("""\bimport\s+${Regex.escape(it)}""")
-            }
-
-    /**
-     * [lines] with their `//` and `/* */` comments blanked out. A block comment may span lines and nest, as Kotlin's
-     * do. String literals, raw ones across lines too, and character literals are kept as code, so a comment's
-     * opening inside one doesn't start a comment.
-     */
-    private fun withoutComments(lines: List<String>): List<String> {
-        var depth = 0
-        var inRaw = false
-        return lines.map { line ->
-            val code = StringBuilder()
-            var i = 0
-
-            // Keeps the literal starting at i, which `quote` ends (or the line, if it doesn't), and moves past it.
-            fun keep(quote: String) {
-                var end = i + quote.length
-                while (end < line.length && !line.startsWith(quote, end)) end += if (line[end] == '\\') 2 else 1
-                val stop = if (end < line.length) end + quote.length else line.length
-                code.append(line, i, stop)
-                i = stop
-            }
-            while (i < line.length) {
-                when {
-                    inRaw -> {
-                        val end = line.indexOf("\"\"\"", i)
-                        val stop = if (end < 0) line.length else end + 3
-                        code.append(line, i, stop)
-                        i = stop
-                        if (end >= 0) inRaw = false
-                    }
-                    depth > 0 && line.startsWith("*/", i) -> {
-                        depth--
-                        i += 2
-                    }
-                    line.startsWith("/*", i) -> {
-                        depth++
-                        i += 2
-                    }
-                    depth > 0 -> i++
-                    line.startsWith("//", i) -> i = line.length
-                    line.startsWith("\"\"\"", i) -> {
-                        code.append("\"\"\"")
-                        i += 3
-                        inRaw = true
-                    }
-                    line[i] == '"' -> keep("\"")
-                    line[i] == '\'' -> keep("'")
-                    else -> {
-                        code.append(line[i])
-                        i++
-                    }
-                }
-            }
-            code.toString()
-        }
-    }
-
-    @TaskAction
-    fun check() {
-        val base = baseDirectory.get().asFile
-        val found =
-            sources.files.sorted().flatMap { file ->
-                withoutComments(file.readLines()).flatMapIndexed { index, line ->
-                    forbidden.filter { (_, pattern) -> pattern.containsMatchIn(line) }.map { (name, _) ->
-                        "${file.relativeTo(base)}:${index + 1}: $name opens its own window, which can swallow " +
-                            "controller keys. Draw it in the screen instead."
-                    }
-                }
-            }
-        if (found.isNotEmpty()) throw GradleException(found.joinToString("\n"))
-        result.get().asFile.writeText("No window dialogs.\n")
-    }
-}
-
-val checkNoWindowDialogs =
-    tasks.register<CheckNoWindowDialogs>("checkNoWindowDialogs") {
-        sources.from(fileTree("src/main/java") { include("**/*.kt") })
-        baseDirectory = layout.projectDirectory
-        result = layout.buildDirectory.file("checkNoWindowDialogs/result.txt")
-    }
-
-tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
 
 // Every Kotlin compile, the app's and both tests', fails on a warning: a new one fails CI rather than piling up unread
 // (one hid a real bug, Rect.overlaps, before). The JVM tests drive coroutines with kotlinx-coroutines-test

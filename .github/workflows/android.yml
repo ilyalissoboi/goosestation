@@ -113,7 +113,8 @@ jobs:
       working-directory: android
       run: |
         export GOOSESTATION_ANDROID_DEPS="$HOME/deps-android"
-        ./gradlew assembleDebug assembleDebugAndroidTest testDebugUnitTest ktlintCheck checkNoWindowDialogs lintDebug
+        ./gradlew assembleDebug assembleDebugAndroidTest testDebugUnitTest ktlintCheck checkNoWindowDialogs lintDebug \
+          :build-logic:test
 
     - name: Upload the debug APK
       uses: actions/upload-artifact@v4.3.3

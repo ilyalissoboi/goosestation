@@ -183,7 +183,7 @@ class GameCallsTest {
             NativeLibrary.startGame(exe.absolutePath, 1, false)
             assertTrue("padtest booted", started.await(30, TimeUnit.SECONDS))
             assertEquals(PADTEST_SERIAL, lastSerial)
-            // Let it draw a frame or two, so the state has a picture.
+            // Let it draw a frame or two, so the state has a picture: no call says a frame was drawn, so it's a wait.
             Thread.sleep(1_000)
             NativeLibrary.setPaused(true)
 
@@ -388,18 +388,14 @@ class GameCallsTest {
             assertNull(NativeLibrary.savePostProcessingFavourite(null, "Lottes", false))
         }) {
             NativeLibrary.setHotkeyBinding(PAD, "NextPostProcessingFavourite", "Button99")
-            Thread.sleep(500)
 
             for (expected in listOf("simple-flip", "crt-lottes")) {
                 NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+                // A Select chord fires on its release, as the core's hotkeys do: nothing shows while it's
+                // held, so the hold is a fixed one.
                 Thread.sleep(300)
                 NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
-                val deadline = System.currentTimeMillis() + 5_000
-                while (settingsIni().value("PostProcessing/Stage1", "ShaderName") != expected &&
-                    System.currentTimeMillis() < deadline
-                ) {
-                    Thread.sleep(50)
-                }
+                await("the chain $expected") { settingsIni().value("PostProcessing/Stage1", "ShaderName") == expected }
                 assertEquals(expected, settingsIni().value("PostProcessing/Stage1", "ShaderName"))
                 assertEquals(expected, NativeLibrary.getRunningSettingForTest("PostProcessing/Stage1", "ShaderName"))
             }
@@ -459,6 +455,8 @@ class GameCallsTest {
             val reverted = mutableListOf<Int>()
             for (press in 0 until 60) {
                 assertTrue(NativeLibrary.pressHotkeyForTest("NextPostProcessingFavourite"))
+                // The press has been handled (pressHotkeyForTest waits): this is the window an app edit could put the
+                // old chain back in, which is what the test looks for. Not a wait for anything.
                 Thread.sleep(20)
                 val expected = if (press % 2 == 0) "simple-flip" else "crt-lottes"
                 val chain = Ini.parse(gameSettings(TEST_KEY).readText()).value("PostProcessing/Stage1", "ShaderName")
@@ -624,11 +622,13 @@ class GameCallsTest {
             )
             connectSecondPad()
             NativeLibrary.onDeviceDisconnected(DEVICE_B)
+            // The disconnect is queued for the core's next pass of its input, and no call says it's been taken.
             Thread.sleep(300)
         }) {
             assertEquals(emptyList<String>(), steeringOf())
 
             connectSecondPad()
+            await("the NeGcon's steering bound") { steeringOf().any { it.startsWith("Android-") } }
 
             assertTrue(
                 "the NeGcon's steering is bound: ${steeringOf()}",
@@ -713,8 +713,7 @@ class GameCallsTest {
             assertEquals("2.0", NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed"))
 
             assertNull(NativeLibrary.changeDisc(2))
-            val deadline = System.currentTimeMillis() + 10_000
-            while (NativeLibrary.getCurrentDisc() != 2 && System.currentTimeMillis() < deadline) Thread.sleep(100)
+            await("disc 2") { NativeLibrary.getCurrentDisc() == 2 }
 
             assertEquals(2, NativeLibrary.getCurrentDisc())
             assertEquals("2.0", NativeLibrary.getRunningSettingForTest("Main", "EmulationSpeed"))
@@ -790,14 +789,16 @@ class GameCallsTest {
         withPadtest(onFastForward = { fastForward.put(it) }, onAnalogPress = { analogPresses.incrementAndGet() }) {
             NativeLibrary.setPadBinding(PAD, "Analog", "Button99")
             NativeLibrary.setHotkeyBinding(PAD, "ToggleFastForward", "Button99")
-            Thread.sleep(500)
             analogPresses.set(0)
 
             NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+            // A Select chord fires on its release, as the core's hotkeys do: nothing shows while it's
+            // held, so the hold is a fixed one.
             Thread.sleep(300)
             NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+            assertEquals("the hotkey fired", true, fastForward.poll(10, TimeUnit.SECONDS))
 
-            assertEquals("the hotkey fired", true, fastForward.poll(3, TimeUnit.SECONDS))
+            // Time for a press of the game's Analog button to show, which it mustn't.
             Thread.sleep(300)
             assertEquals("the game's Analog button wasn't pressed", 0, analogPresses.get())
         }
@@ -809,9 +810,9 @@ class GameCallsTest {
         val analogPresses = AtomicInteger()
         withPadtest(onAnalogPress = { analogPresses.incrementAndGet() }) {
             NativeLibrary.setHotkeyBinding(PAD, "ToggleAnalogMode", "Button99")
-            Thread.sleep(500)
             analogPresses.set(0)
 
+            // Each held alone for a while, then time for a press to show: neither may press the game's Analog button.
             NativeLibrary.onKey(DEVICE_ID, SELECT, true)
             Thread.sleep(200)
             NativeLibrary.onKey(DEVICE_ID, SELECT, false)
@@ -822,9 +823,13 @@ class GameCallsTest {
             assertEquals("Select or X alone", 0, analogPresses.get())
 
             NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+            // A Select chord fires on its release, as the core's hotkeys do: nothing shows while it's
+            // held, so the hold is a fixed one.
             Thread.sleep(300)
             NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
-            Thread.sleep(500)
+            await("the chord's press of the Analog button") { analogPresses.get() >= 1 }
+            // Time for a second press to show, which there mustn't be.
+            Thread.sleep(300)
             assertEquals("Select + X", 1, analogPresses.get())
         }
     }
@@ -836,13 +841,14 @@ class GameCallsTest {
         withPadtest(onAnalogPress = { analogPresses.incrementAndGet() }) {
             NativeLibrary.setPadBinding(PAD, "Analog", "Button99")
             NativeLibrary.setHotkeyBinding(PAD, "ToggleFastForward", "Button99")
-            Thread.sleep(500)
             analogPresses.set(0)
 
             NativeLibrary.onKey(DEVICE_ID, X, true)
-            Thread.sleep(300)
+            // Held until the game has its press.
+            await("the press of the Analog button") { analogPresses.get() >= 1 }
             NativeLibrary.onKey(DEVICE_ID, X, false)
-            Thread.sleep(500)
+            // Time for a second press to show, which there mustn't be.
+            Thread.sleep(300)
 
             assertEquals(1, analogPresses.get())
         }
@@ -854,13 +860,15 @@ class GameCallsTest {
         val hotkeys = LinkedBlockingQueue<String>()
         withPadtest(onHotkey = { hotkeys.put(it) }) {
             NativeLibrary.setHotkeyBinding(PAD, "SaveSelectedSaveState", "Button99")
-            Thread.sleep(500)
 
             NativeLibrary.onKeys(DEVICE_ID, intArrayOf(SELECT, X), booleanArrayOf(true, true))
+            // A Select chord fires on its release, as the core's hotkeys do: nothing shows while it's
+            // held, so the hold is a fixed one.
             Thread.sleep(300)
             NativeLibrary.onKeys(DEVICE_ID, intArrayOf(X, SELECT), booleanArrayOf(false, false))
+            assertEquals("SaveSelectedSaveState", hotkeys.poll(10, TimeUnit.SECONDS))
 
-            assertEquals("SaveSelectedSaveState", hotkeys.poll(3, TimeUnit.SECONDS))
+            // Time for a state the core wrote to show, which there mustn't be.
             Thread.sleep(500)
             assertEquals(emptyList<String>(), File(dataRoot, "savestates").list().orEmpty().toList())
         }
@@ -1014,14 +1022,13 @@ class GameCallsTest {
     fun aMacroPressesItsButtons() =
         withPadtest(settings = { NativeLibrary.setStringSetting("Pad1", "Macro1Binds", "Cross & Circle") }) {
             NativeLibrary.setPadBinding(PAD, "Macro1", "Button99")
-            Thread.sleep(500)
 
             NativeLibrary.onKey(DEVICE_ID, X, true)
-            Thread.sleep(300)
+            awaitBind("Cross", 1f)
             assertEquals(1f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
             assertEquals(1f, NativeLibrary.getPadBindStateForTest(0, "Circle"))
             NativeLibrary.onKey(DEVICE_ID, X, false)
-            Thread.sleep(300)
+            awaitBind("Cross", 0f)
             assertEquals(0f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
         }
 
@@ -1039,6 +1046,7 @@ class GameCallsTest {
             NativeLibrary.setPadVibrationForTest(0, 1f, 0.5f)
 
             assertEquals(Triple(DEVICE_B, 0.5f, 0.25f), rumbles.poll(3, TimeUnit.SECONDS))
+            // Time for a rumble of A to show, which there mustn't be.
             Thread.sleep(300)
             assertTrue("only B rumbled: $rumbles", rumbles.none { it.first == DEVICE_ID && it.second > 0f })
         }
@@ -1054,32 +1062,36 @@ class GameCallsTest {
             connectSecondPad()
             NativeLibrary.setControllerPort(PAD, 1)
             pressAndRelease(DEVICE_B)
-            pressAndRelease(DEVICE_ID)
+            pressAndRelease(DEVICE_ID, port = 1)
             rumbles.clear()
 
             NativeLibrary.setPadVibrationForTest(0, 1f, 0f)
 
             assertEquals(Triple(DEVICE_B, 1f, 0f), rumbles.poll(3, TimeUnit.SECONDS))
+            // Time for a rumble of A to show, which there mustn't be.
             Thread.sleep(300)
             assertTrue("A is on Port 2: $rumbles", rumbles.none { it.first == DEVICE_ID })
         }
     }
 
+    // Once the core has it and its defaults: Cross bound. A pad known from before has its bindings before its connect is
+    // taken, so a test connecting one again waits for what the connect does.
     private fun connectSecondPad() {
         NativeLibrary.onDeviceConnected(DEVICE_B, "Pad B", PAD_B)
-        val deadline = System.nanoTime() + 5_000_000_000L
-        while (NativeLibrary.getPadBindings(PAD_B) == null) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for the second pad to connect")
-            Thread.sleep(50)
+        await("the second pad's bindings") {
+            NativeLibrary.getPadBindings(PAD_B)?.any { it.name == "Cross" && !it.binding.isNullOrEmpty() } == true
         }
-        Thread.sleep(500)
     }
 
-    private fun pressAndRelease(deviceId: Int) {
+    // A press of Cross on [deviceId], which is on [port]: held until the port has it, and let go until it hasn't.
+    private fun pressAndRelease(
+        deviceId: Int,
+        port: Int = 0,
+    ) {
         NativeLibrary.onKey(deviceId, CROSS, true)
-        Thread.sleep(200)
+        awaitBind("Cross", 1f, port)
         NativeLibrary.onKey(deviceId, CROSS, false)
-        Thread.sleep(200)
+        awaitBind("Cross", 0f, port)
     }
 
     // Review Focus 1: a controller on a port the game doesn't have is told at the start. Multitap is on only in another
@@ -1117,6 +1129,8 @@ class GameCallsTest {
             onMessage = { _, text -> texts += text },
         ) {
             reloaded = NativeLibrary.reloadPostProcessingShaders()
+            await("the reload's message") { "Post-processing shaders reloaded." in texts }
+            // Time for the other message to show, which it mustn't.
             Thread.sleep(200)
         }
 
@@ -1131,7 +1145,7 @@ class GameCallsTest {
         var reloaded = true
         withPadtest(onMessage = { _, text -> texts += text }) {
             reloaded = NativeLibrary.reloadPostProcessingShaders()
-            Thread.sleep(200)
+            await("the reload's message") { "No post-processing shaders are selected." in texts }
         }
 
         assertFalse(texts.toString(), reloaded)
@@ -1163,10 +1177,9 @@ class GameCallsTest {
     fun aControllerOnPort2DrivesPort2() =
         withPadtest(settings = { NativeLibrary.setStringSetting("Pad2", "Type", "AnalogController") }) {
             NativeLibrary.setControllerPort(PAD, 1)
-            Thread.sleep(500)
 
             NativeLibrary.onKey(DEVICE_ID, CROSS, true)
-            Thread.sleep(300)
+            awaitBind("Cross", 1f, port = 1)
             assertEquals(1f, NativeLibrary.getPadBindStateForTest(1, "Cross"))
             assertEquals(0f, NativeLibrary.getPadBindStateForTest(0, "Cross"))
             NativeLibrary.onKey(DEVICE_ID, CROSS, false)
@@ -1212,7 +1225,7 @@ class GameCallsTest {
         val keys = java.util.Collections.synchronizedList(mutableListOf<String>())
         withPadtest(onMessage = { key, _ -> keys += key }) {
             NativeLibrary.resetGame()
-            Thread.sleep(1_000)
+            await("the reset's message") { "system_reset" in keys }
         }
 
         assertTrue(keys.toString(), "system_reset" in keys)
@@ -1226,6 +1239,7 @@ class GameCallsTest {
             onMessage = { key, _ -> keys += key },
         ) {
             NativeLibrary.resetGame()
+            // Time for the reset's message to show, which it mustn't.
             Thread.sleep(1_000)
         }
 
@@ -1378,11 +1392,7 @@ class GameCallsTest {
         settings()
         NativeLibrary.applySettings()
         NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", PAD)
-        val deadline = System.nanoTime() + 5_000_000_000L
-        while (NativeLibrary.getPadBindings(PAD) == null) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for the pad to connect")
-            Thread.sleep(50)
-        }
+        await("the pad to connect") { NativeLibrary.getPadBindings(PAD) != null }
         beforeBoot()
         val texture = if (frames == null) SurfaceTexture(0).apply { setDefaultBufferSize(640, 480) } else null
         val surface = frames?.surface ?: Surface(texture)
@@ -1396,6 +1406,7 @@ class GameCallsTest {
             } else {
                 assertTrue("refused", stopped.await(30, TimeUnit.SECONDS))
             }
+            // padtest past its first frames, which nothing reports, before the test presses anything.
             Thread.sleep(1_000)
             body()
         } finally {
@@ -1434,10 +1445,9 @@ class GameCallsTest {
             NativeLibrary.takeTouchPressesForTest()
             NativeLibrary.queueTouchPadsForTest(intArrayOf(TouchButton.Cross.bit, 0))
             var pressed = 0
-            val end = System.nanoTime() + 3_000_000_000L
-            while (pressed and TouchButton.Cross.bit == 0 && System.nanoTime() < end) {
+            eventually {
                 pressed = pressed or NativeLibrary.takeTouchPressesForTest()
-                Thread.sleep(20)
+                pressed and TouchButton.Cross.bit != 0
             }
             assertEquals("Cross was given to Port 1", TouchButton.Cross.bit, pressed and TouchButton.Cross.bit)
             awaitBind("Cross", 0f)
@@ -1451,9 +1461,13 @@ class GameCallsTest {
             NativeLibrary.onKey(DEVICE_ID, KEYCODE_BUTTON_A, true)
             awaitBind("Cross", 1f)
             // Each its own pass: the core takes only the latest state queued.
+            NativeLibrary.takeTouchPressesForTest()
             NativeLibrary.setTouchPad(TouchButton.Cross.bit, 0f, 0f, 0f, 0f)
-            Thread.sleep(300)
+            await("the touch pad's Cross taken") {
+                NativeLibrary.takeTouchPressesForTest() and TouchButton.Cross.bit != 0
+            }
             NativeLibrary.setTouchPad(0, 0f, 0f, 0f, 0f)
+            // Time for the touch release to let go of Cross, which it mustn't.
             Thread.sleep(300)
             assertEquals("the controller still holds it", 1f, bind("Cross"))
             NativeLibrary.onKey(DEVICE_ID, KEYCODE_BUTTON_A, false)
@@ -1524,6 +1538,7 @@ class GameCallsTest {
         assertEquals("the first game's end", listOf(-1), kinds.nextKinds(1))
         withPadtest(onPadKind = { kinds.add(it) }) {
             assertEquals("the second game's first frame", listOf(1), kinds.nextKinds(1))
+            // Time for a press carried over from the first game to show, which there mustn't be.
             Thread.sleep(200)
             assertEquals(0f, bind("Cross"))
         }
@@ -1556,23 +1571,45 @@ class GameCallsTest {
 
     private fun bright(pixel: Int) = maxOf(pixel and 0xFF, (pixel shr 8) and 0xFF, (pixel shr 16) and 0xFF) > 24
 
-    private fun bind(name: String) = NativeLibrary.getPadBindStateForTest(0, name)
+    private fun bind(
+        name: String,
+        port: Int = 0,
+    ) = NativeLibrary.getPadBindStateForTest(port, name)
 
     // The next [count] kinds reported, as many as come within 5 seconds each.
     private fun LinkedBlockingQueue<Int>.nextKinds(count: Int) = List(count) { poll(5, TimeUnit.SECONDS) }
 
-    // Waits for Port 1's [name] to be [value], or above 0 for null.
+    // Waits for [port]'s [name] to be [value], or above 0 for null.
     private fun awaitBind(
         name: String,
         value: Float?,
+        port: Int = 0,
     ) {
-        val deadline = System.nanoTime() + 3_000_000_000L
-        while (true) {
-            val now = bind(name)
-            if (if (value == null) now > 0f else now == value) return
-            if (System.nanoTime() > deadline) throw AssertionError("Port 1's $name is $now, not ${value ?: "pushed"}")
+        if (eventually { bind(name, port).let { if (value == null) it > 0f else it == value } }) return
+        throw AssertionError("Port ${port + 1}'s $name is ${bind(name, port)}, not ${value ?: "pushed"}")
+    }
+
+    // Waits for [condition], failing with [what] if it doesn't come. In place of a fixed sleep before a check: it ends
+    // as soon as the thing has happened, and allows a loaded emulator 10 seconds for it.
+    private fun await(
+        what: String,
+        seconds: Long = 10,
+        condition: () -> Boolean,
+    ) {
+        if (!eventually(seconds, condition)) throw AssertionError("Timed out after $seconds s waiting for $what")
+    }
+
+    // Whether [condition] holds within [seconds], looked at every 20 ms.
+    private fun eventually(
+        seconds: Long = 10,
+        condition: () -> Boolean,
+    ): Boolean {
+        val deadline = System.nanoTime() + seconds * 1_000_000_000L
+        while (!condition()) {
+            if (System.nanoTime() > deadline) return false
             Thread.sleep(20)
         }
+        return true
     }
 
     @Volatile private var lastSerial = ""

@@ -53,6 +53,11 @@ jobs:
       with:
         fetch-depth: 0
 
+    # The instrumented tests' runner can't run here (no emulator), but its lock, step limit and emulator wait can,
+    # against a fake adb.
+    - name: Test the tier script's helpers
+      run: bash android/scripts/tests/test-emulator-run-lib.sh
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4.9.1
       with:

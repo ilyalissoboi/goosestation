@@ -300,6 +300,23 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
   prints the counts and every failure, and exits non-zero on one.
 - It only runs on emulators (`GOOSE_TEST_SERIALS`, by default `emulator-5580 emulator-5582`), never a phone or
   handheld that's plugged in.
+- **One run at a time on this machine**, from any worktree: a run takes a lock, the directory
+  `/tmp/goose-test-emulators.lock` (`GOOSE_TEST_LOCK` moves it), before it asks the emulators anything, and frees it
+  when it ends, also when it's stopped. A second run waits for it, printing who holds it (the worktree, its process
+  ID, the tier and since when) at once and every 5 minutes, then starts. A lock whose holder no longer runs (a run
+  killed with `kill -9`) is cleared once the shards and steps it started have stopped too, as is one with no owner
+  file over a minute after it was made. Not under `$TMPDIR`,
+  which sessions can each have their own of, though they share the emulators.
+- **No step can hang a run**, so no run holds the emulators forever: each Gradle build is stopped after 60 minutes,
+  each Gradle test part (a shard's `ui` or `core`, the OpenGL ES run) after 45, each `adb` call after 2 (the pushes of
+  `GOOSE_TEST_DATA` after 5), and the wait for `goose-test-2` to stop after 1. A step stopped so is reported as timed
+  out, with `timed out after N s: <command>`, and fails the run. The helpers are in
+  `android/scripts/emulator-run-lib.sh`, tested against a fake `adb` by `android/scripts/tests/test-emulator-run-lib.sh`
+  (in CI too).
+- **`goose-test-2` is always put back** after full's OpenGL ES part, whatever failed in it, before the release part and
+  the summary. The run fails, saying so, if it can't be, or if it came back on SwiftShader rather than the host's GPU
+  (`start-test-emulators.sh` falls back to SwiftShader when the host's GPU doesn't boot), which would leave the next
+  run's Vulkan shard on it.
 - `GOOSE_TEST_DATA` is a folder laid out as `/sdcard/GooseTest`, pushed to each emulator: `bios/ps-30j.bin`,
   `games/padtest.psexe` and padtest's disc image, `games/Pad Test #1 (100%).cue` and `.bin`. Here it's
   `~/work/goose-test-data`: the BIOS is a dump of a Japanese v3.0 one, `padtest.psexe` is

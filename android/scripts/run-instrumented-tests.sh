@@ -14,7 +14,13 @@
 # full then runs the classes that boot a game (@BootsGames) once more, unsharded, under OpenGL ES: the host's GPU
 # can't run the core's OpenGL ES renderer, so goose-test-2 (emulator-5582) is restarted with SwiftShader for it, and
 # the tests write [GPU] Renderer = OpenGL (the gooseRenderer argument) before each boot. The part fails unless the
-# log says an OpenGL ES context was created, and never a Vulkan device. goose-test-2 is back on the host's GPU after.
+# log says an OpenGL ES context was created, and never a Vulkan device. goose-test-2 is back on the host's GPU after,
+# however the part ended; the run fails if it isn't.
+#
+# One run at a time on this machine: a run takes the lock /tmp/goose-test-emulators.lock (GOOSE_TEST_LOCK) before it
+# asks the emulators anything, and a second waits for it, saying who holds it. Each step has a time limit (a Gradle
+# build 60 min, a test part 45, an adb call 2, a push of GOOSE_TEST_DATA 5), so a hung one fails the run rather than
+# holding the emulators. The helpers are in emulator-run-lib.sh.
 #
 # GOOSE_TEST_SERIALS picks the emulators for the shards (default "emulator-5580 emulator-5582"): only emulators,
 # never a phone or handheld. GOOSE_TEST_DATA is a folder laid out as the emulators' /sdcard/GooseTest, which is pushed
@@ -81,19 +87,45 @@ if [ "$TIER" = full ]; then
 	fi
 fi
 
-# An interrupted run stops its Gradle builds (and the log reader) too.
+# with_limit, wait_until_gone and the emulators' lock. bash 3.2 under set -e exits with 0 when source can't find its
+# file, so it's checked first.
+LIB="$ANDROID_DIR/scripts/emulator-run-lib.sh"
+if [ ! -f "$LIB" ]; then
+	echo "$LIB is missing."
+	exit 1
+fi
+# shellcheck source=emulator-run-lib.sh
+source "$LIB"
+# The terminal, where with_limit says a step timed out even when the step's output goes to a log.
+exec 3>&1
+
+# An interrupted run stops its Gradle builds (and the log reader) too, and frees the emulators.
+LOCK="${GOOSE_TEST_LOCK:-/tmp/goose-test-emulators.lock}"
 cleanup() {
 	for job in $(jobs -p); do
-		pkill -TERM -P "$job" 2>/dev/null || true
-		kill "$job" 2>/dev/null || true
+		_stop_tree "$job"
 	done
+	release_emulator_lock "$LOCK"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
+# One run at a time on the emulators, from any worktree: taken before anything asks them anything, since the run
+# holding them restarts goose-test-2 in its OpenGL ES part.
+take_emulator_lock "$LOCK" "$TIER"
+# Each step under with_limit, and each shard, is noted in the lock as a worker: killed with kill -9, this run can't
+# free it, and its shards and steps would go on using the emulators, so the lock stays until they've stopped.
+EMULATOR_LOCK="$LOCK"
+
+# A step that waits on an emulator, for 2 minutes at most.
+adb_() {
+	with_limit 120 "$ADB" "$@"
+}
+
+# Where start-test-emulators.sh always starts goose-test-2, which the OpenGL ES part restarts.
 GLES_SERIAL=emulator-5582
 GLES_AVD=goose-test-2
-if [ "$TIER" = full ] && [ "$("$ADB" -s "$GLES_SERIAL" emu avd name 2>/dev/null | head -n 1 | tr -d '\r')" != "$GLES_AVD" ]; then
+if [ "$TIER" = full ] && [ "$(adb_ -s "$GLES_SERIAL" emu avd name 2>/dev/null | head -n 1 | tr -d '\r')" != "$GLES_AVD" ]; then
 	echo "full needs $GLES_AVD running as $GLES_SERIAL, for the OpenGL ES part: start it with start-test-emulators.sh."
 	exit 1
 fi
@@ -103,7 +135,7 @@ for serial in "${SERIALS[@]}"; do
 		echo "$serial isn't an emulator: the tests run on emulators only."
 		exit 1
 	fi
-	if [ "$("$ADB" -s "$serial" get-state 2>/dev/null)" != device ]; then
+	if [ "$(adb_ -s "$serial" get-state 2>/dev/null)" != device ]; then
 		echo "$serial isn't running: start the emulators with start-test-emulators.sh."
 		exit 1
 	fi
@@ -111,21 +143,21 @@ done
 
 # What the tests read from /sdcard/GooseTest.
 for serial in "${SERIALS[@]}"; do
-	"$ADB" -s "$serial" shell mkdir -p /sdcard/GooseTest/bios /sdcard/GooseTest/games
+	adb_ -s "$serial" shell mkdir -p /sdcard/GooseTest/bios /sdcard/GooseTest/games
 	if [ -n "$GOOSE_TEST_DATA" ]; then
-		"$ADB" -s "$serial" push "$GOOSE_TEST_DATA/." /sdcard/GooseTest/ >/dev/null
+		with_limit 300 "$ADB" -s "$serial" push "$GOOSE_TEST_DATA/." /sdcard/GooseTest/ >/dev/null
 		# BiosImporterTest reads it here.
-		"$ADB" -s "$serial" shell mkdir -p /data/local/tmp/goose-test
-		"$ADB" -s "$serial" push "$GOOSE_TEST_DATA/bios/ps-30j.bin" /data/local/tmp/goose-test/ >/dev/null
+		adb_ -s "$serial" shell mkdir -p /data/local/tmp/goose-test
+		with_limit 300 "$ADB" -s "$serial" push "$GOOSE_TEST_DATA/bios/ps-30j.bin" /data/local/tmp/goose-test/ >/dev/null
 	else
-		"$ADB" -s "$serial" push "$ROOT/extras/padtest/padtest.psexe" /sdcard/GooseTest/games/ >/dev/null
+		adb_ -s "$serial" push "$ROOT/extras/padtest/padtest.psexe" /sdcard/GooseTest/games/ >/dev/null
 	fi
 done
 [ -n "$GOOSE_TEST_DATA" ] || echo "GOOSE_TEST_DATA isn't set: the tests that need the BIOS will be skipped."
 
 cd "$ANDROID_DIR"
 # Built once, so the shards' builds find everything up to date and only run the tests.
-want tests && ./gradlew --quiet assembleDebug assembleDebugAndroidTest
+want tests && with_limit 3600 ./gradlew --quiet assembleDebug assembleDebugAndroidTest
 
 FILTER=()
 [ "$TIER" = quick ] && FILTER=("$RUNNER_ARGS.notAnnotation=androidx.test.filters.LargeTest")
@@ -138,15 +170,16 @@ run_part() {
 	else
 		args=("$RUNNER_ARGS.notPackage=$UI_PACKAGE")
 	fi
-	local start=$SECONDS
-	if ANDROID_SERIAL="$serial" ./gradlew connectedDebugAndroidTest "${args[@]}" "${FILTER[@]}" \
+	local start=$SECONDS result=0 log="$LOGS/goose-tests-shard$shard-$part.log"
+	with_limit 2700 env ANDROID_SERIAL="$serial" ./gradlew connectedDebugAndroidTest "${args[@]}" "${FILTER[@]}" \
 		"$RUNNER_ARGS.numShards=$SHARDS" "$RUNNER_ARGS.shardIndex=$shard" "-Pgoose.testResults=shard$shard-$part" \
-		>"$LOGS/goose-tests-shard$shard-$part.log" 2>&1; then
-		echo "shard $shard ($serial), $part: done in $((SECONDS - start)) s"
-	else
-		echo "shard $shard ($serial), $part: failed after $((SECONDS - start)) s (see $LOGS/goose-tests-shard$shard-$part.log)"
-		return 1
-	fi
+		>"$log" 2>&1 || result=$?
+	case $result in
+	0) echo "shard $shard ($serial), $part: done in $((SECONDS - start)) s" ;;
+	124) echo "shard $shard ($serial), $part: timed out after $((SECONDS - start)) s (see $log)" ;;
+	*) echo "shard $shard ($serial), $part: failed after $((SECONDS - start)) s (see $log)" ;;
+	esac
+	[ "$result" -eq 0 ]
 }
 
 # Both parts of shard $1, on emulator $2, the second even if the first failed.
@@ -155,6 +188,64 @@ run_shard() {
 	run_part "$1" "$2" ui || status=1
 	run_part "$1" "$2" core || status=1
 	return $status
+}
+
+# The OpenGL ES part: goose-test-2 restarted with SwiftShader, and the classes that boot a game run on it. False, saying
+# why, if a step fails or times out; it never exits, so restore_gles and the rest of the run still happen.
+run_gles() {
+	local start=$SECONDS result=0 failed=0 logcat contexts vulkan log="$LOGS/goose-tests-gles.log"
+	adb_ -s "$GLES_SERIAL" emu kill >/dev/null 2>&1 || true
+	if ! wait_until_gone "$ADB" "$GLES_SERIAL" 60; then
+		echo "OpenGL ES: $GLES_AVD didn't stop for its SwiftShader start."
+		return 1
+	fi
+	# fd 3 closed (here and below): the emulator, which stays up, would hold a pipe reading this run's output open.
+	if ! GOOSE_TEST_GPU=swiftshader_indirect "$ANDROID_DIR/scripts/start-test-emulators.sh" "$GLES_AVD" 3>&-; then
+		echo "OpenGL ES: $GLES_AVD didn't start with SwiftShader."
+		return 1
+	fi
+	if ! adb_ -s "$GLES_SERIAL" logcat -c; then
+		echo "OpenGL ES: couldn't clear $GLES_SERIAL's log."
+		return 1
+	fi
+	"$ADB" -s "$GLES_SERIAL" logcat -v time -s OpenGLContext:I Host:I >"$LOGS/goose-tests-gles-logcat.txt" 3>&- &
+	logcat=$!
+	with_limit 2700 env ANDROID_SERIAL="$GLES_SERIAL" ./gradlew connectedDebugAndroidTest \
+		"$RUNNER_ARGS.annotation=io.github.ilyalissoboi.goosestation.core.BootsGames" \
+		"$RUNNER_ARGS.gooseRenderer=OpenGL" -Pgoose.testResults=gles >"$log" 2>&1 || result=$?
+	case $result in
+	0) echo "OpenGL ES ($GLES_SERIAL): done in $((SECONDS - start)) s" ;;
+	124) echo "OpenGL ES ($GLES_SERIAL): timed out after $((SECONDS - start)) s (see $log)" ;;
+	*) echo "OpenGL ES ($GLES_SERIAL): failed after $((SECONDS - start)) s (see $log)" ;;
+	esac
+	[ "$result" -eq 0 ] || failed=1
+	kill "$logcat" 2>/dev/null || true
+	contexts=$(grep -c "Created an OpenGL ES context" "$LOGS/goose-tests-gles-logcat.txt" || true)
+	vulkan=$(grep -c "Trying to create a Vulkan GPU device" "$LOGS/goose-tests-gles-logcat.txt" || true)
+	echo "OpenGL ES: $contexts OpenGL ES contexts created, $vulkan Vulkan devices tried (see $LOGS/goose-tests-gles-logcat.txt)"
+	if [ "$contexts" -eq 0 ] || [ "$vulkan" -ne 0 ]; then
+		echo "OpenGL ES: the games didn't all boot under OpenGL ES."
+		failed=1
+	fi
+	return $failed
+}
+
+# goose-test-2 back on the host's GPU for the next run, however run_gles ended. False, saying so, if it isn't:
+# start-test-emulators.sh falls back to SwiftShader when the host's GPU doesn't boot, which would leave the next run's
+# Vulkan shard on it.
+restore_gles() {
+	local log="$LOGS/goose-tests-gles-restore.log"
+	adb_ -s "$GLES_SERIAL" emu kill >/dev/null 2>&1 || true
+	if ! wait_until_gone "$ADB" "$GLES_SERIAL" 60; then
+		echo "OpenGL ES: $GLES_AVD didn't stop, so it isn't back on the host's GPU."
+		return 1
+	fi
+	GOOSE_TEST_GPU=host "$ANDROID_DIR/scripts/start-test-emulators.sh" "$GLES_AVD" >"$log" 2>&1 3>&- || true
+	cat "$log"
+	if ! grep -qF "$GLES_AVD booted as $GLES_SERIAL, with -gpu host." "$log"; then
+		echo "OpenGL ES: $GLES_AVD didn't come back on the host's GPU (see $log)."
+		return 1
+	fi
 }
 
 START=$SECONDS
@@ -167,6 +258,7 @@ pids=()
 for shard in "${!SERIALS[@]}"; do
 	run_shard "$shard" "${SERIALS[$shard]}" &
 	pids+=($!)
+	note_lock_worker "$LOCK" $!
 done
 for pid in "${pids[@]}"; do
 	wait "$pid" || status=1
@@ -177,36 +269,11 @@ for shard in "${!SERIALS[@]}"; do
 	PARTS+=("shard$shard-ui" "shard$shard-core")
 done
 
-# full: the classes that boot a game, again, under OpenGL ES on SwiftShader.
+# full: the classes that boot a game, again, under OpenGL ES on SwiftShader, then goose-test-2 back as it was.
 if [ "$TIER" = full ]; then
 	PARTS+=(gles)
-	gles_start=$SECONDS
-	"$ADB" -s "$GLES_SERIAL" emu kill >/dev/null
-	while "$ADB" devices | grep -q "^$GLES_SERIAL"; do sleep 1; done
-	GOOSE_TEST_GPU=swiftshader_indirect "$ANDROID_DIR/scripts/start-test-emulators.sh" "$GLES_AVD"
-	"$ADB" -s "$GLES_SERIAL" logcat -c
-	"$ADB" -s "$GLES_SERIAL" logcat -v time -s OpenGLContext:I Host:I >"$LOGS/goose-tests-gles-logcat.txt" &
-	logcat=$!
-	if ANDROID_SERIAL="$GLES_SERIAL" ./gradlew connectedDebugAndroidTest \
-		"$RUNNER_ARGS.annotation=io.github.ilyalissoboi.goosestation.core.BootsGames" \
-		"$RUNNER_ARGS.gooseRenderer=OpenGL" -Pgoose.testResults=gles >"$LOGS/goose-tests-gles.log" 2>&1; then
-		echo "OpenGL ES ($GLES_SERIAL): done in $((SECONDS - gles_start)) s"
-	else
-		echo "OpenGL ES ($GLES_SERIAL): failed after $((SECONDS - gles_start)) s (see $LOGS/goose-tests-gles.log)"
-		status=1
-	fi
-	kill "$logcat" 2>/dev/null || true
-	contexts=$(grep -c "Created an OpenGL ES context" "$LOGS/goose-tests-gles-logcat.txt" || true)
-	vulkan=$(grep -c "Trying to create a Vulkan GPU device" "$LOGS/goose-tests-gles-logcat.txt" || true)
-	echo "OpenGL ES: $contexts OpenGL ES contexts created, $vulkan Vulkan devices tried (see $LOGS/goose-tests-gles-logcat.txt)"
-	if [ "$contexts" -eq 0 ] || [ "$vulkan" -ne 0 ]; then
-		echo "OpenGL ES: the games didn't all boot under OpenGL ES."
-		status=1
-	fi
-	# Back on the host's GPU, for the next run.
-	"$ADB" -s "$GLES_SERIAL" emu kill >/dev/null
-	while "$ADB" devices | grep -q "^$GLES_SERIAL"; do sleep 1; done
-	"$ANDROID_DIR/scripts/start-test-emulators.sh" "$GLES_AVD" || status=1
+	run_gles || status=1
+	restore_gles || status=1
 fi
 fi
 
@@ -216,7 +283,7 @@ run_release() {
 	local requests="$LOGS/goose-tests-release-requests.txt" logcat="$LOGS/goose-tests-release-logcat.txt"
 	local answer=/data/local/tmp/goose-release-answer.txt asked_file=/data/local/tmp/goose-release-request.txt
 	local want_request="GET /repos/ilyalissoboi/goosestation/releases/tags/preview"
-	if ! ./gradlew --quiet assembleRelease -Pgoose.updateChannel=preview \
+	if ! with_limit 3600 ./gradlew --quiet assembleRelease -Pgoose.updateChannel=preview \
 		"-Pgoose.updateApi=http://127.0.0.1:$RELEASE_PORT/repos/ilyalissoboi/goosestation" \
 		>"$LOGS/goose-tests-release-build.log" 2>&1; then
 		echo "release: failed: the release build (see $LOGS/goose-tests-release-build.log)"
@@ -235,42 +302,42 @@ run_release() {
 	printf 'HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
 		"${#body}" "$body" >"$LOGS/goose-tests-release-answer.txt"
 	: >"$requests"
-	"$ADB" -s "$serial" push "$LOGS/goose-tests-release-answer.txt" "$answer" >/dev/null
-	"$ADB" -s "$serial" shell rm -f "$asked_file"
-	"$ADB" -s "$serial" shell "nc -l -p $RELEASE_PORT < $answer > $asked_file" >"$LOGS/goose-tests-release-server.log" 2>&1 &
+	adb_ -s "$serial" push "$LOGS/goose-tests-release-answer.txt" "$answer" >/dev/null
+	adb_ -s "$serial" shell rm -f "$asked_file"
+	"$ADB" -s "$serial" shell "nc -l -p $RELEASE_PORT < $answer > $asked_file" >"$LOGS/goose-tests-release-server.log" 2>&1 3>&- &
 	local server=$!
 	# Another build under the release's ID (an old debug install) has another signature: it goes first.
-	"$ADB" -s "$serial" uninstall "$RELEASE_ID" >/dev/null 2>&1 || true
+	adb_ -s "$serial" uninstall "$RELEASE_ID" >/dev/null 2>&1 || true
 	local missing=""
-	if ! "$ADB" -s "$serial" install "$apk" >"$LOGS/goose-tests-release-install.log" 2>&1; then
+	if ! adb_ -s "$serial" install "$apk" >"$LOGS/goose-tests-release-install.log" 2>&1; then
 		missing="the install (see $LOGS/goose-tests-release-install.log)"
 	else
-		"$ADB" -s "$serial" logcat -c
-		"$ADB" -s "$serial" logcat -b all -c 2>/dev/null || true
-		"$ADB" -s "$serial" shell am start -W -n "$RELEASE_ID/io.github.ilyalissoboi.goosestation.MainActivity" >/dev/null
+		adb_ -s "$serial" logcat -c
+		adb_ -s "$serial" logcat -b all -c 2>/dev/null || true
+		adb_ -s "$serial" shell am start -W -n "$RELEASE_ID/io.github.ilyalissoboi.goosestation.MainActivity" >/dev/null
 		local loaded="" asked="" end=$((SECONDS + 60))
 		while [ $SECONDS -lt $end ] && { [ -z "$loaded" ] || [ -z "$asked" ]; }; do
-			"$ADB" -s "$serial" logcat -d -s GooseStation:I >"$logcat" 2>/dev/null || true
+			adb_ -s "$serial" logcat -d -s GooseStation:I >"$logcat" 2>/dev/null || true
 			grep -q "Loaded libgoosestation.so." "$logcat" && loaded=yes
-			"$ADB" -s "$serial" shell cat "$asked_file" 2>/dev/null | tr -d '\r' >"$requests" || true
+			adb_ -s "$serial" shell cat "$asked_file" 2>/dev/null | tr -d '\r' >"$requests" || true
 			grep -qF "$want_request" "$requests" && asked=yes
 			sleep 1
 		done
 		sleep 2
-		"$ADB" -s "$serial" logcat -d >"$logcat" 2>/dev/null || true
+		adb_ -s "$serial" logcat -d >"$logcat" 2>/dev/null || true
 		if [ -z "$loaded" ]; then
 			missing="libgoosestation.so never loaded"
 		elif [ -z "$asked" ]; then
 			missing="no request for the channel's release reached the fake GitHub"
-		elif [ -z "$("$ADB" -s "$serial" shell pidof "$RELEASE_ID" | tr -d '\r')" ]; then
+		elif [ -z "$(adb_ -s "$serial" shell pidof "$RELEASE_ID" | tr -d '\r')" ]; then
 			missing="the app isn't running"
-		elif [ -n "$("$ADB" -s "$serial" logcat -d -b crash | grep -v '^---------' | tr -d '\r')" ]; then
+		elif [ -n "$(adb_ -s "$serial" logcat -d -b crash | grep -v '^---------' | tr -d '\r')" ]; then
 			missing="the crash log isn't empty"
 		fi
 	fi
 	kill "$server" 2>/dev/null || true
-	"$ADB" -s "$serial" shell "pkill -f 'nc -l -p $RELEASE_PORT'; rm -f $answer $asked_file" >/dev/null 2>&1 || true
-	"$ADB" -s "$serial" uninstall "$RELEASE_ID" >/dev/null 2>&1 || true
+	adb_ -s "$serial" shell "pkill -f 'nc -l -p $RELEASE_PORT'; rm -f $answer $asked_file" >/dev/null 2>&1 || true
+	adb_ -s "$serial" uninstall "$RELEASE_ID" >/dev/null 2>&1 || true
 	if [ -n "$missing" ]; then
 		echo "release: failed: $missing (see $logcat)"
 		return 1

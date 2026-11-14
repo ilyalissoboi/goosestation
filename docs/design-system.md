@@ -24,6 +24,7 @@ with an orange beak, on the dark water of a night pond.
 | The bundled fonts and their licences | `android/app/src/main/res/font/`, `android/app/src/main/assets/licenses/` |
 | `GsIcons.kt`'s generator | [`scripts/branding/generate-gsicons.py`](../scripts/branding/generate-gsicons.py) |
 | The Android launcher icon's generator | [`scripts/branding/generate-android-icon.py`](../scripts/branding/generate-android-icon.py) |
+| The desktop app icon's generator | [`scripts/branding/generate-icons.py`](../scripts/branding/generate-icons.py) |
 
 The design system is also published as a browsable page with live previews of every component, in both themes:
 <https://claude.ai/artifact/BZV2gRHHmrSCzRmyWcrqwU> (ask a maintainer for access). `tokens.json` and the SVGs here are
@@ -655,7 +656,7 @@ SVG per core input name (`Triangle`, `LLeft`, …).
   `python scripts/branding/generate-gsicons.py`, which rewrites `GsIcons.kt` from the folder. Don't edit `GsIcons.kt`
   by hand.
 - **The goose:** `goosestation.png` is the hero illustration (about box, setup welcome, store pages), dark grounds
-  only. `logos/goose-mark.svg` is the same goose cropped to head, neck and beak, for small sizes;
+  only; never the app icon. `logos/goose-mark.svg` is the same goose cropped to head, neck and beak, for small sizes;
   `goose-app-icon.svg` is the mark on a dark tile, the app icon and the mark to use on light grounds;
   `goose-mark-mono.svg` is the one-colour silhouette for Android notification and themed icons and the macOS menu
   bar. Never recolour or redraw the goose. The wordmark is the name in Chakra Petch 600 beside the mark; there's no
@@ -667,7 +668,12 @@ SVG per core input name (`Triangle`, `LLeft`, …).
   for themed icons. With `minSdk` 29, vectors cover every supported version, so there are no PNGs per density. It's
   generated from `logos/goose-mark.svg` and `goose-mark-mono.svg` by
   `python scripts/branding/generate-android-icon.py`, which also checks the safe zone; change the mark there, not
-  the XML. The desktop icons (`scripts/branding/generate-icons.py`) still use the full goose.
+  the XML.
+- **The desktop app icon** is the same picture: the launcher icon's background and foreground as a launcher shows
+  them, the middle 72 dp of the canvas, under a rounded square (on macOS, inset to Apple's 824 px tile). It's the
+  Windows executable's `.ico`, the macOS bundles' `.icns`, the Linux packages' PNG and every window's icon.
+  `python scripts/branding/generate-icons.py` draws it from `logos/goose-mark.svg` with the placement and tile colour
+  of `generate-android-icon.py`, so run it after changing either; it needs Pillow.
 - **No emoji** and no decorative illustrations in the interface. The only pictures are the players' covers and
   screenshots.
 

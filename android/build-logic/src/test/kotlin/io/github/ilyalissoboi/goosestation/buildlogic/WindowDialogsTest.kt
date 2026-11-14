@@ -63,6 +63,21 @@ class WindowDialogsTest {
         assertEquals(listOf("A.kt:2: AlertDialog"), found("val s = \"a \${\"/*\" + \"//\"} b\"", "AlertDialog(onDismissRequest = {})"))
     }
 
+    // From the final review: Kotlin ends a raw string at the last three of a run of quotes, so the run's first three
+    // left a quote that paired with the next string's, and that string's "/*" opened a comment.
+    @Test
+    fun aRawStringEndsAtTheLastOfItsQuotes() {
+        assertEquals(
+            listOf("A.kt:2: AlertDialog", "A.kt:4: AlertDialog"),
+            found(
+                "val s = \"\"\"say \"hi\"\"\"\"; val t = \"/*\"",
+                "AlertDialog(onDismissRequest = {})",
+                "val u = \"\${\"\"\"a\"\"\"\"\"} /*\"",
+                "AlertDialog(onDismissRequest = {})",
+            ),
+        )
+    }
+
     @Test
     fun eachNameIsFoundAsACallAndAsAnImport() {
         val names =

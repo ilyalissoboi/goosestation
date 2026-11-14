@@ -48,7 +48,7 @@ fun withoutComments(lines: List<String>): List<String> {
             when {
                 inRaw -> {
                     val end = line.indexOf("\"\"\"", i)
-                    val stop = if (end < 0) line.length else end + 3
+                    val stop = if (end < 0) line.length else rawEnd(line, end)
                     code.append(line, i, stop)
                     i = stop
                     if (end >= 0) inRaw = false
@@ -84,6 +84,17 @@ fun withoutComments(lines: List<String>): List<String> {
     }
 }
 
+// Past the raw string's closing quotes, found at [end]: Kotlin ends it at the last three of a run of quotes, so
+// """say "hi"""" holds "say "hi"".
+private fun rawEnd(
+    line: String,
+    end: Int,
+): Int {
+    var stop = end + 3
+    while (stop < line.length && line[stop] == '"') stop++
+    return stop
+}
+
 // Where the "…" string starting at [start] ends (past its closing quote), or the line's end. Its templates are followed:
 // a quote inside ${…} belongs to a string of the template's, not to this one.
 private fun stringEnd(
@@ -114,7 +125,7 @@ private fun templateEnd(
         when {
             line.startsWith("\"\"\"", i) -> {
                 val end = line.indexOf("\"\"\"", i + 3)
-                i = if (end < 0) line.length else end + 3
+                i = if (end < 0) line.length else rawEnd(line, end)
             }
             line[i] == '"' -> i = stringEnd(line, i)
             line[i] == '\'' -> {

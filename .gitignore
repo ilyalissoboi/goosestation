@@ -43,8 +43,9 @@ CMakeLists.txt.user
 __pycache__
 
 # android (gradle)
-android/.gradle
-android/build-logic/.gradle
+# Gradle's and the Kotlin daemon's caches, in android/ and in each build beside it (build-logic).
+android/**/.gradle
+android/**/.kotlin
 android/**/build
 android/**/.cxx
 android/local.properties

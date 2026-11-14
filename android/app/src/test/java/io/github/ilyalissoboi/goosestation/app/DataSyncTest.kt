@@ -179,7 +179,7 @@ class DataSyncTest {
             sync.pull(onlyMemcards = false)
 
             assertFalse(sync.startsAllowed)
-            assertTrue(sync.keepsLine(COPYING, COPYING))
+            assertTrue(sync.keepsLine(refusalShown = true))
             assertTrue(sync.dataLayout.mirrored("extra/save.dat"))
             assertEquals(1, mirror.runs)
             assertFalse(mirror.removeStrays())

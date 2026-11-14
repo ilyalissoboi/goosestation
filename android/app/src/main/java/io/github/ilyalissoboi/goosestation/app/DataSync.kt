@@ -94,11 +94,8 @@ class DataSync<M : MirrorRuns>(
     /** No game starts while this is false: a catch-up is due or under way ([CatchUpRunner.startsAllowed]). */
     val startsAllowed get() = catchUps.startsAllowed
 
-    /** [CatchUpRunner.keepsLine]: whether [message] stays as a game stops, as a start refused meanwhile said why. */
-    fun keepsLine(
-        message: String?,
-        refusal: String,
-    ) = catchUps.keepsLine(message, refusal)
+    /** [CatchUpRunner.keepsLine]: whether the line stays as a game stops, as a start refused meanwhile said why. */
+    fun keepsLine(refusalShown: Boolean) = catchUps.keepsLine(refusalShown)
 
     // Memory card sync never writes a card while the mirror replaces or deletes it: sync holds the card meanwhile.
     // Before the core starts, nothing syncs.

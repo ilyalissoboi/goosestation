@@ -95,13 +95,13 @@ interface SyncHooks {
 
     /**
      * The message line says the data is being copied in: "Copying…", or with [progress] (the action under way, of
-     * how many) after it. Only the line: not whether it's an error.
+     * how many) after it. An error showing stays.
      */
     fun showCopying(progress: Pair<Int, Int>?)
 
-    /** Whether the message line says just "Copying…". */
+    /** Whether the message line is the plain "Copying…" one, with no counts. */
     fun copyingShown(): Boolean
 
-    /** Clears the message line. */
+    /** Clears the message line, if it's the plain "Copying…" one. */
     fun clearCopying()
 }

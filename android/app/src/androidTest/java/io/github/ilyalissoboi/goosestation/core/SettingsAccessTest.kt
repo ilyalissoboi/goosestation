@@ -252,18 +252,7 @@ class SettingsAccessTest {
     }
 
     private fun initialize() {
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                null,
-                File(dataRoot.parentFile, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"))
     }
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())
@@ -282,8 +271,6 @@ class SettingsAccessTest {
     }
 
     private companion object {
-        const val INSTALL_ID = "test-install"
-
         /**
          * Read by the app alone, never by the core, which doesn't write them (desktop's frontend writes its own): the
          * page's defaults are the ones that count.

@@ -4,7 +4,6 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import android.graphics.SurfaceTexture
-import android.os.ParcelFileDescriptor
 import android.view.Surface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -132,7 +131,7 @@ class GameCallsTest {
         val games = File(root, "games")
         assumeTrue(
             "No padtest in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/games/padtest.psexe", File(games, "padtest.psexe")),
+            copyFromShell("$SDCARD_TESTS/games/padtest.psexe", File(games, "padtest.psexe")),
         )
         initialize()
         NativeLibrary.setGameFolders(arrayOf(games.absolutePath))
@@ -152,8 +151,8 @@ class GameCallsTest {
         val exe = File(root, "padtest.psexe")
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
-                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe),
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/padtest.psexe", exe),
         )
         val started = CountDownLatch(1)
         val stopped = CountDownLatch(1)
@@ -676,9 +675,9 @@ class GameCallsTest {
         val games = File(root, "games")
         assumeTrue(
             "No BIOS or padtest's disc image in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
-                copyGlobAsShell("$SDCARD_TESTS/games/Pad*.cue", File(games, "$PAD_TEST_DISC.cue")) &&
-                copyGlobAsShell("$SDCARD_TESTS/games/Pad*.bin", File(games, "$PAD_TEST_DISC.bin")),
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/Pad*.cue", File(games, "$PAD_TEST_DISC.cue")) &&
+                copyFromShell("$SDCARD_TESTS/games/Pad*.bin", File(games, "$PAD_TEST_DISC.bin")),
         )
         File(games, "Pad Test.m3u").writeText("$PAD_TEST_DISC.cue\n$PAD_TEST_DISC.cue\n")
         val started = CountDownLatch(1)
@@ -737,8 +736,8 @@ class GameCallsTest {
         val games = File(root, "games")
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
-                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", File(games, "padtest.psexe")),
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/padtest.psexe", File(games, "padtest.psexe")),
         )
         val started = CountDownLatch(1)
         val stopped = CountDownLatch(1)
@@ -1335,16 +1334,16 @@ class GameCallsTest {
         val exe = File(root, "padtest.psexe")
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
-                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe),
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/padtest.psexe", exe),
         )
         // With [disc], padtest's disc image boots instead: a game of its own, with another ID.
         val cue = File(root, "games/$PAD_TEST_DISC.cue")
         if (disc) {
             assumeTrue(
                 "No padtest disc image in /sdcard/GooseTest",
-                copyGlobAsShell("$SDCARD_TESTS/games/Pad*.cue", cue) &&
-                    copyGlobAsShell("$SDCARD_TESTS/games/Pad*.bin", File(root, "games/$PAD_TEST_DISC.bin")),
+                copyFromShell("$SDCARD_TESTS/games/Pad*.cue", cue) &&
+                    copyFromShell("$SDCARD_TESTS/games/Pad*.bin", File(root, "games/$PAD_TEST_DISC.bin")),
             )
         }
         val started = CountDownLatch(1)
@@ -1615,48 +1614,10 @@ class GameCallsTest {
     @Volatile private var lastSerial = ""
 
     private fun initialize() {
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                null,
-                File(dataRoot.parentFile, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
-    }
-
-    // The test app can't read /sdcard; the shell can. False if there's nothing there.
-    // [path] a glob matching one file, whose name may have spaces: the command is split at spaces with no shell, so it
-    // runs in sh with ${'$'}{IFS} for its space.
-    private fun copyGlobAsShell(
-        path: String,
-        destination: File,
-    ) = copyAsShell("sh -c cat${'$'}{IFS}$path", destination, command = true)
-
-    private fun copyAsShell(
-        path: String,
-        destination: File,
-        command: Boolean = false,
-    ): Boolean {
-        val output =
-            InstrumentationRegistry
-                .getInstrumentation()
-                .uiAutomation
-                .executeShellCommand(if (command) path else "cat $path")
-        destination.parentFile!!.mkdirs()
-        ParcelFileDescriptor.AutoCloseInputStream(output).use { input ->
-            destination.outputStream().use { input.copyTo(it) }
-        }
-        return destination.length() > 0
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"))
     }
 
     private companion object {
-        const val INSTALL_ID = "test-install"
-
         // A slang shader that ignores its input: red over the top half of what it draws (as slang shaders see it).
         val PROBE_SHADER =
             """

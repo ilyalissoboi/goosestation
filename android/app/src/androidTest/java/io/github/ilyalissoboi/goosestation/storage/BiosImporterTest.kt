@@ -7,7 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
-import io.github.ilyalissoboi.goosestation.core.Resources
+import io.github.ilyalissoboi.goosestation.core.initializeCore
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -113,18 +113,7 @@ class BiosImporterTest {
     fun realBiosIsListed() {
         val bytes = realBios()
         val dataRoot = File(context.cacheDir, "bios-listing").apply { deleteRecursively() }.apply { mkdirs() }
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.path,
-                resources.path,
-                biosDir.path,
-                "test-install",
-                null,
-                File(dataRoot.parentFile, "offline").path,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"))
         val tree = TestTrees.create(context, mapOf("ps-30j.bin" to bytes, "readme.txt" to "hi".toByteArray()))
         assertEquals(1, runBlocking { BiosImporter(context).import(tree) }.images.size)
 

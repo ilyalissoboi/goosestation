@@ -4,7 +4,6 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import android.graphics.SurfaceTexture
-import android.os.ParcelFileDescriptor
 import android.view.Surface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -107,10 +106,10 @@ class AchievementsOfflineTest {
         )
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
-                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe) &&
-                copyAsShell("$SDCARD_TESTS/games/Pad*.cue", disc) &&
-                copyAsShell("$SDCARD_TESTS/games/Pad*.bin", File(root, "$PAD_TEST_DISC.bin")),
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/padtest.psexe", exe) &&
+                copyFromShell("$SDCARD_TESTS/games/Pad*.cue", disc) &&
+                copyFromShell("$SDCARD_TESTS/games/Pad*.bin", File(root, "$PAD_TEST_DISC.bin")),
         )
     }
 
@@ -610,59 +609,17 @@ class AchievementsOfflineTest {
         for (file in files) assertFalse(file.path, file.readText().contains(TOKEN))
     }
 
-    private fun waitFor(
-        what: String,
-        seconds: Int = 10,
-        condition: () -> Boolean,
-    ) {
-        val deadline = System.nanoTime() + seconds * 1_000_000_000L
-        while (!condition()) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for $what")
-            Thread.sleep(50)
-        }
-    }
-
     private fun initialize(
         settings: String,
         signedIn: Boolean = true,
     ) {
         File(dataRoot, "settings.ini").writeText(settings)
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                TOKEN,
-                folder.absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, folder, token = TOKEN)
         if (signedIn) {
             waitFor("the sign-in") {
                 NativeLibrary.getAchievementsAccount().state == AchievementsAccount.SIGNED_IN
             }
         }
-    }
-
-    // The test app can't read /sdcard; the shell can. [path] may be a glob matching one file. The command is split at
-    // spaces with no shell, so it runs in sh with ${'$'}{IFS} for its space: the glob matches a name with spaces.
-    // False if there's nothing there.
-    private fun copyAsShell(
-        path: String,
-        destination: File,
-    ): Boolean {
-        val output =
-            InstrumentationRegistry
-                .getInstrumentation()
-                .uiAutomation
-                .executeShellCommand("sh -c cat${'$'}{IFS}$path")
-        destination.parentFile!!.mkdirs()
-        ParcelFileDescriptor.AutoCloseInputStream(output).use { input ->
-            destination.outputStream().use { input.copyTo(it) }
-        }
-        return destination.length() > 0
     }
 
     private companion object {

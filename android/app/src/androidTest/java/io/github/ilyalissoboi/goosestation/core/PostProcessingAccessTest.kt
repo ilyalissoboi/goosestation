@@ -446,18 +446,7 @@ class PostProcessingAccessTest {
     private fun gameFile() = Ini.parse(File(dataRoot, "gamesettings/$KEY.ini").readText())
 
     private fun initialize() {
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                "test-install",
-                null,
-                File(root, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, File(root, "offline"))
     }
 
     private companion object {

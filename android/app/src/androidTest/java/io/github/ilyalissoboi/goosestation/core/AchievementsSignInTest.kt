@@ -177,8 +177,8 @@ class AchievementsSignInTest {
         val exe = File(root, "padtest.psexe")
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
-                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe),
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/padtest.psexe", exe),
         )
         server.unreachable = true
         initialize(SIGNED_IN_SETTINGS, TOKEN)
@@ -224,52 +224,17 @@ class AchievementsSignInTest {
         return NativeLibrary.getAchievementsAccount()
     }
 
-    private fun waitFor(
-        what: String,
-        condition: () -> Boolean,
-    ) {
-        val deadline = System.nanoTime() + 10_000_000_000L
-        while (!condition()) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for $what")
-            Thread.sleep(50)
-        }
-    }
-
     private fun initialize(
         settings: String? = null,
         token: String? = null,
     ) {
         if (settings != null) File(dataRoot, "settings.ini").writeText(settings)
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                token,
-                File(dataRoot.parentFile, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"), token)
     }
 
     private fun shell(command: String): String {
         val output = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
         return ParcelFileDescriptor.AutoCloseInputStream(output).use { it.readBytes().decodeToString() }
-    }
-
-    // The test app can't read /sdcard; the shell can. False if there's nothing there.
-    private fun copyAsShell(
-        path: String,
-        destination: File,
-    ): Boolean {
-        val output = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("cat $path")
-        destination.parentFile!!.mkdirs()
-        ParcelFileDescriptor.AutoCloseInputStream(output).use { input ->
-            destination.outputStream().use { input.copyTo(it) }
-        }
-        return destination.length() > 0
     }
 
     private companion object {

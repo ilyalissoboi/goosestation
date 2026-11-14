@@ -359,17 +359,6 @@ class ControllerBindingsTest {
 
     private fun descriptors(): List<String> = readSettings().values("Android", "ControllerDescriptors")
 
-    private fun waitFor(
-        what: String,
-        condition: () -> Boolean,
-    ) {
-        val deadline = System.nanoTime() + 5_000_000_000L
-        while (!condition()) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting: $what")
-            Thread.sleep(50)
-        }
-    }
-
     @Test
     fun portTypeIsTheDefaultWithoutASetting() {
         initialize(null)
@@ -656,18 +645,7 @@ class ControllerBindingsTest {
 
     private fun initialize(settings: String?) {
         if (settings != null) settingsFile.writeText(settings)
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                null,
-                File(dataRoot.parentFile, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"))
     }
 
     // --- A game's controllers ---

@@ -51,18 +51,7 @@ class CoverDownloadsTest {
         TestTrees.deleteAll(context)
         val tree = TestTrees.create(context, FILES)
         ContentBridge.init(context)
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                File(root, "bios").absolutePath,
-                "test-install",
-                null,
-                File(root, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, File(root, "bios"), File(root, "offline"))
         NativeLibrary.setGameFolders(arrayOf(tree))
         NativeLibrary.refreshGameList(false)
         // Lists the tiles, which the download goes through.

@@ -336,8 +336,11 @@ the app, the core or `scripts/deps/build-dependencies-android.sh`, and twice a w
 `ubuntu-24.04` it installs the SDK's NDK, CMake (with its Ninja) and platform at the versions above, builds the
 dependency prefix into `~/deps-android` (cached by the script's hash and the NDK version), then runs `assembleDebug`,
 `assembleDebugAndroidTest` (the instrumented tests are built, not run: CI has no emulator), `testDebugUnitTest`,
-`ktlintCheck` and `checkNoWindowDialogs`, and uploads the debug APK as `android-debug-apk`. It has no secrets, and
-isn't part of a release.
+`ktlintCheck`, `checkNoWindowDialogs` and `lintDebug`, and uploads the debug APK as `android-debug-apk` and Lint's
+report as `android-lint-report`. Lint fails the build only on an error, as is its default; its warnings are in the
+report. `AndroidGradlePluginVersion`, `NewerVersionAvailable` and `GradleDependency` are off (`lint { }` in
+`app/build.gradle.kts`): they depend on what's been released that day, not on the change, and a version is updated as a
+step of its own. Every Kotlin compile treats a warning as an error. It has no secrets, and isn't part of a release.
 
 The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
 can only be initialized once per process); with `-Pgoose.orchestrator=false` they share one, which only the `ui`

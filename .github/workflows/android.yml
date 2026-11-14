@@ -108,11 +108,11 @@ jobs:
 
     # The instrumented tests need an emulator, which CI hasn't: they're built here, so a change they no longer compile
     # against fails the pull request rather than the next local run.
-    - name: Build the APK and the instrumented tests, and run the JVM tests and the Kotlin checks
+    - name: Build the APK and the instrumented tests, and run the JVM tests, the Kotlin checks and Lint
       working-directory: android
       run: |
         export GOOSESTATION_ANDROID_DEPS="$HOME/deps-android"
-        ./gradlew assembleDebug assembleDebugAndroidTest testDebugUnitTest ktlintCheck checkNoWindowDialogs
+        ./gradlew assembleDebug assembleDebugAndroidTest testDebugUnitTest ktlintCheck checkNoWindowDialogs lintDebug
 
     - name: Upload the debug APK
       uses: actions/upload-artifact@v4.3.3
@@ -120,3 +120,12 @@ jobs:
         name: android-debug-apk
         path: android/app/build/outputs/apk/debug/app-debug.apk
         if-no-files-found: error
+
+    # Lint fails the build only on an error; its warnings are here, readable without a build.
+    - name: Upload the Lint report
+      if: always()
+      uses: actions/upload-artifact@v4.3.3
+      with:
+        name: android-lint-report
+        path: android/app/build/reports/lint-results-debug.html
+        if-no-files-found: ignore

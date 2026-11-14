@@ -155,6 +155,13 @@ android {
         }
     }
 
+    // CI runs lintDebug, which fails on an error, as Lint does by default; warnings are in its report. These three
+    // depend on what's been released that day, not on the change, so they're off: updating a version is a step of its
+    // own, recorded in docs/android.md.
+    lint {
+        disable += setOf("AndroidGradlePluginVersion", "NewerVersionAvailable", "GradleDependency")
+    }
+
     buildTypes {
         // GooseStation Debug installs beside the release, with its own app storage (its name: src/debug/res).
         debug {

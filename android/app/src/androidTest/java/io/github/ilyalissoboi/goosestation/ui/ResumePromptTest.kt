@@ -15,9 +15,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.core.GameEntry
@@ -33,8 +30,8 @@ import java.time.ZonedDateTime
 /** "Resume where you left off?" over the library: Resume focused, Start over beside it, B cancels, focus kept in it. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class ResumePromptTest {
-    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+class ResumePromptTest : ControllerKeys {
+    @get:Rule override val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val now = ZonedDateTime.of(2026, 10, 31, 14, 5, 0, 0, ZoneId.of("Asia/Tokyo"))
     private val crash = GameEntry("content://games/crash.cue", "Crash Bandicoot", "SCUS-94900", "NTSC-U", 0, 0, null)
@@ -60,11 +57,6 @@ class ResumePromptTest {
                 }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

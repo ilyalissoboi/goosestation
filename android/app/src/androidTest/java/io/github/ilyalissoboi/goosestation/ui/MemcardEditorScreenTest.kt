@@ -19,9 +19,6 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -41,11 +38,11 @@ import org.junit.runner.RunWith
 /** The memory card editor's screen, driven with keys: two panes, their pickers, saves and card actions. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class MemcardEditorScreenTest {
+class MemcardEditorScreenTest : ControllerKeys {
     // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
     @Suppress("DEPRECATION")
     @get:Rule
-    val rule = createComposeRule()
+    override val rule = createComposeRule()
 
     private val actions = RecordingEditorActions()
 
@@ -62,11 +59,6 @@ class MemcardEditorScreenTest {
                 GooseStationTheme { InOverlayHost { MemcardEditorScreen(ui = shown, actions = actions, onLeave = {}) } }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

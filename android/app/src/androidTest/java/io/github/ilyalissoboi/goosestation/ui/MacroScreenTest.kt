@@ -10,11 +10,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
@@ -30,8 +27,8 @@ import org.junit.runner.RunWith
 /** A port's macro with a D-pad: the controller's trigger, the inputs it presses, how it repeats. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class MacroScreenTest {
-    @get:Rule val rule = createComposeRule()
+class MacroScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val changes = mutableListOf<SettingValues>()
     private val captures = mutableListOf<String>()
@@ -68,11 +65,6 @@ class MacroScreenTest {
                 )
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

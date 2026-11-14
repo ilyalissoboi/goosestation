@@ -3,7 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
-import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
+import io.github.ilyalissoboi.goosestation.storage.MemoryStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -12,19 +12,8 @@ import org.junit.Test
 
 /** What the app keeps per game, by its key: the disc last played, and whether its states were migrated. */
 class GameRecordsTest {
-    private val values = HashMap<String, String>()
-    private val store =
-        object : KeyValueStore {
-            override fun getString(key: String): String? = values[key]
-
-            override fun putString(
-                key: String,
-                value: String?,
-            ): Boolean {
-                if (value == null) values.remove(key) else values[key] = value
-                return true
-            }
-        }
+    private val store = MemoryStore()
+    private val values = store.values
     private val records = GameRecords(store)
 
     @Test

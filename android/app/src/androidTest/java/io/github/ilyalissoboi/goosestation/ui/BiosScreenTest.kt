@@ -15,9 +15,6 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.core.BiosImage
 import io.github.ilyalissoboi.goosestation.settings.BiosRegion
@@ -31,14 +28,14 @@ import org.junit.runner.RunWith
 /** The BIOS page with a D-pad: one NTSC-J image, which Automatic picks for every region. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class BiosScreenTest {
+class BiosScreenTest : ControllerKeys {
     private companion object {
         const val SCPH5500 = "SCPH-5500 (v3.0 09-09-96 J)"
         val IMAGE = BiosImage("ps-30j.bin", SCPH5500, "NTSC-J")
         val AUTO = BiosRegion.entries.associateWith<BiosRegion, String?> { SCPH5500 }
     }
 
-    @get:Rule val rule = createComposeRule()
+    @get:Rule override val rule = createComposeRule()
 
     private val overridesSet = mutableListOf<Pair<BiosRegion, String?>>()
     private val fastBoots = mutableListOf<Boolean>()
@@ -66,11 +63,6 @@ class BiosScreenTest {
                 )
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

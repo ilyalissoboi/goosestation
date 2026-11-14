@@ -167,24 +167,12 @@ class GameSettingsAccessTest {
     }
 
     private fun initialize() {
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                null,
-                File(dataRoot.parentFile, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"))
     }
 
     private fun read(key: String): Ini = Ini.parse(File(gameSettings, "$key.ini").readText())
 
     private companion object {
-        const val INSTALL_ID = "test-install"
         const val KEY = "SLUS-00001"
     }
 }

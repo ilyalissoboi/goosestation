@@ -3,7 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
-import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
+import io.github.ilyalissoboi.goosestation.storage.MemoryStore
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -14,19 +14,8 @@ import java.io.File
 class EmusyncCarryOverTest {
     @get:Rule val temp = TemporaryFolder()
 
-    private val values = mutableMapOf<String, String>()
-    private val store =
-        object : KeyValueStore {
-            override fun getString(key: String) = values[key]
-
-            override fun putString(
-                key: String,
-                value: String?,
-            ): Boolean {
-                if (value == null) values.remove(key) else values[key] = value
-                return true
-            }
-        }
+    private val store = MemoryStore()
+    private val values = store.values
 
     private fun workingCopy() =
         temp.newFolder("data").also {

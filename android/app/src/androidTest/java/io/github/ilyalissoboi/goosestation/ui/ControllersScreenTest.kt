@@ -11,10 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.TouchMode
@@ -32,8 +29,8 @@ import org.junit.runner.RunWith
 /** The Controllers page's hub with a D-pad: each controller's port and rumble, multitap, the ports and hotkeys. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class ControllersScreenTest {
-    @get:Rule val rule = createComposeRule()
+class ControllersScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val calls = mutableListOf<String>()
 
@@ -67,11 +64,6 @@ class ControllersScreenTest {
                 )
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

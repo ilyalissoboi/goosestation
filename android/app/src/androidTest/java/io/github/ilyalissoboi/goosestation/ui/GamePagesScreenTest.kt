@@ -21,9 +21,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
@@ -48,8 +45,8 @@ import org.junit.runner.RunWith
 /** The pages with a game's values: every row can use the global setting, the rows of several keys too. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class GamePagesScreenTest {
-    @get:Rule val rule = createComposeRule()
+class GamePagesScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private var shown: SettingValues? = null
 
@@ -70,11 +67,6 @@ class GamePagesScreenTest {
         rule.waitForIdle()
     }
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
     private fun focusedText(): String =
         rule
             .onAllNodes(isFocused())
@@ -82,17 +74,6 @@ class GamePagesScreenTest {
             .firstOrNull()
             ?.let { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text } }
             .orEmpty()
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-
-    private fun downTo(text: String) {
-        repeat(80) {
-            if (focusedHas(text)) return
-            press(Key.DirectionDown)
-        }
-        throw AssertionError("Down never reached $text")
-    }
 
     // Every row, top to bottom: each one's text, until Down no longer moves.
     private fun rows(): List<String> {
@@ -118,7 +99,7 @@ class GamePagesScreenTest {
         show(gamePageValues(ConsoleSettings.all, game = game)) { values, onChange ->
             ConsoleScreen(values, SampleNames.ALL, onChange, onBack = {})
         }
-        downTo("Overclocking percentage")
+        walkTo("Overclocking percentage")
         assertTrue(focusedHas("200%"))
         assertTrue(focusedHas(SET_FOR_GAME))
 
@@ -136,7 +117,7 @@ class GamePagesScreenTest {
         show(gamePageValues(GraphicsSettings.all)) { values, onChange ->
             GraphicsScreen(values, SampleNames.ALL, vulkanFailed = false, onChange = onChange, onBack = {})
         }
-        downTo("Multisampling")
+        walkTo("Multisampling")
         assertTrue(focusedHas("Use global (Off)"))
 
         press(Key.DirectionRight)
@@ -251,11 +232,11 @@ class GamePagesScreenTest {
             AdvancedScreen(values, SampleNames.ALL, fastmemAvailable = true, onChange = onChange, onBack = {})
         }
 
-        downTo("CD-ROM region check")
+        walkTo("CD-ROM region check")
         assertTrue(focusedText(), NextStart.NOTE in focusedText())
-        downTo("Allow booting without an SBI file")
+        walkTo("Allow booting without an SBI file")
         assertTrue(focusedText(), NextStart.NOTE in focusedText())
-        downTo("Recompiler block linking")
+        walkTo("Recompiler block linking")
         assertTrue(focusedText(), NextStart.NOTE !in focusedText())
     }
 }

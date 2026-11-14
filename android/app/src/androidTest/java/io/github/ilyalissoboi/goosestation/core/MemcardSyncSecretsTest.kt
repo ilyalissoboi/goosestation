@@ -172,29 +172,7 @@ class MemcardSyncSecretsTest {
     }
 
     private fun initialize() {
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                File(root, "bios").absolutePath,
-                "test-install",
-                null,
-                File(root, "offline").absolutePath,
-                DEVICE_NAME,
-            ),
-        )
-    }
-
-    private fun waitFor(
-        what: String,
-        condition: () -> Boolean,
-    ) {
-        val deadline = System.nanoTime() + 20_000_000_000L
-        while (!condition()) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting: $what")
-            Thread.sleep(50)
-        }
+        initializeCore(context, dataRoot, File(root, "bios"), File(root, "offline"), deviceName = DEVICE_NAME)
     }
 
     private fun shell(command: String): String {

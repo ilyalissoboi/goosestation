@@ -4,7 +4,6 @@
 package io.github.ilyalissoboi.goosestation.core
 
 import android.graphics.SurfaceTexture
-import android.os.ParcelFileDescriptor
 import android.view.Surface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -261,8 +260,8 @@ class SettingsSetupTest {
         val exe = File(root, "padtest.psexe")
         assumeTrue(
             "No BIOS or padtest in /sdcard/GooseTest",
-            copyAsShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
-                copyAsShell("$SDCARD_TESTS/games/padtest.psexe", exe),
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/padtest.psexe", exe),
         )
         val padtestSettings = File(dataRoot, "gamesettings/$PADTEST_SERIAL.ini")
         padtestSettings.apply {
@@ -356,44 +355,9 @@ class SettingsSetupTest {
         assertEquals("mycache/", NativeLibrary.getCacheFolder())
     }
 
-    private fun waitFor(
-        what: String,
-        condition: () -> Boolean,
-    ) {
-        val deadline = System.nanoTime() + 5_000_000_000L
-        while (!condition()) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting: $what")
-            Thread.sleep(50)
-        }
-    }
-
     private fun initialize(settings: String?) {
         if (settings != null) settingsFile.writeText(settings)
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                null,
-                File(dataRoot.parentFile, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
-    }
-
-    // The test app can't read /sdcard; the shell can. False if there's nothing there.
-    private fun copyAsShell(
-        path: String,
-        destination: File,
-    ): Boolean {
-        val output = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("cat $path")
-        destination.parentFile!!.mkdirs()
-        ParcelFileDescriptor.AutoCloseInputStream(output).use { input ->
-            destination.outputStream().use { input.copyTo(it) }
-        }
-        return destination.length() > 0
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"))
     }
 
     private fun readSettings(): Ini = Ini.parse(settingsFile.readText())

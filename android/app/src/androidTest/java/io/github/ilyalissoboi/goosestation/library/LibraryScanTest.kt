@@ -6,7 +6,7 @@ package io.github.ilyalissoboi.goosestation.library
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
-import io.github.ilyalissoboi.goosestation.core.Resources
+import io.github.ilyalissoboi.goosestation.core.initializeCore
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import io.github.ilyalissoboi.goosestation.storage.TestDocumentsProvider
 import io.github.ilyalissoboi.goosestation.storage.TestTrees
@@ -41,18 +41,7 @@ class LibraryScanTest {
         treeId = TestTrees.directory(context, tree).name
         ContentBridge.init(context)
 
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                File(root, "bios").absolutePath,
-                "test-install",
-                null,
-                File(root, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, File(root, "bios"), File(root, "offline"))
         NativeLibrary.setGameFolders(arrayOf(tree))
         NativeLibrary.refreshGameList(false)
     }

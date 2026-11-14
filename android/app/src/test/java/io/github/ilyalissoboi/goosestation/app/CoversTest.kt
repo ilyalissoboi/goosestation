@@ -82,15 +82,6 @@ class CoversTest {
         ) { game, cover -> landed += game to cover }
 
     // Runs the test's queue until [done], as work comes back from the io thread.
-    private fun TestScope.until(done: () -> Boolean) {
-        val end = System.nanoTime() + 5_000_000_000
-        while (!done()) {
-            check(System.nanoTime() < end) { "timed out" }
-            runCurrent()
-            Thread.sleep(1)
-        }
-    }
-
     private fun TestScope.opened() =
         covers().also {
             it.open()

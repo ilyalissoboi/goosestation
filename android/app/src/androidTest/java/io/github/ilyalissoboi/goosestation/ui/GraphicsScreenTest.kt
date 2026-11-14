@@ -14,9 +14,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -29,8 +26,8 @@ import org.junit.runner.RunWith
 /** The Graphics page with a D-pad: each row changes its own setting and no other. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class GraphicsScreenTest {
-    @get:Rule val rule = createComposeRule()
+class GraphicsScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val start = pageValues(GraphicsSettings.all)
     private val changes = mutableListOf<SettingValues>()
@@ -48,24 +45,8 @@ class GraphicsScreenTest {
         rule.waitForIdle()
     }
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
     private fun assertFocusedHas(text: String) {
         rule.onNode(isFocused()).assert(hasText(text, substring = true))
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-
-    private fun downTo(text: String) {
-        repeat(60) {
-            if (focusedHas(text)) return
-            press(Key.DirectionDown)
-        }
-        throw AssertionError("Down never reached $text")
     }
 
     @Test
@@ -74,11 +55,11 @@ class GraphicsScreenTest {
 
         assertFocusedHas("Renderer")
         press(Key.DirectionRight)
-        downTo("Internal resolution")
+        walkTo("Internal resolution")
         press(Key.DirectionRight)
-        downTo("Aspect ratio")
+        walkTo("Aspect ratio")
         press(Key.DirectionRight)
-        downTo("Show FPS")
+        walkTo("Show FPS")
         press(Key.ButtonA)
 
         assertEquals(
@@ -104,9 +85,9 @@ class GraphicsScreenTest {
         )) {
             rule.onNodeWithText(section).assertExists()
         }
-        downTo("Texture filtering")
-        downTo("Geometry correction")
-        downTo("Aspect ratio")
+        walkTo("Texture filtering")
+        walkTo("Geometry correction")
+        walkTo("Aspect ratio")
     }
 
     @Test
@@ -131,7 +112,7 @@ class GraphicsScreenTest {
     fun multisamplingWritesBothKeys() {
         show()
 
-        downTo("Multisampling")
+        walkTo("Multisampling")
         press(Key.ButtonA)
         repeat(5) { press(Key.DirectionDown) }
         assertFocusedHas("4x SSAA")
@@ -152,7 +133,7 @@ class GraphicsScreenTest {
             }
         }
         rule.waitForIdle()
-        downTo("Geometry correction")
+        walkTo("Geometry correction")
         rule.onNodeWithText("Culling correction").assertExists()
 
         press(Key.ButtonA)
@@ -165,7 +146,7 @@ class GraphicsScreenTest {
     fun theDepthThresholdWritesItsOwnKey() {
         show(pageValues(GraphicsSettings.all, "GPU/PGXPEnable" to "true", "GPU/PGXPDepthBuffer" to "true"))
 
-        downTo("Depth clear threshold")
+        walkTo("Depth clear threshold")
         press(Key.DirectionRight)
 
         assertEquals(
@@ -179,7 +160,7 @@ class GraphicsScreenTest {
     fun theSpriteFilterFollowsTheTextureFilter() {
         show(pageValues(GraphicsSettings.all, "GPU/TextureFilter" to "Bilinear"))
 
-        downTo("Sprite texture filtering")
+        walkTo("Sprite texture filtering")
         assertFocusedHas("Bilinear")
     }
 
@@ -187,14 +168,14 @@ class GraphicsScreenTest {
     fun boxDownsamplingHasAScale() {
         show(pageValues(GraphicsSettings.all, "GPU/DownsampleMode" to "Box"))
 
-        downTo("Downsampling scale")
+        walkTo("Downsampling scale")
     }
 
     @Test
     fun customShowsItsRatio() {
         show(pageValues(GraphicsSettings.all, "Display/AspectRatio" to "Custom"))
 
-        downTo("Custom ratio width")
+        walkTo("Custom ratio width")
         press(Key.DirectionRight)
         press(Key.DirectionDown)
         assertFocusedHas("Custom ratio height")
@@ -221,7 +202,7 @@ class GraphicsScreenTest {
             ),
         )
 
-        downTo("Custom ratio width")
+        walkTo("Custom ratio width")
         assertFocusedHas("1")
         press(Key.DirectionRight)
 
@@ -253,7 +234,7 @@ class GraphicsScreenTest {
                 "Show controller input" to GraphicsSettings.SHOW_INPUTS,
             )
         for ((label, _) in rows) {
-            downTo(label)
+            walkTo(label)
             press(Key.ButtonA)
         }
 
@@ -271,7 +252,7 @@ class GraphicsScreenTest {
     fun preloadingGoesWithReplacements() {
         show(pageValues(GraphicsSettings.all, "TextureReplacements/EnableVRAMWriteReplacements" to "true"))
 
-        downTo("Preload replacement textures")
+        walkTo("Preload replacement textures")
     }
 
     @Test

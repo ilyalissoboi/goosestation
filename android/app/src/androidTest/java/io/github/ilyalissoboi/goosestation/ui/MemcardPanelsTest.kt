@@ -14,9 +14,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -36,11 +33,11 @@ import org.junit.runner.RunWith
 /** What opens over the memory card editor, driven with keys: a save's actions, a question, the rename form. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class MemcardPanelsTest {
+class MemcardPanelsTest : ControllerKeys {
     // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
     @Suppress("DEPRECATION")
     @get:Rule
-    val rule = createComposeRule()
+    override val rule = createComposeRule()
 
     private val actions = RecordingEditorActions()
 
@@ -53,11 +50,6 @@ class MemcardPanelsTest {
         rule.waitForIdle()
     }
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
     private fun focusedText() =
         rule.onAllNodes(isFocused()).fetchSemanticsNodes().joinToString { node ->
             node.config
@@ -65,9 +57,6 @@ class MemcardPanelsTest {
                 .orEmpty()
                 .joinToString(" ")
         }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused().and(hasText(text, substring = true))).fetchSemanticsNodes().isNotEmpty()
 
     private fun count(text: String) = rule.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().size
 

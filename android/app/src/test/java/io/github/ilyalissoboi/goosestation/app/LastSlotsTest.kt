@@ -3,26 +3,15 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
-import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
+import io.github.ilyalissoboi.goosestation.storage.MemoryStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** The slot last saved to or loaded from, per game, in a key-value store. */
 class LastSlotsTest {
-    private val values = HashMap<String, String>()
-    private val store =
-        object : KeyValueStore {
-            override fun getString(key: String): String? = values[key]
-
-            override fun putString(
-                key: String,
-                value: String?,
-            ): Boolean {
-                if (value == null) values.remove(key) else values[key] = value
-                return true
-            }
-        }
+    private val store = MemoryStore()
+    private val values = store.values
     private val lastSlots = LastSlots(store)
 
     @Test

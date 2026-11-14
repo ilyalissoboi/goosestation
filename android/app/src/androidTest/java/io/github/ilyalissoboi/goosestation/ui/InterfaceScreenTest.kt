@@ -16,10 +16,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.CheckNowState
@@ -37,16 +34,11 @@ import org.junit.runner.RunWith
 /** The Interface page with a D-pad: four switches, each its own setting. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class InterfaceScreenTest {
-    @get:Rule val rule = createComposeRule()
+class InterfaceScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val start = pageValues(InterfaceSettings.all)
     private val changes = mutableListOf<SettingValues>()
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
 
     @Test
     fun eachSwitchChangesItsOwnSetting() {

@@ -55,18 +55,7 @@ class BindingCaptureTest {
                 }
             },
         )
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                biosDir.absolutePath,
-                INSTALL_ID,
-                null,
-                File(dataRoot.parentFile, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, biosDir, File(dataRoot.parentFile, "offline"))
         NativeLibrary.onDeviceConnected(DEVICE_ID, "Pad A", "pad-a")
 
         // The connection is queued: wait until the core has pad-a in its table, so a capture can find it.
@@ -212,7 +201,6 @@ class BindingCaptureTest {
     }
 
     private companion object {
-        const val INSTALL_ID = "test-install"
         const val DEVICE_ID = 1
     }
 }

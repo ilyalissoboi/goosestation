@@ -17,9 +17,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameQuestion
@@ -36,8 +33,8 @@ import org.junit.runner.RunWith
 /** A game's settings hub with a D-pad: its summary, its pages, and Copy and Clear's questions. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class GameSettingsScreenTest {
-    @get:Rule val rule = createComposeRule()
+class GameSettingsScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val game = GameEntry("/games/padtest.psexe", "Pad Test", "SLUS-00001", "NTSC-U", 0, 0, null)
     private val opened = mutableListOf<GamePage>()
@@ -73,22 +70,6 @@ class GameSettingsScreenTest {
         rule.waitForIdle()
     }
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun downTo(text: String) {
-        repeat(20) {
-            if (focusedHas(text)) return
-            press(Key.DirectionDown)
-        }
-        throw AssertionError("Down never reached $text")
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-
     @Test
     fun theHubSaysWhatTheGameSets() {
         show()
@@ -98,7 +79,7 @@ class GameSettingsScreenTest {
         rule.onNodeWithText("3 settings of its own", substring = true).assertExists()
         rule.onNodeWithText("and 4 this app doesn't show", substring = true).assertExists()
         rule.onNode(isFocused()).assert(hasText("Console", substring = true))
-        downTo("Graphics")
+        walkTo("Graphics")
         rule.onNode(isFocused()).assert(hasText("2 set for this game", substring = true))
     }
 
@@ -112,7 +93,7 @@ class GameSettingsScreenTest {
     @Test
     fun aPageOpensWithA() {
         show()
-        downTo("Audio")
+        walkTo("Audio")
 
         press(Key.ButtonA)
 
@@ -122,7 +103,7 @@ class GameSettingsScreenTest {
     @Test
     fun copyAsksWithCancelFocused() {
         show()
-        downTo("Copy global settings")
+        walkTo("Copy global settings")
 
         press(Key.ButtonA)
         rule.onNodeWithText("Copy the global settings to Pad Test?", substring = true).assertExists()
@@ -138,7 +119,7 @@ class GameSettingsScreenTest {
     @Test
     fun clearConfirms() {
         show()
-        downTo("Clear settings")
+        walkTo("Clear settings")
 
         press(Key.ButtonA)
         rule.onNodeWithText("the 4 settings this app doesn't show", substring = true).assertExists()

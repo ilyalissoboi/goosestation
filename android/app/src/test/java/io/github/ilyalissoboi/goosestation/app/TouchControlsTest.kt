@@ -4,27 +4,13 @@
 package io.github.ilyalissoboi.goosestation.app
 
 import io.github.ilyalissoboi.goosestation.input.PadKind
-import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
+import io.github.ilyalissoboi.goosestation.storage.MemoryStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** The touch controls' settings, kept on this device, and when the overlay shows. */
 class TouchControlsTest {
-    private class MemoryStore : KeyValueStore {
-        val values = mutableMapOf<String, String>()
-
-        override fun getString(key: String) = values[key]
-
-        override fun putString(
-            key: String,
-            value: String?,
-        ): Boolean {
-            if (value == null) values.remove(key) else values[key] = value
-            return true
-        }
-    }
-
     private val store = MemoryStore()
     private val posted = mutableListOf<String>()
     private var controllers = 0

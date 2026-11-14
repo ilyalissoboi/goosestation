@@ -69,17 +69,7 @@ class ShaderPacksInstallTest {
         File(root, "data").mkdirs()
         ContentBridge.init(context)
         NativeLibrary.setShaderPacksFolder(packs.absolutePath)
-        assertTrue(
-            NativeLibrary.initialize(
-                File(root, "data").absolutePath,
-                Resources.extract(context).absolutePath,
-                File(root, "bios").apply { mkdirs() }.absolutePath,
-                "test-install",
-                null,
-                File(root, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, File(root, "data"), File(root, "bios").apply { mkdirs() }, File(root, "offline"))
         thread(isDaemon = true) { serve() }
     }
 

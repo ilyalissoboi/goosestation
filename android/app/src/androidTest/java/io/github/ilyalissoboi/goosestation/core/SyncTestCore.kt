@@ -8,7 +8,6 @@ import io.github.ilyalissoboi.goosestation.app.KeystoreCipher
 import io.github.ilyalissoboi.goosestation.app.SyncSecrets
 import io.github.ilyalissoboi.goosestation.storage.ContentBridge
 import io.github.ilyalissoboi.goosestation.storage.SharedPreferencesStore
-import org.junit.Assert.assertTrue
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
@@ -79,18 +78,7 @@ class SyncTestCore(
             .commit()
         ContentBridge.init(context)
         NativeLibrary.setCallbacks(callbacks)
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                File(root, "bios").absolutePath,
-                "test-install",
-                null,
-                File(root, "offline").absolutePath,
-                DEVICE_NAME,
-            ),
-        )
+        initializeCore(context, dataRoot, File(root, "bios"), File(root, "offline"), deviceName = DEVICE_NAME)
     }
 
     /** Sync on, with [uri], the made-up key ID and (unless not [withSecret]) secret; not applied yet. */
@@ -112,13 +100,7 @@ class SyncTestCore(
         what: String,
         seconds: Long = 20,
         condition: () -> Boolean,
-    ) {
-        val deadline = System.nanoTime() + seconds * 1_000_000_000L
-        while (!condition()) {
-            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting: $what (state ${state()})")
-            Thread.sleep(50)
-        }
-    }
+    ) = waitFor(what, seconds, { " (state ${state()})" }, condition)
 
     /** Clears the tests' preferences. */
     fun finish() {

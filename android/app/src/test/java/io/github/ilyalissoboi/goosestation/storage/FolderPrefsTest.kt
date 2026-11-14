@@ -10,20 +10,6 @@ import org.junit.Test
 import java.util.UUID
 
 class FolderPrefsTest {
-    private class MemoryStore : KeyValueStore {
-        val values = mutableMapOf<String, String>()
-
-        override fun getString(key: String): String? = values[key]
-
-        override fun putString(
-            key: String,
-            value: String?,
-        ): Boolean {
-            if (value == null) values.remove(key) else values[key] = value
-            return true
-        }
-    }
-
     @Test
     fun saveThenLoadKeepsGameFoldersInOrder() {
         val store = MemoryStore()

@@ -14,13 +14,9 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.NextStart
@@ -40,8 +36,8 @@ import org.junit.runner.RunWith
 /** The shared rows on a game's page, with a D-pad: the Console page with a game's values. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class GameRowsTest {
-    @get:Rule val rule = createComposeRule()
+class GameRowsTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private var shown: SettingValues? = null
 
@@ -107,22 +103,6 @@ class GameRowsTest {
         rule.waitForIdle()
     }
 
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
-        rule.waitForIdle()
-    }
-
-    private fun downTo(text: String) {
-        repeat(30) {
-            if (focusedHas(text)) return
-            press(Key.DirectionDown)
-        }
-        throw AssertionError("Down never reached $text")
-    }
-
-    private fun focusedHas(text: String) =
-        rule.onAllNodes(isFocused() and hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-
     private fun shownCount(text: String) = rule.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().size
 
     // A grouped row over a setting a running game takes only at its next start says so, as a single-setting row does.
@@ -185,7 +165,7 @@ class GameRowsTest {
     @Test
     fun aGameSwitchIsThreeWay() {
         show(gamePageValues(ConsoleSettings.all))
-        downTo("8 MB RAM")
+        walkTo("8 MB RAM")
         assertTrue(focusedHas("Use global (Off)"))
         assertEquals(0, shownCount(SET_FOR_GAME))
 
@@ -220,7 +200,7 @@ class GameRowsTest {
     @Test
     fun aGameNumberStepsFromTheGlobalValue() {
         show(gamePageValues(ConsoleSettings.all, global = mapOf("CDROM/ReadaheadSectors" to "16")))
-        downTo("Readahead")
+        walkTo("Readahead")
         assertTrue(focusedHas("Use global (16 sectors)"))
 
         press(Key.DirectionLeft)
@@ -241,7 +221,7 @@ class GameRowsTest {
     @Test
     fun aGameNumbersListStartsWithUseGlobal() {
         show(gamePageValues(ConsoleSettings.all, game = mapOf("CDROM/ReadaheadSectors" to "4")))
-        downTo("Readahead")
+        walkTo("Readahead")
 
         press(Key.ButtonA)
         repeat(10) { press(Key.DirectionUp) }

@@ -35,11 +35,8 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -64,8 +61,8 @@ import org.junit.runner.RunWith
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class SettingsPanelsTest {
-    @get:Rule val rule = createComposeRule()
+class SettingsPanelsTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     // What the app keeps: the open page, and whether the focus is in it.
     private var current by mutableStateOf<SettingsEntry?>(SettingsEntry.Interface)
@@ -155,11 +152,6 @@ class SettingsPanelsTest {
                 }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

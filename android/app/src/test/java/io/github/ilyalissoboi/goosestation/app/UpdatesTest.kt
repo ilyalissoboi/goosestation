@@ -3,7 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.app
 
-import io.github.ilyalissoboi.goosestation.storage.KeyValueStore
+import io.github.ilyalissoboi.goosestation.storage.MemoryStore
 import io.github.ilyalissoboi.goosestation.update.Changes
 import io.github.ilyalissoboi.goosestation.update.ChannelRelease
 import io.github.ilyalissoboi.goosestation.update.CheckResult
@@ -34,20 +34,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** The update model, over a fake GitHub, a fake installer and a skipped version kept in memory. */
 class UpdatesTest {
-    private class MemoryStore : KeyValueStore {
-        val values = mutableMapOf<String, String>()
-
-        override fun getString(key: String) = values[key]
-
-        override fun putString(
-            key: String,
-            value: String?,
-        ): Boolean {
-            if (value == null) values.remove(key) else values[key] = value
-            return true
-        }
-    }
-
     private val newer = ChannelRelease("preview", "0.1-512-g1a2b3c4", 100_512, "a".repeat(40), "http://x/apk", 4)
 
     private inner class FakeSource : UpdateSourceApi {
@@ -522,15 +508,6 @@ class UpdatesTest {
         }
 
     // Runs the test's queue until [done], as work comes back from the pool's threads.
-    private fun TestScope.until(done: () -> Boolean) {
-        val end = System.nanoTime() + 5_000_000_000
-        while (!done()) {
-            check(System.nanoTime() < end) { "timed out" }
-            runCurrent()
-            Thread.sleep(1)
-        }
-    }
-
     // From review: in the background Android won't start the installer's question, and no status ever comes: the
     // banner stayed at Installing. The installer waits until the app is shown again.
     @Test

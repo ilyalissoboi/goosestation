@@ -35,7 +35,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.ui.components.CHOICE_LIST
@@ -52,8 +51,8 @@ import org.junit.runner.RunWith
 /** The settings rows with a D-pad, on a page of two cycler rows and a switch, the first focused. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class SettingsRowsTest {
-    @get:Rule val rule = createComposeRule()
+class SettingsRowsTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val sizes = mutableStateListOf(Choice("S", "Small"), Choice("M", "Medium"), Choice("L", "Large"))
     private val colours = listOf(Choice(1, "Red"), Choice(2, "Green", note = "The default"))
@@ -119,11 +118,6 @@ class SettingsRowsTest {
                 }
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

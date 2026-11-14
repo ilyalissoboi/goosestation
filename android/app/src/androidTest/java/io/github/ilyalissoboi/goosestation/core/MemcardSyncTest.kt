@@ -30,18 +30,7 @@ class MemcardSyncTest {
 
     @Test
     fun libraryIsAvailable() {
-        val resources = Resources.extract(context)
-        assertTrue(
-            NativeLibrary.initialize(
-                dataRoot.absolutePath,
-                resources.absolutePath,
-                File(root, "bios").absolutePath,
-                "test-install",
-                null,
-                File(root, "offline").absolutePath,
-                "Goose Test Device",
-            ),
-        )
+        initializeCore(context, dataRoot, File(root, "bios"), File(root, "offline"))
 
         assertTrue(NativeLibrary.isMemcardSyncAvailable())
     }

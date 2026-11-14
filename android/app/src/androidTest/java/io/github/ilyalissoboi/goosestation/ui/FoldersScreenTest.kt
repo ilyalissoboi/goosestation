@@ -13,9 +13,6 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.mirror.DataFolderChoice
 import io.github.ilyalissoboi.goosestation.storage.DataFolderCheck
@@ -31,8 +28,8 @@ import org.junit.runner.RunWith
 /** The folder settings with a D-pad, on fake folders and actions. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-class FoldersScreenTest {
-    @get:Rule val rule = createComposeRule()
+class FoldersScreenTest : ControllerKeys {
+    @get:Rule override val rule = createComposeRule()
 
     private val folders =
         SavedFolders(
@@ -78,11 +75,6 @@ class FoldersScreenTest {
                 )
             }
         }
-        rule.waitForIdle()
-    }
-
-    private fun press(key: Key) {
-        rule.onRoot().performKeyInput { pressKey(key) }
         rule.waitForIdle()
     }
 

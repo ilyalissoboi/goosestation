@@ -4,34 +4,13 @@
 package io.github.ilyalissoboi.goosestation.library
 
 import io.github.ilyalissoboi.goosestation.core.GameEntry
+import io.github.ilyalissoboi.goosestation.core.testGame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
 class LibrarySortTest {
-    private fun game(
-        title: String,
-        serial: String = "SLUS-00000",
-        path: String = "/games/$title.cue",
-        played: Long = 0,
-        last: Long = 0,
-        size: Long = 0,
-        uncompressed: Long = 0,
-        type: Int = 0,
-    ) = GameEntry(
-        path = path,
-        title = title,
-        serial = serial,
-        region = "NTSC-U",
-        totalPlayedSeconds = played,
-        lastPlayedSeconds = last,
-        coverPath = null,
-        fileSize = size,
-        uncompressedSize = uncompressed,
-        typeOrder = type,
-    )
-
     private fun titles(
         games: List<GameEntry>,
         key: SortKey,
@@ -40,7 +19,7 @@ class LibrarySortTest {
 
     @Test
     fun titleAscendsByDefault() {
-        val games = listOf(game("C"), game("A"), game("B"))
+        val games = listOf(testGame("C"), testGame("A"), testGame("B"))
 
         assertEquals(LibrarySort(SortKey.Title, false), LibrarySort())
         assertEquals(listOf("A", "B", "C"), titles(games, SortKey.Title))
@@ -71,7 +50,7 @@ class LibrarySortTest {
 
     @Test
     fun lastPlayedIsMostRecentFirst() {
-        val games = listOf(game("Old", last = 100), game("New", last = 300), game("Mid", last = 200))
+        val games = listOf(testGame("Old", last = 100), testGame("New", last = 300), testGame("Mid", last = 200))
 
         assertEquals(listOf("New", "Mid", "Old"), titles(games, SortKey.LastPlayed))
         assertEquals(listOf("Old", "Mid", "New"), titles(games, SortKey.LastPlayed, reverse = true))
@@ -81,9 +60,9 @@ class LibrarySortTest {
     fun timePlayedAndSizesAscend() {
         val games =
             listOf(
-                game("Two", played = 2, size = 2, uncompressed = 2),
-                game("Three", played = 3, size = 3, uncompressed = 3),
-                game("One", played = 1, size = 1, uncompressed = 1),
+                testGame("Two", played = 2, size = 2, uncompressed = 2),
+                testGame("Three", played = 3, size = 3, uncompressed = 3),
+                testGame("One", played = 1, size = 1, uncompressed = 1),
             )
 
         for (key in listOf(SortKey.TimePlayed, SortKey.FileSize, SortKey.UncompressedSize)) {
@@ -94,14 +73,20 @@ class LibrarySortTest {
 
     @Test
     fun serialComparesBytes() {
-        val games = listOf(game("Lower", serial = "slus-0"), game("Upper", serial = "SLUS-1"))
+        val games = listOf(testGame("Lower", serial = "slus-0"), testGame("Upper", serial = "SLUS-1"))
 
         assertEquals(listOf("Upper", "Lower"), titles(games, SortKey.Serial))
     }
 
     @Test
     fun typeSortsDiscsFirst() {
-        val games = listOf(game("Psf", type = 4), game("Exe", type = 2), game("Disc", type = 0), game("M3u", type = 3))
+        val games =
+            listOf(
+                testGame("Psf", type = 4),
+                testGame("Exe", type = 2),
+                testGame("Disc", type = 0),
+                testGame("M3u", type = 3),
+            )
 
         assertEquals(listOf("Disc", "Exe", "M3u", "Psf"), titles(games, SortKey.Type))
         assertEquals(listOf("Psf", "M3u", "Exe", "Disc"), titles(games, SortKey.Type, reverse = true))
@@ -109,7 +94,7 @@ class LibrarySortTest {
 
     @Test
     fun tiesFallBackToTitleReversedWithTheRest() {
-        val games = listOf(game("B", played = 5), game("C", played = 1), game("A", played = 5))
+        val games = listOf(testGame("B", played = 5), testGame("C", played = 1), testGame("A", played = 5))
 
         assertEquals(listOf("C", "A", "B"), titles(games, SortKey.TimePlayed))
         assertEquals(listOf("B", "A", "C"), titles(games, SortKey.TimePlayed, reverse = true))
@@ -119,9 +104,9 @@ class LibrarySortTest {
     fun fileTitleComparesOnlyUpToTheShorterName() {
         val games =
             listOf(
-                game("Zebra", path = "/games/Crash.cue"),
-                game("Apple", path = "/games/Crash 2.cue"),
-                game("Mango", path = "/games/Apex.cue"),
+                testGame("Zebra", path = "/games/Crash.cue"),
+                testGame("Apple", path = "/games/Crash 2.cue"),
+                testGame("Mango", path = "/games/Apex.cue"),
             )
 
         // "Crash" and "Crash 2" tie, so their titles decide.
@@ -138,7 +123,10 @@ class LibrarySortTest {
             val random = Random(seed)
             val games =
                 (1..random.nextInt(32, 600)).map {
-                    game(title = "T${random.nextInt(1000)}", path = "/games/${names[random.nextInt(names.size)]}.cue")
+                    testGame(
+                        title = "T${random.nextInt(1000)}",
+                        path = "/games/${names[random.nextInt(names.size)]}.cue",
+                    )
                 }
             for (reverse in listOf(false, true)) {
                 val sorted = LibraryOrder.sorted(games, LibrarySort(SortKey.FileTitle, reverse))
@@ -149,11 +137,11 @@ class LibrarySortTest {
 
     @Test
     fun caseFoldsOnlyAscii() {
-        assertEquals(listOf("apple", "Banana"), titles(listOf(game("Banana"), game("apple")), SortKey.Title))
+        assertEquals(listOf("apple", "Banana"), titles(listOf(testGame("Banana"), testGame("apple")), SortKey.Title))
         // strcasecmp folds ASCII only: É (C3 89) comes before é (C3 A9) whatever follows.
-        assertEquals(listOf("Ébc", "éab"), titles(listOf(game("éab"), game("Ébc")), SortKey.Title))
+        assertEquals(listOf("Ébc", "éab"), titles(listOf(testGame("éab"), testGame("Ébc")), SortKey.Title))
         // A shorter title that's the start of a longer one comes first.
-        assertEquals(listOf("Crash", "crash 2"), titles(listOf(game("crash 2"), game("Crash")), SortKey.Title))
+        assertEquals(listOf("Crash", "crash 2"), titles(listOf(testGame("crash 2"), testGame("Crash")), SortKey.Title))
     }
 
     @Test
@@ -196,7 +184,7 @@ class LibrarySortTest {
         val random = Random(16)
         val games =
             (1..1000).map { n ->
-                game(
+                testGame(
                     title = "Game ${random.nextInt(10_000)}",
                     serial = "SLUS-%05d".format(random.nextInt(100_000)),
                     path = "content://p/tree/t/document/t%2FGame%20$n.cue",

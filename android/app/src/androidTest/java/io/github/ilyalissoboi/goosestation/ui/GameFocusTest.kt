@@ -5,7 +5,9 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -32,9 +34,9 @@ class GameFocusTest {
 
     private fun show() {
         rule.setContent {
-            LazyColumn(state = list, modifier = Modifier.height(300.dp).then(focus.screenModifier)) {
+            LazyColumn(state = list, modifier = Modifier.width(300.dp).height(300.dp).then(focus.screenModifier)) {
                 items(paths, key = { it }) { path ->
-                    Box(Modifier.height(50.dp).then(focus.modifier(path)).focusable())
+                    Box(Modifier.fillMaxWidth().height(50.dp).then(focus.modifier(path)).focusable())
                 }
             }
         }

@@ -8,7 +8,9 @@ with the Android command-line tools from Homebrew and JDK 17. No Android Studio 
 
 ## Versions
 
-Installed on 2026-10-25, the latest stable releases on that day:
+Installed on 2026-10-25, the latest stable releases on that day. The NDK, CMake, build-tools and emusync versions (and
+emusync's SHA-256) are set once, in `android/gradle/libs.versions.toml`: Gradle reads them there, and CI and the signing
+scripts through `android/scripts/toolchain-versions.py`. Change them there, then here.
 
 | Package | Version |
 | --- | --- |
@@ -49,7 +51,7 @@ distribution itself against `distributionSha256Sum`, which matches the published
 | `org.jlleitschuh.gradle.ktlint` (`./gradlew ktlintCheck`, part of `check`; latest stable on 2026-10-30) / ktlint | 14.2.0 / 1.8.0 |
 | `compileSdk` / `targetSdk` / `minSdk` | 37 / 37 / 29 |
 | NDK / CMake (`ndkVersion`, `externalNativeBuild.cmake.version`) | 30.0.16248370 / 4.1.2 |
-| emusync's Android library (memory card sync; `emusync-0.3.0.aar` from the `v0.3.0` release, SHA-256 `964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81`, checked by `build.gradle.kts`, which downloads it once into `app/build/emusync/`, or takes a copy placed in `dep/emusync/` for builds without network) | 0.3.0 |
+| emusync's Android library (memory card sync; `emusync-0.3.0.aar` from the `v0.3.0` release, SHA-256 `964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81`, checked by `build.gradle.kts`, which downloads it once into `app/build/emusync/`, with a 30 s connect and a 60 s read timeout so a stalled download fails the build rather than hanging it, or takes a copy placed in `dep/emusync/` for builds without network; `-Pgoose.emusyncUrl=` downloads it from elsewhere, to check that by hand) | 0.3.0 |
 
 ## Installing the SDK
 
@@ -329,15 +331,24 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
 ```bash
 ./gradlew ktlintCheck    # the Kotlin layout rules, in android/.editorconfig; ktlintFormat fixes what it can
 ./gradlew check          # ktlintCheck, Android Lint, checkNoWindowDialogs and the JVM tests
+./gradlew :build-logic:test   # the build logic's tests (android/build-logic: checkNoWindowDialogs' matcher)
 ```
+
+`checkNoWindowDialogs`, which every build runs first (`preBuild`), fails on a call or import, in the app's Kotlin, of
+anything that opens a window of its own (`AlertDialog`, `ModalBottomSheet`, `DropdownMenu`, Compose's `Dialog` and
+`Popup`, …): such a window takes the keys, and a controller's can be lost to it. It's a plugin in `android/build-logic`,
+an included build, whose tests cover what comments and strings hide and what they don't.
 
 On GitHub, `.github/workflows/android.yml` ("Android build") runs on pull requests and pushes to `master` that touch
 the app, the core or `scripts/deps/build-dependencies-android.sh`, and twice a week to keep its cache warm. On
 `ubuntu-24.04` it installs the SDK's NDK, CMake (with its Ninja) and platform at the versions above, builds the
 dependency prefix into `~/deps-android` (cached by the script's hash and the NDK version), then runs `assembleDebug`,
 `assembleDebugAndroidTest` (the instrumented tests are built, not run: CI has no emulator), `testDebugUnitTest`,
-`ktlintCheck` and `checkNoWindowDialogs`, and uploads the debug APK as `android-debug-apk`. It has no secrets, and
-isn't part of a release.
+`ktlintCheck`, `checkNoWindowDialogs`, `lintDebug` and `:build-logic:test`, and uploads the debug APK as `android-debug-apk` and Lint's
+report as `android-lint-report`. Lint fails the build only on an error, as is its default; its warnings are in the
+report. `AndroidGradlePluginVersion`, `NewerVersionAvailable` and `GradleDependency` are off (`lint { }` in
+`app/build.gradle.kts`): they depend on what's been released that day, not on the change, and a version is updated as a
+step of its own. Every Kotlin compile treats a warning as an error. It has no secrets, and isn't part of a release.
 
 The instrumented tests run under the AndroidX Test Orchestrator, so each test gets a process of its own (the core
 can only be initialized once per process); with `-Pgoose.orchestrator=false` they share one, which only the `ui`

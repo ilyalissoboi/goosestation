@@ -40,7 +40,10 @@ import org.junit.runner.RunWith
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class UpdateBannerTest {
-    @get:Rule val rule = createComposeRule()
+    // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
+    @Suppress("DEPRECATION")
+    @get:Rule
+    val rule = createComposeRule()
 
     private val release = ChannelRelease("preview", "0.1-512-g1a2b3c4", 100_512, "a".repeat(40), "http://x/apk", 4)
     private val calls = mutableListOf<String>()

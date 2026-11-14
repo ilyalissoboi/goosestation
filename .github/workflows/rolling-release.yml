@@ -411,14 +411,15 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: read
-    env:
-      NDK_VERSION: 30.0.16248370
-      CMAKE_VERSION: 4.1.2
     steps:
     # The whole history, for the version (git describe).
     - uses: actions/checkout@v4.1.6
       with:
         fetch-depth: 0
+
+    # NDK_VERSION, CMAKE_VERSION, BUILD_TOOLS_VERSION and EMUSYNC_VERSION, from the version catalog Gradle reads.
+    - name: Read the toolchain versions
+      run: python3 android/scripts/toolchain-versions.py >> "$GITHUB_ENV"
 
     - name: Get version
       run: |
@@ -442,7 +443,7 @@ jobs:
       run: |
         yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
         "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
-          "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION" "platforms;android-37.0" "build-tools;37.0.0"
+          "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION" "platforms;android-37.0" "build-tools;$BUILD_TOOLS_VERSION"
         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
         echo "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin" >> "$GITHUB_PATH"
 
@@ -468,9 +469,8 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        version=$(sed -n 's/^val emusyncVersion = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
-        test -n "$version"
-        gh release download "v$version" --repo ilyalissoboi/emusync --pattern "emusync-$version.aar" --dir dep/emusync
+        gh release download "v$EMUSYNC_VERSION" --repo ilyalissoboi/emusync --pattern "emusync-$EMUSYNC_VERSION.aar" \
+          --dir dep/emusync
 
     - name: Build the release APK
       working-directory: android
@@ -506,7 +506,8 @@ jobs:
 
   # Signs android-build's APK with the release key, in release runs only. The key is in the release environment, which
   # only master and dev can use (docs/releasing.md); this job builds nothing and runs no project code but the signing
-  # script, so the key never meets the build. Without the key it fails, rather than leave the release unsigned.
+  # script, so the key never meets the build. It checks out the scripts and one data file, the version catalog, for the
+  # build-tools version (android/scripts/toolchain-versions.py). Without the key it fails, rather than leave the release unsigned.
   android-sign:
     needs: android-build
     if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
@@ -516,10 +517,17 @@ jobs:
     permissions:
       contents: read
     steps:
+    # Not cone mode, which takes whole folders only: the catalog is a file.
     - uses: actions/checkout@v4.1.6
       with:
-        sparse-checkout: android/scripts
+        sparse-checkout: |
+          /android/scripts/
+          /android/gradle/libs.versions.toml
+        sparse-checkout-cone-mode: false
         persist-credentials: false
+
+    - name: Read the toolchain versions
+      run: python3 android/scripts/toolchain-versions.py >> "$GITHUB_ENV"
 
     # The secrets reach only this step and the signing step.
     - name: Check the release environment
@@ -544,7 +552,7 @@ jobs:
     - name: Install the build tools
       run: |
         yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
-        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;37.0.0"
+        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;$BUILD_TOOLS_VERSION"
 
     - name: Download the unsigned APK
       uses: actions/download-artifact@v4.1.7

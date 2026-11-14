@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -107,6 +108,7 @@ class CatchUpRunner(
      * the catch-up's [job]: this one, or the one running, which takes the request. A catch-up that ends abnormally
      * with a request it took still to pull runs again.
      */
+    @OptIn(DelicateCoroutinesApi::class)
     fun launch(
         scope: CoroutineScope,
         onEnd: () -> Unit = {},
@@ -114,7 +116,7 @@ class CatchUpRunner(
     ): Job? {
         if (!request()) return job
         // Atomically: a job cancelled before it starts still runs, to its first suspension, so run()'s finally lets go
-        // of running.
+        // of running. That's why ATOMIC is a delicate API (opted into above), and why it's wanted here.
         job =
             scope.launch(start = CoroutineStart.ATOMIC) {
                 try {

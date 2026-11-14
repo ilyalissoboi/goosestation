@@ -39,7 +39,10 @@ class CoversScreenTest {
         const val MINE = "https://covers.example/\${serial}.png"
     }
 
-    @get:Rule val rule = createComposeRule()
+    // The v2 rule (junit4.v2) runs effects differently: moving to it is a change of its own.
+    @Suppress("DEPRECATION")
+    @get:Rule
+    val rule = createComposeRule()
 
     private var backs = 0
 

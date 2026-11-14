@@ -10,6 +10,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ktlint)
+    // checkNoWindowDialogs, before every build: android/build-logic.
+    id("goosestation.no-window-dialogs")
 }
 
 // ktlintCheck runs over the app's Kotlin, main and tests, and with check; the rules are in android/.editorconfig.
@@ -28,9 +30,10 @@ val depsSharedLibraries =
 
 // Memory card sync's library, emusync, from its pinned release's Android library (libemusync.so for the APK, and a
 // small Kotlin helper): a copy in dep/emusync/ if there is one (builds without network), else downloaded once into
-// the build folder. Either way its SHA-256 is checked. Keep the version in step with CMakeModules/EmuSync.cmake.
-val emusyncVersion = "0.3.0"
-val emusyncAarSha256 = "964c65791c8f690ce82281dac244500f9a1d08a56b9ca4e9fc082c22756a8b81"
+// the build folder. Either way its SHA-256 is checked. Both are in the version catalog, as CI reads them too. Keep the
+// version in step with CMakeModules/EmuSync.cmake.
+val emusyncVersion = libs.versions.emusync.get()
+val emusyncAarSha256 = libs.versions.emusyncAarSha256.get()
 val emusyncAar: File =
     run {
         val name = "emusync-$emusyncVersion.aar"
@@ -38,15 +41,26 @@ val emusyncAar: File =
         val downloaded = layout.buildDirectory.file("emusync/$name")
         val aar = if (offline.isFile) offline else downloaded.get().asFile
         if (!aar.isFile) {
-            val url = "https://github.com/ilyalissoboi/emusync/releases/download/v$emusyncVersion/$name"
+            // goose.emusyncUrl stands in for the release's link, to check a stalled download by hand (docs/android.md).
+            val url =
+                providers.gradleProperty("goose.emusyncUrl").orNull
+                    ?: "https://github.com/ilyalissoboi/emusync/releases/download/v$emusyncVersion/$name"
             val part = File(aar.parentFile, "$name.part")
             try {
                 aar.parentFile.mkdirs()
-                URI(url).toURL().openStream().use { input -> part.outputStream().use { input.copyTo(it) } }
-                part.renameTo(aar)
+                // Timeouts, since this runs as Gradle configures: a stalled connection would hang every build, IDE sync
+                // included. A timeout is an IOException, caught below.
+                val connection = URI(url).toURL().openConnection()
+                connection.connectTimeout = 30_000
+                connection.readTimeout = 60_000
+                connection.getInputStream().use { input -> part.outputStream().use { input.copyTo(it) } }
             } catch (e: IOException) {
                 part.delete()
                 throw GradleException("Couldn't download $url ($e): place $name in ${offline.parentFile}.")
+            }
+            if (!part.renameTo(aar)) {
+                part.delete()
+                throw GradleException("Couldn't move the download into $aar: place $name in ${offline.parentFile}.")
             }
         }
         val digest = MessageDigest.getInstance("SHA-256")
@@ -133,8 +147,9 @@ android {
 
         externalNativeBuild {
             cmake {
-                // As android/scripts/configure-native.sh. The core is built optimised even for the debug APK: a
-                // Debug core is far too slow to play on.
+                // As android/scripts/configure-native.sh: CMAKE_BUILD_TYPE, BUILD_QT_FRONTEND and HOST_PAGE_SIZE are
+                // the ones to keep in step. The core is built optimised even for the debug APK: a Debug core is far
+                // too slow to play on.
                 arguments +=
                     listOf(
                         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
@@ -153,6 +168,13 @@ android {
             path = file("../../CMakeLists.txt")
             version = libs.versions.cmake.get()
         }
+    }
+
+    // CI runs lintDebug, which fails on an error, as Lint does by default; warnings are in its report. These three
+    // depend on what's been released that day, not on the change, so they're off: updating a version is a step of its
+    // own, recorded in docs/android.md.
+    lint {
+        disable += setOf("AndroidGradlePluginVersion", "NewerVersionAvailable", "GradleDependency")
     }
 
     buildTypes {
@@ -233,128 +255,11 @@ val stageResources =
         subdirectory = "resources"
     }
 
-/**
- * Fails on a call or import, in [sources], of anything that opens a window of its own: such a window takes the keys,
- * and a controller's can be lost to it. Each is matched as a word, outside comments, and so is a wildcard import of a
- * package that has them.
- */
-@CacheableTask
-abstract class CheckNoWindowDialogs : DefaultTask() {
-    @get:InputFiles
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    @get:IgnoreEmptyDirectories
-    abstract val sources: ConfigurableFileCollection
-
-    /** What the files are named relative to, in the failure. */
-    @get:Internal
-    abstract val baseDirectory: DirectoryProperty
-
-    /** Written once the check passes, so an unchanged tree is up to date. */
-    @get:OutputFile
-    abstract val result: RegularFileProperty
-
-    private val forbidden =
-        listOf(
-            "AlertDialog",
-            "BasicAlertDialog",
-            "DatePickerDialog",
-            "TimePickerDialog",
-            "DropdownMenu",
-            "ExposedDropdownMenuBox",
-            "ModalBottomSheet",
-            "androidx.compose.ui.window.Dialog",
-            "androidx.compose.ui.window.Popup",
-            "android.app.Dialog",
-        ).map { it to Regex("""\b${Regex.escape(it)}\b""") } +
-            listOf("androidx.compose.ui.window.*", "android.app.*").map {
-                it to Regex("""\bimport\s+${Regex.escape(it)}""")
-            }
-
-    /**
-     * [lines] with their `//` and `/* */` comments blanked out. A block comment may span lines and nest, as Kotlin's
-     * do. String literals, raw ones across lines too, and character literals are kept as code, so a comment's
-     * opening inside one doesn't start a comment.
-     */
-    private fun withoutComments(lines: List<String>): List<String> {
-        var depth = 0
-        var inRaw = false
-        return lines.map { line ->
-            val code = StringBuilder()
-            var i = 0
-
-            // Keeps the literal starting at i, which `quote` ends (or the line, if it doesn't), and moves past it.
-            fun keep(quote: String) {
-                var end = i + quote.length
-                while (end < line.length && !line.startsWith(quote, end)) end += if (line[end] == '\\') 2 else 1
-                val stop = if (end < line.length) end + quote.length else line.length
-                code.append(line, i, stop)
-                i = stop
-            }
-            while (i < line.length) {
-                when {
-                    inRaw -> {
-                        val end = line.indexOf("\"\"\"", i)
-                        val stop = if (end < 0) line.length else end + 3
-                        code.append(line, i, stop)
-                        i = stop
-                        if (end >= 0) inRaw = false
-                    }
-                    depth > 0 && line.startsWith("*/", i) -> {
-                        depth--
-                        i += 2
-                    }
-                    line.startsWith("/*", i) -> {
-                        depth++
-                        i += 2
-                    }
-                    depth > 0 -> i++
-                    line.startsWith("//", i) -> i = line.length
-                    line.startsWith("\"\"\"", i) -> {
-                        code.append("\"\"\"")
-                        i += 3
-                        inRaw = true
-                    }
-                    line[i] == '"' -> keep("\"")
-                    line[i] == '\'' -> keep("'")
-                    else -> {
-                        code.append(line[i])
-                        i++
-                    }
-                }
-            }
-            code.toString()
-        }
-    }
-
-    @TaskAction
-    fun check() {
-        val base = baseDirectory.get().asFile
-        val found =
-            sources.files.sorted().flatMap { file ->
-                withoutComments(file.readLines()).flatMapIndexed { index, line ->
-                    forbidden.filter { (_, pattern) -> pattern.containsMatchIn(line) }.map { (name, _) ->
-                        "${file.relativeTo(base)}:${index + 1}: $name opens its own window, which can swallow " +
-                            "controller keys. Draw it in the screen instead."
-                    }
-                }
-            }
-        if (found.isNotEmpty()) throw GradleException(found.joinToString("\n"))
-        result.get().asFile.writeText("No window dialogs.\n")
-    }
-}
-
-val checkNoWindowDialogs =
-    tasks.register<CheckNoWindowDialogs>("checkNoWindowDialogs") {
-        sources.from(fileTree("src/main/java") { include("**/*.kt") })
-        baseDirectory = layout.projectDirectory
-        result = layout.buildDirectory.file("checkNoWindowDialogs/result.txt")
-    }
-
-tasks.named("preBuild") { dependsOn(checkNoWindowDialogs) }
-
-// The JVM tests drive coroutines with kotlinx-coroutines-test (StandardTestDispatcher, runCurrent), still marked
-// experimental: one opt-in for them all, rather than a warning at each use, which buried the compiler's other warnings.
+// Every Kotlin compile, the app's and both tests', fails on a warning: a new one fails CI rather than piling up unread
+// (one hid a real bug, Rect.overlaps, before). The JVM tests drive coroutines with kotlinx-coroutines-test
+// (StandardTestDispatcher, runCurrent), still marked experimental: one opt-in for them all, not a warning at each use.
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions.allWarningsAsErrors.set(true)
     if (name.contains("UnitTest")) compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
 }
 

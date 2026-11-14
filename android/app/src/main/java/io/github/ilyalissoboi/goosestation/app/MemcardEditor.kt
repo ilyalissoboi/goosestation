@@ -732,4 +732,4 @@ class MemcardEditor(
 internal fun sameBytes(
     a: ByteArray?,
     b: ByteArray?,
-) = if (a == null || b == null) a == b else a.contentEquals(b)
+) = if (a == null || b == null) a === b else a.contentEquals(b)

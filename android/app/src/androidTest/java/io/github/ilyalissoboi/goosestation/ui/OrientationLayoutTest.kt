@@ -469,7 +469,7 @@ class OrientationLayoutTest {
             val results = mutableListOf<TextLayoutResult>()
             node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
             val layout =
-                results.singleOrNull() ?: fail("\"$text\" at ${box.describe()} gives no text layout") as Nothing
+                results.singleOrNull() ?: throw AssertionError("\"$text\" at ${box.describe()} gives no text layout")
             // Not didOverflowWidth: the semantics' layout is at the text's max width, wider than the text itself. A
             // word too wide for its line is broken, which the check below catches. A text ending in an ellipsis, such
             // as a game's title in the list, is cut short on purpose.

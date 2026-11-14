@@ -18,7 +18,7 @@ fi
 UNSIGNED="$1"
 SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
 SIGN="$SCRIPTS/sign-apk.sh"
-APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+APKSIGNER="$ANDROID_HOME/build-tools/$(python3 "$SCRIPTS/toolchain-versions.py" buildTools)/apksigner"
 KEYSTORE="$SCRIPTS/../app/build/test-signing/test.jks"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT

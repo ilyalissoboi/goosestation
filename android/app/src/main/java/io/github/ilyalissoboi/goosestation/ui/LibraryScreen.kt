@@ -93,10 +93,10 @@ import kotlinx.coroutines.launch
  * On opening, Settings has focus when [focusSettings] (coming back from the settings), or else the game at
  * [focusPath] (the last one launched), or else the first game; with no games, Settings has it. Toggling the view keeps
  * the focused game. A, Enter or a tap call [onStartGame]; X opens the game's Saves ([onSaves]); Y opens its own
- * settings ([onGameSettings]), for a game with a key (its serial). A long press offers both, in an [OverlayPanel] (a
- * game without a key goes straight to its Saves). With games, the foot says so ([KeyHints]). While [overlayOpen],
- * something the caller draws over the library has the focus (the resume prompt); once it closes, the game last
- * focused takes the focus back, not the first thing on the screen.
+ * settings ([onGameSettings]), for a game with a key (its serial). Away from a game, X and Y do nothing. A long press
+ * offers both, in an [OverlayPanel] (a game without a key goes straight to its Saves). With games, the foot says so
+ * ([KeyHints]). While [overlayOpen], something the caller draws over the library has the focus (the resume prompt);
+ * once it closes, the game last focused takes the focus back, not the first thing on the screen.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -309,6 +309,10 @@ fun LibraryScreen(
                                     query != null -> true.also { if (event.type == KeyEventType.KeyUp) clear() }
                                     else -> false
                                 }
+                            // A game's tile takes them first. Anywhere else they do nothing, but left to the activity,
+                            // Android sends their fallback keys on (Back or Space for Y, Enter or Delete for X), which
+                            // press the focused button or leave the app.
+                            Key.ButtonX, Key.ButtonY -> true
                             else -> false
                         }
                     }.windowInsetsPadding(safeArea)
@@ -622,8 +626,8 @@ private fun gameSettingsOf(
 ): (() -> Unit)? = if (game.serial.isBlank()) null else ({ onGameSettings(game) })
 
 /**
- * On their key-ups, X opens the game's Saves ([saves]) and Y its own settings ([settings]); without settings, Y does
- * nothing here.
+ * On their key-ups, X opens the game's Saves ([saves]) and Y its own settings ([settings]); without settings, Y goes
+ * on to the screen, which takes it and does nothing.
  */
 private fun Modifier.gameKeys(
     settings: (() -> Unit)?,

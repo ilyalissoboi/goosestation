@@ -55,13 +55,10 @@ class CatchUpRunner(
     val startsAllowed get() = !growthPending && !running
 
     /**
-     * Whether [message], the line on screen, stays as a game stops or a catch-up ends: only while starts are refused,
-     * and only if it's the [refusal] line a refused start shows, which says why.
+     * Whether the line on screen stays as a game stops or a catch-up ends: only while starts are refused, and only if
+     * it's the line a refused start shows ([refusalShown]), which says why.
      */
-    fun keepsLine(
-        message: String?,
-        refusal: String,
-    ): Boolean = message == refusal && !startsAllowed
+    fun keepsLine(refusalShown: Boolean): Boolean = refusalShown && !startsAllowed
 
     /** The catch-up running, or the last one. */
     var job: Job? = null

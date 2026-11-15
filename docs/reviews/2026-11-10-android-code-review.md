@@ -19,10 +19,9 @@ finding touches one of them, it says so.
 **Sizes.** S is under an hour, M is about half a day, L is several days. Paths are relative to
 `android/app/src/main/java/io/github/ilyalissoboi/goosestation/` unless they start with `android/`, `src/` or `.github/`.
 
-## Status, 2026-11-11
+## Status, 2026-11-14
 
-Most of the findings in sections 1 and 2 have since been fixed, each test-first where a test could run. Where they
-landed:
+Nearly every finding has since been fixed, each test-first where a test could run. Where they landed:
 
 | PR | Fixed |
 |---|---|
@@ -32,6 +31,21 @@ landed:
 | [#82](https://github.com/ilyalissoboi/goosestation/pull/82) | 1.7 and 1.11 |
 | [#83](https://github.com/ilyalissoboi/goosestation/pull/83) | From 1.13: `HttpBridge` cancel, the installer waiting for the library, the delayed start's re-check, the short cover summary |
 | [#84](https://github.com/ilyalissoboi/goosestation/pull/84) | From 1.13: the lost touch tap, the strict UTF-8 decoder, `memcardSyncHoldCard`, and the focus holders in SlotPanel and PatchCodePanel |
+| [#86](https://github.com/ilyalissoboi/goosestation/pull/86) | From 2: the coroutine opt-in warnings and `docs/android.md`. Section 5. From 6: the "Set for this game" font, rows that are read and not pressed, roles and headings, What's new, and `ButtonRow` |
+| [#87](https://github.com/ilyalissoboi/goosestation/pull/87) | From 4.2: `Question`, `backKeys` and `tabKeys`, and `ResumePrompt` on `OverlayPanel`. 3.3, the side panel's frame |
+| [#88](https://github.com/ilyalissoboi/goosestation/pull/88) | From 4.3: every callback through `WithCallbacks`, and `EmuThread::Call` |
+| [#89](https://github.com/ilyalissoboi/goosestation/pull/89) | From 3.1: `DataSync` out of `AppController` |
+| [#90](https://github.com/ilyalissoboi/goosestation/pull/90) | 4.1, one save list |
+| [#91](https://github.com/ilyalissoboi/goosestation/pull/91) | 3.4, one settings page model |
+| [#92](https://github.com/ilyalissoboi/goosestation/pull/92) | From 3.5: `android_host.cpp` and `jni_bridge.cpp` split by domain |
+| [#93](https://github.com/ilyalissoboi/goosestation/pull/93) | From 3.2: the codes and achievements panels as models of their own |
+| [#94](https://github.com/ilyalissoboi/goosestation/pull/94), [#95](https://github.com/ilyalissoboi/goosestation/pull/95), [#96](https://github.com/ilyalissoboi/goosestation/pull/96) | From 4.3: the JNI array helpers, and `JNI_OnLoad`'s lookups as tables |
+| [#97](https://github.com/ilyalissoboi/goosestation/pull/97), [#98](https://github.com/ilyalissoboi/goosestation/pull/98) | 4.4, and the game-aware rows' names (5) |
+| [#99](https://github.com/ilyalissoboi/goosestation/pull/99) | From 6: the cyclers' 48 dp, motion, and `shadow-overlay` |
+| [#100](https://github.com/ilyalissoboi/goosestation/pull/100) | The last of 1.13: settings writes landing before a boot, `signIn` off `coreDispatcher`, and TalkBack under an overlay |
+| [#105](https://github.com/ilyalissoboi/goosestation/pull/105), [#107](https://github.com/ilyalissoboi/goosestation/pull/107) | The rest of 2: `GameCallsTest`'s sleeps, the tier script's waits and lock, Lint in CI, the toolchain versions, the emusync download, and `CheckNoWindowDialogs`' tests |
+| [#111](https://github.com/ilyalissoboi/goosestation/pull/111) | 4.5, the test helpers |
+| Batch J | From 3.5: the status line's owners, the activity's pause calls, and the library's focus and `MessageBar` |
 
 **How some of them turned out:**
 - **1.7:** fixed with one `withSide()` helper rather than a sealed `SidePanel`. The type is still worth doing with the
@@ -47,20 +61,22 @@ landed:
   request before `rc_client_destroy`.
 - **1.13, the focus holders:** not yet seen on the Thor. The test harness can't reproduce the refocus.
 
+- **4.3, `EmuThread::Call`:** narrower than proposed. Most of the 39 blocking sites are long, with early returns, so
+  only the short ones use it.
+- **6, the toggle's thumb:** kept at 2 dp. The design system now says a shape nested in another takes the outer radius
+  less the padding.
+
 **Still open:**
-- **From 1.13:**
-  - waiting for queued settings writes before a boot, and moving `signIn` off `coreDispatcher`;
-  - TalkBack reaching the screen under an overlay.
-- **From 2:**
-  - Lint in CI;
-  - `GameCallsTest`'s fixed sleeps;
-  - `run-instrumented-tests.sh`'s waits and lock;
-  - the coroutine opt-in warnings;
-  - the toolchain versions pinned in five places;
-  - the emusync download at configuration;
-  - `CheckNoWindowDialogs`' tests;
-  - the three passages of `docs/android.md`.
-- **Sections 3–6:** all of them. The exception is PanelTabs' tap and its TalkBack action (6), fixed in #77 with 1.5.
+- **3.1:** the rest of `AppController`'s split, into `GameSession`, `FolderSettings`, `Navigator` and a thin callbacks
+  adapter.
+- **3.2:** the sealed `SidePanel` type in `InGameMenu`.
+- **3.5:** the controllers screens' 16–28 parameters.
+- **From 4.2:**
+  - the focus set-up helpers (`rememberFocusRequesters`, a `FocusHolderLine` with a ring);
+  - `Notice` with one text style and a live region;
+  - `SettingsPage` and `LazySettingsPage` sharing a `PageHeader`;
+  - a `ScreenPadding` constant for the page scaffold.
+- **Left on purpose:** 1.9's stale hub read, and the deleted save's 0.4 alpha (6), which breaks no token.
 
 ---
 

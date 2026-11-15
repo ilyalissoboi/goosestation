@@ -20,7 +20,6 @@ import io.github.ilyalissoboi.goosestation.app.AppController
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CorePage
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
-import io.github.ilyalissoboi.goosestation.app.PausePolicy
 import io.github.ilyalissoboi.goosestation.app.Screen
 import io.github.ilyalissoboi.goosestation.app.SyncBadges
 import io.github.ilyalissoboi.goosestation.app.TouchVisibility
@@ -246,19 +245,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        AppController.resumed = true
-        // A game left paused under its prompt stays so.
-        val running = PausePolicy.running(AppController.resumed, AppController.menuOpen)
-        if (inGame && AppController.gameRunning && running) NativeLibrary.setPaused(false)
+        AppController.onResume(this)
     }
 
     override fun onPause() {
-        AppController.resumed = false
-        if (inGame) {
-            AppController.controllers?.releaseAll()
-            AppController.touchControls.release()
-            AppController.pauseGame()
-        }
+        AppController.onPause(this)
         super.onPause()
     }
 

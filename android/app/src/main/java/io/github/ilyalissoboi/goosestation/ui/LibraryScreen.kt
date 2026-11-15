@@ -47,7 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
@@ -76,13 +75,11 @@ import io.github.ilyalissoboi.goosestation.ui.components.BannerModel
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHint
 import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
-import io.github.ilyalissoboi.goosestation.ui.components.Notice
-import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
+import io.github.ilyalissoboi.goosestation.ui.components.MessageBar
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.rememberSearchFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
-import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import io.github.ilyalissoboi.goosestation.update.AppVersion
 import kotlinx.coroutines.launch
 
@@ -640,64 +637,4 @@ private fun Modifier.gameKeys(
         } ?: return@onKeyEvent false
     if (event.type == KeyEventType.KeyUp) action()
     true
-}
-
-/**
- * Which game has focus, by path, and which one is to take it once it's composed: [pending], until anything in the
- * screen takes the focus, that game or anything else. A game scrolled away from before it was composed doesn't take
- * the focus later, when it's scrolled back in.
- */
-private class GameFocus {
-    var focused: String? = null
-    var pending by mutableStateOf<String?>(null)
-
-    /** Each composed game's requester, by path, to give it the focus back ([refocus]). */
-    private val requesters = HashMap<String, FocusRequester>()
-
-    /**
-     * The game at [path] takes the focus again, a frame from now: after an overlay over the screen has gone, and the
-     * focus has fallen where it falls as it does, which [pending] doesn't outlast.
-     */
-    suspend fun refocus(path: String) {
-        withFrameNanos {}
-        // Not composed (scrolled away): nothing to focus.
-        runCatching { requesters[path]?.requestFocus() }
-    }
-
-    /** The composed game at [path] takes the focus now; false if it isn't composed. */
-    fun request(path: String): Boolean = runCatching { requesters[path]?.requestFocus() == true }.getOrDefault(false)
-
-    /** For the whole screen, which sees the focus move anywhere in it. */
-    val screenModifier = Modifier.onFocusEvent { if (it.hasFocus) pending = null }
-
-    /** For the item showing the game at [path]. */
-    @Composable
-    fun modifier(path: String): Modifier {
-        val requester = remember { FocusRequester() }
-        requesters[path] = requester
-        if (pending == path) {
-            LaunchedEffect(Unit) {
-                // Not if something else has taken the focus since the item was composed.
-                if (pending == path) {
-                    requester.requestFocus()
-                    pending = null
-                }
-            }
-        }
-        return Modifier.focusRequester(requester).onFocusChanged { if (it.isFocused) focused = path }
-    }
-}
-
-/** The app's latest error ([isError]) or what it's doing, under a screen's top bar, as a [Notice]. */
-@Composable
-internal fun MessageBar(
-    message: String,
-    isError: Boolean,
-) {
-    Notice(
-        status = if (isError) NoticeStatus.Danger else NoticeStatus.Info,
-        icon = if (isError) null else GsIcons.sync,
-    ) {
-        Text(message, style = MaterialTheme.typography.bodyLarge, color = GooseStationTheme.colors.ink)
-    }
 }

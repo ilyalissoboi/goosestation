@@ -173,16 +173,15 @@ class CatchUpRunnerTest {
     fun onlyTheRefusalLineOutlastsARefusal() {
         runner.layoutGrew()
 
-        assertTrue(runner.keepsLine("Copying…", refusal = "Copying…"))
-        assertFalse(runner.keepsLine("Stopping the game…", refusal = "Copying…"))
-        assertFalse(runner.keepsLine(null, refusal = "Copying…"))
+        assertTrue(runner.keepsLine(refusalShown = true))
+        assertFalse(runner.keepsLine(refusalShown = false))
     }
 
     @Test
     fun noLineOutlastsTheCatchUp() {
         assertTrue(runner.startsAllowed)
 
-        assertFalse(runner.keepsLine("Copying…", refusal = "Copying…"))
+        assertFalse(runner.keepsLine(refusalShown = true))
     }
 
     // T10-9: the push's request the failed run took is still pulled, and starts stay refused until it is.

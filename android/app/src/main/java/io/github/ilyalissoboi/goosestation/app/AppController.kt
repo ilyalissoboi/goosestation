@@ -141,6 +141,7 @@ object AppController : NativeCallbacks {
     private const val GAME_STOPPED_FOR_EJECT =
         "The SD card was removed, so the game was stopped. Its memory cards are saved on this device."
     private const val COPYING = "Copying your data from the data folder…"
+    private const val STARTING = "Starting…"
 
     /** A game the in-game menu left for, from its shared slot, that the library no longer has. */
     private const val GONE_FROM_LIBRARY = "Couldn't start that save's game: it isn't in your library any more."
@@ -408,11 +409,12 @@ object AppController : NativeCallbacks {
     var ready by mutableStateOf(false)
         private set
 
+    // The latest error, or what the app is doing; one at a time, and each line its owner's to clear.
+    private val status = StatusLine(Status.Starting, STARTING)
+
     /** The latest error, or what the app is doing; one at a time. */
-    var message by mutableStateOf<String?>("Starting…")
-        private set
-    var messageIsError by mutableStateOf(false)
-        private set
+    val message get() = status.text
+    val messageIsError get() = status.isError
 
     /**
      * A game from startGame() isn't over yet: until its onGameStopped(), which always comes. No other game starts
@@ -450,14 +452,16 @@ object AppController : NativeCallbacks {
             override fun refreshEditor() = this@AppController.refreshEditor()
 
             override fun showCopying(progress: Pair<Int, Int>?) {
-                message = if (progress == null) COPYING else "$COPYING (${progress.first} of ${progress.second})"
+                if (progress == null) {
+                    status.progress(Status.Copying, COPYING)
+                } else {
+                    status.progress(Status.CopyingProgress, "$COPYING (${progress.first} of ${progress.second})")
+                }
             }
 
-            override fun copyingShown() = message == COPYING
+            override fun copyingShown() = status.shows(Status.Copying)
 
-            override fun clearCopying() {
-                message = null
-            }
+            override fun clearCopying() = status.clear(Status.Copying)
         }
 
     /** The data folder mirror's runs, and the state they decide by ([DataSync]). Built once [start] has the context. */
@@ -585,6 +589,7 @@ object AppController : NativeCallbacks {
         private set
 
     var resumed = false
+        private set
 
     /**
      * The app paused the game while it booted ([pauseGame]). That pause can reach the core just after the boot, so
@@ -726,6 +731,34 @@ object AppController : NativeCallbacks {
     }
 
     /**
+     * [activity] is in front: a game on screen carries on, unless its menu is open ([PausePolicy]). Ignored unless
+     * it's the current activity.
+     */
+    fun onResume(activity: Activity) {
+        if (!isCurrent(activity)) return
+        resumed = true
+        // A game left paused under its menu stays so.
+        if (screen == Screen.Game && gameRunning && PausePolicy.running(resumed, menuOpen)) {
+            NativeLibrary.setPaused(false)
+        }
+    }
+
+    /**
+     * [activity] is no longer in front: a game on screen lets go of what's held and pauses, which writes its memory
+     * cards. Ignored unless it's the current activity: an old one pausing after its replacement resumed would leave
+     * the game on screen thought paused.
+     */
+    fun onPause(activity: Activity) {
+        if (!isCurrent(activity)) return
+        resumed = false
+        if (screen == Screen.Game) {
+            controllers?.releaseAll()
+            touchControls.release()
+            pauseGame()
+        }
+    }
+
+    /**
      * [activity] is hidden: everything changed is pushed now, settled or not. Ignored unless it's the current
      * activity: an old one stopping after its replacement started would end the new one's pushes.
      */
@@ -778,8 +811,7 @@ object AppController : NativeCallbacks {
         // Once: a second Finish, pressed before the library shows, would start everything twice.
         if (screen != Screen.Setup) return
         folders = chosen
-        message = "Starting…"
-        messageIsError = false
+        status.show(Status.Starting, STARTING)
         screen = Screen.Library
         scope.launch {
             save()
@@ -1273,13 +1305,13 @@ object AppController : NativeCallbacks {
             showMessage("That's your data folder already.")
             return
         }
-        showMessage("Looking at the folder…")
+        status.show(Status.LookingAtFolder, "Looking at the folder…")
         val inspection = inspectDataFolder(uri, folders.games)
         if (dataChange != null) return
         dataCandidate?.let { if (it.uri != uri) release(it.uri) }
         oldFolderMissedChanges = false
         dataCandidate = DataFolderCandidate(uri, inspection)
-        if (message == "Looking at the folder…") message = null
+        status.clear(Status.LookingAtFolder)
     }
 
     /** The data folder's state, for the folder settings. */
@@ -1302,7 +1334,7 @@ object AppController : NativeCallbacks {
             showError(if (rescan) "$error The copies already made still work." else "$error Pick another.")
             return
         }
-        message = null
+        status.clear()
         // The BIOS page, if it was opened meanwhile, shows the images just copied.
         settingsPages.reloadShown(screen.page)
         val old = folders.bios
@@ -1349,7 +1381,7 @@ object AppController : NativeCallbacks {
     private fun beginGame(game: GameEntry): Boolean {
         if (!ready || gameActive) return false
         if (!dataSync.startsAllowed) {
-            showMessage(COPYING)
+            status.show(Status.Copying, COPYING)
             return false
         }
         if (dataChange != null || (screen != Screen.Library && screen != Screen.Saves)) {
@@ -1362,8 +1394,7 @@ object AppController : NativeCallbacks {
         librarySearch.clearText()
         runningGame = game
         focusSettings = false
-        message = null
-        messageIsError = false
+        status.clear()
         gameActive = true
         dataSync.holdMemcards = true
         // A cover download stops for the game, keeping the covers it found.
@@ -1384,7 +1415,7 @@ object AppController : NativeCallbacks {
     fun leaveGame() {
         menuOpen = false
         screen = Screen.Library
-        if (!messageIsError) message = "Stopping the game…"
+        status.progress(Status.Stopping, "Stopping the game…")
         NativeLibrary.shutdownGame()
     }
 
@@ -1520,7 +1551,7 @@ object AppController : NativeCallbacks {
         if (saved.setupComplete) checkGrants()
         val steps = StartupPlan.steps(saved, missingGrants, coreStarted = false)
         if (StartupStep.ShowSetup in steps) {
-            message = null
+            status.clear()
             screen = Screen.Setup
             // No settings.ini yet: the defaults, on the build's own channel.
             updates?.startupCheck(InterfaceSettings.UPDATE_CHANNEL.default, enabled = true)
@@ -1536,7 +1567,7 @@ object AppController : NativeCallbacks {
                     if (!initializeCore()) return
                     // The folders the core's settings.ini names beyond the defaults, which the first pull left out,
                     // then the cards the game settings in them name: no game starts before they're in.
-                    if (!messageIsError) message = COPYING
+                    status.progress(Status.Copying, COPYING)
                     dataSync.catchUp()?.join()
                     ready = true
                 }
@@ -1567,7 +1598,7 @@ object AppController : NativeCallbacks {
 
     // initialize() waits for the core's thread to start, and the resources are copied out first.
     private suspend fun initializeCore(): Boolean {
-        message = "Starting the core…"
+        status.progress(Status.StartingCore, "Starting the core…")
         val result =
             withContext(coreDispatcher) {
                 runCatching {
@@ -1671,13 +1702,14 @@ object AppController : NativeCallbacks {
 
     private suspend fun refreshLibrary(showProgress: Boolean = false) {
         if (!coreStarted) return
-        if (showProgress && !messageIsError) message = "Scanning your games…"
+        if (showProgress) status.progress(Status.Scanning, "Scanning your games…")
         games =
             withContext(coreDispatcher) {
                 NativeLibrary.refreshGameList(false)
                 NativeLibrary.getGameList().toList()
             }
-        if (showProgress && !messageIsError) message = null
+        // Its own line only: one shown meanwhile (a refused start, a folder's answer) stays.
+        if (showProgress) status.clear(Status.Scanning)
     }
 
     private suspend fun checkGrants() {
@@ -1700,15 +1732,9 @@ object AppController : NativeCallbacks {
         withContext(Dispatchers.IO) { picker.release(uri, saved) }
     }
 
-    private fun showMessage(text: String) {
-        message = text
-        messageIsError = false
-    }
+    private fun showMessage(text: String) = status.show(Status.Note, text)
 
-    private fun showError(text: String) {
-        message = text
-        messageIsError = true
-    }
+    private fun showError(text: String) = status.error(text)
 
     // --- NativeCallbacks ---
 
@@ -1772,7 +1798,7 @@ object AppController : NativeCallbacks {
             rumble.stopAll()
             if (screen == Screen.Game) screen = Screen.Library
             // A start refused meanwhile, while a catch-up runs, still says why.
-            if (!messageIsError && !dataSync.keepsLine(message, COPYING)) message = null
+            if (!messageIsError && !dataSync.keepsLine(status.shows(Status.Copying))) status.clear()
             // The memory cards held back while it ran come in now, then the game's own writes go out; a game the menu
             // left for starts after that, on the cards as they are now.
             gameSwitch.stopped {

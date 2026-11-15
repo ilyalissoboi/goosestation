@@ -83,17 +83,15 @@ import kotlin.system.exitProcess
 
 /**
  * The core, the folders, the mirror and what the app shows, for the life of the process, so a recreated activity
- * carries on. Main thread only, except the [NativeCallbacks], which the core calls on its threads: they post to the
- * main thread and never wait for it, since it may be waiting for the core in [NativeLibrary.surfaceChanged].
+ * carries on: the wiring between the pieces, the activity's lifecycle and the cold start. Main thread only. The core's
+ * callbacks are [CoreEvents]: it posts each to the main thread, and only the few the core needs done before it goes on
+ * ([CoreThreadEvents]) run on the core's threads, none of them touching what the main thread owns.
  *
  * The work behind it runs off the main thread: preferences, grants and SAF on [Dispatchers.IO], the mirror on its
  * own thread, and the core's library and settings calls on [coreDispatcher], one at a time.
  */
-object AppController : NativeCallbacks {
+object AppController {
     private const val TAG = "GooseStation"
-
-    // RetroAchievements' messages over the game, from the design.
-    private const val UNREACHABLE = "Couldn't reach RetroAchievements; achievements are off for this game"
 
     /** An achievement message's picture, as big as the message's line shows it. */
     private const val ICON_PX = 64
@@ -467,16 +465,8 @@ object AppController : NativeCallbacks {
 
             override fun onStarted(game: GameEntry) {
                 gameMenu.gameStarted(game)
-                unreachableSaid = false
+                achievementMessages.gameStarted()
                 touchControls.gameStarted()
-                if (signInExpired) {
-                    signInExpired = false
-                    // With what it keeps for when the player signs in again.
-                    scope.launch {
-                        val kept = withContext(coreDispatcher) { NativeLibrary.getAchievementsQueue().own }
-                        osd.post(AchievementQueueWords.expiry(kept))
-                    }
-                }
                 readSelectChords()
             }
 
@@ -693,11 +683,20 @@ object AppController : NativeCallbacks {
         }
     }
 
-    // Said once, at the next game start, after the server rejected the stored sign-in.
-    private var signInExpired = false
+    /** RetroAchievements' messages over the game, each said once ([AchievementMessages]). */
+    private val achievementMessages by lazy {
+        AchievementMessages(
+            scope,
+            coreDispatcher,
+            gameDispatcher,
+            object : AchievementsReader {
+                override fun queuedOwn() = NativeLibrary.getAchievementsQueue().own
 
-    // The "couldn't reach" or the offline message has been shown for the running game.
-    private var unreachableSaid = false
+                override fun gameAchievements() = NativeGameCoreApi.getGameAchievements()
+            },
+            { gameRunning },
+        ) { osd.post(it) }
+    }
 
     /** The in-game menu: its rows, its slot panel, and what they do. */
     val gameMenu by lazy {
@@ -1284,7 +1283,7 @@ object AppController : NativeCallbacks {
                     val biosDir = File(context.filesDir, "bios").apply { mkdirs() }
                     workingCopy.mkdirs()
                     val resources = Resources.extract(context)
-                    NativeLibrary.setCallbacks(this@AppController)
+                    NativeLibrary.setCallbacks(coreEvents)
                     // The app's own storage, never the data folder: packs aren't mirrored.
                     NativeLibrary.setShaderPacksFolder(File(context.filesDir, "shaderpacks").absolutePath)
                     NativeLibrary
@@ -1389,28 +1388,116 @@ object AppController : NativeCallbacks {
 
     private fun showError(text: String) = status.error(text)
 
-    // --- NativeCallbacks ---
+    // --- The core's events ([CoreEvents]) ---
 
-    override fun onGameStarted(
-        title: String,
-        serial: String,
-        startPaused: Boolean,
-        pauseOnDisconnect: Boolean,
-    ) {
-        mainHandler.post {
-            Log.i(TAG, "Game started: $title")
-            session.started(title, serial, startPaused, pauseOnDisconnect)
+    // What the core's events reach on the main thread, once posted there.
+    private val mainEvents =
+        object : MainEvents {
+            override fun gameStarted(
+                title: String,
+                serial: String,
+                startPaused: Boolean,
+                pauseOnDisconnect: Boolean,
+            ) {
+                Log.i(TAG, "Game started: $title")
+                session.started(title, serial, startPaused, pauseOnDisconnect)
+            }
+
+            override fun gameStopped() {
+                Log.i(TAG, "Game stopped.")
+                session.stopped()
+            }
+
+            override fun error(message: String) {
+                Log.w(TAG, "Error: $message")
+                showError(message)
+            }
+
+            override fun showMessage(
+                text: String,
+                key: String?,
+                seconds: Float?,
+                icon: ArgbImage?,
+            ) {
+                if (seconds == null) osd.post(text, key, icon = icon) else osd.post(text, key, seconds, icon)
+            }
+
+            override fun removeMessage(key: String) = osd.remove(key)
+
+            override fun memcardSyncChanged() {
+                if (coreStarted) memcardSyncStatus.refresh()
+                refreshEditor()
+            }
+
+            override fun achievementsLoginExpired() {
+                achievementMessages.loginExpired()
+                achievementsPage.loginExpired()
+            }
+
+            override fun achievementsChanged() {
+                gameMenu.achievementsChanged()
+                if (screen == Screen.Achievements) achievementsPage.refresh()
+                achievementMessages.achievementsChanged()
+            }
+
+            override fun achievementCard(card: AchievementNotice.Card) = achievementOverlay.post(card)
+
+            override fun achievementIndicator(
+                kind: Int,
+                id: Int,
+                shown: Boolean,
+                text: String,
+                badgePath: String,
+            ) = achievementOverlay.indicator(kind, id, shown, text, badgePath)
+
+            override fun leaderboard(
+                request: Int,
+                page: LeaderboardPage?,
+                error: String?,
+            ) = gameMenu.leaderboardFetched(request, page, error)
+
+            override fun achievementImage(path: String) = badges.downloaded(path)
+
+            override fun fastForwardChanged(enabled: Boolean) = gameMenu.fastForwardChanged(enabled)
+
+            override fun padKindChanged(kind: PadKind?) {
+                touchControls.kind = kind
+            }
+
+            override fun hotkey(hotkey: StateHotkey) = gameMenu.hotkey(hotkey)
         }
-    }
 
-    override fun onGameStopped() {
-        mainHandler.post {
-            Log.i(TAG, "Game stopped.")
-            session.stopped()
+    // What the core's events reach on its own thread, before it goes on.
+    private val coreThreadEvents =
+        object : CoreThreadEvents {
+            // The token lives only in the core's memory until it's stored here.
+            override fun storeAchievementsToken(token: String?) = achievementsToken.store(token)
+
+            override fun storeMemcardSyncSecret(
+                name: String,
+                value: String?,
+            ) = syncSecrets.store(name, value)
+
+            override fun loadMemcardSyncSecret(name: String) = syncSecrets.load(name)
+
+            override fun hasMemcardSyncSecret(name: String) = syncSecrets.has(name)
+
+            override fun bindingCaptured(binding: String) = controllersPage.onBindingCaptured(binding)
+
+            override fun rumble(
+                deviceId: Int,
+                large: Float,
+                small: Float,
+            ) = rumble.onRumble(deviceId, large, small)
+
+            override fun playSound(path: String) = achievementSounds.play(path)
         }
-    }
 
-    override fun onBindingCaptured(binding: String) = controllersPage.onBindingCaptured(binding)
+    /** The core's callbacks, registered as it initializes. */
+    private val coreEvents: CoreEvents =
+        CoreEvents({ block -> mainHandler.post(block) }, mainEvents, coreThreadEvents, scope, Dispatchers.IO) {
+            ArgbImages.decode(it, ICON_PX)
+        }
 
     /**
      * The controllers with a hotkey bound, whose Select the game sees only once it's known not to be a chord
@@ -1428,164 +1515,6 @@ object AppController : NativeCallbacks {
                     }
                 }
             if (gameRunning) input.selectChordDescriptors = chorded.toSet()
-        }
-    }
-
-    override fun onOsdMessage(
-        key: String,
-        text: String,
-        seconds: Float,
-        icon: ArgbImage?,
-    ) {
-        mainHandler.post {
-            if (seconds == 0f) {
-                osd.remove(key)
-            } else {
-                CoreMessages.translate(key, text)?.let { osd.post(it, key.ifEmpty { null }, seconds, icon) }
-            }
-        }
-    }
-
-    // On the core's thread, before the core goes on: the token lives only in its memory until it's stored here.
-    override fun onAchievementsToken(token: String?) = achievementsToken.store(token)
-
-    override fun storeMemcardSyncSecret(
-        name: String,
-        value: String?,
-    ) = syncSecrets.store(name, value)
-
-    override fun loadMemcardSyncSecret(name: String) = syncSecrets.load(name)
-
-    override fun hasMemcardSyncSecret(name: String) = syncSecrets.has(name)
-
-    override fun onMemcardSyncChanged() {
-        mainHandler.post {
-            if (coreStarted) memcardSyncStatus.refresh()
-            refreshEditor()
-        }
-    }
-
-    override fun onAchievementsLoginExpired() {
-        mainHandler.post {
-            signInExpired = true
-            achievementsPage.loginExpired()
-        }
-    }
-
-    override fun onAchievementsSent(count: Int) {
-        mainHandler.post { osd.post(AchievementQueueWords.sent(count)) }
-    }
-
-    override fun onAchievementRefused(title: String) {
-        mainHandler.post { osd.post(AchievementQueueWords.refused(title)) }
-    }
-
-    override fun onAchievementsChanged() {
-        mainHandler.post {
-            gameMenu.achievementsChanged()
-            if (screen == Screen.Achievements) achievementsPage.refresh()
-            if (gameRunning && !unreachableSaid) {
-                scope.launch {
-                    val game = withContext(gameDispatcher) { NativeGameCoreApi.getGameAchievements() }
-                    if (!gameRunning || unreachableSaid) return@launch
-                    when {
-                        game.status == GameAchievements.UNREACHABLE -> {
-                            unreachableSaid = true
-                            osd.post(UNREACHABLE)
-                        }
-                        game.status == GameAchievements.READY && game.offline -> {
-                            unreachableSaid = true
-                            osd.post(AchievementQueueWords.OFFLINE_START)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onAchievementNotification(
-        key: String,
-        title: String,
-        text: String,
-        imagePath: String,
-        seconds: Float,
-        points: Int,
-        offline: Boolean,
-    ) {
-        mainHandler.post {
-            when (val notice = AchievementNotices.from(key, title, text, imagePath, points, offline, seconds)) {
-                is AchievementNotice.Card -> achievementOverlay.post(notice)
-                is AchievementNotice.Message ->
-                    scope.launch {
-                        val icon =
-                            notice.imagePath?.let {
-                                withContext(
-                                    Dispatchers.IO,
-                                ) { ArgbImages.decode(it, ICON_PX) }
-                            }
-                        osd.post(notice.text, key, seconds, icon)
-                    }
-            }
-        }
-    }
-
-    override fun onAchievementToast(
-        title: String,
-        message: String,
-        seconds: Float,
-    ) {
-        mainHandler.post { osd.post(AchievementNotices.toast(title, message), seconds = seconds) }
-    }
-
-    override fun onAchievementIndicator(
-        kind: Int,
-        id: Int,
-        shown: Boolean,
-        text: String,
-        badgePath: String,
-    ) {
-        mainHandler.post { achievementOverlay.indicator(kind, id, shown, text, badgePath) }
-    }
-
-    override fun onPlaySound(path: String) = achievementSounds.play(path)
-
-    override fun onLeaderboard(
-        request: Int,
-        page: LeaderboardPage?,
-        error: String?,
-    ) {
-        mainHandler.post { gameMenu.leaderboardFetched(request, page, error) }
-    }
-
-    override fun onAchievementImage(path: String) {
-        mainHandler.post { badges.downloaded(path) }
-    }
-
-    override fun onFastForwardChanged(enabled: Boolean) {
-        mainHandler.post { gameMenu.fastForwardChanged(enabled) }
-    }
-
-    override fun onPadKindChanged(kind: Int) {
-        mainHandler.post { touchControls.kind = PadKind.fromCore(kind) }
-    }
-
-    override fun onRumble(
-        deviceId: Int,
-        large: Float,
-        small: Float,
-    ) = rumble.onRumble(deviceId, large, small)
-
-    override fun onHotkey(name: String) {
-        val hotkey = StateHotkey.entries.firstOrNull { it.coreName == name } ?: return
-        mainHandler.post { gameMenu.hotkey(hotkey) }
-    }
-
-    override fun onError(message: String) {
-        mainHandler.post {
-            Log.w(TAG, "Error: $message")
-            // A failed boot can report twice; the latest one shows. onGameStopped() follows a failed boot, and takes
-            // the app back to the library, where it shows.
-            showError(message)
         }
     }
 }

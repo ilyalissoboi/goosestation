@@ -179,32 +179,21 @@ object AppController : NativeCallbacks {
     private var documentPicker: DocumentPicker? = null
     private var pushTicker: Job? = null
     private var refreshJob: Job? = null
-    private var biosJob: Job? = null
 
     /** The volumes being ejected, or gone, since their eject: each is handled once, until it's mounted again. */
     private val ejectedVolumes = HashSet<String>()
 
-    /** The saved folders, as last loaded or saved. */
-    var folders by mutableStateOf(SavedFolders(bios = null, games = emptyList(), data = null, setupComplete = false))
-        private set
+    /** The saved folders, as last loaded or saved ([FolderSettings.folders]). */
+    val folders get() = folderSettings.folders
 
     /** The BIOS images the last import copied, as it described them. */
-    var biosImages by mutableStateOf(emptyList<String>())
-        private set
+    val biosImages get() = folderSettings.biosImages
 
     /** A folder picked to become the data folder, waiting for the user's choice in the folder settings. */
-    var dataCandidate by mutableStateOf<DataFolderCandidate?>(null)
-        private set
-
-    /**
-     * The last try at changing to [dataCandidate] found changes that didn't reach the old data folder: the choice is
-     * shown again, warning that using the new folder's data loses them.
-     */
-    private var oldFolderMissedChanges by mutableStateOf(false)
+    val dataCandidate get() = folderSettings.dataCandidate
 
     /** What a data folder change under way is doing; null when none is. It ends in a restart. */
-    var dataChange by mutableStateOf<String?>(null)
-        private set
+    val dataChange get() = folderSettings.dataChange
 
     /** The library focuses its Settings button when it opens, as it does coming back from the settings. */
     var focusSettings by mutableStateOf(false)
@@ -366,8 +355,7 @@ object AppController : NativeCallbacks {
     val menuOpen get() = session.menuOpen
 
     /** Saved folders whose grant is gone, as the last check found. */
-    var missingGrants by mutableStateOf(emptyList<MissingGrant>())
-        private set
+    val missingGrants get() = folderSettings.missingGrants
 
     val mirrorState: StateFlow<MirrorState> get() = dataSync.mirrorState
 
@@ -491,14 +479,103 @@ object AppController : NativeCallbacks {
     private val session: GameSession =
         GameSession(scope, { settingsQueue.settle() }, NativeSessionCore, sessionHooks, status)
 
+    // What the folder settings ask of Android ([FolderSettings]): the picker of the activity shown, if there is one.
+    private val folderAccess =
+        object : FolderAccess {
+            override suspend fun pick(kind: FolderKind) = picker?.pick(kind)
+
+            override fun release(
+                uri: String,
+                saved: SavedFolders,
+            ) {
+                picker?.release(uri, saved)
+            }
+
+            override suspend fun importBios(treeUri: String) = biosImporter.import(treeUri)
+
+            override fun inspectDataFolder(
+                treeUri: String,
+                games: List<String>,
+            ) = DataFolderCheck.inspect(context.contentResolver, treeUri, games)
+
+            override fun missingGrants(saved: SavedFolders) =
+                GrantCheck.missing(saved, context.contentResolver.persistedGrants())
+        }
+
+    // The data folder's move to another folder, from the mirror running now.
+    private val dataFolderSwitch =
+        DataFolderSwitch { newTree, choice, pushOld, lossAccepted, beforeApply ->
+            val store = SafFolderStore(context.contentResolver, newTree)
+            val change = DataFolderChange(workingCopy, manifestFile, dataSync.dataLayout, dataSync::packMarkers)
+            change.switchFrom(dataSync.mirror, pushOld, lossAccepted, newTree, choice, store, beforeApply)
+        }
+
+    // What the folder settings ask the app, or tell it ([FolderSettings]).
+    private val folderHooks =
+        object : FolderHooks {
+            override val onFolders get() = screen == Screen.Folders
+
+            override val onLibrary get() = screen == Screen.Library
+
+            // A game left a moment ago may still be stopping, and the start may still be pulling the old folder. Until
+            // the core has started, the layout is only the defaults.
+            override val busy get() = gameActive || coldStarting || !dataSync.dataLayout.fromCore
+
+            override val mirrorState get() = this@AppController.mirrorState.value
+
+            override suspend fun biosImagesChanged() {
+                if (coreStarted) dropStaleBiosOverrides() else biosOverridesToCheck = true
+            }
+
+            override fun reloadShownPage() = settingsPages.reloadShown(screen.page)
+
+            override suspend fun updateLibrary() = this@AppController.updateLibrary()
+
+            override fun showFolders() {
+                settingsInPage = true
+                screen = Screen.Folders
+            }
+
+            override suspend fun pullAll() {
+                dataSync.pull(onlyMemcards = false)
+            }
+
+            override fun useMirror(data: String) = dataSync.useMirror(data)
+
+            override suspend fun settleCore() = withContext(coreDispatcher) {}
+
+            override fun restart() {
+                activity?.let(ProcessRestart::restart) ?: exitProcess(0)
+            }
+        }
+
+    /**
+     * The saved folders, their grants and what changes them ([FolderSettings]). Built once [start] has the context and
+     * the preferences.
+     */
+    private val folderSettings: FolderSettings by lazy {
+        FolderSettings(
+            scope,
+            Dispatchers.IO,
+            prefsDispatcher,
+            prefs,
+            folderAccess,
+            dataFolderSwitch,
+            folderHooks,
+            status,
+        ) { priority, line, error ->
+            Log.println(priority, TAG, if (error == null) line else "$line\n${Log.getStackTraceString(error)}")
+        }
+    }
+
     // What the mirror's runs tell the app, or ask it ([DataSync]).
     private val syncHooks =
         object : SyncHooks {
             override fun coreStarted() = coreStarted
 
-            override fun dataGranted() = dataGranted
+            override fun dataGranted() = folderSettings.dataGranted
 
-            override fun readableGameFolders() = this@AppController.readableGameFolders()
+            override fun readableGameFolders() = folderSettings.readableGameFolders()
 
             override suspend fun onSettingsReloadedOnCore() = readLibraryView()
 
@@ -660,7 +737,6 @@ object AppController : NativeCallbacks {
 
     private val workingCopy get() = File(context.filesDir, "data")
     private val manifestFile get() = File(context.filesDir, "mirror-manifest.txt")
-    private val dataGranted get() = missingGrants.none { it.kind == FolderKind.Data }
 
     /** Starts the cold-start sequence, once per process. */
     fun start(appContext: Context) {
@@ -681,11 +757,7 @@ object AppController : NativeCallbacks {
                 scope.launch { snapshotFlow { screen == Screen.Game || gameActive }.collect { made.onScreen(it) } }
                 scope.launch { snapshotFlow { installerWaits(screen, gameActive) }.collect { made.onLibrary(it) } }
             }
-        scope.launch {
-            val (saved, images) = withContext(Dispatchers.IO) { prefs.load() to prefs.biosImages() }
-            biosImages = images
-            coldStart(saved)
-        }
+        scope.launch { coldStart(folderSettings.load()) }
     }
 
     private fun makeUpdates(appContext: Context) =
@@ -827,39 +899,26 @@ object AppController : NativeCallbacks {
      * Copies the BIOS images in [treeUri], and remembers what it found, if anything. A region whose image isn't among
      * the new copies goes back to Automatic, once the core has started ([dropStaleBiosOverrides]).
      */
-    suspend fun importBios(treeUri: String): BiosImportResult {
-        val result = biosImporter.import(treeUri)
-        if (result.images.isNotEmpty()) {
-            biosImages = result.images
-            withContext(prefsDispatcher) { prefs.saveBiosImages(result.images) }
-            if (coreStarted) dropStaleBiosOverrides() else biosOverridesToCheck = true
-        }
-        return result
-    }
+    suspend fun importBios(treeUri: String): BiosImportResult = folderSettings.importBios(treeUri)
 
     /** Whether [treeUri] can be the data folder alongside the [games] folders, and what it holds if it can. */
     suspend fun inspectDataFolder(
         treeUri: String,
         games: List<String>,
-    ): DataFolderInspection =
-        withContext(Dispatchers.IO) { DataFolderCheck.inspect(context.contentResolver, treeUri, games) }
+    ): DataFolderInspection = folderSettings.inspectDataFolder(treeUri, games)
 
     /** Lets go of a folder setup picked and then dropped, unless a saved folder still uses it. */
-    fun releaseFolder(uri: String) {
-        val saved = folders
-        val picker = picker ?: return
-        scope.launch(Dispatchers.IO) { picker.release(uri, saved) }
-    }
+    fun releaseFolder(uri: String) = folderSettings.releaseFolder(uri)
 
     /** Saves the folders setup chose, then starts as a set-up app does. */
     fun finishSetup(chosen: SavedFolders) {
         // Once: a second Finish, pressed before the library shows, would start everything twice.
         if (screen != Screen.Setup) return
-        folders = chosen
+        folderSettings.use(chosen)
         status.show(Status.Starting, STARTING)
         screen = Screen.Library
         scope.launch {
-            save()
+            folderSettings.save()
             coldStart(chosen)
         }
     }
@@ -870,53 +929,11 @@ object AppController : NativeCallbacks {
     fun banners(state: MirrorState): List<BannerModel> =
         LibraryBanners.build(missingGrants, state, folders.data != null, ::folderLabel, ::repick, ::removeGamesFolder)
 
-    /**
-     * Picks [grant]'s folder again. The same folder restores it. Another one replaces a games or BIOS folder (the BIOS
-     * is imported again); for the data folder, the folder settings open on the choice of what to do with it.
-     */
-    fun repick(grant: MissingGrant) {
-        val picker = picker ?: return
-        scope.launch {
-            val picked = picker.pick(grant.kind) ?: return@launch
-            if (picked != grant.uri) {
-                when (grant.kind) {
-                    FolderKind.Data -> {
-                        offerDataFolder(picked)
-                        if (dataCandidate?.uri == picked && screen == Screen.Library) {
-                            settingsInPage = true
-                            screen = Screen.Folders
-                        }
-                        return@launch
-                    }
-                    FolderKind.Bios -> {
-                        val result = importBios(picked)
-                        if (result.images.isEmpty()) {
-                            release(picked)
-                            showError(result.error ?: "No PS1 BIOS found in this folder. Pick another.")
-                            return@launch
-                        }
-                        folders = folders.copy(bios = picked)
-                    }
-                    FolderKind.Games -> {
-                        if (refuseGamesFolder(picked)) return@launch
-                        val games = folders.games.map { if (it == grant.uri) picked else it }.distinct()
-                        folders = folders.copy(games = games)
-                    }
-                }
-                save()
-                release(grant.uri)
-            }
-            checkGrants()
-            when (grant.kind) {
-                FolderKind.Data -> if (dataGranted) dataSync.pull(onlyMemcards = false)
-                FolderKind.Games -> updateLibrary()
-                FolderKind.Bios -> {}
-            }
-        }
-    }
+    /** Picks [grant]'s folder again ([FolderSettings.repick]). */
+    fun repick(grant: MissingGrant) = folderSettings.repick(grant)
 
     /** Stops listing a games folder whose grant is gone, and releases it. */
-    fun removeGamesFolder(uri: String) = setGamesFolders(folders.games - uri)
+    fun removeGamesFolder(uri: String) = folderSettings.removeGamesFolder(uri)
 
     // --- The library ---
 
@@ -1179,216 +1196,30 @@ object AppController : NativeCallbacks {
     // --- The folder settings ---
 
     /** Picks another BIOS folder, which replaces the old one if it holds any images. */
-    fun changeBios() {
-        val picker = picker ?: return
-        if (biosJob?.isActive == true) return
-        biosJob =
-            scope.launch {
-                val picked = picker.pick(FolderKind.Bios) ?: return@launch
-                useBiosFolder(picked, rescan = false)
-            }
-    }
+    fun changeBios() = folderSettings.changeBios()
 
     /** Imports the BIOS folder's images again. */
-    fun rescanBios() {
-        val bios = folders.bios ?: return
-        if (biosJob?.isActive == true) return
-        biosJob = scope.launch { useBiosFolder(bios, rescan = true) }
-    }
+    fun rescanBios() = folderSettings.rescanBios()
 
-    fun addGamesFolder() {
-        val picker = picker ?: return
-        scope.launch {
-            val picked = picker.pick(FolderKind.Games) ?: return@launch
-            if (refuseGamesFolder(picked)) return@launch
-            if (picked !in folders.games) setGamesFolders(folders.games + picked)
-        }
-    }
-
-    /** Refuses, saying why, and lets go of, a games folder [picked] that overlaps the data folder. */
-    private suspend fun refuseGamesFolder(picked: String): Boolean {
-        val data = folders.data ?: return false
-        if (!DataFolderCheck.overlaps(picked, data)) return false
-        release(picked)
-        showError(DataFolderCheck.GAMES_OVERLAP_DATA)
-        return true
-    }
+    fun addGamesFolder() = folderSettings.addGamesFolder()
 
     /** Saves [games] as the games folders, releases the removed ones, and refreshes the library. */
-    fun setGamesFolders(games: List<String>) {
-        if (dataChange != null) return
-        val removed = folders.games - games.toSet()
-        // Now, so a second change made before this one is saved starts from it.
-        folders = folders.copy(games = games.distinct())
-        scope.launch {
-            save()
-            removed.forEach { release(it) }
-            checkGrants()
-            updateLibrary()
-        }
-    }
+    fun setGamesFolders(games: List<String>) = folderSettings.setGamesFolders(games)
 
     /** Picks a new data folder, then waits for the user's choice of what to do with it ([changeDataFolder]). */
-    fun pickDataFolder() {
-        val picker = picker ?: return
-        if (dataChange != null) return
-        scope.launch {
-            val picked = picker.pick(FolderKind.Data) ?: return@launch
-            offerDataFolder(picked)
-        }
-    }
+    fun pickDataFolder() = folderSettings.pickDataFolder()
 
     /** Drops the data folder picked, and its grant unless a saved folder holds it. */
-    fun cancelDataChange() {
-        val candidate = dataCandidate ?: return
-        if (dataChange != null) return
-        dataCandidate = null
-        oldFolderMissedChanges = false
-        scope.launch { release(candidate.uri) }
-    }
+    fun cancelDataChange() = folderSettings.cancelDataChange()
 
-    /**
-     * Makes the picked data folder the data folder, as [choice] says, then restarts the process: the core's data root
-     * can't change while it runs. The old folder gets this device's latest changes first, if it can be reached, and
-     * its mirror then stops for good ([DataFolderChange.switchFrom]). Using the new folder's data waits for the user
-     * again if some changes didn't reach the old folder, unless the choice was already shown with the warning that
-     * they're lost. If the change fails, nothing is saved, and the old folder carries on.
-     */
-    fun changeDataFolder(choice: DataFolderChoice) {
-        val candidate = dataCandidate ?: return
-        val usable = candidate.inspection is DataFolderInspection.Usable
-        if (!usable || screen != Screen.Folders || dataChange != null) return
-        // A game left a moment ago may still be stopping, and the start may still be pulling the old folder. Until the
-        // core has started, the layout is only the defaults: a push to the old folder would leave out the folders its
-        // settings.ini names, and still count as complete.
-        if (gameActive || coldStarting || !dataSync.dataLayout.fromCore) {
-            showMessage("GooseStation is busy. Try again in a moment.")
-            return
-        }
-        val old = folders.data
-        // What the screen said when the user chose: with the old folder unreachable, that its missing changes are lost.
-        val lossAccepted = !dataReachable(mirrorState.value)
-        dataChange = "Saving your latest changes to the old data folder…"
-        scope.launch {
-            val failure =
-                try {
-                    val store = SafFolderStore(context.contentResolver, candidate.uri)
-                    val change = DataFolderChange(workingCopy, manifestFile, dataSync.dataLayout, dataSync::packMarkers)
-                    val applied =
-                        change.switchFrom(
-                            dataSync.mirror,
-                            pushOld = dataGranted,
-                            lossAccepted = lossAccepted,
-                            newTree = candidate.uri,
-                            choice = choice,
-                            store = store,
-                        ) {
-                            dataChange =
-                                when (choice) {
-                                    DataFolderChoice.CopyThisDevicesData ->
-                                        "Copying this device's data into the new folder…"
-                                    DataFolderChoice.UseFolderData -> "Copying the data from the new folder…"
-                                }
-                            // A settings reload or folder change queued before the mirror closed would have the core
-                            // save its settings.ini over the one the change brings in.
-                            withContext(coreDispatcher) {}
-                        }
-                    if (!applied) {
-                        oldFolderMissedChanges = true
-                        dataChange = null
-                        showError(
-                            "Not every change on this device reached your old data folder. Choose again to use the " +
-                                "new folder's data anyway, or cancel.",
-                        )
-                        return@launch
-                    }
-                    folders = folders.copy(data = candidate.uri)
-                    if (save()) null else "can't save your folders"
-                } catch (e: Exception) {
-                    Log.e(TAG, "Can't change the data folder.", e)
-                    e.message ?: e.javaClass.name
-                }
-            if (failure != null) {
-                abandonDataChange(old, candidate.uri, failure)
-                return@launch
-            }
-            old?.let { release(it) }
-            dataChange = "Restarting…"
-            Log.i(TAG, "The data folder changed: restarting.")
-            activity?.let(ProcessRestart::restart) ?: exitProcess(0)
-        }
-    }
-
-    /** The data folder stays [old]: its mirror carries on, and the folder picked ([uri]) is let go of. */
-    private suspend fun abandonDataChange(
-        old: String?,
-        uri: String,
-        error: String,
-    ) {
-        if (folders.data != old) {
-            folders = folders.copy(data = old)
-            save()
-        }
-        dataCandidate = null
-        oldFolderMissedChanges = false
-        dataChange = null
-        release(uri)
-        showError("Can't change the data folder ($error). The old one is still your data folder.")
-        old ?: return
-        dataSync.useMirror(old)
-        // The working copy may be part-way changed: a full pull makes it match the old folder again, and reloads
-        // settings.ini if it came back.
-        dataSync.pull(onlyMemcards = false)
-    }
-
-    /**
-     * Offers [uri] as the new data folder, once it's looked at, unless it's the data folder already. One that can't be
-     * the data folder ([DataFolderCheck]) is offered only to say why.
-     */
-    private suspend fun offerDataFolder(uri: String) {
-        if (uri == folders.data) {
-            showMessage("That's your data folder already.")
-            return
-        }
-        status.show(Status.LookingAtFolder, "Looking at the folder…")
-        val inspection = inspectDataFolder(uri, folders.games)
-        if (dataChange != null) return
-        dataCandidate?.let { if (it.uri != uri) release(it.uri) }
-        oldFolderMissedChanges = false
-        dataCandidate = DataFolderCandidate(uri, inspection)
-        status.clear(Status.LookingAtFolder)
-    }
+    /** Makes the picked data folder the data folder, as [choice] says, then restarts the process. */
+    fun changeDataFolder(choice: DataFolderChoice) = folderSettings.changeDataFolder(choice)
 
     /** The data folder's state, for the folder settings. */
-    fun dataStatus(state: MirrorState): String = LibraryBanners.dataStatus(state, dataGranted)
+    fun dataStatus(state: MirrorState): String = LibraryBanners.dataStatus(state, folderSettings.dataGranted)
 
     /** The data folder holds the latest changes, as far as the app knows. */
-    fun dataReachable(state: MirrorState): Boolean =
-        dataGranted && state !is MirrorState.Unreachable && !oldFolderMissedChanges
-
-    /** Imports [uri]'s BIOS images, and makes it the BIOS folder if it has any; otherwise nothing changes. */
-    private suspend fun useBiosFolder(
-        uri: String,
-        rescan: Boolean,
-    ) {
-        showMessage("Looking for BIOS images…")
-        val result = importBios(uri)
-        if (result.images.isEmpty()) {
-            if (uri != folders.bios) release(uri)
-            val error = result.error ?: "No PS1 BIOS found in this folder."
-            showError(if (rescan) "$error The copies already made still work." else "$error Pick another.")
-            return
-        }
-        status.clear()
-        // The BIOS page, if it was opened meanwhile, shows the images just copied.
-        settingsPages.reloadShown(screen.page)
-        val old = folders.bios
-        if (uri == old) return
-        folders = folders.copy(bios = uri)
-        save()
-        old?.let { release(it) }
-        checkGrants()
-    }
+    fun dataReachable(state: MirrorState): Boolean = folderSettings.dataReachable(state)
 
     // --- Games ---
 
@@ -1495,8 +1326,8 @@ object AppController : NativeCallbacks {
     }
 
     private suspend fun coldStartSteps(saved: SavedFolders) {
-        folders = saved
-        if (saved.setupComplete) checkGrants()
+        folderSettings.use(saved)
+        if (saved.setupComplete) folderSettings.checkGrants()
         val steps = StartupPlan.steps(saved, missingGrants, coreStarted = false)
         if (StartupStep.ShowSetup in steps) {
             status.clear()
@@ -1529,7 +1360,7 @@ object AppController : NativeCallbacks {
 
     /** Back in front: grants again, then a pull, settings.ini reloaded if it changed, and the library refreshed. */
     private suspend fun resume() {
-        checkGrants()
+        folderSettings.checkGrants()
         // A pull that reloaded the settings has rescanned the library already.
         var refreshed = false
         for (step in StartupPlan.steps(folders, missingGrants, coreStarted = true)) {
@@ -1624,14 +1455,8 @@ object AppController : NativeCallbacks {
         }
     }
 
-    // The games folders the app can read: one without its grant is left out until it's picked again.
-    private fun readableGameFolders(): Array<String> {
-        val unreadable = missingGrants.filter { it.kind == FolderKind.Games }.map { it.uri }.toSet()
-        return folders.games.filterNot { it in unreadable }.toTypedArray()
-    }
-
     private suspend fun applyGameFolders() {
-        val readable = readableGameFolders()
+        val readable = folderSettings.readableGameFolders()
         withContext(settingsQueue) { NativeLibrary.setGameFolders(readable) }
     }
 
@@ -1658,26 +1483,6 @@ object AppController : NativeCallbacks {
             }
         // Its own line only: one shown meanwhile (a refused start, a folder's answer) stays.
         if (showProgress) status.clear(Status.Scanning)
-    }
-
-    private suspend fun checkGrants() {
-        val saved = folders
-        missingGrants =
-            withContext(Dispatchers.IO) { GrantCheck.missing(saved, context.contentResolver.persistedGrants()) }
-    }
-
-    /** Saves [folders], committed before it returns; false, with the error shown, if that failed. */
-    private suspend fun save(): Boolean {
-        val saved = folders
-        val written = withContext(prefsDispatcher) { prefs.save(saved) }
-        if (!written) showError("Can't save your folders.")
-        return written
-    }
-
-    private suspend fun release(uri: String) {
-        val picker = picker ?: return
-        val saved = folders
-        withContext(Dispatchers.IO) { picker.release(uri, saved) }
     }
 
     private fun showMessage(text: String) = status.show(Status.Note, text)

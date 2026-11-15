@@ -173,8 +173,8 @@ ordered log, a real `FolderPrefs` over an in-memory store, a real `StatusLine`, 
 
 ## What follows this, each a PR of its own
 
-`AppController` should come out of this at about 1,650 lines: the hooks and the Android-backed `FolderAccess` stay in
-it. The rest of 3.1:
+`AppController` comes out of this at 1,691 lines: the hooks and the Android-backed `FolderAccess` stay in it. The rest
+of 3.1:
 
 1. **`Navigator`:** the `Screen` machine and its back stack. `SessionHooks.screen` and `FolderHooks`' screen
    questions then become the navigator.

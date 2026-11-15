@@ -142,7 +142,8 @@ These pin today's behaviour, with a fake `ScreenPages` writing to one ordered lo
 
 ## What follows this
 
-`AppController` should come out of this at about 1,520 lines. One step of 3.1 is left, as a PR of its own:
+`AppController` comes out of this at 1,591 lines: what each page loads and closes stays in it, as its `ScreenPages`.
+One step of 3.1 is left, as a PR of its own:
 
 - **The callbacks adapter:** a class of its own for `NativeCallbacks`' 30 overrides, which posts to the main thread
   and calls the pieces. `AppController` is then the wiring, the lifecycle and the cold start, and its class doc can

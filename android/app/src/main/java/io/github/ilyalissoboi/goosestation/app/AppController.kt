@@ -158,24 +158,18 @@ object AppController : NativeCallbacks {
     /** What a data folder change under way is doing; null when none is. It ends in a restart. */
     val dataChange get() = folderSettings.dataChange
 
-    /** The library focuses its Settings button when it opens, as it does coming back from the settings. */
-    var focusSettings by mutableStateOf(false)
-        private set
+    /** The library focuses its Settings button when it opens ([Navigator.focusSettings]). */
+    val focusSettings get() = navigator.focusSettings
 
     /** The update check and an update under way; made in [start]. */
     var updates by mutableStateOf<Updates?>(null)
         private set
 
-    /** The category of the page last left, which the settings focus; null on opening them from the library. */
-    var settingsEntry by mutableStateOf<SettingsEntry?>(null)
-        private set
+    /** The category of the page last left, which the settings focus ([Navigator.settingsEntry]). */
+    val settingsEntry get() = navigator.settingsEntry
 
-    /**
-     * In the settings' two panels, the focus is in the open page, not on its category beside it: set on going into
-     * the page, or opening it from elsewhere, and kept while a screen the page opened shows.
-     */
-    var settingsInPage by mutableStateOf(false)
-        private set
+    /** In the settings' two panels, the focus is in the open page ([Navigator.settingsInPage]). */
+    val settingsInPage get() = navigator.settingsInPage
 
     /** The Graphics and BIOS pages' values. */
     val settingsPages = SettingsPages(scope, settingsQueue, NativeCoreApi, NativeCoreSettings)
@@ -311,8 +305,91 @@ object AppController : NativeCallbacks {
     /** The cold-start sequence is under way: the data folder can't change until it's done. */
     private var coldStarting = false
 
-    var screen by mutableStateOf(Screen.Library)
-        private set
+    // What the screens' moves ask of the pages, or tell them ([Navigator]).
+    private val screenPages =
+        object : ScreenPages {
+            override val ready get() = this@AppController.ready
+
+            override val gameActive get() = this@AppController.gameActive
+
+            override val hasConflicts get() = SyncBadges.of(memcardSyncStatus.state) is SyncBadge.Conflicts
+
+            override fun loadPage(entry: SettingsEntry) {
+                CorePage.of(entry)?.let(settingsPages::load)
+                when (entry) {
+                    // Read as their CorePage, above.
+                    SettingsEntry.Interface,
+                    SettingsEntry.Console,
+                    SettingsEntry.Emulation,
+                    SettingsEntry.Graphics,
+                    SettingsEntry.Audio,
+                    SettingsEntry.Advanced,
+                    -> {}
+                    SettingsEntry.Achievements -> achievementsPage.load()
+                    SettingsEntry.MemoryCards -> {
+                        memcardSyncStatus.refresh()
+                        memcardEditor.loadCount(games)
+                    }
+                    SettingsEntry.Bios -> settingsPages.loadBios()
+                    SettingsEntry.Controllers -> controllersPage.open()
+                    SettingsEntry.PostProcessing -> postProcessingPage.open(null, running = false)
+                    SettingsEntry.Folders -> {}
+                    SettingsEntry.Covers -> covers.open()
+                }
+            }
+
+            override fun closePage(entry: SettingsEntry): Boolean {
+                when (entry) {
+                    SettingsEntry.Folders -> {
+                        if (dataChange != null) return false
+                        cancelDataChange()
+                    }
+                    SettingsEntry.Controllers -> controllersPage.close()
+                    SettingsEntry.PostProcessing -> postProcessingPage.close()
+                    SettingsEntry.Covers -> covers.close()
+                    // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before
+                    // this.
+                    SettingsEntry.Advanced -> scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
+                    else -> {}
+                }
+                return true
+            }
+
+            override fun openSaves(game: GameEntry) = savesPage.open(game)
+
+            override fun closeSaves(): String? {
+                val path = savesPage.state?.game?.path
+                savesPage.close()
+                return path
+            }
+
+            override fun openGameSettings(game: GameEntry) = gameSettingsPages.open(game, running = false)
+
+            override fun closeGameSettings(): String? {
+                val path = gameSettingsPages.game?.path
+                gameSettingsPages.close()
+                return path
+            }
+
+            override fun openMemcardEditor() = memcardEditor.open(games)
+
+            override fun memcardEditorClosed() = memcardEditor.loadCount(games)
+
+            override fun openSyncConflicts() {
+                memcardSyncPage.loadConflicts()
+                memcardSyncStatus.refresh()
+            }
+
+            override fun syncConflictsClosed() = memcardSyncStatus.refresh()
+
+            override fun savesLeftForGame() = savesPage.close()
+        }
+
+    /** The screen shown, and the moves between screens ([Navigator]). */
+    private val navigator: Navigator = Navigator(screenPages)
+
+    /** The screen shown ([Navigator.screen]). */
+    val screen get() = navigator.screen
 
     /** The in-game menu shows over the game ([GameSession.menuOpen]). */
     val menuOpen get() = session.menuOpen
@@ -366,23 +443,26 @@ object AppController : NativeCallbacks {
 
             override val dataChanging get() = dataChange != null
 
+            // The session only ever moves to the game, or back to the library.
             override var screen: Screen
-                get() = this@AppController.screen
+                get() = navigator.screen
                 set(value) {
-                    this@AppController.screen = value
+                    when (value) {
+                        Screen.Game -> navigator.showGame()
+                        Screen.Library -> navigator.showLibrary()
+                        else -> error("A game's session doesn't show $value.")
+                    }
                 }
 
             override fun keepsCopyingLine() = dataSync.keepsLine(status.shows(Status.Copying))
 
             override fun onBegin(game: GameEntry) {
-                libraryFocus = null
                 // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
                 librarySearch.clearText()
-                focusSettings = false
                 dataSync.holdMemcards = true
                 // A cover download stops for the game, keeping the covers it found.
                 covers.stop()
-                if (this@AppController.screen == Screen.Saves) savesPage.close()
+                navigator.gameBegins()
             }
 
             override fun onStarted(game: GameEntry) {
@@ -494,10 +574,7 @@ object AppController : NativeCallbacks {
 
             override suspend fun updateLibrary() = this@AppController.updateLibrary()
 
-            override fun showFolders() {
-                settingsInPage = true
-                screen = Screen.Folders
-            }
+            override fun showFolders() = navigator.showFolders()
 
             override suspend fun pullAll() {
                 dataSync.pull(onlyMemcards = false)
@@ -876,10 +953,9 @@ object AppController : NativeCallbacks {
     /** Saves the folders setup chose, then starts as a set-up app does. */
     fun finishSetup(chosen: SavedFolders) {
         // Once: a second Finish, pressed before the library shows, would start everything twice.
-        if (screen != Screen.Setup) return
+        if (!navigator.finishSetup()) return
         folderSettings.use(chosen)
         status.show(Status.Starting, STARTING)
-        screen = Screen.Library
         scope.launch {
             folderSettings.save()
             coldStart(chosen)
@@ -920,124 +996,36 @@ object AppController : NativeCallbacks {
         refreshJob = scope.launch { refreshLibrary(showProgress = true) }
     }
 
-    // --- The settings ---
+    // --- The settings ([Navigator]) ---
 
     /** Opens the settings, from the library, on their categories. */
-    fun openSettings() {
-        if (screen != Screen.Library) return
-        settingsEntry = null
-        settingsInPage = false
-        screen = Screen.Settings
-    }
+    fun openSettings() = navigator.openSettings()
 
     /** Back to the library, which focuses its Settings button. */
-    fun closeSettings() {
-        if (screen != Screen.Settings) return
-        focusSettings = true
-        screen = Screen.Library
-    }
+    fun closeSettings() = navigator.closeSettings()
 
     /** The settings pages that need the core can open: it has started, and no game is under way. */
-    val settingsReady get() = ready && !gameActive
+    val settingsReady get() = navigator.settingsReady
 
-    /**
-     * Opens [entry]'s page from the categories' list, with the focus in it, if it can: all but Folders need
-     * [settingsReady]. A [CorePage] and BIOS show once their settings are read, on [coreDispatcher]; Controllers once
-     * its bindings are.
-     */
-    fun openSettingsPage(entry: SettingsEntry) {
-        if (screen != Screen.Settings || (entry.needsCore && !settingsReady)) return
-        loadSettingsPage(entry)
-        settingsInPage = true
-    }
+    /** Opens [entry]'s page from the categories' list, with the focus in it, if it can. */
+    fun openSettingsPage(entry: SettingsEntry) = navigator.openSettingsPage(entry)
 
-    /**
-     * Shows [entry]'s page beside the categories, in the settings' two panels, with the focus on its category: in
-     * place of the page that's open, if one is and it can close. The open page's own category only takes the focus
-     * back from it.
-     */
-    fun showSettingsPage(entry: SettingsEntry) {
-        if (screen != Screen.Settings && screen.page == null) return
-        if (screen.page != entry) {
-            if (entry.needsCore && !settingsReady) return
-            if (screen.page != null && unloadSettingsPage() == null) return
-            loadSettingsPage(entry)
-        }
-        settingsInPage = false
-    }
+    /** Shows [entry]'s page beside the categories, in the settings' two panels, with the focus on its category. */
+    fun showSettingsPage(entry: SettingsEntry) = navigator.showSettingsPage(entry)
 
     /** The focus goes into the open page, in the settings' two panels. */
-    fun enterSettingsPage() {
-        if (screen.page != null) settingsInPage = true
-    }
+    fun enterSettingsPage() = navigator.enterSettingsPage()
 
     /** Back from a settings page to the categories' list, which focuses the page's entry, if the page can close. */
-    fun closeSettingsPage() {
-        val page = unloadSettingsPage() ?: return
-        settingsEntry = page
-        settingsInPage = false
-        screen = Screen.Settings
-    }
+    fun closeSettingsPage() = navigator.closeSettingsPage()
 
     /** Back to the library from the settings, with a page open or not, if the page can close. */
-    fun leaveSettings() {
-        if (screen == Screen.Settings) return closeSettings()
-        unloadSettingsPage() ?: return
-        settingsInPage = false
-        focusSettings = true
-        screen = Screen.Library
-    }
-
-    // Reads what entry's page shows, and makes it the screen.
-    private fun loadSettingsPage(entry: SettingsEntry) {
-        CorePage.of(entry)?.let(settingsPages::load)
-        when (entry) {
-            // Read as their CorePage, above.
-            SettingsEntry.Interface,
-            SettingsEntry.Console,
-            SettingsEntry.Emulation,
-            SettingsEntry.Graphics,
-            SettingsEntry.Audio,
-            SettingsEntry.Advanced,
-            -> {}
-            SettingsEntry.Achievements -> achievementsPage.load()
-            SettingsEntry.MemoryCards -> {
-                memcardSyncStatus.refresh()
-                memcardEditor.loadCount(games)
-            }
-            SettingsEntry.Bios -> settingsPages.loadBios()
-            SettingsEntry.Controllers -> controllersPage.open()
-            SettingsEntry.PostProcessing -> postProcessingPage.open(null, running = false)
-            SettingsEntry.Folders -> {}
-            SettingsEntry.Covers -> covers.open()
-        }
-        screen = Screen.entries.first { it.page == entry }
-    }
-
-    // Closes the open settings page, for another screen to take its place: its category, or null with no page open,
-    // or one that can't close (Folders, while a data folder change is under way).
-    private fun unloadSettingsPage(): SettingsEntry? {
-        val page = screen.page ?: return null
-        when (page) {
-            SettingsEntry.Folders -> {
-                if (dataChange != null) return null
-                cancelDataChange()
-            }
-            SettingsEntry.Controllers -> controllersPage.close()
-            SettingsEntry.PostProcessing -> postProcessingPage.close()
-            SettingsEntry.Covers -> covers.close()
-            // Log to file adds the logs to the mirror, or takes them off: after the page's saves, queued before this.
-            SettingsEntry.Advanced -> scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
-            else -> {}
-        }
-        return page
-    }
+    fun leaveSettings() = navigator.leaveSettings()
 
     // --- A game's own settings ---
 
-    /** The game the library focuses next, over the last one launched: the one whose settings were just shown. */
-    var libraryFocus by mutableStateOf<String?>(null)
-        private set
+    /** The game the library focuses next, over the last one launched ([Navigator.libraryFocus]). */
+    val libraryFocus get() = navigator.libraryFocus
 
     /** A game's Saves page, from its library tile. */
     val savesPage by lazy {
@@ -1051,52 +1039,24 @@ object AppController : NativeCallbacks {
     }
 
     /** Opens [game]'s Saves, from the library. */
-    fun openSaves(game: GameEntry) {
-        if (screen != Screen.Library || !ready || gameActive) return
-        savesPage.open(game)
-        screen = Screen.Saves
-    }
+    fun openSaves(game: GameEntry) = navigator.openSaves(game)
 
     /** Back to the library, which focuses the game. */
-    fun closeSaves() {
-        if (screen != Screen.Saves) return
-        libraryFocus = savesPage.state?.game?.path
-        focusSettings = false
-        savesPage.close()
-        screen = Screen.Library
-    }
+    fun closeSaves() = navigator.closeSaves()
 
     /** Opens [game]'s own settings, from the library, if the settings can open and it has a key to keep them under. */
-    fun openGameSettings(game: GameEntry) {
-        if (screen != Screen.Library || !settingsReady || game.serial.isBlank()) return
-        gameSettingsPages.open(game, running = false)
-        screen = Screen.GameSettings
-    }
+    fun openGameSettings(game: GameEntry) = navigator.openGameSettings(game)
 
     /** Back to the library, which focuses the game. */
-    fun closeGameSettings() {
-        if (screen != Screen.GameSettings) return
-        libraryFocus = gameSettingsPages.game?.path
-        focusSettings = false
-        gameSettingsPages.close()
-        screen = Screen.Library
-    }
+    fun closeGameSettings() = navigator.closeGameSettings()
 
     // --- The memory card editor ---
 
     /** Opens the memory card editor, from the Memory cards page, if the settings can open: no game is under way. */
-    fun openMemcardEditor() {
-        if (screen != Screen.MemoryCards || !settingsReady) return
-        memcardEditor.open(games)
-        screen = Screen.MemcardEditor
-    }
+    fun openMemcardEditor() = navigator.openMemcardEditor()
 
     /** Back from the editor to the Memory cards page, which counts the cards again. */
-    fun closeMemcardEditor() {
-        if (screen != Screen.MemcardEditor) return
-        memcardEditor.loadCount(games)
-        screen = Screen.MemoryCards
-    }
+    fun closeMemcardEditor() = navigator.closeMemcardEditor()
 
     // Cards the data folder or sync changed while the editor shows: read again, unless they have edits.
     private fun refreshEditor() {
@@ -1105,37 +1065,14 @@ object AppController : NativeCallbacks {
 
     // --- Memory card sync's conflicts ---
 
-    // Where the conflict screen was opened from, which it goes back to.
-    private var conflictsFrom = Screen.MemoryCards
-
     /** Opens the conflict screen, from the Memory cards page or the library's badge, if the settings can open. */
-    fun openSyncConflicts() {
-        if ((screen != Screen.MemoryCards && screen != Screen.Library) || !settingsReady) return
-        conflictsFrom = screen
-        memcardSyncPage.loadConflicts()
-        memcardSyncStatus.refresh()
-        screen = Screen.SyncConflicts
-    }
+    fun openSyncConflicts() = navigator.openSyncConflicts()
 
     /** The library's sync badge: the conflict screen when there are conflicts, else Settings > Memory cards. */
-    fun openSyncBadge() {
-        if (screen != Screen.Library || !settingsReady) return
-        if (SyncBadges.of(memcardSyncStatus.state) is SyncBadge.Conflicts) {
-            openSyncConflicts()
-        } else {
-            settingsEntry = null
-            screen = Screen.Settings
-            // With the focus in the page, which is what the badge is about.
-            openSettingsPage(SettingsEntry.MemoryCards)
-        }
-    }
+    fun openSyncBadge() = navigator.openSyncBadge()
 
     /** Back from the conflict screen to where it was opened from. */
-    fun closeSyncConflicts() {
-        if (screen != Screen.SyncConflicts) return
-        memcardSyncStatus.refresh()
-        screen = conflictsFrom
-    }
+    fun closeSyncConflicts() = navigator.closeSyncConflicts()
 
     // --- The Controllers page ([ControllersPage]) ---
 
@@ -1294,12 +1231,12 @@ object AppController : NativeCallbacks {
         val steps = StartupPlan.steps(saved, missingGrants, coreStarted = false)
         if (StartupStep.ShowSetup in steps) {
             status.clear()
-            screen = Screen.Setup
+            navigator.showSetup()
             // No settings.ini yet: the defaults, on the build's own channel.
             updates?.startupCheck(InterfaceSettings.UPDATE_CHANNEL.default, enabled = true)
             return
         }
-        screen = Screen.Library
+        navigator.showLibrary()
         // A missing grant still has a mirror, for when the folder is picked again.
         saved.data?.let(dataSync::useMirror)
         for (step in steps) {

@@ -303,6 +303,54 @@ class LibraryScreenTest : ControllerKeys {
         press(Key.ButtonY)
 
         assertEquals(emptyList<GameEntry>(), gameSettings)
+        // Left to the activity, Android would send it on as its fallback: Back, or Space.
+        assertFalse(outerKeys.contains(Key.ButtonY))
+    }
+
+    // --- X and Y away from a game ---
+
+    /** Presses X and Y where the focus is, and checks the screen kept both from the activity and opened nothing. */
+    private fun xAndYGoNowhere() {
+        press(Key.ButtonX)
+        press(Key.ButtonY)
+
+        assertFalse(outerKeys.contains(Key.ButtonX))
+        assertFalse(outerKeys.contains(Key.ButtonY))
+        assertEquals(emptyList<GameEntry>(), saves + gameSettings + started)
+    }
+
+    @Test
+    fun xAndYOnABarButtonGoNowhere() {
+        show(focusSettings = true)
+
+        xAndYGoNowhere()
+
+        rule.onNodeWithContentDescription("Settings").assertIsFocused()
+    }
+
+    @Test
+    fun xAndYOnTheSearchFieldGoNowhere() {
+        show()
+        press(Key.DirectionUp)
+        field().assertIsFocused()
+
+        xAndYGoNowhere()
+
+        field().assertIsFocused()
+        assertEquals("", field().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+    }
+
+    @Test
+    fun xAndYOnClearSearchGoNowhere() {
+        show()
+        type("zelda")
+        press(Key.DirectionDown)
+        rule.onNodeWithText("Clear search").assertIsFocused()
+
+        xAndYGoNowhere()
+
+        rule.onNodeWithText("Clear search").assertIsFocused()
+        assertEquals("zelda", field().fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
     }
 
     @Test

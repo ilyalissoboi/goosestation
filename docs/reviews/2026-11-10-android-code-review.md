@@ -19,7 +19,7 @@ finding touches one of them, it says so.
 **Sizes.** S is under an hour, M is about half a day, L is several days. Paths are relative to
 `android/app/src/main/java/io/github/ilyalissoboi/goosestation/` unless they start with `android/`, `src/` or `.github/`.
 
-## Status, 2026-11-14
+## Status, 2026-11-15
 
 Nearly every finding has since been fixed, each test-first where a test could run. Where they landed:
 
@@ -45,7 +45,8 @@ Nearly every finding has since been fixed, each test-first where a test could ru
 | [#100](https://github.com/ilyalissoboi/goosestation/pull/100) | The last of 1.13: settings writes landing before a boot, `signIn` off `coreDispatcher`, and TalkBack under an overlay |
 | [#105](https://github.com/ilyalissoboi/goosestation/pull/105), [#107](https://github.com/ilyalissoboi/goosestation/pull/107) | The rest of 2: `GameCallsTest`'s sleeps, the tier script's waits and lock, Lint in CI, the toolchain versions, the emusync download, and `CheckNoWindowDialogs`' tests |
 | [#111](https://github.com/ilyalissoboi/goosestation/pull/111) | 4.5, the test helpers |
-| Batch J | From 3.5: the status line's owners, the activity's pause calls, and the library's focus and `MessageBar` |
+| [#112](https://github.com/ilyalissoboi/goosestation/pull/112) | From 3.5: the status line's owners, the activity's pause calls, and the library's focus and `MessageBar` |
+| Batch K | From 3.1: `GameSession` out of `AppController` |
 
 **How some of them turned out:**
 - **1.7:** fixed with one `withSide()` helper rather than a sealed `SidePanel`. The type is still worth doing with the
@@ -67,8 +68,8 @@ Nearly every finding has since been fixed, each test-first where a test could ru
   less the padding.
 
 **Still open:**
-- **3.1:** the rest of `AppController`'s split, into `GameSession`, `FolderSettings`, `Navigator` and a thin callbacks
-  adapter.
+- **3.1:** the rest of `AppController`'s split, into `FolderSettings`, `Navigator` and a thin callbacks adapter, in
+  that order. It is 1,886 lines after `GameSession`.
 - **3.2:** the sealed `SidePanel` type in `InGameMenu`.
 - **3.5:** the controllers screens' 16–28 parameters.
 - **From 4.2:**

@@ -162,7 +162,8 @@ These pin today's behaviour, with a fake `SessionCore` and `SessionHooks`, a rea
 
 ## What follows this, each a PR of its own
 
-`AppController` should come out of this at about 1,750 lines. The rest of 3.1, in the order I'd take it:
+`AppController` comes out of this at 1,886 lines: what the session asks and tells the app stays in it, as its
+`SessionHooks`. The rest of 3.1, in the order I'd take it:
 
 1. **`FolderSettings`:** the saved folders, the grants, the BIOS import, the pickers and the data folder change.
 2. **`Navigator`:** the `Screen` machine and its back stack (`settingsEntry`, `settingsInPage`, `focusSettings`,

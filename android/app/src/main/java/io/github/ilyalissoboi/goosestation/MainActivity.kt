@@ -26,6 +26,7 @@ import io.github.ilyalissoboi.goosestation.app.TouchVisibility
 import io.github.ilyalissoboi.goosestation.app.Updates
 import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.input.LeftoverKeys
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
 import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
@@ -275,13 +276,14 @@ class MainActivity : ComponentActivity() {
     }
 
     // With padInput, controllers go to the core; otherwise they move Compose's focus. A key-up goes where its key-down
-    // went, either way, and a stick the core was given stays its until it's back near rest. Lint's RestrictedApi is a
-    // false positive here: the restricted one is androidx.core's override of Activity.dispatchKeyEvent, which is public.
+    // went, either way, and a stick the core was given stays its until it's back near rest. X and Y that Compose left
+    // are taken here, so Android sends no fallback key for them ([LeftoverKeys]). Lint's RestrictedApi is a false
+    // positive here: the restricted one is androidx.core's override of Activity.dispatchKeyEvent, which is public.
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val controllers = AppController.controllers
         if (controllers != null && controllers.onKeyEvent(event, padInput)) return true
-        return super.dispatchKeyEvent(event)
+        return super.dispatchKeyEvent(event) || LeftoverKeys.takes(event.keyCode, padInput)
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {

@@ -82,43 +82,6 @@ import java.io.File
 import kotlin.system.exitProcess
 
 /**
- * The app's screens: the settings' categories with no page open ([Screen.Settings], the list a narrow window shows),
- * and their pages ([Screen.page]), open from the library.
- */
-enum class Screen(
-    /** The hub's entry for this page of the settings; null for any other screen. */
-    val page: SettingsEntry? = null,
-) {
-    Setup,
-    Library,
-    Settings,
-    Controllers(SettingsEntry.Controllers),
-    Interface(SettingsEntry.Interface),
-    Console(SettingsEntry.Console),
-    Emulation(SettingsEntry.Emulation),
-    Graphics(SettingsEntry.Graphics),
-    PostProcessing(SettingsEntry.PostProcessing),
-    Audio(SettingsEntry.Audio),
-    Achievements(SettingsEntry.Achievements),
-    Advanced(SettingsEntry.Advanced),
-    MemoryCards(SettingsEntry.MemoryCards),
-    Bios(SettingsEntry.Bios),
-    Folders(SettingsEntry.Folders),
-    Covers(SettingsEntry.Covers),
-    SyncConflicts,
-
-    /** The memory card editor, from the Memory cards page. */
-    MemcardEditor,
-
-    /** A game's own settings, from its tile in the library. */
-    GameSettings,
-
-    /** A game's Saves, from its tile in the library. */
-    Saves,
-    Game,
-}
-
-/**
  * The core, the folders, the mirror and what the app shows, for the life of the process, so a recreated activity
  * carries on. Main thread only, except the [NativeCallbacks], which the core calls on its threads: they post to the
  * main thread and never wait for it, since it may be waiting for the core in [NativeLibrary.surfaceChanged].

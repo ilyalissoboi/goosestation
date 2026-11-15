@@ -7,6 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
+/** The [Status.Copying] line's words: the cold start's, a catch-up's, and a start refused during one. */
+internal const val COPYING = "Copying your data from the data folder…"
+
 /** Whose line the status line shows: each kind of work in progress has one owner, which clears only its own. */
 enum class Status {
     Starting,

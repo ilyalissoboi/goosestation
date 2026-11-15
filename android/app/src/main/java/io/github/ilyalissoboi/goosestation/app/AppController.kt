@@ -140,7 +140,6 @@ object AppController : NativeCallbacks {
     private const val CARD_REMOVED = "the SD card was removed"
     private const val GAME_STOPPED_FOR_EJECT =
         "The SD card was removed, so the game was stopped. Its memory cards are saved on this device."
-    private const val COPYING = "Copying your data from the data folder…"
     private const val STARTING = "Starting…"
 
     /** A game the in-game menu left for, from its shared slot, that the library no longer has. */
@@ -162,7 +161,6 @@ object AppController : NativeCallbacks {
     // The settings work on the core queue: the page models' and this class's own reads and writes. A game's start
     // waits for it, so it boots on the settings asked for; the queue's scans and covers aren't counted.
     private val settingsQueue = SettingsQueue(coreDispatcher)
-    private val startGate = GameStartGate(scope) { settingsQueue.settle() }
 
     // The in-game menu's core calls (GameCoreApi), one at a time, apart from coreDispatcher: a library scan running
     // there never holds up the menu.
@@ -364,18 +362,8 @@ object AppController : NativeCallbacks {
     var screen by mutableStateOf(Screen.Library)
         private set
 
-    /**
-     * The in-game menu shows over the game: the game is paused, and the controllers move the menu's focus rather than
-     * play.
-     */
-    var menuOpen: Boolean
-        get() = menuShown
-        private set(value) {
-            menuShown = value
-            // Unlock cards wait, and the live indicators hide, while the menu is open.
-            achievementOverlay.menuOpen(value)
-        }
-    private var menuShown by mutableStateOf(false)
+    /** The in-game menu shows over the game ([GameSession.menuOpen]). */
+    val menuOpen get() = session.menuOpen
 
     /** Saved folders whose grant is gone, as the last check found. */
     var missingGrants by mutableStateOf(emptyList<MissingGrant>())
@@ -402,8 +390,7 @@ object AppController : NativeCallbacks {
     val librarySort: LibrarySort get() = librarySorts.sort
 
     /** The last game started, which the library focuses on coming back to it. */
-    var lastGamePath by mutableStateOf<String?>(null)
-        private set
+    val lastGamePath get() = session.lastGamePath
 
     /** The core is initialized, and the data folder pulled in full: games can start, and the game screen can show. */
     var ready by mutableStateOf(false)
@@ -416,12 +403,93 @@ object AppController : NativeCallbacks {
     val message get() = status.text
     val messageIsError get() = status.isError
 
-    /**
-     * A game from startGame() isn't over yet: until its onGameStopped(), which always comes. No other game starts
-     * meanwhile, so every callback is for this one, even after the user has left it.
-     */
-    var gameActive by mutableStateOf(false)
-        private set
+    /** A game from a start isn't over yet: until the core says it stopped ([GameSession.gameActive]). */
+    val gameActive get() = session.gameActive
+
+    // What a game's session asks the app, or tells it ([GameSession]).
+    private val sessionHooks: SessionHooks =
+        object : SessionHooks {
+            override val ready get() = this@AppController.ready
+
+            override val startsAllowed get() = dataSync.startsAllowed
+
+            override val dataChanging get() = dataChange != null
+
+            override var screen: Screen
+                get() = this@AppController.screen
+                set(value) {
+                    this@AppController.screen = value
+                }
+
+            override fun keepsCopyingLine() = dataSync.keepsLine(status.shows(Status.Copying))
+
+            override fun onBegin(game: GameEntry) {
+                libraryFocus = null
+                // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
+                librarySearch.clearText()
+                focusSettings = false
+                dataSync.holdMemcards = true
+                // A cover download stops for the game, keeping the covers it found.
+                covers.stop()
+                if (this@AppController.screen == Screen.Saves) savesPage.close()
+            }
+
+            override fun onStarted(game: GameEntry) {
+                gameMenu.gameStarted(game)
+                unreachableSaid = false
+                touchControls.gameStarted()
+                if (signInExpired) {
+                    signInExpired = false
+                    // With what it keeps for when the player signs in again.
+                    scope.launch {
+                        val kept = withContext(coreDispatcher) { NativeLibrary.getAchievementsQueue().own }
+                        osd.post(AchievementQueueWords.expiry(kept))
+                    }
+                }
+                readSelectChords()
+            }
+
+            override fun onStopped() {
+                dataSync.holdMemcards = false
+                osd.clear()
+                achievementOverlay.clear()
+                gameMenu.gameStopped()
+                controllers?.selectChordDescriptors = emptySet()
+                rumble.stopAll()
+            }
+
+            override fun menuShown(open: Boolean) = achievementOverlay.menuOpen(open)
+
+            override fun menuOpened() = gameMenu.opened()
+
+            override fun releaseInput() {
+                controllers?.releaseAll()
+            }
+
+            override fun releaseTouch() = touchControls.release()
+
+            override fun stopRumble() = rumble.stopAll()
+
+            override fun say(text: String) {
+                osd.post(text)
+            }
+
+            override fun readCorePaths() {
+                scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
+            }
+
+            override suspend fun syncAfterStop() {
+                withContext(coreDispatcher) { dataSync.readCorePaths() }
+                dataSync.pull(onlyMemcards = true)
+                dataSync.push(force = true)
+            }
+
+            override fun startNext(next: StateStart) = this@AppController.startNext(next)
+        }
+
+    /** The game: its start, its pauses, its menu and its stop ([GameSession]). */
+    private val session: GameSession =
+        GameSession(scope, { settingsQueue.settle() }, NativeSessionCore, sessionHooks, status)
 
     // What the mirror's runs tell the app, or ask it ([DataSync]).
     private val syncHooks =
@@ -523,19 +591,16 @@ object AppController : NativeCallbacks {
             lastSlots,
             gameRecords,
             onMessage = { osd.post(it) },
-            onResume = ::closeMenu,
-            onExit = ::exitGame,
+            onResume = session::closeMenu,
+            onExit = session::exit,
             // The running game's own settings, each change applied straight away.
             onSettings = { game ->
                 if (game == null) gameMenuSettings.close() else gameMenuSettings.open(game, running = true)
             },
             // A shared slot of another game: it starts once this one has stopped (onGameStopped()).
-            onSwitch = gameSwitch::leaving,
+            onSwitch = session::leavingFor,
         )
     }
-
-    /** The game to start from a state once the running one has stopped, as the in-game menu asked. */
-    private val gameSwitch by lazy { GameSwitch(scope, ::startNext) }
 
     /** What the app keeps per game on this device: its last slot, last disc, and so on. */
     private val gamePrefs by lazy { SharedPreferencesStore(context, "game") }
@@ -571,34 +636,23 @@ object AppController : NativeCallbacks {
             NativeGameCoreApi,
             gameRecords,
             lastSlots,
-            startFrom = ::startGameFromStateNow,
-            starting = { startGate.starting },
-            start = ::startGameNow,
+            startFrom = session::startFromState,
+            starting = { session.starting },
+            start = session::start,
         )
     }
 
-    /** The game from the last start, until its onGameStopped(). */
-    var runningGame: GameEntry? = null
-        private set
+    /** The game from the last start, until the core says it stopped. */
+    val runningGame get() = session.runningGame
 
     /** Fast forward is on in the running game: its marker shows over the game. */
     val fastForward get() = gameMenu.state.fastForward
 
     /** The core has a game running, from onGameStarted to onGameStopped. */
-    var gameRunning = false
-        private set
+    val gameRunning get() = session.gameRunning
 
-    var resumed = false
-        private set
-
-    /**
-     * The app paused the game while it booted ([pauseGame]). That pause can reach the core just after the boot, so
-     * [onGameStarted] unpauses the game if it may run by then. Reset as the game starts or stops.
-     */
-    private var pausedDuringBoot = false
-
-    /** The running game pauses into its menu when a controller disconnects: its `[Main] PauseOnControllerDisconnection`. */
-    private var pausesOnDisconnect = false
+    /** The app is in front, between the activity's resume and its pause. */
+    val resumed get() = session.resumed
 
     /** The controllers, once the core has started. Set on the main thread; the rumble's thread reads it too. */
     @Volatile var controllers: ControllerInput? = null
@@ -736,11 +790,7 @@ object AppController : NativeCallbacks {
      */
     fun onResume(activity: Activity) {
         if (!isCurrent(activity)) return
-        resumed = true
-        // A game left paused under its menu stays so.
-        if (screen == Screen.Game && gameRunning && PausePolicy.running(resumed, menuOpen)) {
-            NativeLibrary.setPaused(false)
-        }
+        session.onResume()
     }
 
     /**
@@ -750,12 +800,7 @@ object AppController : NativeCallbacks {
      */
     fun onPause(activity: Activity) {
         if (!isCurrent(activity)) return
-        resumed = false
-        if (screen == Screen.Game) {
-            controllers?.releaseAll()
-            touchControls.release()
-            pauseGame()
-        }
+        session.onPause()
     }
 
     /**
@@ -1349,59 +1394,8 @@ object AppController : NativeCallbacks {
 
     /** Starts [game], once it's asked whether to resume where it was left, if it has a resume state ([gameStarts]). */
     fun startGame(game: GameEntry) {
-        if (!ready || gameActive || startGate.starting) return
+        if (!ready || gameActive || session.starting) return
         gameStarts.play(game)
-    }
-
-    // The start itself, on its disc or from its resume state.
-    private fun startGameNow(
-        game: GameEntry,
-        disc: Int,
-        resume: Boolean,
-    ) {
-        // Once the settings asked for before it have landed; it boots once the game screen's surface exists.
-        startGate.start(begin = { beginGame(game) }, boot = { NativeLibrary.startGame(game.path, disc, resume) })
-    }
-
-    // A start from a state (a save on the Saves page, or a shared slot of another game), as startGameNow() starts.
-    private fun startGameFromStateNow(
-        game: GameEntry,
-        state: StateRef,
-    ) {
-        startGate.start(
-            begin = { beginGame(game) },
-            boot = { NativeLibrary.startGameFromState(game.path, state.key, state.slot, state.shared) },
-        )
-    }
-
-    // Both starts, checked again: things may have changed while the player answered, or while a switch to another
-    // game waited for the last one's cards. A start goes from the library or the Saves page, where it's asked for, and
-    // never during a data folder change; one that finds the player elsewhere by then says so rather than start over
-    // the page. True when the game screen is up for the core to boot on.
-    private fun beginGame(game: GameEntry): Boolean {
-        if (!ready || gameActive) return false
-        if (!dataSync.startsAllowed) {
-            status.show(Status.Copying, COPYING)
-            return false
-        }
-        if (dataChange != null || (screen != Screen.Library && screen != Screen.Saves)) {
-            showMessage("${game.title} didn't start. Start it again from the library.")
-            return false
-        }
-        lastGamePath = game.path
-        libraryFocus = null
-        // The search is for finding a game: once one starts, the library comes back whole, the sort kept.
-        librarySearch.clearText()
-        runningGame = game
-        focusSettings = false
-        status.clear()
-        gameActive = true
-        dataSync.holdMemcards = true
-        // A cover download stops for the game, keeping the covers it found.
-        covers.stop()
-        if (screen == Screen.Saves) savesPage.close()
-        screen = Screen.Game
-        return true
     }
 
     // The game the in-game menu left for, from its shared slot, now that the last one has stopped.
@@ -1411,63 +1405,20 @@ object AppController : NativeCallbacks {
         gameStarts.playFromState(entry, next.state, ::showError)
     }
 
-    // Back to the library, which waits for the game's onGameStopped() before it starts another.
-    fun leaveGame() {
-        menuOpen = false
-        screen = Screen.Library
-        status.progress(Status.Stopping, "Stopping the game…")
-        NativeLibrary.shutdownGame()
-    }
+    /** Back to the library, which waits for the game's stop before it starts another ([GameSession.leave]). */
+    fun leaveGame() = session.leave()
 
-    /**
-     * Pauses the game and shows its menu, from Back, Mode or Select + Start held. Everything the controllers hold is
-     * let go first, so nothing pressed now is still pressed after Resume. The pause writes the memory cards. A game
-     * still booting is paused once it has booted ([onGameStarted]).
-     */
-    fun openMenu() {
-        if (screen != Screen.Game || menuOpen) return
-        menuOpen = true
-        gameMenu.opened()
-        controllers?.releaseAll()
-        rumble.stopAll()
-        pauseGame()
-    }
+    /** Pauses the game and shows its menu, from Back, Mode or Select + Start held ([GameSession.openMenu]). */
+    fun openMenu() = session.openMenu()
 
-    // A controller went: with PauseOnControllerDisconnection, the game pauses into its menu, as Back does.
-    private fun controllerDisconnected(name: String) {
-        if (!PausePolicy.pausesOnDisconnect(pausesOnDisconnect, gameRunning, screen == Screen.Game, menuOpen)) return
-        openMenu()
-        osd.post("$name disconnected")
-    }
+    /** Pauses the game, which writes its memory cards ([GameSession.pause]). */
+    fun pauseGame() = session.pause()
 
-    /** Pauses the game, which writes its memory cards: for the menu, or the app going to the background. */
-    fun pauseGame() {
-        if (gameActive && !gameRunning) pausedDuringBoot = true
-        NativeLibrary.setPaused(true)
-    }
+    /** Closes the menu, and carries on with the game if the app is in front ([GameSession.closeMenu]). */
+    fun closeMenu() = session.closeMenu()
 
-    /** Closes the menu, and carries on with the game if the app is in front ([PausePolicy]). */
-    fun closeMenu() {
-        if (!menuOpen) return
-        menuOpen = false
-        // As the menu opened: an axis the core still had, such as a trigger let go once the stick it came with was
-        // back at rest, isn't left held in the game.
-        controllers?.releaseAll()
-        if (gameRunning && PausePolicy.running(resumed, menuOpen = false)) NativeLibrary.setPaused(false)
-    }
-
-    /** Closes the menu, and stops the game: back to the library. */
-    fun exitToLibrary() {
-        if (!menuOpen) return
-        menuOpen = false
-        leaveGame()
-    }
-
-    // Exit game, once the menu has saved the resume state, or failed to ([InGameMenu.exit]).
-    private fun exitGame(resumeError: String?) {
-        exitToLibrary()
-        resumeError?.let { showError("Couldn't save your place: $it") }
-    }
+    /** Closes the menu, and stops the game: back to the library ([GameSession.exitToLibrary]). */
+    fun exitToLibrary() = session.exitToLibrary()
 
     // --- SD card removal ---
 
@@ -1512,11 +1463,8 @@ object AppController : NativeCallbacks {
         Log.i(TAG, "Volume $volumeId is going away: $actions")
         if (EjectAction.ShowMessage in actions) showError(GAME_STOPPED_FOR_EJECT)
         if (EjectAction.FlushAndStopGame in actions) {
-            // The shutdown saves the memory cards anyway, before it closes the disc. Pausing writes them at once
-            // (android_host_boot.cpp), before anything else the core runs. onGameStopped() follows.
-            NativeLibrary.setPaused(true)
-            if (screen == Screen.Game) screen = Screen.Library
-            NativeLibrary.shutdownGame()
+            // onGameStopped() follows.
+            session.stopForEject()
         }
         if (EjectAction.StopMirror in actions) dataSync.mirror?.hold(CARD_REMOVED)
     }
@@ -1643,8 +1591,8 @@ object AppController : NativeCallbacks {
         // Reported once the core takes input; it keeps connections made before then anyway.
         controllers =
             ControllerInput(context).also {
-                it.onMenuRequested = ::openMenu
-                it.onControllerDisconnected = ::controllerDisconnected
+                it.onMenuRequested = session::openMenu
+                it.onControllerDisconnected = session::controllerDisconnected
                 it.start()
             }
         return true
@@ -1745,67 +1693,15 @@ object AppController : NativeCallbacks {
         pauseOnDisconnect: Boolean,
     ) {
         mainHandler.post {
-            pausesOnDisconnect = pauseOnDisconnect
             Log.i(TAG, "Game started: $title")
-            gameRunning = true
-            // The game as the library listed it; one without a key (not in the list) is keyed by the core's ID, as the
-            // host keys it.
-            val started = runningGame ?: GameEntry("", title, serial, "", 0, 0, null)
-            gameMenu.gameStarted(if (started.serial.isBlank()) started.copy(serial = serial) else started)
-            unreachableSaid = false
-            touchControls.gameStarted()
-            if (signInExpired) {
-                signInExpired = false
-                // With what it keeps for when the player signs in again.
-                scope.launch {
-                    val kept = withContext(coreDispatcher) { NativeLibrary.getAchievementsQueue().own }
-                    osd.post(AchievementQueueWords.expiry(kept))
-                }
-            }
-            readSelectChords()
-            // Release on this thread, after any input it already sent during the boot, so nothing pressed
-            // while booting can stay held.
-            controllers?.releaseAll()
-            // Booted in the background or with the menu open, it waits paused. One the app paused while it booted
-            // runs if it may by now, as that pause may have reached the core just after the boot. One the user left
-            // while it booted is shut down next anyway.
-            val paused = PausePolicy.atBoot(pausedDuringBoot, PausePolicy.running(resumed, menuOpen))
-            pausedDuringBoot = false
-            if (screen == Screen.Game && paused != null) NativeLibrary.setPaused(paused)
-            // Booted paused, with nothing on screen to resume from: the game's menu is that.
-            if (screen == Screen.Game && PausePolicy.opensMenuAtBoot(startPaused, paused)) openMenu()
-            // The cards its own settings name are held back from now on, and mirrored.
-            scope.launch { withContext(coreDispatcher) { dataSync.readCorePaths() } }
+            session.started(title, serial, startPaused, pauseOnDisconnect)
         }
     }
 
     override fun onGameStopped() {
         mainHandler.post {
             Log.i(TAG, "Game stopped.")
-            gameRunning = false
-            pausedDuringBoot = false
-            pausesOnDisconnect = false
-            // Same as on start: release in order with this thread's input.
-            controllers?.releaseAll()
-            menuOpen = false
-            gameActive = false
-            runningGame = null
-            dataSync.holdMemcards = false
-            osd.clear()
-            achievementOverlay.clear()
-            gameMenu.gameStopped()
-            controllers?.selectChordDescriptors = emptySet()
-            rumble.stopAll()
-            if (screen == Screen.Game) screen = Screen.Library
-            // A start refused meanwhile, while a catch-up runs, still says why.
-            if (!messageIsError && !dataSync.keepsLine(status.shows(Status.Copying))) status.clear()
-            // The memory cards held back while it ran come in now, then the game's own writes go out; a game the menu
-            // left for starts after that, on the cards as they are now.
-            gameSwitch.stopped {
-                withContext(coreDispatcher) { dataSync.readCorePaths() }
-                dataSync.pull(onlyMemcards = true)
-                dataSync.push(force = true)
-            }
+            session.stopped()
         }
     }
 

@@ -85,6 +85,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveListState
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SavesPageState
+import io.github.ilyalissoboi.goosestation.app.ShownPanel
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
@@ -539,7 +540,7 @@ class OrientationLayoutTest : ControllerKeys {
             assertTrue("Resume is focused, not ${focusedText()}", focusedHas("Resume"))
             pressUntilFocusedInView(Key.DirectionDown, "Exit game")
 
-            menu.value = menu.value.copy(slots = slotPanel(SlotMode.Save, entries, focus = 1))
+            menu.value = menu.value.copy(panel = ShownPanel.Slots(slotPanel(SlotMode.Save, entries, focus = 1)))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             assertTrue("Slot 1 is focused, not ${focusedText()}", focusedHas("Slot 1"))
@@ -550,9 +551,10 @@ class OrientationLayoutTest : ControllerKeys {
             val saved = entries.filter { it.savedAt != null }.map { it.copy(disc = 1) }
             val others = listOf(3, 9).map { SlotEntry(it, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2) }
             // Closed first, as the menu does between panels.
-            menu.value = menu.value.copy(slots = null)
+            menu.value = menu.value.copy(panel = null)
             rule.waitForIdle()
-            menu.value = menu.value.copy(slots = slotPanel(SlotMode.Load, saved, focus = 1, others = others))
+            menu.value =
+                menu.value.copy(panel = ShownPanel.Slots(slotPanel(SlotMode.Load, saved, focus = 1, others = others)))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             pressUntilFocusedInView(Key.DirectionDown, "Slot 9")
@@ -562,11 +564,14 @@ class OrientationLayoutTest : ControllerKeys {
             val held = HeldGame(LONG_GAME.title, "SLPS-02021", LONG_GAME.path)
             val shared =
                 listOf(2, 5, 8).map { SlotEntry(it, now.toEpochSecond() - 600, shared = true, holds = held, disc = 2) }
-            menu.value = menu.value.copy(slots = null)
+            menu.value = menu.value.copy(panel = null)
             rule.waitForIdle()
             menu.value =
                 menu.value.copy(
-                    slots = slotPanel(SlotMode.Load, saved, tab = SlotTab.Shared, shared = shared, sharedFocus = 2),
+                    panel =
+                        ShownPanel.Slots(
+                            slotPanel(SlotMode.Load, saved, tab = SlotTab.Shared, shared = shared, sharedFocus = 2),
+                        ),
                 )
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
@@ -579,15 +584,16 @@ class OrientationLayoutTest : ControllerKeys {
                 (1..4).map {
                     GameDisc("content://g/$it.chd", "SLPS-0202$it", "${LONG_GAME.title} (Disc $it)", it)
                 }
-            menu.value = menu.value.copy(slots = null)
+            menu.value = menu.value.copy(panel = null)
             rule.waitForIdle()
-            menu.value = menu.value.copy(disc = 1, discCount = 4, discs = DiscChoice(discs, current = 1))
+            menu.value =
+                menu.value.copy(disc = 1, discCount = 4, panel = ShownPanel.Discs(DiscChoice(discs, current = 1)))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             assertTrue("Disc 1 is focused, not ${focusedText()}", focusedHas("Disc 1"))
             pressUntilFocusedInView(Key.DirectionDown, "Disc 4")
             assertTextsLaidOut(inView = true)
-            menu.value = menu.value.copy(discs = null)
+            menu.value = menu.value.copy(panel = null)
             rule.waitForIdle()
 
             // Patch codes in groups, with names and notes as long as the database's longest (the 99th percentile of
@@ -609,12 +615,12 @@ class OrientationLayoutTest : ControllerKeys {
                     )
                 }
             val groups = listOf(PatchCodeGroup("Player", rows.take(4)), PatchCodeGroup("Other", rows.drop(4)))
-            menu.value = menu.value.copy(codes = CodePanel(groups, "${LONG_GAME.title}.cht"))
+            menu.value = menu.value.copy(panel = ShownPanel.Codes(CodePanel(groups, "${LONG_GAME.title}.cht")))
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             pressUntilFocusedInView(Key.DirectionDown, "slot 7 of 8")
             assertTextsLaidOut(inView = true)
-            menu.value = menu.value.copy(codes = null)
+            menu.value = menu.value.copy(panel = null)
             // As the next config's menu opens.
             menu.value = GameMenuState(booted = true, analogMode = true)
         }
@@ -649,7 +655,7 @@ class OrientationLayoutTest : ControllerKeys {
             GameMenuState(
                 booted = true,
                 achievements = game,
-                cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+                panel = ShownPanel.Achievements(AchievementsPanelState(CheevoTab.Achievements, sections)),
             )
         eachConfig({ GameMenu(state, NoMenuActions, LONG_GAME, now) }) {
             assertTextsLaidOut(inView = true)
@@ -676,12 +682,14 @@ class OrientationLayoutTest : ControllerKeys {
             GameMenuState(
                 booted = true,
                 achievements = game,
-                cheevos =
-                    AchievementsPanelState(
-                        CheevoTab.Leaderboards,
-                        leaderboards = listOf(board),
-                        open = board,
-                        page = page,
+                panel =
+                    ShownPanel.Achievements(
+                        AchievementsPanelState(
+                            CheevoTab.Leaderboards,
+                            leaderboards = listOf(board),
+                            open = board,
+                            page = page,
+                        ),
                     ),
             )
         eachConfig({ GameMenu(state, NoMenuActions, LONG_GAME) }) {

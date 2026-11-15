@@ -1,4 +1,4 @@
-# MenuPanel: the in-game menu's one side panel, as one field
+# ShownPanel: the in-game menu's one side panel, as one field
 
 Batch O of the Android code review's clean-ups (`docs/reviews/2026-11-10-android-code-review.md`, findings 3.2 and
 1.7). It is what 3.2 has left.
@@ -23,7 +23,7 @@ The goal is that **one side panel at a time is in the type**, so no `open*` can 
 
 ## Goals
 
-- **A sealed `MenuPanel`** in `app/`, one case per side panel, and **one `panel: MenuPanel?` field** in
+- **A sealed `ShownPanel`** in `app/`, one case per side panel, and **one `panel: ShownPanel?` field** in
   `GameMenuState` in place of the four.
 - **The UI chooses by `when (state.panel)`**, exhaustive, in the three places.
 - **The slot panel's work has its own generation**, bumped only as the slot panel opens or goes.
@@ -54,16 +54,17 @@ These are my calls as the designer. A builder may adjust names, but not the shap
 - **The type:**
 
   ```kotlin
-  sealed interface MenuPanel {
-      data class Slots(val slots: SlotPanel) : MenuPanel
-      data class Discs(val choice: DiscChoice) : MenuPanel
-      data class Codes(val codes: CodePanel) : MenuPanel
-      data class Achievements(val cheevos: AchievementsPanelState) : MenuPanel
+  sealed interface ShownPanel {
+      data class Slots(val slots: SlotPanel) : ShownPanel
+      data class Discs(val choice: DiscChoice) : ShownPanel
+      data class Codes(val codes: CodePanel) : ShownPanel
+      data class Achievements(val cheevos: AchievementsPanelState) : ShownPanel
   }
   ```
 
-  *(My call: `MenuPanel`, not the review's `SidePanel`, because `ui/components/SidePanel` is the frame composable
-  from 3.3, and `GameMenu.kt` imports both.)*
+  *(My call: `ShownPanel`, not the review's `SidePanel`, because `ui/components/SidePanel` is the frame composable
+  from 3.3, and `GameMenu.kt` imports both; nor `MenuPanel`, which is already `GameMenu.kt`'s composable for the
+  menu's own column.)*
 - **`GameMenuState`** keeps `slots`, `discs`, `codes` and `cheevos` as **read-only properties** derived from `panel`.
   Reads stay as they are, so the 135 reads in `InGameMenuTest` and most of the UI don't change. Every write goes
   through `panel`.
@@ -78,8 +79,8 @@ These are my calls as the designer. A builder may adjust names, but not the shap
 - **The UI (`ui/GameMenu.kt`):**
   - **B:** the slot panel's questions and work first, as now, then one `when (val panel = shown.panel)` for which
     panel to close and which row takes the focus;
-  - **the panel drawn:** one `when` over `MenuPanel`;
-  - **where the focus goes back:** `CameFrom` remembers the last `MenuPanel` case shown (with the slot panel's mode)
+  - **the panel drawn:** one `when` over `ShownPanel`;
+  - **where the focus goes back:** `CameFrom` remembers the last `ShownPanel` case shown (with the slot panel's mode)
     instead of four flags.
 - **`GameMenuTest`**'s fake actions write `panel` instead of the four fields.
 
@@ -106,10 +107,11 @@ The existing tests, which read `slots`, `discs`, `codes` and `cheevos`, must pas
 - **On a device.** On the AYN Thor's debug build, with your OK, in a running game: Save state and Load state opened
   and closed with B, Change disc, Patch codes and Achievements likewise, and one panel opened from another's row. The
   focus should come back to each panel's row. Nothing is picked, saved or loaded.
-- **Commits:** the type and `InGameMenu` with the new tests first; then the UI and `GameMenuTest`; then the review's
-  status section.
+- **Commits:** the type, `InGameMenu`, the UI and the tests in one, since the old UI smart-casts the fields that become
+  derived properties, and the instrumented tests that build the state (`GameMenuTest`, `FocusAuditTest`,
+  `OrientationLayoutTest`) set them; then the review's status section.
 
 ## Left to the builder
 
-- Whether `MenuPanel` lives in `InGameMenu.kt` beside the state classes, or a file of its own.
+- Whether `ShownPanel` lives in `InGameMenu.kt` beside the state classes, or a file of its own.
 - The tests' names, and how they reach each pair.

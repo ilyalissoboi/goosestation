@@ -2599,4 +2599,136 @@ class InGameMenuTest {
             assertFalse(menu.slots().working)
             assertFalse(menu.slots().lists.removing)
         }
+
+    // --- One side panel at a time ([ShownPanel]) ---
+
+    private val panelKinds = listOf("slots", "discs", "codes", "cheevos")
+
+    /** Opens the side panel [kind] names, with its model's reads done. */
+    private fun TestScope.open(
+        menu: InGameMenu,
+        kind: String,
+    ) {
+        when (kind) {
+            "slots" -> menu.openSlots(SlotMode.Load)
+            "discs" -> menu.openDiscs()
+            "codes" -> menu.openCodes()
+            "cheevos" -> menu.openAchievements()
+        }
+        runCurrent()
+    }
+
+    /** Closes the side panel [kind] names, as B does. */
+    private fun close(
+        menu: InGameMenu,
+        kind: String,
+    ) {
+        when (kind) {
+            "slots" -> menu.closeSlots()
+            "discs" -> menu.closeDiscs()
+            "codes" -> menu.closeCodes()
+            "cheevos" -> menu.closeAchievements()
+        }
+    }
+
+    /** Which side panel shows, by the name [open] takes; null for none. */
+    private fun InGameMenu.shown(): String? =
+        when (state.panel) {
+            is ShownPanel.Slots -> "slots"
+            is ShownPanel.Discs -> "discs"
+            is ShownPanel.Codes -> "codes"
+            is ShownPanel.Achievements -> "cheevos"
+            null -> null
+        }
+
+    private fun TestScope.everyPanelReady(): InGameMenu {
+        achievementsReady()
+        api.codes = listOf(PatchCode(0, "", "A", false, false))
+        api.times[1] = 100
+        return ac3Menu()
+    }
+
+    // Each panel opened over another takes its place; B on it then leaves none, not the one it replaced.
+    @Test
+    fun eachPanelReplacesEveryOtherAndBLeavesNoneUnderIt() =
+        runTest {
+            for (first in panelKinds) {
+                for (second in panelKinds) {
+                    if (first == second) continue
+                    val menu = everyPanelReady()
+                    open(menu, first)
+                    assertEquals(first, menu.shown())
+
+                    open(menu, second)
+                    assertEquals("$first, then $second", second, menu.shown())
+
+                    close(menu, second)
+                    runCurrent()
+                    assertNull("$first, then $second, then B", menu.shown())
+                }
+            }
+        }
+
+    // A panel's model is closed as another takes its place: its read, landing after, doesn't bring it back.
+    @Test
+    fun aReadForAReplacedPanelDoesNotBringItBack() =
+        runTest {
+            val menu = everyPanelReady()
+            for (first in panelKinds - "discs") {
+                // Its read not yet done.
+                when (first) {
+                    "slots" -> menu.openSlots(SlotMode.Load)
+                    "codes" -> menu.openCodes()
+                    "cheevos" -> menu.openAchievements()
+                }
+                menu.openDiscs()
+                runCurrent()
+
+                assertEquals(first, "discs", menu.shown())
+                assertNull(menu.state.slots)
+                assertNull(menu.state.codes)
+                assertNull(menu.state.cheevos)
+                menu.closeDiscs()
+            }
+        }
+
+    // A load failing once the disc panel has taken the slot panel's place: said as a message, not in a panel gone.
+    @Test
+    fun aLoadFailingAfterItsPanelWasReplacedSaysWhy() =
+        runTest {
+            api.loadError = "Bad state."
+            val menu = everyPanelReady()
+            menu.openSlots(SlotMode.Load)
+            runCurrent()
+            calls.clear()
+
+            menu.pickSlot(1)
+            menu.openDiscs()
+            runCurrent()
+
+            assertTrue(calls.toString(), "message Couldn't load slot 1: Bad state." in calls)
+            assertEquals("discs", menu.shown())
+        }
+
+    // The menu opening, and the game's start and stop, show no side panel.
+    @Test
+    fun theMenuOpeningAndTheGamesStartAndStopShowNoPanel() =
+        runTest {
+            val menu = everyPanelReady()
+            for (kind in panelKinds) {
+                open(menu, kind)
+                menu.opened()
+                runCurrent()
+                assertNull("$kind, then the menu opening", menu.shown())
+
+                open(menu, kind)
+                menu.gameStopped()
+                runCurrent()
+                assertNull("$kind, then the game stopping", menu.shown())
+
+                menu.gameStarted(ac3)
+                runCurrent()
+                assertNull("$kind, then a game starting", menu.shown())
+            }
+        }
 }

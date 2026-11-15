@@ -309,9 +309,8 @@ fun LibraryScreen(
                                     query != null -> true.also { if (event.type == KeyEventType.KeyUp) clear() }
                                     else -> false
                                 }
-                            // A game's tile takes them first. Anywhere else they do nothing, but left to the activity,
-                            // Android sends their fallback keys on (Back or Space for Y, Enter or Delete for X), which
-                            // press the focused button or leave the app.
+                            // A game's tile takes them first. Anywhere else they do nothing. The activity would take
+                            // them too (LeftoverKeys), but the screen keeps them off it, as it did before.
                             Key.ButtonX, Key.ButtonY -> true
                             else -> false
                         }

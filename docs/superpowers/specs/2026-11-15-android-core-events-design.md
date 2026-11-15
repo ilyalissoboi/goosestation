@@ -140,5 +140,5 @@ whether the queue had been run:
 ## What this ends
 
 3.1 is done with this step: `AppController` is the wiring, the lifecycle and the cold start, with the pieces' hooks.
-It should come out of this at about 1,450 lines. What remains open in the review is 3.2 (the sealed `SidePanel`),
-3.5 (the controllers screens' parameters) and four rows of 4.2.
+It comes out of this at 1,520 lines: the two target interfaces' implementations stay in it. What remains open in the
+review is 3.2 (the sealed `SidePanel`), 3.5 (the controllers screens' parameters) and four rows of 4.2.

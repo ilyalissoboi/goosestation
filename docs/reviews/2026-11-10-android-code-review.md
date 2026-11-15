@@ -48,7 +48,8 @@ Nearly every finding has since been fixed, each test-first where a test could ru
 | [#112](https://github.com/ilyalissoboi/goosestation/pull/112) | From 3.5: the status line's owners, the activity's pause calls, and the library's focus and `MessageBar` |
 | [#113](https://github.com/ilyalissoboi/goosestation/pull/113) | From 3.1: `GameSession` out of `AppController` |
 | [#114](https://github.com/ilyalissoboi/goosestation/pull/114) | From 3.1: `FolderSettings` out of `AppController` |
-| Batch M | From 3.1: `Navigator` out of `AppController` |
+| [#115](https://github.com/ilyalissoboi/goosestation/pull/115) | From 3.1: `Navigator` out of `AppController` |
+| Batch N | The last of 3.1: `CoreEvents` and `AchievementMessages` out of `AppController` |
 
 **How some of them turned out:**
 - **1.7:** fixed with one `withSide()` helper rather than a sealed `SidePanel`. The type is still worth doing with the
@@ -64,13 +65,16 @@ Nearly every finding has since been fixed, each test-first where a test could ru
   request before `rc_client_destroy`.
 - **1.13, the focus holders:** not yet seen on the Thor. The test harness can't reproduce the refocus.
 
+- **3.1:** `AppController` went from 2,079 lines to 1,520, in five steps: `DataSync`, `GameSession`, `FolderSettings`,
+  `Navigator` and `CoreEvents`, each with JVM tests. What stays is the wiring, the lifecycle, the cold start, and the
+  pieces' hooks. It is no longer the core's `NativeCallbacks`.
+
 - **4.3, `EmuThread::Call`:** narrower than proposed. Most of the 39 blocking sites are long, with early returns, so
   only the short ones use it.
 - **6, the toggle's thumb:** kept at 2 dp. The design system now says a shape nested in another takes the outer radius
   less the padding.
 
 **Still open:**
-- **3.1:** the last of `AppController`'s split, a thin callbacks adapter. It is 1,591 lines after `Navigator`.
 - **3.2:** the sealed `SidePanel` type in `InGameMenu`.
 - **3.5:** the controllers screens' 16–28 parameters.
 - **From 4.2:**

@@ -46,7 +46,8 @@ Nearly every finding has since been fixed, each test-first where a test could ru
 | [#105](https://github.com/ilyalissoboi/goosestation/pull/105), [#107](https://github.com/ilyalissoboi/goosestation/pull/107) | The rest of 2: `GameCallsTest`'s sleeps, the tier script's waits and lock, Lint in CI, the toolchain versions, the emusync download, and `CheckNoWindowDialogs`' tests |
 | [#111](https://github.com/ilyalissoboi/goosestation/pull/111) | 4.5, the test helpers |
 | [#112](https://github.com/ilyalissoboi/goosestation/pull/112) | From 3.5: the status line's owners, the activity's pause calls, and the library's focus and `MessageBar` |
-| Batch K | From 3.1: `GameSession` out of `AppController` |
+| [#113](https://github.com/ilyalissoboi/goosestation/pull/113) | From 3.1: `GameSession` out of `AppController` |
+| Batch L | From 3.1: `FolderSettings` out of `AppController` |
 
 **How some of them turned out:**
 - **1.7:** fixed with one `withSide()` helper rather than a sealed `SidePanel`. The type is still worth doing with the
@@ -68,8 +69,8 @@ Nearly every finding has since been fixed, each test-first where a test could ru
   less the padding.
 
 **Still open:**
-- **3.1:** the rest of `AppController`'s split, into `FolderSettings`, `Navigator` and a thin callbacks adapter, in
-  that order. It is 1,886 lines after `GameSession`.
+- **3.1:** the rest of `AppController`'s split, into `Navigator` and a thin callbacks adapter, in that order. It is
+  1,691 lines after `FolderSettings`.
 - **3.2:** the sealed `SidePanel` type in `InGameMenu`.
 - **3.5:** the controllers screens' 16–28 parameters.
 - **From 4.2:**

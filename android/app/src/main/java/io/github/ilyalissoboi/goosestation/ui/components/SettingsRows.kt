@@ -124,9 +124,6 @@ fun SettingsPage(
     onBack: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // Before any handler a page adds itself, which takes Back first while it's enabled.
-    BackHandler(onBack = onBack)
-    val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val lists = remember { ChoiceListHost() }
     var pageCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
@@ -134,6 +131,7 @@ fun SettingsPage(
         Column(
             modifier =
                 Modifier
+                    .pageBack(onBack)
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
                     .safeDrawingPadding()
@@ -155,21 +153,11 @@ fun SettingsPage(
                                 lists.tappedAt(page.localToRoot(change.position))
                             }
                         }
-                    }
-                    // B, and a Back key reaching Compose, go to the back handlers, the innermost enabled one first.
-                    .backKeys { dispatcher?.onBackPressed() ?: onBack() }
-                    .verticalScroll(rememberScrollState())
+                    }.verticalScroll(rememberScrollState())
                     .padding(horizontal = 32.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // A game's own pages carry its title over theirs.
-            LocalGameContext.current?.let { Eyebrow(it.title) }
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() },
-            )
+            PageHeader(title)
             content()
         }
     }
@@ -188,19 +176,15 @@ fun LazySettingsPage(
     subtitle: String? = null,
     content: LazyListScope.() -> Unit,
 ) {
-    BackHandler(onBack = onBack)
-    val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     Column(
         modifier =
             Modifier
+                .pageBack(onBack)
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .safeDrawingPadding()
-                // B, and a Back key reaching Compose, go to the back handlers, the innermost enabled one first.
-                .backKeys { dispatcher?.onBackPressed() ?: onBack() }
                 .padding(horizontal = 28.dp, vertical = 16.dp),
     ) {
-        val game = LocalGameContext.current
         // The title scrolls with the rows, as on every settings page, so a short screen keeps its height for them.
         LazyColumn(
             state = state,
@@ -208,20 +192,7 @@ fun LazySettingsPage(
             contentPadding = PaddingValues(4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item(key = LAZY_PAGE_HEADER) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    game?.let { Eyebrow(it.title) }
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    subtitle?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = GooseStationTheme.colors.inkMuted)
-                    }
-                }
-            }
+            item(key = LAZY_PAGE_HEADER) { PageHeader(title, subtitle) }
             content()
         }
     }
@@ -229,6 +200,44 @@ fun LazySettingsPage(
 
 /** The key of a [LazySettingsPage]'s first item, its title: the page's own items come after it. */
 const val LAZY_PAGE_HEADER = "page-header"
+
+/**
+ * A page's header: the game's title over it on a game's own pages, then [title] as a heading, then [subtitle] if any,
+ * 8 dp apart.
+ */
+@Composable
+fun PageHeader(
+    title: String,
+    subtitle: String? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LocalGameContext.current?.let { Eyebrow(it.title) }
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() },
+        )
+        subtitle?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = GooseStationTheme.colors.inkMuted,
+            )
+        }
+    }
+}
+
+/**
+ * A page's Back: its [BackHandler], registered before any a page adds itself, which then takes Back first while it's
+ * enabled; and B, and a Back key reaching Compose, to the back handlers, the innermost enabled one first.
+ */
+@Composable
+private fun Modifier.pageBack(onBack: () -> Unit): Modifier {
+    BackHandler(onBack = onBack)
+    val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    return backKeys { dispatcher?.onBackPressed() ?: onBack() }
+}
 
 /**
  * A [SettingsPage] for the moment its settings take to read: [title] and a line saying so. The line holds the focus,

@@ -278,7 +278,51 @@ bool GPU_HW::Initialize()
 
   UpdateDownsamplingLevels();
   RestoreDeviceContext();
+  UpdateTextureCache(false);
   return true;
+}
+
+void GPU_HW::UpdateTextureCache(bool seed_from_gpu)
+{
+  const Settings::TextureReplacementSettings& tr = g_settings.texture_replacements;
+  m_texture_cache_reload_count = TextureReplacements::GetReloadCount();
+  if (!tr.ShouldTrackTextures(g_settings.gpu_texture_cache))
+  {
+    if (m_texture_cache)
+      INFO_LOG("Texture cache off.");
+    m_texture_cache.reset();
+    m_texture_cache_dumping = false;
+    return;
+  }
+
+  if (!m_texture_cache)
+  {
+    INFO_LOG("Texture cache on.");
+    if (seed_from_gpu)
+      ReadVRAM(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+    m_texture_cache = std::make_unique<GPUTextureCache>(TextureReplacements::GetConfig());
+    m_texture_cache->Reset(g_vram);
+  }
+
+  m_texture_cache->SetConfig(TextureReplacements::GetConfig());
+  m_texture_cache->SetIndex(tr.enable_texture_replacements ? &TextureReplacements::GetIndex() : nullptr);
+  m_texture_cache->SetDumping(tr.dump_textures ? TextureReplacements::GetTextureDumpDirectory() : std::string(),
+                              TextureReplacements::GetGameDirectory(), tr.dump_replaced_textures,
+                              tr.dump_texture_force_alpha_channel);
+  m_texture_cache_dumping = m_texture_cache->IsDumping();
+}
+
+void GPU_HW::AddDrawnTextureRect(GSVector4i uv_rect)
+{
+  if (m_texture_window_active)
+  {
+    const GSVector4i twin = GSVector4i::load<false>(m_batch_ubo_data.u_texture_window);
+    const GSVector4i last = uv_rect.sub32(GSVector4i::cxpr(0, 0, 1, 1));
+    uv_rect = ((GSVector4i(uv_rect.left, uv_rect.top, last.right, last.bottom) & twin.xyxy()) | twin.zwzw());
+    uv_rect = uv_rect.min_i32(uv_rect.zwzw()).max_i32(uv_rect.xyxy()).add32(GSVector4i::cxpr(0, 0, 1, 1));
+  }
+
+  m_texture_cache->AddDrawnTexture(m_texture_cache_key, uv_rect);
 }
 
 void GPU_HW::Reset(bool clear_vram)
@@ -298,7 +342,11 @@ void GPU_HW::Reset(bool clear_vram)
   SetClampedDrawingArea();
 
   if (clear_vram)
+  {
     ClearFramebuffer();
+    if (m_texture_cache)
+      m_texture_cache->Reset(g_vram);
+  }
 }
 
 bool GPU_HW::DoState(StateWrapper& sw, GPUTexture** host_texture, bool update_display)
@@ -370,6 +418,14 @@ bool GPU_HW::DoState(StateWrapper& sw, GPUTexture** host_texture, bool update_di
     ClearVRAMDirtyRectangle();
     SetFullVRAMDirtyRectangle();
     ResetBatchVertexDepth();
+
+    // The texture cache starts again from the state's VRAM; a host texture state doesn't fill g_vram.
+    if (m_texture_cache)
+    {
+      if (host_texture && !m_sw_renderer)
+        ReadVRAM(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+      m_texture_cache->Reset(g_vram);
+    }
   }
 
   return true;
@@ -505,6 +561,8 @@ void GPU_HW::UpdateSettings(const Settings& old_settings)
     UpdateDownsamplingLevels();
     RestoreDeviceContext();
     UpdateVRAM(0, 0, VRAM_WIDTH, VRAM_HEIGHT, g_vram, false, false);
+    if (m_texture_cache)
+      m_texture_cache->Reset(g_vram); // not an upload: the whole of VRAM restored
     if (m_write_mask_as_depth)
       UpdateDepthBufferFromMaskBit();
     UpdateDisplay();
@@ -523,6 +581,8 @@ void GPU_HW::UpdateSettings(const Settings& old_settings)
   {
     UpdateDownsamplingLevels();
   }
+
+  UpdateTextureCache(true);
 }
 
 void GPU_HW::CheckSettings()
@@ -730,6 +790,9 @@ void GPU_HW::AddDrawnRectangle(const GSVector4i rect)
   // changes, or it samples a larger region, so we can get away without doing so. This reduces copies considerably in
   // games like Mega Man Legends 2.
   m_vram_dirty_draw_rect = m_vram_dirty_draw_rect.runion(rect);
+
+  if (m_texture_cache)
+    m_texture_cache->Draw(rect);
 }
 
 void GPU_HW::AddUnclampedDrawnRectangle(const GSVector4i rect)
@@ -2182,6 +2245,9 @@ void GPU_HW::ComputePolygonUVLimits(BatchVertex* vertices, u32 num_vertices)
 
   if (m_texpage_dirty != 0)
     CheckForTexPageOverlap(GSVector4i(min).upl32(GSVector4i(max)).u16to32());
+
+  if (m_texture_cache_dumping)
+    AddDrawnTextureRect(GSVector4i(min).upl32(GSVector4i(max)).u16to32());
 }
 
 void GPU_HW::SetBatchDepthBuffer(bool enabled)
@@ -2451,7 +2517,7 @@ void GPU_HW::LoadVertices()
       }
       else
       {
-        if (textured && m_compute_uv_range)
+        if (textured && (m_compute_uv_range || m_texture_cache_dumping))
           ComputePolygonUVLimits(vertices.data(), num_vertices);
 
         AddDrawnRectangle(clamped_draw_rect_012);
@@ -2497,7 +2563,7 @@ void GPU_HW::LoadVertices()
         }
         else
         {
-          if (first_tri_culled && textured && m_compute_uv_range)
+          if (first_tri_culled && textured && (m_compute_uv_range || m_texture_cache_dumping))
             ComputePolygonUVLimits(vertices.data(), num_vertices);
 
           AddDrawnRectangle(clamped_draw_rect_123);
@@ -2605,6 +2671,11 @@ void GPU_HW::LoadVertices()
           {
             CheckForTexPageOverlap(GSVector4i(static_cast<s32>(tex_left), static_cast<s32>(tex_top),
                                               static_cast<s32>(tex_right), static_cast<s32>(tex_bottom)));
+          }
+          if (rc.texture_enable && m_texture_cache_dumping)
+          {
+            AddDrawnTextureRect(GSVector4i(static_cast<s32>(tex_left), static_cast<s32>(tex_top),
+                                           static_cast<s32>(tex_right), static_cast<s32>(tex_bottom)));
           }
 
           const u32 base_vertex = m_batch_vertex_count;
@@ -3058,6 +3129,9 @@ void GPU_HW::FillVRAM(u32 x, u32 y, u32 width, u32 height, u32 color)
     m_sw_renderer->PushCommand(cmd);
   }
 
+  if (m_texture_cache)
+    m_texture_cache->Fill(x, y, width, height, VRAMRGBA8888ToRGBA5551(color), IsInterlacedRenderingEnabled());
+
   GL_INS_FMT("Dirty draw area before: {}", m_vram_dirty_draw_rect);
 
   const GSVector4i bounds = GetVRAMTransferBounds(x, y, width, height);
@@ -3173,6 +3247,9 @@ void GPU_HW::UpdateVRAM(u32 x, u32 y, u32 width, u32 height, const void* data, b
     m_sw_renderer->PushCommand(cmd);
   }
 
+  if (m_texture_cache)
+    m_texture_cache->Write(x, y, width, height, static_cast<const u16*>(data), set_mask, check_mask);
+
   const GSVector4i bounds = GetVRAMTransferBounds(x, y, width, height);
   DebugAssert(bounds.right <= static_cast<s32>(VRAM_WIDTH) && bounds.bottom <= static_cast<s32>(VRAM_HEIGHT));
   AddWrittenRectangle(bounds);
@@ -3275,6 +3352,12 @@ void GPU_HW::CopyVRAM(u32 src_x, u32 src_y, u32 dst_x, u32 dst_y, u32 width, u32
     cmd->width = static_cast<u16>(width);
     cmd->height = static_cast<u16>(height);
     m_sw_renderer->PushCommand(cmd);
+  }
+
+  if (m_texture_cache)
+  {
+    m_texture_cache->Copy(src_x, src_y, dst_x, dst_y, width, height, m_GPUSTAT.set_mask_while_drawing,
+                          m_GPUSTAT.check_mask_before_draw);
   }
 
   // masking enabled, oversized, or overlapping
@@ -3437,6 +3520,16 @@ void GPU_HW::DispatchRenderCommand()
     texture_mode = (m_draw_mode.mode_reg.texture_mode == GPUTextureMode::Reserved_Direct16Bit) ?
                      BatchTextureMode::Direct16Bit :
                      static_cast<BatchTextureMode>(m_draw_mode.mode_reg.texture_mode.GetValue());
+
+    if (m_texture_cache)
+    {
+      const GSVector4i page_rect = m_draw_mode.mode_reg.GetTexturePageRectangle();
+      m_texture_cache_key.page = static_cast<u8>(GPUTextureCache::GetPageIndex(page_rect.left, page_rect.top));
+      m_texture_cache_key.mode = static_cast<GPUTextureMode>(std::min<u8>(
+        static_cast<u8>(texture_mode), static_cast<u8>(GPUTextureMode::Direct16Bit)));
+      m_texture_cache_key.palette_bits = m_draw_mode.palette_reg.bits;
+      m_texture_cache_key.semitransparent = rc.transparency_enable;
+    }
   }
 
   // has any state changed which requires a new batch?
@@ -3601,6 +3694,11 @@ void GPU_HW::UpdateDisplay()
 {
   FlushRender();
   DeactivateROV();
+
+  if (m_texture_cache_reload_count != TextureReplacements::GetReloadCount())
+    UpdateTextureCache(true);
+  if (m_texture_cache)
+    m_texture_cache->EndFrame();
 
   GL_SCOPE("UpdateDisplay()");
 

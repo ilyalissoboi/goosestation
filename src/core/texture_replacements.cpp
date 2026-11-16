@@ -51,6 +51,7 @@ static ReplacementIndex s_index;
 static std::unordered_map<std::string, CachedImage> s_image_cache;
 static size_t s_image_cache_bytes = 0;
 static u64 s_image_cache_counter = 0;
+static u32 s_reload_count = 0;
 
 } // namespace TextureReplacements
 
@@ -375,8 +376,14 @@ std::string TextureReplacements::GetVRAMWriteDumpFilename(u32 width, u32 height,
   return filename;
 }
 
+u32 TextureReplacements::GetReloadCount()
+{
+  return s_reload_count;
+}
+
 void TextureReplacements::Reload()
 {
+  s_reload_count++;
   const std::string game_dir = GetGameDirectory();
   s_config = game_dir.empty() ? g_settings.texture_replacements.config :
                                 LoadGameConfig(game_dir, g_settings.texture_replacements.config);

@@ -269,12 +269,6 @@ struct Settings
       return enable_texture_replacements || enable_vram_write_replacements;
     }
 
-    ALWAYS_INLINE bool ShouldDumpVRAMWrite(u32 width, u32 height) const
-    {
-      return dump_vram_writes && width >= config.vram_write_dump_width_threshold &&
-             height >= config.vram_write_dump_height_threshold;
-    }
-
     /// The texture cache tracks VRAM only when it's on and something uses it.
     ALWAYS_INLINE bool ShouldTrackTextures(bool texture_cache_enabled) const
     {

@@ -532,7 +532,9 @@ void GPU::FinishVRAMWrite()
                      m_vram_transfer.height, sizeof(u16) * m_vram_transfer.width, m_blit_buffer.data(), true);
     }
 
-    if (g_settings.texture_replacements.ShouldDumpVRAMWrite(m_vram_transfer.width, m_vram_transfer.height))
+    if (g_settings.texture_replacements.dump_vram_writes &&
+        m_vram_transfer.width >= TextureReplacements::GetConfig().vram_write_dump_width_threshold &&
+        m_vram_transfer.height >= TextureReplacements::GetConfig().vram_write_dump_height_threshold)
     {
       TextureReplacements::DumpVRAMWrite(m_vram_transfer.width, m_vram_transfer.height,
                                          reinterpret_cast<const u16*>(m_blit_buffer.data()));

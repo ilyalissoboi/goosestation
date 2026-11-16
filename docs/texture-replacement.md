@@ -158,11 +158,19 @@ All ours: the hardware renderer keeps VRAM on the GPU only, so the cache keeps a
 - Each 64×256-word page carries a count that changes whenever anything in it changes, so whatever was looked up for
   it is looked up again.
 - After a save state loads, the copy is the state's VRAM, all known, with no uploads until the game uploads again.
+  States kept in memory (rewind, runahead) don't carry VRAM for the CPU, so after one of those the cache reads VRAM
+  back from the GPU first.
+- The cache exists only while `[GPU] EnableTextureCache` is on and replacements, dumping or `AlwaysTrackUploads` are
+  on; turning it on mid-game reads VRAM back from the GPU to start from.
 
 ### What a draw samples, and dumping
 
 - A textured draw samples one page with one mode and palette, semi-transparent or not; its rect is the texels it
   reads, with the texture window applied (ours).
+- **Not yet matched:** the black box's rects are larger than one primitive's: unions over several draws, with left
+  and right edges rounded out to 32 texels (8 words) for 4-bit textures. Its texture and palette hashes do match ours
+  for the same uploads (15 of run (a)'s 29 pairs drawn by our run of the same stretch). Until the rect rule is worked
+  out, upload-mode names here differ from the black box's in their rect fields.
 - Upload mode: the texture is the upload holding all the words under the rect; a rect over two uploads, or over
   words that aren't an upload, is neither dumped nor replaced by upload names (ours, consistent with run (a)).
 - Page mode: the texture is the rect itself, hashed over its words; the name's size is the page's (64, 128 or 256

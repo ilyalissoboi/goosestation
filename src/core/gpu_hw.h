@@ -4,6 +4,7 @@
 #pragma once
 
 #include "gpu.h"
+#include "gpu_texture_cache.h"
 #include "texture_replacements.h"
 
 #include "util/gpu_device.h"
@@ -183,6 +184,12 @@ private:
 
   void CheckForTexPageOverlap(GSVector4i uv_rect);
 
+  /// Creates, updates or drops the texture cache for the current settings; seed_from_gpu reads VRAM back first.
+  void UpdateTextureCache(bool seed_from_gpu);
+
+  /// A textured primitive's UV rect (page texels, right/bottom exclusive), for dumping.
+  void AddDrawnTextureRect(GSVector4i uv_rect);
+
   bool IsFlushed() const;
   void EnsureVertexBufferSpace(u32 required_vertices, u32 required_indices);
   void EnsureVertexBufferSpaceForCurrentCommand();
@@ -250,6 +257,11 @@ private:
   std::unique_ptr<GPUTexture> m_vram_write_texture;
 
   std::unique_ptr<GPU_SW_Backend> m_sw_renderer;
+
+  std::unique_ptr<GPUTextureCache> m_texture_cache;
+  GPUTextureCache::DrawKey m_texture_cache_key = {};
+  u32 m_texture_cache_reload_count = 0;
+  bool m_texture_cache_dumping = false;
 
   BatchVertex* m_batch_vertex_ptr = nullptr;
   u16* m_batch_index_ptr = nullptr;

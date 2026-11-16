@@ -66,6 +66,9 @@ void SetGameID(std::string game_id);
 
 void Reload();
 
+/// Changes with every Reload (a new game, settings, or the reload hotkey).
+u32 GetReloadCount();
+
 /// The running game's folder, textures/<serial>, and its dump folder, textures/<serial>/dumps (empty with no game).
 std::string GetGameDirectory();
 std::string GetTextureDumpDirectory();

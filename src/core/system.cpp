@@ -4504,10 +4504,16 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
       UpdateMemorySaveStateSettings();
     }
 
-    if (g_settings.texture_replacements.enable_vram_write_replacements !=
-          old_settings.texture_replacements.enable_vram_write_replacements ||
-        g_settings.texture_replacements.preload_textures != old_settings.texture_replacements.preload_textures)
+    const Settings::TextureReplacementSettings& tr = g_settings.texture_replacements;
+    const Settings::TextureReplacementSettings& old_tr = old_settings.texture_replacements;
+    if (tr.enable_vram_write_replacements != old_tr.enable_vram_write_replacements ||
+        tr.enable_texture_replacements != old_tr.enable_texture_replacements ||
+        tr.preload_textures != old_tr.preload_textures || tr.always_track_uploads != old_tr.always_track_uploads ||
+        tr.dump_textures != old_tr.dump_textures || tr.dump_replaced_textures != old_tr.dump_replaced_textures ||
+        tr.dump_texture_force_alpha_channel != old_tr.dump_texture_force_alpha_channel || tr.config != old_tr.config ||
+        g_settings.gpu_texture_cache != old_settings.gpu_texture_cache)
     {
+      // The hardware renderer picks up the change on its next frame.
       TextureReplacements::Reload();
     }
 

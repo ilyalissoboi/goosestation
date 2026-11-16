@@ -21,7 +21,8 @@ TEST(SettingsTextureCache, KeysLoadFromTheirSections)
   si.SetIntValue("TextureReplacements", "MaxVRAMWriteSplits", 2);
   si.SetIntValue("TextureReplacements", "DumpTextureWidthThreshold", 8);
   si.SetIntValue("TextureReplacements", "DumpVRAMWriteHeightThreshold", 64);
-  si.SetIntValue("TextureReplacements", "MaxReplacementCacheVRAMUsage", 256);
+  // A default on neither platform (Android's is 256, the desktop's 512): one the user chose, so it's saved.
+  si.SetIntValue("TextureReplacements", "MaxReplacementCacheVRAMUsage", 384);
 
   Settings settings;
   settings.Load(si, si);
@@ -37,7 +38,7 @@ TEST(SettingsTextureCache, KeysLoadFromTheirSections)
   EXPECT_EQ(tr.config.max_vram_write_splits, 2u);
   EXPECT_EQ(tr.config.texture_dump_width_threshold, 8u);
   EXPECT_EQ(tr.config.vram_write_dump_height_threshold, 64u);
-  EXPECT_EQ(tr.config.max_replacement_cache_vram_usage_mb, 256u);
+  EXPECT_EQ(tr.config.max_replacement_cache_vram_usage_mb, 384u);
 
   MemorySettingsInterface saved;
   settings.Save(saved, false);
@@ -46,7 +47,7 @@ TEST(SettingsTextureCache, KeysLoadFromTheirSections)
   EXPECT_FALSE(saved.GetBoolValue("TextureReplacements", "DumpReplacedTextures", true));
   EXPECT_TRUE(saved.GetBoolValue("TextureReplacements", "DumpTexturePages", false));
   EXPECT_EQ(saved.GetIntValue("TextureReplacements", "MaxVRAMWriteSplits", 0), 2);
-  EXPECT_EQ(saved.GetIntValue("TextureReplacements", "MaxReplacementCacheVRAMUsage", 0), 256);
+  EXPECT_EQ(saved.GetIntValue("TextureReplacements", "MaxReplacementCacheVRAMUsage", 0), 384);
 }
 
 TEST(SettingsTextureCache, TheDefaultsAreOff)

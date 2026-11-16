@@ -529,6 +529,9 @@ void RegTestHost::PrintCommandLineHelp(const char* progname)
   std::fprintf(stderr, "  -frames: Sets the number of frames to execute.\n");
   std::fprintf(stderr, "  -log <level>: Sets the log level. Defaults to verbose.\n");
   std::fprintf(stderr, "  -renderer <renderer>: Sets the graphics renderer. Default to software.\n");
+  std::fprintf(stderr, "  -setting <Section>/<Key>=<Value>: Sets a setting, after the runner's defaults. Repeatable.\n"
+                       "    Folders follow them, e.g. -setting Folders/Textures=<dir> for texture packs and dumps,\n"
+                       "    -setting BIOS/SearchDirectory=<dir>.\n");
   std::fprintf(stderr, "  --: Signals that no more arguments will follow and the remaining\n"
                        "    parameters make up the filename. Use when the filename contains\n"
                        "    spaces or starts with a dash.\n");
@@ -625,6 +628,24 @@ bool RegTestHost::ParseCommandLineParameters(int argc, char* argv[], std::option
         }
 
         s_base_settings_interface->SetStringValue("GPU", "Renderer", Settings::GetRendererName(renderer.value()));
+        continue;
+      }
+      else if (CHECK_ARG_PARAM("-setting"))
+      {
+        const std::string_view setting = argv[++i];
+        const std::string_view::size_type slash = setting.find('/');
+        const std::string_view::size_type equals = setting.find('=');
+        if (slash == std::string_view::npos || equals == std::string_view::npos || slash == 0 || equals < slash + 2)
+        {
+          ERROR_LOG("Invalid setting '{}', expected <Section>/<Key>=<Value>.", setting);
+          return false;
+        }
+
+        const std::string section(setting.substr(0, slash));
+        const std::string key(setting.substr(slash + 1, equals - slash - 1));
+        const std::string value(setting.substr(equals + 1));
+        INFO_LOG("Setting {}/{} to '{}'.", section, key, value);
+        s_base_settings_interface->SetStringValue(section.c_str(), key.c_str(), value.c_str());
         continue;
       }
       else if (CHECK_ARG_PARAM("-upscale"))
@@ -750,6 +771,10 @@ int main(int argc, char* argv[])
   std::optional<SystemBootParameters> autoboot;
   if (!RegTestHost::ParseCommandLineParameters(argc, argv, autoboot))
     return EXIT_FAILURE;
+
+  // Folders may have been changed by -setting.
+  EmuFolders::LoadConfig(*s_base_settings_interface.get());
+  EmuFolders::EnsureFoldersExist();
 
   if (!autoboot || autoboot->filename.empty())
   {

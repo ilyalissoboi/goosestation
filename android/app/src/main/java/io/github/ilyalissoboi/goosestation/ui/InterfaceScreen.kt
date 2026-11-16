@@ -18,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.BuildConfig
@@ -30,6 +29,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.update.AppVersion
 import io.github.ilyalissoboi.goosestation.update.CheckResult
@@ -48,8 +48,7 @@ fun InterfaceScreen(
     updates: InterfaceUpdates? = null,
     version: String = BuildConfig.VERSION_NAME,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
 
     SettingsPage("Interface", onBack = onBack) {
         GameSwitch(

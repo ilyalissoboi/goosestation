@@ -4,10 +4,7 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
@@ -15,6 +12,7 @@ import io.github.ilyalissoboi.goosestation.settings.Hardcore
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
 /**
  * The Console page, in desktop's sections: the console (region, 8 MB RAM, disable all enhancements), the CPU (execution
@@ -29,8 +27,7 @@ fun ConsoleScreen(
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
     val percent = ConsoleSettings.overclockPercent(values)
 
     SettingsPage("Console", onBack = onBack) {

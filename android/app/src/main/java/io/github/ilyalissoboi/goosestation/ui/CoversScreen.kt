@@ -45,6 +45,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
+import io.github.ilyalissoboi.goosestation.ui.components.rememberFocusRequesters
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 private const val COVERS_TITLE = "Covers"
@@ -75,9 +76,9 @@ fun CoversScreen(
         return
     }
 
-    val fieldRequesters = remember { mutableMapOf<Int, FocusRequester>() }
+    val fieldRequesters = rememberFocusRequesters<Int>()
 
-    fun fieldRequester(id: Int) = fieldRequesters.getOrPut(id) { FocusRequester() }
+    fun fieldRequester(id: Int) = fieldRequesters[id]
     val add = remember { FocusRequester() }
     val restore = remember { FocusRequester() }
     val download = remember { FocusRequester() }

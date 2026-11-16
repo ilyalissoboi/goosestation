@@ -241,8 +241,8 @@ fun SettingsPanels(
                         Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState())
-                            // The page's own, down; the ring's room and the items' own 12 dp, across.
-                            .padding(horizontal = 12.dp, vertical = 20.dp),
+                            // The page's own (ScreenPadding), down; the ring's room and the items' own 12 dp, across.
+                            .padding(horizontal = 12.dp, vertical = 24.dp),
                     // The focus rings of two items, one over the other.
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {

@@ -167,9 +167,7 @@ fun SaveSlotPanel(
                     .focusable(enabled = nothingToFocus || titleFocused),
         )
         panel.lists.error?.let { error ->
-            Notice(NoticeStatus.Danger) {
-                Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
-            }
+            Notice(NoticeStatus.Danger, error)
         }
         if (panel.working) {
             SlotLine(

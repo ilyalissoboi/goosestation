@@ -15,9 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -32,6 +30,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.SidePanel
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.components.rememberFocusRequesters
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsShapes
 
@@ -50,9 +49,9 @@ fun DiscPanel(
     modifier: Modifier = Modifier,
 ) {
     val colors = GooseStationTheme.colors
-    val rows = remember { HashMap<Int, FocusRequester>() }
+    val rows = rememberFocusRequesters<Int>()
 
-    fun row(number: Int) = rows.getOrPut(number) { FocusRequester() }
+    fun row(number: Int) = rows[number]
 
     LaunchedEffect(Unit) {
         val target = choice.discs.firstOrNull { it.number == choice.current } ?: choice.discs.firstOrNull()
@@ -62,9 +61,7 @@ fun DiscPanel(
     SidePanel(modifier) {
         Text("Change disc", style = MaterialTheme.typography.headlineSmall, color = colors.ink)
         choice.error?.let { error ->
-            Notice(NoticeStatus.Danger) {
-                Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
-            }
+            Notice(NoticeStatus.Danger, error)
         }
         if (choice.busy) {
             Text("Inserting…", style = MaterialTheme.typography.bodyLarge, color = colors.inkMuted)

@@ -44,6 +44,7 @@ import io.github.ilyalissoboi.goosestation.storage.folderLabel
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.Eyebrow
+import io.github.ilyalissoboi.goosestation.ui.components.ScreenPadding
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseMark
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import kotlinx.coroutines.launch
@@ -129,7 +130,7 @@ fun SetupScreen(
                     if (event.type == KeyEventType.KeyUp) back()
                     true
                 }.verticalScroll(rememberScrollState())
-                .padding(horizontal = 32.dp, vertical = 20.dp),
+                .padding(ScreenPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

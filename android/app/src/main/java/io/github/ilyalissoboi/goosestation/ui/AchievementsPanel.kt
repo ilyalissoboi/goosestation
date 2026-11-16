@@ -412,13 +412,7 @@ private fun LeaderboardsTab(
         val error = panel.pageError
         when {
             error != null ->
-                Notice(NoticeStatus.Danger) {
-                    Text(
-                        error.ifEmpty { "Couldn't reach RetroAchievements" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.ink,
-                    )
-                }
+                Notice(NoticeStatus.Danger, error.ifEmpty { "Couldn't reach RetroAchievements" })
             rows == null -> Text("Loading…", style = MaterialTheme.typography.bodyLarge, color = colors.inkMuted)
         }
         var firstEntry = true

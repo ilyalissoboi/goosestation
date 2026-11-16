@@ -78,6 +78,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.KeyHints
 import io.github.ilyalissoboi.goosestation.ui.components.MessageBar
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
+import io.github.ilyalissoboi.goosestation.ui.components.ScreenPadding
 import io.github.ilyalissoboi.goosestation.ui.components.rememberSearchFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.update.AppVersion
@@ -315,7 +316,7 @@ fun LibraryScreen(
                             else -> false
                         }
                     }.windowInsetsPadding(safeArea)
-                    .padding(horizontal = 32.dp, vertical = 20.dp),
+                    .padding(ScreenPadding),
             // 8 dp, not 12: the bar, its labels, the search row and the count line need the height on a handheld.
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

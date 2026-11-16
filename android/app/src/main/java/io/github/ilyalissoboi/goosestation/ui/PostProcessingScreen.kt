@@ -48,6 +48,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
+import io.github.ilyalissoboi.goosestation.ui.components.rememberFocusRequesters
 import io.github.ilyalissoboi.goosestation.ui.components.useGlobalLabel
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
@@ -115,12 +116,12 @@ private fun ChainsPage(
     onBack: () -> Unit,
 ) {
     // Each chain's switch (-1), its stages, and one past them its Add row.
-    val requesters = remember { mutableMapOf<Pair<Chain, Int>, FocusRequester>() }
+    val requesters = rememberFocusRequesters<Pair<Chain, Int>>()
 
     fun requester(
         chain: Chain,
         index: Int,
-    ) = requesters.getOrPut(chain to index) { FocusRequester() }
+    ) = requesters[chain to index]
     // The model's focus, whenever it changes and its row is there (an edit the core answers late moves it, and only the
     // shown chain's rows are); else the Chain switch.
     val shown = model.shown
@@ -138,11 +139,11 @@ private fun ChainsPage(
         }
     }
     // The favourites' rows (one past the last, "Save as favourite"): the model's focus as a panel closes.
-    val favouriteRows = remember { mutableMapOf<Int, FocusRequester>() }
+    val favouriteRows = rememberFocusRequesters<Int>()
     val focusFavourite = model.focusFavourite
     LaunchedEffect(focusFavourite) {
         val row = focusFavourite ?: return@LaunchedEffect
-        runCatching { favouriteRows.getOrPut(row) { FocusRequester() }.requestFocus() }
+        runCatching { favouriteRows[row].requestFocus() }
     }
 
     // Once a question is gone, the focus goes back to the row that asked it.
@@ -219,7 +220,7 @@ private fun ChainsPage(
             )
         }
         // Favourites are saved display chains.
-        if (shown == Chain.Display) FavouriteRows(model) { favouriteRows.getOrPut(it) { FocusRequester() } }
+        if (shown == Chain.Display) FavouriteRows(model) { favouriteRows[it] }
         SettingsSection("Shader packs")
         // While a pack downloads, its progress shows here too, with the panel closed.
         val job = packs.job

@@ -3,10 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +25,7 @@ import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
+import io.github.ilyalissoboi.goosestation.ui.components.FocusHolderLine
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
@@ -121,18 +119,12 @@ fun ControllersScreen(
     LaunchedEffect(focusInPage) { if (!focusInPage) focusBack() }
 
     SettingsPage("Controllers", onBack = onBack) {
-        Notice(NoticeStatus.Info, icon = GsIcons.gamepad) {
-            Text(
-                MENU_TRIGGERS,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
+        Notice(NoticeStatus.Info, MENU_TRIGGERS, icon = GsIcons.gamepad)
         Column(Modifier.onFocusChanged { focusInPage = it.hasFocus }) {
             SettingsSection("Controllers")
             if (controllers.isEmpty()) {
                 // It holds the focus, so B and Back reach the page.
-                Line("Connect a controller to set it up.", Modifier.focusRequester(first).focusable())
+                FocusHolderLine("Connect a controller to set it up.", requester = first)
             }
             controllers.forEachIndexed { i, pad ->
                 val name = state.label(pad)

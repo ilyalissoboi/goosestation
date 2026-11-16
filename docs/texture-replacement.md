@@ -105,3 +105,15 @@ outside the repository.
   of the wrong type stops the file being used, with an error naming the key; unknown keys and other lines are skipped
   with a warning (ours).
 - The `config.yaml` written beside a game's first dump has every key commented out, with our own comments (ours).
+
+### Where replacements are found
+
+- Every image (`png`, `jpg`, `webp`) under `textures/<serial>/` whose file name, without its extension, is a texture or
+  VRAM write name, at any depth, except under `textures/<serial>/dumps/`, so dumps are never loaded back (ours).
+- Each `Aliases` entry: a texture name and a file, the file relative to `textures/<serial>/`. An alias whose name
+  isn't a texture name, or whose file isn't an image there, is skipped with a warning (ours).
+- A name whose rect reaches past its source (wider than the source's words times its texels per word: 4 for 4-bit, 2
+  for 8-bit, 1 for direct colour, or taller than the source) is skipped with a warning (ours).
+- Two files with the same name: the first found is used, with a warning (ours).
+- Loaded images are kept up to `MaxReplacementCacheVRAMUsage` megabytes (4 bytes a pixel), the least recently used
+  dropped first; `PreloadTextures` loads them all when the game starts (ours).

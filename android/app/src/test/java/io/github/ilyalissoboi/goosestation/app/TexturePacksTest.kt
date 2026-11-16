@@ -9,14 +9,15 @@ import org.junit.Test
 class TexturePacksTest {
     private val data = "content://com.android.externalstorage.documents/tree/primary%3AGooseStation"
 
+    // A grant missing at the core's start (a card not yet mounted) and given back later: the folder is read once it
+    // can be, at the next game's start, without restarting the app. Until then it indexes nothing.
     @Test
-    fun packsAreReadFromTheDataFolder() {
-        assertEquals(data, TexturePacks.folderFor(data, granted = true))
+    fun theDataFolderIsReadWhateverTheGrantIsAtStart() {
+        assertEquals(data, TexturePacks.folderFor(data))
     }
 
     @Test
-    fun withoutTheDataFoldersGrantPacksAreReadFromNowhere() {
-        assertEquals("", TexturePacks.folderFor(data, granted = false))
-        assertEquals("", TexturePacks.folderFor(null, granted = true))
+    fun withoutADataFolderPacksAreReadFromNowhere() {
+        assertEquals("", TexturePacks.folderFor(null))
     }
 }

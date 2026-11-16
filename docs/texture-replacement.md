@@ -89,6 +89,10 @@ outside the repository.
 
 ### The Vagrant Story HD dialogue font pack
 
+- Played with its own files and `config.yaml`, from save states (2026-11-17): in the command menu 39 of its names are
+  placed and the menu's letters and the HUD's `HP`/`MP` labels are drawn from it; elsewhere 19; in a cutscene none,
+  since cutscene dialogue is drawn as one composed texture (below). Its names are found with nothing converted, so its
+  `texpage-STP4` names agree with ours.
 - Its 161 names are all `texpage-STP4-…-64x256-…-P0-15`, at 8× their rect (the pack's files). None of them appear
   among the black box's dumps of the opening, even over 8 minutes in the pack's own page mode (runs (c) and a longer
   rerun): the opening draws no glyph-sized rects, and its dialogue text seems to be put together by the game into the
@@ -253,7 +257,7 @@ dumped images were put in `replacements/` under their names and counted as place
 | `texupload-`/`texpage-` C16, STC16 | Our hashes, same rule | Not drawn in the opening; assumed to follow the same rule, unchecked |
 | Cropped names (a smaller rect than dumped) | Works here | Checked with our own dumps renamed (Task 11); the black box's behaviour not checked |
 | `vram-write-` | Unchanged | Pre-existing; names now always 32 digits |
-| The Vagrant Story HD dialogue font pack | Not checked | Its glyphs aren't drawn in the opening; needs a scene with menus or in-game text |
+| The Vagrant Story HD dialogue font pack | **Works** | As published (its 161 files and `config.yaml`), from save states of the user's game (2026-11-17): in the command menu 39 of its names are placed and the menu's letters and the HUD's labels draw from the pack at 8×; in another scene 19; a cutscene's dialogue draws its text as one composed texture, which the pack doesn't cover (none placed, as in the opening) |
 
 ### Cost
 

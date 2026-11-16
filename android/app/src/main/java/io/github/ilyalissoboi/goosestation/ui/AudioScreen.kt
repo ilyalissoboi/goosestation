@@ -4,16 +4,14 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
 /**
  * The Audio page, in desktop's sections: volume (output and fast-forward volume, mute, mute CD audio) and output
@@ -28,8 +26,7 @@ fun AudioScreen(
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
 
     SettingsPage("Audio", onBack = onBack) {
         SettingsSection("Volume")

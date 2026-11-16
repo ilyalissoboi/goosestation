@@ -33,6 +33,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.Question
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 /**
@@ -152,8 +153,7 @@ private fun RenameForm(
     val colors = GooseStationTheme.colors
     val title = remember(save.firstBlock) { TextFieldState(panel.title ?: save.title) }
     val fileName = remember(save.firstBlock) { TextFieldState(panel.fileName ?: save.fileName) }
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
     val rename = { actions.rename(title.text.toString(), fileName.text.toString()) }
     Text("Rename", style = MaterialTheme.typography.headlineSmall, color = colors.ink)
     TextFieldRow("Title", title, modifier = Modifier.focusRequester(first))

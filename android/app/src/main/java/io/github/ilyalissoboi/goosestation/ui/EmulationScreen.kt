@@ -4,10 +4,7 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.FloatSetting
@@ -16,6 +13,7 @@ import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
 /**
  * The Emulation page, in desktop's sections: speed (emulation, fast-forward, turbo), frame pacing, rewind, and
@@ -30,8 +28,7 @@ fun EmulationScreen(
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
     val hardcore = Hardcore.on(values)
     val runAhead = values[EmulationSettings.RUNAHEAD] > 0
 

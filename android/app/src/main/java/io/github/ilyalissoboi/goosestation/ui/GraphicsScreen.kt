@@ -4,10 +4,7 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
@@ -16,6 +13,7 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
 /**
  * The Graphics page, in desktop's sections: rendering, enhancements, PGXP, the display and the on-screen display, from
@@ -32,8 +30,7 @@ fun GraphicsScreen(
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
     val renderer = values[GraphicsSettings.RENDERER]
     val hardware = renderer != SOFTWARE
     val trueColor = values[GraphicsSettings.TRUE_COLOR]

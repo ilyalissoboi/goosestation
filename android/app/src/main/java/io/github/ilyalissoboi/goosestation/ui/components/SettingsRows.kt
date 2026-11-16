@@ -12,7 +12,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -240,15 +239,9 @@ fun SettingsLoadingPage(
     title: String,
     onBack: () -> Unit,
 ) {
-    val holder = remember { FocusRequester() }
-    LaunchedEffect(Unit) { holder.requestFocus() }
+    val holder = rememberInitialFocus()
     SettingsPage(title, onBack = onBack) {
-        Text(
-            "Reading the settings…",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp).focusRequester(holder).focusable(),
-        )
+        FocusHolderLine("Reading the settings…", requester = holder)
     }
 }
 

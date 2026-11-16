@@ -7,10 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.core.BiosImage
@@ -19,6 +16,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
 /**
  * The BIOS page: for each region, Automatic (the image the core picks, [auto], named) or one of the [images], as
@@ -35,8 +33,7 @@ fun BiosScreen(
     onFastBoot: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
 
     SettingsPage("BIOS", onBack = onBack) {
         BiosRegion.entries.forEachIndexed { index, region ->

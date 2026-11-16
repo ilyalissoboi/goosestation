@@ -4,16 +4,14 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
 /** What fast memory access says on a device whose memory pages are larger than the build's: the host turns it off. */
 const val FASTMEM_UNAVAILABLE = "This device's memory pages are too large for it."
@@ -34,8 +32,7 @@ fun AdvancedScreen(
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
     val logging = !values.isGame
 
     SettingsPage("Advanced", onBack = onBack) {

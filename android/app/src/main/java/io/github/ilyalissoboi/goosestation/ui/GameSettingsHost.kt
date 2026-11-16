@@ -5,10 +5,7 @@ package io.github.ilyalissoboi.goosestation.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.app.GamePage
 import io.github.ilyalissoboi.goosestation.app.GameSettingsPages
@@ -18,6 +15,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
 /**
  * The game's own settings that [pages] shows: its hub, or the page open, each row able to use the global setting.
@@ -82,8 +80,7 @@ private fun GamePageScreen(
                 )
             }
         GamePage.Achievements -> {
-            val first = remember { FocusRequester() }
-            LaunchedEffect(Unit) { first.requestFocus() }
+            val first = rememberInitialFocus()
             SettingsPage(
                 page.label,
                 onBack = back,

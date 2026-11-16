@@ -3,7 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -13,6 +12,7 @@ import io.github.ilyalissoboi.goosestation.app.ControllersActions
 import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.settings.MacroSettings
+import io.github.ilyalissoboi.goosestation.ui.components.FocusHolderLine
 import io.github.ilyalissoboi.goosestation.ui.components.NumberRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
@@ -43,9 +43,9 @@ fun MacroScreen(
     BindingsPage("Macro $macro · $port", state, actions, onBack, focus = { first }) {
         SettingsSection("Trigger")
         if (controller == null) {
-            Line(
+            FocusHolderLine(
                 "No controller is on $port. Pick $port for one on the Controllers page.",
-                Modifier.focusRequester(first).focusable(),
+                requester = first,
             )
         } else {
             ControllerPicker(state.covered, state.labels, controller, actions::select, Modifier.focusRequester(first))

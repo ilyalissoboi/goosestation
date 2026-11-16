@@ -3,7 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,6 +27,7 @@ import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
+import io.github.ilyalissoboi.goosestation.ui.components.FocusHolderLine
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
@@ -132,7 +132,7 @@ fun ControllersScreen(
             SettingsSection("Controllers")
             if (controllers.isEmpty()) {
                 // It holds the focus, so B and Back reach the page.
-                Line("Connect a controller to set it up.", Modifier.focusRequester(first).focusable())
+                FocusHolderLine("Connect a controller to set it up.", requester = first)
             }
             controllers.forEachIndexed { i, pad ->
                 val name = state.label(pad)

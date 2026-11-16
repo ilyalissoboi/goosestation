@@ -3,7 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -23,6 +22,7 @@ import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
+import io.github.ilyalissoboi.goosestation.ui.components.FocusHolderLine
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
@@ -83,9 +83,10 @@ fun PortScreen(
         val firstHere = if (type == null) Modifier.focusRequester(first) else Modifier
         if (controller == null) {
             // It holds the focus only as the first row, so B and Back reach the page; below the type, no stop.
-            Line(
+            FocusHolderLine(
                 "No controller is on $title. Pick $title for one on the Controllers page.",
-                firstHere.focusable(type == null),
+                requester = if (type == null) first else null,
+                enabled = type == null,
             )
         } else {
             // It holds the focus on opening, with nothing to activate for one controller.

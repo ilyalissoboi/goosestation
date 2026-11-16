@@ -30,6 +30,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.NavRow
 import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.ProgressBar
 import io.github.ilyalissoboi.goosestation.ui.components.Question
+import io.github.ilyalissoboi.goosestation.ui.components.rememberFocusRequesters
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 const val SHADER_PACKS_TITLE = "Download shader packs"
@@ -64,9 +65,9 @@ fun ShaderPacksPanel(
     val actions = model.actions
     val removing = model.removing
 
-    val rowRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    val rowRequesters = rememberFocusRequesters<String>()
 
-    fun rowRequester(id: String) = rowRequesters.getOrPut(id) { FocusRequester() }
+    fun rowRequester(id: String) = rowRequesters[id]
     val firstAction = remember { FocusRequester() }
     val cancel = remember { FocusRequester() }
     val close = remember { FocusRequester() }

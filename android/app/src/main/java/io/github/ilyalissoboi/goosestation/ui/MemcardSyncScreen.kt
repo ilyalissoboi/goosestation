@@ -42,6 +42,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.components.TextFieldRow
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 /**
@@ -72,8 +73,7 @@ fun MemcardSyncScreen(
     cards: CardSlots? = null,
 ) {
     val colors = GooseStationTheme.colors
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
     // The row whose field is open, by its key, or null.
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     // Rows that take the focus when what had it goes: Remove passphrase, the conflicts' row.

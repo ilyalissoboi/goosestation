@@ -3,15 +3,11 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.GameControllers
@@ -19,8 +15,10 @@ import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
+import io.github.ilyalissoboi.goosestation.ui.components.FocusHolderLine
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
+import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 
 /** What a game's Controllers page says of the bindings, which stay global. */
@@ -40,20 +38,17 @@ fun GameControllersScreen(
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
 ) {
-    val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { first.requestFocus() }
+    val first = rememberInitialFocus()
     val colors = GooseStationTheme.colors
 
     SettingsPage("Controllers", onBack = onBack) {
         val profile = controllers.inputProfile
         if (profile != null) {
             // It holds the focus, so B and Back reach the page.
-            Text(
+            FocusHolderLine(
                 "This game uses desktop's input profile \"$profile\", which this app doesn't use. " +
                     "Its controllers here are the global ones.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = colors.ink,
-                modifier = Modifier.padding(horizontal = 16.dp).focusRequester(first).focusable(),
+                requester = first,
             )
             return@SettingsPage
         }

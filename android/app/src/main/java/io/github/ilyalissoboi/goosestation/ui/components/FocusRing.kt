@@ -19,6 +19,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -250,3 +254,50 @@ fun ActionButton(
  */
 val NotAFocusStop = SemanticsPropertyKey<String>("NotAFocusStop")
 var SemanticsPropertyReceiver.notAFocusStop by NotAFocusStop
+
+/**
+ * A focus requester whose element takes the focus as the page opens, once: the element the player most likely wants
+ * ("Something always has focus"). A page that picks it by its state asks for the focus itself.
+ */
+@Composable
+fun rememberInitialFocus(): FocusRequester {
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { requester.requestFocus() }
+    return requester
+}
+
+/** A focus requester per key, made the first time it's asked for and kept for the screen's life: one per row. */
+@Stable
+class FocusRequesters<K> {
+    private val requesters = HashMap<K, FocusRequester>()
+
+    operator fun get(key: K): FocusRequester = requesters.getOrPut(key) { FocusRequester() }
+}
+
+@Composable
+fun <K> rememberFocusRequesters(): FocusRequesters<K> = remember { FocusRequesters() }
+
+/**
+ * A line that holds the focus where a page has nothing to press ("Connect a controller to set it up."), so B and Back
+ * reach the page: [text] in `body`, `ink-muted`, a [focusStop] with the ring, read whole and not as a button. It
+ * carries [requester] if given. Not [enabled], it's only a line, no stop.
+ */
+@Composable
+fun FocusHolderLine(
+    text: String,
+    modifier: Modifier = Modifier,
+    requester: FocusRequester? = null,
+    enabled: Boolean = true,
+) {
+    val stop = if (enabled) Modifier.focusStop() else Modifier
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyLarge,
+        color = GooseStationTheme.colors.inkMuted,
+        modifier =
+            modifier
+                .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
+                .then(stop)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}

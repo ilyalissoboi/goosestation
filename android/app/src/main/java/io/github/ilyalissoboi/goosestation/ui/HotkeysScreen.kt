@@ -3,7 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -11,6 +10,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.app.ControllersActions
 import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.ui.components.FocusHolderLine
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 
 /**
@@ -31,7 +31,7 @@ fun HotkeysScreen(
 
     BindingsPage("Hotkeys", state, actions, onBack, focus = { first }) {
         if (controller == null) {
-            Line("Connect a controller to set its hotkeys.", Modifier.focusRequester(first).focusable())
+            FocusHolderLine("Connect a controller to set its hotkeys.", requester = first)
             return@BindingsPage
         }
         ControllerPicker(state.covered, state.labels, controller, actions::select, Modifier.focusRequester(first))

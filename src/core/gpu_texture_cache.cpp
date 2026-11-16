@@ -4,9 +4,18 @@
 #include "gpu_texture_cache.h"
 #include "gpu_texture_data.h"
 #include "gpu_types.h"
+#include "texture_replacements.h"
+
+#include "common/file_system.h"
+#include "common/log.h"
+#include "common/path.h"
+
+#include "fmt/format.h"
 
 #include <algorithm>
 #include <cstring>
+
+Log_SetChannel(GPUTextureCache);
 
 GPUTextureCache::GPUTextureCache(const TexturePackConfig& config) : m_config(config), m_vram(VRAM_WIDTH * VRAM_HEIGHT)
 {
@@ -290,6 +299,15 @@ void GPUTextureCache::Draw(GSVector4i rect)
   SetBlocks(m_unknown, rect, false, true);
 }
 
+void GPUTextureCache::HashUpload(Upload& upload)
+{
+  if (!upload.hashed)
+  {
+    upload.hash = GPUTextureData::HashTextureWords(m_vram.data(), upload.rect);
+    upload.hashed = true;
+  }
+}
+
 const GPUTextureCache::Upload* GPUTextureCache::FindUpload(GSVector4i word_rect)
 {
   for (Upload& upload : m_uploads)
@@ -297,14 +315,315 @@ const GPUTextureCache::Upload* GPUTextureCache::FindUpload(GSVector4i word_rect)
     if (word_rect.left >= upload.rect.left && word_rect.top >= upload.rect.top &&
         word_rect.right <= upload.rect.right && word_rect.bottom <= upload.rect.bottom)
     {
-      if (!upload.hashed)
-      {
-        upload.hash = GPUTextureData::HashTextureWords(m_vram.data(), upload.rect);
-        upload.hashed = true;
-      }
+      HashUpload(upload);
       return &upload;
     }
   }
 
   return nullptr;
+}
+
+void GPUTextureCache::SetIndex(const TextureReplacements::ReplacementIndex* index)
+{
+  m_index = index;
+  m_lookups.clear();
+}
+
+void GPUTextureCache::SetDumping(std::string dump_dir, std::string game_dir, bool dump_replaced_textures,
+                                 bool force_alpha)
+{
+  m_dump_dir = std::move(dump_dir);
+  m_game_dir = std::move(game_dir);
+  m_dump_replaced_textures = dump_replaced_textures;
+  m_dump_force_alpha = force_alpha;
+  m_dumped.clear();
+  if (m_dump_dir.empty())
+    m_pending_dumps.clear();
+}
+
+u32 GPUTextureCache::GetPageWords(u32 page_x, GPUTextureMode mode)
+{
+  static constexpr std::array<u32, 4> words = {{64, 128, 256, 256}};
+  return std::min<u32>(words[static_cast<u8>(mode)], VRAM_WIDTH - page_x);
+}
+
+bool GPUTextureCache::IsPaletteKnown(const DrawKey& key) const
+{
+  if (key.mode != GPUTextureMode::Palette4Bit && key.mode != GPUTextureMode::Palette8Bit)
+    return true;
+
+  const GPUTexturePaletteReg palette{key.palette_bits};
+  const GSVector4i rect = palette.GetRectangle(key.mode);
+  return IsKnown(rect.rintersect(GSVector4i(0, 0, VRAM_WIDTH, VRAM_HEIGHT))) &&
+         (rect.right <= static_cast<s32>(VRAM_WIDTH) ||
+          IsKnown(GSVector4i(0, rect.top, rect.right - VRAM_WIDTH, rect.bottom)));
+}
+
+bool GPUTextureCache::HasReplacement(const TextureNames::Name& name, const std::string& formatted) const
+{
+  if (!m_index)
+    return false;
+
+  const std::span<const TextureReplacements::TextureReplacement> candidates =
+    (name.kind == TextureNames::Kind::TexUpload) ? m_index->FindUploadReplacements(name.mode, name.texture_hash) :
+                                                   m_index->GetPageReplacements(name.mode);
+  for (const TextureReplacements::TextureReplacement& candidate : candidates)
+  {
+    if (TextureNames::Format(candidate.name) == formatted)
+      return true;
+  }
+  return false;
+}
+
+void GPUTextureCache::AddDrawnTexture(const DrawKey& key, GSVector4i texel_rect)
+{
+  if (m_dump_dir.empty())
+    return;
+
+  const GPUTextureMode mode = (key.mode == GPUTextureMode::Reserved_Direct16Bit) ? GPUTextureMode::Direct16Bit : key.mode;
+  const bool palettized = (mode != GPUTextureMode::Direct16Bit);
+  if (!palettized && !m_config.dump_c16_textures)
+    return;
+
+  const u32 page_x = GetPageX(key.page), page_y = GetPageY(key.page);
+  const u32 page_words = GetPageWords(page_x, mode);
+  const s32 page_texels = static_cast<s32>(page_words * GPUTextureData::GetTexelsPerWord(mode));
+  texel_rect = texel_rect.rintersect(GSVector4i(0, 0, std::min(page_texels, 256), 256));
+  if (m_config.dump_texture_pages && m_config.dump_full_texture_pages)
+    texel_rect = GSVector4i(0, 0, std::min(page_texels, 256), 256);
+  if (texel_rect.rempty() || static_cast<u32>(texel_rect.width()) < m_config.texture_dump_width_threshold ||
+      static_cast<u32>(texel_rect.height()) < m_config.texture_dump_height_threshold)
+  {
+    return;
+  }
+
+  const std::optional<GSVector4i> words = GPUTextureData::TexelRectToWordRect(page_x, page_y, texel_rect, mode);
+  if (!words.has_value() || !IsKnown(words.value()) || !IsPaletteKnown(key))
+    return;
+
+  TextureNames::Name name = {};
+  name.mode = TextureNames::MakeMode(mode, key.semitransparent);
+  name.width = static_cast<u16>(texel_rect.width());
+  name.height = static_cast<u16>(texel_rect.height());
+  if (m_config.dump_texture_pages)
+  {
+    name.kind = TextureNames::Kind::TexPage;
+    name.texture_hash = GPUTextureData::HashTextureWords(m_vram.data(), words.value());
+    name.source_width = static_cast<u16>(page_words);
+    name.source_height = static_cast<u16>(PAGE_HEIGHT);
+    name.offset_x = static_cast<u16>(texel_rect.left);
+    name.offset_y = static_cast<u16>(texel_rect.top);
+  }
+  else
+  {
+    const Upload* upload = FindUpload(words.value());
+    if (!upload)
+      return;
+
+    const s32 tpw = static_cast<s32>(GPUTextureData::GetTexelsPerWord(mode));
+    name.kind = TextureNames::Kind::TexUpload;
+    name.texture_hash = upload->hash;
+    name.source_width = static_cast<u16>(upload->rect.width());
+    name.source_height = static_cast<u16>(upload->rect.height());
+    name.offset_x = static_cast<u16>((static_cast<s32>(page_x) - upload->rect.left) * tpw + texel_rect.left);
+    name.offset_y = static_cast<u16>(static_cast<s32>(page_y) - upload->rect.top + texel_rect.top);
+  }
+
+  const GPUTexturePaletteReg palette{key.palette_bits};
+  if (palettized)
+  {
+    const std::pair<u16, u16> range =
+      m_config.reduce_palette_range ?
+        GPUTextureData::GetUsedPaletteRange(m_vram.data(), page_x, page_y, texel_rect, mode) :
+        std::pair<u16, u16>(0, (mode == GPUTextureMode::Palette4Bit) ? 15 : 255);
+    name.palette_min = range.first;
+    name.palette_max = range.second;
+    name.palette_hash = GPUTextureData::HashPalette(m_vram.data(), palette, range.first, range.second);
+  }
+
+  std::string formatted = TextureNames::Format(name);
+  if (!m_dumped.insert(formatted).second)
+    return;
+  if (!m_dump_replaced_textures && HasReplacement(name, formatted))
+    return;
+
+  PendingDump& dump = m_pending_dumps.emplace_back();
+  dump.name = std::move(formatted);
+  GPUTextureData::DecodeTexture(m_vram.data(), page_x, page_y, texel_rect, mode, palette,
+                                GPUTextureData::Encoding::Dump, key.semitransparent, m_dump_force_alpha, &dump.image);
+}
+
+void GPUTextureCache::EndFrame()
+{
+  if (m_pending_dumps.empty())
+    return;
+
+  if (!FileSystem::EnsureDirectoryExists(m_dump_dir.c_str(), true))
+  {
+    ERROR_LOG("Can't create '{}'; not dumping.", m_dump_dir);
+    m_pending_dumps.clear();
+    return;
+  }
+
+  if (!m_game_dir.empty())
+  {
+    FileSystem::EnsureDirectoryExists(Path::Combine(m_game_dir, "replacements").c_str(), false);
+    const std::string yaml = Path::Combine(m_game_dir, "config.yaml");
+    if (!FileSystem::FileExists(yaml.c_str()) &&
+        !FileSystem::FileExists(Path::Combine(m_game_dir, "config.yml").c_str()))
+    {
+      FileSystem::WriteStringToFile(yaml.c_str(), TexturePackConfig::GetTemplateYAML());
+    }
+  }
+
+  for (const PendingDump& dump : m_pending_dumps)
+  {
+    const std::string path = Path::Combine(m_dump_dir, fmt::format("{}.png", dump.name));
+    if (FileSystem::FileExists(path.c_str()))
+      continue;
+
+    DEV_LOG("Dumping '{}'", dump.name);
+    if (!dump.image.SaveToFile(path.c_str()))
+      ERROR_LOG("Failed to dump '{}'", path);
+  }
+
+  m_pending_dumps.clear();
+}
+
+u64 GPUTextureCache::GetSignature(const DrawKey& key) const
+{
+  const u32 page_x = GetPageX(key.page), page_y = GetPageY(key.page);
+  u64 signature = 0;
+  const u32 last_x = page_x + GetPageWords(page_x, key.mode) - 1;
+  for (u32 x = page_x; x <= last_x; x += PAGE_WIDTH)
+    signature += m_page_generation[GetPageIndex(x, page_y)];
+
+  if (key.mode == GPUTextureMode::Palette4Bit || key.mode == GPUTextureMode::Palette8Bit)
+  {
+    const GSVector4i rect = GPUTexturePaletteReg{key.palette_bits}.GetRectangle(key.mode);
+    for (s32 x = rect.left; x < rect.right; x += PAGE_WIDTH)
+      signature += m_page_generation[GetPageIndex(static_cast<u32>(x) % VRAM_WIDTH, rect.top)];
+    signature += m_page_generation[GetPageIndex(static_cast<u32>(rect.right - 1) % VRAM_WIDTH, rect.top)];
+  }
+
+  return signature;
+}
+
+const GPUTextureCache::Source* GPUTextureCache::LookupSource(const DrawKey& in_key, u32 max_texture_size)
+{
+  if (!m_index || m_index->GetTextureCount() == 0)
+    return nullptr;
+
+  DrawKey key = in_key;
+  if (key.mode == GPUTextureMode::Reserved_Direct16Bit)
+    key.mode = GPUTextureMode::Direct16Bit;
+  if (key.mode == GPUTextureMode::Direct16Bit)
+    key.palette_bits = 0;
+
+  const u64 packed = static_cast<u64>(key.page) | (static_cast<u64>(key.mode) << 5) |
+                     (static_cast<u64>(key.semitransparent) << 7) | (static_cast<u64>(key.palette_bits) << 8);
+  const u64 signature = GetSignature(key);
+
+  auto it = m_lookups.find(packed);
+  if (it != m_lookups.end() && it->second.signature == signature)
+  {
+    it->second.last_used = ++m_lookup_counter;
+    return it->second.source.get();
+  }
+
+  std::unique_ptr<Source> source = FindSource(key, max_texture_size);
+  if (it == m_lookups.end())
+    it = m_lookups.emplace(packed, Lookup{}).first;
+  it->second.signature = signature;
+  it->second.last_used = ++m_lookup_counter;
+  it->second.source = std::move(source);
+
+  const size_t limit = std::max<u32>(m_config.max_hash_cache_entries, 1);
+  while (m_lookups.size() > limit)
+  {
+    auto oldest = m_lookups.end();
+    for (auto cur = m_lookups.begin(); cur != m_lookups.end(); ++cur)
+    {
+      if (cur->first != packed && (oldest == m_lookups.end() || cur->second.last_used < oldest->second.last_used))
+        oldest = cur;
+    }
+    m_lookups.erase(oldest);
+  }
+
+  return m_lookups.find(packed)->second.source.get();
+}
+
+std::unique_ptr<GPUTextureCache::Source> GPUTextureCache::FindSource(const DrawKey& key, u32 max_texture_size)
+{
+  if (!IsPaletteKnown(key))
+    return {};
+
+  const u32 page_x = GetPageX(key.page), page_y = GetPageY(key.page);
+  const u32 page_words = GetPageWords(page_x, key.mode);
+  const bool palettized = (key.mode != GPUTextureMode::Direct16Bit);
+  const GPUTexturePaletteReg palette{key.palette_bits};
+  const TextureNames::Mode mode = TextureNames::MakeMode(key.mode, key.semitransparent);
+
+  auto source = std::make_unique<Source>();
+  std::vector<std::pair<GSVector4i, std::pair<u32, u32>>> sizes;
+  const auto palette_matches = [&](const TextureNames::Name& name) {
+    return !palettized ||
+           GPUTextureData::HashPalette(m_vram.data(), palette, name.palette_min, name.palette_max) == name.palette_hash;
+  };
+  const auto place = [&](GSVector4i rect, const std::string& path) {
+    const TextureReplacements::ReplacementImage* image = TextureReplacements::GetTextureImage(path);
+    if (!image || image->GetWidth() == 0 || image->GetHeight() == 0)
+      return;
+    source->placements.push_back(Placement{rect, path, image->GetWidth(), image->GetHeight()});
+    sizes.emplace_back(rect, std::make_pair(image->GetWidth(), image->GetHeight()));
+  };
+
+  // Upload names: by the hashes of the uploads in the page.
+  const GSVector4i page_rect(page_x, page_y, page_x + page_words, page_y + PAGE_HEIGHT);
+  for (Upload& upload : m_uploads)
+  {
+    if (!upload.rect.rintersects(page_rect))
+      continue;
+
+    HashUpload(upload);
+    for (const TextureReplacements::TextureReplacement& candidate :
+         m_index->FindUploadReplacements(mode, upload.hash))
+    {
+      if (candidate.name.source_width != upload.rect.width() || candidate.name.source_height != upload.rect.height() ||
+          !palette_matches(candidate.name))
+      {
+        continue;
+      }
+
+      const std::optional<GSVector4i> rect =
+        GPUTextureData::GetPageRect(candidate.name, upload.rect, page_x, page_y, key.mode);
+      if (rect.has_value())
+        place(rect.value(), candidate.path);
+    }
+  }
+
+  // Page names: by the hash of the words under each name's rect.
+  for (const TextureReplacements::TextureReplacement& candidate : m_index->GetPageReplacements(mode))
+  {
+    const TextureNames::Name& name = candidate.name;
+    if (name.source_width != page_words || name.source_height != PAGE_HEIGHT || !palette_matches(name))
+      continue;
+
+    const GSVector4i rect(name.offset_x, name.offset_y, name.offset_x + name.width, name.offset_y + name.height);
+    const std::optional<GSVector4i> words = GPUTextureData::TexelRectToWordRect(page_x, page_y, rect, key.mode);
+    if (!words.has_value() || !IsKnown(words.value()) ||
+        GPUTextureData::HashTextureWords(m_vram.data(), words.value()) != name.texture_hash)
+    {
+      continue;
+    }
+
+    place(rect, candidate.path);
+  }
+
+  if (source->placements.empty())
+    return {};
+
+  source->scale = GPUTextureData::GetSourceScale(sizes, max_texture_size);
+  source->id = ++m_next_source_id;
+  return source;
 }

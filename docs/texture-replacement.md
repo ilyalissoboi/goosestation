@@ -158,3 +158,31 @@ All ours: the hardware renderer keeps VRAM on the GPU only, so the cache keeps a
 - Each 64×256-word page carries a count that changes whenever anything in it changes, so whatever was looked up for
   it is looked up again.
 - After a save state loads, the copy is the state's VRAM, all known, with no uploads until the game uploads again.
+
+### What a draw samples, and dumping
+
+- A textured draw samples one page with one mode and palette, semi-transparent or not; its rect is the texels it
+  reads, with the texture window applied (ours).
+- Upload mode: the texture is the upload holding all the words under the rect; a rect over two uploads, or over
+  words that aren't an upload, is neither dumped nor replaced by upload names (ours, consistent with run (a)).
+- Page mode: the texture is the rect itself, hashed over its words; the name's size is the page's (64, 128 or 256
+  words for 4-bit, 8-bit and direct colour, cut at VRAM's right edge) (black box, runs (c), (d)).
+- Neither is dumped or replaced while any block under the rect, or under the palette, is unknown (ours).
+- A name is dumped once per session, at the end of the frame it is first drawn in, unless the file exists, the rect
+  is smaller than `DumpTextureWidthThreshold` × `DumpTextureHeightThreshold` texels, it is direct colour without
+  `DumpC16Textures`, or it has a replacement and `DumpReplacedTextures` is off. The image is decoded as it was when
+  drawn (black box for the one-file-per-rect rule, run (a); ours for the rest).
+- The first dump creates `replacements/` and, when the game has neither `config.yaml` nor `config.yml`, writes the
+  `config.yaml` template (black box, run (a); our template).
+
+### Looking replacements up
+
+All ours.
+
+- For a page, mode, palette and semi-transparency, the replacements are: upload names whose hash is that of an
+  upload in the page, with its size, whose palette hash matches the palette at the name's range, placed where the
+  name's rect falls in the page; and page names of the page's size whose palette hash matches and whose rect's words
+  hash to the name's hash. Both kinds are used whatever the dump mode.
+- The answer, replacements or none, is kept until anything in the page (all the 64-word columns an 8-bit or direct
+  page spans) or in its palette's page changes, for at most `MaxHashCacheEntries` combinations, the least recently
+  used dropped first.

@@ -213,9 +213,10 @@ fun MemcardEditorScreen(
                 ) {
                     Header(ui.changes, memory, onDiscard = actions::discard, onSave = actions::save)
                     ui.message?.let { message ->
-                        Notice(if (message.error) NoticeStatus.Danger else NoticeStatus.Success) {
-                            Text(message.text, style = MaterialTheme.typography.titleMedium, color = colors.ink)
-                        }
+                        Notice(
+                            if (message.error) NoticeStatus.Danger else NoticeStatus.Success,
+                            message.text,
+                        )
                     }
                     if (narrow) {
                         PanelTabs(

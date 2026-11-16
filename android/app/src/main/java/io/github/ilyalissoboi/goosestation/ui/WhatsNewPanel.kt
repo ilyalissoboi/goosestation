@@ -68,13 +68,7 @@ fun WhatsNewPanel(
             shown == WhatsNew.Loading ->
                 Text("Loading the changes…", style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
             changes == null ->
-                Notice(NoticeStatus.Danger) {
-                    Text(
-                        "Couldn't load the changes. Check your network connection.",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.ink,
-                    )
-                }
+                Notice(NoticeStatus.Danger, "Couldn't load the changes. Check your network connection.")
             else -> {
                 changes.commits.forEachIndexed { index, change ->
                     Column(

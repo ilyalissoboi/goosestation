@@ -61,9 +61,7 @@ fun DiscPanel(
     SidePanel(modifier) {
         Text("Change disc", style = MaterialTheme.typography.headlineSmall, color = colors.ink)
         choice.error?.let { error ->
-            Notice(NoticeStatus.Danger) {
-                Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
-            }
+            Notice(NoticeStatus.Danger, error)
         }
         if (choice.busy) {
             Text("Inserting…", style = MaterialTheme.typography.bodyLarge, color = colors.inkMuted)

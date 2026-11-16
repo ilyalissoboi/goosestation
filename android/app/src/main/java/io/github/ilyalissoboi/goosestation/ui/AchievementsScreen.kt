@@ -100,9 +100,7 @@ fun AchievementsScreen(
             }
             val notice = error ?: if (expired) EXPIRED_NOTE else null
             notice?.let {
-                Notice(NoticeStatus.Danger, Modifier.padding(horizontal = 16.dp)) {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
-                }
+                Notice(NoticeStatus.Danger, it, Modifier.padding(horizontal = 16.dp))
             }
             ActionButton(
                 if (signingIn) "Signing in…" else "Sign in",

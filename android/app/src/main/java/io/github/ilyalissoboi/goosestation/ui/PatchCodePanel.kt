@@ -82,14 +82,10 @@ fun PatchCodePanel(
                     .focusable(enabled = groups.isNullOrEmpty() || titleFocused),
         )
         panel.error?.let { error ->
-            Notice(NoticeStatus.Danger) {
-                Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
-            }
+            Notice(NoticeStatus.Danger, error)
         }
         panel.applied?.let { applied ->
-            Notice(NoticeStatus.Success) {
-                Text(applied, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
-            }
+            Notice(NoticeStatus.Success, applied)
         }
         Column(
             modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(4.dp),

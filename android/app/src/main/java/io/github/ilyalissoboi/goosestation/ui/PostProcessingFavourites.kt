@@ -179,9 +179,7 @@ private fun NameForm(
     )
     TextFieldRow("Name", text, modifier = Modifier.focusRequester(field), imeAction = ImeAction.Done, onDone = submit)
     if (naming.error.isNotEmpty()) {
-        Notice(NoticeStatus.Danger) {
-            Text(naming.error, style = MaterialTheme.typography.titleMedium, color = colors.ink)
-        }
+        Notice(NoticeStatus.Danger, naming.error)
     }
     ButtonRow {
         ActionButton(if (naming.renaming == null) "Save" else "Rename", onClick = submit, kind = ButtonKind.Primary)
@@ -222,7 +220,7 @@ private fun FavouriteActions(
         Text(favouriteSummary(favourite), style = MaterialTheme.typography.bodyMedium, color = colors.inkMuted)
     }
     model.favouriteError?.let {
-        Notice(NoticeStatus.Danger) { Text(it, style = MaterialTheme.typography.titleMedium, color = colors.ink) }
+        Notice(NoticeStatus.Danger, it)
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         val wide = Modifier.fillMaxWidth()

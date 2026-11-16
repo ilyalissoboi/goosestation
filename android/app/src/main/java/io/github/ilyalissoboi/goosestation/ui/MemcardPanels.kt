@@ -159,7 +159,7 @@ private fun RenameForm(
     TextFieldRow("Title", title, modifier = Modifier.focusRequester(first))
     TextFieldRow("File name", fileName, imeAction = ImeAction.Done, onDone = rename)
     error?.let {
-        Notice(NoticeStatus.Danger) { Text(it, style = MaterialTheme.typography.titleMedium, color = colors.ink) }
+        Notice(NoticeStatus.Danger, it)
     }
     ButtonRow {
         ActionButton("Rename", onClick = rename)

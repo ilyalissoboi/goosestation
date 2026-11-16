@@ -135,9 +135,7 @@ fun SavesScreen(
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
                     lists.error?.let { error ->
-                        Notice(NoticeStatus.Danger) {
-                            Text(error, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
-                        }
+                        Notice(NoticeStatus.Danger, error)
                     }
                     if (lists.removing) SlotLine("Deleting…")
                     SaveListEmptyLine(lists)

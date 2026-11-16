@@ -19,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
@@ -74,6 +77,23 @@ fun Notice(
                 Row(Modifier.padding(top = 8.dp)) { it() }
             }
         }
+    }
+}
+
+/**
+ * A [Notice] that says one thing: [text], in `body` and `ink`. A screen reader reads it as it appears or changes,
+ * politely, so it's for a message that changes now and then, not one that ticks (a download's progress).
+ */
+@Composable
+fun Notice(
+    status: NoticeStatus,
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+) {
+    // One node, read whole, as it appears or changes.
+    Notice(status, modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }, icon) {
+        Text(text, style = MaterialTheme.typography.bodyLarge, color = GooseStationTheme.colors.ink)
     }
 }
 

@@ -34,8 +34,14 @@ TEST(TexturePackConfig, TheDefaultsAreTheReleasesDefaults)
   EXPECT_EQ(config.vram_write_dump_width_threshold, 128u);
   EXPECT_EQ(config.vram_write_dump_height_threshold, 128u);
   EXPECT_EQ(config.max_hash_cache_entries, 1200u);
+#ifdef __ANDROID__
+  // Phones and handhelds have less memory: our own, smaller budgets.
+  EXPECT_EQ(config.max_hash_cache_vram_usage_mb, 512u);
+  EXPECT_EQ(config.max_replacement_cache_vram_usage_mb, 256u);
+#else
   EXPECT_EQ(config.max_hash_cache_vram_usage_mb, 2048u);
   EXPECT_EQ(config.max_replacement_cache_vram_usage_mb, 512u);
+#endif
   EXPECT_TRUE(config.aliases.empty());
 }
 
@@ -52,7 +58,7 @@ TEST(TexturePackConfig, TheFontPacksConfigLoads)
   EXPECT_FALSE(config.reduce_palette_range);
   EXPECT_FALSE(config.replacement_scale_linear_filter);
   EXPECT_EQ(config.max_hash_cache_entries, 77u);
-  EXPECT_EQ(config.max_hash_cache_vram_usage_mb, 2048u);
+  EXPECT_EQ(config.max_hash_cache_vram_usage_mb, TexturePackConfig().max_hash_cache_vram_usage_mb);
 }
 
 TEST(TexturePackConfig, AliasesLoad)

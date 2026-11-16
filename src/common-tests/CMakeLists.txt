@@ -47,6 +47,7 @@ add_executable(common-tests
   texture_pack_config_tests.cpp
   texture_replacements_tests.cpp
   gpu_texture_data_tests.cpp
+  gpu_texture_cache_tests.cpp
   settings_texture_cache_tests.cpp
   ../util/text_input.cpp
 )

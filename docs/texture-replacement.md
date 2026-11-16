@@ -135,3 +135,26 @@ outside the repository.
   (ours, after the published "a page mixing scales is drawn at the largest").
 - In the page as drawn, texels without a replacement keep their own colour, a `0x0000` texel stays transparent and
   bit 15 stays the semi-transparency bit (ours).
+
+### Tracking VRAM
+
+All ours: the hardware renderer keeps VRAM on the GPU only, so the cache keeps a copy of its own to hash and dump.
+
+- The copy follows every write from the CPU, fill and copy exactly, masks and wrapping at VRAM's edges included.
+  What the GPU renders isn't in it: those areas are *unknown*, in blocks of 8×8 words, and nothing on an unknown
+  block is dumped or replaced.
+- A block becomes known again when a write, fill or copy from known blocks covers all of it. A write or copy with the
+  mask check on never makes a block known; an interlaced fill, or a copy from unknown blocks, makes its blocks
+  unknown.
+- Each write from the CPU without the mask check is an *upload*, unless it wraps at VRAM's edge. A write directly
+  below an upload with the same left and right edges joins it while the joined upload fits
+  `MaxVRAMWriteCoalesceWidth` × `MaxVRAMWriteCoalesceHeight` (0 by default: never).
+- Anything that changes part of an upload ends it. While its splits are below `MaxVRAMWriteSplits` (0 by default),
+  the parts it leaves untouched (above, below, left and right of the change) stay uploads of their own, hashed over
+  their own words.
+- With `ConvertCopiesToWrites`, a copy whose source lies in one upload makes its destination an upload too.
+- An upload's hash is taken over the cache's copy when first needed, which is the upload's words as written (with bit
+  15 set if the write set it).
+- Each 64×256-word page carries a count that changes whenever anything in it changes, so whatever was looked up for
+  it is looked up again.
+- After a save state loads, the copy is the state's VRAM, all known, with no uploads until the game uploads again.

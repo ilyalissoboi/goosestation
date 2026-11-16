@@ -4448,6 +4448,7 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
         g_settings.gpu_pgxp_texture_correction != old_settings.gpu_pgxp_texture_correction ||
         g_settings.gpu_pgxp_color_correction != old_settings.gpu_pgxp_color_correction ||
         g_settings.gpu_pgxp_depth_buffer != old_settings.gpu_pgxp_depth_buffer ||
+        g_settings.gpu_texture_cache != old_settings.gpu_texture_cache ||
         g_settings.display_active_start_offset != old_settings.display_active_start_offset ||
         g_settings.display_active_end_offset != old_settings.display_active_end_offset ||
         g_settings.display_line_start_offset != old_settings.display_line_start_offset ||

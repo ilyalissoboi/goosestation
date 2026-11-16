@@ -623,6 +623,7 @@ std::unique_ptr<GPUTextureCache::Source> GPUTextureCache::FindSource(const DrawK
   if (source->placements.empty())
     return {};
 
+  source->key = key;
   source->scale = GPUTextureData::GetSourceScale(sizes, max_texture_size);
   source->id = ++m_next_source_id;
   return source;

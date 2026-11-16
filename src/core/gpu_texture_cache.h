@@ -65,6 +65,7 @@ public:
   /// A page as drawn with its replacements: its placements, its scale, and an id that changes with the answer.
   struct Source
   {
+    DrawKey key;
     std::vector<Placement> placements;
     u32 scale;
     u64 id;

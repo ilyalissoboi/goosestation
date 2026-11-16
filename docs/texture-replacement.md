@@ -194,3 +194,24 @@ All ours.
 - The answer, replacements or none, is kept until anything in the page (all the 64-word columns an 8-bit or direct
   page spans) or in its palette's page changes, for at most `MaxHashCacheEntries` combinations, the least recently
   used dropped first.
+
+### Drawing replacements
+
+All ours.
+
+- A page with replacements is drawn into a texture of its own: the page decoded at 1× and stretched to the page's
+  scale, then each replacement image drawn over its rect, with linear filtering if `ReplacementScaleLinearFilter` is
+  on, else nearest. Draws of that page, mode, palette and semi-transparency then sample this texture instead of VRAM.
+- Such draws read the texture at the draw's own texture coordinates, with the texture window applied to the texel and
+  the part within the texel kept, so a 4× replacement shows its own detail at 4× resolution.
+- A replacement pixel with alpha 0 is transparent; alpha below 255 sets the texel's semi-transparency bit (the
+  published rule, "alpha below 255 means semi-transparent"); 255 is opaque. Opaque black stays opaque.
+- The texture filtering enhancement (bilinear, JINC2, xBR) doesn't apply to these draws; the replacement already is
+  the higher resolution.
+- Composed pages are kept, least recently used dropped first, within `MaxHashCacheVRAMUsageMB`; they are dropped
+  whenever replacements reload.
+- Checked by hand (stage 1, 2026-11-16) on Metal, with a pack made from our own dumps of Vagrant Story's opening at
+  4× with a marked border: the marks appear where those textures are drawn on Metal, Vulkan (MoltenVK) and OpenGL
+  (identical frames), a name with a smaller rect replaces only that rect, an alias draws its file, rewritten dialogue
+  pages never show an old replacement, preloading draws the same frames, and with no pack frames are identical with
+  the cache on and off.

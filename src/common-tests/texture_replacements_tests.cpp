@@ -311,3 +311,20 @@ TEST_F(ContentPack, ChangingThePackFolderMovesTheIndex)
 }
 
 #endif
+
+TEST(TextureReplacementIndex, DuplicatesAreFoundWhateverLiesBetween)
+{
+  // Two files with one name, and another rect of the same texture sorting between them.
+  TempGameFolder game;
+  game.Write(fmt::format("a/{}.png", UPLOAD_NAME));
+  for (char folder = 'b'; folder < 'z'; folder++)
+  {
+    game.Write(fmt::format("{}/texupload-P4-B5E04041144CABCE-D7ADDCD353C6521A-64x256-0-{}-16x16-P0-15.png", folder,
+                           (folder - 'b') * 8));
+  }
+  game.Write(fmt::format("z/{}.png", UPLOAD_NAME));
+
+  ReplacementIndex index;
+  index.Build(game.path(), TexturePackConfig());
+  EXPECT_EQ(index.GetTextureCount(), 25u);
+}

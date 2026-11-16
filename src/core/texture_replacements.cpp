@@ -154,18 +154,15 @@ void TextureReplacements::ReplacementIndex::Build(const std::string& game_dir, c
     AddTexture(name.value(), std::move(path));
   }
 
-  // Sort by key; the first of two files with one name wins.
+  // The first of two files with one name wins, whatever lies between them; then sorted by key.
+  std::unordered_map<std::string, std::string> seen;
+  std::erase_if(m_textures, [&seen](const TextureReplacement& tr) {
+    const auto [it, inserted] = seen.emplace(TextureNames::Format(tr.name), tr.path);
+    if (!inserted)
+      WARNING_LOG("Duplicate texture replacement: '{}' and '{}'", it->second, tr.path);
+    return !inserted;
+  });
   std::stable_sort(m_textures.begin(), m_textures.end(), NameLess);
-  for (size_t i = 1; i < m_textures.size();)
-  {
-    if (TextureNames::Format(m_textures[i].name) == TextureNames::Format(m_textures[i - 1].name))
-    {
-      WARNING_LOG("Duplicate texture replacement: '{}' and '{}'", m_textures[i - 1].path, m_textures[i].path);
-      m_textures.erase(m_textures.begin() + i);
-      continue;
-    }
-    i++;
-  }
 
   INFO_LOG("Found {} texture and {} VRAM write replacements in '{}'", m_textures.size(), m_vram_writes.size(),
            game_dir);

@@ -833,3 +833,28 @@ TEST(GPUTextureCache, CuttingAnUploadBumpsEveryPageItSpans)
   cache->Write(2, 2, 1, 1, &word, false, false); // in page 0 only
   EXPECT_NE(cache->GetPageGeneration(1), page1);
 }
+
+TEST(GPUTextureCache, AFillThatWrapsLandsOnBothEdges)
+{
+  const auto cache = MakeCache();
+  cache->Fill(1020, 508, 8, 8, 0x4321, false);
+  EXPECT_EQ(At(*cache, 1020, 508), 0x4321);
+  EXPECT_EQ(At(*cache, 3, 508), 0x4321);
+  EXPECT_EQ(At(*cache, 1020, 3), 0x4321);
+  EXPECT_EQ(At(*cache, 3, 3), 0x4321);
+  EXPECT_EQ(At(*cache, 4, 4), 0);
+}
+
+TEST(GPUTextureCache, AMaskedCopySkipsMaskedPixels)
+{
+  const auto cache = MakeCache();
+  const u16 source[2] = {0x0011, 0x0012};
+  cache->Write(0, 0, 2, 1, source, false, false);
+  const u16 destination[2] = {0x8001, 0x0002};
+  cache->Write(100, 0, 2, 1, destination, false, false);
+  cache->Copy(0, 0, 100, 0, 2, 1, false, true); // check mask: the masked word stays
+  EXPECT_EQ(At(*cache, 100, 0), 0x8001);
+  EXPECT_EQ(At(*cache, 101, 0), 0x0012);
+  cache->Copy(0, 0, 200, 0, 2, 1, true, false); // set mask
+  EXPECT_EQ(At(*cache, 200, 0), 0x8011);
+}

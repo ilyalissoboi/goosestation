@@ -37,6 +37,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.MessageBar
 import io.github.ilyalissoboi.goosestation.ui.components.PICKER_HINT
+import io.github.ilyalissoboi.goosestation.ui.components.ScreenPadding
 import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GsIcons
 import kotlinx.coroutines.launch
@@ -135,7 +136,7 @@ fun FoldersScreen(
                     }
                 }.backKeys { back() }
                 .verticalScroll(scroll)
-                .padding(horizontal = 32.dp, vertical = 20.dp),
+                .padding(ScreenPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Folders", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)

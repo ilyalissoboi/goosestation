@@ -154,7 +154,7 @@ fun SettingsPage(
                             }
                         }
                     }.verticalScroll(rememberScrollState())
-                    .padding(horizontal = 32.dp, vertical = 20.dp),
+                    .padding(ScreenPadding),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PageHeader(title)
@@ -183,7 +183,8 @@ fun LazySettingsPage(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .safeDrawingPadding()
-                .padding(horizontal = 28.dp, vertical = 16.dp),
+                // ScreenPadding, less the rows' 4 dp ring margin inside the list.
+                .padding(horizontal = 28.dp, vertical = 20.dp),
     ) {
         // The title scrolls with the rows, as on every settings page, so a short screen keeps its height for them.
         LazyColumn(
@@ -197,6 +198,11 @@ fun LazySettingsPage(
         }
     }
 }
+
+/**
+ * A screen's padding inside the safe area: 32 dp at the sides (`space-7`), 24 dp at the top and bottom (`space-5`).
+ */
+val ScreenPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp)
 
 /** The key of a [LazySettingsPage]'s first item, its title: the page's own items come after it. */
 const val LAZY_PAGE_HEADER = "page-header"

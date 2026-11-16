@@ -136,6 +136,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.GameContext
 import io.github.ilyalissoboi.goosestation.ui.components.LocalGameContext
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
+import io.github.ilyalissoboi.goosestation.ui.components.ScreenPadding
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import io.github.ilyalissoboi.goosestation.update.Change
@@ -2532,7 +2533,7 @@ class OrientationLayoutTest : ControllerKeys {
             )
         var state by mutableStateOf<UpdateState>(states.last())
         eachConfig({
-            Column(Modifier.padding(horizontal = 32.dp, vertical = 20.dp)) {
+            Column(Modifier.padding(ScreenPadding)) {
                 UpdateBanner(updateBanner(state), onWhatsNew = {})
             }
         }) {

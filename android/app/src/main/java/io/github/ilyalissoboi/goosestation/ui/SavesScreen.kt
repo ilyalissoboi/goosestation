@@ -45,6 +45,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.OverlayPanel
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
 import io.github.ilyalissoboi.goosestation.ui.components.QuestionPanel
+import io.github.ilyalissoboi.goosestation.ui.components.ScreenPadding
 import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.components.tabKeys
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -106,7 +107,7 @@ fun SavesScreen(
                     // B, and a Back key reaching Compose, go to the back handlers.
                     .backKeys { dispatcher?.onBackPressed() ?: onBack() }
                     .tabKeys { switchTab() }
-                    .padding(horizontal = 32.dp, vertical = 20.dp),
+                    .padding(ScreenPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             BoxWithConstraints(Modifier.weight(1f)) {

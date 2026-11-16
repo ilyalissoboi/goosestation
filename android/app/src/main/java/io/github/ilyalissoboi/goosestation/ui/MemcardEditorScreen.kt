@@ -70,6 +70,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.Notice
 import io.github.ilyalissoboi.goosestation.ui.components.NoticeStatus
 import io.github.ilyalissoboi.goosestation.ui.components.PadGlyphs
 import io.github.ilyalissoboi.goosestation.ui.components.PanelTabs
+import io.github.ilyalissoboi.goosestation.ui.components.ScreenPadding
 import io.github.ilyalissoboi.goosestation.ui.components.backKeys
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
@@ -203,7 +204,7 @@ fun MemcardEditorScreen(
                                 }
                                 else -> false
                             }
-                        }.padding(horizontal = 32.dp, vertical = 20.dp),
+                        }.padding(ScreenPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // One scroll for the whole page, so a short screen still shows a whole save at a time.

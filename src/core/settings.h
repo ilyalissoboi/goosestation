@@ -269,10 +269,12 @@ struct Settings
       return enable_texture_replacements || enable_vram_write_replacements;
     }
 
-    /// The texture cache tracks VRAM only when it's on and something uses it.
-    ALWAYS_INLINE bool ShouldTrackTextures(bool texture_cache_enabled) const
+    /// The texture cache tracks VRAM only when it's on and something uses it: replacements the game has, dumping, or
+    /// AlwaysTrackUploads.
+    ALWAYS_INLINE bool ShouldTrackTextures(bool texture_cache_enabled, bool game_has_replacements) const
     {
-      return texture_cache_enabled && (enable_texture_replacements || dump_textures || always_track_uploads);
+      return texture_cache_enabled &&
+             ((enable_texture_replacements && game_has_replacements) || dump_textures || always_track_uploads);
     }
   } texture_replacements;
 

@@ -58,21 +58,23 @@ TEST(SettingsTextureCache, TheDefaultsAreOff)
   EXPECT_FALSE(settings.texture_replacements.enable_texture_replacements);
   EXPECT_FALSE(settings.texture_replacements.dump_textures);
   EXPECT_TRUE(settings.texture_replacements.dump_replaced_textures);
-  EXPECT_FALSE(settings.texture_replacements.ShouldTrackTextures(true));
+  EXPECT_FALSE(settings.texture_replacements.ShouldTrackTextures(true, true));
   EXPECT_EQ(settings.texture_replacements.config, TexturePackConfig());
 }
 
 TEST(SettingsTextureCache, TexturesAreTrackedOnlyWithTheCacheAndAUse)
 {
   Settings::TextureReplacementSettings tr;
-  EXPECT_FALSE(tr.ShouldTrackTextures(true));
+  EXPECT_FALSE(tr.ShouldTrackTextures(true, true));
   tr.dump_textures = true;
-  EXPECT_TRUE(tr.ShouldTrackTextures(true));
-  EXPECT_FALSE(tr.ShouldTrackTextures(false));
+  EXPECT_TRUE(tr.ShouldTrackTextures(true, false));
+  EXPECT_FALSE(tr.ShouldTrackTextures(false, true));
   tr.dump_textures = false;
   tr.enable_texture_replacements = true;
-  EXPECT_TRUE(tr.ShouldTrackTextures(true));
+  EXPECT_TRUE(tr.ShouldTrackTextures(true, true));
+  // Replacements on, but the game has none: nothing to track for.
+  EXPECT_FALSE(tr.ShouldTrackTextures(true, false));
   tr.enable_texture_replacements = false;
   tr.always_track_uploads = true;
-  EXPECT_TRUE(tr.ShouldTrackTextures(true));
+  EXPECT_TRUE(tr.ShouldTrackTextures(true, false));
 }

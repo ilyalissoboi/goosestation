@@ -289,7 +289,7 @@ void GPU_HW::UpdateTextureCache(bool seed_from_gpu)
   m_texture_cache_reload_count = TextureReplacements::GetReloadCount();
   FlushRender();
   ClearReplacementSources();
-  if (!tr.ShouldTrackTextures(g_settings.gpu_texture_cache))
+  if (!tr.ShouldTrackTextures(g_settings.gpu_texture_cache, TextureReplacements::GetIndex().GetTextureCount() > 0))
   {
     if (m_texture_cache)
       INFO_LOG("Texture cache off.");

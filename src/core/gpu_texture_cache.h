@@ -129,7 +129,7 @@ private:
   /// A rect's pieces after wrapping at VRAM's edges (up to four).
   static u32 SplitWrapped(u32 x, u32 y, u32 width, u32 height, std::array<GSVector4i, 4>* pieces);
 
-  static void SetBlocks(BlockMask& mask, GSVector4i rect, bool whole_blocks_only, bool value);
+  static bool SetBlocks(BlockMask& mask, GSVector4i rect, bool whole_blocks_only, bool value);
   static bool AnyBlocks(const BlockMask& mask, GSVector4i rect);
 
   void Changed(GSVector4i rect);
@@ -199,5 +199,4 @@ private:
 
   std::unordered_map<u64, Lookup> m_lookups;
   u64 m_lookup_counter = 0;
-  u64 m_next_source_id = 0;
 };

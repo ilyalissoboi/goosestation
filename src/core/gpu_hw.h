@@ -13,6 +13,7 @@
 #include "common/gsvector.h"
 
 #include <limits>
+#include <unordered_map>
 #include <tuple>
 #include <utility>
 
@@ -277,13 +278,14 @@ private:
   bool m_texture_cache_dumping = false;
   bool m_replaced_pipelines = false;
 
+  /// One composed page per draw key, replaced when what it shows changes; a null texture remembers a failure.
   struct ReplacementSourceTexture
   {
     u64 id;
     u64 last_used;
     std::unique_ptr<GPUTexture> texture;
   };
-  std::vector<ReplacementSourceTexture> m_replacement_sources;
+  std::unordered_map<u64, ReplacementSourceTexture> m_replacement_sources;
   u64 m_replacement_source_counter = 0;
   std::unique_ptr<GPUPipeline> m_texture_source_blit_pipeline;
 

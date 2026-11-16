@@ -133,3 +133,11 @@ TEST(TexturePackConfig, WritingThenReadingKeepsEveryValue)
   expected.max_hash_cache_entries = 99;
   EXPECT_EQ(from_template, expected);
 }
+
+TEST(TexturePackConfig, AByteOrderMarkIsIgnored)
+{
+  TexturePackConfig config;
+  Error error;
+  ASSERT_TRUE(config.LoadYAML("\xEF\xBB\xBF" "DumpTexturePages: true\n", &error)) << error.GetDescription();
+  EXPECT_TRUE(config.dump_texture_pages);
+}

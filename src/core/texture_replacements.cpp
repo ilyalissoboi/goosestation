@@ -126,9 +126,12 @@ void TextureReplacements::ReplacementIndex::Build(const std::string& game_dir, c
       continue;
     }
 
-    const std::optional<TextureNames::Name> name = TextureNames::Parse(Path::GetFileTitle(fd.FileName));
+    const std::string_view title = Path::GetFileTitle(fd.FileName);
+    const std::optional<TextureNames::Name> name = TextureNames::Parse(title);
     if (name.has_value())
       AddTexture(name.value(), std::move(fd.FileName));
+    else if (title.starts_with("texupload-") || title.starts_with("texpage-") || title.starts_with("vram-write-"))
+      WARNING_LOG("Skipping '{}': not a well-formed texture name.", Path::GetFileName(fd.FileName));
   }
 
   for (const auto& [alias, file] : config.aliases)

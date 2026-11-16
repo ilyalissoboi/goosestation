@@ -198,9 +198,12 @@ All ours.
   upload in the page, with its size, whose palette hash matches the palette at the name's range, placed where the
   name's rect falls in the page; and page names of the page's size whose palette hash matches and whose rect's words
   hash to the name's hash. Both kinds are used whatever the dump mode.
-- The answer, replacements or none, is kept until anything in the page (all the 64-word columns an 8-bit or direct
-  page spans) or in its palette's page changes, for at most `MaxHashCacheEntries` combinations, the least recently
-  used dropped first.
+- The answer, replacements or none, is kept until something changes in the page (all the 64-word columns an 8-bit or
+  direct page spans) or in its palette's page: a write, fill or copy, an upload cut (every page it spans), or a GPU
+  draw that makes blocks unknown for the first time (drawing again over unknown blocks changes nothing). At most
+  `MaxHashCacheEntries` combinations are kept, the least recently used dropped first.
+- An answer's id is a hash of everything the page as drawn shows (its words, its palette, its replacements' rects and
+  files), so looking up again after a change elsewhere, a state load or a rewind finds the same page already drawn.
 
 ### Drawing replacements
 
@@ -215,8 +218,15 @@ All ours.
   published rule, "alpha below 255 means semi-transparent"); 255 is opaque. Opaque black stays opaque.
 - The texture filtering enhancement (bilinear, JINC2, xBR) doesn't apply to these draws; the replacement already is
   the higher resolution.
-- Composed pages are kept, least recently used dropped first, within `MaxHashCacheVRAMUsageMB`; they are dropped
-  whenever replacements reload.
+- One composed page is kept for each page, mode, palette and semi-transparency, replaced when what it shows changes,
+  within `MaxHashCacheVRAMUsageMB` (the least recently used dropped first); a page that can't be created isn't tried
+  again until what it shows changes. A page's scale is lowered until it takes at most a quarter of that budget. They
+  are dropped whenever replacements reload.
+- Replaced draws pick the same texel as other draws (rounding at 1×, as the renderer does) and the position within
+  it: a pack of our own dumps at 1× draws frames byte-identical to the cache off, at 1× and at 4×, on Metal and
+  Vulkan (39 textures placed over Vagrant Story's opening).
+- Not handled yet: texels of a replaced page that the GPU rendered into come from the cache's copy of VRAM, which
+  doesn't have them. Only a draw with the same page, mode and palette sampling that rendered area would show it.
 - Checked by hand (stage 1, 2026-11-16) on Metal, with a pack made from our own dumps of Vagrant Story's opening at
   4× with a marked border: the marks appear where those textures are drawn on Metal, Vulkan (MoltenVK) and OpenGL
   (identical frames), a name with a smaller rect replaces only that rect, an alias draws its file, rewritten dialogue
@@ -250,4 +260,5 @@ waited for each frame, so this shows the CPU side the cache adds):
 | Vulkan (MoltenVK) | 1× | 0.30 ms | 0.31 ms (+3.3%) | 0.35 ms (+17%) |
 | Vulkan (MoltenVK) | 4× | 0.32 ms | 0.32 ms (+0%) | 0.36 ms (+13%) |
 
-The differences with no pack are one step of the measurement's 0.01 ms resolution.
+The differences with no pack are one step of the measurement's 0.01 ms resolution. With a pack (218 of our own dumps
+at 4×, crops and an alias) on Metal at 1×: 0.39 ms against 0.34 ms off (+15%).

@@ -339,7 +339,7 @@ bool GPU_HW::IsTextureModeCompiled(BatchTextureMode mode) const
 
 void GPU_HW::ClearReplacementSources()
 {
-  for (ReplacementSourceTexture& rs : m_replacement_sources)
+  for (auto& [key, rs] : m_replacement_sources)
     g_gpu_device->RecycleTexture(std::move(rs.texture));
   m_replacement_sources.clear();
   m_batch.source = nullptr;
@@ -347,13 +347,14 @@ void GPU_HW::ClearReplacementSources()
 
 GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
 {
-  for (ReplacementSourceTexture& rs : m_replacement_sources)
+  const u64 key = static_cast<u64>(source.key.page) | (static_cast<u64>(source.key.mode) << 5) |
+                  (static_cast<u64>(source.key.semitransparent) << 7) |
+                  (static_cast<u64>(source.key.palette_bits) << 8);
+  auto existing = m_replacement_sources.find(key);
+  if (existing != m_replacement_sources.end() && existing->second.id == source.id)
   {
-    if (rs.id == source.id)
-    {
-      rs.last_used = ++m_replacement_source_counter;
-      return rs.texture.get();
-    }
+    existing->second.last_used = ++m_replacement_source_counter;
+    return existing->second.texture.get(); // null after a failure, until what it shows changes
   }
 
   if (!m_texture_source_blit_pipeline)
@@ -361,25 +362,42 @@ GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
 
   // Composing draws outside the batch.
   FlushRender();
-
-  const u32 size = 256u * source.scale;
-  const size_t bytes = static_cast<size_t>(size) * size * sizeof(u32);
-  const size_t limit = static_cast<size_t>(TextureReplacements::GetConfig().max_hash_cache_vram_usage_mb) * 1024 * 1024;
-  size_t used = 0;
-  for (const ReplacementSourceTexture& rs : m_replacement_sources)
-    used += static_cast<size_t>(rs.texture->GetWidth()) * rs.texture->GetHeight() * sizeof(u32);
-  while (!m_replacement_sources.empty() && used + bytes > limit)
+  if (existing != m_replacement_sources.end())
   {
-    auto oldest = m_replacement_sources.begin();
+    if (existing->second.texture.get() == m_batch.source)
+      m_batch.source = nullptr;
+    g_gpu_device->RecycleTexture(std::move(existing->second.texture));
+    m_replacement_sources.erase(existing);
+  }
+
+  // At most a quarter of the budget for one page.
+  const size_t limit = static_cast<size_t>(TextureReplacements::GetConfig().max_hash_cache_vram_usage_mb) * 1024 * 1024;
+  u32 scale = source.scale;
+  while (scale > 1 && static_cast<size_t>(256u * scale) * (256u * scale) * sizeof(u32) > limit / 4)
+    scale--;
+
+  const u32 size = 256u * scale;
+  const size_t bytes = static_cast<size_t>(size) * size * sizeof(u32);
+  size_t used = 0;
+  for (const auto& [k, rs] : m_replacement_sources)
+  {
+    if (rs.texture)
+      used += static_cast<size_t>(rs.texture->GetWidth()) * rs.texture->GetHeight() * sizeof(u32);
+  }
+  while (used + bytes > limit)
+  {
+    auto oldest = m_replacement_sources.end();
     for (auto it = m_replacement_sources.begin(); it != m_replacement_sources.end(); ++it)
     {
-      if (it->last_used < oldest->last_used)
+      if (it->second.texture && (oldest == m_replacement_sources.end() || it->second.last_used < oldest->second.last_used))
         oldest = it;
     }
-    used -= static_cast<size_t>(oldest->texture->GetWidth()) * oldest->texture->GetHeight() * sizeof(u32);
-    if (oldest->texture.get() == m_batch.source)
+    if (oldest == m_replacement_sources.end())
+      break;
+    used -= static_cast<size_t>(oldest->second.texture->GetWidth()) * oldest->second.texture->GetHeight() * sizeof(u32);
+    if (oldest->second.texture.get() == m_batch.source)
       m_batch.source = nullptr;
-    g_gpu_device->RecycleTexture(std::move(oldest->texture));
+    g_gpu_device->RecycleTexture(std::move(oldest->second.texture));
     m_replacement_sources.erase(oldest);
   }
 
@@ -388,6 +406,7 @@ GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
   if (!target)
   {
     ERROR_LOG("Failed to create a {}x{} texture replacement page.", size, size);
+    m_replacement_sources.emplace(key, ReplacementSourceTexture{source.id, ++m_replacement_source_counter, nullptr});
     return nullptr;
   }
 
@@ -425,8 +444,8 @@ GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
     g_gpu_device->RecycleTexture(std::move(tex));
   };
 
-  const s32 scale = static_cast<s32>(source.scale);
-  blit(page, GSVector4i(0, 0, texels * scale, 256 * scale), g_gpu_device->GetNearestSampler());
+  const s32 iscale = static_cast<s32>(scale);
+  blit(page, GSVector4i(0, 0, texels * iscale, 256 * iscale), g_gpu_device->GetNearestSampler());
 
   GPUSampler* sampler = TextureReplacements::GetConfig().replacement_scale_linear_filter ?
                           g_gpu_device->GetLinearSampler() :
@@ -435,14 +454,15 @@ GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
   {
     const TextureReplacements::ReplacementImage* image = TextureReplacements::GetTextureImage(placement.path);
     if (image)
-      blit(*image, placement.page_rect.mul32l(GSVector4i(scale)), sampler);
+      blit(*image, placement.page_rect.mul32l(GSVector4i(iscale)), sampler);
   }
 
   target->MakeReadyForSampling();
   RestoreDeviceContext();
 
   GPUTexture* result = target.get();
-  m_replacement_sources.push_back(ReplacementSourceTexture{source.id, ++m_replacement_source_counter, std::move(target)});
+  m_replacement_sources.emplace(key,
+                                ReplacementSourceTexture{source.id, ++m_replacement_source_counter, std::move(target)});
   return result;
 }
 

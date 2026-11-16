@@ -154,6 +154,10 @@ bool SplitKeyValue(std::string_view line, std::string_view* key, std::string_vie
 
 bool TexturePackConfig::LoadYAML(std::string_view yaml, Error* error)
 {
+  // Editors may save UTF-8 with a byte order mark.
+  if (yaml.starts_with("\xEF\xBB\xBF"))
+    yaml.remove_prefix(3);
+
   // Split by hand: StringUtil::SplitString strips the indentation this needs.
   std::vector<std::string_view> lines;
   for (std::string_view::size_type start = 0; start < yaml.length();)

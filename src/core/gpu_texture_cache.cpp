@@ -11,6 +11,7 @@
 #include "common/path.h"
 
 #include "fmt/format.h"
+#include "xxhash.h"
 
 #include <algorithm>
 #include <cstring>
@@ -69,7 +70,7 @@ u32 GPUTextureCache::SplitWrapped(u32 x, u32 y, u32 width, u32 height, std::arra
   return count;
 }
 
-void GPUTextureCache::SetBlocks(BlockMask& mask, GSVector4i rect, bool whole_blocks_only, bool value)
+bool GPUTextureCache::SetBlocks(BlockMask& mask, GSVector4i rect, bool whole_blocks_only, bool value)
 {
   s32 bx0, by0, bx1, by1; // inclusive start, exclusive end, in blocks
   if (whole_blocks_only)
@@ -87,17 +88,23 @@ void GPUTextureCache::SetBlocks(BlockMask& mask, GSVector4i rect, bool whole_blo
     by1 = (rect.bottom + BLOCK_SIZE - 1) / BLOCK_SIZE;
   }
   if (bx0 >= bx1 || by0 >= by1)
-    return;
+    return false;
 
   BlockRow bits = {};
   for (s32 bx = bx0; bx < bx1; bx++)
     bits[bx / 64] |= u64(1) << (bx % 64);
 
+  bool changed = false;
   for (s32 by = by0; by < by1; by++)
   {
     for (u32 i = 0; i < 2; i++)
-      mask[by][i] = value ? (mask[by][i] | bits[i]) : (mask[by][i] & ~bits[i]);
+    {
+      const u64 old_bits = mask[by][i];
+      mask[by][i] = value ? (old_bits | bits[i]) : (old_bits & ~bits[i]);
+      changed |= (mask[by][i] != old_bits);
+    }
   }
+  return changed;
 }
 
 bool GPUTextureCache::AnyBlocks(const BlockMask& mask, GSVector4i rect)
@@ -167,6 +174,8 @@ void GPUTextureCache::CutUploads(GSVector4i rect)
       keep(hole.right, hole.top, u.right, hole.bottom);
     }
 
+    // Whatever was looked up from any part of it is looked up again.
+    BumpPages(it->rect);
     it = m_uploads.erase(it);
     removed = true;
   }
@@ -194,7 +203,8 @@ void GPUTextureCache::AddUpload(GSVector4i rect)
     {
       upload.rect.bottom = rect.bottom;
       upload.hashed = false;
-      upload.serial = ++m_next_upload_serial; // a new texture: what was drawn from the old one was dumped above
+      BumpPages(upload.rect);
+      upload.serial = ++m_next_upload_serial; // a new texture; the old one is dumped later, under its old hash
       SetBlocks(m_upload_blocks, rect, false, true);
       return;
     }
@@ -331,8 +341,12 @@ void GPUTextureCache::Draw(GSVector4i rect)
 
   if (!m_drawn_textures.empty())
     EndDrawnTextures(rect);
-  Changed(rect);
-  SetBlocks(m_unknown, rect, false, true);
+
+  // Drawing over what's already unknown changes nothing a lookup or a dump sees; only new unknown blocks (or an
+  // upload drawn over) do. Frames drawn again and again near a texture don't look it up again.
+  CutUploads(rect);
+  if (SetBlocks(m_unknown, rect, false, true))
+    BumpPages(rect);
 }
 
 void GPUTextureCache::HashUpload(Upload& upload)
@@ -834,6 +848,27 @@ std::unique_ptr<GPUTextureCache::Source> GPUTextureCache::FindSource(const DrawK
 
   source->key = key;
   source->scale = GPUTextureData::GetSourceScale(sizes, max_texture_size);
-  source->id = ++m_next_source_id;
+
+  // The id is what the page shows: equal ids draw the same, so the GPU side keeps one page per id.
+  XXH3_state_t state;
+  XXH3_64bits_reset(&state);
+  XXH3_64bits_update(&state, &key, sizeof(key));
+  XXH3_64bits_update(&state, &source->scale, sizeof(source->scale));
+  for (u32 y = page_y; y < page_y + PAGE_HEIGHT; y++)
+    XXH3_64bits_update(&state, &m_vram[y * VRAM_WIDTH + page_x], page_words * sizeof(u16));
+  if (palettized)
+  {
+    for (u32 i = 0; i < 256; i++)
+    {
+      const u16 entry = m_vram[palette.GetYBase() * VRAM_WIDTH + ((palette.GetXBase() + i) & (VRAM_WIDTH - 1))];
+      XXH3_64bits_update(&state, &entry, sizeof(entry));
+    }
+  }
+  for (const Placement& placement : source->placements)
+  {
+    XXH3_64bits_update(&state, &placement.page_rect, sizeof(placement.page_rect));
+    XXH3_64bits_update(&state, placement.path.data(), placement.path.size());
+  }
+  source->id = XXH3_64bits_digest(&state);
   return source;
 }

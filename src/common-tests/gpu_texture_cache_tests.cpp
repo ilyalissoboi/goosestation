@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -746,6 +747,75 @@ TEST(GPUTextureCache, TheLookupCacheHoldsAtMostItsLimit)
                                                        PaletteAt(0, 480).bits, false},
                               16384);
   EXPECT_LE(scene.cache->GetLookupCount(), 2u);
-  // The first was dropped, so it's looked up again under a new id.
-  EXPECT_NE(scene.cache->LookupSource(scene.Key(), 16384)->id, id);
+  // The first was dropped and is looked up again; showing the same, it has the same id.
+  const GPUTextureCache::Source* again = scene.cache->LookupSource(scene.Key(), 16384);
+  ASSERT_NE(again, nullptr);
+  EXPECT_EQ(again->id, id);
+  EXPECT_LE(scene.cache->GetLookupCount(), 2u);
+}
+
+TEST(GPUTextureCache, DrawingNearTheTextureKeepsItsSource)
+{
+  Scene scene;
+  const std::string name = scene.UploadName(GSVector4i(64, 0, 96, 32));
+  WritePNG(Path::Combine(scene.game_dir, fmt::format("replacements/{}.png", name)), 64, 64);
+  scene.index.Build(scene.game_dir, TexturePackConfig());
+  const u64 id = scene.cache->LookupSource(scene.Key(), 16384)->id;
+
+  // A frame being drawn in the palette's page, beside the palette, again and again.
+  for (u32 i = 0; i < 3; i++)
+  {
+    scene.cache->Draw(GSVector4i(0, 256, 64, 470));
+    const GPUTextureCache::Source* source = scene.cache->LookupSource(scene.Key(), 16384);
+    ASSERT_NE(source, nullptr);
+    EXPECT_EQ(source->id, id);
+  }
+}
+
+TEST(GPUTextureCache, ASourceKeepsItsIdWhenNothingItShowsChanged)
+{
+  Scene scene;
+  const std::string name = scene.UploadName(GSVector4i(64, 0, 96, 32));
+  WritePNG(Path::Combine(scene.game_dir, fmt::format("replacements/{}.png", name)), 64, 64);
+  scene.index.Build(scene.game_dir, TexturePackConfig());
+  const u64 id = scene.cache->LookupSource(scene.Key(), 16384)->id;
+
+  // Rewind and runahead load the same VRAM again; the upload is gone, so it's found by... nothing in upload mode,
+  // but a write of the same words brings it back unchanged.
+  std::vector<u16> vram(scene.cache->GetVRAM(), scene.cache->GetVRAM() + VRAM_WIDTH * VRAM_HEIGHT);
+  scene.cache->Reset(vram.data());
+  std::vector<u16> upload(64 * 64);
+  for (u32 y = 0; y < 64; y++)
+    std::memcpy(&upload[y * 64], &vram[y * VRAM_WIDTH + 16], 64 * sizeof(u16));
+  scene.cache->Write(16, 0, 64, 64, upload.data(), false, false);
+  const GPUTextureCache::Source* source = scene.cache->LookupSource(scene.Key(), 16384);
+  ASSERT_NE(source, nullptr);
+  EXPECT_EQ(source->id, id);
+}
+
+TEST(GPUTextureCache, DrawingIntoThePageKeepsItsReplacement)
+{
+  Scene scene;
+  const std::string name = scene.UploadName(GSVector4i(64, 0, 96, 32));
+  WritePNG(Path::Combine(scene.game_dir, fmt::format("replacements/{}.png", name)), 64, 64);
+  scene.index.Build(scene.game_dir, TexturePackConfig());
+  const u64 id = scene.cache->LookupSource(scene.Key(), 16384)->id;
+
+  // Games put textures beside their frame buffers: rendering elsewhere in the page keeps the replacement, and the
+  // same page as drawn (the copy of VRAM doesn't change under a GPU draw).
+  scene.cache->Draw(GSVector4i(0, 100, 8, 108));
+  const GPUTextureCache::Source* source = scene.cache->LookupSource(scene.Key(), 16384);
+  ASSERT_NE(source, nullptr);
+  EXPECT_EQ(source->id, id);
+}
+
+TEST(GPUTextureCache, CuttingAnUploadBumpsEveryPageItSpans)
+{
+  const auto cache = MakeCache();
+  const std::vector<u16> data = Words(128, 16, 1); // words 0..127: pages 0 and 1
+  cache->Write(0, 0, 128, 16, data.data(), false, false);
+  const u32 page1 = cache->GetPageGeneration(1);
+  const u16 word = 7;
+  cache->Write(2, 2, 1, 1, &word, false, false); // in page 0 only
+  EXPECT_NE(cache->GetPageGeneration(1), page1);
 }

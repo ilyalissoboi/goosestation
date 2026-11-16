@@ -8,6 +8,8 @@
 #include "core/gpu_types.h"
 #include "core/texture_names.h"
 
+#include "test_data_dir.h"
+
 #include "common/file_system.h"
 #include "common/path.h"
 #include "common/string_util.h"
@@ -27,7 +29,7 @@ namespace {
 std::vector<std::string> ReadNames(const char* run)
 {
   const std::optional<std::string> list = FileSystem::ReadFileToString(
-    Path::Combine(GOOSESTATION_TEST_DATA_DIR, fmt::format("texture-names/SLUS-01040-reference-{}.txt", run)).c_str());
+    Path::Combine(GetTestDataDir(), fmt::format("texture-names/SLUS-01040-reference-{}.txt", run)).c_str());
   std::vector<std::string> names;
   if (list.has_value())
   {
@@ -50,6 +52,9 @@ std::vector<u16> ReadWords(const std::string& path)
 
 TEST(TextureCacheReference, EveryReferenceNameRoundTrips)
 {
+  if (!FileSystem::DirectoryExists(Path::Combine(GetTestDataDir(), "texture-names").c_str()))
+    GTEST_SKIP() << "No test data at " << GetTestDataDir();
+
   u32 count = 0;
   for (const char* run : {"a", "b", "c"})
   {

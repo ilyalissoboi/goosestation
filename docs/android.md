@@ -326,6 +326,10 @@ GOOSE_TEST_DATA=~/work/goose-test-data android/scripts/run-instrumented-tests.sh
   ("Results on the emulator"). `full` won't start unless all four are there, since a test missing one is skipped
   rather than failed. Without the folder (quick only) just `extras/padtest/padtest.psexe` is pushed, and the tests
   that need the BIOS are skipped.
+- `TextureCacheTest` also wants, from the user's own copy of the game, `games/Vagrant Story (USA).chd` and
+  `savestates/SLUS-01040_2.sav` (a state at the command menu), and `packs/vs-font/textures/SLUS-01040/` (the Vagrant
+  Story HD dialogue font pack's folder, as published); without them it is skipped. The state was made on another
+  machine, so the test points its copy at the device's disc before loading it.
 - The tests run with animations off (`testOptions.animationsDisabled`).
 
 ```bash

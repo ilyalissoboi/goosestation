@@ -115,6 +115,10 @@ All ours.
   while the data folder has none, never taken back). It doesn't even list a pack's own folders, so a pack of tens of
   thousands of files costs a mirror run nothing. Copies of packs an earlier build pulled into the app's storage are
   dropped from it (never from the data folder). Legacy `vram-write-` dumps in `dump/textures/` are mirrored as before.
+- Checked on the Android emulators (2026-11-17, `TextureCacheTest`) on Vulkan (the host's GPU) and OpenGL ES 3.1
+  (ANGLE on SwiftShader), with the Vagrant Story HD font pack read in place from a `content://` data folder at the
+  command menu: the pack changes the menu's frame; the cache tracking VRAM with nothing to replace leaves frames as
+  they are without it; dumps land in the app's storage and nothing of the pack is copied there.
 - Android's defaults for the memory budgets are smaller (ours): `MaxHashCacheVRAMUsageMB` 512 (desktop 2048) and
   `MaxReplacementCacheVRAMUsage` 256 (desktop 512). A value in the settings or a pack's `config.yaml` wins. Large
   packs are best preloaded on Android (`PreloadTextures`), since images read through the data folder's grant load

@@ -19,9 +19,10 @@ finding touches one of them, it says so.
 **Sizes.** S is under an hour, M is about half a day, L is several days. Paths are relative to
 `android/app/src/main/java/io/github/ilyalissoboi/goosestation/` unless they start with `android/`, `src/` or `.github/`.
 
-## Status, 2026-11-15
+## Status, 2026-11-16
 
-Nearly every finding has since been fixed, each test-first where a test could run. Where they landed:
+Every finding has since been fixed, each test-first where a test could run, but for two left on purpose (below).
+Where they landed:
 
 | PR | Fixed |
 |---|---|
@@ -51,7 +52,8 @@ Nearly every finding has since been fixed, each test-first where a test could ru
 | [#115](https://github.com/ilyalissoboi/goosestation/pull/115) | From 3.1: `Navigator` out of `AppController` |
 | [#118](https://github.com/ilyalissoboi/goosestation/pull/118) | The last of 3.1: `CoreEvents` and `AchievementMessages` out of `AppController` |
 | [#119](https://github.com/ilyalissoboi/goosestation/pull/119) | The last of 3.2: `ShownPanel`, the in-game menu's one side panel as one field |
-| Batch P | The last of 3.5: the controllers screens take `ControllersState` and `ControllersActions` |
+| [#120](https://github.com/ilyalissoboi/goosestation/pull/120) | The last of 3.5: the controllers screens take `ControllersState` and `ControllersActions` |
+| Batch Q | The last of 4.2: `rememberInitialFocus`, `rememberFocusRequesters` and `FocusHolderLine`; `Notice(status, text)`; `PageHeader`; `ScreenPadding` |
 
 **How some of them turned out:**
 - **1.7:** fixed first with one `withSide()` helper, then with the sealed type it asked for (#119), named
@@ -74,7 +76,7 @@ Nearly every finding has since been fixed, each test-first where a test could ru
   `Navigator` and `CoreEvents`, each with JVM tests. What stays is the wiring, the lifecycle, the cold start, and the
   pieces' hooks. It is no longer the core's `NativeCallbacks`.
 - **3.5, the controllers screens:** done as the post-processing page's shape: each screen takes the page's state and
-  an actions interface the page implements (batch P). The rules `MainActivity` worked out (the controllers on a port,
+  an actions interface the page implements (#120). The rules `MainActivity` worked out (the controllers on a port,
   a port's name, glyphs, the macro row to focus) are `ControllersState`'s, which the page shares. `BindingsPage` and
   `CaptureBindingRow` hold the capture's frame; the three prompts keep their own words. `MainActivity` went from 615
   lines to 496.
@@ -84,13 +86,17 @@ Nearly every finding has since been fixed, each test-first where a test could ru
 - **6, the toggle's thumb:** kept at 2 dp. The design system now says a shape nested in another takes the outer radius
   less the padding.
 
-**Still open:**
-- **From 4.2:**
-  - the focus set-up helpers (`rememberFocusRequesters`, a `FocusHolderLine` with a ring);
-  - `Notice` with one text style and a live region;
-  - `SettingsPage` and `LazySettingsPage` sharing a `PageHeader`;
-  - a `ScreenPadding` constant for the page scaffold.
-- **Left on purpose:** 1.9's stale hub read, and the deleted save's 0.4 alpha (6), which breaks no token.
+- **4.2, the last of it (batch Q):**
+  - the 7 lines that hold the focus where a page has nothing to press now show the ring;
+  - the 14 one-message notices are in `body`, as the type table has a message. `Banner` and `UpdateBanner` keep
+    their own content, and an update's progress isn't a live region;
+  - the screens pad 24 dp at the top and bottom, a step of the grid, not 20; the settings rail's title moved with
+    the pages' so the two stay level;
+  - `SettingsPage(initialFocus = …)` wasn't added: `rememberInitialFocus()` serves the pages that open on their first
+    row, and the pages that pick it by state keep their own effect.
+
+**Still open:** nothing. **Left on purpose:** 1.9's stale hub read, and the deleted save's 0.4 alpha (6), which breaks
+no token.
 
 ---
 

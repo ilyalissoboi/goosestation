@@ -9,7 +9,7 @@ The last open items of the Android code review (`docs/reviews/2026-11-10-android
 Four patterns are still written by hand on each screen, and each copy has drifted a little:
 
 - **Focus set-up.** `remember { FocusRequester() }` and `LaunchedEffect(Unit) { requestFocus() }` open 11 pages and the loading page.
-  `remember { mutableMapOf<K, FocusRequester>() }` with `getOrPut` makes a requester per row in 6 places. Six lines
+  `remember { mutableMapOf<K, FocusRequester>() }` with `getOrPut` makes a requester per row in 6 places. Seven lines
   hold the focus when a page has nothing to press ("Connect a controller to set it up.", "Reading the settings…"),
   each a `Text` with `.focusable()` and no ring, against "Focus is always visible" (design-system.md, principle 2).
 - **One-message notices** (a `Notice` whose content is one `Text`) come in three text styles: `bodyMedium` (8),
@@ -24,8 +24,9 @@ Four patterns are still written by hand on each screen, and each copy has drifte
 ## Goals
 
 - **`rememberInitialFocus()`**, a requester the element it's on takes as the page opens, on the 11 pages and the loading page.
-- **`rememberFocusRequesters<K>()`**, a requester per key, made the first time it's asked for, in the 6 places.
-- **`FocusHolderLine(text)`**, a line that holds the focus with nothing to press, with the focus ring, in the 6 places.
+- **`rememberFocusRequesters<K>()`**, a requester per key, made the first time it's asked for, in the 5 places that
+  only make and keep one. A sixth, the sync conflicts', fills its map as its rows compose, and stays.
+- **`FocusHolderLine(text)`**, a line that holds the focus with nothing to press, with the focus ring, in the 7 places.
 - **`Notice(status, text)`**, a one-message notice in `body` and `ink`, announced politely as it appears or changes,
   at the 14 one-message sites.
 - **`PageHeader(title, subtitle)`** and one back set-up, shared by `SettingsPage` and `LazySettingsPage`.
@@ -63,8 +64,8 @@ These are my calls as the designer. A builder may adjust names, but not the shap
   entries, a memory-card sync row shown only first) keeps its own effect.
 - **`rememberFocusRequesters<K>(): FocusRequesters<K>`**, a `@Stable` class with `operator fun get(key: K):
   FocusRequester`, made on first use and kept for the screen's life, as `getOrPut` does now.
-- **`FocusHolderLine(text, modifier, requester)`**: `body` in `ink-muted` (as five of the six are now), padded 16 dp at the
-  sides and 8 dp down, holding the focus with `focusStop()`, so it shows the ring and the `raised` fill, and a screen
+- **`FocusHolderLine(text, modifier, requester)`**: `body` in `ink-muted` (as six of the seven are now), padded 16 dp
+  at the sides and 8 dp down, holding the focus with `focusStop()`, so it shows the ring and the `raised` fill, and a screen
   reader reads it whole and not as a button. `requester` is the focus requester it carries, usually
   `rememberInitialFocus()`; `enabled = false` makes it no stop, for the port's line below its type row.
 - **`Notice(status, text, modifier, icon)`**: the existing `Notice` with one `Text(text, bodyLarge, ink)` and

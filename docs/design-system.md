@@ -149,7 +149,8 @@ screens with 48 dp inside the overscan-safe area.
 ## Space, size and shape
 
 - **A 4 dp grid:** 4, 8, 12, 16, 24, 32, 48, 64 (`space-1` to `space-8`). Rows and buttons pad 16 or 24 at the sides,
-  screens 32 (48 on a TV), sections sit 12 to 24 apart. Android uses these as `dp` literals.
+  screens 32 (48 on a TV) and 24 at the top and bottom (`ScreenPadding`), sections sit 12 to 24 apart. Android uses
+  these as `dp` literals.
 - **Controls** are at least 48 dp tall on touch screens and TVs, which is also the smallest touch target; 40 dp is
   for pointer-only desktop controls.
 - **Radii:** `radius-sm` 4 dp for small, tight things (badges, toggles, fields, covers), `radius-md` 8 dp for
@@ -222,6 +223,17 @@ Row(Modifier.fillMaxWidth().focusRing(role = Role.Button, onClick = ::open).padd
 the touch target cover the whole element. For a ring on part of an element, pass `ring = false` and
 `onFocusChange`, and draw `Modifier.focusIndicator(focused, colors.focus, shape)` on the part, as `GameTile` does.
 
+```kotlin
+val first = rememberInitialFocus()
+val rows = rememberFocusRequesters<String>()
+FocusHolderLine("Connect a controller to set it up.", requester = first)
+```
+
+`rememberInitialFocus()` is the requester of what a page focuses as it opens. `rememberFocusRequesters<K>()` gives a
+requester per row, by key, kept for the screen's life. Where a page has nothing to press, a `FocusHolderLine` holds the
+focus, so B and Back reach the page: a `body` line in `ink-muted` with the ring (`Modifier.focusStop`, which is for
+anything read and not pressed), that a screen reader doesn't hear as a button.
+
 ### `IconActionButton` and `ActionLabelStrip` (`IconActionButton.kt`)
 
 ```kotlin
@@ -258,17 +270,18 @@ the keyboard's action is Search, which closes it; `onKeyboardClosed` hears it cl
 ### `Notice` and `Banner` (`Banner.kt`)
 
 ```kotlin
-Notice(NoticeStatus.Warning) {
-    Text("Memory card sync is offline", style = MaterialTheme.typography.titleMedium, color = colors.ink)
-}
+Notice(NoticeStatus.Danger, "Couldn't save the card.")
+Notice(NoticeStatus.Warning) { … }
 Banner(BannerModel("Can't read your BIOS folder.", listOf("Pick again" to ::repick)))
 ```
 
 A message in the page, on its status's `-soft` ground, with the status icon: `Info` (a square, or pass
 `icon = GsIcons.sync` for activity), `Success` (a ticked square), `Warning` (a triangle), `Danger` (an octagon). A
 `Banner` is a warning notice with up to two secondary actions. Notices go at the top of the content, most serious
-first, and leave when their cause does. A notice never holds a primary button. `MessageBar` in `LibraryScreen.kt` is
-the app's passing status line, an info or danger notice.
+first, and leave when their cause does. A notice never holds a primary button. One that says one thing is
+`Notice(status, text)`: its message in `body` and `ink`, one node a screen reader hears, politely, as it appears or
+changes. Content of its own, as an update's progress, goes in the lambda, and isn't a live region. `MessageBar`
+(`MessageBar.kt`) is the app's passing status line, an info or danger notice.
 
 ### `UpdateBanner` (`UpdateBanner.kt`)
 
@@ -350,7 +363,8 @@ SettingsPage("Graphics", onBack = onBack) {
 }
 ```
 
-- `SettingsPage`: the title in `title-1`, the rows in a scrolling column, B and Back going back. It keeps one choice
+- `SettingsPage`: its `PageHeader` (the game's title as an eyebrow on a game's own pages, then the title in
+  `title-1`), the rows in a scrolling column inside `ScreenPadding`, B and Back going back. It keeps one choice
   list open at a time; a tap outside an open list closes it and still does what it would have.
 - `CyclerRow`: a setting with a few values, shown between two arrows. Left and right step and stop at the ends; a tap
   on an arrow steps its way. Each step is the change. A, Enter or a tap on the row open its choice list. A

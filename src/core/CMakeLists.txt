@@ -124,6 +124,8 @@ add_library(core
   system.h
   texture_names.cpp
   texture_names.h
+  texture_pack_config.cpp
+  texture_pack_config.h
   texture_replacements.cpp
   texture_replacements.h
   timers.cpp

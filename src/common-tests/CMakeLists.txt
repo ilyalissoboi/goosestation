@@ -44,6 +44,8 @@ add_executable(common-tests
   string_tests.cpp
   text_input_tests.cpp
   texture_names_tests.cpp
+  texture_pack_config_tests.cpp
+  settings_texture_cache_tests.cpp
   ../util/text_input.cpp
 )
 

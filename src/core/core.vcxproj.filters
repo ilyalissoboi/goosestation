@@ -52,6 +52,7 @@
     <ClCompile Include="gpu_backend.cpp" />
     <ClCompile Include="gpu_sw_backend.cpp" />
     <ClCompile Include="texture_names.cpp" />
+    <ClCompile Include="texture_pack_config.cpp" />
     <ClCompile Include="texture_replacements.cpp" />
     <ClCompile Include="multitap.cpp" />
     <ClCompile Include="host.cpp" />
@@ -130,6 +131,7 @@
     <ClInclude Include="gpu_backend.h" />
     <ClInclude Include="gpu_sw_backend.h" />
     <ClInclude Include="texture_names.h" />
+    <ClInclude Include="texture_pack_config.h" />
     <ClInclude Include="texture_replacements.h" />
     <ClInclude Include="multitap.h" />
     <ClInclude Include="host.h" />

@@ -94,3 +94,14 @@ outside the repository.
   rerun): the opening draws no glyph-sized rects, and its dialogue text seems to be put together by the game into the
   dialogue box's texture. 4 of the pack's 21 palette hashes do appear there. The pack's glyphs are drawn in menus and
   during play, which a run without input doesn't reach; checking the pack needs such a scene.
+
+### config.yaml
+
+- Read from `textures/<serial>/config.yaml`, else `config.yml`. Keys it sets override the global settings of the same
+  name for that game; keys it leaves out (or comments out) keep the global values (ours).
+- Read as flat YAML: `Key: value` lines, `#` comments, quoted values, and the `Aliases:` map of indented
+  `name: file` lines, where a file may also be on the next, more indented line after `name: |`. Booleans are
+  `true`/`false` (also `yes`/`no`, `on`/`off`, `1`/`0`); numbers are whole and not negative. A known key with a value
+  of the wrong type stops the file being used, with an error naming the key; unknown keys and other lines are skipped
+  with a warning (ours).
+- The `config.yaml` written beside a game's first dump has every key commented out, with our own comments (ours).

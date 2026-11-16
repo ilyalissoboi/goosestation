@@ -67,6 +67,8 @@ import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CoverJob
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
@@ -1969,25 +1971,25 @@ class OrientationLayoutTest : ControllerKeys {
     private fun controllersWithTwoPads(glyphs: Boolean) {
         eachConfig({
             var selected by remember { mutableStateOf(LONG_PAD.descriptor) }
+            val actions =
+                remember {
+                    object : FakeControllersActions() {
+                        override fun select(descriptor: String) {
+                            selected = descriptor
+                        }
+                    }
+                }
             PortScreen(
-                title = "Port 1",
-                controllers = listOf(PAD, LONG_PAD),
-                labels = emptyMap(),
-                selected = selected,
-                bindings = BINDINGS,
-                bindingsFor = LONG_PAD.descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = { selected = it },
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
+                ControllersState(
+                    controllers = listOf(PAD, LONG_PAD),
+                    selected = selected,
+                    bindings = BINDINGS,
+                    bindingsFor = LONG_PAD.descriptor,
+                    bindingsType = glyphTypeOr(glyphs),
+                    view = ControllersView.Port(0),
+                ),
+                actions,
                 onBack = {},
-                glyphs = glyphs,
             )
         }) {
             assertTextsLaidOut()
@@ -2018,39 +2020,35 @@ class OrientationLayoutTest : ControllerKeys {
     fun theControllersHub() {
         eachConfig({
             ControllersScreen(
-                controllers = listOf(PAD.copy(motors = 2), LONG_PAD),
-                labels = emptyMap(),
-                ports = mapOf(LONG_PAD.descriptor to 4),
-                rumble = emptyMap(),
-                offered =
-                    (0..7).map {
-                        Choice(
-                            it,
-                            listOf(
-                                "Port 1A",
-                                "Port 2A",
-                                "Port 1B",
-                                "Port 1C",
-                                "Port 1D",
-                                "Port 2B",
-                                "Port 2C",
-                                "Port 2D",
-                            )[it],
-                        )
-                    },
-                portTypes = (0..7).associateWith { if (it == 0) "AnalogController" else "NeGconRumble" },
-                typeNames =
-                    listOf(
-                        Choice("AnalogController", "Analog Controller (DualShock)"),
-                        Choice("NeGconRumble", "NeGcon (Rumble)"),
-                    ),
-                multitap = pageValues(listOf(PortSettings.MULTITAP), "ControllerPorts/MultitapMode" to "BothPorts"),
-                multitapNames = listOf(Choice("BothPorts", "Enable on Ports 1 and 2")),
-                onPort = { _, _ -> },
-                onRumble = { _, _ -> },
-                onMultitap = {},
-                onOpenPort = {},
-                onOpenHotkeys = {},
+                ControllersState(
+                    controllers = listOf(PAD.copy(motors = 2), LONG_PAD),
+                    ports = mapOf(LONG_PAD.descriptor to 4),
+                    offered =
+                        (0..7).map {
+                            Choice(
+                                it,
+                                listOf(
+                                    "Port 1A",
+                                    "Port 2A",
+                                    "Port 1B",
+                                    "Port 1C",
+                                    "Port 1D",
+                                    "Port 2B",
+                                    "Port 2C",
+                                    "Port 2D",
+                                )[it],
+                            )
+                        },
+                    portTypes = (0..7).associateWith { if (it == 0) "AnalogController" else "NeGconRumble" },
+                    typeNames =
+                        listOf(
+                            Choice("AnalogController", "Analog Controller (DualShock)"),
+                            Choice("NeGconRumble", "NeGcon (Rumble)"),
+                        ),
+                    multitap = pageValues(listOf(PortSettings.MULTITAP), "ControllerPorts/MultitapMode" to "BothPorts"),
+                    multitapNames = listOf(Choice("BothPorts", "Enable on Ports 1 and 2")),
+                ),
+                FakeControllersActions(),
                 onBack = {},
             )
         }) {
@@ -2112,20 +2110,14 @@ class OrientationLayoutTest : ControllerKeys {
     fun theHotkeysPage() {
         eachConfig({
             HotkeysScreen(
-                controllers = listOf(PAD, LONG_PAD),
-                labels = emptyMap(),
-                selected = LONG_PAD.descriptor,
-                hotkeys = HOTKEYS,
-                hotkeysFor = LONG_PAD.descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCaptureHotkey = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
+                ControllersState(
+                    controllers = listOf(PAD, LONG_PAD),
+                    selected = LONG_PAD.descriptor,
+                    hotkeys = HOTKEYS,
+                    bindingsFor = LONG_PAD.descriptor,
+                    view = ControllersView.Hotkeys,
+                ),
+                FakeControllersActions(),
                 onBack = {},
             )
         }) {
@@ -2144,28 +2136,21 @@ class OrientationLayoutTest : ControllerKeys {
     fun aPortWithNeGconsSettings() {
         eachConfig({
             PortScreen(
-                title = "Port 1A",
-                controllers = listOf(PAD, LONG_PAD),
-                labels = emptyMap(),
-                selected = LONG_PAD.descriptor,
-                bindings = BINDINGS,
-                bindingsFor = LONG_PAD.descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
+                ControllersState(
+                    controllers = listOf(PAD, LONG_PAD),
+                    selected = LONG_PAD.descriptor,
+                    bindings = BINDINGS,
+                    bindingsFor = LONG_PAD.descriptor,
+                    offered = listOf(Choice(0, "Port 1A")),
+                    view = ControllersView.Port(0),
+                    portTypes = mapOf(0 to "NeGcon"),
+                    typeNames = listOf(Choice("NeGcon", "NeGcon")),
+                    typeSettings = NEGCON_SETTINGS,
+                    portValues =
+                        portPageValues(NEGCON_SETTINGS, "Pad1/Macro4Binds" to "Cross & Circle & Square & Triangle"),
+                ),
+                FakeControllersActions(),
                 onBack = {},
-                glyphs = false,
-                type = "NeGcon",
-                typeNames = listOf(Choice("NeGcon", "NeGcon")),
-                typeSettings = NEGCON_SETTINGS,
-                values = portPageValues(NEGCON_SETTINGS, "Pad1/Macro4Binds" to "Cross & Circle & Square & Triangle"),
             )
         }) {
             assertTextsLaidOut()
@@ -2183,26 +2168,17 @@ class OrientationLayoutTest : ControllerKeys {
     fun aMacroPage() {
         eachConfig({
             MacroScreen(
-                title = "Macro 2 · Port 2C",
-                pad = 6,
-                macro = 2,
-                controllers = listOf(LONG_PAD),
-                labels = emptyMap(),
-                selected = LONG_PAD.descriptor,
-                triggers = listOf(PadBinding("Macro2", "Macro 2", PadBindingKind.Button, null)),
-                triggersFor = LONG_PAD.descriptor,
-                inputs = BINDINGS,
-                values = pageValues(MacroSettings.settings(6, 2)),
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onChange = {},
+                ControllersState(
+                    controllers = listOf(LONG_PAD),
+                    selected = LONG_PAD.descriptor,
+                    ports = mapOf(LONG_PAD.descriptor to 6),
+                    macros = listOf(PadBinding("Macro2", "Macro 2", PadBindingKind.Button, null)),
+                    bindingsFor = LONG_PAD.descriptor,
+                    macroInputs = BINDINGS,
+                    macroValues = pageValues(MacroSettings.settings(6, 2)),
+                    view = ControllersView.Macro(6, 2),
+                ),
+                FakeControllersActions(),
                 onBack = {},
             )
         }) {
@@ -2218,24 +2194,16 @@ class OrientationLayoutTest : ControllerKeys {
     fun controllersWithGlyphsAtLargeText() {
         eachConfig({
             PortScreen(
-                title = "Port 1",
-                controllers = listOf(PAD),
-                labels = emptyMap(),
-                selected = PAD.descriptor,
-                bindings = BINDINGS,
-                bindingsFor = PAD.descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
+                ControllersState(
+                    controllers = listOf(PAD),
+                    selected = PAD.descriptor,
+                    bindings = BINDINGS,
+                    bindingsFor = PAD.descriptor,
+                    bindingsType = glyphTypeOr(true),
+                    view = ControllersView.Port(0),
+                ),
+                FakeControllersActions(),
                 onBack = {},
-                glyphs = true,
             )
         }) {
             assertTextsLaidOut()
@@ -2251,6 +2219,9 @@ class OrientationLayoutTest : ControllerKeys {
         }
     }
 
+    // A type whose inputs show as glyphs, or with none, words.
+    private fun glyphTypeOr(glyphs: Boolean) = if (glyphs) "AnalogController" else null
+
     private fun focusedDescribedAs(name: String) =
         rule.onAllNodes(isFocused() and hasContentDescription(name)).fetchSemanticsNodes().isNotEmpty()
 
@@ -2264,24 +2235,16 @@ class OrientationLayoutTest : ControllerKeys {
         val pads = mutableStateOf(listOf(PAD))
         eachConfig({
             PortScreen(
-                title = "Port 1",
-                controllers = pads.value,
-                labels = emptyMap(),
-                selected = pads.value.firstOrNull()?.descriptor,
-                bindings = if (pads.value.isEmpty()) emptyList() else BINDINGS,
-                bindingsFor = pads.value.firstOrNull()?.descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
+                ControllersState(
+                    controllers = pads.value,
+                    selected = pads.value.firstOrNull()?.descriptor,
+                    bindings = if (pads.value.isEmpty()) emptyList() else BINDINGS,
+                    bindingsFor = pads.value.firstOrNull()?.descriptor,
+                    bindingsType = glyphTypeOr(glyphs),
+                    view = ControllersView.Port(0),
+                ),
+                FakeControllersActions(),
                 onBack = {},
-                glyphs = glyphs,
             )
         }) {
             pads.value = listOf(PAD)
@@ -2309,25 +2272,32 @@ class OrientationLayoutTest : ControllerKeys {
     private fun capturePrompt(glyphs: Boolean) {
         val capturing: MutableState<String?> = mutableStateOf(null)
         eachConfig({
+            // The page shows the capture it starts, and ends it as it's cancelled.
+            val actions =
+                remember {
+                    object : FakeControllersActions() {
+                        override fun capture(name: String) {
+                            capturing.value = name
+                        }
+
+                        override fun cancelCapture() {
+                            capturing.value = null
+                        }
+                    }
+                }
             PortScreen(
-                title = "Port 1",
-                controllers = listOf(LONG_PAD),
-                labels = emptyMap(),
-                selected = LONG_PAD.descriptor,
-                bindings = BINDINGS,
-                bindingsFor = LONG_PAD.descriptor,
-                capturing = capturing.value,
-                secondsLeft = 5,
-                undoFor = null,
-                onSelect = {},
-                onCapture = { capturing.value = it },
-                onCancelCapture = { capturing.value = null },
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
+                ControllersState(
+                    controllers = listOf(LONG_PAD),
+                    selected = LONG_PAD.descriptor,
+                    bindings = BINDINGS,
+                    bindingsFor = LONG_PAD.descriptor,
+                    bindingsType = glyphTypeOr(glyphs),
+                    capturing = capturing.value,
+                    secondsLeft = 5,
+                    view = ControllersView.Port(0),
+                ),
+                actions,
                 onBack = {},
-                glyphs = glyphs,
             )
         }) {
             // The row that's lowest on screen once Down has scrolled to it: a capture there grows it at the bottom.

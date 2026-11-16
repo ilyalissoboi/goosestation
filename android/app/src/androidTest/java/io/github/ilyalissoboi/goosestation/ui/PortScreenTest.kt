@@ -4,18 +4,11 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import android.view.KeyEvent
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -27,9 +20,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.app.ControllersView
+import io.github.ilyalissoboi.goosestation.app.Undo
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
@@ -41,8 +35,6 @@ import io.github.ilyalissoboi.goosestation.settings.MacroSettings
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
-import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
-import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -129,22 +121,40 @@ class PortScreenTest : ControllerKeys {
 
     @get:Rule override val rule = createComposeRule()
 
-    private val selects = mutableListOf<String>()
-    private val types = mutableListOf<String>()
-    private val changes = mutableListOf<SettingValues>()
-    private val macros = mutableListOf<Int>()
-    private val captures = mutableListOf<String>()
-    private val clears = mutableListOf<String>()
-    private var cancels = 0
-    private var resets = 0
-    private var backs = 0
-    private var undos = 0
-    private var dropUndos = 0
+    @get:Rule val deviceKeys = DeviceKeys()
 
     // What the page shows, which a test can change once it's open.
-    private var controllers by mutableStateOf(listOf(PAD))
-    private var capturing by mutableStateOf<String?>(null)
-    private var undoFor by mutableStateOf<String?>(null)
+    private var state by mutableStateOf(ControllersState())
+    private var controllers
+        get() = state.controllers
+        set(value) {
+            state = state.copy(controllers = value)
+        }
+    private var capturing
+        get() = state.capturing
+        set(value) {
+            state = state.copy(capturing = value)
+        }
+
+    // An Undo pressed puts the binding back, and the row offers Clear again.
+    private val actions =
+        object : FakeControllersActions() {
+            override fun undo() {
+                super.undo()
+                state = state.copy(undo = null)
+            }
+        }
+    private val selects get() = actions.selects
+    private val types get() = actions.types.map { it.second }
+    private val changes get() = actions.portChanges
+    private val macros get() = actions.macros.map { it.second }
+    private val captures get() = actions.captures
+    private val clears get() = actions.clears
+    private val cancels get() = actions.cancels
+    private val resets get() = actions.resets
+    private val undos get() = actions.undos
+    private val dropUndos get() = actions.dropUndos
+    private var backs = 0
 
     private fun show(
         controllers: List<ConnectedController> = listOf(PAD),
@@ -161,44 +171,24 @@ class PortScreenTest : ControllerKeys {
         typeSettings: List<TypeSetting> = emptyList(),
         values: SettingValues? = null,
     ) {
-        this.controllers = controllers
-        this.capturing = capturing
-        this.undoFor = undoFor
-        rule.setContent {
-            GooseStationTheme {
-                PortScreen(
-                    title = "Port 1",
-                    controllers = this.controllers,
-                    labels = labels,
-                    selected = selected,
-                    bindings = bindings,
-                    bindingsFor = bindingsFor,
-                    capturing = this.capturing,
-                    secondsLeft = secondsLeft,
-                    undoFor = this.undoFor,
-                    onSelect = { selects += it },
-                    onCapture = { captures += it },
-                    onCancelCapture = { cancels++ },
-                    onClear = { clears += it },
-                    onUndo = {
-                        undos++
-                        this.undoFor = null
-                    },
-                    onDropUndo = { dropUndos++ },
-                    onReset = { resets++ },
-                    onBack = { backs++ },
-                    glyphs = glyphs,
-                    pad = 0,
-                    type = type,
-                    typeNames = TYPES,
-                    onType = { types += it },
-                    typeSettings = typeSettings,
-                    values = values,
-                    onChange = { changes += it },
-                    onOpenMacro = { macros += it },
-                )
-            }
-        }
+        state =
+            ControllersState(
+                controllers = controllers,
+                labels = labels,
+                selected = selected,
+                bindings = bindings,
+                bindingsFor = bindingsFor,
+                bindingsType = if (glyphs) "AnalogController" else null,
+                capturing = capturing,
+                secondsLeft = secondsLeft,
+                undo = undoFor?.let { Undo(it, null) },
+                view = ControllersView.Port(0),
+                portTypes = type?.let { mapOf(0 to it) }.orEmpty(),
+                typeNames = TYPES,
+                typeSettings = typeSettings,
+                portValues = values,
+            )
+        rule.setContent { GooseStationTheme { PortScreen(state, actions, onBack = { backs++ }) } }
         rule.waitForIdle()
     }
 
@@ -335,81 +325,29 @@ class PortScreenTest : ControllerKeys {
         rule.onNodeWithText("Macro 1").assertExists()
     }
 
-    @get:Rule val deviceKeys = DeviceKeys()
-
-    // The port's page and one of its macros as the app has them: in the settings' two panels, at the Thor's window
-    // size, one view at a time, with Back from the macro to the port. A macro's page here is a row that takes the
-    // focus as it opens, as MacroScreen's does.
-    private fun showInPanels() {
-        var macro by mutableStateOf<Int?>(null)
-        var cameFrom by mutableStateOf<Int?>(null)
-        var inPage by mutableStateOf(true)
-        rule.setContent {
-            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(832.dp, 420.dp))) {
-                GooseStationTheme {
-                    SettingsPanels(
-                        current = SettingsEntry.Controllers,
-                        inPage = inPage,
-                        coreReady = true,
-                        locked = false,
-                        onShow = { inPage = false },
-                        onEnterPage = { inPage = true },
-                        onBack = { backs++ },
-                    ) { onBack ->
-                        val shown = macro
-                        if (shown != null) {
-                            val first = remember { FocusRequester() }
-                            LaunchedEffect(Unit) { first.requestFocus() }
-                            SettingsPage(
-                                "Macro $shown",
-                                onBack = {
-                                    cameFrom = shown
-                                    macro = null
-                                },
-                            ) {
-                                SwitchRow("Macro's first row", false, onToggle = {}, Modifier.focusRequester(first))
-                            }
-                        } else {
-                            PortScreen(
-                                title = "Port 1",
-                                controllers = listOf(PAD),
-                                labels = emptyMap(),
-                                selected = PAD.descriptor,
-                                bindings = BINDINGS,
-                                bindingsFor = PAD.descriptor,
-                                capturing = null,
-                                secondsLeft = 0,
-                                undoFor = null,
-                                onSelect = {},
-                                onCapture = {},
-                                onCancelCapture = {},
-                                onClear = {},
-                                onUndo = {},
-                                onDropUndo = {},
-                                onReset = {},
-                                onBack = onBack,
-                                glyphs = false,
-                                type = "AnalogController",
-                                typeNames = TYPES,
-                                typeSettings = SETTINGS,
-                                values = portValues(),
-                                onOpenMacro = { macro = it },
-                                focusMacro = cameFrom,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        rule.waitForIdle()
-    }
+    // Port 1's page as the app has it on the Thor, with its settings, bindings and macros read.
+    private fun showInPanels() =
+        rule.showControllersInPanels(
+            ControllersState(
+                controllers = listOf(PAD),
+                selected = PAD.descriptor,
+                bindings = BINDINGS,
+                macros = emptyList(),
+                bindingsFor = PAD.descriptor,
+                view = ControllersView.Port(0),
+                portTypes = mapOf(0 to "AnalogController"),
+                typeNames = TYPES,
+                typeSettings = SETTINGS,
+                portValues = portValues(),
+            ),
+        )
 
     @Test
     fun backFromAMacroInThePanelsFocusesItsRow() {
         showInPanels()
         walkTo("Macro 3")
         press(Key.ButtonA)
-        assertFocusedHas("Macro's first row")
+        rule.onNodeWithText("Macro 3 · Port 1").assertExists()
 
         // A controller's B, as it comes on a device.
         deviceKeys.press(KeyEvent.KEYCODE_BUTTON_B)

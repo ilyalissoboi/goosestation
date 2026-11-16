@@ -13,11 +13,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.MacroSettings
-import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -30,41 +31,28 @@ import org.junit.runner.RunWith
 class MacroScreenTest : ControllerKeys {
     @get:Rule override val rule = createComposeRule()
 
-    private val changes = mutableListOf<SettingValues>()
-    private val captures = mutableListOf<String>()
+    private val actions = FakeControllersActions()
+    private val changes get() = actions.macroChanges
+    private val captures get() = actions.captures
 
     private fun show(
         controllers: List<ConnectedController> = listOf(PAD),
         capturing: String? = null,
         vararg file: Pair<String, String>,
     ) {
-        rule.setContent {
-            GooseStationTheme {
-                MacroScreen(
-                    title = "Macro 1 · Port 1",
-                    pad = 0,
-                    macro = 1,
-                    controllers = controllers,
-                    labels = emptyMap(),
-                    selected = controllers.firstOrNull()?.descriptor,
-                    triggers = listOf(PadBinding("Macro1", "Macro 1", PadBindingKind.Button, "Button99")),
-                    triggersFor = controllers.firstOrNull()?.descriptor,
-                    inputs = INPUTS,
-                    values = pageValues(MacroSettings.settings(0, 1), *file),
-                    capturing = capturing,
-                    secondsLeft = 5,
-                    undoFor = null,
-                    onSelect = {},
-                    onCapture = { captures += it },
-                    onCancelCapture = {},
-                    onClear = {},
-                    onUndo = {},
-                    onDropUndo = {},
-                    onChange = { changes += it },
-                    onBack = {},
-                )
-            }
-        }
+        val state =
+            ControllersState(
+                controllers = controllers,
+                selected = controllers.firstOrNull()?.descriptor,
+                macros = listOf(PadBinding("Macro1", "Macro 1", PadBindingKind.Button, "Button99")),
+                bindingsFor = controllers.firstOrNull()?.descriptor,
+                macroInputs = INPUTS,
+                macroValues = pageValues(MacroSettings.settings(0, 1), *file),
+                capturing = capturing,
+                secondsLeft = 5,
+                view = ControllersView.Macro(0, 1),
+            )
+        rule.setContent { GooseStationTheme { MacroScreen(state, actions, onBack = {}) } }
         rule.waitForIdle()
     }
 

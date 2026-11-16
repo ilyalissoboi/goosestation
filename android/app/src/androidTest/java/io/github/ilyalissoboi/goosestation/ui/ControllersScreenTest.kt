@@ -4,18 +4,11 @@
 package io.github.ilyalissoboi.goosestation.ui
 
 import android.view.KeyEvent
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.test.DeviceConfigurationOverride
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.ForcedSize
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasText
@@ -23,9 +16,8 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.TouchMode
 import io.github.ilyalissoboi.goosestation.app.TouchSettings
@@ -34,8 +26,6 @@ import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
-import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
-import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -62,22 +52,19 @@ class ControllersScreenTest : ControllerKeys {
         rule.setContent {
             GooseStationTheme {
                 ControllersScreen(
-                    controllers = controllers,
-                    labels = emptyMap(),
-                    ports = ports,
-                    rumble = mapOf(PAD.descriptor to 60),
-                    offered = offered,
-                    portTypes = mapOf(0 to "AnalogController", 1 to "None"),
-                    typeNames = TYPES,
-                    multitap = MULTITAP,
-                    multitapNames = MODES,
-                    onPort = { d, pad -> calls += "port $d $pad" },
-                    onRumble = { d, percent -> calls += "rumble $d $percent" },
-                    onMultitap = { calls += "multitap ${it[PortSettings.MULTITAP]}" },
-                    onOpenPort = { calls += "open $it" },
-                    onOpenHotkeys = { calls += "hotkeys" },
+                    ControllersState(
+                        controllers = controllers,
+                        ports = ports,
+                        rumble = mapOf(PAD.descriptor to 60),
+                        offered = offered,
+                        portTypes = mapOf(0 to "AnalogController", 1 to "None"),
+                        typeNames = TYPES,
+                        multitap = MULTITAP,
+                        multitapNames = MODES,
+                        cameFrom = cameFrom,
+                    ),
+                    FakeControllersActions(calls),
                     onBack = { calls += "back" },
-                    cameFrom = cameFrom,
                     touch = TouchSettings(),
                     onTouch = { calls += "touch $it" },
                 )
@@ -227,85 +214,24 @@ class ControllersScreenTest : ControllerKeys {
         assertEquals(listOf("hotkeys"), calls)
     }
 
-    // The hub, a port's page and the Hotkeys as the app has them: in the settings' two panels, at the Thor's window
-    // size, one view at a time, with Back from a port or the Hotkeys to the hub. A port's page here is a row that
-    // takes the focus as it opens, as PortScreen's does.
-    private fun showInPanels() {
-        var view by mutableStateOf<ControllersView>(ControllersView.Hub)
-        var cameFrom by mutableStateOf<ControllersView?>(null)
-        var inPage by mutableStateOf(true)
-        rule.setContent {
-            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(832.dp, 420.dp))) {
-                GooseStationTheme {
-                    SettingsPanels(
-                        current = SettingsEntry.Controllers,
-                        inPage = inPage,
-                        coreReady = true,
-                        locked = false,
-                        onShow = { inPage = false },
-                        onEnterPage = { inPage = true },
-                        onBack = { calls += "leave" },
-                    ) { onBack ->
-                        val back = {
-                            if (view == ControllersView.Hub) {
-                                onBack()
-                            } else {
-                                cameFrom = view
-                                view = ControllersView.Hub
-                            }
-                        }
-                        when (val shown = view) {
-                            ControllersView.Hotkeys ->
-                                HotkeysScreen(
-                                    controllers = listOf(PAD),
-                                    labels = emptyMap(),
-                                    selected = PAD.descriptor,
-                                    hotkeys = HOTKEYS,
-                                    hotkeysFor = PAD.descriptor,
-                                    capturing = null,
-                                    secondsLeft = 5,
-                                    undoFor = null,
-                                    onSelect = {},
-                                    onCaptureHotkey = {},
-                                    onCancelCapture = {},
-                                    onClear = {},
-                                    onUndo = {},
-                                    onDropUndo = {},
-                                    onBack = back,
-                                )
-                            is ControllersView.Port -> {
-                                val first = remember { FocusRequester() }
-                                LaunchedEffect(Unit) { first.requestFocus() }
-                                SettingsPage("Port ${shown.pad + 1}", onBack = back) {
-                                    SwitchRow("Port's first row", false, onToggle = {}, Modifier.focusRequester(first))
-                                }
-                            }
-                            else ->
-                                ControllersScreen(
-                                    controllers = listOf(PAD),
-                                    labels = emptyMap(),
-                                    ports = emptyMap(),
-                                    rumble = mapOf(PAD.descriptor to 60),
-                                    offered = OFFERED,
-                                    portTypes = mapOf(0 to "AnalogController", 1 to "None"),
-                                    typeNames = TYPES,
-                                    multitap = MULTITAP,
-                                    multitapNames = MODES,
-                                    onPort = { _, _ -> },
-                                    onRumble = { _, _ -> },
-                                    onMultitap = {},
-                                    onOpenPort = { view = ControllersView.Port(it) },
-                                    onOpenHotkeys = { view = ControllersView.Hotkeys },
-                                    onBack = back,
-                                    cameFrom = cameFrom,
-                                )
-                        }
-                    }
-                }
-            }
-        }
-        rule.waitForIdle()
-    }
+    // The page as the app has it on the Thor, on its hub, with the selected controller's hotkeys read.
+    private fun showInPanels() =
+        rule.showControllersInPanels(
+            ControllersState(
+                controllers = listOf(PAD),
+                selected = PAD.descriptor,
+                bindings = emptyList(),
+                hotkeys = HOTKEYS,
+                bindingsFor = PAD.descriptor,
+                rumble = mapOf(PAD.descriptor to 60),
+                offered = OFFERED,
+                portTypes = mapOf(0 to "AnalogController", 1 to "None"),
+                typeNames = TYPES,
+                multitap = MULTITAP,
+                multitapNames = MODES,
+            ),
+            calls,
+        )
 
     // Down the hub to the row with [summary], and A on it.
     private fun openFromTheHub(summary: String) {
@@ -334,7 +260,7 @@ class ControllersScreenTest : ControllerKeys {
     fun backFromAPortInThePanelsFocusesItsRow() {
         showInPanels()
         openFromTheHub("Not Connected")
-        assertFocusedHas("Port's first row")
+        assertFocusedHas("Controller type")
 
         pressBOnTheDevice()
 
@@ -348,6 +274,47 @@ class ControllersScreenTest : ControllerKeys {
         assertFocusedHas("Connect a controller to set it up.")
         press(Key.ButtonB)
         assertEquals(listOf("back"), calls)
+    }
+
+    // The page's one screen picks its view's: the hub, a port's page, a macro and the hotkeys.
+    @Test
+    fun thePageShowsItsViewsScreen() {
+        var state by
+            mutableStateOf(
+                ControllersState(
+                    controllers = listOf(PAD),
+                    selected = PAD.descriptor,
+                    bindings = emptyList(),
+                    hotkeys = emptyList(),
+                    macros = emptyList(),
+                    bindingsFor = PAD.descriptor,
+                    offered = OFFERED,
+                ),
+            )
+        rule.setContent {
+            GooseStationTheme {
+                ControllersPageScreen(
+                    state,
+                    FakeControllersActions(calls),
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("Back, the Mode", substring = true).assertExists()
+
+        state = state.copy(view = ControllersView.Port(1))
+        rule.waitForIdle()
+        rule.onNodeWithText("No controller is on Port 2", substring = true).assertExists()
+
+        state = state.copy(view = ControllersView.Macro(0, 3))
+        rule.waitForIdle()
+        rule.onNodeWithText("Macro 3 · Port 1").assertExists()
+
+        state = state.copy(view = ControllersView.Hotkeys)
+        rule.waitForIdle()
+        rule.onNodeWithText("Hold Select and press the button you set.", substring = true).assertExists()
+        rule.onNodeWithText("Back, the Mode", substring = true).assertDoesNotExist()
     }
 
     private companion object {

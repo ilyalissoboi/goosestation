@@ -46,6 +46,7 @@ add_executable(common-tests
   texture_names_tests.cpp
   texture_pack_config_tests.cpp
   texture_replacements_tests.cpp
+  gpu_texture_data_tests.cpp
   settings_texture_cache_tests.cpp
   ../util/text_input.cpp
 )
@@ -68,7 +69,7 @@ if(ANDROID)
   target_link_libraries(common-tests PRIVATE imgui)
 endif()
 
-target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip gtest gtest_main)
+target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip xxhash gtest gtest_main)
 
 # game_database_tests.cpp loads the shipped database from the source tree (and skips where it isn't there).
 target_compile_definitions(common-tests PRIVATE

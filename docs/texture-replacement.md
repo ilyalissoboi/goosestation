@@ -117,3 +117,21 @@ outside the repository.
 - Two files with the same name: the first found is used, with a warning (ours).
 - Loaded images are kept up to `MaxReplacementCacheVRAMUsage` megabytes (4 bytes a pixel), the least recently used
   dropped first; `PreloadTextures` loads them all when the game starts (ours).
+
+### Decoding, ranges and scale
+
+- A texture's texels are read from its page: 4-bit pages hold four indices a word, lowest nibble first; 8-bit pages
+  two, low byte first; direct-colour pages one colour a word. Palette entries are read from the palette's first entry
+  on, wrapping at VRAM's right edge (ours, from how the console reads them).
+- The used palette range is the smallest and largest index among the drawn rect's texels (black box: one upload is
+  named `P0-11` for one rect and `P0-15` for others, run (a)).
+- A page-mode rect hashes the words its texels touch: texel `x` of a 4-bit page is in word `x / 4`, so texels 1 to 5
+  hash words 0 and 1 (ours, consistent with run (c)'s `4x1` rects hashing one word). A rect whose words would pass
+  VRAM's right edge isn't hashed (ours).
+- An upload-mode name's rect is placed in its page by the upload's position: an upload 16 words into a 4-bit page
+  starts 64 texels in (ours, from the name layout).
+- A page with replacements is drawn at one whole-number scale: the largest, over its replacements and both axes, of
+  the image's size over the rect's, rounded up, and no more than the GPU's largest texture allows for 256 texels
+  (ours, after the published "a page mixing scales is drawn at the largest").
+- In the page as drawn, texels without a replacement keep their own colour, a `0x0000` texel stays transparent and
+  bit 15 stays the semi-transparency bit (ours).

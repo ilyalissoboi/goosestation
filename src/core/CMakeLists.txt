@@ -61,6 +61,8 @@ add_library(core
   gpu_sw.h
   gpu_sw_backend.cpp
   gpu_sw_backend.h
+  gpu_texture_data.cpp
+  gpu_texture_data.h
   gpu_types.h
   guncon.cpp
   guncon.h

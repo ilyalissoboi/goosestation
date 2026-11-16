@@ -171,3 +171,25 @@ u32 GPUTextureData::GetSourceScale(std::span<const std::pair<GSVector4i, std::pa
   }
   return std::clamp<u32>(scale, 1u, std::max<u32>(max_texture_size / PAGE_TEXELS, 1u));
 }
+
+GSVector4i GPUTextureData::ApplyTextureWindow(GSVector4i texel_rect, const GPUTextureWindow& window)
+{
+  // Each axis has at most 256 coordinates, so look at all of them.
+  const auto axis = [](s32 begin, s32 end, u8 and_mask, u8 or_mask) {
+    u32 lo = 0xFF, hi = 0;
+    for (s32 c = begin; c < end && c < begin + 256; c++)
+    {
+      const u32 windowed = (static_cast<u32>(c) & and_mask) | or_mask;
+      lo = std::min(lo, windowed & 0xFFu);
+      hi = std::max(hi, windowed & 0xFFu);
+    }
+    return std::make_pair(static_cast<s32>(lo), static_cast<s32>(hi) + 1);
+  };
+
+  if (texel_rect.rempty())
+    return texel_rect;
+
+  const auto [left, right] = axis(texel_rect.left, texel_rect.right, window.and_x, window.or_x);
+  const auto [top, bottom] = axis(texel_rect.top, texel_rect.bottom, window.and_y, window.or_y);
+  return GSVector4i(left, top, right, bottom);
+}

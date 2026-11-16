@@ -211,3 +211,19 @@ TEST(GPUTextureData, TheSourceScaleIsTheLargestThatFits)
   const std::array<Entry, 1> fractional = {{{GSVector4i(0, 0, 16, 16), {56, 56}}}};
   EXPECT_EQ(GetSourceScale(fractional, 16384), 4u);
 }
+
+TEST(GPUTextureData, ATextureWindowBoundsEveryTexelSampled)
+{
+  // No window: unchanged.
+  GPUTextureWindow none = {0xFF, 0xFF, 0x00, 0x00};
+  EXPECT_TRUE(ApplyTextureWindow(GSVector4i(10, 20, 30, 40), none).eq(GSVector4i(10, 20, 30, 40)));
+
+  // U 0..32 with and_x 0xDF: column 32 wraps to 0, so columns 0..31 are sampled (not the one texel the endpoints
+  // map to).
+  GPUTextureWindow wrap = {0xDF, 0xFF, 0x00, 0x00};
+  EXPECT_TRUE(ApplyTextureWindow(GSVector4i(0, 0, 33, 8), wrap).eq(GSVector4i(0, 0, 32, 8)));
+
+  // A 16-texel tile at an offset, drawn 64 wide: the whole tile.
+  GPUTextureWindow tile = {0x0F, 0x0F, 0x40, 0x20};
+  EXPECT_TRUE(ApplyTextureWindow(GSVector4i(0, 0, 64, 4), tile).eq(GSVector4i(64, 32, 80, 36)));
+}

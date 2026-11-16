@@ -167,7 +167,8 @@ All ours: the hardware renderer keeps VRAM on the GPU only, so the cache keeps a
 ### What a draw samples, and dumping
 
 - A textured draw samples one page with one mode and palette, semi-transparent or not; its rect is the texels it
-  reads, with the texture window applied (ours).
+  reads, through the texture window: the bounds over every windowed coordinate, so a draw that crosses a window's wrap
+  covers the whole tile (ours).
 - A draw's rect (black box, worked out from 1.56 million draws of our run against run (b)'s names, 2026-11-16): a
   polygon covers its texture coordinates up to the largest one *inclusive*, so its rect ends one past it; a sprite
   ends at its own edge. Left and right widen to whole VRAM words (4 texels for 4-bit, 2 for 8-bit), and the rect is
@@ -223,8 +224,8 @@ All ours.
   within `MaxHashCacheVRAMUsageMB` (the least recently used dropped first); a page that can't be created isn't tried
   again until what it shows changes. A page's scale is lowered until it takes at most a quarter of that budget. They
   are dropped whenever replacements reload.
-- Replaced draws pick the same texel as other draws (rounding at 1×, as the renderer does) and the position within
-  it: a pack of our own dumps at 1× draws frames byte-identical to the cache off, at 1× and at 4×, on Metal and
+- Replaced draws pick the same texel as other draws (rounding at 1× or with forced rounding, as the renderer does,
+  and never for sprites, which have pipelines of their own) and the position within it: a pack of our own dumps at 1× draws frames byte-identical to the cache off, at 1× and at 4×, on Metal and
   Vulkan (39 textures placed over Vagrant Story's opening).
 - Checked the same way on Windows (RTX 4090), on D3D11, D3D12, Vulkan and OpenGL: with no pack frames are identical
   to the cache off; the marked pack changes the same 17 of 40 frames as on the Mac, and its crop-and-alias frame is

@@ -46,8 +46,10 @@ public:
     SpritePalette8Bit,
     SpriteDirect16Bit,
 
-    /// A page drawn with its texture replacements (sprites too); only with the texture cache on.
+    /// A page drawn with its texture replacements; only with the texture cache on. Sprites have their own, as the
+    /// other modes do, so they keep sprites' coordinate rounding.
     Replaced,
+    SpriteReplaced,
 
     MaxCount,
 

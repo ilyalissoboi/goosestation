@@ -59,6 +59,10 @@ std::optional<GSVector4i> GetPageRect(const TextureNames::Name& name, GSVector4i
 u32 GetSourceScale(std::span<const std::pair<GSVector4i, std::pair<u32, u32>>> rects_and_image_sizes,
                    u32 max_texture_size);
 
+/// The texels a page rect (right and bottom exclusive) samples through a texture window: the bounds over every
+/// windowed coordinate, so a rect crossing a window's wrap covers the whole tile.
+GSVector4i ApplyTextureWindow(GSVector4i texel_rect, const GPUTextureWindow& window);
+
 /// Texels in a VRAM word: 4 for 4-bit, 2 for 8-bit, 1 for direct colour.
 u32 GetTexelsPerWord(GPUTextureMode mode);
 

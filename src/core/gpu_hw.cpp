@@ -56,7 +56,7 @@ static constexpr const std::array s_transparency_modes = {
 
 static constexpr const std::array s_batch_texture_modes = {
   "Palette4Bit",       "Palette8Bit",       "Direct16Bit",       "Disabled",
-  "SpritePalette4Bit", "SpritePalette8Bit", "SpriteDirect16Bit", "Replaced",
+  "SpritePalette4Bit", "SpritePalette8Bit", "SpriteDirect16Bit", "Replaced", "SpriteReplaced",
 };
 
 static constexpr const std::array s_batch_render_modes = {
@@ -318,12 +318,7 @@ void GPU_HW::UpdateTextureCache(bool seed_from_gpu)
 void GPU_HW::AddDrawnTextureRect(GSVector4i uv_rect)
 {
   if (m_texture_window_active)
-  {
-    const GSVector4i twin = GSVector4i::load<false>(m_batch_ubo_data.u_texture_window);
-    const GSVector4i last = uv_rect.sub32(GSVector4i::cxpr(0, 0, 1, 1));
-    uv_rect = ((GSVector4i(uv_rect.left, uv_rect.top, last.right, last.bottom) & twin.xyxy()) | twin.zwzw());
-    uv_rect = uv_rect.min_i32(uv_rect.zwzw()).max_i32(uv_rect.xyxy()).add32(GSVector4i::cxpr(0, 0, 1, 1));
-  }
+    uv_rect = GPUTextureData::ApplyTextureWindow(uv_rect, m_draw_mode.texture_window);
 
   m_texture_cache->AddDrawnTexture(m_texture_cache_key, uv_rect);
 }
@@ -332,6 +327,8 @@ bool GPU_HW::IsTextureModeCompiled(BatchTextureMode mode) const
 {
   if (mode == BatchTextureMode::Replaced)
     return m_replaced_pipelines;
+  if (mode == BatchTextureMode::SpriteReplaced)
+    return m_replaced_pipelines && m_allow_sprite_mode;
   if (mode >= BatchTextureMode::SpriteStart)
     return m_allow_sprite_mode;
   return true;
@@ -1292,8 +1289,11 @@ bool GPU_HW::CompilePipelines(Error* error)
                 const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart &&
                                      static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Replaced);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
-                const BatchTextureMode shader_texmode = static_cast<BatchTextureMode>(
-                  texture_mode - (sprite ? static_cast<u8>(BatchTextureMode::SpriteStart) : 0));
+                const BatchTextureMode shader_texmode =
+                  (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpriteReplaced) ?
+                    BatchTextureMode::Replaced :
+                    static_cast<BatchTextureMode>(texture_mode -
+                                                  (sprite ? static_cast<u8>(BatchTextureMode::SpriteStart) : 0));
                 const bool use_rov =
                   (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend) && m_use_rov_for_shader_blend);
                 const std::string fs = shadergen.GenerateBatchFragmentShader(
@@ -1384,14 +1384,15 @@ bool GPU_HW::CompilePipelines(Error* error)
               for (u8 check_mask = 0; check_mask < 2; check_mask++)
               {
                 const bool textured = (static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Disabled);
-                const bool replaced = (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Replaced);
+                const bool replaced = (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Replaced ||
+                                       static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpriteReplaced);
                 const bool palette =
                   (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Palette4Bit ||
                    static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Palette8Bit ||
                    static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpritePalette4Bit ||
                    static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpritePalette8Bit || replaced);
-                const bool sprite =
-                  (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart && !replaced);
+                const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart &&
+                                     static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Replaced);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
                 const bool use_shader_blending = (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend));
                 const bool use_rov = (use_shader_blending && m_use_rov_for_shader_blend);
@@ -2052,11 +2053,18 @@ ALWAYS_INLINE_RELEASE void GPU_HW::DrawBatchVertices(BatchRenderMode render_mode
                                                      u32 base_vertex)
 {
   // [depth_test][transparency_mode][render_mode][texture_mode][dithering][interlacing][check_mask]
-  const u8 texture_mode = static_cast<u8>(m_batch.texture_mode) +
-                          ((m_batch.texture_mode != BatchTextureMode::Disabled &&
-                            m_batch.texture_mode != BatchTextureMode::Replaced && m_batch.sprite_mode) ?
-                             static_cast<u8>(BatchTextureMode::SpriteStart) :
-                             0);
+  u8 texture_mode;
+  if (m_batch.texture_mode == BatchTextureMode::Replaced)
+  {
+    texture_mode = static_cast<u8>(m_batch.sprite_mode ? BatchTextureMode::SpriteReplaced : BatchTextureMode::Replaced);
+  }
+  else
+  {
+    texture_mode = static_cast<u8>(m_batch.texture_mode) +
+                   ((m_batch.texture_mode != BatchTextureMode::Disabled && m_batch.sprite_mode) ?
+                      static_cast<u8>(BatchTextureMode::SpriteStart) :
+                      0);
+  }
   const u8 depth_test = BoolToUInt8(m_batch.use_depth_buffer);
   const u8 check_mask = BoolToUInt8(m_batch.check_mask_before_draw);
   g_gpu_device->SetPipeline(m_batch_pipelines[depth_test][static_cast<u8>(m_batch.transparency_mode)][static_cast<u8>(

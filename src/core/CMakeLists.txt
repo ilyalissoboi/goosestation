@@ -61,6 +61,10 @@ add_library(core
   gpu_sw.h
   gpu_sw_backend.cpp
   gpu_sw_backend.h
+  gpu_texture_cache.cpp
+  gpu_texture_cache.h
+  gpu_texture_data.cpp
+  gpu_texture_data.h
   gpu_types.h
   guncon.cpp
   guncon.h
@@ -122,6 +126,10 @@ add_library(core
   spu.h
   system.cpp
   system.h
+  texture_names.cpp
+  texture_names.h
+  texture_pack_config.cpp
+  texture_pack_config.h
   texture_replacements.cpp
   texture_replacements.h
   timers.cpp

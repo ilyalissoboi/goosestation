@@ -5,6 +5,7 @@
 #include "cpu_core.h"
 #include "cpu_pgxp.h"
 #include "gpu_hw_shadergen.h"
+#include "gpu_texture_data.h"
 #include "gpu_sw_backend.h"
 #include "host.h"
 #include "settings.h"
@@ -55,7 +56,7 @@ static constexpr const std::array s_transparency_modes = {
 
 static constexpr const std::array s_batch_texture_modes = {
   "Palette4Bit",       "Palette8Bit",       "Direct16Bit",       "Disabled",
-  "SpritePalette4Bit", "SpritePalette8Bit", "SpriteDirect16Bit",
+  "SpritePalette4Bit", "SpritePalette8Bit", "SpriteDirect16Bit", "Replaced", "SpriteReplaced",
 };
 
 static constexpr const std::array s_batch_render_modes = {
@@ -278,7 +279,188 @@ bool GPU_HW::Initialize()
 
   UpdateDownsamplingLevels();
   RestoreDeviceContext();
+  UpdateTextureCache(false);
   return true;
+}
+
+void GPU_HW::UpdateTextureCache(bool seed_from_gpu)
+{
+  const Settings::TextureReplacementSettings& tr = g_settings.texture_replacements;
+  m_texture_cache_reload_count = TextureReplacements::GetReloadCount();
+  FlushRender();
+  ClearReplacementSources();
+  if (!tr.ShouldTrackTextures(g_settings.gpu_texture_cache, TextureReplacements::GetIndex().GetTextureCount() > 0))
+  {
+    if (m_texture_cache)
+      INFO_LOG("Texture cache off.");
+    m_texture_cache.reset();
+    m_texture_cache_dumping = false;
+    return;
+  }
+
+  if (!m_texture_cache)
+  {
+    INFO_LOG("Texture cache on.");
+    if (seed_from_gpu)
+      ReadVRAM(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+    m_texture_cache = std::make_unique<GPUTextureCache>(TextureReplacements::GetConfig());
+    m_texture_cache->Reset(g_vram);
+  }
+
+  m_texture_cache->SetConfig(TextureReplacements::GetConfig());
+  m_texture_cache->SetIndex(tr.enable_texture_replacements ? &TextureReplacements::GetIndex() : nullptr);
+  m_texture_cache->SetDumping(tr.dump_textures ? TextureReplacements::GetTextureDumpDirectory() : std::string(),
+                              TextureReplacements::GetGameDirectory(), tr.dump_replaced_textures,
+                              tr.dump_texture_force_alpha_channel);
+  m_texture_cache_dumping = m_texture_cache->IsDumping();
+}
+
+void GPU_HW::AddDrawnTextureRect(GSVector4i uv_rect)
+{
+  if (m_texture_window_active)
+    uv_rect = GPUTextureData::ApplyTextureWindow(uv_rect, m_draw_mode.texture_window);
+
+  m_texture_cache->AddDrawnTexture(m_texture_cache_key, uv_rect);
+}
+
+bool GPU_HW::IsTextureModeCompiled(BatchTextureMode mode) const
+{
+  if (mode == BatchTextureMode::Replaced)
+    return m_replaced_pipelines;
+  if (mode == BatchTextureMode::SpriteReplaced)
+    return m_replaced_pipelines && m_allow_sprite_mode;
+  if (mode >= BatchTextureMode::SpriteStart)
+    return m_allow_sprite_mode;
+  return true;
+}
+
+void GPU_HW::ClearReplacementSources()
+{
+  for (auto& [key, rs] : m_replacement_sources)
+    g_gpu_device->RecycleTexture(std::move(rs.texture));
+  m_replacement_sources.clear();
+  m_batch.source = nullptr;
+}
+
+GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
+{
+  const u64 key = static_cast<u64>(source.key.page) | (static_cast<u64>(source.key.mode) << 5) |
+                  (static_cast<u64>(source.key.semitransparent) << 7) |
+                  (static_cast<u64>(source.key.palette_bits) << 8);
+  auto existing = m_replacement_sources.find(key);
+  if (existing != m_replacement_sources.end() && existing->second.id == source.id)
+  {
+    existing->second.last_used = ++m_replacement_source_counter;
+    return existing->second.texture.get(); // null after a failure, until what it shows changes
+  }
+
+  if (!m_texture_source_blit_pipeline)
+    return nullptr;
+
+  // Composing draws outside the batch.
+  FlushRender();
+  if (existing != m_replacement_sources.end())
+  {
+    if (existing->second.texture.get() == m_batch.source)
+      m_batch.source = nullptr;
+    g_gpu_device->RecycleTexture(std::move(existing->second.texture));
+    m_replacement_sources.erase(existing);
+  }
+
+  // At most a quarter of the budget for one page.
+  const size_t limit = static_cast<size_t>(TextureReplacements::GetConfig().max_hash_cache_vram_usage_mb) * 1024 * 1024;
+  u32 scale = source.scale;
+  while (scale > 1 && static_cast<size_t>(256u * scale) * (256u * scale) * sizeof(u32) > limit / 4)
+    scale--;
+
+  const u32 size = 256u * scale;
+  const size_t bytes = static_cast<size_t>(size) * size * sizeof(u32);
+  size_t used = 0;
+  for (const auto& [k, rs] : m_replacement_sources)
+  {
+    if (rs.texture)
+      used += static_cast<size_t>(rs.texture->GetWidth()) * rs.texture->GetHeight() * sizeof(u32);
+  }
+  while (used + bytes > limit)
+  {
+    auto oldest = m_replacement_sources.end();
+    for (auto it = m_replacement_sources.begin(); it != m_replacement_sources.end(); ++it)
+    {
+      if (it->second.texture && (oldest == m_replacement_sources.end() || it->second.last_used < oldest->second.last_used))
+        oldest = it;
+    }
+    if (oldest == m_replacement_sources.end())
+      break;
+    used -= static_cast<size_t>(oldest->second.texture->GetWidth()) * oldest->second.texture->GetHeight() * sizeof(u32);
+    if (oldest->second.texture.get() == m_batch.source)
+      m_batch.source = nullptr;
+    g_gpu_device->RecycleTexture(std::move(oldest->second.texture));
+    m_replacement_sources.erase(oldest);
+  }
+
+  std::unique_ptr<GPUTexture> target =
+    g_gpu_device->FetchTexture(size, size, 1, 1, 1, GPUTexture::Type::RenderTarget, GPUTexture::Format::RGBA8);
+  if (!target)
+  {
+    ERROR_LOG("Failed to create a {}x{} texture replacement page.", size, size);
+    m_replacement_sources.emplace(key, ReplacementSourceTexture{source.id, ++m_replacement_source_counter, nullptr});
+    return nullptr;
+  }
+
+  GL_SCOPE_FMT("Texture replacement page {} ({}x{}, {} replacements)", source.key.page, size, size,
+               source.placements.size());
+
+  // The page itself, at 1x, then each replacement over it.
+  static constexpr std::array<u32, 3> page_words = {{64, 128, 256}};
+  const GPUTextureMode mode = source.key.mode;
+  const u32 page_x = GPUTextureCache::GetPageX(source.key.page);
+  const u32 page_y = GPUTextureCache::GetPageY(source.key.page);
+  const u32 texels = std::min<u32>(
+    256, std::min<u32>(page_words[static_cast<u8>(mode)], VRAM_WIDTH - page_x) * GPUTextureData::GetTexelsPerWord(mode));
+  RGBA8Image page;
+  GPUTextureData::DecodeTexture(m_texture_cache->GetVRAM(), page_x, page_y, GSVector4i(0, 0, texels, 256), mode,
+                                GPUTexturePaletteReg{source.key.palette_bits}, GPUTextureData::Encoding::Source, false,
+                                false, &page);
+
+  g_gpu_device->ClearRenderTarget(target.get(), 0);
+  g_gpu_device->SetRenderTarget(target.get());
+  g_gpu_device->SetPipeline(m_texture_source_blit_pipeline.get());
+
+  const auto blit = [&](const RGBA8Image& image, GSVector4i rect, GPUSampler* sampler) {
+    std::unique_ptr<GPUTexture> tex =
+      g_gpu_device->FetchTexture(image.GetWidth(), image.GetHeight(), 1, 1, 1, GPUTexture::Type::Texture,
+                                 GPUTexture::Format::RGBA8, image.GetPixels(), image.GetPitch());
+    if (!tex)
+      return;
+
+    static constexpr float src_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    g_gpu_device->SetTextureSampler(0, tex.get(), sampler);
+    g_gpu_device->SetViewportAndScissor(rect.left, rect.top, rect.width(), rect.height());
+    g_gpu_device->PushUniformBuffer(src_rect, sizeof(src_rect));
+    g_gpu_device->Draw(3, 0);
+    g_gpu_device->RecycleTexture(std::move(tex));
+  };
+
+  const s32 iscale = static_cast<s32>(scale);
+  blit(page, GSVector4i(0, 0, texels * iscale, 256 * iscale), g_gpu_device->GetNearestSampler());
+
+  GPUSampler* sampler = TextureReplacements::GetConfig().replacement_scale_linear_filter ?
+                          g_gpu_device->GetLinearSampler() :
+                          g_gpu_device->GetNearestSampler();
+  for (const GPUTextureCache::Placement& placement : source.placements)
+  {
+    const TextureReplacements::ReplacementImage* image = TextureReplacements::GetTextureImage(placement.path);
+    if (image)
+      blit(*image, placement.page_rect.mul32l(GSVector4i(iscale)), sampler);
+  }
+
+  target->MakeReadyForSampling();
+  RestoreDeviceContext();
+
+  GPUTexture* result = target.get();
+  m_replacement_sources.emplace(key,
+                                ReplacementSourceTexture{source.id, ++m_replacement_source_counter, std::move(target)});
+  return result;
 }
 
 void GPU_HW::Reset(bool clear_vram)
@@ -298,7 +480,11 @@ void GPU_HW::Reset(bool clear_vram)
   SetClampedDrawingArea();
 
   if (clear_vram)
+  {
     ClearFramebuffer();
+    if (m_texture_cache)
+      m_texture_cache->Reset(g_vram);
+  }
 }
 
 bool GPU_HW::DoState(StateWrapper& sw, GPUTexture** host_texture, bool update_display)
@@ -370,6 +556,14 @@ bool GPU_HW::DoState(StateWrapper& sw, GPUTexture** host_texture, bool update_di
     ClearVRAMDirtyRectangle();
     SetFullVRAMDirtyRectangle();
     ResetBatchVertexDepth();
+
+    // The texture cache starts again from the state's VRAM; a host texture state doesn't fill g_vram.
+    if (m_texture_cache)
+    {
+      if (host_texture && !m_sw_renderer)
+        ReadVRAM(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+      m_texture_cache->Reset(g_vram);
+    }
   }
 
   return true;
@@ -414,7 +608,8 @@ void GPU_HW::UpdateSettings(const Settings& old_settings)
      (features.noperspective_interpolation &&
       ShouldDisableColorPerspective() != old_settings.gpu_pgxp_color_correction) ||
      m_allow_sprite_mode !=
-       ShouldAllowSpriteMode(m_resolution_scale, g_settings.gpu_texture_filter, g_settings.gpu_sprite_texture_filter));
+       ShouldAllowSpriteMode(m_resolution_scale, g_settings.gpu_texture_filter, g_settings.gpu_sprite_texture_filter) ||
+     m_replaced_pipelines != g_settings.gpu_texture_cache);
 
   if (m_resolution_scale != resolution_scale)
   {
@@ -505,6 +700,8 @@ void GPU_HW::UpdateSettings(const Settings& old_settings)
     UpdateDownsamplingLevels();
     RestoreDeviceContext();
     UpdateVRAM(0, 0, VRAM_WIDTH, VRAM_HEIGHT, g_vram, false, false);
+    if (m_texture_cache)
+      m_texture_cache->Reset(g_vram); // not an upload: the whole of VRAM restored
     if (m_write_mask_as_depth)
       UpdateDepthBufferFromMaskBit();
     UpdateDisplay();
@@ -523,6 +720,8 @@ void GPU_HW::UpdateSettings(const Settings& old_settings)
   {
     UpdateDownsamplingLevels();
   }
+
+  UpdateTextureCache(true);
 }
 
 void GPU_HW::CheckSettings()
@@ -730,6 +929,9 @@ void GPU_HW::AddDrawnRectangle(const GSVector4i rect)
   // changes, or it samples a larger region, so we can get away without doing so. This reduces copies considerably in
   // games like Mega Man Legends 2.
   m_vram_dirty_draw_rect = m_vram_dirty_draw_rect.runion(rect);
+
+  if (m_texture_cache)
+    m_texture_cache->Draw(rect);
 }
 
 void GPU_HW::AddUnclampedDrawnRectangle(const GSVector4i rect)
@@ -986,9 +1188,10 @@ bool GPU_HW::CompilePipelines(Error* error)
                              m_write_mask_as_depth, ShouldDisableColorPerspective(), m_supports_dual_source_blend,
                              m_supports_framebuffer_fetch, g_settings.gpu_true_color && g_settings.gpu_debanding);
 
-  const u32 active_texture_modes =
-    m_allow_sprite_mode ? NUM_TEXTURE_MODES :
-                          (NUM_TEXTURE_MODES - (NUM_TEXTURE_MODES - static_cast<u32>(BatchTextureMode::SpriteStart)));
+  m_replaced_pipelines = g_settings.gpu_texture_cache;
+  u32 active_texture_modes = 0;
+  for (u8 texture_mode = 0; texture_mode < NUM_TEXTURE_MODES; texture_mode++)
+    active_texture_modes += BoolToUInt32(IsTextureModeCompiled(static_cast<BatchTextureMode>(texture_mode)));
   const u32 total_pipelines =
     (m_allow_sprite_mode ? 5 : 3) +                                                    // vertex shaders
     (active_texture_modes * 5 * 9 * 2 * 2 * 2 * (1 + BoolToUInt32(needs_rov_depth))) + // fragment shaders
@@ -999,6 +1202,7 @@ bool GPU_HW::CompilePipelines(Error* error)
     (1 + BoolToUInt32(m_write_mask_as_depth)) +                                        // vram copy
     (1 + BoolToUInt32(m_write_mask_as_depth)) +                                        // vram write
     1 +                                                                                // vram write replacement
+    (m_replaced_pipelines ? 1 : 0) +                                                   // texture source blit
     (m_write_mask_as_depth ? 1 : 0) +                                                  // mask -> depth
     1 +                                                                                // vram read
     2 +                                                                                // extract/display
@@ -1064,8 +1268,11 @@ bool GPU_HW::CompilePipelines(Error* error)
           continue;
         }
 
-        for (u8 texture_mode = 0; texture_mode < active_texture_modes; texture_mode++)
+        for (u8 texture_mode = 0; texture_mode < NUM_TEXTURE_MODES; texture_mode++)
         {
+          if (!IsTextureModeCompiled(static_cast<BatchTextureMode>(texture_mode)))
+            continue;
+
           for (u8 check_mask = 0; check_mask < 2; check_mask++)
           {
             if (check_mask && render_mode != static_cast<u8>(BatchRenderMode::ShaderBlend))
@@ -1079,10 +1286,14 @@ bool GPU_HW::CompilePipelines(Error* error)
             {
               for (u8 interlacing = 0; interlacing < 2; interlacing++)
               {
-                const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart);
+                const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart &&
+                                     static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Replaced);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
-                const BatchTextureMode shader_texmode = static_cast<BatchTextureMode>(
-                  texture_mode - (sprite ? static_cast<u8>(BatchTextureMode::SpriteStart) : 0));
+                const BatchTextureMode shader_texmode =
+                  (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpriteReplaced) ?
+                    BatchTextureMode::Replaced :
+                    static_cast<BatchTextureMode>(texture_mode -
+                                                  (sprite ? static_cast<u8>(BatchTextureMode::SpriteStart) : 0));
                 const bool use_rov =
                   (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend) && m_use_rov_for_shader_blend);
                 const std::string fs = shadergen.GenerateBatchFragmentShader(
@@ -1161,8 +1372,11 @@ bool GPU_HW::CompilePipelines(Error* error)
           continue;
         }
 
-        for (u8 texture_mode = 0; texture_mode < active_texture_modes; texture_mode++)
+        for (u8 texture_mode = 0; texture_mode < NUM_TEXTURE_MODES; texture_mode++)
         {
+          if (!IsTextureModeCompiled(static_cast<BatchTextureMode>(texture_mode)))
+            continue;
+
           for (u8 dithering = 0; dithering < 2; dithering++)
           {
             for (u8 interlacing = 0; interlacing < 2; interlacing++)
@@ -1170,12 +1384,15 @@ bool GPU_HW::CompilePipelines(Error* error)
               for (u8 check_mask = 0; check_mask < 2; check_mask++)
               {
                 const bool textured = (static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Disabled);
+                const bool replaced = (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Replaced ||
+                                       static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpriteReplaced);
                 const bool palette =
                   (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Palette4Bit ||
                    static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Palette8Bit ||
                    static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpritePalette4Bit ||
-                   static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpritePalette8Bit);
-                const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart);
+                   static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpritePalette8Bit || replaced);
+                const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart &&
+                                     static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Replaced);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
                 const bool use_shader_blending = (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend));
                 const bool use_rov = (use_shader_blending && m_use_rov_for_shader_blend);
@@ -1227,7 +1444,7 @@ bool GPU_HW::CompilePipelines(Error* error)
                          ((static_cast<GPUTransparencyMode>(transparency_mode) != GPUTransparencyMode::Disabled &&
                            (static_cast<BatchRenderMode>(render_mode) != BatchRenderMode::TransparencyDisabled &&
                             static_cast<BatchRenderMode>(render_mode) != BatchRenderMode::OnlyOpaque)) ||
-                          (textured &&
+                          (textured && !replaced &&
                            IsBlendedTextureFiltering(sprite ? m_sprite_texture_filtering : m_texture_filtering))))
                 {
                   plconfig.blend.enable = true;
@@ -1438,6 +1655,21 @@ bool GPU_HW::CompilePipelines(Error* error)
       return false;
 
     progress.Increment();
+
+    // Texture cache: draws a page and its replacements into a page source, an RGBA8 target of its own.
+    if (m_replaced_pipelines)
+    {
+      GPUPipeline::GraphicsConfig blit_config = plconfig;
+      blit_config.samples = 1;
+      blit_config.per_sample_shading = false;
+      blit_config.render_pass_flags = GPUPipeline::NoRenderPassFlags;
+      blit_config.blend = GPUPipeline::BlendState::GetNoBlendingState();
+      blit_config.SetTargetFormats(GPUTexture::Format::RGBA8);
+      if (!(m_texture_source_blit_pipeline = g_gpu_device->CreatePipeline(blit_config, error)))
+        return false;
+
+      progress.Increment();
+    }
   }
 
   // VRAM update depth
@@ -1645,6 +1877,7 @@ void GPU_HW::DestroyPipelines()
   destroy(m_vram_readback_pipeline);
   destroy(m_vram_update_depth_pipeline);
   destroy(m_vram_write_replacement_pipeline);
+  destroy(m_texture_source_blit_pipeline);
 
   destroy(m_downsample_first_pass_pipeline);
   destroy(m_downsample_mid_pass_pipeline);
@@ -1820,10 +2053,18 @@ ALWAYS_INLINE_RELEASE void GPU_HW::DrawBatchVertices(BatchRenderMode render_mode
                                                      u32 base_vertex)
 {
   // [depth_test][transparency_mode][render_mode][texture_mode][dithering][interlacing][check_mask]
-  const u8 texture_mode = static_cast<u8>(m_batch.texture_mode) +
-                          ((m_batch.texture_mode != BatchTextureMode::Disabled && m_batch.sprite_mode) ?
-                             static_cast<u8>(BatchTextureMode::SpriteStart) :
-                             0);
+  u8 texture_mode;
+  if (m_batch.texture_mode == BatchTextureMode::Replaced)
+  {
+    texture_mode = static_cast<u8>(m_batch.sprite_mode ? BatchTextureMode::SpriteReplaced : BatchTextureMode::Replaced);
+  }
+  else
+  {
+    texture_mode = static_cast<u8>(m_batch.texture_mode) +
+                   ((m_batch.texture_mode != BatchTextureMode::Disabled && m_batch.sprite_mode) ?
+                      static_cast<u8>(BatchTextureMode::SpriteStart) :
+                      0);
+  }
   const u8 depth_test = BoolToUInt8(m_batch.use_depth_buffer);
   const u8 check_mask = BoolToUInt8(m_batch.check_mask_before_draw);
   g_gpu_device->SetPipeline(m_batch_pipelines[depth_test][static_cast<u8>(m_batch.transparency_mode)][static_cast<u8>(
@@ -2182,6 +2423,10 @@ void GPU_HW::ComputePolygonUVLimits(BatchVertex* vertices, u32 num_vertices)
 
   if (m_texpage_dirty != 0)
     CheckForTexPageOverlap(GSVector4i(min).upl32(GSVector4i(max)).u16to32());
+
+  // A polygon draws up to its largest coordinate, inclusive (docs/texture-replacement.md, "What a draw samples").
+  if (m_texture_cache_dumping)
+    AddDrawnTextureRect(GSVector4i(min).upl32(GSVector4i(max)).u16to32().add32(GSVector4i::cxpr(0, 0, 1, 1)));
 }
 
 void GPU_HW::SetBatchDepthBuffer(bool enabled)
@@ -2451,7 +2696,7 @@ void GPU_HW::LoadVertices()
       }
       else
       {
-        if (textured && m_compute_uv_range)
+        if (textured && (m_compute_uv_range || m_texture_cache_dumping))
           ComputePolygonUVLimits(vertices.data(), num_vertices);
 
         AddDrawnRectangle(clamped_draw_rect_012);
@@ -2497,7 +2742,7 @@ void GPU_HW::LoadVertices()
         }
         else
         {
-          if (first_tri_culled && textured && m_compute_uv_range)
+          if (first_tri_culled && textured && (m_compute_uv_range || m_texture_cache_dumping))
             ComputePolygonUVLimits(vertices.data(), num_vertices);
 
           AddDrawnRectangle(clamped_draw_rect_123);
@@ -2605,6 +2850,11 @@ void GPU_HW::LoadVertices()
           {
             CheckForTexPageOverlap(GSVector4i(static_cast<s32>(tex_left), static_cast<s32>(tex_top),
                                               static_cast<s32>(tex_right), static_cast<s32>(tex_bottom)));
+          }
+          if (rc.texture_enable && m_texture_cache_dumping)
+          {
+            AddDrawnTextureRect(GSVector4i(static_cast<s32>(tex_left), static_cast<s32>(tex_top),
+                                           static_cast<s32>(tex_right), static_cast<s32>(tex_bottom)));
           }
 
           const u32 base_vertex = m_batch_vertex_count;
@@ -3058,6 +3308,9 @@ void GPU_HW::FillVRAM(u32 x, u32 y, u32 width, u32 height, u32 color)
     m_sw_renderer->PushCommand(cmd);
   }
 
+  if (m_texture_cache)
+    m_texture_cache->Fill(x, y, width, height, VRAMRGBA8888ToRGBA5551(color), IsInterlacedRenderingEnabled());
+
   GL_INS_FMT("Dirty draw area before: {}", m_vram_dirty_draw_rect);
 
   const GSVector4i bounds = GetVRAMTransferBounds(x, y, width, height);
@@ -3173,6 +3426,9 @@ void GPU_HW::UpdateVRAM(u32 x, u32 y, u32 width, u32 height, const void* data, b
     m_sw_renderer->PushCommand(cmd);
   }
 
+  if (m_texture_cache)
+    m_texture_cache->Write(x, y, width, height, static_cast<const u16*>(data), set_mask, check_mask);
+
   const GSVector4i bounds = GetVRAMTransferBounds(x, y, width, height);
   DebugAssert(bounds.right <= static_cast<s32>(VRAM_WIDTH) && bounds.bottom <= static_cast<s32>(VRAM_HEIGHT));
   AddWrittenRectangle(bounds);
@@ -3275,6 +3531,12 @@ void GPU_HW::CopyVRAM(u32 src_x, u32 src_y, u32 dst_x, u32 dst_y, u32 width, u32
     cmd->width = static_cast<u16>(width);
     cmd->height = static_cast<u16>(height);
     m_sw_renderer->PushCommand(cmd);
+  }
+
+  if (m_texture_cache)
+  {
+    m_texture_cache->Copy(src_x, src_y, dst_x, dst_y, width, height, m_GPUSTAT.set_mask_while_drawing,
+                          m_GPUSTAT.check_mask_before_draw);
   }
 
   // masking enabled, oversized, or overlapping
@@ -3380,6 +3642,7 @@ void GPU_HW::DispatchRenderCommand()
   const GPURenderCommand rc{m_render_command.bits};
 
   BatchTextureMode texture_mode = BatchTextureMode::Disabled;
+  GPUTexture* source = nullptr;
   if (rc.IsTexturingEnabled())
   {
     // texture page changed - check that the new page doesn't intersect the drawing area
@@ -3437,6 +3700,24 @@ void GPU_HW::DispatchRenderCommand()
     texture_mode = (m_draw_mode.mode_reg.texture_mode == GPUTextureMode::Reserved_Direct16Bit) ?
                      BatchTextureMode::Direct16Bit :
                      static_cast<BatchTextureMode>(m_draw_mode.mode_reg.texture_mode.GetValue());
+
+    if (m_texture_cache)
+    {
+      const GSVector4i page_rect = m_draw_mode.mode_reg.GetTexturePageRectangle();
+      m_texture_cache_key.page = static_cast<u8>(GPUTextureCache::GetPageIndex(page_rect.left, page_rect.top));
+      m_texture_cache_key.mode = static_cast<GPUTextureMode>(std::min<u8>(
+        static_cast<u8>(texture_mode), static_cast<u8>(GPUTextureMode::Direct16Bit)));
+      m_texture_cache_key.palette_bits = m_draw_mode.palette_reg.bits;
+      m_texture_cache_key.semitransparent = rc.transparency_enable;
+
+      if (m_replaced_pipelines)
+      {
+        const GPUTextureCache::Source* cache_source =
+          m_texture_cache->LookupSource(m_texture_cache_key, g_gpu_device->GetMaxTextureSize());
+        if (cache_source && (source = GetReplacementSource(*cache_source)))
+          texture_mode = BatchTextureMode::Replaced;
+      }
+    }
   }
 
   // has any state changed which requires a new batch?
@@ -3447,7 +3728,7 @@ void GPU_HW::DispatchRenderCommand()
   const bool dithering_enable = (!m_true_color && rc.IsDitheringEnabled()) ? m_GPUSTAT.dither_enable : false;
   if (texture_mode != m_batch.texture_mode || transparency_mode != m_batch.transparency_mode ||
       (transparency_mode == GPUTransparencyMode::BackgroundMinusForeground && !m_allow_shader_blend) ||
-      dithering_enable != m_batch.dithering)
+      dithering_enable != m_batch.dithering || source != m_batch.source)
   {
     FlushRender();
   }
@@ -3491,6 +3772,7 @@ void GPU_HW::DispatchRenderCommand()
 
     // update state
     m_batch.texture_mode = texture_mode;
+    m_batch.source = source;
     m_batch.transparency_mode = transparency_mode;
     m_batch.dithering = dithering_enable;
 
@@ -3570,6 +3852,15 @@ void GPU_HW::FlushRender()
     m_batch_ubo_dirty = false;
   }
 
+  const bool replaced = (m_batch.texture_mode == BatchTextureMode::Replaced);
+  if (replaced)
+  {
+    g_gpu_device->SetTextureSampler(0, m_batch.source,
+                                    TextureReplacements::GetConfig().replacement_scale_linear_filter ?
+                                      g_gpu_device->GetLinearSampler() :
+                                      g_gpu_device->GetNearestSampler());
+  }
+
   if (m_wireframe_mode != GPUWireframeMode::OnlyWireframe)
   {
     if (NeedsShaderBlending(m_batch.transparency_mode, m_batch.texture_mode, m_batch.check_mask_before_draw) ||
@@ -3588,6 +3879,9 @@ void GPU_HW::FlushRender()
     }
   }
 
+  if (replaced)
+    g_gpu_device->SetTextureSampler(0, m_vram_read_texture.get(), g_gpu_device->GetNearestSampler());
+
   if (m_wireframe_mode != GPUWireframeMode::Disabled)
   {
     // This'll be less than ideal, but wireframe is for debugging, so take the perf hit.
@@ -3601,6 +3895,11 @@ void GPU_HW::UpdateDisplay()
 {
   FlushRender();
   DeactivateROV();
+
+  if (m_texture_cache_reload_count != TextureReplacements::GetReloadCount())
+    UpdateTextureCache(true);
+  if (m_texture_cache)
+    m_texture_cache->EndFrame();
 
   GL_SCOPE("UpdateDisplay()");
 

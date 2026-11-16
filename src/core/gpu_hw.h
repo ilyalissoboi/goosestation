@@ -4,6 +4,7 @@
 #pragma once
 
 #include "gpu.h"
+#include "gpu_texture_cache.h"
 #include "texture_replacements.h"
 
 #include "util/gpu_device.h"
@@ -12,6 +13,7 @@
 #include "common/gsvector.h"
 
 #include <limits>
+#include <unordered_map>
 #include <tuple>
 #include <utility>
 
@@ -43,6 +45,11 @@ public:
     SpritePalette4Bit,
     SpritePalette8Bit,
     SpriteDirect16Bit,
+
+    /// A page drawn with its texture replacements; only with the texture cache on. Sprites have their own, as the
+    /// other modes do, so they keep sprites' coordinate rounding.
+    Replaced,
+    SpriteReplaced,
 
     MaxCount,
 
@@ -116,6 +123,9 @@ private:
     bool use_depth_buffer = false;
     bool sprite_mode = false;
 
+    /// The page drawn with replacements, for BatchTextureMode::Replaced.
+    GPUTexture* source = nullptr;
+
     // Returns the render mode for this batch.
     BatchRenderMode GetRenderMode() const;
   };
@@ -182,6 +192,19 @@ private:
   void SetTexPageChangedOnOverlap(const GSVector4i update_rect);
 
   void CheckForTexPageOverlap(GSVector4i uv_rect);
+
+  /// Creates, updates or drops the texture cache for the current settings; seed_from_gpu reads VRAM back first.
+  void UpdateTextureCache(bool seed_from_gpu);
+
+  /// A textured primitive's UV rect (page texels, right/bottom exclusive), for dumping.
+  void AddDrawnTextureRect(GSVector4i uv_rect);
+
+  /// The page drawn with a source's replacements, composed on first use and kept within MaxHashCacheVRAMUsageMB.
+  GPUTexture* GetReplacementSource(const GPUTextureCache::Source& source);
+  void ClearReplacementSources();
+
+  /// Whether a batch texture mode's pipelines are compiled.
+  bool IsTextureModeCompiled(BatchTextureMode mode) const;
 
   bool IsFlushed() const;
   void EnsureVertexBufferSpace(u32 required_vertices, u32 required_indices);
@@ -250,6 +273,23 @@ private:
   std::unique_ptr<GPUTexture> m_vram_write_texture;
 
   std::unique_ptr<GPU_SW_Backend> m_sw_renderer;
+
+  std::unique_ptr<GPUTextureCache> m_texture_cache;
+  GPUTextureCache::DrawKey m_texture_cache_key = {};
+  u32 m_texture_cache_reload_count = 0;
+  bool m_texture_cache_dumping = false;
+  bool m_replaced_pipelines = false;
+
+  /// One composed page per draw key, replaced when what it shows changes; a null texture remembers a failure.
+  struct ReplacementSourceTexture
+  {
+    u64 id;
+    u64 last_used;
+    std::unique_ptr<GPUTexture> texture;
+  };
+  std::unordered_map<u64, ReplacementSourceTexture> m_replacement_sources;
+  u64 m_replacement_source_counter = 0;
+  std::unique_ptr<GPUPipeline> m_texture_source_blit_pipeline;
 
   BatchVertex* m_batch_vertex_ptr = nullptr;
   u16* m_batch_index_ptr = nullptr;

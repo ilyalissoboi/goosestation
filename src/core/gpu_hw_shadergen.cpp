@@ -705,8 +705,13 @@ std::string GPU_HW_ShaderGen::GenerateBatchFragmentShader(
   DebugAssert(!rov_depth_test || (use_rov && use_rov_depth));
 
   const bool textured = (texture_mode != GPU_HW::BatchTextureMode::Disabled);
-  const bool palette =
-    (texture_mode == GPU_HW::BatchTextureMode::Palette4Bit || texture_mode == GPU_HW::BatchTextureMode::Palette8Bit);
+  const bool replaced = (texture_mode == GPU_HW::BatchTextureMode::Replaced);
+
+  // Replaced textures use the palette modes' interface (texture coordinates in page texels), not their sampling.
+  const bool palette = (texture_mode == GPU_HW::BatchTextureMode::Palette4Bit ||
+                        texture_mode == GPU_HW::BatchTextureMode::Palette8Bit || replaced);
+  if (replaced)
+    texture_filtering = GPUTextureFilter::Nearest;
   const bool shader_blending = (render_mode == GPU_HW::BatchRenderMode::ShaderBlend);
   const bool use_dual_source = (!shader_blending && !use_rov && m_supports_dual_source_blend &&
                                 ((render_mode != GPU_HW::BatchRenderMode::TransparencyDisabled &&
@@ -723,6 +728,7 @@ std::string GPU_HW_ShaderGen::GenerateBatchFragmentShader(
   DefineMacro(ss, "CHECK_MASK_BIT", check_mask);
   DefineMacro(ss, "TEXTURED", textured);
   DefineMacro(ss, "PALETTE", palette);
+  DefineMacro(ss, "REPLACED", replaced);
   DefineMacro(ss, "PALETTE_4_BIT", texture_mode == GPU_HW::BatchTextureMode::Palette4Bit);
   DefineMacro(ss, "PALETTE_8_BIT", texture_mode == GPU_HW::BatchTextureMode::Palette8Bit);
   DefineMacro(ss, "DITHERING", dithering);
@@ -809,7 +815,25 @@ uint2 FloatToIntegerCoords(float2 coords)
 
 float4 SampleFromVRAM(TEXPAGE_VALUE texpage, float2 coords)
 {
-  #if PALETTE
+  #if REPLACED
+    // samp0 is the page drawn with its replacements, 256 texels square at any scale. Its alpha is 0 for a
+    // transparent texel, below 1 for a semi-transparent one, 1 otherwise; turn that into the VRAM texel's form.
+    // The texel the other modes would take, and where in it the coordinate falls.
+    uint2 icoords = FloatToIntegerCoords(coords);
+    float2 sub = (RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ?
+                   clamp(coords - float2(icoords) + 0.5, float2(0.0, 0.0), float2(0.999, 0.999)) :
+                   (coords - float2(icoords));
+    float2 pcoords = (float2(ApplyTextureWindow(icoords)) + sub) * (1.0 / 256.0);
+    float4 texel = SAMPLE_TEXTURE_LEVEL(samp0, pcoords, 0.0);
+    if (texel.a <= (0.5 / 255.0))
+      return TRANSPARENT_PIXEL_COLOR;
+
+    float4 result = float4(texel.rgb, (texel.a < (254.5 / 255.0)) ? 1.0 : 0.0);
+    // Opaque black must not read as transparent; this is below what an 8-bit output keeps.
+    if (VECTOR_EQ(result, TRANSPARENT_PIXEL_COLOR))
+      result.r = 1.0 / 512.0;
+    return result;
+  #elif PALETTE
     uint2 icoord = ApplyTextureWindow(FloatToIntegerCoords(coords));
 
     uint2 vicoord;
@@ -933,7 +957,11 @@ float3 ApplyDebanding(float2 frag_coord)
       if (ialpha < 0.5)
         discard;
     #else
-      #if UV_LIMITS
+      #if UV_LIMITS && REPLACED
+        // The last texel's whole area, not only its start: replacements have detail within it.
+        texcol = SampleFromVRAM(v_texpage, clamp(v_tex0, v_uv_limits.xy,
+          v_uv_limits.zw + ((RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ? 0.499 : 0.999)));
+      #elif UV_LIMITS
         texcol = SampleFromVRAM(v_texpage, clamp(v_tex0, v_uv_limits.xy, v_uv_limits.zw));
       #else
         texcol = SampleFromVRAM(v_texpage, v_tex0);

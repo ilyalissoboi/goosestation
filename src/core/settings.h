@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "texture_pack_config.h"
 #include "types.h"
 
 #include "util/audio_stream.h"
@@ -127,6 +128,7 @@ struct Settings
   bool gpu_disable_interlacing : 1 = true;
   bool gpu_force_ntsc_timings : 1 = false;
   bool gpu_widescreen_hack : 1 = false;
+  bool gpu_texture_cache : 1 = false;
   bool gpu_pgxp_enable : 1 = false;
   bool gpu_pgxp_culling : 1 = true;
   bool gpu_pgxp_texture_correction : 1 = true;
@@ -248,19 +250,31 @@ struct Settings
   // texture replacements
   struct TextureReplacementSettings
   {
+    bool enable_texture_replacements : 1 = false;
     bool enable_vram_write_replacements : 1 = false;
+    bool always_track_uploads : 1 = false;
     bool preload_textures : 1 = false;
 
+    bool dump_textures : 1 = false;
+    bool dump_replaced_textures : 1 = true;
+    bool dump_texture_force_alpha_channel : 1 = false;
     bool dump_vram_writes : 1 = false;
     bool dump_vram_write_force_alpha_channel : 1 = true;
-    u32 dump_vram_write_width_threshold = 128;
-    u32 dump_vram_write_height_threshold = 128;
 
-    ALWAYS_INLINE bool AnyReplacementsEnabled() const { return enable_vram_write_replacements; }
+    /// The keys a pack's config.yaml can override; these are the global values.
+    TexturePackConfig config;
 
-    ALWAYS_INLINE bool ShouldDumpVRAMWrite(u32 width, u32 height)
+    ALWAYS_INLINE bool AnyReplacementsEnabled() const
     {
-      return dump_vram_writes && width >= dump_vram_write_width_threshold && height >= dump_vram_write_height_threshold;
+      return enable_texture_replacements || enable_vram_write_replacements;
+    }
+
+    /// The texture cache tracks VRAM only when it's on and something uses it: replacements the game has, dumping, or
+    /// AlwaysTrackUploads.
+    ALWAYS_INLINE bool ShouldTrackTextures(bool texture_cache_enabled, bool game_has_replacements) const
+    {
+      return texture_cache_enabled &&
+             ((enable_texture_replacements && game_has_replacements) || dump_textures || always_track_uploads);
     }
   } texture_replacements;
 

@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
@@ -32,8 +34,8 @@ import org.junit.runner.RunWith
 class HotkeysScreenTest : ControllerKeys {
     @get:Rule override val rule = createComposeRule()
 
-    private val captures = mutableListOf<String>()
-    private val clears = mutableListOf<String>()
+    private val actions = FakeControllersActions()
+    private val captures get() = actions.hotkeyCaptures
     private var backs = 0
 
     private fun show(
@@ -42,27 +44,17 @@ class HotkeysScreenTest : ControllerKeys {
         capturing: String? = null,
         hotkeysFor: String? = controllers.firstOrNull()?.descriptor,
     ) {
-        rule.setContent {
-            GooseStationTheme {
-                HotkeysScreen(
-                    controllers = controllers,
-                    labels = emptyMap(),
-                    selected = controllers.firstOrNull()?.descriptor,
-                    hotkeys = hotkeys,
-                    hotkeysFor = hotkeysFor,
-                    capturing = capturing,
-                    secondsLeft = 5,
-                    undoFor = null,
-                    onSelect = {},
-                    onCaptureHotkey = { captures += it },
-                    onCancelCapture = {},
-                    onClear = { clears += it },
-                    onUndo = {},
-                    onDropUndo = {},
-                    onBack = { backs++ },
-                )
-            }
-        }
+        val state =
+            ControllersState(
+                controllers = controllers,
+                selected = controllers.firstOrNull()?.descriptor,
+                hotkeys = hotkeys,
+                bindingsFor = hotkeysFor,
+                capturing = capturing,
+                secondsLeft = 5,
+                view = ControllersView.Hotkeys,
+            )
+        rule.setContent { GooseStationTheme { HotkeysScreen(state, actions, onBack = { backs++ }) } }
         rule.waitForIdle()
     }
 

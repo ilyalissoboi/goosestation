@@ -3,25 +3,16 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.unit.dp
-import io.github.ilyalissoboi.goosestation.core.PadBinding
+import io.github.ilyalissoboi.goosestation.app.ControllersActions
+import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
-import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.BoolSetting
 import io.github.ilyalissoboi.goosestation.settings.FloatSetting
 import io.github.ilyalissoboi.goosestation.settings.IntSetting
@@ -31,148 +22,113 @@ import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
-import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.NavRow
-import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsLoadingPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 
 /**
- * The Port 1 controller types whose inputs show as PlayStation glyphs (`[Pad1] Type`, as the core names it). Other
- * types reuse the names for other things, such as the PlayStation Mouse's Left and Right buttons.
- */
-val GLYPH_TYPES = setOf("DigitalController", "AnalogController")
-
-/**
- * A port's page, titled [title]: the bindings of the [selected] one of the [controllers] on the port, one row each,
- * once they're its own ([bindingsFor]); until then, a line says they're being read. Each controller is named by its
- * [labels] entry, or its name. With more than one, a row picks which ([onSelect]); with none, a line says how to put
- * one on the port. A row's A or Enter starts a capture for it ([onCapture]): while [capturing] is its name, it asks
- * for an input, with the [secondsLeft]. Right reaches the row's Clear ([onClear]), or its Undo ([onUndo]) while
- * [undoFor] is its name, until the focus leaves the row ([onDropUndo]). Reset to defaults ([onReset]) ends the page.
- * The focus starts on the page's first row, never on a binding, so an A pressed as the page opens captures nothing;
- * it moves only when nothing in the page has it, never as a controller comes or goes. B or Back go back ([onBack]);
- * Back during a capture cancels it ([onCancelCapture]), as B is captured like any button. The inputs show as their
- * PlayStation glyphs, unless not [glyphs] (a type outside [GLYPH_TYPES]): then as words.
+ * The page of the port [state]'s view shows ([ControllersView.Port]), titled with its name: the bindings of the
+ * controller it shows among those on the port, one row each, once they're its own ([ControllersState.bindingsFor]);
+ * until then, a line says they're being read, and until the port's bindings are first read, the page says it's reading.
+ * With more than one controller, a row picks which; with none, a line says how to put one on the port. A row's A or
+ * Enter starts a capture for it: while it's captured, it asks for an input, with the seconds left. Right reaches the
+ * row's Clear, or its Undo after a capture, until the focus leaves the row. Reset to defaults ends the page. Each goes
+ * to [actions]. The focus starts on the page's first row, never on a binding, so an A pressed as the page opens
+ * captures nothing; it moves only when nothing in the page has it, never as a controller comes or goes; back from a
+ * macro, it goes to that macro's row. B or Back go back ([onBack]); Back during a capture cancels it. The inputs show as
+ * their PlayStation glyphs for a type that has them ([ControllersState.glyphs]), else as words.
  */
 @Composable
 fun PortScreen(
-    title: String,
-    controllers: List<ConnectedController>,
-    labels: Map<String, String>,
-    selected: String?,
-    bindings: List<PadBinding>,
-    bindingsFor: String?,
-    capturing: String?,
-    secondsLeft: Int,
-    undoFor: String?,
-    onSelect: (String) -> Unit,
-    onCapture: (String) -> Unit,
-    onCancelCapture: () -> Unit,
-    onClear: (String) -> Unit,
-    onUndo: () -> Unit,
-    onDropUndo: () -> Unit,
-    onReset: () -> Unit,
+    state: ControllersState,
+    actions: ControllersActions,
     onBack: () -> Unit,
-    glyphs: Boolean = true,
-    pad: Int = 0,
-    type: String? = null,
-    typeNames: List<Choice<String>> = emptyList(),
-    onType: (String) -> Unit = {},
-    typeSettings: List<TypeSetting> = emptyList(),
-    values: SettingValues? = null,
-    onChange: (SettingValues) -> Unit = {},
-    onOpenMacro: (Int) -> Unit = {},
-    focusMacro: Int? = null,
 ) {
+    val pad = (state.view as? ControllersView.Port)?.pad ?: return
+    val title = state.portLabel(pad)
+    val bindings = state.bindings
+    if (bindings == null) {
+        SettingsLoadingPage(title, onBack = onBack)
+        return
+    }
+    val type = state.portTypes[pad]
+    val values = state.portValues
     val first = remember { FocusRequester() }
     val macroRows = remember { List(MacroSettings.COUNT) { FocusRequester() } }
-    var focusInPage by remember { mutableStateOf(false) }
+    val controller = state.controller
+
     // On opening, and whenever the row with the focus goes, as when the controller's name becomes the Controller row;
     // back from a macro, its row.
-    LaunchedEffect(focusInPage) {
-        if (focusInPage) return@LaunchedEffect
-        val macroRow = focusMacro?.let { macroRows.getOrNull(it - 1) }
-        if (macroRow != null && values != null) macroRow.requestFocus() else first.requestFocus()
-    }
-    val controller = controllers.firstOrNull { it.descriptor == selected } ?: controllers.firstOrNull()
-
-    SettingsPage(title, onBack = onBack) {
-        // After the page's own, so it takes Back first while a capture runs.
-        BackHandler(enabled = capturing != null, onBack = onCancelCapture)
-        Column(
-            Modifier.fillMaxWidth().onFocusChanged { focusInPage = it.hasFocus },
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (type != null) {
-                CyclerRow(
-                    "Controller type",
-                    offered(typeNames, type),
-                    type,
-                    onSelect = onType,
-                    modifier = Modifier.focusRequester(first),
-                )
-                // Not Connected: nothing to set, bind or press.
-                if (type == NOT_CONNECTED) return@Column
-            }
-            if (values != null && typeSettings.isNotEmpty()) {
-                SettingsSection("Settings")
-                typeSettings.forEach { TypeSettingRow(pad, it, values, onChange) }
-            }
-            if (type != null) SettingsSection("Bindings")
-            val firstHere = if (type == null) Modifier.focusRequester(first) else Modifier
-            if (controller == null) {
-                // It holds the focus, so B and Back reach the page.
-                // It holds the focus only as the first row, so B and Back reach the page; below the type, no stop.
-                Line(
-                    "No controller is on $title. Pick $title for one on the Controllers page.",
-                    firstHere.focusable(type == null),
-                )
+    BindingsPage(title, state, actions, onBack, focus = {
+        val macroRow = state.macroFocus?.let { macroRows.getOrNull(it - 1) }
+        if (macroRow != null && values != null) macroRow else first
+    }) {
+        if (type != null) {
+            CyclerRow(
+                "Controller type",
+                offered(state.typeNames, type),
+                type,
+                onSelect = { actions.setType(pad, it) },
+                modifier = Modifier.focusRequester(first),
+            )
+            // Not Connected: nothing to set, bind or press.
+            if (type == NOT_CONNECTED) return@BindingsPage
+        }
+        if (values != null && state.typeSettings.isNotEmpty()) {
+            SettingsSection("Settings")
+            state.typeSettings.forEach { TypeSettingRow(pad, it, values, actions::changePort) }
+        }
+        if (type != null) SettingsSection("Bindings")
+        val firstHere = if (type == null) Modifier.focusRequester(first) else Modifier
+        if (controller == null) {
+            // It holds the focus only as the first row, so B and Back reach the page; below the type, no stop.
+            Line(
+                "No controller is on $title. Pick $title for one on the Controllers page.",
+                firstHere.focusable(type == null),
+            )
+        } else {
+            // It holds the focus on opening, with nothing to activate for one controller.
+            ControllerPicker(
+                state.covered,
+                state.labels,
+                controller,
+                actions::select,
+                firstHere,
+                nameFocusable = type == null,
+            )
+            Line("Each controller on $title keeps its own bindings.")
+            if (state.bindingsFor != controller.descriptor) {
+                Line("Reading ${state.label(controller)}'s bindings…")
             } else {
-                val label = labels[controller.descriptor] ?: controller.name
-                // It holds the focus on opening, with nothing to activate for one controller.
-                ControllerPicker(controllers, labels, controller, onSelect, firstHere, nameFocusable = type == null)
-                Line("Each controller on $title keeps its own bindings.")
-                if (bindingsFor != controller.descriptor) {
-                    Line("Reading $label's bindings…")
-                } else {
-                    bindings.forEachIndexed { i, binding ->
-                        // A type a game's own file gives the port: its inputs, after the port's own, under its name.
-                        if (binding.category.isNotEmpty() && binding.category != bindings.getOrNull(i - 1)?.category) {
-                            SettingsSection("${binding.category} (a game's)")
-                        }
-                        BindingRow(
-                            binding = binding,
-                            glyph = glyphs,
-                            prompt =
-                                if (capturing == binding.name) {
-                                    "Press the new button for ${binding.displayName}… Back cancels ($secondsLeft)"
-                                } else {
-                                    null
-                                },
-                            undo = undoFor == binding.name,
-                            onCapture = { onCapture(binding.name) },
-                            onClear = { onClear(binding.name) },
-                            onUndo = onUndo,
-                            onDropUndo = onDropUndo,
-                        )
+                bindings.forEachIndexed { i, binding ->
+                    // A type a game's own file gives the port: its inputs, after the port's own, under its name.
+                    if (binding.category.isNotEmpty() && binding.category != bindings.getOrNull(i - 1)?.category) {
+                        SettingsSection("${binding.category} (a game's)")
                     }
-                }
-            }
-            if (values != null) {
-                SettingsSection("Macros")
-                for (macro in 1..MacroSettings.COUNT) {
-                    NavRow(
-                        "Macro $macro",
-                        values[MacroSettings.binds(pad, macro)].ifEmpty { "Not set" },
-                        onClick = { onOpenMacro(macro) },
-                        modifier = Modifier.focusRequester(macroRows[macro - 1]),
+                    CaptureBindingRow(
+                        binding,
+                        ask = "Press the new button for ${binding.displayName}",
+                        state = state,
+                        actions = actions,
+                        glyph = state.glyphs,
                     )
                 }
             }
-            if (controller != null && bindingsFor == controller.descriptor) {
-                ActionButton("Reset to defaults", onClick = onReset, kind = ButtonKind.Danger)
+        }
+        if (values != null) {
+            SettingsSection("Macros")
+            for (macro in 1..MacroSettings.COUNT) {
+                NavRow(
+                    "Macro $macro",
+                    values[MacroSettings.binds(pad, macro)].ifEmpty { "Not set" },
+                    onClick = { actions.openMacro(pad, macro) },
+                    modifier = Modifier.focusRequester(macroRows[macro - 1]),
+                )
             }
+        }
+        if (controller != null && state.bindingsFor == controller.descriptor) {
+            ActionButton("Reset to defaults", onClick = actions::reset, kind = ButtonKind.Danger)
         }
     }
 }

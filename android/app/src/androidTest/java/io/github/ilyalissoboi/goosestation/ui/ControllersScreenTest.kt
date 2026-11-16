@@ -3,6 +3,9 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -13,6 +16,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.TouchMode
 import io.github.ilyalissoboi.goosestation.app.TouchSettings
@@ -43,22 +47,19 @@ class ControllersScreenTest : ControllerKeys {
         rule.setContent {
             GooseStationTheme {
                 ControllersScreen(
-                    controllers = controllers,
-                    labels = emptyMap(),
-                    ports = ports,
-                    rumble = mapOf(PAD.descriptor to 60),
-                    offered = offered,
-                    portTypes = mapOf(0 to "AnalogController", 1 to "None"),
-                    typeNames = TYPES,
-                    multitap = MULTITAP,
-                    multitapNames = MODES,
-                    onPort = { d, pad -> calls += "port $d $pad" },
-                    onRumble = { d, percent -> calls += "rumble $d $percent" },
-                    onMultitap = { calls += "multitap ${it[PortSettings.MULTITAP]}" },
-                    onOpenPort = { calls += "open $it" },
-                    onOpenHotkeys = { calls += "hotkeys" },
+                    ControllersState(
+                        controllers = controllers,
+                        ports = ports,
+                        rumble = mapOf(PAD.descriptor to 60),
+                        offered = offered,
+                        portTypes = mapOf(0 to "AnalogController", 1 to "None"),
+                        typeNames = TYPES,
+                        multitap = MULTITAP,
+                        multitapNames = MODES,
+                        cameFrom = cameFrom,
+                    ),
+                    FakeControllersActions(calls),
                     onBack = { calls += "back" },
-                    cameFrom = cameFrom,
                     touch = TouchSettings(),
                     onTouch = { calls += "touch $it" },
                 )
@@ -215,6 +216,47 @@ class ControllersScreenTest : ControllerKeys {
         assertFocusedHas("Connect a controller to set it up.")
         press(Key.ButtonB)
         assertEquals(listOf("back"), calls)
+    }
+
+    // The page's one screen picks its view's: the hub, a port's page, a macro and the hotkeys.
+    @Test
+    fun thePageShowsItsViewsScreen() {
+        var state by
+            mutableStateOf(
+                ControllersState(
+                    controllers = listOf(PAD),
+                    selected = PAD.descriptor,
+                    bindings = emptyList(),
+                    hotkeys = emptyList(),
+                    macros = emptyList(),
+                    bindingsFor = PAD.descriptor,
+                    offered = OFFERED,
+                ),
+            )
+        rule.setContent {
+            GooseStationTheme {
+                ControllersPageScreen(
+                    state,
+                    FakeControllersActions(calls),
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("Back, the Mode", substring = true).assertExists()
+
+        state = state.copy(view = ControllersView.Port(1))
+        rule.waitForIdle()
+        rule.onNodeWithText("No controller is on Port 2", substring = true).assertExists()
+
+        state = state.copy(view = ControllersView.Macro(0, 3))
+        rule.waitForIdle()
+        rule.onNodeWithText("Macro 3 · Port 1").assertExists()
+
+        state = state.copy(view = ControllersView.Hotkeys)
+        rule.waitForIdle()
+        rule.onNodeWithText("Hold Select and press the button you set.", substring = true).assertExists()
+        rule.onNodeWithText("Back, the Mode", substring = true).assertDoesNotExist()
     }
 
     private companion object {

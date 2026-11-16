@@ -17,7 +17,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import io.github.ilyalissoboi.goosestation.app.AppController
-import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CorePage
 import io.github.ilyalissoboi.goosestation.app.MemcardEditorWords
 import io.github.ilyalissoboi.goosestation.app.Screen
@@ -28,27 +27,22 @@ import io.github.ilyalissoboi.goosestation.core.NativeLibrary
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.input.LeftoverKeys
 import io.github.ilyalissoboi.goosestation.settings.InterfaceSettings
-import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.storage.DocumentPicker
 import io.github.ilyalissoboi.goosestation.storage.FolderPicker
 import io.github.ilyalissoboi.goosestation.ui.AchievementsScreen
 import io.github.ilyalissoboi.goosestation.ui.BiosScreen
 import io.github.ilyalissoboi.goosestation.ui.CardSlots
-import io.github.ilyalissoboi.goosestation.ui.ControllersScreen
+import io.github.ilyalissoboi.goosestation.ui.ControllersPageScreen
 import io.github.ilyalissoboi.goosestation.ui.CoversScreen
 import io.github.ilyalissoboi.goosestation.ui.FoldersScreen
-import io.github.ilyalissoboi.goosestation.ui.GLYPH_TYPES
 import io.github.ilyalissoboi.goosestation.ui.GameScreen
 import io.github.ilyalissoboi.goosestation.ui.GameSettingsHost
-import io.github.ilyalissoboi.goosestation.ui.HotkeysScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceScreen
 import io.github.ilyalissoboi.goosestation.ui.InterfaceUpdates
 import io.github.ilyalissoboi.goosestation.ui.LibraryScreen
-import io.github.ilyalissoboi.goosestation.ui.MacroScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardEditorScreen
 import io.github.ilyalissoboi.goosestation.ui.MemcardSyncScreen
-import io.github.ilyalissoboi.goosestation.ui.PortScreen
 import io.github.ilyalissoboi.goosestation.ui.PostProcessingScreen
 import io.github.ilyalissoboi.goosestation.ui.ResumePrompt
 import io.github.ilyalissoboi.goosestation.ui.SavesScreen
@@ -420,127 +414,14 @@ private fun SettingsPageContent(
                 )
             }
         }
-        Screen.Controllers -> {
-            val page = AppController.controllersPage
-            val state = page.state
-            when (val view = state.view) {
-                ControllersView.Hub ->
-                    ControllersScreen(
-                        controllers = state.controllers,
-                        labels = state.labels,
-                        ports = state.ports,
-                        rumble = state.rumble,
-                        offered = state.offered,
-                        portTypes = state.portTypes,
-                        typeNames = state.typeNames,
-                        multitap = state.multitap,
-                        multitapNames = state.multitapNames,
-                        onPort = page::setPort,
-                        onRumble = page::setRumble,
-                        onMultitap = page::setMultitap,
-                        onOpenPort = page::openPort,
-                        onOpenHotkeys = page::openHotkeys,
-                        onBack = controllersBack,
-                        cameFrom = state.cameFrom,
-                        touch = AppController.touchControls.settings,
-                        onTouch = { AppController.touchControls.settings = it },
-                    )
-                is ControllersView.Port -> {
-                    val bindings = state.bindings
-                    val title =
-                        state.offered.firstOrNull { it.value == view.pad }?.label
-                            ?: Pads.label(view.pad)
-                    if (bindings == null) {
-                        SettingsLoadingPage(title, onBack = controllersBack)
-                    } else {
-                        PortScreen(
-                            title = title,
-                            controllers =
-                                state.controllers.filter {
-                                    (state.ports[it.descriptor] ?: 0) ==
-                                        view.pad
-                                },
-                            labels = state.labels,
-                            selected = state.selected,
-                            bindings = bindings,
-                            bindingsFor = state.bindingsFor,
-                            capturing = state.capturing,
-                            secondsLeft = state.secondsLeft,
-                            undoFor = state.undo?.name,
-                            onSelect = AppController::selectController,
-                            onCapture = AppController::captureBinding,
-                            glyphs = state.bindingsType in GLYPH_TYPES,
-                            onCancelCapture = AppController::cancelCapture,
-                            onClear = AppController::clearBinding,
-                            onUndo = page::undo,
-                            onDropUndo = page::dropUndo,
-                            onReset = AppController::resetBindings,
-                            onBack = controllersBack,
-                            pad = view.pad,
-                            type = state.portTypes[view.pad],
-                            typeNames = state.typeNames,
-                            onType = { page.setType(view.pad, it) },
-                            typeSettings = state.typeSettings,
-                            values = state.portValues,
-                            onChange = page::changePort,
-                            onOpenMacro = { page.openMacro(view.pad, it) },
-                            focusMacro = (state.cameFrom as? ControllersView.Macro)?.macro,
-                        )
-                    }
-                }
-                is ControllersView.Macro -> {
-                    val port =
-                        state.offered.firstOrNull { it.value == view.pad }?.label
-                            ?: Pads.label(view.pad)
-                    MacroScreen(
-                        title = "Macro ${view.macro} · $port",
-                        pad = view.pad,
-                        macro = view.macro,
-                        controllers =
-                            state.controllers.filter {
-                                (state.ports[it.descriptor] ?: 0) ==
-                                    view.pad
-                            },
-                        labels = state.labels,
-                        selected = state.selected,
-                        triggers = state.macros.orEmpty(),
-                        triggersFor = state.bindingsFor.takeIf { state.macros != null },
-                        inputs = state.macroInputs,
-                        values = state.macroValues,
-                        capturing = state.capturing,
-                        secondsLeft = state.secondsLeft,
-                        undoFor = state.undo?.name,
-                        onSelect = AppController::selectController,
-                        onCapture = AppController::captureBinding,
-                        onCancelCapture = AppController::cancelCapture,
-                        onClear = AppController::clearBinding,
-                        onUndo = page::undo,
-                        onDropUndo = page::dropUndo,
-                        onChange = page::changeMacro,
-                        onBack = controllersBack,
-                        port = port,
-                    )
-                }
-                ControllersView.Hotkeys ->
-                    HotkeysScreen(
-                        controllers = state.controllers,
-                        labels = state.labels,
-                        selected = state.selected,
-                        hotkeys = state.hotkeys.orEmpty(),
-                        hotkeysFor = state.bindingsFor.takeIf { state.hotkeys != null },
-                        capturing = state.capturing,
-                        secondsLeft = state.secondsLeft,
-                        undoFor = state.undo?.name,
-                        onSelect = AppController::selectController,
-                        onCaptureHotkey = AppController::captureHotkey,
-                        onCancelCapture = AppController::cancelCapture,
-                        onClear = AppController::clearBinding,
-                        onUndo = page::undo,
-                        onDropUndo = page::dropUndo,
-                        onBack = controllersBack,
-                    )
-            }
-        }
+        Screen.Controllers ->
+            ControllersPageScreen(
+                AppController.controllersPage.state,
+                AppController.controllersPage,
+                onBack = controllersBack,
+                touch = AppController.touchControls.settings,
+                onTouch = { AppController.touchControls.settings = it },
+            )
         Screen.Covers -> CoversScreen(AppController.covers, onBack = onBack)
         Screen.Folders -> {
             val mirrorState by AppController.mirrorState.collectAsState()

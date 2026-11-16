@@ -18,13 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import io.github.ilyalissoboi.goosestation.app.ControllersActions
+import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.TouchMode
 import io.github.ilyalissoboi.goosestation.app.TouchSettings
-import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.Pads
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
-import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.settings.offered
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
@@ -62,35 +62,43 @@ private val TOUCH_MODES =
     )
 
 /**
- * The Controllers page's hub: the menu triggers; then each of the [controllers] (named by its [labels] entry, or its
- * name) with its port among [offered] ([ports], set with [onPort]) and its rumble strength ([rumble], [onRumble]), or a
- * line when Android can drive none of its motors; then the on-screen touch controls' settings ([touch], changed with
- * [onTouch]): when they show, their size and opacity, and the press tick; then Multitap ([multitap], among [multitapNames], [onMultitap]), a
- * row per offered port with its type ([portTypes], named by [typeNames]) and the controllers on it, which opens its
- * page ([onOpenPort]), and Hotkeys ([onOpenHotkeys]). The focus starts on the first row, or on the row of the view
- * Back came from ([cameFrom]). B or Back go back ([onBack]).
+ * The Controllers page [state] shows: its view's screen, each asking [actions], and back by [onBack]. The hub also
+ * shows the touch controls' settings ([touch], changed with [onTouch]), which aren't the page's.
  */
 @Composable
-fun ControllersScreen(
-    controllers: List<ConnectedController>,
-    labels: Map<String, String>,
-    ports: Map<String, Int>,
-    rumble: Map<String, Int>,
-    offered: List<Choice<Int>>,
-    portTypes: Map<Int, String>,
-    typeNames: List<Choice<String>>,
-    multitap: SettingValues?,
-    multitapNames: List<Choice<String>>,
-    onPort: (descriptor: String, pad: Int) -> Unit,
-    onRumble: (descriptor: String, percent: Int) -> Unit,
-    onMultitap: (SettingValues) -> Unit,
-    onOpenPort: (pad: Int) -> Unit,
-    onOpenHotkeys: () -> Unit,
+fun ControllersPageScreen(
+    state: ControllersState,
+    actions: ControllersActions,
     onBack: () -> Unit,
-    cameFrom: ControllersView? = null,
     touch: TouchSettings = TouchSettings(),
     onTouch: (TouchSettings) -> Unit = {},
 ) {
+    when (state.view) {
+        ControllersView.Hub -> ControllersScreen(state, actions, onBack, touch, onTouch)
+        is ControllersView.Port -> PortScreen(state, actions, onBack)
+        is ControllersView.Macro -> MacroScreen(state, actions, onBack)
+        ControllersView.Hotkeys -> HotkeysScreen(state, actions, onBack)
+    }
+}
+
+/**
+ * The Controllers page's hub, as [state] has it: the menu triggers; then each controller connected with its port among
+ * those offered and its rumble strength, or a line when Android can drive none of its motors; then the on-screen
+ * touch controls' settings ([touch], changed with [onTouch]): when they show, their size and opacity, and the press
+ * tick; then Multitap, a row per offered port with its type and the controllers on it, which opens its page, and
+ * Hotkeys. Each change and page goes to [actions]. The focus starts on the first row, or on the row of the view Back
+ * came from ([ControllersState.cameFrom]). B or Back go back ([onBack]).
+ */
+@Composable
+fun ControllersScreen(
+    state: ControllersState,
+    actions: ControllersActions,
+    onBack: () -> Unit,
+    touch: TouchSettings = TouchSettings(),
+    onTouch: (TouchSettings) -> Unit = {},
+) {
+    val controllers = state.controllers
+    val ports = state.ports
     val first = remember { FocusRequester() }
     val portRows = remember { mutableMapOf<Int, FocusRequester>() }
     val hotkeysRow = remember { FocusRequester() }
@@ -99,7 +107,7 @@ fun ControllersScreen(
     LaunchedEffect(focusInPage) {
         if (focusInPage) return@LaunchedEffect
         val back =
-            when (cameFrom) {
+            when (val cameFrom = state.cameFrom) {
                 is ControllersView.Port -> portRows[cameFrom.pad]
                 ControllersView.Hotkeys -> hotkeysRow
                 else -> null
@@ -122,21 +130,21 @@ fun ControllersScreen(
                 Line("Connect a controller to set it up.", Modifier.focusRequester(first).focusable())
             }
             controllers.forEachIndexed { i, pad ->
-                val name = labels[pad.descriptor] ?: pad.name
+                val name = state.label(pad)
                 val on = ports[pad.descriptor] ?: 0
                 CyclerRow(
                     name,
-                    offered(offered, on) { Pads.label(it) },
+                    offered(state.offered, on) { Pads.label(it) },
                     on,
-                    onSelect = { onPort(pad.descriptor, it) },
+                    onSelect = { actions.setPort(pad.descriptor, it) },
                     modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
                 )
                 if (pad.motors > 0) {
                     NumberRow(
                         "Rumble strength",
-                        rumble[pad.descriptor] ?: 100,
+                        state.rumble[pad.descriptor] ?: 100,
                         RUMBLE_SCALE,
-                        onChange = { onRumble(pad.descriptor, it) },
+                        onChange = { actions.setRumble(pad.descriptor, it) },
                     )
                 } else {
                     Line("$name has no motors Android can drive, so it doesn't rumble.")
@@ -161,22 +169,23 @@ fun ControllersScreen(
             )
 
             SettingsSection("Ports")
+            val multitap = state.multitap
             if (multitap != null) {
                 val mode = multitap[PortSettings.MULTITAP]
                 CyclerRow(
                     "Multitap",
-                    offered(multitapNames, mode),
+                    offered(state.multitapNames, mode),
                     mode,
-                    onSelect = { onMultitap(multitap.with(PortSettings.MULTITAP, it)) },
+                    onSelect = { actions.setMultitap(multitap.with(PortSettings.MULTITAP, it)) },
                 )
             }
-            offered.forEach { port ->
-                val type = portTypes[port.value]
-                val typeName = typeNames.firstOrNull { it.value == type }?.label ?: type.orEmpty()
+            state.offered.forEach { port ->
+                val type = state.portTypes[port.value]
+                val typeName = state.typeNames.firstOrNull { it.value == type }?.label ?: type.orEmpty()
                 val names =
                     controllers
                         .filter { (ports[it.descriptor] ?: 0) == port.value }
-                        .map { labels[it.descriptor] ?: it.name }
+                        .map { state.label(it) }
                         .ifEmpty { listOf("No controller") }
                 key(port.value) {
                     val row = remember { FocusRequester() }
@@ -184,7 +193,7 @@ fun ControllersScreen(
                     NavRow(
                         port.label,
                         listOf(typeName, names.joinToString(", ")).filter { it.isNotEmpty() }.joinToString(" · "),
-                        onClick = { onOpenPort(port.value) },
+                        onClick = { actions.openPort(port.value) },
                         modifier = Modifier.focusRequester(row),
                     )
                 }
@@ -194,7 +203,7 @@ fun ControllersScreen(
             NavRow(
                 "Hotkeys",
                 "Select + a button, while a game runs",
-                onClick = onOpenHotkeys,
+                onClick = actions::openHotkeys,
                 modifier = Modifier.focusRequester(hotkeysRow),
             )
         }

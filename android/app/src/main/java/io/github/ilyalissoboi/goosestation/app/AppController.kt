@@ -1080,18 +1080,6 @@ object AppController {
         if (!controllersPage.back()) leave()
     }
 
-    fun selectController(descriptor: String) = controllersPage.select(descriptor)
-
-    fun captureBinding(name: String) = controllersPage.capture(name)
-
-    fun captureHotkey(name: String) = controllersPage.captureHotkey(name)
-
-    fun cancelCapture() = controllersPage.cancelCapture()
-
-    fun clearBinding(name: String) = controllersPage.clear(name)
-
-    fun resetBindings() = controllersPage.reset()
-
     // --- The folder settings ---
 
     /** Picks another BIOS folder, which replaces the old one if it holds any images. */

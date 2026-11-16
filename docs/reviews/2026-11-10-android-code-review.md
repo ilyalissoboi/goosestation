@@ -50,13 +50,14 @@ Nearly every finding has since been fixed, each test-first where a test could ru
 | [#114](https://github.com/ilyalissoboi/goosestation/pull/114) | From 3.1: `FolderSettings` out of `AppController` |
 | [#115](https://github.com/ilyalissoboi/goosestation/pull/115) | From 3.1: `Navigator` out of `AppController` |
 | [#118](https://github.com/ilyalissoboi/goosestation/pull/118) | The last of 3.1: `CoreEvents` and `AchievementMessages` out of `AppController` |
-| Batch O | The last of 3.2: `ShownPanel`, the in-game menu's one side panel as one field |
+| [#119](https://github.com/ilyalissoboi/goosestation/pull/119) | The last of 3.2: `ShownPanel`, the in-game menu's one side panel as one field |
+| Batch P | The last of 3.5: the controllers screens take `ControllersState` and `ControllersActions` |
 
 **How some of them turned out:**
-- **1.7:** fixed first with one `withSide()` helper, then with the sealed type it asked for (batch O), named
+- **1.7:** fixed first with one `withSide()` helper, then with the sealed type it asked for (#119), named
   `ShownPanel`, since `SidePanel` is 3.3's frame composable.
 - **3.2:** done in parts: `SlotQuestion` and the shared save list (#90), the codes and achievements panels' own models
-  (#93), and `ShownPanel` with the slot panel's own generation (batch O). `InGameMenu` is 1,049 lines, its slot work,
+  (#93), and `ShownPanel` with the slot panel's own generation (#119). `InGameMenu` is 1,049 lines, its slot work,
   discs, exit and hotkeys still in it.
 - **1.9:** multitap's stale hub read is left as it is. It only makes the page flicker for a moment before a fresh read
   replaces it.
@@ -72,6 +73,11 @@ Nearly every finding has since been fixed, each test-first where a test could ru
 - **3.1:** `AppController` went from 2,079 lines to 1,520, in five steps: `DataSync`, `GameSession`, `FolderSettings`,
   `Navigator` and `CoreEvents`, each with JVM tests. What stays is the wiring, the lifecycle, the cold start, and the
   pieces' hooks. It is no longer the core's `NativeCallbacks`.
+- **3.5, the controllers screens:** done as the post-processing page's shape: each screen takes the page's state and
+  an actions interface the page implements (batch P). The rules `MainActivity` worked out (the controllers on a port,
+  a port's name, glyphs, the macro row to focus) are `ControllersState`'s, which the page shares. `BindingsPage` and
+  `CaptureBindingRow` hold the capture's frame; the three prompts keep their own words. `MainActivity` went from 615
+  lines to 496.
 
 - **4.3, `EmuThread::Call`:** narrower than proposed. Most of the 39 blocking sites are long, with early returns, so
   only the short ones use it.
@@ -79,7 +85,6 @@ Nearly every finding has since been fixed, each test-first where a test could ru
   less the padding.
 
 **Still open:**
-- **3.5:** the controllers screens' 16–28 parameters.
 - **From 4.2:**
   - the focus set-up helpers (`rememberFocusRequesters`, a `FocusHolderLine` with a ring);
   - `Notice` with one text style and a live region;

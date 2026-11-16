@@ -3,7 +3,11 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,9 +24,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import io.github.ilyalissoboi.goosestation.app.ControllersActions
+import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.input.BindingLabels
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
@@ -33,6 +40,7 @@ import io.github.ilyalissoboi.goosestation.ui.components.CyclerRow
 import io.github.ilyalissoboi.goosestation.ui.components.LabelValue
 import io.github.ilyalissoboi.goosestation.ui.components.PsGlyph
 import io.github.ilyalissoboi.goosestation.ui.components.PsGlyphs
+import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.focusRing
 
 /**
@@ -150,6 +158,60 @@ internal fun BindingRow(
             },
         )
     }
+}
+
+/**
+ * A page of the Controllers page's bindings, titled [title]: its [content] in a column, which asks [focus] for the row
+ * to focus whenever nothing in it has the focus, as when it opens or the row with the focus goes. B or Back go back
+ * ([onBack]); Back during a capture cancels it instead, as B is captured like any button.
+ */
+@Composable
+internal fun BindingsPage(
+    title: String,
+    state: ControllersState,
+    actions: ControllersActions,
+    onBack: () -> Unit,
+    focus: () -> FocusRequester,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    var focusInPage by remember { mutableStateOf(false) }
+    LaunchedEffect(focusInPage) { if (!focusInPage) focus().requestFocus() }
+    SettingsPage(title, onBack = onBack) {
+        // After the page's own, so it takes Back first while a capture runs.
+        BackHandler(enabled = state.capturing != null, onBack = actions::cancelCapture)
+        Column(
+            Modifier.fillMaxWidth().onFocusChanged { focusInPage = it.hasFocus },
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content,
+        )
+    }
+}
+
+/**
+ * A [BindingRow] for the input [name] (the [binding]'s own, unless it shows under another name), captured through
+ * [actions] (a [hotkey]'s as a Select chord), cleared and undone there. While it's captured, it asks for an input
+ * ([ask]) with the seconds left.
+ */
+@Composable
+internal fun CaptureBindingRow(
+    binding: PadBinding,
+    ask: String,
+    state: ControllersState,
+    actions: ControllersActions,
+    name: String = binding.name,
+    hotkey: Boolean = false,
+    glyph: Boolean = false,
+) {
+    BindingRow(
+        binding = binding,
+        glyph = glyph,
+        prompt = if (state.capturing == name) "$ask… Back cancels (${state.secondsLeft})" else null,
+        undo = state.undoFor == name,
+        onCapture = { if (hotkey) actions.captureHotkey(name) else actions.capture(name) },
+        onClear = { actions.clear(name) },
+        onUndo = actions::undo,
+        onDropUndo = actions::dropUndo,
+    )
 }
 
 @Composable

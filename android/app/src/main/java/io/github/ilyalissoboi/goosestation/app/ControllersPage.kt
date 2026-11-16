@@ -66,7 +66,123 @@ data class ControllersState(
     val multitapNames: List<Choice<String>> = emptyList(),
     /** The view Back last left, whose row the view it went to focuses; null on opening. */
     val cameFrom: ControllersView? = null,
-)
+) {
+    /** The controllers the view covers: on a port's or a macro's view, those on its pad; else all of them. */
+    val covered: List<ConnectedController> get() = coveredAmong(controllers)
+
+    /** The controller the view shows: the selected one among those it [covered], or else the first; none with none. */
+    val controller: ConnectedController? get() =
+        covered.let { c ->
+            c.firstOrNull { it.descriptor == selected }
+                ?: c.firstOrNull()
+        }
+
+    /** Whether the bindings' type shows its inputs as PlayStation glyphs: one of [GLYPH_TYPES]. */
+    val glyphs: Boolean get() = bindingsType in GLYPH_TYPES
+
+    /** The input whose row offers Undo: the one the last capture replaced. */
+    val undoFor: String? get() = undo?.name
+
+    /** The macro whose row a port's page focuses as it comes back from it; null from anywhere else. */
+    val macroFocus: Int? get() = (cameFrom as? ControllersView.Macro)?.macro
+
+    /**
+     * Those of [connected] the view covers: on a port's or a macro's view, those on its pad (one whose port isn't read
+     * yet counts as on pad 0); else all of them.
+     */
+    fun coveredAmong(connected: List<ConnectedController>): List<ConnectedController> {
+        val pad =
+            when (view) {
+                is ControllersView.Port -> view.pad
+                is ControllersView.Macro -> view.pad
+                else -> return connected
+            }
+        return connected.filter { (ports[it.descriptor] ?: 0) == pad }
+    }
+
+    /** [controller]'s name on the page: its numbered label while it shares its name, or else its name. */
+    fun label(controller: ConnectedController): String = labels[controller.descriptor] ?: controller.name
+
+    /** [pad]'s name: as the ports offered name it, or else its own. */
+    fun portLabel(pad: Int): String = offered.firstOrNull { it.value == pad }?.label ?: Pads.label(pad)
+
+    companion object {
+        /**
+         * The Port 1 controller types whose inputs show as PlayStation glyphs (`[Pad1] Type`, as the core names it).
+         * Other types reuse the names for other things, such as the PlayStation Mouse's Left and Right buttons.
+         */
+        val GLYPH_TYPES = setOf("DigitalController", "AnalogController")
+    }
+}
+
+/**
+ * What the Controllers page's screens ask of it. [ControllersPage] does each; a screen's tests record them. The page's
+ * opening, closing, Back and the core's report of a capture aren't here: they're [AppController]'s.
+ */
+interface ControllersActions {
+    /** Shows the controller with [descriptor]'s bindings. */
+    fun select(descriptor: String)
+
+    /** Captures the selected controller's next input as [name]'s binding. */
+    fun capture(name: String)
+
+    /** Captures the button held with Select as the hotkey [name]'s. */
+    fun captureHotkey(name: String)
+
+    /** Ends the capture running, if any. */
+    fun cancelCapture()
+
+    /** Leaves the binding or hotkey [name] unbound. */
+    fun clear(name: String)
+
+    /** Puts back the binding the last capture replaced. */
+    fun undo()
+
+    /** The last capture can't be undone any more. */
+    fun dropUndo()
+
+    /** Gives the selected controller its default bindings again. */
+    fun reset()
+
+    /** Puts the controller with [descriptor] on [pad]. */
+    fun setPort(
+        descriptor: String,
+        pad: Int,
+    )
+
+    /** Sets the controller with [descriptor]'s rumble strength. */
+    fun setRumble(
+        descriptor: String,
+        percent: Int,
+    )
+
+    /** Saves multitap's change to [values]. */
+    fun setMultitap(values: SettingValues)
+
+    /** Opens [pad]'s page. */
+    fun openPort(pad: Int)
+
+    /** Opens [pad]'s [macro]. */
+    fun openMacro(
+        pad: Int,
+        macro: Int,
+    )
+
+    /** Opens the hotkeys. */
+    fun openHotkeys()
+
+    /** Sets [pad]'s controller [type]. */
+    fun setType(
+        pad: Int,
+        type: String,
+    )
+
+    /** Saves the open port's change to [values]. */
+    fun changePort(values: SettingValues)
+
+    /** Saves the open macro's change to [values]. */
+    fun changeMacro(values: SettingValues)
+}
 
 /** The Controllers page's views: the hub, a port's page, one of a port's macros, and the hotkeys. */
 sealed interface ControllersView {
@@ -103,7 +219,7 @@ class ControllersPage(
     private val isOpen: () -> Boolean,
     private val settings: CoreSettings,
     private val log: (String) -> Unit = {},
-) {
+) : ControllersActions {
     /** The page's controllers, bindings and capture. */
     var state by mutableStateOf(ControllersState())
         private set
@@ -153,7 +269,7 @@ class ControllersPage(
     }
 
     /** Puts the controller with [descriptor] on [pad]; its bindings follow it there. */
-    fun setPort(
+    override fun setPort(
         descriptor: String,
         pad: Int,
     ) {
@@ -168,7 +284,7 @@ class ControllersPage(
     }
 
     /** Sets the controller with [descriptor]'s rumble strength, 0 to 100 percent. */
-    fun setRumble(
+    override fun setRumble(
         descriptor: String,
         percent: Int,
     ) {
@@ -178,7 +294,7 @@ class ControllersPage(
     }
 
     /** Saves multitap's change to [values], then reads the ports offered again, as they follow it. */
-    fun setMultitap(values: SettingValues) {
+    override fun setMultitap(values: SettingValues) {
         val old = state.multitap ?: return
         if (values == old) return
         state = state.copy(multitap = values)
@@ -192,16 +308,16 @@ class ControllersPage(
     }
 
     /** Opens [pad]'s page: its type and settings, and the bindings of a controller on it. */
-    fun openPort(pad: Int) = show(ControllersView.Port(pad))
+    override fun openPort(pad: Int) = show(ControllersView.Port(pad))
 
     /** Opens [pad]'s [macro] (1 to [MacroSettings.COUNT]). */
-    fun openMacro(
+    override fun openMacro(
         pad: Int,
         macro: Int,
     ) = show(ControllersView.Macro(pad, macro))
 
     /** Opens the hotkeys, for any connected controller. */
-    fun openHotkeys() = show(ControllersView.Hotkeys)
+    override fun openHotkeys() = show(ControllersView.Hotkeys)
 
     /** One view up: a macro to its port, a port or the hotkeys to the hub. False on the hub, which the page leaves. */
     fun back(): Boolean {
@@ -216,7 +332,7 @@ class ControllersPage(
     }
 
     /** Sets [pad]'s controller [type]; each controller on it gets the type's defaults where it has none. */
-    fun setType(
+    override fun setType(
         pad: Int,
         type: String,
     ) {
@@ -231,7 +347,7 @@ class ControllersPage(
     }
 
     /** Saves the open port's change to [values], only the settings that changed. */
-    fun changePort(values: SettingValues) {
+    override fun changePort(values: SettingValues) {
         val old = state.portValues ?: return
         if (values == old) return
         state = state.copy(portValues = values)
@@ -248,7 +364,7 @@ class ControllersPage(
     }
 
     /** Saves the open macro's change to [values]. */
-    fun changeMacro(values: SettingValues) {
+    override fun changeMacro(values: SettingValues) {
         val old = state.macroValues ?: return
         if (values == old) return
         state = state.copy(macroValues = values)
@@ -276,7 +392,7 @@ class ControllersPage(
     // The controller the view shows: the one selected, or the one picked last, or the first, among those it covers.
     private fun reselect() {
         val state = state
-        val candidates = candidates(state, state.controllers)
+        val candidates = state.coveredAmong(state.controllers)
         val selected =
             (
                 candidates.firstOrNull { it.descriptor == state.selected }
@@ -291,20 +407,6 @@ class ControllersPage(
         } else if (selected != state.selected || state.bindingsFor != selected) {
             readBindings(selected)
         }
-    }
-
-    // A port's views cover the controllers on its pad; the hub and the hotkeys cover them all.
-    private fun candidates(
-        state: ControllersState,
-        connected: List<ConnectedController>,
-    ): List<ConnectedController> {
-        val pad =
-            when (val view = state.view) {
-                is ControllersView.Port -> view.pad
-                is ControllersView.Macro -> view.pad
-                else -> return connected
-            }
-        return connected.filter { (state.ports[it.descriptor] ?: 0) == pad }
     }
 
     // Reads each controller's port and rumble, the ports offered, their types and multitap.
@@ -425,10 +527,12 @@ class ControllersPage(
     }
 
     /** Shows the controller with [descriptor]'s bindings, and selects it whenever it's connected from now on. */
-    fun select(descriptor: String) {
+    override fun select(descriptor: String) {
         pickedController = descriptor
         val state = state
-        if (descriptor == state.selected || candidates(state, state.controllers).none { it.descriptor == descriptor }) {
+        if (descriptor == state.selected ||
+            state.coveredAmong(state.controllers).none { it.descriptor == descriptor }
+        ) {
             return
         }
         cancelCapture()
@@ -440,13 +544,13 @@ class ControllersPage(
      * Captures the selected controller's next input as [name]'s binding ([onBindingCaptured]): for 5 s, counting down
      * once a second, and then it's cancelled. Its controllers' input goes to the core meanwhile ([capturingInput]).
      */
-    fun capture(name: String) = startCapture(name, hotkey = false)
+    override fun capture(name: String) = startCapture(name, hotkey = false)
 
     /**
      * Captures the button the selected controller presses with Select as the hotkey [name]'s ([onBindingCaptured]), as
      * [capture] does a binding. Select and Start aren't taken.
      */
-    fun captureHotkey(name: String) = startCapture(name, hotkey = true)
+    override fun captureHotkey(name: String) = startCapture(name, hotkey = true)
 
     private fun startCapture(
         name: String,
@@ -484,7 +588,7 @@ class ControllersPage(
     }
 
     /** Ends the capture running, if any, leaving the binding as it was. */
-    fun cancelCapture() {
+    override fun cancelCapture() {
         if (state.capturing == null) return
         endCapture()
         scope.launch {
@@ -495,7 +599,7 @@ class ControllersPage(
     }
 
     /** Leaves the binding or hotkey [name] unbound on the selected controller. */
-    fun clear(name: String) {
+    override fun clear(name: String) {
         val descriptor = state.selected ?: return
         if (capturingInput || !showsOwnBindings(state)) return
         val hotkey = isHotkey(name)
@@ -504,7 +608,7 @@ class ControllersPage(
     }
 
     /** Gives the selected controller its default bindings again. */
-    fun reset() {
+    override fun reset() {
         val descriptor = state.selected ?: return
         if (capturingInput || !showsOwnBindings(state)) return
         state = state.copy(undo = null)
@@ -512,7 +616,7 @@ class ControllersPage(
     }
 
     /** Puts back the binding the last capture replaced, as [ControllersState.undo] says. */
-    fun undo() {
+    override fun undo() {
         val undo = state.undo ?: return
         val descriptor = state.selected ?: return
         if (capturingInput || !showsOwnBindings(state)) return
@@ -525,7 +629,7 @@ class ControllersPage(
     }
 
     /** The last capture can't be undone any more: the focus left its row. */
-    fun dropUndo() {
+    override fun dropUndo() {
         if (state.undo != null) state = state.copy(undo = null)
     }
 
@@ -565,7 +669,7 @@ class ControllersPage(
      */
     private fun onControllersChanged(connected: List<ConnectedController>) {
         val old = state
-        val candidates = candidates(old, connected)
+        val candidates = old.coveredAmong(connected)
         val selected =
             (
                 candidates.firstOrNull { it.descriptor == old.selected }

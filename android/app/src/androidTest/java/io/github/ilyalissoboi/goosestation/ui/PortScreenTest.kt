@@ -20,6 +20,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.app.ControllersView
+import io.github.ilyalissoboi.goosestation.app.Undo
 import io.github.ilyalissoboi.goosestation.core.PadBinding
 import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
@@ -117,22 +120,38 @@ class PortScreenTest : ControllerKeys {
 
     @get:Rule override val rule = createComposeRule()
 
-    private val selects = mutableListOf<String>()
-    private val types = mutableListOf<String>()
-    private val changes = mutableListOf<SettingValues>()
-    private val macros = mutableListOf<Int>()
-    private val captures = mutableListOf<String>()
-    private val clears = mutableListOf<String>()
-    private var cancels = 0
-    private var resets = 0
-    private var backs = 0
-    private var undos = 0
-    private var dropUndos = 0
-
     // What the page shows, which a test can change once it's open.
-    private var controllers by mutableStateOf(listOf(PAD))
-    private var capturing by mutableStateOf<String?>(null)
-    private var undoFor by mutableStateOf<String?>(null)
+    private var state by mutableStateOf(ControllersState())
+    private var controllers
+        get() = state.controllers
+        set(value) {
+            state = state.copy(controllers = value)
+        }
+    private var capturing
+        get() = state.capturing
+        set(value) {
+            state = state.copy(capturing = value)
+        }
+
+    // An Undo pressed puts the binding back, and the row offers Clear again.
+    private val actions =
+        object : FakeControllersActions() {
+            override fun undo() {
+                super.undo()
+                state = state.copy(undo = null)
+            }
+        }
+    private val selects get() = actions.selects
+    private val types get() = actions.types.map { it.second }
+    private val changes get() = actions.portChanges
+    private val macros get() = actions.macros.map { it.second }
+    private val captures get() = actions.captures
+    private val clears get() = actions.clears
+    private val cancels get() = actions.cancels
+    private val resets get() = actions.resets
+    private val undos get() = actions.undos
+    private val dropUndos get() = actions.dropUndos
+    private var backs = 0
 
     private fun show(
         controllers: List<ConnectedController> = listOf(PAD),
@@ -149,44 +168,24 @@ class PortScreenTest : ControllerKeys {
         typeSettings: List<TypeSetting> = emptyList(),
         values: SettingValues? = null,
     ) {
-        this.controllers = controllers
-        this.capturing = capturing
-        this.undoFor = undoFor
-        rule.setContent {
-            GooseStationTheme {
-                PortScreen(
-                    title = "Port 1",
-                    controllers = this.controllers,
-                    labels = labels,
-                    selected = selected,
-                    bindings = bindings,
-                    bindingsFor = bindingsFor,
-                    capturing = this.capturing,
-                    secondsLeft = secondsLeft,
-                    undoFor = this.undoFor,
-                    onSelect = { selects += it },
-                    onCapture = { captures += it },
-                    onCancelCapture = { cancels++ },
-                    onClear = { clears += it },
-                    onUndo = {
-                        undos++
-                        this.undoFor = null
-                    },
-                    onDropUndo = { dropUndos++ },
-                    onReset = { resets++ },
-                    onBack = { backs++ },
-                    glyphs = glyphs,
-                    pad = 0,
-                    type = type,
-                    typeNames = TYPES,
-                    onType = { types += it },
-                    typeSettings = typeSettings,
-                    values = values,
-                    onChange = { changes += it },
-                    onOpenMacro = { macros += it },
-                )
-            }
-        }
+        state =
+            ControllersState(
+                controllers = controllers,
+                labels = labels,
+                selected = selected,
+                bindings = bindings,
+                bindingsFor = bindingsFor,
+                bindingsType = if (glyphs) "AnalogController" else null,
+                capturing = capturing,
+                secondsLeft = secondsLeft,
+                undo = undoFor?.let { Undo(it, null) },
+                view = ControllersView.Port(0),
+                portTypes = type?.let { mapOf(0 to it) }.orEmpty(),
+                typeNames = TYPES,
+                typeSettings = typeSettings,
+                portValues = values,
+            )
+        rule.setContent { GooseStationTheme { PortScreen(state, actions, onBack = { backs++ }) } }
         rule.waitForIdle()
     }
 

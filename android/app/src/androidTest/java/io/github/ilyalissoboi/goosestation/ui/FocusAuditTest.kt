@@ -37,6 +37,8 @@ import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.ControllersState
+import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CoverJob
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.EditorQuestion
@@ -1129,20 +1131,19 @@ class FocusAuditTest : ControllerKeys {
     fun controllersHub() {
         show {
             ControllersScreen(
-                controllers = PADS,
-                labels = emptyMap(),
-                ports = emptyMap(),
-                rumble = emptyMap(),
-                offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2")),
-                portTypes = mapOf(0 to "AnalogController", 1 to "None"),
-                typeNames = listOf(Choice("AnalogController", "Analog Controller (DualShock)")),
-                multitap = pageValues(listOf(PortSettings.MULTITAP)),
-                multitapNames = listOf(Choice("Disabled", "Disabled"), Choice("BothPorts", "Enable on Ports 1 and 2")),
-                onPort = { _, _ -> },
-                onRumble = { _, _ -> },
-                onMultitap = {},
-                onOpenPort = {},
-                onOpenHotkeys = {},
+                ControllersState(
+                    controllers = PADS,
+                    offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2")),
+                    portTypes = mapOf(0 to "AnalogController", 1 to "None"),
+                    typeNames = listOf(Choice("AnalogController", "Analog Controller (DualShock)")),
+                    multitap = pageValues(listOf(PortSettings.MULTITAP)),
+                    multitapNames =
+                        listOf(
+                            Choice("Disabled", "Disabled"),
+                            Choice("BothPorts", "Enable on Ports 1 and 2"),
+                        ),
+                ),
+                FakeControllersActions(),
                 onBack = {},
             )
         }
@@ -1157,20 +1158,8 @@ class FocusAuditTest : ControllerKeys {
     fun controllersHubWithNone() {
         show {
             ControllersScreen(
-                controllers = emptyList(),
-                labels = emptyMap(),
-                ports = emptyMap(),
-                rumble = emptyMap(),
-                offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2")),
-                portTypes = emptyMap(),
-                typeNames = emptyList(),
-                multitap = null,
-                multitapNames = emptyList(),
-                onPort = { _, _ -> },
-                onRumble = { _, _ -> },
-                onMultitap = {},
-                onOpenPort = {},
-                onOpenHotkeys = {},
+                ControllersState(offered = listOf(Choice(0, "Port 1"), Choice(1, "Port 2"))),
+                FakeControllersActions(),
                 onBack = {},
             )
         }
@@ -1181,24 +1170,18 @@ class FocusAuditTest : ControllerKeys {
     fun hotkeys() {
         show {
             HotkeysScreen(
-                controllers = PADS,
-                labels = emptyMap(),
-                selected = PADS.first().descriptor,
-                hotkeys =
-                    listOf(
-                        PadBinding("Rewind", "Rewind", PadBindingKind.Button, null, "System"),
-                        PadBinding("UndoLoadState", "Undo Load State", PadBindingKind.Button, null, "Save States"),
-                    ),
-                hotkeysFor = PADS.first().descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCaptureHotkey = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
+                ControllersState(
+                    controllers = PADS,
+                    selected = PADS.first().descriptor,
+                    hotkeys =
+                        listOf(
+                            PadBinding("Rewind", "Rewind", PadBindingKind.Button, null, "System"),
+                            PadBinding("UndoLoadState", "Undo Load State", PadBindingKind.Button, null, "Save States"),
+                        ),
+                    bindingsFor = PADS.first().descriptor,
+                    view = ControllersView.Hotkeys,
+                ),
+                FakeControllersActions(),
                 onBack = {},
             )
         }
@@ -1209,32 +1192,23 @@ class FocusAuditTest : ControllerKeys {
     fun aPortWithNeGconsSettings() {
         show {
             PortScreen(
-                title = "Port 1",
-                controllers = PADS,
-                labels = emptyMap(),
-                selected = PADS.first().descriptor,
-                bindings = BINDINGS,
-                bindingsFor = PADS.first().descriptor,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
+                ControllersState(
+                    controllers = PADS,
+                    selected = PADS.first().descriptor,
+                    bindings = BINDINGS,
+                    bindingsFor = PADS.first().descriptor,
+                    view = ControllersView.Port(0),
+                    portTypes = mapOf(0 to "NeGcon"),
+                    typeNames =
+                        listOf(
+                            Choice("NeGcon", "NeGcon"),
+                            Choice("AnalogController", "Analog Controller (DualShock)"),
+                        ),
+                    typeSettings = NEGCON_SETTINGS,
+                    portValues = portPageValues(NEGCON_SETTINGS, "Pad1/Macro1Binds" to "I & II"),
+                ),
+                FakeControllersActions(),
                 onBack = {},
-                glyphs = false,
-                type = "NeGcon",
-                typeNames =
-                    listOf(
-                        Choice("NeGcon", "NeGcon"),
-                        Choice("AnalogController", "Analog Controller (DualShock)"),
-                    ),
-                typeSettings = NEGCON_SETTINGS,
-                values = portPageValues(NEGCON_SETTINGS, "Pad1/Macro1Binds" to "I & II"),
             )
         }
         rule.assertControllerReady()
@@ -1244,26 +1218,15 @@ class FocusAuditTest : ControllerKeys {
     fun aPortNotConnected() {
         show {
             PortScreen(
-                title = "Port 2",
-                controllers = emptyList(),
-                labels = emptyMap(),
-                selected = null,
-                bindings = emptyList(),
-                bindingsFor = null,
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onReset = {},
+                ControllersState(
+                    bindings = emptyList(),
+                    view = ControllersView.Port(1),
+                    portTypes = mapOf(1 to "None"),
+                    typeNames = listOf(Choice("None", "Not Connected")),
+                    portValues = portPageValues(emptyList()),
+                ),
+                FakeControllersActions(),
                 onBack = {},
-                type = "None",
-                typeNames = listOf(Choice("None", "Not Connected")),
-                values = portPageValues(emptyList()),
             )
         }
         rule.assertControllerReady()
@@ -1273,26 +1236,16 @@ class FocusAuditTest : ControllerKeys {
     fun aMacro() {
         show {
             MacroScreen(
-                title = "Macro 1 · Port 1",
-                pad = 0,
-                macro = 1,
-                controllers = PADS,
-                labels = emptyMap(),
-                selected = PADS.first().descriptor,
-                triggers = listOf(PadBinding("Macro1", "Macro 1", PadBindingKind.Button, "Button99")),
-                triggersFor = PADS.first().descriptor,
-                inputs = BINDINGS,
-                values = pageValues(MacroSettings.settings(0, 1), "Pad1/Macro1Binds" to "Cross"),
-                capturing = null,
-                secondsLeft = 0,
-                undoFor = null,
-                onSelect = {},
-                onCapture = {},
-                onCancelCapture = {},
-                onClear = {},
-                onUndo = {},
-                onDropUndo = {},
-                onChange = {},
+                ControllersState(
+                    controllers = PADS,
+                    selected = PADS.first().descriptor,
+                    macros = listOf(PadBinding("Macro1", "Macro 1", PadBindingKind.Button, "Button99")),
+                    bindingsFor = PADS.first().descriptor,
+                    macroInputs = BINDINGS,
+                    macroValues = pageValues(MacroSettings.settings(0, 1), "Pad1/Macro1Binds" to "Cross"),
+                    view = ControllersView.Macro(0, 1),
+                ),
+                FakeControllersActions(),
                 onBack = {},
             )
         }
@@ -1739,24 +1692,16 @@ class FocusAuditTest : ControllerKeys {
         glyphs: Boolean = true,
     ) = show {
         PortScreen(
-            title = "Port 1",
-            controllers = controllers,
-            labels = emptyMap(),
-            selected = controllers.firstOrNull()?.descriptor,
-            bindings = BINDINGS,
-            bindingsFor = controllers.firstOrNull()?.descriptor,
-            capturing = null,
-            secondsLeft = 0,
-            undoFor = null,
-            onSelect = {},
-            onCapture = {},
-            onCancelCapture = {},
-            onClear = {},
-            onUndo = {},
-            onDropUndo = {},
-            onReset = {},
+            ControllersState(
+                controllers = controllers,
+                selected = controllers.firstOrNull()?.descriptor,
+                bindings = BINDINGS,
+                bindingsFor = controllers.firstOrNull()?.descriptor,
+                bindingsType = if (glyphs) "AnalogController" else null,
+                view = ControllersView.Port(0),
+            ),
+            FakeControllersActions(),
             onBack = {},
-            glyphs = glyphs,
         )
     }
 }

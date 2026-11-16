@@ -99,6 +99,18 @@ outside the repository.
   dialogue box's texture. 4 of the pack's 21 palette hashes do appear there. The pack's glyphs are drawn in menus and
   during play, which a run without input doesn't reach; checking the pack needs such a scene.
 
+### Where packs are read and dumps written
+
+All ours.
+
+- Packs are read from the *pack folder*: on desktop the data folder's `textures/`; on Android the data folder's own
+  `textures/`, read in place through `content://` (the app's storage holds no copy). Dumps, and the `config.yaml` a
+  first dump writes, go to the *local* `textures/` (on desktop the same folder; on Android the app's storage, which
+  the mirror sends to the data folder).
+- A game's config is the pack folder's `config.yaml` (else `config.yml`); only when the pack has none is a local one,
+  written by a first dump, read. A first dump writes no config when the pack has one.
+- An unreadable pack folder (a revoked grant, a removed card) gives no replacements, and the game plays.
+
 ### config.yaml
 
 - Read from `textures/<serial>/config.yaml`, else `config.yml`. Keys it sets override the global settings of the same

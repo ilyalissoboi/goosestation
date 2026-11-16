@@ -175,3 +175,119 @@ TEST(TextureReplacementIndex, ABrokenConfigLeavesTheGlobalSettings)
   base.dump_texture_pages = false;
   EXPECT_EQ(LoadGameConfig(game.path(), base), base);
 }
+
+// Packs read through content:// (Android's data folder), dumps written locally.
+
+#ifndef _WIN32
+
+#include "core/settings.h"
+
+#include "fake_content_provider.h"
+
+namespace {
+
+class ContentPack : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    m_provider = std::make_unique<FakeProvider>(m_tree.path());
+    FileSystem::SetContentProvider(m_provider.get());
+    m_old_textures = EmuFolders::Textures;
+    EmuFolders::Textures = Path::Combine(m_local.path(), "textures");
+  }
+
+  void TearDown() override
+  {
+    TextureReplacements::SetPackFolder(std::string());
+    TextureReplacements::Shutdown();
+    EmuFolders::Textures = m_old_textures;
+    FileSystem::SetContentProvider(nullptr);
+  }
+
+  static std::string PackGame() { return fmt::format("{}/textures/SLUS-00000", FakeProvider::ROOT); }
+
+  TempGameFolder m_tree;  // served as FakeProvider::ROOT
+  TempGameFolder m_local; // the app's own storage
+  std::unique_ptr<FakeProvider> m_provider;
+  std::string m_old_textures;
+};
+
+} // namespace
+
+TEST_F(ContentPack, APackIsIndexedThroughContent)
+{
+  m_tree.Write(fmt::format("textures/SLUS-00000/replacements/{}.png", UPLOAD_NAME));
+  m_tree.Write(fmt::format("textures/SLUS-00000/dumps/{}.png", UPLOAD_NAME_2));
+  m_tree.Write(fmt::format("textures/SLUS-00000/{}.png", VRAM_WRITE_NAME));
+  m_tree.Write("textures/SLUS-00000/config.yaml", "DumpTexturePages: true\n");
+
+  const TexturePackConfig config = LoadGameConfig(PackGame(), Path::Combine(EmuFolders::Textures, "SLUS-00000"),
+                                                  TexturePackConfig());
+  EXPECT_TRUE(config.dump_texture_pages);
+
+  ReplacementIndex index;
+  index.Build(PackGame(), config);
+  ASSERT_EQ(index.GetTextureCount(), 1u);
+  EXPECT_TRUE(index.GetTextures()[0].path.starts_with(FakeProvider::ROOT));
+  EXPECT_EQ(index.GetVRAMWriteCount(), 1u);
+}
+
+TEST_F(ContentPack, IndexingAContentTreeListsEachFolderOnce)
+{
+  for (u32 i = 0; i < 50; i++)
+  {
+    m_tree.Write(fmt::format("textures/SLUS-00000/replacements/a/texupload-P4-{:016X}-D7ADDCD353C6521A-64x256-0-0-16x16-P0-15.png", i));
+    m_tree.Write(fmt::format("textures/SLUS-00000/replacements/b/texupload-P4-{:016X}-D7ADDCD353C6521A-64x256-0-0-16x16-P0-15.png", i + 1000));
+  }
+
+  ReplacementIndex index;
+  index.Build(PackGame(), TexturePackConfig());
+  EXPECT_EQ(index.GetTextureCount(), 100u);
+  EXPECT_EQ(m_provider->GetListCalls(), 4u); // the game folder, replacements/, a/ and b/
+  EXPECT_EQ(m_provider->GetStatCalls(), 0u);
+}
+
+TEST_F(ContentPack, AnUnreadablePackFolderIndexesNothing)
+{
+  m_tree.Write(fmt::format("textures/SLUS-00000/replacements/{}.png", UPLOAD_NAME));
+  m_tree.Write("textures/SLUS-00000/config.yaml", "DumpTexturePages: true\n");
+  m_provider->SetRefuseAll(true);
+
+  ReplacementIndex index;
+  index.Build(PackGame(), TexturePackConfig());
+  EXPECT_EQ(index.GetTextureCount(), 0u);
+  EXPECT_EQ(LoadGameConfig(PackGame(), Path::Combine(EmuFolders::Textures, "SLUS-00000"), TexturePackConfig()),
+            TexturePackConfig());
+}
+
+TEST_F(ContentPack, ALocalConfigIsReadOnlyWithoutThePacksOwn)
+{
+  const std::string local_game = Path::Combine(EmuFolders::Textures, "SLUS-00000");
+  FileSystem::EnsureDirectoryExists(local_game.c_str(), true);
+  FileSystem::WriteStringToFile(Path::Combine(local_game, "config.yaml").c_str(), "DumpC16Textures: true\n");
+
+  EXPECT_TRUE(LoadGameConfig(PackGame(), local_game, TexturePackConfig()).dump_c16_textures);
+
+  m_tree.Write("textures/SLUS-00000/config.yml", "ReducePaletteRange: false\n");
+  const TexturePackConfig config = LoadGameConfig(PackGame(), local_game, TexturePackConfig());
+  EXPECT_FALSE(config.dump_c16_textures);
+  EXPECT_FALSE(config.reduce_palette_range);
+  EXPECT_TRUE(HasGameConfig(PackGame()));
+  EXPECT_FALSE(HasGameConfig(Path::Combine(EmuFolders::Textures, "SLUS-99999")));
+}
+
+TEST_F(ContentPack, DumpsGoToTheLocalFolder)
+{
+  SetPackFolder(fmt::format("{}/textures", FakeProvider::ROOT));
+  SetGameID("SLUS-00000");
+  EXPECT_EQ(GetGameDirectory(), PackGame());
+  EXPECT_EQ(GetLocalGameDirectory(), Path::Combine(EmuFolders::Textures, "SLUS-00000"));
+  EXPECT_EQ(GetTextureDumpDirectory(), Path::Combine(EmuFolders::Textures, "SLUS-00000/dumps"));
+
+  // Without a pack folder, both are the local one, as on desktop.
+  SetPackFolder(std::string());
+  EXPECT_EQ(GetGameDirectory(), GetLocalGameDirectory());
+}
+
+#endif

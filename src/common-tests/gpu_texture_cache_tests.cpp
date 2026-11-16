@@ -347,10 +347,13 @@ struct Scene
     cache->SetIndex(&index);
   }
 
-  void Dump(bool dump_replaced = true) { cache->SetDumping(dump_dir, game_dir, dump_replaced, false); }
+  void Dump(bool dump_replaced = true, bool write_config = true)
+  {
+    cache->SetDumping(dump_dir, game_dir, write_config, dump_replaced, false);
+  }
 
   // Stops dumping, which writes whatever is waiting.
-  void Finish() { cache->SetDumping(std::string(), std::string(), true, false); }
+  void Finish() { cache->SetDumping(std::string(), std::string(), true, true, false); }
 
   GPUTextureCache::DrawKey Key(GPUTextureMode mode = GPUTextureMode::Palette4Bit, bool st = false) const
   {
@@ -601,6 +604,17 @@ TEST(GPUTextureCache, TheFirstDumpWritesAConfig)
   ASSERT_TRUE(yaml.has_value());
   EXPECT_EQ(yaml.value(), TexturePackConfig::GetTemplateYAML());
   EXPECT_TRUE(FileSystem::DirectoryExists(Path::Combine(scene.game_dir, "replacements").c_str()));
+}
+
+TEST(GPUTextureCache, AFirstDumpWithAPackConfigWritesNone)
+{
+  // The pack (read elsewhere, as on Android) has its own config: the first dump writes none locally.
+  Scene scene;
+  scene.Dump(true, false);
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
+  scene.Finish();
+  EXPECT_EQ(ListPNGs(scene.dump_dir).size(), 1u);
+  EXPECT_FALSE(FileSystem::FileExists(Path::Combine(scene.game_dir, "config.yaml").c_str()));
 }
 
 TEST(GPUTextureCache, AnExistingConfigIsNotOverwritten)

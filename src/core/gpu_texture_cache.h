@@ -96,9 +96,10 @@ public:
   /// Replacements to look up in; nullptr for none.
   void SetIndex(const TextureReplacements::ReplacementIndex* index);
 
-  /// Dumps go to dump_dir (empty: no dumping); the first one creates game_dir's replacements/ and, without a config,
-  /// its config.yaml.
-  void SetDumping(std::string dump_dir, std::string game_dir, bool dump_replaced_textures, bool force_alpha);
+  /// Dumps go to dump_dir (empty: no dumping); the first one creates game_dir's replacements/ and, if write_config
+  /// and game_dir has none, its config.yaml.
+  void SetDumping(std::string dump_dir, std::string game_dir, bool write_config, bool dump_replaced_textures,
+                  bool force_alpha);
   bool IsDumping() const { return !m_dump_dir.empty(); }
 
   /// A textured draw's rect, in page texels (right and bottom exclusive) with the texture window applied. Rects
@@ -189,6 +190,7 @@ private:
   std::string m_dump_dir;
   std::string m_game_dir;
   bool m_dump_replaced_textures = true;
+  bool m_write_config = true;
   bool m_dump_force_alpha = false;
   std::vector<PendingDump> m_pending_dumps;
   std::unordered_set<std::string> m_dumped;

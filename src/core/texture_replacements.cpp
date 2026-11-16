@@ -46,6 +46,7 @@ struct CachedImage
 } // namespace
 
 static std::string s_game_id;
+static std::string s_pack_folder;
 static TexturePackConfig s_config;
 static ReplacementIndex s_index;
 static std::unordered_map<std::string, CachedImage> s_image_cache;
@@ -213,6 +214,25 @@ TextureReplacements::ReplacementIndex::GetPageReplacements(TextureNames::Mode mo
   return std::span<const TextureReplacement>(first, last);
 }
 
+bool TextureReplacements::HasGameConfig(const std::string& game_dir)
+{
+  return FileSystem::FileExists(Path::Combine(game_dir, "config.yaml").c_str()) ||
+         FileSystem::FileExists(Path::Combine(game_dir, "config.yml").c_str());
+}
+
+TexturePackConfig TextureReplacements::LoadGameConfig(const std::string& pack_dir, const std::string& local_dir,
+                                                      const TexturePackConfig& base)
+{
+  return (pack_dir == local_dir || HasGameConfig(pack_dir) || !HasGameConfig(local_dir)) ?
+           LoadGameConfig(pack_dir, base) :
+           LoadGameConfig(local_dir, base);
+}
+
+void TextureReplacements::SetPackFolder(std::string folder)
+{
+  s_pack_folder = std::move(folder);
+}
+
 TexturePackConfig TextureReplacements::LoadGameConfig(const std::string& game_dir, const TexturePackConfig& base)
 {
   for (const char* file : {"config.yaml", "config.yml"})
@@ -248,12 +268,19 @@ void TextureReplacements::SetGameID(std::string game_id)
 
 std::string TextureReplacements::GetGameDirectory()
 {
+  if (s_game_id.empty())
+    return {};
+  return Path::Combine(s_pack_folder.empty() ? EmuFolders::Textures : s_pack_folder, s_game_id);
+}
+
+std::string TextureReplacements::GetLocalGameDirectory()
+{
   return s_game_id.empty() ? std::string() : Path::Combine(EmuFolders::Textures, s_game_id);
 }
 
 std::string TextureReplacements::GetTextureDumpDirectory()
 {
-  return s_game_id.empty() ? std::string() : Path::Combine(GetGameDirectory(), "dumps");
+  return s_game_id.empty() ? std::string() : Path::Combine(GetLocalGameDirectory(), "dumps");
 }
 
 const TexturePackConfig& TextureReplacements::GetConfig()
@@ -389,7 +416,7 @@ void TextureReplacements::Reload()
   s_reload_count++;
   const std::string game_dir = GetGameDirectory();
   s_config = game_dir.empty() ? g_settings.texture_replacements.config :
-                                LoadGameConfig(game_dir, g_settings.texture_replacements.config);
+                                LoadGameConfig(game_dir, GetLocalGameDirectory(), g_settings.texture_replacements.config);
 
   s_index.Clear();
   if (!game_dir.empty() && g_settings.texture_replacements.AnyReplacementsEnabled())

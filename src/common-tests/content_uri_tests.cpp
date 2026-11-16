@@ -9,6 +9,8 @@
 
 #include <gtest/gtest.h>
 
+#include "fake_content_provider.h"
+
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
@@ -25,7 +27,7 @@
 
 namespace {
 
-constexpr std::string_view R = "content://fake/tree/root";
+constexpr std::string_view R = FakeProvider::ROOT;
 
 std::string Uri(std::string_view relative)
 {
@@ -36,103 +38,6 @@ bool HasErrno(const Error& error, int err)
 {
   return error.GetType() == Error::Type::Errno && error.GetDescription().starts_with(fmt::format("errno {}:", err));
 }
-
-// Serves R from a local directory, the way the Android provider serves a granted tree.
-class FakeProvider final : public FileSystem::ContentProvider
-{
-public:
-  explicit FakeProvider(std::string root) : m_root(std::move(root)) {}
-
-  void SetServePipes(bool serve_pipes) { m_serve_pipes = serve_pipes; }
-
-  int OpenForReading(std::string_view uri, Error* error) override
-  {
-    std::string local;
-    if (!ToLocal(uri, &local))
-    {
-      Error::SetErrno(error, ENOENT);
-      return -1;
-    }
-
-    if (m_serve_pipes)
-    {
-      int fds[2];
-      if (pipe(fds) != 0)
-      {
-        Error::SetErrno(error, errno);
-        return -1;
-      }
-      close(fds[1]);
-      return fds[0];
-    }
-
-    const int fd = open(local.c_str(), O_RDONLY);
-    if (fd < 0)
-      Error::SetErrno(error, errno);
-    return fd;
-  }
-
-  bool Stat(std::string_view uri, FILESYSTEM_STAT_DATA* sd) override
-  {
-    std::string local;
-    struct stat st;
-    if (!ToLocal(uri, &local) || stat(local.c_str(), &st) != 0)
-      return false;
-
-    sd->CreationTime = st.st_ctime;
-    sd->ModificationTime = st.st_mtime;
-    sd->Size = S_ISREG(st.st_mode) ? st.st_size : 0;
-    sd->Attributes = S_ISDIR(st.st_mode) ? FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY : 0;
-    return true;
-  }
-
-  bool ListDirectory(std::string_view uri, FileSystem::FindResultsArray* entries, Error* error) override
-  {
-    std::string local;
-    DIR* dir = ToLocal(uri, &local) ? opendir(local.c_str()) : nullptr;
-    if (!dir)
-    {
-      Error::SetErrno(error, ENOTDIR);
-      return false;
-    }
-
-    while (const struct dirent* ent = readdir(dir))
-    {
-      const std::string_view name = ent->d_name;
-      if (name == "." || name == "..")
-        continue;
-
-      FILESYSTEM_STAT_DATA sd;
-      if (!Stat(fmt::format("{}/{}", uri, name), &sd))
-        continue;
-
-      FILESYSTEM_FIND_DATA fd;
-      fd.FileName = name;
-      fd.CreationTime = sd.CreationTime;
-      fd.ModificationTime = sd.ModificationTime;
-      fd.Size = sd.Size;
-      fd.Attributes = sd.Attributes;
-      entries->push_back(std::move(fd));
-    }
-
-    closedir(dir);
-    return true;
-  }
-
-private:
-  bool ToLocal(std::string_view uri, std::string* local) const
-  {
-    if (!uri.starts_with(R) || (uri.size() > R.size() && uri[R.size()] != '/'))
-      return false;
-
-    *local = m_root;
-    local->append(uri.substr(R.size()));
-    return true;
-  }
-
-  std::string m_root;
-  bool m_serve_pipes = false;
-};
 
 std::vector<std::string> SortedNames(const FileSystem::FindResultsArray& results)
 {

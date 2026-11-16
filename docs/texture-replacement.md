@@ -120,9 +120,12 @@ All ours.
   command menu: the pack changes the menu's frame; the cache tracking VRAM with nothing to replace leaves frames as
   they are without it; dumps land in the app's storage and nothing of the pack is copied there.
 - Android's defaults for the memory budgets are smaller (ours): `MaxHashCacheVRAMUsageMB` 512 (desktop 2048) and
-  `MaxReplacementCacheVRAMUsage` 256 (desktop 512). A value in the settings or a pack's `config.yaml` wins. Large
-  packs are best preloaded on Android (`PreloadTextures`), since images read through the data folder's grant load
-  more slowly than local files.
+  `MaxReplacementCacheVRAMUsage` 256 (desktop 512). A value in the settings or a pack's `config.yaml` wins. The
+  settings file is shared through the data folder, so these two keys are written to it only when they differ from the
+  platform's default, and a default another platform wrote is removed (ours). Large packs are best preloaded on
+  Android (`PreloadTextures`), since images read through the data folder's grant load more slowly than local files;
+  what's preloaded is held within `MaxReplacementCacheVRAMUsage`, so a pack larger than that budget reloads images
+  the budget let go of.
 
 ### config.yaml
 

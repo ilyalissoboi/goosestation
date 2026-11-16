@@ -4,6 +4,7 @@
 #include "core/texture_pack_config.h"
 
 #include "common/error.h"
+#include "common/memory_settings_interface.h"
 
 #include <gtest/gtest.h>
 
@@ -146,4 +147,31 @@ TEST(TexturePackConfig, AByteOrderMarkIsIgnored)
   Error error;
   ASSERT_TRUE(config.LoadYAML("\xEF\xBB\xBF" "DumpTexturePages: true\n", &error)) << error.GetDescription();
   EXPECT_TRUE(config.dump_texture_pages);
+}
+
+// The memory budgets' defaults differ by platform, and settings.ini is shared through the data folder: a default is
+// left out of the file, so each platform reads its own.
+TEST(TexturePackConfig, DefaultBudgetsArentWrittenToSettings)
+{
+  MemorySettingsInterface si;
+  // What the other platform's build wrote, with its own defaults.
+  si.SetUIntValue("TextureReplacements", "MaxHashCacheVRAMUsageMB", 1);
+  si.SetUIntValue("TextureReplacements", "MaxReplacementCacheVRAMUsage", 1);
+  TexturePackConfig().Save(si);
+  EXPECT_FALSE(si.ContainsValue("TextureReplacements", "MaxHashCacheVRAMUsageMB"));
+  EXPECT_FALSE(si.ContainsValue("TextureReplacements", "MaxReplacementCacheVRAMUsage"));
+  EXPECT_TRUE(si.ContainsValue("TextureReplacements", "MaxHashCacheEntries"));
+}
+
+TEST(TexturePackConfig, AChosenBudgetIsWrittenToSettings)
+{
+  MemorySettingsInterface si;
+  TexturePackConfig config;
+  config.max_hash_cache_vram_usage_mb = 1;
+  config.max_replacement_cache_vram_usage_mb = 2;
+  config.Save(si);
+  TexturePackConfig loaded;
+  loaded.Load(si);
+  EXPECT_EQ(loaded.max_hash_cache_vram_usage_mb, 1u);
+  EXPECT_EQ(loaded.max_replacement_cache_vram_usage_mb, 2u);
 }

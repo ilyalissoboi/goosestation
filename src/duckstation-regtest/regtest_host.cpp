@@ -529,6 +529,7 @@ void RegTestHost::PrintCommandLineHelp(const char* progname)
   std::fprintf(stderr, "  -frames: Sets the number of frames to execute.\n");
   std::fprintf(stderr, "  -log <level>: Sets the log level. Defaults to verbose.\n");
   std::fprintf(stderr, "  -renderer <renderer>: Sets the graphics renderer. Default to software.\n");
+  std::fprintf(stderr, "  -statefile <filename>: Loads this save state once the game boots.\n");
   std::fprintf(stderr, "  -setting <Section>/<Key>=<Value>: Sets a setting, after the runner's defaults. Repeatable.\n"
                        "    Folders follow them, e.g. -setting Folders/Textures=<dir> for texture packs and dumps,\n"
                        "    -setting BIOS/SearchDirectory=<dir>.\n");
@@ -628,6 +629,11 @@ bool RegTestHost::ParseCommandLineParameters(int argc, char* argv[], std::option
         }
 
         s_base_settings_interface->SetStringValue("GPU", "Renderer", Settings::GetRendererName(renderer.value()));
+        continue;
+      }
+      else if (CHECK_ARG_PARAM("-statefile"))
+      {
+        AutoBoot(autoboot)->save_state = argv[++i];
         continue;
       }
       else if (CHECK_ARG_PARAM("-setting"))

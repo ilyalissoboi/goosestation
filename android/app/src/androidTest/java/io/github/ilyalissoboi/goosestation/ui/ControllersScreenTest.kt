@@ -3,7 +3,6 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
-import android.os.Build
 import android.view.KeyEvent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,7 +26,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.TouchMode
 import io.github.ilyalissoboi.goosestation.app.TouchSettings
@@ -39,7 +37,6 @@ import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SwitchRow
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -52,8 +49,9 @@ import org.junit.runner.RunWith
 class ControllersScreenTest : ControllerKeys {
     @get:Rule override val rule = createComposeRule()
 
+    @get:Rule val deviceKeys = DeviceKeys()
+
     private val calls = mutableListOf<String>()
-    private var leftTouchMode = false
 
     private fun show(
         controllers: List<ConnectedController> = listOf(PAD),
@@ -311,29 +309,14 @@ class ControllersScreenTest : ControllerKeys {
 
     // Down the hub to the row with [summary], and A on it.
     private fun openFromTheHub(summary: String) {
-        var downs = 0
-        while (!focusedHas(summary) && downs++ < 20) press(Key.DirectionDown)
+        walkTo(summary)
         press(Key.ButtonA)
     }
 
-    // A controller's B, as it comes on a device: out of touch mode, through the window. Out of touch mode, a focused
-    // row that goes leaves the focus to Android, which gives it to the first thing that takes it: the rail.
+    // A controller's B, as it comes on a device.
     private fun pressBOnTheDevice() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            instrumentation.setInTouchMode(false)
-            leftTouchMode = true
-        }
-        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BUTTON_B)
+        deviceKeys.press(KeyEvent.KEYCODE_BUTTON_B)
         rule.waitForIdle()
-    }
-
-    // Touch mode is the display's, not the test's: back as the other tests have it.
-    @After
-    fun backToTouchMode() {
-        if (leftTouchMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            InstrumentationRegistry.getInstrumentation().setInTouchMode(true)
-        }
     }
 
     @Test

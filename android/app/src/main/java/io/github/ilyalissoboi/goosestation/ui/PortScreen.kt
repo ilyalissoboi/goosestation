@@ -88,13 +88,18 @@ fun PortScreen(
     val first = remember { FocusRequester() }
     val macroRows = remember { List(MacroSettings.COUNT) { FocusRequester() } }
     var focusInPage by remember { mutableStateOf(false) }
-    // On opening, and whenever the row with the focus goes, as when the controller's name becomes the Controller row;
-    // back from a macro, its row.
-    LaunchedEffect(focusInPage) {
-        if (focusInPage) return@LaunchedEffect
+
+    // Back from a macro, its row; else the first.
+    fun focusBack() {
         val macroRow = focusMacro?.let { macroRows.getOrNull(it - 1) }
         if (macroRow != null && values != null) macroRow.requestFocus() else first.requestFocus()
     }
+    // On opening, even with the focus in the page by then: the macro Back came from took the focused row with it, and
+    // out of touch mode Android gives the focus to the first thing that takes it, the settings' rail, which puts it on
+    // the page's first row before this runs.
+    LaunchedEffect(Unit) { focusBack() }
+    // Whenever the row with the focus goes, as when the controller's name becomes the Controller row.
+    LaunchedEffect(focusInPage) { if (!focusInPage) focusBack() }
     val controller = controllers.firstOrNull { it.descriptor == selected } ?: controllers.firstOrNull()
 
     SettingsPage(title, onBack = onBack) {

@@ -42,6 +42,7 @@ public:
     u64 hash;
     bool hashed;
     u32 splits;
+    u64 serial;
   };
 
   /// What a draw samples: a page, its mode and palette, and whether it's drawn semi-transparent.
@@ -100,11 +101,16 @@ public:
   void SetDumping(std::string dump_dir, std::string game_dir, bool dump_replaced_textures, bool force_alpha);
   bool IsDumping() const { return !m_dump_dir.empty(); }
 
-  /// A textured draw's rect, in page texels with the texture window applied. Dumps it (at EndFrame) if it's new.
+  /// A textured draw's rect, in page texels (right and bottom exclusive) with the texture window applied. Rects
+  /// collect per run of draws with one key, and merge per texture where they overlap; a texture is dumped when its
+  /// upload or page is about to change, or when dumping stops.
   void AddDrawnTexture(const DrawKey& key, GSVector4i texel_rect);
 
-  /// Writes the frame's dumps.
+  /// Ends the run and writes the dumps waiting.
   void EndFrame();
+
+  /// Dumps every texture drawn so far, and writes them.
+  void FlushDumps();
 
   /// The replacements to draw a key with; nullptr if none apply. Kept until the key's page or palette changes, at
   /// most MaxHashCacheEntries of them. The pointer is valid until the next call.
@@ -146,6 +152,24 @@ private:
     RGBA8Image image;
   };
 
+  /// A texture being drawn, until its upload or page changes: its key, its upload (upload mode), its rects so far.
+  struct DrawnTexture
+  {
+    DrawKey key;
+    u64 upload_serial;
+    GSVector4i upload_rect;
+    u64 upload_hash;
+    std::vector<GSVector4i> rects;
+  };
+
+  DrawnTexture& GetDrawnTexture(const DrawKey& key, const Upload* upload);
+  void CloseRun();
+  void EndDrawnTextures(GSVector4i word_rect);
+  bool DrawnTextureEndsWith(const DrawnTexture& texture, GSVector4i word_rect);
+  void QueueDumps(const DrawnTexture& texture);
+  void QueueDump(const DrawnTexture& texture, GSVector4i texel_rect);
+  void WriteDumps();
+
   struct Lookup
   {
     u64 signature;
@@ -168,6 +192,10 @@ private:
   bool m_dump_force_alpha = false;
   std::vector<PendingDump> m_pending_dumps;
   std::unordered_set<std::string> m_dumped;
+  std::vector<DrawnTexture> m_drawn_textures;
+  std::optional<DrawKey> m_run_key;
+  std::vector<std::pair<size_t, GSVector4i>> m_run; // drawn texture index, union in this run
+  u64 m_next_upload_serial = 0;
 
   std::unordered_map<u64, Lookup> m_lookups;
   u64 m_lookup_counter = 0;

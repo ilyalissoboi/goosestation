@@ -167,10 +167,17 @@ All ours: the hardware renderer keeps VRAM on the GPU only, so the cache keeps a
 
 - A textured draw samples one page with one mode and palette, semi-transparent or not; its rect is the texels it
   reads, with the texture window applied (ours).
-- **Not yet matched:** the black box's rects are larger than one primitive's: unions over several draws, with left
-  and right edges rounded out to 32 texels (8 words) for 4-bit textures. Its texture and palette hashes do match ours
-  for the same uploads (15 of run (a)'s 29 pairs drawn by our run of the same stretch). Until the rect rule is worked
-  out, upload-mode names here differ from the black box's in their rect fields.
+- A draw's rect (black box, worked out from 1.56 million draws of our run against run (b)'s names, 2026-11-16): a
+  polygon covers its texture coordinates up to the largest one *inclusive*, so its rect ends one past it; a sprite
+  ends at its own edge. Left and right widen to whole VRAM words (4 texels for 4-bit, 2 for 8-bit), and the rect is
+  cut to the upload (or page).
+- Rects collect per *run*: consecutive textured draws with one page, mode, palette and semi-transparency. Each
+  texture's rects within a run join into one; a run's rect joins the texture's earlier rects that it overlaps (rects
+  that only touch stay apart). A texture is dumped when its upload, page or palette is about to change, and whatever
+  is left when dumping stops (black box: its dumps appear during play, long before it was stopped; the rest ours).
+- With these rules 22 of run (a)'s 32 names and 23 of run (b)'s come out identical here; the rest differ in their
+  rects (two textures the black box joins and we keep apart, or the reverse), which looks like where runs end. This
+  matters only for dumps: a pack's names are found by their hashes and their own rects, whatever rects our dumps use.
 - Upload mode: the texture is the upload holding all the words under the rect; a rect over two uploads, or over
   words that aren't an upload, is neither dumped nor replaced by upload names (ours, consistent with run (a)).
 - Page mode: the texture is the rect itself, hashed over its words; the name's size is the page's (64, 128 or 256
@@ -215,3 +222,17 @@ All ours.
   (identical frames), a name with a smaller rect replaces only that rect, an alias draws its file, rewritten dialogue
   pages never show an old replacement, preloading draws the same frames, and with no pack frames are identical with
   the cache on and off.
+
+### Which names are compatible
+
+Checked on 2026-11-16 against the black box's names from Vagrant Story's opening (runs (a)–(c)). "As a pack" means its
+dumped images were put in `replacements/` under their names and counted as placed during our run of the same stretch.
+
+| Kind | Status | How it was checked |
+| --- | --- | --- |
+| `texupload-` P4, P8, STP4, STP8, full and reduced palette ranges | **Compatible** | All 64 names' texture and palette hashes reproduced by our functions from our run's uploads (`TextureCacheReference.OurHashesAreTheReferencesHashes`); as a pack, 30 of 32 placed (the other 2 aren't drawn the same way in our run) |
+| `texpage-` P4, P8, STP4, STP8 | **Compatible** | 103 of 211 hashes reproduced from single uploads; as a pack, 145 of 211 placed; the rest are animated (one rect with 23 hashes) or 4×1 strips of changing data, whose contents depend on CD timing |
+| `texupload-`/`texpage-` C16, STC16 | Our hashes, same rule | Not drawn in the opening; assumed to follow the same rule, unchecked |
+| Cropped names (a smaller rect than dumped) | Works here | Checked with our own dumps renamed (Task 11); the black box's behaviour not checked |
+| `vram-write-` | Unchanged | Pre-existing; names now always 32 digits |
+| The Vagrant Story HD dialogue font pack | Not checked | Its glyphs aren't drawn in the opening; needs a scene with menus or in-game text |

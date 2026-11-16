@@ -21,7 +21,11 @@ GPUTextureCache::GPUTextureCache(const TexturePackConfig& config) : m_config(con
 {
 }
 
-GPUTextureCache::~GPUTextureCache() = default;
+GPUTextureCache::~GPUTextureCache()
+{
+  if (!m_dump_dir.empty())
+    FlushDumps();
+}
 
 void GPUTextureCache::SetConfig(const TexturePackConfig& config)
 {
@@ -30,6 +34,14 @@ void GPUTextureCache::SetConfig(const TexturePackConfig& config)
 
 void GPUTextureCache::Reset(const u16* vram)
 {
+  if (!m_drawn_textures.empty())
+  {
+    CloseRun();
+    for (const DrawnTexture& texture : m_drawn_textures)
+      QueueDumps(texture);
+    m_drawn_textures.clear();
+  }
+
   std::memcpy(m_vram.data(), vram, m_vram.size() * sizeof(u16));
   m_unknown = {};
   m_upload_blocks = {};
@@ -147,7 +159,7 @@ void GPUTextureCache::CutUploads(GSVector4i rect)
       const u32 splits = it->splits + 1;
       const auto keep = [&](s32 l, s32 t, s32 r, s32 b) {
         if (l < r && t < b)
-          pieces.push_back(Upload{GSVector4i(l, t, r, b), 0, false, splits});
+          pieces.push_back(Upload{GSVector4i(l, t, r, b), 0, false, splits, ++m_next_upload_serial});
       };
       keep(u.left, u.top, u.right, hole.top);
       keep(u.left, hole.bottom, u.right, u.bottom);
@@ -182,17 +194,25 @@ void GPUTextureCache::AddUpload(GSVector4i rect)
     {
       upload.rect.bottom = rect.bottom;
       upload.hashed = false;
+      upload.serial = ++m_next_upload_serial; // a new texture: what was drawn from the old one was dumped above
       SetBlocks(m_upload_blocks, rect, false, true);
       return;
     }
   }
 
-  m_uploads.push_back(Upload{rect, 0, false, 0});
+  m_uploads.push_back(Upload{rect, 0, false, 0, ++m_next_upload_serial});
   SetBlocks(m_upload_blocks, rect, false, true);
 }
 
 void GPUTextureCache::Write(u32 x, u32 y, u32 width, u32 height, const u16* data, bool set_mask, bool check_mask)
 {
+  if (!m_drawn_textures.empty())
+  {
+    std::array<GSVector4i, 4> ended;
+    for (u32 i = 0, count = SplitWrapped(x, y, width, height, &ended); i < count; i++)
+      EndDrawnTextures(ended[i]);
+  }
+
   const u16 mask_or = set_mask ? 0x8000 : 0;
   for (u32 row = 0; row < height; row++)
   {
@@ -221,6 +241,13 @@ void GPUTextureCache::Write(u32 x, u32 y, u32 width, u32 height, const u16* data
 
 void GPUTextureCache::Fill(u32 x, u32 y, u32 width, u32 height, u16 color, bool interlaced)
 {
+  if (!m_drawn_textures.empty())
+  {
+    std::array<GSVector4i, 4> ended;
+    for (u32 i = 0, count = SplitWrapped(x, y, width, height, &ended); i < count; i++)
+      EndDrawnTextures(ended[i]);
+  }
+
   for (u32 row = 0; row < height; row++)
   {
     u16* dst_row = &m_vram[((y + row) % VRAM_HEIGHT) * VRAM_WIDTH];
@@ -262,6 +289,13 @@ void GPUTextureCache::Copy(u32 src_x, u32 src_y, u32 dst_x, u32 dst_y, u32 width
                                nullptr;
   const bool convert = (src_upload != nullptr);
 
+  if (!m_drawn_textures.empty())
+  {
+    std::array<GSVector4i, 4> ended;
+    for (u32 i = 0, count = SplitWrapped(dst_x, dst_y, width, height, &ended); i < count; i++)
+      EndDrawnTextures(ended[i]);
+  }
+
   const u16 mask_or = set_mask ? 0x8000 : 0;
   for (u32 row = 0; row < height; row++)
   {
@@ -295,6 +329,8 @@ void GPUTextureCache::Draw(GSVector4i rect)
   if (rect.rempty())
     return;
 
+  if (!m_drawn_textures.empty())
+    EndDrawnTextures(rect);
   Changed(rect);
   SetBlocks(m_unknown, rect, false, true);
 }
@@ -332,13 +368,17 @@ void GPUTextureCache::SetIndex(const TextureReplacements::ReplacementIndex* inde
 void GPUTextureCache::SetDumping(std::string dump_dir, std::string game_dir, bool dump_replaced_textures,
                                  bool force_alpha)
 {
+  if (!m_dump_dir.empty())
+    FlushDumps();
+
   m_dump_dir = std::move(dump_dir);
   m_game_dir = std::move(game_dir);
   m_dump_replaced_textures = dump_replaced_textures;
   m_dump_force_alpha = force_alpha;
   m_dumped.clear();
-  if (m_dump_dir.empty())
-    m_pending_dumps.clear();
+  m_drawn_textures.clear();
+  m_run.clear();
+  m_run_key.reset();
 }
 
 u32 GPUTextureCache::GetPageWords(u32 page_x, GPUTextureMode mode)
@@ -375,62 +415,212 @@ bool GPUTextureCache::HasReplacement(const TextureNames::Name& name, const std::
   return false;
 }
 
-void GPUTextureCache::AddDrawnTexture(const DrawKey& key, GSVector4i texel_rect)
+static bool SameKey(const GPUTextureCache::DrawKey& lhs, const GPUTextureCache::DrawKey& rhs)
+{
+  return lhs.page == rhs.page && lhs.mode == rhs.mode && lhs.palette_bits == rhs.palette_bits &&
+         lhs.semitransparent == rhs.semitransparent;
+}
+
+void GPUTextureCache::AddDrawnTexture(const DrawKey& in_key, GSVector4i texel_rect)
 {
   if (m_dump_dir.empty())
     return;
 
-  const GPUTextureMode mode = (key.mode == GPUTextureMode::Reserved_Direct16Bit) ? GPUTextureMode::Direct16Bit : key.mode;
-  const bool palettized = (mode != GPUTextureMode::Direct16Bit);
-  if (!palettized && !m_config.dump_c16_textures)
+  DrawKey key = in_key;
+  if (key.mode == GPUTextureMode::Reserved_Direct16Bit)
+    key.mode = GPUTextureMode::Direct16Bit;
+  if (key.mode == GPUTextureMode::Direct16Bit)
+    key.palette_bits = 0;
+
+  // Any change of key ends the run, whether or not this draw is dumped.
+  if (!m_run_key.has_value() || !SameKey(m_run_key.value(), key))
+  {
+    CloseRun();
+    m_run_key = key;
+  }
+
+  const GPUTextureMode mode = key.mode;
+  if (mode == GPUTextureMode::Direct16Bit && !m_config.dump_c16_textures)
     return;
 
   const u32 page_x = GetPageX(key.page), page_y = GetPageY(key.page);
-  const u32 page_words = GetPageWords(page_x, mode);
-  const s32 page_texels = static_cast<s32>(page_words * GPUTextureData::GetTexelsPerWord(mode));
-  texel_rect = texel_rect.rintersect(GSVector4i(0, 0, std::min(page_texels, 256), 256));
+  const s32 tpw = static_cast<s32>(GPUTextureData::GetTexelsPerWord(mode));
+  const s32 page_texels = std::min<s32>(static_cast<s32>(GetPageWords(page_x, mode)) * tpw, 256);
+
+  // Whole words, within the page.
+  texel_rect = GSVector4i((texel_rect.left / tpw) * tpw, texel_rect.top, ((texel_rect.right + tpw - 1) / tpw) * tpw,
+                          texel_rect.bottom)
+                 .rintersect(GSVector4i(0, 0, page_texels, 256));
   if (m_config.dump_texture_pages && m_config.dump_full_texture_pages)
-    texel_rect = GSVector4i(0, 0, std::min(page_texels, 256), 256);
-  if (texel_rect.rempty() || static_cast<u32>(texel_rect.width()) < m_config.texture_dump_width_threshold ||
-      static_cast<u32>(texel_rect.height()) < m_config.texture_dump_height_threshold)
-  {
+    texel_rect = GSVector4i(0, 0, page_texels, 256);
+  if (texel_rect.rempty())
     return;
-  }
 
   const std::optional<GSVector4i> words = GPUTextureData::TexelRectToWordRect(page_x, page_y, texel_rect, mode);
   if (!words.has_value() || !IsKnown(words.value()) || !IsPaletteKnown(key))
     return;
 
+  const Upload* upload = nullptr;
+  if (!m_config.dump_texture_pages)
+  {
+    if (!(upload = FindUpload(words.value())))
+      return;
+  }
+
+  DrawnTexture& texture = GetDrawnTexture(key, upload);
+  const size_t index = static_cast<size_t>(&texture - m_drawn_textures.data());
+  for (auto& [run_index, run_rect] : m_run)
+  {
+    if (run_index == index)
+    {
+      run_rect = run_rect.runion(texel_rect);
+      return;
+    }
+  }
+  m_run.emplace_back(index, texel_rect);
+}
+
+GPUTextureCache::DrawnTexture& GPUTextureCache::GetDrawnTexture(const DrawKey& key, const Upload* upload)
+{
+  const u64 serial = upload ? upload->serial : 0;
+  for (DrawnTexture& texture : m_drawn_textures)
+  {
+    if (texture.upload_serial == serial && SameKey(texture.key, key))
+      return texture;
+  }
+
+  DrawnTexture& texture = m_drawn_textures.emplace_back();
+  texture.key = key;
+  texture.upload_serial = serial;
+  texture.upload_rect = upload ? upload->rect : GSVector4i::zero();
+  texture.upload_hash = upload ? upload->hash : 0;
+  return texture;
+}
+
+void GPUTextureCache::CloseRun()
+{
+  // Each run's rect joins the texture's rects it overlaps (touching isn't enough).
+  for (const auto& [index, run_rect] : m_run)
+  {
+    std::vector<GSVector4i>& rects = m_drawn_textures[index].rects;
+    GSVector4i rect = run_rect;
+    for (bool merged = true; merged;)
+    {
+      merged = false;
+      for (auto it = rects.begin(); it != rects.end(); ++it)
+      {
+        if (it->rintersects(rect))
+        {
+          rect = rect.runion(*it);
+          rects.erase(it);
+          merged = true;
+          break;
+        }
+      }
+    }
+    rects.push_back(rect);
+  }
+
+  m_run.clear();
+}
+
+bool GPUTextureCache::DrawnTextureEndsWith(const DrawnTexture& texture, GSVector4i word_rect)
+{
+  const u32 page_x = GetPageX(texture.key.page), page_y = GetPageY(texture.key.page);
+  const GSVector4i source = texture.upload_serial ?
+                              texture.upload_rect :
+                              GSVector4i(page_x, page_y, page_x + GetPageWords(page_x, texture.key.mode),
+                                         page_y + PAGE_HEIGHT);
+  if (source.rintersects(word_rect))
+    return true;
+  if (texture.key.mode == GPUTextureMode::Direct16Bit)
+    return false;
+
+  const GSVector4i palette = GPUTexturePaletteReg{texture.key.palette_bits}.GetRectangle(texture.key.mode);
+  return palette.rintersects(word_rect) ||
+         (palette.right > static_cast<s32>(VRAM_WIDTH) &&
+          GSVector4i(0, palette.top, palette.right - VRAM_WIDTH, palette.bottom).rintersects(word_rect));
+}
+
+void GPUTextureCache::EndDrawnTextures(GSVector4i word_rect)
+{
+  // Most changes are elsewhere: leave the run alone unless a texture ends.
+  if (std::none_of(m_drawn_textures.begin(), m_drawn_textures.end(),
+                   [&](const DrawnTexture& texture) { return DrawnTextureEndsWith(texture, word_rect); }))
+  {
+    return;
+  }
+
+  CloseRun();
+  for (auto it = m_drawn_textures.begin(); it != m_drawn_textures.end();)
+  {
+    const DrawnTexture& texture = *it;
+    if (DrawnTextureEndsWith(texture, word_rect))
+    {
+      QueueDumps(texture);
+      it = m_drawn_textures.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
+  }
+}
+
+void GPUTextureCache::QueueDumps(const DrawnTexture& texture)
+{
+  for (const GSVector4i& rect : texture.rects)
+    QueueDump(texture, rect);
+}
+
+void GPUTextureCache::QueueDump(const DrawnTexture& texture, GSVector4i texel_rect)
+{
+  const DrawKey& key = texture.key;
+  const GPUTextureMode mode = key.mode;
+  const u32 page_x = GetPageX(key.page), page_y = GetPageY(key.page);
+  const s32 tpw = static_cast<s32>(GPUTextureData::GetTexelsPerWord(mode));
+
   TextureNames::Name name = {};
   name.mode = TextureNames::MakeMode(mode, key.semitransparent);
-  name.width = static_cast<u16>(texel_rect.width());
-  name.height = static_cast<u16>(texel_rect.height());
-  if (m_config.dump_texture_pages)
+  if (texture.upload_serial)
   {
+    // Within the upload.
+    const GSVector4i upload_texels((texture.upload_rect.left - static_cast<s32>(page_x)) * tpw,
+                                   texture.upload_rect.top - static_cast<s32>(page_y),
+                                   (texture.upload_rect.right - static_cast<s32>(page_x)) * tpw,
+                                   texture.upload_rect.bottom - static_cast<s32>(page_y));
+    texel_rect = texel_rect.rintersect(upload_texels);
+    if (texel_rect.rempty())
+      return;
+
+    name.kind = TextureNames::Kind::TexUpload;
+    name.texture_hash = texture.upload_hash;
+    name.source_width = static_cast<u16>(texture.upload_rect.width());
+    name.source_height = static_cast<u16>(texture.upload_rect.height());
+    name.offset_x = static_cast<u16>(texel_rect.left - upload_texels.left);
+    name.offset_y = static_cast<u16>(texel_rect.top - upload_texels.top);
+  }
+  else
+  {
+    const std::optional<GSVector4i> words = GPUTextureData::TexelRectToWordRect(page_x, page_y, texel_rect, mode);
+    if (!words.has_value())
+      return;
+
     name.kind = TextureNames::Kind::TexPage;
     name.texture_hash = GPUTextureData::HashTextureWords(m_vram.data(), words.value());
-    name.source_width = static_cast<u16>(page_words);
+    name.source_width = static_cast<u16>(GetPageWords(page_x, mode));
     name.source_height = static_cast<u16>(PAGE_HEIGHT);
     name.offset_x = static_cast<u16>(texel_rect.left);
     name.offset_y = static_cast<u16>(texel_rect.top);
   }
-  else
-  {
-    const Upload* upload = FindUpload(words.value());
-    if (!upload)
-      return;
 
-    const s32 tpw = static_cast<s32>(GPUTextureData::GetTexelsPerWord(mode));
-    name.kind = TextureNames::Kind::TexUpload;
-    name.texture_hash = upload->hash;
-    name.source_width = static_cast<u16>(upload->rect.width());
-    name.source_height = static_cast<u16>(upload->rect.height());
-    name.offset_x = static_cast<u16>((static_cast<s32>(page_x) - upload->rect.left) * tpw + texel_rect.left);
-    name.offset_y = static_cast<u16>(static_cast<s32>(page_y) - upload->rect.top + texel_rect.top);
-  }
+  name.width = static_cast<u16>(texel_rect.width());
+  name.height = static_cast<u16>(texel_rect.height());
+  if (name.width < m_config.texture_dump_width_threshold || name.height < m_config.texture_dump_height_threshold)
+    return;
 
   const GPUTexturePaletteReg palette{key.palette_bits};
-  if (palettized)
+  if (mode != GPUTextureMode::Direct16Bit)
   {
     const std::pair<u16, u16> range =
       m_config.reduce_palette_range ?
@@ -455,8 +645,26 @@ void GPUTextureCache::AddDrawnTexture(const DrawKey& key, GSVector4i texel_rect)
 
 void GPUTextureCache::EndFrame()
 {
-  if (m_pending_dumps.empty())
+  CloseRun();
+  WriteDumps();
+}
+
+void GPUTextureCache::FlushDumps()
+{
+  CloseRun();
+  for (const DrawnTexture& texture : m_drawn_textures)
+    QueueDumps(texture);
+  m_drawn_textures.clear();
+  WriteDumps();
+}
+
+void GPUTextureCache::WriteDumps()
+{
+  if (m_pending_dumps.empty() || m_dump_dir.empty())
+  {
+    m_pending_dumps.clear();
     return;
+  }
 
   if (!FileSystem::EnsureDirectoryExists(m_dump_dir.c_str(), true))
   {
@@ -574,6 +782,7 @@ std::unique_ptr<GPUTextureCache::Source> GPUTextureCache::FindSource(const DrawK
     const TextureReplacements::ReplacementImage* image = TextureReplacements::GetTextureImage(path);
     if (!image || image->GetWidth() == 0 || image->GetHeight() == 0)
       return;
+    DEV_LOG("Placing '{}' at {},{} of page {}", Path::GetFileTitle(path), rect.left, rect.top, key.page);
     source->placements.push_back(Placement{rect, path, image->GetWidth(), image->GetHeight()});
     sizes.emplace_back(rect, std::make_pair(image->GetWidth(), image->GetHeight()));
   };

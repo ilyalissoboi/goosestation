@@ -2396,8 +2396,9 @@ void GPU_HW::ComputePolygonUVLimits(BatchVertex* vertices, u32 num_vertices)
   if (m_texpage_dirty != 0)
     CheckForTexPageOverlap(GSVector4i(min).upl32(GSVector4i(max)).u16to32());
 
+  // A polygon draws up to its largest coordinate, inclusive (docs/texture-replacement.md, "What a draw samples").
   if (m_texture_cache_dumping)
-    AddDrawnTextureRect(GSVector4i(min).upl32(GSVector4i(max)).u16to32());
+    AddDrawnTextureRect(GSVector4i(min).upl32(GSVector4i(max)).u16to32().add32(GSVector4i::cxpr(0, 0, 1, 1)));
 }
 
 void GPU_HW::SetBatchDepthBuffer(bool enabled)

@@ -348,6 +348,9 @@ struct Scene
 
   void Dump(bool dump_replaced = true) { cache->SetDumping(dump_dir, game_dir, dump_replaced, false); }
 
+  // Stops dumping, which writes whatever is waiting.
+  void Finish() { cache->SetDumping(std::string(), std::string(), true, false); }
+
   GPUTextureCache::DrawKey Key(GPUTextureMode mode = GPUTextureMode::Palette4Bit, bool st = false) const
   {
     return GPUTextureCache::DrawKey{0, mode, PaletteAt(0, 480).bits, st};
@@ -379,36 +382,110 @@ struct Scene
 
 } // namespace
 
-TEST(GPUTextureCache, ADrawFromAnUploadIsDumpedOnceAtTheEndOfTheFrame)
+TEST(GPUTextureCache, ADrawFromAnUploadIsDumpedOnceWhenItEnds)
 {
   Scene scene;
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
+  scene.cache->EndFrame();
+  EXPECT_TRUE(ListPNGs(scene.dump_dir).empty()); // the texture is still there
+
+  const std::string name = scene.UploadName(GSVector4i(64, 0, 96, 32));
+  RGBA8Image expected;
+  GPUTextureData::DecodeTexture(scene.cache->GetVRAM(), 0, 0, GSVector4i(64, 0, 96, 32), GPUTextureMode::Palette4Bit,
+                                PaletteAt(0, 480), GPUTextureData::Encoding::Dump, false, false, &expected);
+
+  // Overwriting the upload ends the texture: it's dumped as it was, at the end of the frame.
+  const std::vector<u16> over(64 * 64, 0x1111);
+  scene.cache->Write(16, 0, 64, 64, over.data(), false, false);
   EXPECT_TRUE(ListPNGs(scene.dump_dir).empty());
   scene.cache->EndFrame();
   const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
   ASSERT_EQ(dumps.size(), 1u);
-  EXPECT_EQ(dumps[0], scene.UploadName(GSVector4i(64, 0, 96, 32)));
+  EXPECT_EQ(dumps[0], name);
 
   RGBA8Image image;
   ASSERT_TRUE(image.LoadFromFile(Path::Combine(scene.dump_dir, dumps[0] + ".png").c_str()));
-  EXPECT_EQ(image.GetWidth(), 32u);
-  EXPECT_EQ(image.GetHeight(), 32u);
-
-  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
-  EXPECT_EQ(ListPNGs(scene.dump_dir).size(), 1u);
+  ASSERT_EQ(image.GetWidth(), 32u);
+  ASSERT_EQ(image.GetHeight(), 32u);
+  EXPECT_EQ(image.GetPixel(0, 0), expected.GetPixel(0, 0));
+  EXPECT_EQ(image.GetPixel(31, 31), expected.GetPixel(31, 31));
 }
 
-TEST(GPUTextureCache, EachRectDrawnIsItsOwnDump)
+TEST(GPUTextureCache, StoppingDumpingWritesWhatsWaiting)
 {
   Scene scene;
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(96, 0, 128, 32));
-  scene.cache->AddDrawnTexture(scene.Key(GPUTextureMode::Palette4Bit, true), GSVector4i(64, 0, 96, 32));
   scene.cache->EndFrame();
-  EXPECT_EQ(ListPNGs(scene.dump_dir).size(), 3u);
+  scene.Finish();
+  EXPECT_EQ(ListPNGs(scene.dump_dir).size(), 1u);
+}
+
+TEST(GPUTextureCache, ARunOfDrawsIsDumpedAsItsUnion)
+{
+  Scene scene;
+  scene.Dump();
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 80, 16));
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(80, 0, 96, 16));
+  scene.Finish();
+  const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
+  ASSERT_EQ(dumps.size(), 1u);
+  EXPECT_EQ(dumps[0], scene.UploadName(GSVector4i(64, 0, 96, 16)));
+}
+
+TEST(GPUTextureCache, DrawingElsewhereDoesntEndARun)
+{
+  Scene scene;
+  scene.Dump();
+  // Each primitive also renders somewhere; away from the texture, that doesn't split the run.
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 80, 16));
+  scene.cache->Draw(GSVector4i(512, 256, 600, 300));
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(80, 0, 96, 16));
+  scene.cache->Draw(GSVector4i(512, 256, 600, 300));
+  scene.Finish();
+  const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
+  ASSERT_EQ(dumps.size(), 1u);
+  EXPECT_EQ(dumps[0], scene.UploadName(GSVector4i(64, 0, 96, 16)));
+}
+
+TEST(GPUTextureCache, RunsThatOverlapAreMerged)
+{
+  Scene scene;
+  scene.Dump();
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 16));
+  scene.cache->EndFrame();
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 8, 96, 40));
+  scene.Finish();
+  const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
+  ASSERT_EQ(dumps.size(), 1u);
+  EXPECT_EQ(dumps[0], scene.UploadName(GSVector4i(64, 0, 96, 40)));
+}
+
+TEST(GPUTextureCache, RunsThatOnlyTouchStayApart)
+{
+  Scene scene;
+  scene.Dump();
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 16));
+  // A draw of another page in between ends the run, even one that isn't dumped (no upload there).
+  scene.cache->AddDrawnTexture(GPUTextureCache::DrawKey{2, GPUTextureMode::Palette4Bit, PaletteAt(0, 480).bits, false},
+                               GSVector4i(0, 0, 16, 16));
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(96, 0, 128, 16));
+  scene.Finish();
+  const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
+  ASSERT_EQ(dumps.size(), 2u);
+  EXPECT_EQ(dumps[0], std::min(scene.UploadName(GSVector4i(64, 0, 96, 16)), scene.UploadName(GSVector4i(96, 0, 128, 16))));
+}
+
+TEST(GPUTextureCache, RectsWidenToWholeWords)
+{
+  Scene scene;
+  scene.Dump();
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(65, 0, 94, 16)); // texels 65..93: words 16..23
+  scene.Finish();
+  const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
+  ASSERT_EQ(dumps.size(), 1u);
+  EXPECT_EQ(dumps[0], scene.UploadName(GSVector4i(64, 0, 96, 16)));
 }
 
 TEST(GPUTextureCache, ADrawAcrossTwoUploadsIsNotDumpedInUploadMode)
@@ -417,7 +494,7 @@ TEST(GPUTextureCache, ADrawAcrossTwoUploadsIsNotDumpedInUploadMode)
   scene.Dump();
   // Texels 0..63 are words 0..15, outside the upload at word 16.
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(32, 0, 96, 16));
-  scene.cache->EndFrame();
+  scene.Finish();
   EXPECT_TRUE(ListPNGs(scene.dump_dir).empty());
 }
 
@@ -429,7 +506,7 @@ TEST(GPUTextureCache, PageModeNamesThePage)
   Scene scene(config);
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(GPUTextureMode::Palette4Bit, true), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
   ASSERT_EQ(dumps.size(), 1u);
   const std::optional<TextureNames::Name> name = TextureNames::Parse(dumps[0]);
@@ -452,7 +529,7 @@ TEST(GPUTextureCache, FullPagesDumpTheWholePage)
   Scene scene(config);
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   const std::vector<std::string> dumps = ListPNGs(scene.dump_dir);
   ASSERT_EQ(dumps.size(), 1u);
   const std::optional<TextureNames::Name> name = TextureNames::Parse(dumps[0]);
@@ -463,12 +540,17 @@ TEST(GPUTextureCache, FullPagesDumpTheWholePage)
 
 TEST(GPUTextureCache, SmallTexturesBelowTheThresholdAreNotDumped)
 {
-  Scene scene;
-  scene.Dump();
-  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 79, 32)); // 15 wide
-  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 15)); // 15 tall
-  scene.cache->EndFrame();
-  EXPECT_TRUE(ListPNGs(scene.dump_dir).empty());
+  Scene narrow;
+  narrow.Dump();
+  narrow.cache->AddDrawnTexture(narrow.Key(), GSVector4i(64, 0, 72, 32)); // 8 wide
+  narrow.Finish();
+  EXPECT_TRUE(ListPNGs(narrow.dump_dir).empty());
+
+  Scene shallow;
+  shallow.Dump();
+  shallow.cache->AddDrawnTexture(shallow.Key(), GSVector4i(64, 0, 96, 15)); // 15 tall
+  shallow.Finish();
+  EXPECT_TRUE(ListPNGs(shallow.dump_dir).empty());
 }
 
 TEST(GPUTextureCache, C16IsDumpedOnlyWhenAsked)
@@ -476,7 +558,7 @@ TEST(GPUTextureCache, C16IsDumpedOnlyWhenAsked)
   Scene scene;
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(GPUTextureMode::Direct16Bit), GSVector4i(16, 0, 48, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   EXPECT_TRUE(ListPNGs(scene.dump_dir).empty());
 
   TexturePackConfig config;
@@ -484,7 +566,7 @@ TEST(GPUTextureCache, C16IsDumpedOnlyWhenAsked)
   Scene c16(config);
   c16.Dump();
   c16.cache->AddDrawnTexture(c16.Key(GPUTextureMode::Direct16Bit), GSVector4i(16, 0, 48, 32));
-  c16.cache->EndFrame();
+  c16.Finish();
   const std::vector<std::string> dumps = ListPNGs(c16.dump_dir);
   ASSERT_EQ(dumps.size(), 1u);
   EXPECT_EQ(TextureNames::Parse(dumps[0])->mode, TextureNames::Mode::C16);
@@ -498,12 +580,12 @@ TEST(GPUTextureCache, ReplacedTexturesAreDumpedOnlyWhenAsked)
   scene.index.Build(scene.game_dir, TexturePackConfig());
   scene.Dump(false);
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   EXPECT_TRUE(ListPNGs(scene.dump_dir).empty());
 
   scene.Dump(true);
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   EXPECT_EQ(ListPNGs(scene.dump_dir).size(), 1u);
 }
 
@@ -512,7 +594,7 @@ TEST(GPUTextureCache, TheFirstDumpWritesAConfig)
   Scene scene;
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   const std::optional<std::string> yaml =
     FileSystem::ReadFileToString(Path::Combine(scene.game_dir, "config.yaml").c_str());
   ASSERT_TRUE(yaml.has_value());
@@ -527,7 +609,7 @@ TEST(GPUTextureCache, AnExistingConfigIsNotOverwritten)
   FileSystem::WriteStringToFile(Path::Combine(scene.game_dir, "config.yml").c_str(), "DumpC16Textures: true\n");
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   EXPECT_FALSE(FileSystem::FileExists(Path::Combine(scene.game_dir, "config.yaml").c_str()));
   EXPECT_EQ(FileSystem::ReadFileToString(Path::Combine(scene.game_dir, "config.yml").c_str()).value(),
             "DumpC16Textures: true\n");
@@ -541,7 +623,7 @@ TEST(GPUTextureCache, ATextureOnUnknownBlocksIsNeitherDumpedNorLookedUp)
   scene.cache->Draw(GSVector4i(16, 0, 24, 8));
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   EXPECT_TRUE(ListPNGs(scene.dump_dir).empty());
 
   // Nor with a known texture and an unknown palette.
@@ -549,7 +631,7 @@ TEST(GPUTextureCache, ATextureOnUnknownBlocksIsNeitherDumpedNorLookedUp)
   palette.cache->Draw(GSVector4i(0, 480, 8, 481));
   palette.Dump();
   palette.cache->AddDrawnTexture(palette.Key(), GSVector4i(64, 0, 96, 32));
-  palette.cache->EndFrame();
+  palette.Finish();
   EXPECT_TRUE(ListPNGs(palette.dump_dir).empty());
 }
 
@@ -558,7 +640,7 @@ TEST(GPUTextureCache, TheReducedRangeNamesTheUsedIndices)
   Scene scene;
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   const std::optional<TextureNames::Name> name = TextureNames::Parse(ListPNGs(scene.dump_dir).at(0));
   EXPECT_EQ(name->palette_min, 1);
   EXPECT_EQ(name->palette_max, 3);
@@ -590,7 +672,7 @@ TEST(GPUTextureCache, APageReplacementIsPlacedOnlyWhereItsRectMatches)
   Scene scene(config);
   scene.Dump();
   scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
-  scene.cache->EndFrame();
+  scene.Finish();
   const std::string name = ListPNGs(scene.dump_dir).at(0);
   WritePNG(Path::Combine(scene.game_dir, fmt::format("replacements/{}.png", name)), 64, 64);
   scene.index.Build(scene.game_dir, config);

@@ -160,8 +160,9 @@ All ours: the hardware renderer keeps VRAM on the GPU only, so the cache keeps a
 - After a save state loads, the copy is the state's VRAM, all known, with no uploads until the game uploads again.
   States kept in memory (rewind, runahead) don't carry VRAM for the CPU, so after one of those the cache reads VRAM
   back from the GPU first.
-- The cache exists only while `[GPU] EnableTextureCache` is on and replacements, dumping or `AlwaysTrackUploads` are
-  on; turning it on mid-game reads VRAM back from the GPU to start from.
+- The cache exists only while `[GPU] EnableTextureCache` is on and something uses it: replacements the game has (not
+  merely `EnableTextureReplacements` with an empty folder), dumping, or `AlwaysTrackUploads`. Turning it on mid-game,
+  or adding a pack and reloading, reads VRAM back from the GPU to start from.
 
 ### What a draw samples, and dumping
 
@@ -225,6 +226,12 @@ All ours.
 - Replaced draws pick the same texel as other draws (rounding at 1×, as the renderer does) and the position within
   it: a pack of our own dumps at 1× draws frames byte-identical to the cache off, at 1× and at 4×, on Metal and
   Vulkan (39 textures placed over Vagrant Story's opening).
+- Checked the same way on Windows (RTX 4090), on D3D11, D3D12, Vulkan and OpenGL: with no pack frames are identical
+  to the cache off; the marked pack changes the same 17 of 40 frames as on the Mac, and its crop-and-alias frame is
+  byte-identical to Metal's on all four. With the 1× pack of our own dumps, frames differ from the cache off by at
+  most 2 of 255 in a few hundred pixels inside replaced pages, on all four alike: the page as drawn is decoded on the
+  CPU, rounding 5-bit colours to 8 bits exactly, while D3D and Vulkan allow a GPU to convert within 0.6 of a step,
+  which this one does. Apple's GPU rounds exactly, so the Mac matches byte for byte.
 - Not handled yet: texels of a replaced page that the GPU rendered into come from the cache's copy of VRAM, which
   doesn't have them. Only a draw with the same page, mode and palette sampling that rendered area would show it.
 - Checked by hand (stage 1, 2026-11-16) on Metal, with a pack made from our own dumps of Vagrant Story's opening at
@@ -260,5 +267,10 @@ waited for each frame, so this shows the CPU side the cache adds):
 | Vulkan (MoltenVK) | 1× | 0.30 ms | 0.31 ms (+3.3%) | 0.35 ms (+17%) |
 | Vulkan (MoltenVK) | 4× | 0.32 ms | 0.32 ms (+0%) | 0.36 ms (+13%) |
 
-The differences with no pack are one step of the measurement's 0.01 ms resolution. With a pack (218 of our own dumps
+| D3D11 (Windows, RTX 4090, MSVC build) | 1× | 0.30 ms | 0.30 ms (no cache: nothing to replace) | — |
+
+The differences with no pack are one step of the measurement's 0.01 ms resolution. On D3D11 the cache first cost
+0.02 ms a frame (+7%) with replacements on and an empty folder; since then the cache isn't created until the game has
+replacements, so that case costs nothing (0.30 and 0.31 ms medians, within the resolution). With our marked pack on
+D3D11: 0.36 ms (+20%). With a pack (218 of our own dumps
 at 4×, crops and an alias) on Metal at 1×: 0.39 ms against 0.34 ms off (+15%).

@@ -236,3 +236,18 @@ dumped images were put in `replacements/` under their names and counted as place
 | Cropped names (a smaller rect than dumped) | Works here | Checked with our own dumps renamed (Task 11); the black box's behaviour not checked |
 | `vram-write-` | Unchanged | Pre-existing; names now always 32 digits |
 | The Vagrant Story HD dialogue font pack | Not checked | Its glyphs aren't drawn in the opening; needs a scene with menus or in-game text |
+
+### Cost
+
+Measured 2026-11-16 on an M2 Pro with `goosestation-regtest` over Vagrant Story's first 12,000 frames, uncapped, three
+runs each, median of its "average frame time" (the emulation thread with the renderer, no window; the GPU isn't
+waited for each frame, so this shows the CPU side the cache adds):
+
+| Renderer | Scale | Cache off | Cache on, no pack | Cache on, dumping |
+| --- | --- | --- | --- | --- |
+| Metal | 1× | 0.35 ms | 0.36 ms (+2.9%) | 0.40 ms (+14%) |
+| Metal | 4× | 0.39 ms | 0.40 ms (+2.6%) | 0.44 ms (+13%) |
+| Vulkan (MoltenVK) | 1× | 0.30 ms | 0.31 ms (+3.3%) | 0.35 ms (+17%) |
+| Vulkan (MoltenVK) | 4× | 0.32 ms | 0.32 ms (+0%) | 0.36 ms (+13%) |
+
+The differences with no pack are one step of the measurement's 0.01 ms resolution.

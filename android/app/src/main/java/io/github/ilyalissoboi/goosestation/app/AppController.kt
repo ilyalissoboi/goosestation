@@ -1274,6 +1274,8 @@ object AppController {
                     NativeLibrary.setCallbacks(coreEvents)
                     // The app's own storage, never the data folder: packs aren't mirrored.
                     NativeLibrary.setShaderPacksFolder(File(context.filesDir, "shaderpacks").absolutePath)
+                    // Texture packs are read from the data folder in place: the mirror doesn't copy them.
+                    NativeLibrary.setDataFolder(TexturePacks.folderFor(folders.data, folderSettings.dataGranted))
                     NativeLibrary
                         .initialize(
                             workingCopy.absolutePath,

@@ -21,6 +21,7 @@
 #include "core/pad.h"
 #include "core/settings.h"
 #include "core/system.h"
+#include "core/texture_replacements.h"
 #include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
@@ -305,6 +306,11 @@ void AndroidHost::LoadFolders(SettingsInterface& si)
   // it, for the desktop that shares it.
   EmuFolders::LoadConfig(si);
   EmuFolders::Bios = s_bios_dir;
+}
+
+void AndroidHost::SetDataFolder(std::string tree_uri)
+{
+  TextureReplacements::SetPackFolder(tree_uri.empty() ? std::string() : Path::Combine(tree_uri, "textures"));
 }
 
 void AndroidHost::SetGameFolders(std::vector<std::string> tree_uris)

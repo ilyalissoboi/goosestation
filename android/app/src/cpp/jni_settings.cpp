@@ -67,6 +67,11 @@ NATIVE_LIBRARY_FUNCTION(void, setShaderPacksFolder)(JNIEnv* env, jobject, jstrin
   AndroidHost::SetShaderPacksFolder(FromJString(env, path));
 }
 
+NATIVE_LIBRARY_FUNCTION(void, setDataFolder)(JNIEnv* env, jobject, jstring tree_uri)
+{
+  AndroidHost::SetDataFolder(FromJString(env, tree_uri));
+}
+
 NATIVE_LIBRARY_FUNCTION(jboolean, initialize)(JNIEnv* env, jobject, jstring data_root, jstring resources_root,
                                                jstring bios_dir, jstring install_id, jstring achievements_token,
                                                jstring achievements_folder, jstring device_name)

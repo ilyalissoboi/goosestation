@@ -291,3 +291,23 @@ TEST_F(ContentPack, DumpsGoToTheLocalFolder)
 }
 
 #endif
+
+#ifndef _WIN32
+
+TEST_F(ContentPack, ChangingThePackFolderMovesTheIndex)
+{
+  const bool old_enabled = g_settings.texture_replacements.enable_texture_replacements;
+  g_settings.texture_replacements.enable_texture_replacements = true;
+
+  m_tree.Write(fmt::format("textures/SLUS-00000/replacements/{}.png", UPLOAD_NAME));
+  SetGameID("SLUS-00000"); // no pack folder yet: the local one, which is empty
+  EXPECT_EQ(GetIndex().GetTextureCount(), 0u);
+
+  SetPackFolder(fmt::format("{}/textures", FakeProvider::ROOT));
+  Reload();
+  EXPECT_EQ(GetIndex().GetTextureCount(), 1u);
+
+  g_settings.texture_replacements.enable_texture_replacements = old_enabled;
+}
+
+#endif

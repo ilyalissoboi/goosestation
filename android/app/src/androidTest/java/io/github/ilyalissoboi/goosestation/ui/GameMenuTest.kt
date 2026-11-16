@@ -57,6 +57,7 @@ import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
+import io.github.ilyalissoboi.goosestation.app.ShownPanel
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
@@ -114,7 +115,7 @@ class GameMenuTest : ControllerKeys {
 
             override fun closeSlots() {
                 calls += "closeSlots"
-                state = state.copy(slots = null)
+                state = state.copy(panel = null)
             }
 
             override fun pickSlot(slot: Int) {
@@ -134,13 +135,13 @@ class GameMenuTest : ControllerKeys {
 
             override fun closeDiscs() {
                 calls += "closeDiscs"
-                state = state.copy(discs = null)
+                state = state.copy(panel = null)
             }
 
             override fun pickDisc(number: Int) {
                 calls += "pickDisc $number"
                 // The disc already in just closes the panel, as InGameMenu does.
-                if (number == state.discs?.current) state = state.copy(discs = null)
+                if (number == state.discs?.current) state = state.copy(panel = null)
             }
 
             override fun openCodes() {
@@ -149,7 +150,7 @@ class GameMenuTest : ControllerKeys {
 
             override fun closeCodes() {
                 calls += "closeCodes"
-                state = state.copy(codes = null)
+                state = state.copy(panel = null)
             }
 
             override fun setCode(
@@ -169,7 +170,7 @@ class GameMenuTest : ControllerKeys {
 
             override fun cancelReplace() {
                 calls += "cancelReplace"
-                state = state.copy(slots = state.slots?.copy(question = null))
+                state = state.copy(panel = (state.slots?.copy(question = null))?.let(ShownPanel::Slots))
             }
 
             override fun toggleFastForward() {
@@ -227,13 +228,15 @@ class GameMenuTest : ControllerKeys {
                 calls += "openAchievements"
                 if (switchingTabs) {
                     state =
-                        state.copy(cheevos = AchievementsPanelState(CheevoTab.Achievements, sections))
+                        state.copy(
+                            panel = ShownPanel.Achievements(AchievementsPanelState(CheevoTab.Achievements, sections)),
+                        )
                 }
             }
 
             override fun closeAchievements() {
                 calls += "closeAchievements"
-                state = state.copy(cheevos = null)
+                state = state.copy(panel = null)
             }
 
             override fun switchTab() {
@@ -241,12 +244,18 @@ class GameMenuTest : ControllerKeys {
                 // The slot panel's tabs, as InGameMenu switches them.
                 state.slots?.let { slots ->
                     val tab = if (slots.lists.tab == SlotTab.ThisGame) SlotTab.Shared else SlotTab.ThisGame
-                    state = state.copy(slots = slots.lists { it.copy(tab = tab) })
+                    state = state.copy(panel = ShownPanel.Slots(slots.lists { it.copy(tab = tab) }))
                     return
                 }
                 if (switchingTabs) {
                     val list = if (listsLoad) null else boards
-                    state = state.copy(cheevos = AchievementsPanelState(CheevoTab.Leaderboards, leaderboards = list))
+                    state =
+                        state.copy(
+                            panel =
+                                ShownPanel.Achievements(
+                                    AchievementsPanelState(CheevoTab.Leaderboards, leaderboards = list),
+                                ),
+                        )
                 }
             }
 
@@ -260,7 +269,7 @@ class GameMenuTest : ControllerKeys {
 
             override fun askDelete(entry: SlotEntry) {
                 calls += "askDelete ${entry.slot}"
-                state = state.copy(slots = state.slots?.lists { it.copy(deleting = entry) })
+                state = state.copy(panel = (state.slots?.lists { it.copy(deleting = entry) })?.let(ShownPanel::Slots))
             }
 
             override fun confirmSwitch() {
@@ -269,7 +278,7 @@ class GameMenuTest : ControllerKeys {
 
             override fun cancelSwitch() {
                 calls += "cancelSwitch"
-                state = state.copy(slots = state.slots?.copy(question = null))
+                state = state.copy(panel = (state.slots?.copy(question = null))?.let(ShownPanel::Slots))
             }
 
             override fun confirmDelete() {
@@ -279,7 +288,18 @@ class GameMenuTest : ControllerKeys {
             override fun cancelDelete() {
                 calls += "cancelDelete"
                 val slots = state.slots
-                state = state.copy(slots = slots?.lists { it.copy(deleting = null, focusRow = it.deleting) })
+                state =
+                    state.copy(
+                        panel =
+                            (
+                                slots?.lists {
+                                    it.copy(
+                                        deleting = null,
+                                        focusRow = it.deleting,
+                                    )
+                                }
+                            )?.let(ShownPanel::Slots),
+                    )
             }
 
             override fun openLeaderboard(id: Int) {
@@ -296,7 +316,17 @@ class GameMenuTest : ControllerKeys {
 
             override fun closeLeaderboard() {
                 calls += "closeLeaderboard"
-                state = state.copy(cheevos = state.cheevos?.copy(open = null, page = null, pageError = null))
+                state =
+                    state.copy(
+                        panel =
+                            (
+                                state.cheevos?.copy(
+                                    open = null,
+                                    page = null,
+                                    pageError = null,
+                                )
+                            )?.let(ShownPanel::Achievements),
+                    )
             }
         }
 
@@ -490,7 +520,7 @@ class GameMenuTest : ControllerKeys {
             GameMenuState(
                 booted = true,
                 achievements = game,
-                cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+                panel = ShownPanel.Achievements(AchievementsPanelState(CheevoTab.Achievements, sections)),
             )
         show()
     }
@@ -594,13 +624,15 @@ class GameMenuTest : ControllerKeys {
             GameMenuState(
                 booted = true,
                 achievements = game,
-                cheevos =
-                    AchievementsPanelState(
-                        CheevoTab.Leaderboards,
-                        leaderboards = boards,
-                        open = open,
-                        page = page,
-                        pageError = error,
+                panel =
+                    ShownPanel.Achievements(
+                        AchievementsPanelState(
+                            CheevoTab.Leaderboards,
+                            leaderboards = boards,
+                            open = open,
+                            page = page,
+                            pageError = error,
+                        ),
                     ),
             )
         show()
@@ -645,7 +677,7 @@ class GameMenuTest : ControllerKeys {
         press(Key.ButtonR1)
         rule.onNodeWithText("Loading…").assertExists()
 
-        state = state.copy(cheevos = state.cheevos!!.copy(leaderboards = boards))
+        state = state.copy(panel = ShownPanel.Achievements(state.cheevos!!.copy(leaderboards = boards)))
         rule.waitForIdle()
 
         rule.onNode(isFocused()).assert(hasText("Sunny Flight"))
@@ -729,7 +761,7 @@ class GameMenuTest : ControllerKeys {
         showLeaderboards(boards[0])
 
         rule.onNodeWithText("Loading…").assertExists()
-        state = state.copy(cheevos = state.cheevos!!.copy(page = sunnyPage))
+        state = state.copy(panel = ShownPanel.Achievements(state.cheevos!!.copy(page = sunnyPage)))
         rule.waitForIdle()
         rule.onNodeWithText("user1").assertExists()
     }
@@ -841,7 +873,7 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun saveStateOpensThePanelOnTheFocusedSlot() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(3), focus = 3))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(3), focus = 3)))
         show()
 
         rule.onNode(isFocused() and hasText("Slot 3", substring = true)).assertExists()
@@ -852,7 +884,7 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun aSlotIsPicked() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(), focus = 1)))
         show()
 
         press(Key.DirectionDown)
@@ -864,7 +896,11 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun loadListsTheSavedSlots() {
         val entries = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond())) + saved(4).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, entries, focus = SaveSlots.RESUME))
+        state =
+            GameMenuState(
+                booted = true,
+                panel = ShownPanel.Slots(slotPanel(SlotMode.Load, entries, focus = SaveSlots.RESUME)),
+            )
         show()
         rule
             .onNode(isFocused() and hasText("Resume", substring = true) and hasText("Saved", substring = true))
@@ -880,7 +916,10 @@ class GameMenuTest : ControllerKeys {
     fun otherSavesShowUnderTheirHeading() {
         val others = listOf(SlotEntry(4, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
         state =
-            GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, saved(1).take(1), focus = 1, others = others))
+            GameMenuState(
+                booted = true,
+                panel = ShownPanel.Slots(slotPanel(SlotMode.Load, saved(1).take(1), focus = 1, others = others)),
+            )
         show()
 
         rule.onNodeWithText("OTHER SAVES").assertExists()
@@ -905,7 +944,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots = slotPanel(SlotMode.Load, saved(1).take(1), focus = 1, shared = shared(4, 6), sharedFocus = 6),
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(SlotMode.Load, saved(1).take(1), focus = 1, shared = shared(4, 6), sharedFocus = 6),
+                    ),
             )
         show()
         rule.onNode(isFocused() and hasText("Slot 1", substring = true)).assertExists()
@@ -931,13 +973,15 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots =
-                    slotPanel(
-                        SlotMode.Load,
-                        emptyList(),
-                        tab = SlotTab.Shared,
-                        shared = shared(4) + unknown,
-                        sharedFocus = 4,
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(
+                            SlotMode.Load,
+                            emptyList(),
+                            tab = SlotTab.Shared,
+                            shared = shared(4) + unknown,
+                            sharedFocus = 4,
+                        ),
                     ),
             )
         show()
@@ -958,13 +1002,15 @@ class GameMenuTest : ControllerKeys {
             GameMenuState(
                 booted = true,
                 hasKey = false,
-                slots =
-                    slotPanel(
-                        SlotMode.Save,
-                        emptyList(),
-                        tab = SlotTab.ThisGame,
-                        shared = shared(),
-                        hasKey = false,
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(
+                            SlotMode.Save,
+                            emptyList(),
+                            tab = SlotTab.ThisGame,
+                            shared = shared(),
+                            hasKey = false,
+                        ),
                     ),
             )
         show()
@@ -980,7 +1026,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots = slotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+                    ),
             )
         show()
         rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertExists()
@@ -1002,13 +1051,15 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots =
-                    slotPanel(
-                        SlotMode.Load,
-                        emptyList(),
-                        tab = SlotTab.Shared,
-                        shared = rows,
-                        question = SlotQuestion.Switch(rows[0]),
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(
+                            SlotMode.Load,
+                            emptyList(),
+                            tab = SlotTab.Shared,
+                            shared = rows,
+                            question = SlotQuestion.Switch(rows[0]),
+                        ),
                     ),
             )
         show()
@@ -1026,13 +1077,15 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots =
-                    slotPanel(
-                        SlotMode.Load,
-                        emptyList(),
-                        tab = SlotTab.Shared,
-                        shared = rows,
-                        question = SlotQuestion.Switch(rows[0]),
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(
+                            SlotMode.Load,
+                            emptyList(),
+                            tab = SlotTab.Shared,
+                            shared = rows,
+                            question = SlotQuestion.Switch(rows[0]),
+                        ),
                     ),
             )
         show()
@@ -1045,7 +1098,7 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun saveHasNoDelete() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(2), focus = 2))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(2), focus = 2)))
         show()
         rule.onNodeWithContentDescription("${PadGlyphs.action}: Delete").assertDoesNotExist()
 
@@ -1056,11 +1109,18 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun afterADeleteTheNextRowIsFocused() {
         val rows = saved(2, 5, 7).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[1]))
+        state =
+            GameMenuState(
+                booted = true,
+                panel = ShownPanel.Slots(slotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[1])),
+            )
         show()
 
         // The core's list comes back without slot 5, the row after it named.
-        state = state.copy(slots = slotPanel(SlotMode.Load, rows - rows[1], focus = 2, focusRow = rows[2]))
+        state =
+            state.copy(
+                panel = ShownPanel.Slots(slotPanel(SlotMode.Load, rows - rows[1], focus = 2, focusRow = rows[2])),
+            )
         rule.waitForIdle()
 
         rule.onNode(isFocused() and hasText("Slot 7", substring = true)).assertExists()
@@ -1070,13 +1130,17 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun deletingTheLastSaveFocusesTheHeading() {
         val rows = saved(2).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[0]))
+        state =
+            GameMenuState(
+                booted = true,
+                panel = ShownPanel.Slots(slotPanel(SlotMode.Load, rows, focus = 2, deleting = rows[0])),
+            )
         show()
 
         // As InGameMenu does: the question goes, the panel is busy with the old rows, then the list comes back empty.
-        state = state.copy(slots = state.slots!!.lists { it.copy(deleting = null, removing = true) })
+        state = state.copy(panel = ShownPanel.Slots(state.slots!!.lists { it.copy(deleting = null, removing = true) }))
         rule.waitForIdle()
-        state = state.copy(slots = slotPanel(SlotMode.Load, emptyList()))
+        state = state.copy(panel = ShownPanel.Slots(slotPanel(SlotMode.Load, emptyList())))
         rule.waitForIdle()
 
         rule.onNode(isFocused() and hasText("Load state")).assertExists()
@@ -1088,13 +1152,15 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots =
-                    slotPanel(
-                        SlotMode.Load,
-                        saved(2).filter {
-                            it.savedAt != null
-                        },
-                        removing = true,
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(
+                            SlotMode.Load,
+                            saved(2).filter {
+                                it.savedAt != null
+                            },
+                            removing = true,
+                        ),
                     ),
             )
         show()
@@ -1108,7 +1174,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots = slotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(SlotMode.Load, saved(2, 5).filter { it.savedAt != null }, focus = 2),
+                    ),
             )
         show()
 
@@ -1121,7 +1190,7 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun bCancelsTheDelete() {
         val rows = saved(2, 5).filter { it.savedAt != null }
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, rows, focus = 2))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Load, rows, focus = 2)))
         show()
         press(Key.DirectionDown)
         press(Key.ButtonX)
@@ -1137,7 +1206,10 @@ class GameMenuTest : ControllerKeys {
     fun onlyOtherSavesAreStillSaves() {
         val others = listOf(SlotEntry(SaveSlots.RESUME, now.toEpochSecond() - 600, owner = "SLPS-02021", disc = 2))
         state =
-            GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, emptyList(), focus = null, others = others))
+            GameMenuState(
+                booted = true,
+                panel = ShownPanel.Slots(slotPanel(SlotMode.Load, emptyList(), focus = null, others = others)),
+            )
         show()
 
         rule.onNodeWithText("No saves yet for this game.").assertDoesNotExist()
@@ -1147,7 +1219,7 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun aRowShowsItsDisc() {
         val entries = listOf(SlotEntry(1, now.toEpochSecond() - 600, disc = 2))
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, entries, focus = 1))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Load, entries, focus = 1)))
         show()
 
         rule.onNodeWithText("Saved · Disc 2").assertExists()
@@ -1182,7 +1254,13 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun theDiscPanelFocusesTheCurrentDisc() {
-        state = GameMenuState(booted = true, disc = 2, discCount = 2, discs = DiscChoice(ac3Discs, current = 2))
+        state =
+            GameMenuState(
+                booted = true,
+                disc = 2,
+                discCount = 2,
+                panel = ShownPanel.Discs(DiscChoice(ac3Discs, current = 2)),
+            )
         show()
 
         rule.onNode(isFocused() and hasText("Disc 2", substring = true)).assertExists()
@@ -1199,7 +1277,13 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun aDiscWithTheGamesTitleShowsItsSerial() {
         val discs = ac3Discs.map { it.copy(title = "Ace Combat 3") }
-        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(discs, current = 1))
+        state =
+            GameMenuState(
+                booted = true,
+                disc = 1,
+                discCount = 2,
+                panel = ShownPanel.Discs(DiscChoice(discs, current = 1)),
+            )
         show(game = GameEntry("content://g/ac3 1.chd", "Ace Combat 3", "SLPS-02020", "NTSC-J", 0, 0, null, discs))
 
         rule.onNodeWithText("SLPS-02021").assertExists()
@@ -1207,7 +1291,13 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun bLeavesTheDiscPanelForItsRow() {
-        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(ac3Discs, current = 1))
+        state =
+            GameMenuState(
+                booted = true,
+                disc = 1,
+                discCount = 2,
+                panel = ShownPanel.Discs(DiscChoice(ac3Discs, current = 1)),
+            )
         show()
 
         press(Key.ButtonB)
@@ -1218,7 +1308,13 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun theDiscPanelsHintsSayInsert() {
-        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(ac3Discs, current = 1))
+        state =
+            GameMenuState(
+                booted = true,
+                disc = 1,
+                discCount = 2,
+                panel = ShownPanel.Discs(DiscChoice(ac3Discs, current = 1)),
+            )
         show()
 
         rule.onNodeWithContentDescription("A: Insert").assertExists()
@@ -1227,7 +1323,7 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun aFailedSwapShowsInThePanel() {
         val choice = DiscChoice(ac3Discs, current = 1, error = "Disc 2 isn't in your library any more.")
-        state = GameMenuState(booted = true, disc = 1, discCount = 2, discs = choice)
+        state = GameMenuState(booted = true, disc = 1, discCount = 2, panel = ShownPanel.Discs(choice))
         show()
 
         rule.onNodeWithText("Disc 2 isn't in your library any more.").assertExists()
@@ -1254,7 +1350,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(4, "Infinite HP", "In battle", false, false)))),
+                panel =
+                    ShownPanel.Codes(
+                        codes(PatchCodeGroup(null, listOf(PatchCodeRow(4, "Infinite HP", "In battle", false, false)))),
+                    ),
             )
         show()
 
@@ -1269,7 +1368,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(2, "Max Money Now", null, true, false)))),
+                panel =
+                    ShownPanel.Codes(
+                        codes(PatchCodeGroup(null, listOf(PatchCodeRow(2, "Max Money Now", null, true, false)))),
+                    ),
             )
         show()
 
@@ -1283,10 +1385,12 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                codes =
-                    codes(
-                        PatchCodeGroup("Player", listOf(PatchCodeRow(0, "Infinite HP", null, false, true))),
-                        PatchCodeGroup("Other", listOf(PatchCodeRow(1, "Max Money", null, false, false))),
+                panel =
+                    ShownPanel.Codes(
+                        codes(
+                            PatchCodeGroup("Player", listOf(PatchCodeRow(0, "Infinite HP", null, false, true))),
+                            PatchCodeGroup("Other", listOf(PatchCodeRow(1, "Max Money", null, false, false))),
+                        ),
                     ),
             )
         show()
@@ -1299,7 +1403,7 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun noCodesSaysWhichFileToAdd() {
-        state = GameMenuState(booted = true, codes = codes())
+        state = GameMenuState(booted = true, panel = ShownPanel.Codes(codes()))
         show()
 
         rule.onNodeWithText("No patch codes for this game.").assertExists()
@@ -1312,7 +1416,7 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                codes = codes(PatchCodeGroup(null, rows)).copy(applied = "Applied: Max Money Now"),
+                panel = ShownPanel.Codes(codes(PatchCodeGroup(null, rows)).copy(applied = "Applied: Max Money Now")),
             )
         show()
         rule.onNodeWithText("Applied: Max Money Now").assertExists()
@@ -1323,7 +1427,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                codes = codes(PatchCodeGroup(null, listOf(PatchCodeRow(0, "Infinite HP", null, false, false)))),
+                panel =
+                    ShownPanel.Codes(
+                        codes(PatchCodeGroup(null, listOf(PatchCodeRow(0, "Infinite HP", null, false, false)))),
+                    ),
             )
         show()
 
@@ -1346,7 +1453,7 @@ class GameMenuTest : ControllerKeys {
         }
         rule.onNodeWithText("Patch codes").assertIsDisplayed()
 
-        state = state.copy(codes = codes(PatchCodeGroup(null, rows)))
+        state = state.copy(panel = ShownPanel.Codes(codes(PatchCodeGroup(null, rows))))
         rule.waitForIdle()
         press(Key.ButtonB)
 
@@ -1363,7 +1470,7 @@ class GameMenuTest : ControllerKeys {
             press(Key.DirectionDown)
         }
 
-        state = state.copy(discs = DiscChoice(ac3Discs, current = 1))
+        state = state.copy(panel = ShownPanel.Discs(DiscChoice(ac3Discs, current = 1)))
         rule.waitForIdle()
         rule.onNode(isFocused() and hasText("Disc 1", substring = true)).assertExists()
         press(Key.Enter)
@@ -1377,7 +1484,8 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun noSavesSaysSo() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, emptyList(), focus = null))
+        state =
+            GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Load, emptyList(), focus = null)))
         show()
 
         rule.onNodeWithText("No saves yet for this game.").assertExists()
@@ -1389,7 +1497,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots = slotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+                    ),
             )
         show()
 
@@ -1409,7 +1520,7 @@ class GameMenuTest : ControllerKeys {
     fun aHeldBDoesNothingOnTheLayerItOpened() {
         show()
         rule.onRoot().performKeyInput { keyDown(Key.ButtonB) }
-        state = state.copy(slots = slotPanel(SlotMode.Save, saved(), focus = 1))
+        state = state.copy(panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(), focus = 1)))
         rule.waitForIdle()
 
         rule.onRoot().performKeyInput { keyUp(Key.ButtonB) }
@@ -1426,7 +1537,10 @@ class GameMenuTest : ControllerKeys {
         state =
             GameMenuState(
                 booted = true,
-                slots = slotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+                panel =
+                    ShownPanel.Slots(
+                        slotPanel(SlotMode.Save, saved(3), focus = 3, question = SlotQuestion.Replace(3)),
+                    ),
             )
         show()
 
@@ -1503,7 +1617,11 @@ class GameMenuTest : ControllerKeys {
     @Test
     fun anErrorShowsInThePanel() {
         val error = "Couldn't save to slot 2: Cannot save state while memory card is being saved."
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 2, error = error))
+        state =
+            GameMenuState(
+                booted = true,
+                panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(), focus = 2, error = error)),
+            )
         show()
 
         rule.onNodeWithText(error).assertExists()
@@ -1511,7 +1629,7 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun focusStaysInTheSlotPanel() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(), focus = 1)))
         show()
 
         press(Key.DirectionLeft)
@@ -1522,7 +1640,7 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun aNarrowScreenStacksThePanels() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(), focus = 1)))
         show(width = 411, height = 891)
 
         val menu = rule.onNode(hasText("Save state") and hasClickAction()).getUnclippedBoundsInRoot()
@@ -1540,7 +1658,7 @@ class GameMenuTest : ControllerKeys {
     // The AYN Thor at 480 dpi: the menu narrows while the slot panel shows, so the pictures stay full size.
     @Test
     fun theThorsSlotPicturesAreFullSize() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(1), focus = 1))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(1), focus = 1)))
         show(width = 640, height = 360)
 
         val picture = rule.onAllNodesWithTag(SLOT_PICTURE, useUnmergedTree = true)[0].getUnclippedBoundsInRoot()
@@ -1567,7 +1685,7 @@ class GameMenuTest : ControllerKeys {
 
     @Test
     fun modeResumesFromAnyLayer() {
-        state = GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, saved(), focus = 1))
+        state = GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, saved(), focus = 1)))
         show()
 
         press(Key.ButtonMode)

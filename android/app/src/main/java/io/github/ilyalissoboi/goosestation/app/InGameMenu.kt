@@ -114,19 +114,40 @@ data class CodePanel(
 )
 
 /**
+ * The one side panel the in-game menu shows beside its rows, if any. One field holds it ([GameMenuState.panel]), so two
+ * can't show at once, and B, which closes the one shown, never finds another under it.
+ */
+sealed interface ShownPanel {
+    data class Slots(
+        val slots: SlotPanel,
+    ) : ShownPanel
+
+    data class Discs(
+        val choice: DiscChoice,
+    ) : ShownPanel
+
+    data class Codes(
+        val codes: CodePanel,
+    ) : ShownPanel
+
+    data class Achievements(
+        val cheevos: AchievementsPanelState,
+    ) : ShownPanel
+}
+
+/**
  * The in-game menu: whether the game has [booted] (until then only Resume and Exit game work), whether fast forward is
- * on, Port 1's analog mode (null when it isn't a DualShock: the row is hidden), the slot panel, if it's open,
+ * on, Port 1's analog mode (null when it isn't a DualShock: the row is hidden), the side [panel] shown, if any,
  * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, whether Exit game
  * asks before it replaces the resume state saved at [replacingResume] (Unix seconds), and whether it's saving the
- * resume state ([exiting]). A multi-disc game ([discCount] over 1) has its [disc] in the drive, and the Change disc
- * panel ([discs]) when it's open. The Patch codes panel is [codes]. In [hardcore] mode, Load state, Patch codes and
- * Fast forward are off.
+ * resume state ([exiting]). A multi-disc game ([discCount] over 1) has its [disc] in the drive. In [hardcore] mode,
+ * Load state, Patch codes and Fast forward are off.
  */
 data class GameMenuState(
     val booted: Boolean = false,
     val fastForward: Boolean = false,
     val analogMode: Boolean? = null,
-    val slots: SlotPanel? = null,
+    val panel: ShownPanel? = null,
     val confirmingReset: Boolean = false,
     val exiting: Boolean = false,
     val cardBusy: Boolean = false,
@@ -134,14 +155,10 @@ data class GameMenuState(
     val replacingResume: Long? = null,
     val disc: Int = 0,
     val discCount: Int = 0,
-    val discs: DiscChoice? = null,
-    val codes: CodePanel? = null,
     /** Hardcore mode is active: no state loads, Undo load, patch codes or fast forward. */
     val hardcore: Boolean = false,
     /** The game's RetroAchievements, once read. */
     val achievements: GameAchievements? = null,
-    /** The Achievements panel, while it's open. */
-    val cheevos: AchievementsPanelState? = null,
     /** The game's own settings show in the menu's place. */
     val settings: Boolean = false,
     /** Back from the game's settings: the menu focuses its Settings row. */
@@ -150,7 +167,19 @@ data class GameMenuState(
     val hasKey: Boolean = true,
     /** The core has a load to undo in this game (never in hardcore mode): Undo load is on. */
     val canUndo: Boolean = false,
-)
+) {
+    /** The slot panel, while it shows. */
+    val slots: SlotPanel? get() = (panel as? ShownPanel.Slots)?.slots
+
+    /** The Change disc panel, while it shows. */
+    val discs: DiscChoice? get() = (panel as? ShownPanel.Discs)?.choice
+
+    /** The Patch codes panel, while it shows. */
+    val codes: CodePanel? get() = (panel as? ShownPanel.Codes)?.codes
+
+    /** The Achievements panel, while it shows. */
+    val cheevos: AchievementsPanelState? get() = (panel as? ShownPanel.Achievements)?.cheevos
+}
 
 /** What the in-game menu's rows and panels do. */
 interface GameMenuActions {
@@ -308,20 +337,21 @@ class InGameMenu(
     /** Changes as each game starts and stops, so a read for an earlier one is dropped. */
     private var gameId = 0
 
-    /** Changes as the slot panel opens and closes, so a read for an earlier panel is dropped. */
-    private var panelId = 0
+    /** Changes as the slot panel opens and goes, so its work for an earlier panel ends as a message. */
+    private var slotsId = 0
 
     /** The slot panel's lists: open while the panel is, which shows each change. */
     private val slotLists =
         SaveListModel(scope, game, reader, api) { lists ->
-            state = state.copy(slots = lists?.let { state.slots?.copy(lists = it) ?: SlotPanel(it) })
+            show<ShownPanel.Slots>(lists?.let { ShownPanel.Slots(state.slots?.copy(lists = it) ?: SlotPanel(it)) })
         }
 
     /** The Patch codes panel: open while the menu shows it, which shows each change. */
-    private val codes = PatchCodesModel(scope, game, api) { state = state.copy(codes = it) }
+    private val codes = PatchCodesModel(scope, game, api) { show<ShownPanel.Codes>(it?.let(ShownPanel::Codes)) }
 
     /** The Achievements panel: open while the menu shows it, which shows each change. */
-    private val cheevos = AchievementsPanelModel(scope, game, api) { state = state.copy(cheevos = it) }
+    private val cheevos =
+        AchievementsPanelModel(scope, game, api) { show<ShownPanel.Achievements>(it?.let(ShownPanel::Achievements)) }
 
     private val canSave get() = state.booted && !serial.isNullOrBlank()
 
@@ -337,7 +367,7 @@ class InGameMenu(
      */
     fun gameStarted(game: GameEntry) {
         gameId++
-        panelId++
+        slotsId++
         running = game
         selectedSlot = null
         closeModels()
@@ -348,7 +378,7 @@ class InGameMenu(
     /** The game is gone. */
     fun gameStopped() {
         gameId++
-        panelId++
+        slotsId++
         running = null
         switchTo = null
         selectedSlot = null
@@ -362,15 +392,12 @@ class InGameMenu(
      * read again, as the game changes them. The paused game can't change them while it shows.
      */
     fun opened() {
-        panelId++
+        slotsId++
         switchTo = null
         closeModels()
         state =
             state.copy(
-                slots = null,
-                discs = null,
-                codes = null,
-                cheevos = null,
+                panel = null,
                 confirmingReset = false,
                 confirmingExit = false,
                 replacingResume = null,
@@ -390,14 +417,12 @@ class InGameMenu(
     override fun openAchievements() {
         val game = state.achievements
         if (!state.booted || game == null || game.status != GameAchievements.READY) return
-        panelId++
         val tab = if (game.hasAchievements) CheevoTab.Achievements else CheevoTab.Leaderboards
         state = withSide()
         cheevos.open(tab)
     }
 
     override fun closeAchievements() {
-        panelId++
         cheevos.close()
     }
 
@@ -409,7 +434,6 @@ class InGameMenu(
         if (state.cheevos == null) return
         val game = state.achievements ?: return
         if (!game.hasAchievements || !game.hasLeaderboards) return
-        panelId++
         cheevos.switchTab()
     }
 
@@ -445,7 +469,6 @@ class InGameMenu(
     override fun openSettings() {
         val game = running ?: return
         if (!state.booted || game.serial.isBlank()) return
-        panelId++
         state =
             withSide().copy(
                 settings = true,
@@ -527,7 +550,7 @@ class InGameMenu(
         val serial = serial
         if (!state.booted || serial == null || (mode == SlotMode.Load && state.hardcore)) return
         state = withSide()
-        panelId++
+        slotsId++
         val game = running
         slotLists.open(serial, game?.path.orEmpty(), game?.discs.orEmpty(), mode) { lastSlots.get(serial) }
     }
@@ -544,7 +567,7 @@ class InGameMenu(
     override fun cancelSwitch() {
         val panel = state.slots ?: return
         val switching = (panel.question as? SlotQuestion.Switch)?.entry ?: return
-        state = state.copy(slots = panel.copy(question = null))
+        showSlots(panel.copy(question = null))
         slotLists.focusOn(switching)
     }
 
@@ -563,7 +586,7 @@ class InGameMenu(
     }
 
     private fun dropSlots() {
-        panelId++
+        slotsId++
         slotLists.close()
     }
 
@@ -574,7 +597,7 @@ class InGameMenu(
         val saved = entry.savedAt != null
         when {
             panel.mode == SlotMode.Load -> if (saved) load(slot)
-            saved -> state = state.copy(slots = panel.copy(question = SlotQuestion.Replace(slot)))
+            saved -> showSlots(panel.copy(question = SlotQuestion.Replace(slot)))
             else -> save(slot)
         }
     }
@@ -586,7 +609,7 @@ class InGameMenu(
         val saved = entry.savedAt != null
         when {
             panel.mode == SlotMode.Load -> if (saved) loadShared(entry)
-            saved -> state = state.copy(slots = panel.copy(question = SlotQuestion.Replace(slot)))
+            saved -> showSlots(panel.copy(question = SlotQuestion.Replace(slot)))
             else -> saveShared(slot)
         }
     }
@@ -596,14 +619,14 @@ class InGameMenu(
      * slot is never loaded as this game's without knowing it is.
      */
     private fun loadShared(entry: SlotEntry) {
-        val id = panelId
+        val id = slotsId
         val path = running?.path.orEmpty()
         // Busy at once, while its game is read: a second A starts nothing (a second load would take the undo state).
         updatePanel(id) { it.copy(work = SlotWork.Loading) }
         slotLists.clearError()
         scope.launch {
             val read = slotLists.readHolds(entry) ?: return@launch
-            if (id != panelId) return@launch
+            if (id != slotsId) return@launch
             val holds = read.holds
             when {
                 holds == null -> failed(id, SaveLists.UNREADABLE)
@@ -636,7 +659,7 @@ class InGameMenu(
         id: Int,
         error: String,
     ) {
-        if (id != panelId || state.slots == null) return
+        if (id != slotsId || state.slots == null) return
         updatePanel(id) { it.copy(work = null) }
         slotLists.fail(error)
     }
@@ -667,14 +690,13 @@ class InGameMenu(
     override fun openDiscs() {
         val discs = running?.discs.orEmpty()
         if (!state.booted || discs.size < 2) return
-        panelId++
-        state = withSide(discs = DiscChoice(discs, state.disc))
+        state = withSide(ShownPanel.Discs(DiscChoice(discs, state.disc)))
     }
 
     // A disc going in ends in its panel, as a save does.
     override fun closeDiscs() {
         if (state.discs?.busy == true) return
-        state = state.copy(discs = null)
+        show<ShownPanel.Discs>(null)
     }
 
     override fun pickDisc(number: Int) {
@@ -682,7 +704,7 @@ class InGameMenu(
         val key = serial ?: return
         if (choice.busy) return
         if (number == choice.current) return closeDiscs()
-        state = state.copy(discs = choice.copy(busy = true, error = null))
+        state = state.copy(panel = ShownPanel.Discs(choice.copy(busy = true, error = null)))
         scope.launch {
             val error =
                 withContext(game) {
@@ -692,13 +714,14 @@ class InGameMenu(
             val open = state.discs?.takeIf { it.busy }
             if (error != null) {
                 if (open != null) {
-                    state = state.copy(discs = open.copy(busy = false, error = error))
+                    state = state.copy(panel = ShownPanel.Discs(open.copy(busy = false, error = error)))
                 } else {
                     onMessage(error)
                 }
                 return@launch
             }
-            state = state.copy(disc = number, discs = if (open != null) null else state.discs)
+            state = state.copy(disc = number)
+            if (open != null) show<ShownPanel.Discs>(null)
             onMessage("Disc $number inserted")
             resume()
         }
@@ -706,13 +729,11 @@ class InGameMenu(
 
     override fun openCodes() {
         if (!state.booted || state.hardcore) return
-        panelId++
         state = withSide()
         codes.open()
     }
 
     override fun closeCodes() {
-        panelId++
         codes.close()
     }
 
@@ -726,14 +747,14 @@ class InGameMenu(
     override fun confirmReplace() {
         val panel = state.slots ?: return
         val slot = (panel.question as? SlotQuestion.Replace)?.slot ?: return
-        state = state.copy(slots = panel.copy(question = null))
+        showSlots(panel.copy(question = null))
         if (panel.lists.tab == SlotTab.Shared) saveShared(slot) else save(slot)
     }
 
     override fun cancelReplace() {
         val panel = state.slots ?: return
         if (panel.question !is SlotQuestion.Replace) return
-        state = state.copy(slots = panel.copy(question = null))
+        showSlots(panel.copy(question = null))
     }
 
     override fun toggleFastForward() {
@@ -808,7 +829,7 @@ class InGameMenu(
         failed: (String) -> String,
     ) {
         val serial = serial ?: return
-        val id = panelId
+        val id = slotsId
         val multiDisc = state.discCount > 1
         var disc = 0
         updatePanel(id) { it.copy(work = work) }
@@ -827,7 +848,7 @@ class InGameMenu(
             if (error != null) {
                 // Said in the panel, or once another row has taken its place, as a message: never lost with it.
                 val reason = failed(error)
-                if (id == panelId && state.slots != null) {
+                if (id == slotsId && state.slots != null) {
                     failed(id, reason)
                 } else {
                     onMessage(reason)
@@ -836,7 +857,7 @@ class InGameMenu(
             }
             // The save state hotkeys' slot follows the menu's too.
             if (remember) selectedSlot = slot
-            if (id == panelId) dropSlots()
+            if (id == slotsId) dropSlots()
             onMessage(done)
             resume()
         }
@@ -978,11 +999,26 @@ class InGameMenu(
         return disc
     }
 
-    // The menu with the one side panel given, or none, and no reset question: the side panels take turns, so B, which
-    // closes the one shown, never finds another under it.
-    private fun withSide(discs: DiscChoice? = null): GameMenuState {
+    // The menu with the side panel given, or none, and no reset question: the others' models close, and the slot panel's
+    // work, if it was the one shown, ends as a message.
+    private fun withSide(panel: ShownPanel? = null): GameMenuState {
+        if (state.panel is ShownPanel.Slots) slotsId++
         closeModels()
-        return state.copy(slots = null, discs = discs, codes = null, cheevos = null, confirmingReset = false)
+        return state.copy(panel = panel, confirmingReset = false)
+    }
+
+    // A model's change: its panel [shown], or, with null, its panel gone if it's the one shown. A model only reports
+    // while it's open, and every other panel's open closes it first.
+    private inline fun <reified P : ShownPanel> show(shown: P?) {
+        if (shown != null) {
+            state = state.copy(panel = shown)
+        } else if (state.panel is P) {
+            state = state.copy(panel = null)
+        }
+    }
+
+    private fun showSlots(slots: SlotPanel) {
+        state = state.copy(panel = ShownPanel.Slots(slots))
     }
 
     // The panels' models, closed wherever the menu drops every panel.
@@ -998,7 +1034,7 @@ class InGameMenu(
         change: (SlotPanel) -> SlotPanel,
     ) {
         val panel = state.slots ?: return
-        if (id == panelId) state = state.copy(slots = change(panel))
+        if (id == slotsId) showSlots(change(panel))
     }
 
     private companion object {

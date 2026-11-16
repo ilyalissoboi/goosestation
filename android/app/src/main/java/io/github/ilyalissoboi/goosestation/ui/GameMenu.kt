@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import io.github.ilyalissoboi.goosestation.app.AchievementLists
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
+import io.github.ilyalissoboi.goosestation.app.ShownPanel
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotQuestion
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
@@ -116,26 +117,22 @@ fun GameMenu(
             shown.slots?.question is SlotQuestion.Replace -> actions.cancelReplace()
             // A save, load, delete or disc change under way ends in its panel, which stays until it has.
             shown.slots?.working == true || shown.discs?.busy == true -> Unit
-            shown.slots != null -> {
-                (if (shown.slots.mode == SlotMode.Save) cameFrom.saveRow else cameFrom.loadRow).requestFocus()
-                actions.closeSlots()
-            }
-            shown.discs != null -> {
-                cameFrom.discRow.requestFocus()
-                actions.closeDiscs()
-            }
-            shown.codes != null -> {
-                cameFrom.codesRow.requestFocus()
-                actions.closeCodes()
-            }
-            shown.cheevos?.open != null -> {
-                // As the board's rows go; the panel gives the focus back to the board's row.
-                cameFrom.cheevosRow.requestFocus()
-                actions.closeLeaderboard()
-            }
-            shown.cheevos != null -> {
-                cameFrom.cheevosRow.requestFocus()
-                actions.closeAchievements()
+            shown.panel != null -> {
+                cameFrom.rowOf(shown.panel).requestFocus()
+                when (shown.panel) {
+                    is ShownPanel.Slots -> actions.closeSlots()
+                    is ShownPanel.Discs -> actions.closeDiscs()
+                    is ShownPanel.Codes -> actions.closeCodes()
+                    // An open leaderboard first, as the board's rows go; the panel gives the focus back to its row.
+                    is ShownPanel.Achievements ->
+                        if (shown.panel.cheevos.open !=
+                            null
+                        ) {
+                            actions.closeLeaderboard()
+                        } else {
+                            actions.closeAchievements()
+                        }
+                }
             }
             shown.confirmingReset -> actions.cancelReset()
             shown.confirmingExit -> actions.cancelExit()
@@ -160,10 +157,7 @@ fun GameMenu(
         )
     val down = remember(layer) { HashSet<Key>() }
     SideEffect {
-        state.slots?.let { cameFrom.slots = it.mode }
-        if (state.discs != null) cameFrom.discs = true
-        if (state.codes != null) cameFrom.codes = true
-        if (state.cheevos != null) cameFrom.cheevos = true
+        state.panel?.let { cameFrom.panel = it }
         if (state.confirmingReset) cameFrom.reset = true
         if (state.confirmingExit || state.replacingResume != null) cameFrom.exit = true
     }
@@ -199,47 +193,32 @@ fun GameMenu(
         val screenWidth = maxWidth + 64.dp
         val screenHeight = maxHeight + 64.dp
         val height = maxHeight
-        val slots = state.slots
-        val discs = state.discs
-        val codes = state.codes
-        val cheevos = state.cheevos
+        val panel = state.panel
         val achievements = state.achievements
-        val sidePanel = slots != null || discs != null || codes != null || (cheevos != null && achievements != null)
+        // The Achievements panel draws once the game's set is read.
+        val sidePanel = panel != null && (panel !is ShownPanel.Achievements || achievements != null)
 
-        // The one side panel open, if any: the slots, the discs, the codes or the achievements.
+        // The one side panel open, if any.
         @Composable
         fun SidePanel(modifier: Modifier) {
-            when {
-                slots != null ->
-                    SaveSlotPanel(
-                        slots,
-                        actions,
-                        now,
-                        modifier,
-                        keepFocus = {
-                            (
-                                if (slots.mode ==
-                                    SlotMode.Save
-                                ) {
-                                    cameFrom.saveRow
-                                } else {
-                                    cameFrom.loadRow
-                                }
-                            ).requestFocus()
-                        },
-                    )
-                discs != null -> DiscPanel(discs, game?.title.orEmpty(), actions, modifier)
-                codes != null -> PatchCodePanel(codes, actions, modifier)
-                cheevos != null && achievements != null ->
-                    AchievementsPanel(
-                        cheevos,
-                        achievements,
-                        actions,
-                        badge,
-                        now,
-                        modifier,
-                        keepFocus = { cameFrom.cheevosRow.requestFocus() },
-                    )
+            val keepFocus = { panel?.let { cameFrom.rowOf(it).requestFocus() } }
+            when (panel) {
+                is ShownPanel.Slots -> SaveSlotPanel(panel.slots, actions, now, modifier, keepFocus = { keepFocus() })
+                is ShownPanel.Discs -> DiscPanel(panel.choice, game?.title.orEmpty(), actions, modifier)
+                is ShownPanel.Codes -> PatchCodePanel(panel.codes, actions, modifier)
+                is ShownPanel.Achievements ->
+                    if (achievements != null) {
+                        AchievementsPanel(
+                            panel.cheevos,
+                            achievements,
+                            actions,
+                            badge,
+                            now,
+                            modifier,
+                            keepFocus = { keepFocus() },
+                        )
+                    }
+                null -> {}
             }
         }
         if (screenWidth >= SIDE_BY_SIDE || screenWidth >= screenHeight) {
@@ -271,12 +250,20 @@ private class CameFrom {
     val settingsRow = FocusRequester()
     val resetRow = FocusRequester()
     val exitRow = FocusRequester()
-    var slots: SlotMode? = null
-    var discs = false
-    var codes = false
-    var cheevos = false
+
+    /** The side panel last shown, whose row takes the focus back as it goes. */
+    var panel: ShownPanel? = null
     var reset = false
     var exit = false
+
+    /** The menu row [panel] was opened from. */
+    fun rowOf(panel: ShownPanel): FocusRequester =
+        when (panel) {
+            is ShownPanel.Slots -> if (panel.slots.mode == SlotMode.Save) saveRow else loadRow
+            is ShownPanel.Discs -> discRow
+            is ShownPanel.Codes -> codesRow
+            is ShownPanel.Achievements -> cheevosRow
+        }
 }
 
 @Composable
@@ -305,29 +292,17 @@ private fun MenuPanel(
     val cheevosOpen = state.cheevos != null
     // While a side panel is open the focus only passes through the menu (as the panel swaps its rows): no ring shows
     // there, and the row the panel came from shows as current.
-    val quiet = openMode != null || discsOpen || codesOpen || cheevosOpen
+    val quiet = state.panel != null
 
     // Resume as the menu opens; the row a slot panel or the reset question came from as it closes.
     val asking = state.confirmingReset || state.confirmingExit || state.replacingResume != null
     LaunchedEffect(openMode, discsOpen, codesOpen, cheevosOpen, asking, state.cameFromSettings) {
-        val from = cameFrom.slots
+        val from = cameFrom.panel
         when {
-            openMode != null || discsOpen || codesOpen || cheevosOpen || asking -> {}
+            state.panel != null || asking -> {}
             from != null -> {
-                cameFrom.slots = null
-                (if (from == SlotMode.Save) saveRow else loadRow).requestFocus()
-            }
-            cameFrom.discs -> {
-                cameFrom.discs = false
-                discRow.requestFocus()
-            }
-            cameFrom.codes -> {
-                cameFrom.codes = false
-                codesRow.requestFocus()
-            }
-            cameFrom.cheevos -> {
-                cameFrom.cheevos = false
-                cheevosRow.requestFocus()
+                cameFrom.panel = null
+                cameFrom.rowOf(from).requestFocus()
             }
             cameFrom.reset -> {
                 cameFrom.reset = false

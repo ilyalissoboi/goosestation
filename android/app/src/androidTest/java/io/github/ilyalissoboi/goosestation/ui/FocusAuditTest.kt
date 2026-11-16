@@ -54,6 +54,7 @@ import io.github.ilyalissoboi.goosestation.app.SaveListState
 import io.github.ilyalissoboi.goosestation.app.SavePanel
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.SavesPageState
+import io.github.ilyalissoboi.goosestation.app.ShownPanel
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
 import io.github.ilyalissoboi.goosestation.app.SlotMode
 import io.github.ilyalissoboi.goosestation.app.SlotPanel
@@ -1324,7 +1325,7 @@ class FocusAuditTest : ControllerKeys {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, if (it == 2) 1_700_000_000L else null) }
         show {
             GameMenu(
-                GameMenuState(booted = true, slots = slotPanel(SlotMode.Save, entries, focus = 2)),
+                GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Save, entries, focus = 2))),
                 NoMenuActions,
             )
         }
@@ -1340,13 +1341,15 @@ class FocusAuditTest : ControllerKeys {
             GameMenu(
                 GameMenuState(
                     booted = true,
-                    slots =
-                        slotPanel(
-                            SlotMode.Save,
-                            emptyList(),
-                            tab = SlotTab.Shared,
-                            shared = shared.map { if (it.slot == 3) it.copy(holds = held) else it },
-                            sharedFocus = 1,
+                    panel =
+                        ShownPanel.Slots(
+                            slotPanel(
+                                SlotMode.Save,
+                                emptyList(),
+                                tab = SlotTab.Shared,
+                                shared = shared.map { if (it.slot == 3) it.copy(holds = held) else it },
+                                sharedFocus = 1,
+                            ),
                         ),
                 ),
                 NoMenuActions,
@@ -1363,7 +1366,10 @@ class FocusAuditTest : ControllerKeys {
                 GameMenuState(
                     booted = true,
                     hasKey = false,
-                    slots = slotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
+                    panel =
+                        ShownPanel.Slots(
+                            slotPanel(SlotMode.Load, emptyList(), shared = emptyList(), hasKey = false),
+                        ),
                 ),
                 NoMenuActions,
             )
@@ -1380,13 +1386,15 @@ class FocusAuditTest : ControllerKeys {
             GameMenu(
                 GameMenuState(
                     booted = true,
-                    slots =
-                        slotPanel(
-                            SlotMode.Load,
-                            emptyList(),
-                            tab = SlotTab.Shared,
-                            shared = shared,
-                            question = SlotQuestion.Switch(shared[0]),
+                    panel =
+                        ShownPanel.Slots(
+                            slotPanel(
+                                SlotMode.Load,
+                                emptyList(),
+                                tab = SlotTab.Shared,
+                                shared = shared,
+                                question = SlotQuestion.Switch(shared[0]),
+                            ),
                         ),
                 ),
                 NoMenuActions,
@@ -1403,7 +1411,7 @@ class FocusAuditTest : ControllerKeys {
             GameMenu(
                 GameMenuState(
                     booted = true,
-                    slots = slotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1]),
+                    panel = ShownPanel.Slots(slotPanel(SlotMode.Load, entries, focus = 1, deleting = entries[1])),
                 ),
                 NoMenuActions,
             )
@@ -1418,7 +1426,10 @@ class FocusAuditTest : ControllerKeys {
         val others = listOf(SlotEntry(3, 1_700_000_000L, owner = "SLPS-02021", disc = 2))
         show {
             GameMenu(
-                GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, entries, focus = 1, others = others)),
+                GameMenuState(
+                    booted = true,
+                    panel = ShownPanel.Slots(slotPanel(SlotMode.Load, entries, focus = 1, others = others)),
+                ),
                 NoMenuActions,
             )
         }
@@ -1435,7 +1446,12 @@ class FocusAuditTest : ControllerKeys {
             )
         show {
             GameMenu(
-                GameMenuState(booted = true, disc = 1, discCount = 2, discs = DiscChoice(discs, current = 1)),
+                GameMenuState(
+                    booted = true,
+                    disc = 1,
+                    discCount = 2,
+                    panel = ShownPanel.Discs(DiscChoice(discs, current = 1)),
+                ),
                 NoMenuActions,
             )
         }
@@ -1463,7 +1479,7 @@ class FocusAuditTest : ControllerKeys {
                 GameMenuState(
                     booted = true,
                     achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
-                    cheevos = AchievementsPanelState(CheevoTab.Achievements, sections),
+                    panel = ShownPanel.Achievements(AchievementsPanelState(CheevoTab.Achievements, sections)),
                 ),
                 NoMenuActions,
             )
@@ -1479,7 +1495,7 @@ class FocusAuditTest : ControllerKeys {
                 GameMenuState(
                     booted = true,
                     achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
-                    cheevos = AchievementsPanelState(CheevoTab.Achievements),
+                    panel = ShownPanel.Achievements(AchievementsPanelState(CheevoTab.Achievements)),
                 ),
                 NoMenuActions,
             )
@@ -1502,12 +1518,14 @@ class FocusAuditTest : ControllerKeys {
                 GameMenuState(
                     booted = true,
                     achievements = GameAchievements(GameAchievements.READY, 1, 2, 5, 30, true, true, false),
-                    cheevos =
-                        AchievementsPanelState(
-                            CheevoTab.Leaderboards,
-                            leaderboards = boards,
-                            open = boards[0].takeIf { open },
-                            page = page.takeIf { open },
+                    panel =
+                        ShownPanel.Achievements(
+                            AchievementsPanelState(
+                                CheevoTab.Leaderboards,
+                                leaderboards = boards,
+                                open = boards[0].takeIf { open },
+                                page = page.takeIf { open },
+                            ),
                         ),
                 ),
                 NoMenuActions,
@@ -1538,7 +1556,10 @@ class FocusAuditTest : ControllerKeys {
             )
         show {
             GameMenu(
-                GameMenuState(booted = true, codes = CodePanel(listOf(PatchCodeGroup("Player", rows)), "Game.cht")),
+                GameMenuState(
+                    booted = true,
+                    panel = ShownPanel.Codes(CodePanel(listOf(PatchCodeGroup("Player", rows)), "Game.cht")),
+                ),
                 NoMenuActions,
             )
         }
@@ -1548,14 +1569,24 @@ class FocusAuditTest : ControllerKeys {
 
     @Test
     fun gameMenuNoCodes() {
-        show { GameMenu(GameMenuState(booted = true, codes = CodePanel(emptyList(), "Game.cht")), NoMenuActions) }
+        show {
+            GameMenu(
+                GameMenuState(booted = true, panel = ShownPanel.Codes(CodePanel(emptyList(), "Game.cht"))),
+                NoMenuActions,
+            )
+        }
 
         rule.assertControllerReady()
     }
 
     @Test
     fun gameMenuLoadWithNoSaves() {
-        show { GameMenu(GameMenuState(booted = true, slots = slotPanel(SlotMode.Load, emptyList())), NoMenuActions) }
+        show {
+            GameMenu(
+                GameMenuState(booted = true, panel = ShownPanel.Slots(slotPanel(SlotMode.Load, emptyList()))),
+                NoMenuActions,
+            )
+        }
 
         rule.assertControllerReady()
     }
@@ -1564,7 +1595,7 @@ class FocusAuditTest : ControllerKeys {
     fun gameMenuReplacing() {
         val entries = (1..SaveSlots.COUNT).map { SlotEntry(it, 1_700_000_000L) }
         val panel = slotPanel(SlotMode.Save, entries, focus = 1, question = SlotQuestion.Replace(1))
-        show { GameMenu(GameMenuState(booted = true, slots = panel), NoMenuActions) }
+        show { GameMenu(GameMenuState(booted = true, panel = ShownPanel.Slots(panel)), NoMenuActions) }
 
         rule.assertControllerReady()
     }

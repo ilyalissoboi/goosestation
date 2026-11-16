@@ -162,8 +162,8 @@ internal fun BindingRow(
 
 /**
  * A page of the Controllers page's bindings, titled [title]: its [content] in a column, which asks [focus] for the row
- * to focus whenever nothing in it has the focus, as when it opens or the row with the focus goes. B or Back go back
- * ([onBack]); Back during a capture cancels it instead, as B is captured like any button.
+ * to focus as it opens, and whenever nothing in it has the focus, as when the row with the focus goes. B or Back go
+ * back ([onBack]); Back during a capture cancels it instead, as B is captured like any button.
  */
 @Composable
 internal fun BindingsPage(
@@ -175,6 +175,10 @@ internal fun BindingsPage(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     var focusInPage by remember { mutableStateOf(false) }
+    // On opening, even with the focus in the page by then: the view Back came from (a port's macro) took the focused
+    // row with it, and out of touch mode Android gives the focus to the first thing that takes it, the settings'
+    // rail, which puts it on the page's first row before this runs.
+    LaunchedEffect(Unit) { focus().requestFocus() }
     LaunchedEffect(focusInPage) { if (!focusInPage) focus().requestFocus() }
     SettingsPage(title, onBack = onBack) {
         // After the page's own, so it takes Back first while a capture runs.

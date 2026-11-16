@@ -103,9 +103,8 @@ fun ControllersScreen(
     val portRows = remember { mutableMapOf<Int, FocusRequester>() }
     val hotkeysRow = remember { FocusRequester() }
     var focusInPage by remember { mutableStateOf(false) }
-    // On opening, and whenever the row with the focus goes, as when a controller's rows do.
-    LaunchedEffect(focusInPage) {
-        if (focusInPage) return@LaunchedEffect
+
+    fun focusBack() {
         val back =
             when (val cameFrom = state.cameFrom) {
                 is ControllersView.Port -> portRows[cameFrom.pad]
@@ -114,6 +113,12 @@ fun ControllersScreen(
             }
         (back ?: first).requestFocus()
     }
+    // On opening, even with the focus in the page by then: the view Back came from took the focused row with it,
+    // and out of touch mode Android gives the focus to the first thing that takes it, the settings' rail, which puts
+    // it on the page's first row before this runs.
+    LaunchedEffect(Unit) { focusBack() }
+    // Whenever the row with the focus goes, as when a controller's rows do.
+    LaunchedEffect(focusInPage) { if (!focusInPage) focusBack() }
 
     SettingsPage("Controllers", onBack = onBack) {
         Notice(NoticeStatus.Info, icon = GsIcons.gamepad) {

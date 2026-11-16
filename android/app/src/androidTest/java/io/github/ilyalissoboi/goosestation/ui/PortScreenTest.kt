@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import android.view.KeyEvent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -119,6 +120,8 @@ class PortScreenTest : ControllerKeys {
     }
 
     @get:Rule override val rule = createComposeRule()
+
+    @get:Rule val deviceKeys = DeviceKeys()
 
     // What the page shows, which a test can change once it's open.
     private var state by mutableStateOf(ControllersState())
@@ -320,6 +323,37 @@ class PortScreenTest : ControllerKeys {
 
         assertEquals(listOf(2), macros)
         rule.onNodeWithText("Macro 1").assertExists()
+    }
+
+    // Port 1's page as the app has it on the Thor, with its settings, bindings and macros read.
+    private fun showInPanels() =
+        rule.showControllersInPanels(
+            ControllersState(
+                controllers = listOf(PAD),
+                selected = PAD.descriptor,
+                bindings = BINDINGS,
+                macros = emptyList(),
+                bindingsFor = PAD.descriptor,
+                view = ControllersView.Port(0),
+                portTypes = mapOf(0 to "AnalogController"),
+                typeNames = TYPES,
+                typeSettings = SETTINGS,
+                portValues = portValues(),
+            ),
+        )
+
+    @Test
+    fun backFromAMacroInThePanelsFocusesItsRow() {
+        showInPanels()
+        walkTo("Macro 3")
+        press(Key.ButtonA)
+        rule.onNodeWithText("Macro 3 · Port 1").assertExists()
+
+        // A controller's B, as it comes on a device.
+        deviceKeys.press(KeyEvent.KEYCODE_BUTTON_B)
+        rule.waitForIdle()
+
+        assertFocusedHas("Macro 3")
     }
 
     // Below the settings, one controller's name isn't a stop: it has no ring, so Down goes on to the first binding.

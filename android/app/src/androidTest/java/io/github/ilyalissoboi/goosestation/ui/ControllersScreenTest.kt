@@ -3,6 +3,7 @@
 
 package io.github.ilyalissoboi.goosestation.ui
 
+import android.view.KeyEvent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,6 +21,8 @@ import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.TouchMode
 import io.github.ilyalissoboi.goosestation.app.TouchSettings
+import io.github.ilyalissoboi.goosestation.core.PadBinding
+import io.github.ilyalissoboi.goosestation.core.PadBindingKind
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
 import io.github.ilyalissoboi.goosestation.settings.PortSettings
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -35,6 +38,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ControllersScreenTest : ControllerKeys {
     @get:Rule override val rule = createComposeRule()
+
+    @get:Rule val deviceKeys = DeviceKeys()
 
     private val calls = mutableListOf<String>()
 
@@ -209,6 +214,59 @@ class ControllersScreenTest : ControllerKeys {
         assertEquals(listOf("hotkeys"), calls)
     }
 
+    // The page as the app has it on the Thor, on its hub, with the selected controller's hotkeys read.
+    private fun showInPanels() =
+        rule.showControllersInPanels(
+            ControllersState(
+                controllers = listOf(PAD),
+                selected = PAD.descriptor,
+                bindings = emptyList(),
+                hotkeys = HOTKEYS,
+                bindingsFor = PAD.descriptor,
+                rumble = mapOf(PAD.descriptor to 60),
+                offered = OFFERED,
+                portTypes = mapOf(0 to "AnalogController", 1 to "None"),
+                typeNames = TYPES,
+                multitap = MULTITAP,
+                multitapNames = MODES,
+            ),
+            calls,
+        )
+
+    // Down the hub to the row with [summary], and A on it.
+    private fun openFromTheHub(summary: String) {
+        walkTo(summary)
+        press(Key.ButtonA)
+    }
+
+    // A controller's B, as it comes on a device.
+    private fun pressBOnTheDevice() {
+        deviceKeys.press(KeyEvent.KEYCODE_BUTTON_B)
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun backFromTheHotkeysInThePanelsFocusesTheirRow() {
+        showInPanels()
+        openFromTheHub("Select + a button")
+        rule.onNodeWithText("General hotkey 1").assertExists()
+
+        pressBOnTheDevice()
+
+        assertFocusedHas("Hotkeys", "Select + a button")
+    }
+
+    @Test
+    fun backFromAPortInThePanelsFocusesItsRow() {
+        showInPanels()
+        openFromTheHub("Not Connected")
+        assertFocusedHas("Controller type")
+
+        pressBOnTheDevice()
+
+        assertFocusedHas("Port 2", "Not Connected")
+    }
+
     @Test
     fun noControllerSaysToConnectOne() {
         show(controllers = emptyList())
@@ -265,5 +323,9 @@ class ControllersScreenTest : ControllerKeys {
         val TYPES = listOf(Choice("None", "Not Connected"), Choice("AnalogController", "Analog Controller (DualShock)"))
         val MODES = listOf(Choice("Disabled", "Disabled"), Choice("Port1Only", "Enable on Port 1 Only"))
         val MULTITAP = pageValues(listOf(PortSettings.MULTITAP))
+        val HOTKEYS =
+            listOf("General", "System", "Save States", "Controller", "Graphics", "Audio").flatMap { category ->
+                (1..4).map { PadBinding("$category$it", "$category hotkey $it", PadBindingKind.Button, null, category) }
+            }
     }
 }

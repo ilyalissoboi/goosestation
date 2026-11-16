@@ -3,6 +3,10 @@
 
 #include "gpu_texture_data.h"
 
+// The streaming state (XXH3_state_t) is only complete with this; CMake sets it, the Windows projects don't.
+#ifndef XXH_STATIC_LINKING_ONLY
+#define XXH_STATIC_LINKING_ONLY
+#endif
 #include "xxhash.h"
 
 #include <algorithm>

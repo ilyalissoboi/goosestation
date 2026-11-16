@@ -301,11 +301,14 @@ Bounded: with Task 12, about two days. Experiment code stays out of the repo (a 
 - Produces (namespace `GPUTextureData`; every `vram` argument is 1024×512 words, stride `VRAM_WIDTH`; rects are
   `GSVector4i` left/top/right/bottom, never wrapping):
   - `u64 HashTextureWords(const u16* vram, GSVector4i word_rect)` — Task 3's rule (or ours);
-  - `u64 HashPalette(const u16* vram, GPUTexturePaletteReg palette, u16 min, u16 max)`;
+  - `u64 HashPalette(const u16* vram, GPUTexturePaletteReg palette, u16 min, u16 max)` — XXH3_64bits over
+    `max − min + 1` entries from the palette's first entry (Task 3's finding, not entries `min`…`max`);
   - `std::pair<u16, u16> GetUsedPaletteRange(const u16* vram, GSVector4i word_rect, GPUTextureMode mode)`;
   - `u32 TexelToSourceRGBA(u16 texel)` — draw-time encoding in a source: `0x0000` → `0x00000000`; bit 15 set →
     alpha `0x80`; otherwise alpha `0xFF`; colour from `VRAMRGBA5551ToRGBA8888`;
-  - `u32 TexelToDumpRGBA(u16 texel, bool semitransparent_mode, bool force_alpha)` — Task 1's dump rule;
+  - `u32 TexelToDumpRGBA(u16 texel, bool semitransparent_mode, bool force_alpha)` — Task 1's dump rule: `0x0000` →
+    alpha 0; ST mode and bit 15 set → 143; otherwise 255; force alpha → 255 for every texel; channels
+    `(c × 255 + 15) / 31`;
   - `void DecodeTexture(const u16* vram, u32 page_x, u32 page_y, GSVector4i texel_rect, GPUTextureMode mode,
     GPUTexturePaletteReg palette, u32 (*encode)(u16), RGBA8Image* out)` (and an overload taking the dump rule's flags);
   - `std::optional<GSVector4i> GetPageRect(const TextureNames::Name& name, GSVector4i source_word_rect, u32 page_x,
@@ -316,16 +319,18 @@ Bounded: with Task 12, about two days. Experiment code stays out of the repo (a 
     `max_texture_size / 256`.
 
 - [ ] **Step 1: Write the failing tests:**
-  - `HashesFollowTheRule`: for a synthetic 64×256 block of words `i * 0x9E37`, `HashTextureWords` equals the chosen
-    xxHash call over the chosen byte layout computed in the test directly (pins the layout, not just stability);
-    likewise `HashPalette` over 16 entries.
+  - `HashesFollowTheRule`: for a synthetic 64×256 block of words `i * 0x9E37` placed at (320, 256),
+    `HashTextureWords` over it equals `XXH3_64bits` of the same words packed row after row (pins the layout, not just
+    stability), and over a 4×16 sub-rect equals the hash of those 64 words packed; `HashPalette` with range 0–15
+    equals the hash of the 16 entries, and with range 1–5 the hash of the first 5 entries.
   - `TheUsedRangeOfAP4TextureIsItsSmallestAndLargestIndex`: indices 3..11 give `{3, 11}`; P8 with 0 and 200 gives
     `{0, 200}`.
   - `DecodingAP4TextureAppliesItsPalette`, `…AP8Texture…`, `…AC16Texture…`: known texels at known positions,
     including the nibble order of P4 (low nibble first) and P8's two indices per word.
   - `SourceAlphaEncodesTransparentAndSemiTransparent`: `0x0000` → alpha 0, `0x8000` → alpha `0x80` (black, opaque
     or semi), `0x7FFF` → alpha `0xFF`.
-  - `DumpAlphaFollowsTheReferences`: Task 1's observed values for each mode, ST and not, force alpha on and off.
+  - `DumpAlphaFollowsTheReferences`: `0x0000` → 0 in P4 and STP4; `0x8000` → 255 in P4, 143 in STP4; `0x7C1F`
+    → 255 in both, colour (255, 0, 255); with force alpha all 255; channel 3 → 25, 16 → 132.
   - `AnUploadsRectLandsInItsPage`: a P4 upload at words (16, 0) of page (0, 0) and name rect `8-4-16x16` gives page
     texels (72, 4)–(88, 20); a rect past the page's 256 texels gives `std::nullopt`.
   - `TheSourceScaleIsTheLargestThatFits`: rects 16×16 with images 128×128 and 32×48 give 8; with max texture size
@@ -404,15 +409,17 @@ Bounded: with Task 12, about two days. Experiment code stays out of the repo (a 
   draw's word rect, and nothing if none does (not dumped, not replaced); in page mode (`DumpTexturePages`) it is the
   page, hashed per Task 1/3's finding (whole page or the drawn rect); either needs every block it reads and its
   palette's known; its name's palette range is the used range with `ReducePaletteRange`, else the mode's full range;
-  each name is dumped once per session, with the union of the rects drawn from it in the frame it was first drawn (the
-  whole page with `DumpFullTexturePages`), skipped if the file exists, if below the thresholds (in texels), if C16
+  each name (rect included) is dumped once per session, the rect being one primitive's UV rect (the whole page with
+  `DumpFullTexturePages`), written at the end of the frame, skipped if the file exists, if below the thresholds (in texels), if C16
   without `DumpC16Textures`, or if it has a replacement without `DumpReplacedTextures`; the first dump writes
-  `config.yaml` (`TexturePackConfig::ToYAML`) when the game has neither config file; lookups gather the replacements
-  of every upload in the page (upload mode) or of the page (page mode) and place them with `GetPageRect`.
+  `config.yaml` (`TexturePackConfig::ToYAML`) when the game has neither config file, and creates `replacements/`;
+  in page mode the name's hash covers only the rect's words, so a lookup takes the page-mode replacements with the
+  key's mode and palette hash and keeps those whose rect's words, hashed now, match; in upload mode it gathers the
+  replacements of every upload in the page by their hashes; both place them with `GetPageRect`.
 
 - [ ] **Step 1: Write the failing tests:** `ADrawFromAnUploadIsDumpedOnceAtTheEndOfTheFrame` (one PNG named by
   `TextureNames::Format`, nothing before `EndFrame`, nothing new on a second frame);
-  `TheDumpsRectIsTheUnionDrawnThatFrame`; `ADrawAcrossTwoUploadsIsNotDumpedInUploadMode`; `PageModeNamesThePage`;
+  `EachRectDrawnIsItsOwnDump`; `APageReplacementIsPlacedOnlyWhereItsRectMatches`; `ADrawAcrossTwoUploadsIsNotDumpedInUploadMode`; `PageModeNamesThePage`;
   `FullPagesDumpTheWholePage`; `SmallTexturesBelowTheThresholdAreNotDumped`; `C16IsDumpedOnlyWhenAsked`;
   `ReplacedTexturesAreDumpedOnlyWhenAsked`; `TheFirstDumpWritesAConfig`; `AnExistingConfigIsNotOverwritten`;
   `ATextureOnUnknownBlocksIsNeitherDumpedNorLookedUp`; `TheReducedRangeNamesTheUsedIndices`;

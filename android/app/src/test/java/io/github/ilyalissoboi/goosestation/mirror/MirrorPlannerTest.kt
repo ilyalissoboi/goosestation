@@ -434,4 +434,36 @@ class MirrorPlannerTest {
             },
         )
     }
+
+    // texture dumps and a first dump's config.yaml
+
+    private val dump =
+        "textures/SLUS-01040/dumps/" +
+            "texupload-P4-B5E04041144CABCE-D7ADDCD353C6521A-64x256-96-192-32x63-P0-15.png"
+    private val config = "textures/SLUS-01040/config.yaml"
+    private val pack = "textures/SLUS-01040/replacements/x.png"
+
+    @Test
+    fun aTexturePackIsNeitherPulledNorPushed() {
+        assertEquals(emptyList<MirrorAction>(), pull(mapOf(pack to s(1)), emptyMap(), none))
+        assertEquals(emptyList<MirrorAction>(), push(emptyMap(), mapOf(pack to s(1)), none))
+    }
+
+    @Test
+    fun aDumpIsPushedAndNeverPulled() {
+        assertEquals(listOf(CopyToFolder(dump)), push(emptyMap(), mapOf(dump to s(1)), none))
+        assertEquals(emptyList<MirrorAction>(), pull(mapOf(dump to s(2)), mapOf(dump to s(1)), none))
+    }
+
+    @Test
+    fun aDumpsConfigIsSentOnceAndNeverPulled() {
+        // None in the folder: sent.
+        assertEquals(listOf(CopyToFolder(config)), push(emptyMap(), mapOf(config to s(1)), none))
+        // The folder has its own (a pack's): never overwritten, whatever happens locally.
+        assertEquals(emptyList<MirrorAction>(), push(mapOf(config to s(5)), mapOf(config to s(1)), none))
+        // Sent before and changed in the folder since: not sent again, not pulled.
+        val sent = Manifest(mapOf(config to entry(1, 1)))
+        assertEquals(emptyList<MirrorAction>(), push(mapOf(config to s(7)), mapOf(config to s(2)), sent))
+        assertEquals(emptyList<MirrorAction>(), pull(mapOf(config to s(7)), mapOf(config to s(1)), sent))
+    }
 }

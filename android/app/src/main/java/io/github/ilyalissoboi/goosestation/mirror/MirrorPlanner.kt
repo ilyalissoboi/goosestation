@@ -43,7 +43,8 @@ data class Forget(
  * folder side won: it is left for a later run.
  *
  * Plans are sorted by path, and hold only the paths the [DataLayout] mirrors: anything else on either side is never
- * pulled, pushed or deleted. A file it sends only ([DataLayout.sentOnly]) is never pulled, and its push wins.
+ * pulled, pushed or deleted. A file it sends only ([DataLayout.sentOnly]) is never pulled, and its push wins. A file
+ * it sends if absent ([DataLayout.sentIfAbsent]) is never pulled, and pushed once, only while the folder has none.
  */
 object MirrorPlanner {
     /** How long a working-copy file must stay unchanged before a push sends it, so a file isn't sent mid-write. */
@@ -62,7 +63,7 @@ object MirrorPlanner {
         deferred: (String) -> Boolean,
     ): List<MirrorAction> =
         paths(folder.keys, manifest.entries.keys, layout).mapNotNull { path ->
-            if (deferred(path) || layout.sentOnly(path)) return@mapNotNull null
+            if (deferred(path) || layout.sentOnly(path) || layout.sentIfAbsent(path)) return@mapNotNull null
             folderWins(path, folder[path], local[path], manifest[path])
         }
 
@@ -89,6 +90,13 @@ object MirrorPlanner {
                 l == m?.local -> null
                 // This device's own, whatever the folder did: sent once settled, never deleted there.
                 layout.sentOnly(path) -> if (l != null && (force || settled(l, nowMs))) CopyToFolder(path) else null
+                // A first dump's config.yaml: out once, and never over the folder's own (a pack's).
+                layout.sentIfAbsent(path) ->
+                    when {
+                        l == null || f != null || m != null -> null
+                        force || settled(l, nowMs) -> CopyToFolder(path)
+                        else -> null
+                    }
                 folderChanged(f, m) -> if (deferred(path)) null else folderWins(path, f, l, m)
                 // Gone locally, so the path came from the manifest, and the folder still holds its file unchanged.
                 l == null -> DeleteFromFolder(path)

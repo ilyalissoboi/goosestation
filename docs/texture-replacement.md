@@ -110,6 +110,11 @@ All ours.
 - A game's config is the pack folder's `config.yaml` (else `config.yml`); only when the pack has none is a local one,
   written by a first dump, read. A first dump writes no config when the pack has one.
 - An unreadable pack folder (a revoked grant, a removed card) gives no replacements, and the game plays.
+- Android's mirror, which keeps the app's copy of the data folder in step, copies nothing under `textures/` but a
+  game's `dumps/` (sent to the data folder, never taken from it) and a first dump's `config.yaml` (sent once, only
+  while the data folder has none, never taken back). It doesn't even list a pack's own folders, so a pack of tens of
+  thousands of files costs a mirror run nothing. Copies of packs an earlier build pulled into the app's storage are
+  dropped from it (never from the data folder). Legacy `vram-write-` dumps in `dump/textures/` are mirrored as before.
 
 ### config.yaml
 

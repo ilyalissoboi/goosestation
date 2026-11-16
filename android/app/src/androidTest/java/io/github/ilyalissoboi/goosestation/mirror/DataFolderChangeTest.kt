@@ -147,6 +147,36 @@ class DataFolderChangeTest {
         assertEquals(setOf("memcards/a.mcd", "notes.txt"), files(TestTrees.directory(context, new)))
     }
 
+    // A pack's own config.yaml in the new folder is never replaced by the one a first dump wrote on this device.
+    @Test
+    fun copyThisDevicesDataKeepsAPacksConfig() {
+        pulledFrom(mapOf("memcards/a.mcd" to CARD_A))
+        local(PACK_CONFIG).apply {
+            parentFile!!.mkdirs()
+            writeBytes(CARD_A)
+        }
+        val new = TestTrees.create(context, mapOf(PACK_CONFIG to CARD_B))
+
+        change(new, DataFolderChoice.CopyThisDevicesData)
+
+        assertArrayEquals(CARD_B, File(TestTrees.directory(context, new), PACK_CONFIG).readBytes())
+    }
+
+    // Without a config of the pack's own in the new folder, a first dump's is copied out.
+    @Test
+    fun copyThisDevicesDataCopiesAFirstDumpsConfigWhereThereIsNone() {
+        pulledFrom(mapOf("memcards/a.mcd" to CARD_A))
+        local(PACK_CONFIG).apply {
+            parentFile!!.mkdirs()
+            writeBytes(CARD_A)
+        }
+        val new = TestTrees.create(context, emptyMap())
+
+        change(new, DataFolderChoice.CopyThisDevicesData)
+
+        assertArrayEquals(CARD_A, File(TestTrees.directory(context, new), PACK_CONFIG).readBytes())
+    }
+
     @Test
     fun useFolderDataTakesOnlyTheLayout() {
         pulledFrom(mapOf("memcards/a.mcd" to CARD_A))
@@ -271,5 +301,6 @@ class DataFolderChangeTest {
         val CARD_A = ByteArray(128) { 0xA1.toByte() }
         val CARD_B = ByteArray(128) { 0xB2.toByte() }
         val INI = "[Main]\nSettingsVersion = 3\n".toByteArray()
+        const val PACK_CONFIG = "textures/SLUS-01040/config.yaml"
     }
 }

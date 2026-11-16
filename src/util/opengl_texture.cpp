@@ -541,8 +541,11 @@ void OpenGLDevice::CommitRTClearInFB(OpenGLTexture* tex, u32 idx)
   {
     case GPUTexture::State::Invalidated:
     {
-      const GLenum attachment = GL_COLOR_ATTACHMENT0 + idx;
-      glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &attachment);
+      if (glInvalidateFramebuffer)
+      {
+        const GLenum attachment = GL_COLOR_ATTACHMENT0 + idx;
+        glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &attachment);
+      }
       tex->SetState(GPUTexture::State::Dirty);
     }
     break;
@@ -579,8 +582,11 @@ void OpenGLDevice::CommitDSClearInFB(OpenGLTexture* tex)
   {
     case GPUTexture::State::Invalidated:
     {
-      const GLenum attachment = GL_DEPTH_ATTACHMENT;
-      glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &attachment);
+      if (glInvalidateFramebuffer)
+      {
+        const GLenum attachment = GL_DEPTH_ATTACHMENT;
+        glInvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 1, &attachment);
+      }
       tex->SetState(GPUTexture::State::Dirty);
     }
     break;

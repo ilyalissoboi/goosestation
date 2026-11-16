@@ -43,6 +43,7 @@ add_executable(common-tests
   ../util/shiftjis.cpp
   string_tests.cpp
   text_input_tests.cpp
+  texture_names_tests.cpp
   ../util/text_input.cpp
 )
 
@@ -68,4 +69,5 @@ target_link_libraries(common-tests PRIVATE core scmversion common rcheevos miniz
 
 # game_database_tests.cpp loads the shipped database from the source tree (and skips where it isn't there).
 target_compile_definitions(common-tests PRIVATE
-  GOOSESTATION_TEST_RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../data/resources")
+  GOOSESTATION_TEST_RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../data/resources"
+  GOOSESTATION_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

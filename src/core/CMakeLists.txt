@@ -122,6 +122,8 @@ add_library(core
   spu.h
   system.cpp
   system.h
+  texture_names.cpp
+  texture_names.h
   texture_replacements.cpp
   texture_replacements.h
   timers.cpp

@@ -88,6 +88,7 @@
     <ClCompile Include="sio.cpp" />
     <ClCompile Include="spu.cpp" />
     <ClCompile Include="system.cpp" />
+    <ClCompile Include="texture_names.cpp" />
     <ClCompile Include="texture_replacements.cpp" />
     <ClCompile Include="timers.cpp" />
     <ClCompile Include="timing_event.cpp" />
@@ -175,6 +176,7 @@
     <ClInclude Include="sio.h" />
     <ClInclude Include="spu.h" />
     <ClInclude Include="system.h" />
+    <ClInclude Include="texture_names.h" />
     <ClInclude Include="texture_replacements.h" />
     <ClInclude Include="timers.h" />
     <ClInclude Include="timing_event.h" />

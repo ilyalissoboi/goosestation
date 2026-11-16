@@ -13,11 +13,6 @@ namespace TextureReplacements {
 
 using ReplacementImage = RGBA8Image;
 
-enum class ReplacmentType
-{
-  VRAMWrite,
-};
-
 void SetGameID(std::string game_id);
 
 void Reload();

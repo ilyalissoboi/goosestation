@@ -3,6 +3,7 @@
 
 #include "texture_replacements.h"
 #include "gpu_types.h"
+#include "texture_names.h"
 #include "host.h"
 #include "settings.h"
 
@@ -34,9 +35,6 @@ struct VRAMReplacementHash
   u64 low;
   u64 high;
 
-  TinyString ToString() const;
-  bool ParseString(std::string_view sv);
-
   bool operator<(const VRAMReplacementHash& rhs) const { return std::tie(low, high) < std::tie(rhs.low, rhs.high); }
   bool operator==(const VRAMReplacementHash& rhs) const { return low == rhs.low && high == rhs.high; }
   bool operator!=(const VRAMReplacementHash& rhs) const { return low != rhs.low || high != rhs.high; }
@@ -50,9 +48,6 @@ struct VRAMReplacementHashMapHash
 
 using VRAMWriteReplacementMap = std::unordered_map<VRAMReplacementHash, std::string, VRAMReplacementHashMapHash>;
 using TextureCache = std::unordered_map<std::string, ReplacementImage>;
-
-static bool ParseReplacementFilename(const std::string& filename, VRAMReplacementHash* replacement_hash,
-                                     ReplacmentType* replacement_type);
 
 static std::string GetSourceDirectory();
 static std::string GetDumpDirectory();
@@ -79,26 +74,6 @@ size_t TextureReplacements::VRAMReplacementHashMapHash::operator()(const VRAMRep
   size_t hash_hash = std::hash<u64>{}(hash.low);
   hash_combine(hash_hash, hash.high);
   return hash_hash;
-}
-
-TinyString TextureReplacements::VRAMReplacementHash::ToString() const
-{
-  return TinyString::from_format("{:08X}{:08X}", high, low);
-}
-
-bool TextureReplacements::VRAMReplacementHash::ParseString(std::string_view sv)
-{
-  if (sv.length() != 32)
-    return false;
-
-  std::optional<u64> high_value = StringUtil::FromChars<u64>(sv.substr(0, 16), 16);
-  std::optional<u64> low_value = StringUtil::FromChars<u64>(sv.substr(16), 16);
-  if (!high_value.has_value() || !low_value.has_value())
-    return false;
-
-  low = low_value.value();
-  high = high_value.value();
-  return true;
 }
 
 void TextureReplacements::SetGameID(std::string game_id)
@@ -188,7 +163,11 @@ std::string TextureReplacements::GetVRAMWriteDumpFilename(u32 width, u32 height,
 
   const VRAMReplacementHash hash = GetVRAMWriteHash(width, height, pixels);
   const std::string dump_directory(GetDumpDirectory());
-  std::string filename(Path::Combine(dump_directory, fmt::format("vram-write-{}.png", hash.ToString())));
+  TextureNames::Name name = {};
+  name.kind = TextureNames::Kind::VRAMWrite;
+  name.texture_hash = hash.low;
+  name.texture_hash_high = hash.high;
+  std::string filename(Path::Combine(dump_directory, fmt::format("{}.png", TextureNames::Format(name))));
 
   if (FileSystem::FileExists(filename.c_str()))
     return {};
@@ -228,32 +207,6 @@ void TextureReplacements::PurgeUnreferencedTexturesFromCache()
   }
 }
 
-bool TextureReplacements::ParseReplacementFilename(const std::string& filename, VRAMReplacementHash* replacement_hash,
-                                                   ReplacmentType* replacement_type)
-{
-  const std::string_view file_title = Path::GetFileTitle(filename);
-  if (!file_title.starts_with("vram-write-"))
-    return false;
-
-  const std::string_view hashpart = file_title.substr(11);
-  if (!replacement_hash->ParseString(hashpart))
-    return false;
-
-  const std::string_view file_extension = Path::GetExtension(filename);
-  bool valid_extension = false;
-  for (const char* test_extension : {"png", "jpg", "webp"})
-  {
-    if (StringUtil::EqualNoCase(file_extension, test_extension))
-    {
-      valid_extension = true;
-      break;
-    }
-  }
-
-  *replacement_type = ReplacmentType::VRAMWrite;
-  return valid_extension;
-}
-
 void TextureReplacements::FindTextures(const std::string& dir)
 {
   FileSystem::FindResultsArray files;
@@ -264,26 +217,22 @@ void TextureReplacements::FindTextures(const std::string& dir)
     if (fd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY)
       continue;
 
-    VRAMReplacementHash hash;
-    ReplacmentType type;
-    if (!ParseReplacementFilename(fd.FileName, &hash, &type))
+    if (!TextureNames::IsImageExtension(Path::GetExtension(fd.FileName)))
       continue;
 
-    switch (type)
-    {
-      case ReplacmentType::VRAMWrite:
-      {
-        auto it = s_vram_write_replacements.find(hash);
-        if (it != s_vram_write_replacements.end())
-        {
-          WARNING_LOG("Duplicate VRAM write replacement: '{}' and '{}'", it->second, fd.FileName);
-          continue;
-        }
+    const std::optional<TextureNames::Name> name = TextureNames::Parse(Path::GetFileTitle(fd.FileName));
+    if (!name.has_value() || name->kind != TextureNames::Kind::VRAMWrite)
+      continue;
 
-        s_vram_write_replacements.emplace(hash, std::move(fd.FileName));
-      }
-      break;
+    const VRAMReplacementHash hash = {name->texture_hash, name->texture_hash_high};
+    auto it = s_vram_write_replacements.find(hash);
+    if (it != s_vram_write_replacements.end())
+    {
+      WARNING_LOG("Duplicate VRAM write replacement: '{}' and '{}'", it->second, fd.FileName);
+      continue;
     }
+
+    s_vram_write_replacements.emplace(hash, std::move(fd.FileName));
   }
 
   INFO_LOG("Found {} replacement VRAM writes for '{}'", s_vram_write_replacements.size(), s_game_id);

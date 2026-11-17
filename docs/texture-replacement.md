@@ -137,8 +137,8 @@ outside the repository.
 - A page with replacements is drawn at one whole-number scale: the largest, over its replacements and both axes, of
   the image's size over the rect's, rounded up, and no more than the GPU's largest texture allows for 256 texels
   (ours, after the published "a page mixing scales is drawn at the largest").
-- In the page as drawn, texels without a replacement keep their own colour, a `0x0000` texel stays transparent and
-  bit 15 stays the semi-transparency bit (ours).
+- Texels without a replacement are read from VRAM as by any draw, so a `0x0000` texel stays transparent and bit 15
+  stays the semi-transparency bit (ours).
 
 ### Tracking VRAM
 
@@ -215,11 +215,16 @@ All ours.
 
 All ours.
 
-- A page with replacements is drawn into a texture of its own: the page decoded at 1× and stretched to the page's
-  scale, then each replacement image drawn over its rect, with linear filtering if `ReplacementScaleLinearFilter` is
-  on, else nearest. Draws of that page, mode, palette and semi-transparency then sample this texture instead of VRAM.
-- Such draws read the texture at the draw's own texture coordinates, with the texture window applied to the texel and
-  the part within the texel kept, so a 4× replacement shows its own detail at 4× resolution.
+- A page with replacements is drawn into a texture of its own that holds only the replacements: cleared, then each
+  replacement image drawn over its rect at the page's scale, with linear filtering if `ReplacementScaleLinearFilter`
+  is on, else nearest. Its alpha marks what covers each texel: 0 nothing, 85 a transparent replacement pixel, 170 a
+  semi-transparent one, 255 an opaque one.
+- Draws of that page, mode, palette and semi-transparency read this texture where a replacement covers the texel, and
+  VRAM everywhere else, exactly as they would without replacements (the same texel, palette lookup and UV clamp).
+  What the GPU rendered into the page therefore shows as it is, and texels outside the replacements are the GPU's
+  own. They read the texture at the draw's own texture coordinates, with the texture window applied to the texel and
+  the part within the texel kept, so a 4× replacement shows its own detail at 4× resolution; nearest, as filtering
+  would blur the coverage into its neighbours.
 - A replacement pixel with alpha 0 is transparent; alpha below 255 sets the texel's semi-transparency bit (the
   published rule, "alpha below 255 means semi-transparent"); 255 is opaque. Opaque black stays opaque.
 - The texture filtering enhancement (bilinear, JINC2, xBR) doesn't apply to these draws; the replacement already is
@@ -228,21 +233,23 @@ All ours.
   within `MaxHashCacheVRAMUsageMB` (the least recently used dropped first); a page that can't be created isn't tried
   again until what it shows changes. A page's scale is lowered until it takes at most a quarter of that budget. They
   are dropped whenever replacements reload.
-- Replaced draws pick the same texel as other draws (rounding at 1× or with forced rounding, as the renderer does,
-  and never for sprites, which have pipelines of their own) and the position within it: a pack of our own dumps at 1× draws frames byte-identical to the cache off, at 1× and at 4×, on Metal and
-  Vulkan (39 textures placed over Vagrant Story's opening).
-- Checked the same way on Windows (RTX 4090), on D3D11, D3D12, Vulkan and OpenGL: with no pack frames are identical
-  to the cache off; the marked pack changes the same 17 of 40 frames as on the Mac, and its crop-and-alias frame is
-  byte-identical to Metal's on all four. With the 1× pack of our own dumps, frames differ from the cache off by at
-  most 2 of 255 in a few hundred pixels inside replaced pages, on all four alike: the page as drawn is decoded on the
-  CPU, rounding 5-bit colours to 8 bits exactly, while D3D and Vulkan allow a GPU to convert within 0.6 of a step,
-  which this one does. Apple's GPU rounds exactly, so the Mac matches byte for byte. VRAM uploads now convert
-  exactly on every GPU (below); the Windows check is to be repeated with that.
+- Each real mode has replaced pipelines of its own (4-bit, 8-bit and direct, each with a sprite twin), compiled only
+  with the cache on: 13 texture modes with sprite shaders (7 with the cache off, 9 before this change), 7 without
+  (4 and 5).
 - VRAM uploads turn each 5-bit colour into `(c × 255 + 15) / 31` in integers and write that over 255, which every
   GPU stores exactly, instead of `c / 31`, which a GPU may store one step off. Fills already did. Frames on the Mac,
-  whose GPU rounded exactly before, are byte-identical before and after (Metal, Vulkan, OpenGL; 1× and 4×) (ours).
-- Not handled yet: texels of a replaced page that the GPU rendered into come from the cache's copy of VRAM, which
-  doesn't have them. Only a draw with the same page, mode and palette sampling that rendered area would show it.
+  whose GPU rounded exactly before, are byte-identical before and after (Metal, Vulkan, OpenGL; 1× and 4×).
+- Replaced draws pick the same texel as other draws (rounding at 1× or with forced rounding, as the renderer does,
+  and never for sprites, which have pipelines of their own) and the position within it. Checked 2026-11-17 over
+  Vagrant Story's opening (12,000 frames, frames and VRAM every 300) with packs of our own 1× dumps: the upload-mode
+  dumps (39), the same cut to their top halves (so draws sample covered and uncovered texels), 160 page-mode dumps
+  and 18 direct-colour (`C16`) page dumps: frames and VRAM byte-identical to the cache off at 1× and 4× on Metal,
+  Vulkan (MoltenVK) and OpenGL. The marked pack draws the same frames as before this change; a marked `C16` pack
+  shows its marks where the title menu's direct-colour texture is drawn, at 4×.
+- Windows (D3D11, D3D12, Vulkan, OpenGL) and Android (OpenGL ES, Vulkan): to be checked the same way.
+- Not seen yet: a scene where a replaced page's GPU-rendered texels reach the screen. Vagrant Story's opening and the
+  three save states at hand have replaced pages with rendered blocks, but no frame or VRAM dump differs even with
+  the cache's copy of those blocks overwritten, so no draw there samples them.
 - Checked by hand (stage 1, 2026-11-16) on Metal, with a pack made from our own dumps of Vagrant Story's opening at
   4× with a marked border: the marks appear where those textures are drawn on Metal, Vulkan (MoltenVK) and OpenGL
   (identical frames), a name with a smaller rect replaces only that rect, an alias draws its file, rewritten dialogue
@@ -283,3 +290,9 @@ The differences with no pack are one step of the measurement's 0.01 ms resolutio
 replacements, so that case costs nothing (0.30 and 0.31 ms medians, within the resolution). With our marked pack on
 D3D11: 0.36 ms (+20%). With a pack (218 of our own dumps
 at 4×, crops and an alias) on Metal at 1×: 0.39 ms against 0.34 ms off (+15%).
+
+With replaced pages drawn over live VRAM (2026-11-17, same machine and stretch, three runs each, no frame dumps): our
+39 upload-mode dumps at 1× cost 0.36 ms a frame against 0.34 ms with the cache off on Metal at 1× (+6%), 0.39 against
+0.37 ms at 4× (+5%). The replaced pipelines (above) are compiled at start when the cache is on: on Metal, with the
+driver's own shader cache warm, 1.7 s against 0.8 s with the cache off (1.1 s with the cache on before this change);
+the first start after the shaders changed took 12 s, the driver compiling every new shader once.

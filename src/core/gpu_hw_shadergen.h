@@ -17,9 +17,11 @@ public:
 
   std::string GenerateBatchVertexShader(bool textured, bool palette, bool uv_limits, bool force_round_texcoords,
                                         bool pgxp_depth);
+  /// texture_mode is a base mode (palette or direct); replaced adds the lookup into the composed page at samp1.
   std::string GenerateBatchFragmentShader(GPU_HW::BatchRenderMode render_mode, GPUTransparencyMode transparency,
-                                          GPU_HW::BatchTextureMode texture_mode, GPUTextureFilter texture_filtering,
-                                          bool uv_limits, bool force_round_texcoords, bool dithering, bool interlacing,
+                                          GPU_HW::BatchTextureMode texture_mode, bool replaced,
+                                          GPUTextureFilter texture_filtering, bool uv_limits,
+                                          bool force_round_texcoords, bool dithering, bool interlacing,
                                           bool check_mask, bool use_rov, bool use_rov_depth, bool rov_depth_test);
   std::string GenerateWireframeGeometryShader();
   std::string GenerateWireframeFragmentShader();
@@ -29,6 +31,7 @@ public:
   std::string GenerateVRAMFillFragmentShader(bool wrapped, bool interlaced);
   std::string GenerateVRAMUpdateDepthFragmentShader();
   std::string GenerateVRAMExtractFragmentShader(bool color_24bit, bool depth_buffer);
+  std::string GenerateReplacementComposeFragmentShader();
 
   std::string GenerateAdaptiveDownsampleVertexShader();
   std::string GenerateAdaptiveDownsampleMipFragmentShader(bool first_pass);

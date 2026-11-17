@@ -700,19 +700,17 @@ void FilteredSampleFromVRAM(TEXPAGE_VALUE texpage, float2 coords, float4 uv_limi
 
 std::string GPU_HW_ShaderGen::GenerateBatchFragmentShader(
   GPU_HW::BatchRenderMode render_mode, GPUTransparencyMode transparency, GPU_HW::BatchTextureMode texture_mode,
-  GPUTextureFilter texture_filtering, bool uv_limits, bool force_round_texcoords, bool dithering, bool interlacing,
-  bool check_mask, bool use_rov, bool use_rov_depth, bool rov_depth_test)
+  bool replaced, GPUTextureFilter texture_filtering, bool uv_limits, bool force_round_texcoords, bool dithering,
+  bool interlacing, bool check_mask, bool use_rov, bool use_rov_depth, bool rov_depth_test)
 {
   // TODO: don't write depth for shader blend
   DebugAssert(transparency == GPUTransparencyMode::Disabled || render_mode == GPU_HW::BatchRenderMode::ShaderBlend);
   DebugAssert(!rov_depth_test || (use_rov && use_rov_depth));
+  DebugAssert(!replaced || texture_mode != GPU_HW::BatchTextureMode::Disabled);
 
   const bool textured = (texture_mode != GPU_HW::BatchTextureMode::Disabled);
-  const bool replaced = (texture_mode == GPU_HW::BatchTextureMode::Replaced);
-
-  // Replaced textures use the palette modes' interface (texture coordinates in page texels), not their sampling.
   const bool palette = (texture_mode == GPU_HW::BatchTextureMode::Palette4Bit ||
-                        texture_mode == GPU_HW::BatchTextureMode::Palette8Bit || replaced);
+                        texture_mode == GPU_HW::BatchTextureMode::Palette8Bit);
   if (replaced)
     texture_filtering = GPUTextureFilter::Nearest;
   const bool shader_blending = (render_mode == GPU_HW::BatchRenderMode::ShaderBlend);
@@ -753,6 +751,8 @@ std::string GPU_HW_ShaderGen::GenerateBatchFragmentShader(
   WriteCommonFunctions(ss);
   WriteBatchUniformBuffer(ss);
   DeclareTexture(ss, "samp0", 0);
+  if (replaced)
+    DeclareTexture(ss, "samp1", 1);
 
   if (use_rov)
   {
@@ -818,25 +818,7 @@ uint2 FloatToIntegerCoords(float2 coords)
 
 float4 SampleFromVRAM(TEXPAGE_VALUE texpage, float2 coords)
 {
-  #if REPLACED
-    // samp0 is the page drawn with its replacements, 256 texels square at any scale. Its alpha is 0 for a
-    // transparent texel, below 1 for a semi-transparent one, 1 otherwise; turn that into the VRAM texel's form.
-    // The texel the other modes would take, and where in it the coordinate falls.
-    uint2 icoords = FloatToIntegerCoords(coords);
-    float2 sub = (RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ?
-                   clamp(coords - float2(icoords) + 0.5, float2(0.0, 0.0), float2(0.999, 0.999)) :
-                   (coords - float2(icoords));
-    float2 pcoords = (float2(ApplyTextureWindow(icoords)) + sub) * (1.0 / 256.0);
-    float4 texel = SAMPLE_TEXTURE_LEVEL(samp0, pcoords, 0.0);
-    if (texel.a <= (0.5 / 255.0))
-      return TRANSPARENT_PIXEL_COLOR;
-
-    float4 result = float4(texel.rgb, (texel.a < (254.5 / 255.0)) ? 1.0 : 0.0);
-    // Opaque black must not read as transparent; this is below what an 8-bit output keeps.
-    if (VECTOR_EQ(result, TRANSPARENT_PIXEL_COLOR))
-      result.r = 1.0 / 512.0;
-    return result;
-  #elif PALETTE
+  #if PALETTE
     uint2 icoord = ApplyTextureWindow(FloatToIntegerCoords(coords));
 
     uint2 vicoord;
@@ -886,6 +868,41 @@ float4 SampleFromVRAM(TEXPAGE_VALUE texpage, float2 coords)
     return LOAD_TEXTURE(samp0, int2(vicoord), 0);
   #endif
 }
+
+#if REPLACED
+// samp1 is the page drawn with its replacements, 256 texels square at any scale. Its alpha says what covers a texel:
+// 0 nothing (the texel comes from VRAM, as for any draw), 85 a transparent replacement pixel, 170 a semi-transparent
+// one, 255 an opaque one. Covered texels are returned in the VRAM texel's form.
+bool SampleReplacement(float2 coords, out float4 result)
+{
+  result = TRANSPARENT_PIXEL_COLOR;
+
+  // The texel the base mode takes, and where in it the coordinate falls.
+  #if PALETTE || !UPSCALED
+    uint2 icoords = FloatToIntegerCoords(coords);
+    float2 sub = (RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ?
+                   clamp(coords - float2(icoords) + 0.5, float2(0.0, 0.0), float2(0.999, 0.999)) :
+                   (coords - float2(icoords));
+  #else
+    // Upscaled direct coordinates: the direct path floors them in page texels.
+    float2 ncoords = coords / float(RESOLUTION_SCALE);
+    uint2 icoords = uint2(floor(ncoords));
+    float2 sub = frac(ncoords);
+  #endif
+
+  float4 texel = SAMPLE_TEXTURE_LEVEL(samp1, (float2(ApplyTextureWindow(icoords)) + sub) * (1.0 / 256.0), 0.0);
+  if (texel.a < (42.5 / 255.0))
+    return false;
+  if (texel.a < (127.5 / 255.0))
+    return true;
+
+  result = float4(texel.rgb, (texel.a < (212.5 / 255.0)) ? 1.0 : 0.0);
+  // Opaque black must not read as transparent; this is below what an 8-bit output keeps.
+  if (VECTOR_EQ(result, TRANSPARENT_PIXEL_COLOR))
+    result.r = 1.0 / 512.0;
+  return true;
+}
+#endif
 
 #endif
 
@@ -961,9 +978,20 @@ float3 ApplyDebanding(float2 frag_coord)
         discard;
     #else
       #if UV_LIMITS && REPLACED
-        // The last texel's whole area, not only its start: replacements have detail within it.
-        texcol = SampleFromVRAM(v_texpage, clamp(v_tex0, v_uv_limits.xy,
-          v_uv_limits.zw + ((RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ? 0.499 : 0.999)));
+        // VRAM takes the clamp other draws take; replacements the last texel's whole area, as they have detail
+        // within it (direct coordinates are upscaled and their limits already cover the texel).
+        float2 vcoords = clamp(v_tex0, v_uv_limits.xy, v_uv_limits.zw);
+        #if PALETTE
+          float2 rcoords = clamp(v_tex0, v_uv_limits.xy,
+            v_uv_limits.zw + ((RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ? 0.499 : 0.999));
+        #else
+          float2 rcoords = vcoords;
+        #endif
+        if (!SampleReplacement(rcoords, texcol))
+          texcol = SampleFromVRAM(v_texpage, vcoords);
+      #elif REPLACED
+        if (!SampleReplacement(v_tex0, texcol))
+          texcol = SampleFromVRAM(v_texpage, v_tex0);
       #elif UV_LIMITS
         texcol = SampleFromVRAM(v_texpage, clamp(v_tex0, v_uv_limits.xy, v_uv_limits.zw));
       #else
@@ -1596,6 +1624,27 @@ std::string GPU_HW_ShaderGen::GenerateVRAMUpdateDepthFragmentShader()
 void GPU_HW_ShaderGen::WriteAdaptiveDownsampleUniformBuffer(std::stringstream& ss)
 {
   DeclareUniformBuffer(ss, {"float2 u_uv_min", "float2 u_uv_max", "float2 u_rcp_resolution", "float u_lod"}, true);
+}
+
+std::string GPU_HW_ShaderGen::GenerateReplacementComposeFragmentShader()
+{
+  // A replacement drawn into a composed page: its colour, and its alpha as the coverage marker the replaced batch
+  // shaders read (0 is left for texels no replacement covers): transparent 85, semi-transparent 170, opaque 255.
+  std::stringstream ss;
+  WriteHeader(ss);
+  DeclareUniformBuffer(ss, {"float4 u_src_rect"}, true);
+  DeclareTexture(ss, "samp0", 0);
+  DeclareFragmentEntryPoint(ss, 0, 1);
+
+  ss << R"(
+{
+  float4 texel = SAMPLE_TEXTURE(samp0, u_src_rect.xy + v_tex0 * u_src_rect.zw);
+  float marker = (texel.a <= (0.5 / 255.0)) ? (85.0 / 255.0) : ((texel.a < (254.5 / 255.0)) ? (170.0 / 255.0) : 1.0);
+  o_col0 = float4(texel.rgb, marker);
+}
+)";
+
+  return ss.str();
 }
 
 std::string GPU_HW_ShaderGen::GenerateAdaptiveDownsampleVertexShader()

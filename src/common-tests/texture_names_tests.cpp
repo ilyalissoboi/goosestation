@@ -3,6 +3,8 @@
 
 #include "core/texture_names.h"
 
+#include "test_data_dir.h"
+
 #include "common/file_system.h"
 #include "common/path.h"
 #include "common/string_util.h"
@@ -63,9 +65,10 @@ TEST(TextureNames, ParsesAPageNameWithoutAPalette)
 
 TEST(TextureNames, EveryFontPackNameRoundTrips)
 {
-  const std::optional<std::string> list =
-    FileSystem::ReadFileToString(Path::Combine(GOOSESTATION_TEST_DATA_DIR, "texture-names/vs-font-pack.txt").c_str());
-  ASSERT_TRUE(list.has_value());
+  const std::string path = Path::Combine(GetTestDataDir(), "texture-names/vs-font-pack.txt");
+  const std::optional<std::string> list = FileSystem::ReadFileToString(path.c_str());
+  if (!list.has_value())
+    GTEST_SKIP() << "No test data at " << path;
 
   u32 count = 0;
   for (const std::string_view line : StringUtil::SplitString(list.value(), '\n'))

@@ -62,6 +62,17 @@ private:
 /// none, or if it fails to load (logged).
 TexturePackConfig LoadGameConfig(const std::string& game_dir, const TexturePackConfig& base);
 
+/// The pack's config (pack_dir), else one a first dump wrote locally (local_dir), over the global settings.
+TexturePackConfig LoadGameConfig(const std::string& pack_dir, const std::string& local_dir,
+                                 const TexturePackConfig& base);
+
+/// Whether a game folder has a config.yaml or config.yml.
+bool HasGameConfig(const std::string& game_dir);
+
+/// Where packs are read: <data folder>/textures through content:// on Android; empty (the default) means
+/// EmuFolders::Textures. Takes effect on the next Reload().
+void SetPackFolder(std::string folder);
+
 void SetGameID(std::string game_id);
 
 void Reload();
@@ -69,8 +80,10 @@ void Reload();
 /// Changes with every Reload (a new game, settings, or the reload hotkey).
 u32 GetReloadCount();
 
-/// The running game's folder, textures/<serial>, and its dump folder, textures/<serial>/dumps (empty with no game).
+/// The running game's pack folder, <pack folder>/<serial> (read); its local folder, EmuFolders::Textures/<serial>
+/// (written: dumps, a first dump's config); and its dump folder, <local folder>/dumps. Empty with no game.
 std::string GetGameDirectory();
+std::string GetLocalGameDirectory();
 std::string GetTextureDumpDirectory();
 
 /// The running game's settings (its config.yaml over the global ones) and replacements.

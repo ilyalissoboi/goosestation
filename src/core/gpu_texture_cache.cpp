@@ -383,14 +383,15 @@ void GPUTextureCache::SetIndex(const TextureReplacements::ReplacementIndex* inde
   m_lookups.clear();
 }
 
-void GPUTextureCache::SetDumping(std::string dump_dir, std::string game_dir, bool dump_replaced_textures,
-                                 bool force_alpha)
+void GPUTextureCache::SetDumping(std::string dump_dir, std::string game_dir, bool write_config,
+                                 bool dump_replaced_textures, bool force_alpha)
 {
   if (!m_dump_dir.empty())
     FlushDumps();
 
   m_dump_dir = std::move(dump_dir);
   m_game_dir = std::move(game_dir);
+  m_write_config = write_config;
   m_dump_replaced_textures = dump_replaced_textures;
   m_dump_force_alpha = force_alpha;
   m_dumped.clear();
@@ -695,7 +696,7 @@ void GPUTextureCache::WriteDumps()
   {
     FileSystem::EnsureDirectoryExists(Path::Combine(m_game_dir, "replacements").c_str(), false);
     const std::string yaml = Path::Combine(m_game_dir, "config.yaml");
-    if (!FileSystem::FileExists(yaml.c_str()) &&
+    if (m_write_config && !FileSystem::FileExists(yaml.c_str()) &&
         !FileSystem::FileExists(Path::Combine(m_game_dir, "config.yml").c_str()))
     {
       FileSystem::WriteStringToFile(yaml.c_str(), TexturePackConfig::GetTemplateYAML());

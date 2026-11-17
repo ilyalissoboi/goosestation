@@ -302,6 +302,14 @@ TEST(AndroidDiscGroups, FindStateDiscByFileName)
   EXPECT_EQ(FindStateDisc(TwoDiscs(false), "", "/home/a/FF7 (Disc 2).CHD", 0), 2u);
 }
 
+TEST(AndroidDiscGroups, FindStateDiscFromWindows)
+{
+  // A state made on desktop names a Windows path, which never opens here.
+  EXPECT_EQ(FindStateDisc(TwoDiscs(false), "SCUS-94164", "F:\\Games\\PSX\\Final Fantasy VII (Disc 2).chd", 0), 2u);
+  EXPECT_EQ(FindStateDisc(TwoDiscs(false), "", "F:\\Games\\PSX\\FF7 (Disc 2).chd", 0), 2u);
+  EXPECT_FALSE(FindStateDisc(TwoDiscs(false), "SLUS-01040", "F:\\Games\\PSX\\Vagrant Story (USA).chd", 0).has_value());
+}
+
 TEST(AndroidDiscGroups, FindStateDiscNone)
 {
   EXPECT_FALSE(FindStateDisc(TwoDiscs(false), "SLUS-00001", "/home/a/other.chd", 0).has_value());

@@ -34,8 +34,14 @@ struct TexturePackConfig
   u32 vram_write_dump_height_threshold = 128;
 
   u32 max_hash_cache_entries = 1200;
+#ifdef __ANDROID__
+  // Phones and handhelds have far less memory than the desktops the published defaults suit: ours, smaller.
+  u32 max_hash_cache_vram_usage_mb = 512;
+  u32 max_replacement_cache_vram_usage_mb = 256;
+#else
   u32 max_hash_cache_vram_usage_mb = 2048;
   u32 max_replacement_cache_vram_usage_mb = 512;
+#endif
 
   /// A texture name (no extension) and the file it uses instead, in file order. config.yaml only.
   std::vector<std::pair<std::string, std::string>> aliases;

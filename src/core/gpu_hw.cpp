@@ -1268,10 +1268,11 @@ bool GPU_HW::CompilePipelines(Error* error)
             {
               for (u8 interlacing = 0; interlacing < 2; interlacing++)
               {
-                const bool sprite = IsSpriteTextureMode(static_cast<BatchTextureMode>(texture_mode));
-                const bool replaced = IsReplacedTextureMode(static_cast<BatchTextureMode>(texture_mode));
+                const BatchTextureMode batch_mode = static_cast<BatchTextureMode>(texture_mode);
+                const bool sprite = IsSpriteTextureMode(batch_mode);
+                const bool replaced = IsReplacedTextureMode(batch_mode);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
-                const BatchTextureMode shader_texmode = GetBaseTextureMode(static_cast<BatchTextureMode>(texture_mode));
+                const BatchTextureMode shader_texmode = GetBaseTextureMode(batch_mode);
                 const bool use_rov =
                   (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend) && m_use_rov_for_shader_blend);
                 const std::string fs = shadergen.GenerateBatchFragmentShader(
@@ -1361,12 +1362,13 @@ bool GPU_HW::CompilePipelines(Error* error)
             {
               for (u8 check_mask = 0; check_mask < 2; check_mask++)
               {
-                const BatchTextureMode base_mode = GetBaseTextureMode(static_cast<BatchTextureMode>(texture_mode));
+                const BatchTextureMode batch_mode = static_cast<BatchTextureMode>(texture_mode);
+                const BatchTextureMode base_mode = GetBaseTextureMode(batch_mode);
                 const bool textured = (base_mode != BatchTextureMode::Disabled);
-                const bool replaced = IsReplacedTextureMode(static_cast<BatchTextureMode>(texture_mode));
+                const bool replaced = IsReplacedTextureMode(batch_mode);
                 const bool palette =
                   (base_mode == BatchTextureMode::Palette4Bit || base_mode == BatchTextureMode::Palette8Bit);
-                const bool sprite = IsSpriteTextureMode(static_cast<BatchTextureMode>(texture_mode));
+                const bool sprite = IsSpriteTextureMode(batch_mode);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
                 const bool use_shader_blending = (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend));
                 const bool use_rov = (use_shader_blending && m_use_rov_for_shader_blend);

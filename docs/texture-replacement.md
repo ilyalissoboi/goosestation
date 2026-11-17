@@ -292,8 +292,15 @@ All ours.
   the cache off there too: by 1 of 255 on the display, and by one 5-bit step in a few hundred VRAM pixels the GPU drew
   from slightly different texels. With D3D11's and D3D12's debug layers on, both packs run to the end; Vulkan's
   validation layers aren't installed on either machine.
-- Android (OpenGL ES, Vulkan): not checked yet. The regression test runner doesn't build for Android (the app
-  provides some of the core's host functions).
+- The same holds with PGXP on (which clamps texture coordinates, so the replaced shaders' clamped variant runs), on
+  the Mac's three renderers and Windows' four at 1× and 4×; with forced rounding, true colour off, 4× MSAA and the
+  PGXP depth buffer on Metal and Vulkan at 4×; and with ROV blending (accurate blending, true colour off) on Windows'
+  Vulkan, after a fix to how Vulkan binds the sets around a pushed texture set (without it, 30 of 80 frames differed
+  there). With sprite texture filtering on, replaced sprites draw unfiltered, as above, so frames differ from the
+  cache off.
+- Android: stage 2's `TextureCacheTest` passes on the emulators on Vulkan and OpenGL ES (3 of 3 each, the font pack
+  drawing in the menu). Byte-for-byte checks there need the regression test runner, which doesn't build for Android
+  (the app provides some of the core's host functions).
 - Not seen yet: a scene where a replaced page's GPU-rendered texels reach the screen. Vagrant Story's opening and the
   three save states at hand have replaced pages with rendered blocks, but no frame or VRAM dump differs even with
   the cache's copy of those blocks overwritten, so no draw there samples them.

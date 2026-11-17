@@ -28,20 +28,26 @@ class DataLayout private constructor(
     private val packFiles: Set<String> = emptySet(),
 ) {
     /** Whether the file at [path] is mirrored. */
-    fun mirrored(path: String) = inLayout(path) && !kept(path) && !packed(path)
+    fun mirrored(path: String) = inLayout(path) && !kept(path) && !packed(path) && !texturePack(path)
 
     /**
      * Whether the mirrored file at [path] is only ever sent to the data folder, never taken from it: the core's logs,
      * this device's own, which desktop sharing the folder (and settings.ini's Log to file) writes under the same name,
      * and which the core holds open while it runs.
      */
-    fun sentOnly(path: String) = (path == LOG || path == PREVIOUS_LOG) && mirrored(path)
+    fun sentOnly(path: String) = (path == LOG || path == PREVIOUS_LOG || isTextureDump(path)) && mirrored(path)
+
+    /**
+     * Whether the mirrored file at [path] is sent to the data folder only if the folder has none, once, and never
+     * taken from it: the `config.yaml` a game's first texture dump writes, which must never replace a pack's own.
+     */
+    fun sentIfAbsent(path: String) = isTextureConfig(path) && mirrored(path)
 
     /**
      * Whether the working-copy file at [path] is neither mirrored nor the core's: an earlier build copied it in from
      * the data folder, which keeps its own copy.
      */
-    fun stray(path: String) = (!inLayout(path) || packed(path)) && !kept(path)
+    fun stray(path: String) = (!inLayout(path) || packed(path) || texturePack(path)) && !kept(path)
 
     /**
      * This layout, keeping a desktop's shader packs out of the mirror: every file in [markers] (the data folder's
@@ -56,11 +62,37 @@ class DataLayout private constructor(
     private fun packed(path: String) = (packMarkers != null && path.startsWith(packMarkers)) || path in packFiles
 
     /**
+     * Texture packs are read from the data folder in place, never copied: under `textures/`, only a game's `dumps/`
+     * and its first dump's `config.yaml` are mirrored (both written on the device).
+     */
+    private fun texturePack(path: String) = path.startsWith(TEXTURES) && !isTextureDump(path) && !isTextureConfig(path)
+
+    private fun isTextureDump(path: String): Boolean {
+        val game = textureGame(path) ?: return false
+        return path.startsWith("$TEXTURES$game/$DUMPS")
+    }
+
+    private fun isTextureConfig(path: String) = textureGame(path)?.let { path == "$TEXTURES$it/$CONFIG" } ?: false
+
+    /** The game folder of a path under `textures/`, or null. */
+    private fun textureGame(path: String): String? {
+        if (!path.startsWith(TEXTURES)) return null
+        val rest = path.substring(TEXTURES.length)
+        val slash = rest.indexOf('/')
+        return if (slash > 0) rest.substring(0, slash) else null
+    }
+
+    /**
      * Whether a listing goes into [folder] (no trailing `/`): it's in a layout folder, or holds one, or a layout file.
      */
     fun walks(folder: String): Boolean {
         val prefix = "$folder/"
         if (caches.any { prefix.startsWith(it) }) return false
+        // Under textures/, only a game's folder and its dumps: a pack's own folders aren't listed.
+        if (prefix.startsWith(TEXTURES)) {
+            val depth = prefix.substring(TEXTURES.length).count { it == '/' }
+            if (depth > 1 && !isTextureDump(prefix)) return false
+        }
         return folders.any { it.isNotEmpty() && (prefix.startsWith(it) || it.startsWith(prefix)) } ||
             files.any { it.startsWith(prefix) }
     }
@@ -109,6 +141,9 @@ class DataLayout private constructor(
         private const val BACKUP = ".goosebak"
         private const val CACHE = "cache/"
         private const val EMUSYNC = "emusync/"
+        private const val TEXTURES = "textures/"
+        private const val DUMPS = "dumps/"
+        private const val CONFIG = "config.yaml"
 
         // emusync's siblings of a card it's replacing: `<name>.emusync-tmp`, and a folder card's `-old` and `-swap`.
         private val EMUSYNC_SCRATCH = Regex("""\.emusync-(tmp|old|swap)(/|$)""")

@@ -314,6 +314,17 @@ void TexturePackConfig::Save(SettingsInterface& si) const
 {
   for (const BoolKey& bk : BOOL_KEYS)
     si.SetBoolValue("TextureReplacements", bk.name, this->*bk.member);
+
+  // The memory budgets' defaults differ by platform, and settings.ini is shared through the data folder: a default
+  // is left out (and another platform's removed), so each platform reads its own.
+  const TexturePackConfig defaults;
   for (const UIntKey& uk : UINT_KEYS)
-    si.SetUIntValue("TextureReplacements", uk.name, this->*uk.member);
+  {
+    const bool per_platform = (uk.member == &TexturePackConfig::max_hash_cache_vram_usage_mb ||
+                               uk.member == &TexturePackConfig::max_replacement_cache_vram_usage_mb);
+    if (per_platform && this->*uk.member == defaults.*uk.member)
+      si.DeleteValue("TextureReplacements", uk.name);
+    else
+      si.SetUIntValue("TextureReplacements", uk.name, this->*uk.member);
+  }
 }

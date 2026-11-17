@@ -311,9 +311,11 @@ void GPU_HW::UpdateTextureCache(bool seed_from_gpu)
 
   m_texture_cache->SetConfig(TextureReplacements::GetConfig());
   m_texture_cache->SetIndex(tr.enable_texture_replacements ? &TextureReplacements::GetIndex() : nullptr);
+  // A first dump writes a config locally only when the game's pack has none (on Android, packs are read elsewhere).
   m_texture_cache->SetDumping(tr.dump_textures ? TextureReplacements::GetTextureDumpDirectory() : std::string(),
-                              TextureReplacements::GetGameDirectory(), tr.dump_replaced_textures,
-                              tr.dump_texture_force_alpha_channel);
+                              TextureReplacements::GetLocalGameDirectory(),
+                              !TextureReplacements::HasGameConfig(TextureReplacements::GetGameDirectory()),
+                              tr.dump_replaced_textures, tr.dump_texture_force_alpha_channel);
   m_texture_cache_dumping = m_texture_cache->IsDumping();
 }
 

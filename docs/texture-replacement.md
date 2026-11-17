@@ -99,6 +99,46 @@ outside the repository.
   dialogue box's texture. 4 of the pack's 21 palette hashes do appear there. The pack's glyphs are drawn in menus and
   during play, which a run without input doesn't reach; checking the pack needs such a scene.
 
+### Where packs are read and dumps written
+
+All ours.
+
+- Packs are read from the *pack folder*: on desktop the data folder's `textures/`; on Android the data folder's own
+  `textures/`, read in place through `content://` (the app's storage holds no copy). Dumps, and the `config.yaml` a
+  first dump writes, go to the *local* `textures/` (on desktop the same folder; on Android the app's storage, which
+  the mirror sends to the data folder).
+- A game's config is the pack folder's `config.yaml` (else `config.yml`); only when the pack has none is a local one,
+  written by a first dump, read. A first dump writes no config when the pack has one.
+- An unreadable pack folder (a revoked grant, a removed card) gives no replacements, and the game plays.
+- Android's mirror, which keeps the app's copy of the data folder in step, copies nothing under `textures/` but a
+  game's `dumps/` (sent to the data folder, never taken from it) and a first dump's `config.yaml` (sent once, only
+  while the data folder has none, never taken back). It doesn't even list a pack's own folders, so a pack of tens of
+  thousands of files costs a mirror run nothing. Copies of packs an earlier build pulled into the app's storage are
+  dropped from it (never from the data folder). Legacy `vram-write-` dumps in `dump/textures/` are mirrored as before.
+- Checked on the Android emulators (2026-11-17, `TextureCacheTest`) on Vulkan (the host's GPU) and OpenGL ES 3.1
+  (ANGLE on SwiftShader), with the Vagrant Story HD font pack read in place from a `content://` data folder at the
+  command menu: the pack changes the menu's frame; the cache tracking VRAM with nothing to replace leaves frames as
+  they are without it; dumps land in the app's storage and nothing of the pack is copied there.
+- Checked on the AYN Thor (Snapdragon 8 Gen 2, Adreno 740, 2026-11-17) with `TextureCacheTest` on Vulkan and OpenGL
+  ES 3.2: all three pass, and the font pack's smooth glyphs replace the menu's pixel font. Measured at the command menu
+  (state 2, 4× resolution, 20 s each, the core's per-second counters), the pack read from a `content://` tree:
+  - The core's thread costs 1.5–2.4 points more with the cache on (31–33% Vulkan, 40–42% OpenGL ES, of one core); the
+    GPU's time is unchanged (3.4% and 2.7%); steady frames stay at 16.7 ms, the slowest under 19 ms, in every case.
+  - The pack's first frame takes 89 ms on Vulkan (106 ms OpenGL ES), while its images load; 69 ms with the same pack
+    in local files, so most of it is decoding and uploading, which preloading moves to the boot: 25 ms (33 ms) then,
+    the 161 images (128 MB) preloaded in under half a second.
+  - Memory: the pack adds about 55 MB to the app's PSS and 18 MB of graphics memory on Vulkan; preloaded, about
+    135 MB. Tracking without a pack adds nothing measurable.
+  - Not covered: the system's own storage provider (the test's tree is the test app's provider; the user's data folder
+    is reached through Android's external storage provider, which may be slower), and packs larger than the budget.
+- Android's defaults for the memory budgets are smaller (ours): `MaxHashCacheVRAMUsageMB` 512 (desktop 2048) and
+  `MaxReplacementCacheVRAMUsage` 256 (desktop 512). A value in the settings or a pack's `config.yaml` wins. The
+  settings file is shared through the data folder, so these two keys are written to it only when they differ from the
+  platform's default, and a default another platform wrote is removed (ours). Large packs are best preloaded on
+  Android (`PreloadTextures`), since images read through the data folder's grant load more slowly than local files;
+  what's preloaded is held within `MaxReplacementCacheVRAMUsage`, so a pack larger than that budget reloads images
+  the budget let go of.
+
 ### config.yaml
 
 - Read from `textures/<serial>/config.yaml`, else `config.yml`. Keys it sets override the global settings of the same

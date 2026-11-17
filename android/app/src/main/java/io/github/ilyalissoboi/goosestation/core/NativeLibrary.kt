@@ -34,6 +34,12 @@ object NativeLibrary {
     external fun setShaderPacksFolder(path: String)
 
     /**
+     * The data folder's tree URI, whose `textures/` the core reads texture packs from in place (never copied): ""
+     * for none. Set before [initialize]; a data folder change restarts the process.
+     */
+    external fun setDataFolder(treeUri: String)
+
+    /**
      * Loads the settings from [dataRoot] and starts the core. Call it first; later calls do nothing. BIOS images are
      * read from [biosDir]. A settings.ini made by anything but this install ([installId]) has its device-specific
      * settings reset. [achievementsToken] is the stored RetroAchievements login token, or null: the core keeps it in

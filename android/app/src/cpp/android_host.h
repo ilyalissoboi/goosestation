@@ -49,6 +49,9 @@ bool Initialize(std::string data_root, std::string resources_root, std::string b
 /// Scans exactly these folders, and all below them, for games: [GameList] RecursivePaths, with no Paths.
 void SetGameFolders(std::vector<std::string> tree_uris);
 
+/// The data folder's tree URI (or empty): texture packs are read from its textures/ in place. Before Initialize().
+void SetDataFolder(std::string tree_uri);
+
 /// Reads settings.ini again (after the app replaced it), adapts it if it's from another install, and applies it. Each
 /// connected controller the file leaves with no binding of its own gets its defaults. Blocks until the CPU thread has
 /// done so.

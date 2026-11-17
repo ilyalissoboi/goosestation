@@ -263,4 +263,53 @@ class DataLayoutTest {
         assertTrue(layout.mirrored("shaders/shaders_slang/crt/a.slangp"))
         assertFalse(layout.mirrored("shaders/.shaderpacks/shaders_slang.json"))
     }
+
+    // Texture packs are read from the data folder in place: only a game's dumps and the config.yaml a first dump
+    // writes are mirrored. A pack, however large, is never copied, nor listed past its game's folder.
+    @Test
+    fun aTexturePackIsntMirrored() {
+        listOf(
+            "textures/SLUS-01040/replacements/" +
+                "texpage-STP4-065D13C54C34C0FB-69491D7E26769824-64x256-228-0-28x16-P0-15.png",
+            "textures/SLUS-01040/replacements/sub/x.webp",
+            "textures/SLUS-01040/vram-write-000000001234567800000000000000AB.png",
+            "textures/SLUS-01040/config.yml",
+            "textures/SLUS-01040/ABOUT.txt",
+        ).forEach {
+            assertFalse(it, default.mirrored(it))
+            assertTrue(it, default.stray(it))
+        }
+        assertFalse(default.walks("textures/SLUS-01040/replacements"))
+        assertTrue(default.walks("textures"))
+        assertTrue(default.walks("textures/SLUS-01040"))
+        assertTrue(default.walks("textures/SLUS-01040/dumps"))
+        assertEquals(emptyList<String>(), default.others(listOf("textures" to true)))
+    }
+
+    @Test
+    fun dumpsAreSentAndNeverPulled() {
+        val dump =
+            "textures/SLUS-01040/dumps/" +
+                "texupload-P4-B5E04041144CABCE-D7ADDCD353C6521A-64x256-96-192-32x63-P0-15.png"
+        assertTrue(default.mirrored(dump))
+        assertTrue(default.sentOnly(dump))
+        assertFalse(default.stray(dump))
+    }
+
+    @Test
+    fun aDumpsConfigIsSentOnce() {
+        val config = "textures/SLUS-01040/config.yaml"
+        assertTrue(default.mirrored(config))
+        assertTrue(default.sentIfAbsent(config))
+        assertFalse(default.sentOnly(config))
+        assertFalse(default.sentIfAbsent("settings.ini"))
+    }
+
+    // The legacy VRAM write dumps stay where they were, mirrored as before.
+    @Test
+    fun legacyDumpsAreMirroredAsBefore() {
+        val dump = "dump/textures/SLUS-01040/vram-write-000000001234567800000000000000AB.png"
+        assertTrue(default.mirrored(dump))
+        assertFalse(default.sentOnly(dump))
+    }
 }

@@ -347,10 +347,13 @@ struct Scene
     cache->SetIndex(&index);
   }
 
-  void Dump(bool dump_replaced = true) { cache->SetDumping(dump_dir, game_dir, dump_replaced, false); }
+  void Dump(bool dump_replaced = true, bool write_config = true)
+  {
+    cache->SetDumping(dump_dir, game_dir, write_config, dump_replaced, false);
+  }
 
   // Stops dumping, which writes whatever is waiting.
-  void Finish() { cache->SetDumping(std::string(), std::string(), true, false); }
+  void Finish() { cache->SetDumping(std::string(), std::string(), true, true, false); }
 
   GPUTextureCache::DrawKey Key(GPUTextureMode mode = GPUTextureMode::Palette4Bit, bool st = false) const
   {
@@ -603,6 +606,17 @@ TEST(GPUTextureCache, TheFirstDumpWritesAConfig)
   EXPECT_TRUE(FileSystem::DirectoryExists(Path::Combine(scene.game_dir, "replacements").c_str()));
 }
 
+TEST(GPUTextureCache, AFirstDumpWithAPackConfigWritesNone)
+{
+  // The pack (read elsewhere, as on Android) has its own config: the first dump writes none locally.
+  Scene scene;
+  scene.Dump(true, false);
+  scene.cache->AddDrawnTexture(scene.Key(), GSVector4i(64, 0, 96, 32));
+  scene.Finish();
+  EXPECT_EQ(ListPNGs(scene.dump_dir).size(), 1u);
+  EXPECT_FALSE(FileSystem::FileExists(Path::Combine(scene.game_dir, "config.yaml").c_str()));
+}
+
 TEST(GPUTextureCache, AnExistingConfigIsNotOverwritten)
 {
   Scene scene;
@@ -818,4 +832,29 @@ TEST(GPUTextureCache, CuttingAnUploadBumpsEveryPageItSpans)
   const u16 word = 7;
   cache->Write(2, 2, 1, 1, &word, false, false); // in page 0 only
   EXPECT_NE(cache->GetPageGeneration(1), page1);
+}
+
+TEST(GPUTextureCache, AFillThatWrapsLandsOnBothEdges)
+{
+  const auto cache = MakeCache();
+  cache->Fill(1020, 508, 8, 8, 0x4321, false);
+  EXPECT_EQ(At(*cache, 1020, 508), 0x4321);
+  EXPECT_EQ(At(*cache, 3, 508), 0x4321);
+  EXPECT_EQ(At(*cache, 1020, 3), 0x4321);
+  EXPECT_EQ(At(*cache, 3, 3), 0x4321);
+  EXPECT_EQ(At(*cache, 4, 4), 0);
+}
+
+TEST(GPUTextureCache, AMaskedCopySkipsMaskedPixels)
+{
+  const auto cache = MakeCache();
+  const u16 source[2] = {0x0011, 0x0012};
+  cache->Write(0, 0, 2, 1, source, false, false);
+  const u16 destination[2] = {0x8001, 0x0002};
+  cache->Write(100, 0, 2, 1, destination, false, false);
+  cache->Copy(0, 0, 100, 0, 2, 1, false, true); // check mask: the masked word stays
+  EXPECT_EQ(At(*cache, 100, 0), 0x8001);
+  EXPECT_EQ(At(*cache, 101, 0), 0x0012);
+  cache->Copy(0, 0, 200, 0, 2, 1, true, false); // set mask
+  EXPECT_EQ(At(*cache, 200, 0), 0x8011);
 }

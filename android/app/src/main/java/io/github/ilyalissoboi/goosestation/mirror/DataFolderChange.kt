@@ -71,8 +71,9 @@ class DataFolderChange(
      * Makes [newTree], reached through [store], the folder the working copy mirrors, as [choice] says.
      *
      * - [DataFolderChoice.CopyThisDevicesData]: every working-copy file the [layout] mirrors is replaced into the
-     *   folder; the folder's other files are left alone, and those the layout mirrors come in at the next pull. The
-     *   manifest is rebuilt from both sides' states. Throws [IOException] if any file fails, before the manifest
+     *   folder, but for one the layout sends only if absent, where the folder's own copy wins; the folder's other files
+     *   are left alone, and those the layout mirrors come in at the next pull. The manifest is rebuilt from both sides'
+     *   states. Throws [IOException] if any file fails, before the manifest
      *   changes: the working copy is untouched, and the old folder can carry on.
      * - [DataFolderChoice.UseFolderData]: the working copy's contents, except `cache/`, are deleted, the manifest is
      *   emptied, and the folder's files that the [layout] mirrors are pulled. Throws [IOException] if the folder
@@ -97,6 +98,8 @@ class DataFolderChange(
         var manifest = Manifest(emptyMap())
         for ((path, local) in LocalTree.list(workingCopy).toSortedMap()) {
             if (!layout.mirrored(path)) continue
+            // A first dump's config.yaml never replaces a pack's own.
+            if (layout.sentIfAbsent(path) && folder[path] != null) continue
             // The state from before the copy read the file, as the mirror records it: a write since is a change.
             val written = store.replace(path, File(workingCopy, path), folder[path])
             manifest = manifest.with(path, ManifestEntry(local, written))

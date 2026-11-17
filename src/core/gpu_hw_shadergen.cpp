@@ -43,7 +43,10 @@ float4 RGBA5551ToRGBA8(uint v)
   uint b = ((v >> 10) & 31u);
   uint a = ((v >> 15) & 1u);
 
-  return float4(float(r) / 31.0, float(g) / 31.0, float(b) / 31.0, float(a));
+  // The 8-bit value rounded in integers, as the CPU does ((c * 255 + 15) / 31), then over 255: GPUs may store c / 31
+  // within 0.6 of a step of the exact value, so one off on some D3D, Vulkan and OpenGL GPUs, but n / 255 always as n.
+  return float4(float((r * 255u + 15u) / 31u) / 255.0, float((g * 255u + 15u) / 31u) / 255.0,
+                float((b * 255u + 15u) / 31u) / 255.0, float(a));
 }
 )";
 }

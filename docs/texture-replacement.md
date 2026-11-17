@@ -236,7 +236,11 @@ All ours.
   byte-identical to Metal's on all four. With the 1× pack of our own dumps, frames differ from the cache off by at
   most 2 of 255 in a few hundred pixels inside replaced pages, on all four alike: the page as drawn is decoded on the
   CPU, rounding 5-bit colours to 8 bits exactly, while D3D and Vulkan allow a GPU to convert within 0.6 of a step,
-  which this one does. Apple's GPU rounds exactly, so the Mac matches byte for byte.
+  which this one does. Apple's GPU rounds exactly, so the Mac matches byte for byte. VRAM uploads now convert
+  exactly on every GPU (below); the Windows check is to be repeated with that.
+- VRAM uploads turn each 5-bit colour into `(c × 255 + 15) / 31` in integers and write that over 255, which every
+  GPU stores exactly, instead of `c / 31`, which a GPU may store one step off. Fills already did. Frames on the Mac,
+  whose GPU rounded exactly before, are byte-identical before and after (Metal, Vulkan, OpenGL; 1× and 4×) (ours).
 - Not handled yet: texels of a replaced page that the GPU rendered into come from the cache's copy of VRAM, which
   doesn't have them. Only a draw with the same page, mode and palette sampling that rendered area would show it.
 - Checked by hand (stage 1, 2026-11-16) on Metal, with a pack made from our own dumps of Vagrant Story's opening at

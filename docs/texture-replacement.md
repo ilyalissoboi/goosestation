@@ -246,7 +246,14 @@ All ours.
   and 18 direct-colour (`C16`) page dumps: frames and VRAM byte-identical to the cache off at 1× and 4× on Metal,
   Vulkan (MoltenVK) and OpenGL. The marked pack draws the same frames as before this change; a marked `C16` pack
   shows its marks where the title menu's direct-colour texture is drawn, at 4×.
-- Windows (D3D11, D3D12, Vulkan, OpenGL) and Android (OpenGL ES, Vulkan): to be checked the same way.
+- Checked the same way on Windows (RTX 4090, MSVC Release build), on D3D11, D3D12, Vulkan and OpenGL at 1× and 4×:
+  all four packs draw frames and VRAM byte-identical to the cache off. Before this change and the exact uploads, the
+  upload-mode pack differed in 29 of those 80 frames and VRAM dumps on all four. The exact uploads change frames with
+  the cache off there too: by 1 of 255 on the display, and by one 5-bit step in a few hundred VRAM pixels the GPU drew
+  from slightly different texels. With D3D11's and D3D12's debug layers on, both packs run to the end; Vulkan's
+  validation layers aren't installed on either machine.
+- Android (OpenGL ES, Vulkan): not checked yet. The regression test runner doesn't build for Android (the app
+  provides some of the core's host functions).
 - Not seen yet: a scene where a replaced page's GPU-rendered texels reach the screen. Vagrant Story's opening and the
   three save states at hand have replaced pages with rendered blocks, but no frame or VRAM dump differs even with
   the cache's copy of those blocks overwritten, so no draw there samples them.

@@ -119,6 +119,18 @@ All ours.
   (ANGLE on SwiftShader), with the Vagrant Story HD font pack read in place from a `content://` data folder at the
   command menu: the pack changes the menu's frame; the cache tracking VRAM with nothing to replace leaves frames as
   they are without it; dumps land in the app's storage and nothing of the pack is copied there.
+- Checked on the AYN Thor (Snapdragon 8 Gen 2, Adreno 740, 2026-11-17) with `TextureCacheTest` on Vulkan and OpenGL
+  ES 3.2: all three pass, and the font pack's smooth glyphs replace the menu's pixel font. Measured at the command menu
+  (state 2, 4× resolution, 20 s each, the core's per-second counters), the pack read from a `content://` tree:
+  - The core's thread costs 1.5–2.4 points more with the cache on (31–33% Vulkan, 40–42% OpenGL ES, of one core); the
+    GPU's time is unchanged (3.4% and 2.7%); steady frames stay at 16.7 ms, the slowest under 19 ms, in every case.
+  - The pack's first frame takes 89 ms on Vulkan (106 ms OpenGL ES), while its images load; 69 ms with the same pack
+    in local files, so most of it is decoding and uploading, which preloading moves to the boot: 25 ms (33 ms) then,
+    the 161 images (128 MB) preloaded in under half a second.
+  - Memory: the pack adds about 55 MB to the app's PSS and 18 MB of graphics memory on Vulkan; preloaded, about
+    135 MB. Tracking without a pack adds nothing measurable.
+  - Not covered: the system's own storage provider (the test's tree is the test app's provider; the user's data folder
+    is reached through Android's external storage provider, which may be slower), and packs larger than the budget.
 - Android's defaults for the memory budgets are smaller (ours): `MaxHashCacheVRAMUsageMB` 512 (desktop 2048) and
   `MaxReplacementCacheVRAMUsage` 256 (desktop 512). A value in the settings or a pack's `config.yaml` wins. The
   settings file is shared through the data folder, so these two keys are written to it only when they differ from the

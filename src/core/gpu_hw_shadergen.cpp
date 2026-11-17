@@ -979,9 +979,9 @@ float3 ApplyDebanding(float2 frag_coord)
     #else
       #if UV_LIMITS && REPLACED
         // VRAM takes the clamp other draws take; replacements the last texel's whole area, as they have detail
-        // within it (direct coordinates are upscaled and their limits already cover the texel).
+        // within it (upscaled direct coordinates' limits already cover the texel).
         float2 vcoords = clamp(v_tex0, v_uv_limits.xy, v_uv_limits.zw);
-        #if PALETTE
+        #if PALETTE || !UPSCALED
           float2 rcoords = clamp(v_tex0, v_uv_limits.xy,
             v_uv_limits.zw + ((RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ? 0.499 : 0.999));
         #else

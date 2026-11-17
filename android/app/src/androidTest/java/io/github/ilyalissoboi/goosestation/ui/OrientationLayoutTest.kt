@@ -2461,19 +2461,27 @@ class OrientationLayoutTest : ControllerKeys {
         val search = TextFieldState()
         val grid = mutableStateOf(true)
         eachConfig({
-            LibraryScreen(
-                games = games,
-                gridView = grid.value,
-                banners = emptyList(),
-                message = null,
-                isError = false,
-                onToggleView = {},
-                onOpenSettings = {},
-                onRefresh = {},
-                onStartGame = {},
-                focusPath = null,
-                search = search,
-            )
+            // A status bar and a gesture bar of the screen's own, not the test emulator's, a portrait phone's: under
+            // those, at 640x360 and text 1.3x, no room was left for the no-match area at all.
+            Box(
+                Modifier
+                    .consumeWindowInsets(WindowInsets.safeDrawing)
+                    .padding(top = 30.dp, bottom = 24.dp),
+            ) {
+                LibraryScreen(
+                    games = games,
+                    gridView = grid.value,
+                    banners = emptyList(),
+                    message = null,
+                    isError = false,
+                    onToggleView = {},
+                    onOpenSettings = {},
+                    onRefresh = {},
+                    onStartGame = {},
+                    focusPath = null,
+                    search = search,
+                )
+            }
         }) {
             for (gridView in listOf(true, false)) {
                 grid.value = gridView
@@ -2491,7 +2499,8 @@ class OrientationLayoutTest : ControllerKeys {
                 rule.waitForIdle()
                 press(Key.DirectionDown)
                 assertTrue("Down from the field didn't reach Clear search", focusedHas("Clear search"))
-                assertFocusedInView(screen())
+                // All of it in the no-match area's scroll, not just on the screen: a sliver of an area clips it.
+                assertFocusedInView()
                 press(Key.Enter)
                 assertTrue(focusedIsTheField())
             }

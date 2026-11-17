@@ -3873,6 +3873,11 @@ bool VulkanDevice::UpdateDescriptorSetsForLayout(u32 dirty)
   u32 first_ds = 0;
   u32 num_ds = 0;
 
+  // With push descriptors the texture set is pushed, not bound: the sets before it and after it are bound apart.
+  [[maybe_unused]] u32 pushed_set = 0;
+  [[maybe_unused]] u32 num_ds_before_pushed = 0;
+  [[maybe_unused]] bool pushed = false;
+
   if constexpr (layout == GPUPipeline::Layout::SingleTextureAndUBO || layout == GPUPipeline::Layout::MultiTextureAndUBO)
   {
     new_dynamic_offsets = ((dirty & DIRTY_FLAG_DYNAMIC_OFFSETS) != 0);
@@ -3915,10 +3920,10 @@ bool VulkanDevice::UpdateDescriptorSetsForLayout(u32 dirty)
                                                     tex->GetVkLayout());
       }
 
-      const u32 set = (layout == GPUPipeline::Layout::MultiTextureAndUBO) ? 1 : 0;
-      dsub.PushUpdate(GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_layout, set);
-      if (num_ds == 0)
-        return true;
+      pushed_set = (layout == GPUPipeline::Layout::MultiTextureAndUBO) ? 1 : 0;
+      dsub.PushUpdate(GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_layout, pushed_set);
+      num_ds_before_pushed = num_ds;
+      pushed = true;
     }
     else
     {
@@ -3977,6 +3982,27 @@ bool VulkanDevice::UpdateDescriptorSetsForLayout(u32 dirty)
       dsub.AddInputAttachmentDescriptorWrite(ids, 0, m_current_render_targets[0]->GetView(),
                                              m_current_render_targets[0]->GetVkLayout());
       dsub.Update(m_device, false);
+    }
+  }
+
+  if constexpr (layout == GPUPipeline::Layout::MultiTextureAndUBO ||
+                layout == GPUPipeline::Layout::MultiTextureAndPushConstants)
+  {
+    if (pushed)
+    {
+      // The UBO set (if any) sits before the pushed texture set, the feedback loop or ROV set after it.
+      if (num_ds_before_pushed > 0)
+      {
+        vkCmdBindDescriptorSets(GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_layout,
+                                first_ds, num_ds_before_pushed, ds.data(), static_cast<u32>(new_dynamic_offsets),
+                                new_dynamic_offsets ? &m_uniform_buffer_position : nullptr);
+      }
+      if (num_ds > num_ds_before_pushed)
+      {
+        vkCmdBindDescriptorSets(GetCurrentCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_layout,
+                                pushed_set + 1, num_ds - num_ds_before_pushed, &ds[num_ds_before_pushed], 0, nullptr);
+      }
+      return true;
     }
   }
 

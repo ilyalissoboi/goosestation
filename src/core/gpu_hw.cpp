@@ -56,8 +56,10 @@ static constexpr const std::array s_transparency_modes = {
 
 static constexpr const std::array s_batch_texture_modes = {
   "Palette4Bit",       "Palette8Bit",       "Direct16Bit",       "Disabled",
-  "SpritePalette4Bit", "SpritePalette8Bit", "SpriteDirect16Bit", "Replaced", "SpriteReplaced",
+  "SpritePalette4Bit", "SpritePalette8Bit", "SpriteDirect16Bit", "ReplacedPalette4Bit", "ReplacedPalette8Bit",
+  "ReplacedDirect16Bit", "SpriteReplacedPalette4Bit", "SpriteReplacedPalette8Bit", "SpriteReplacedDirect16Bit",
 };
+static_assert(s_batch_texture_modes.size() == static_cast<size_t>(GPU_HW::BatchTextureMode::MaxCount));
 
 static constexpr const std::array s_batch_render_modes = {
   "TransparencyDisabled", "TransparentAndOpaque", "OnlyOpaque", "OnlyTransparent", "ShaderBlend",
@@ -327,13 +329,7 @@ void GPU_HW::AddDrawnTextureRect(GSVector4i uv_rect)
 
 bool GPU_HW::IsTextureModeCompiled(BatchTextureMode mode) const
 {
-  if (mode == BatchTextureMode::Replaced)
-    return m_replaced_pipelines;
-  if (mode == BatchTextureMode::SpriteReplaced)
-    return m_replaced_pipelines && m_allow_sprite_mode;
-  if (mode >= BatchTextureMode::SpriteStart)
-    return m_allow_sprite_mode;
-  return true;
+  return (!IsReplacedTextureMode(mode) || m_replaced_pipelines) && (!IsSpriteTextureMode(mode) || m_allow_sprite_mode);
 }
 
 void GPU_HW::ClearReplacementSources()
@@ -356,7 +352,7 @@ GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
     return existing->second.texture.get(); // null after a failure, until what it shows changes
   }
 
-  if (!m_texture_source_blit_pipeline)
+  if (!m_replacement_compose_pipeline)
     return nullptr;
 
   // Composing draws outside the batch.
@@ -412,48 +408,34 @@ GPUTexture* GPU_HW::GetReplacementSource(const GPUTextureCache::Source& source)
   GL_SCOPE_FMT("Texture replacement page {} ({}x{}, {} replacements)", source.key.page, size, size,
                source.placements.size());
 
-  // The page itself, at 1x, then each replacement over it.
-  static constexpr std::array<u32, 3> page_words = {{64, 128, 256}};
-  const GPUTextureMode mode = source.key.mode;
-  const u32 page_x = GPUTextureCache::GetPageX(source.key.page);
-  const u32 page_y = GPUTextureCache::GetPageY(source.key.page);
-  const u32 texels = std::min<u32>(
-    256, std::min<u32>(page_words[static_cast<u8>(mode)], VRAM_WIDTH - page_x) * GPUTextureData::GetTexelsPerWord(mode));
-  RGBA8Image page;
-  GPUTextureData::DecodeTexture(m_texture_cache->GetVRAM(), page_x, page_y, GSVector4i(0, 0, texels, 256), mode,
-                                GPUTexturePaletteReg{source.key.palette_bits}, GPUTextureData::Encoding::Source, false,
-                                false, &page);
-
+  // Cleared to 0, "uncovered": those texels come from VRAM. Each replacement is drawn over its rect.
   g_gpu_device->ClearRenderTarget(target.get(), 0);
   g_gpu_device->SetRenderTarget(target.get());
-  g_gpu_device->SetPipeline(m_texture_source_blit_pipeline.get());
-
-  const auto blit = [&](const RGBA8Image& image, GSVector4i rect, GPUSampler* sampler) {
-    std::unique_ptr<GPUTexture> tex =
-      g_gpu_device->FetchTexture(image.GetWidth(), image.GetHeight(), 1, 1, 1, GPUTexture::Type::Texture,
-                                 GPUTexture::Format::RGBA8, image.GetPixels(), image.GetPitch());
-    if (!tex)
-      return;
-
-    static constexpr float src_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
-    g_gpu_device->SetTextureSampler(0, tex.get(), sampler);
-    g_gpu_device->SetViewportAndScissor(rect.left, rect.top, rect.width(), rect.height());
-    g_gpu_device->PushUniformBuffer(src_rect, sizeof(src_rect));
-    g_gpu_device->Draw(3, 0);
-    g_gpu_device->RecycleTexture(std::move(tex));
-  };
+  g_gpu_device->SetPipeline(m_replacement_compose_pipeline.get());
 
   const s32 iscale = static_cast<s32>(scale);
-  blit(page, GSVector4i(0, 0, texels * iscale, 256 * iscale), g_gpu_device->GetNearestSampler());
-
   GPUSampler* sampler = TextureReplacements::GetConfig().replacement_scale_linear_filter ?
                           g_gpu_device->GetLinearSampler() :
                           g_gpu_device->GetNearestSampler();
   for (const GPUTextureCache::Placement& placement : source.placements)
   {
     const TextureReplacements::ReplacementImage* image = TextureReplacements::GetTextureImage(placement.path);
-    if (image)
-      blit(*image, placement.page_rect.mul32l(GSVector4i(iscale)), sampler);
+    if (!image)
+      continue;
+
+    std::unique_ptr<GPUTexture> tex =
+      g_gpu_device->FetchTexture(image->GetWidth(), image->GetHeight(), 1, 1, 1, GPUTexture::Type::Texture,
+                                 GPUTexture::Format::RGBA8, image->GetPixels(), image->GetPitch());
+    if (!tex)
+      continue;
+
+    static constexpr float src_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    const GSVector4i rect = placement.page_rect.mul32l(GSVector4i(iscale));
+    g_gpu_device->SetTextureSampler(0, tex.get(), sampler);
+    g_gpu_device->SetViewportAndScissor(rect.left, rect.top, rect.width(), rect.height());
+    g_gpu_device->PushUniformBuffer(src_rect, sizeof(src_rect));
+    g_gpu_device->Draw(3, 0);
+    g_gpu_device->RecycleTexture(std::move(tex));
   }
 
   target->MakeReadyForSampling();
@@ -1204,7 +1186,7 @@ bool GPU_HW::CompilePipelines(Error* error)
     (1 + BoolToUInt32(m_write_mask_as_depth)) +                                        // vram copy
     (1 + BoolToUInt32(m_write_mask_as_depth)) +                                        // vram write
     1 +                                                                                // vram write replacement
-    (m_replaced_pipelines ? 1 : 0) +                                                   // texture source blit
+    (m_replaced_pipelines ? 1 : 0) +                                                   // replacement compose
     (m_write_mask_as_depth ? 1 : 0) +                                                  // mask -> depth
     1 +                                                                                // vram read
     2 +                                                                                // extract/display
@@ -1288,19 +1270,16 @@ bool GPU_HW::CompilePipelines(Error* error)
             {
               for (u8 interlacing = 0; interlacing < 2; interlacing++)
               {
-                const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart &&
-                                     static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Replaced);
+                const BatchTextureMode batch_mode = static_cast<BatchTextureMode>(texture_mode);
+                const bool sprite = IsSpriteTextureMode(batch_mode);
+                const bool replaced = IsReplacedTextureMode(batch_mode);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
-                const BatchTextureMode shader_texmode =
-                  (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpriteReplaced) ?
-                    BatchTextureMode::Replaced :
-                    static_cast<BatchTextureMode>(texture_mode -
-                                                  (sprite ? static_cast<u8>(BatchTextureMode::SpriteStart) : 0));
+                const BatchTextureMode shader_texmode = GetBaseTextureMode(batch_mode);
                 const bool use_rov =
                   (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend) && m_use_rov_for_shader_blend);
                 const std::string fs = shadergen.GenerateBatchFragmentShader(
                   static_cast<BatchRenderMode>(render_mode), static_cast<GPUTransparencyMode>(transparency_mode),
-                  shader_texmode, sprite ? m_sprite_texture_filtering : m_texture_filtering, uv_limits,
+                  shader_texmode, replaced, sprite ? m_sprite_texture_filtering : m_texture_filtering, uv_limits,
                   !sprite && force_round_texcoords, ConvertToBoolUnchecked(dithering),
                   ConvertToBoolUnchecked(interlacing), ConvertToBoolUnchecked(check_mask), use_rov, needs_rov_depth,
                   (depth_test != 0));
@@ -1385,16 +1364,13 @@ bool GPU_HW::CompilePipelines(Error* error)
             {
               for (u8 check_mask = 0; check_mask < 2; check_mask++)
               {
-                const bool textured = (static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Disabled);
-                const bool replaced = (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Replaced ||
-                                       static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpriteReplaced);
+                const BatchTextureMode batch_mode = static_cast<BatchTextureMode>(texture_mode);
+                const BatchTextureMode base_mode = GetBaseTextureMode(batch_mode);
+                const bool textured = (base_mode != BatchTextureMode::Disabled);
+                const bool replaced = IsReplacedTextureMode(batch_mode);
                 const bool palette =
-                  (static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Palette4Bit ||
-                   static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::Palette8Bit ||
-                   static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpritePalette4Bit ||
-                   static_cast<BatchTextureMode>(texture_mode) == BatchTextureMode::SpritePalette8Bit || replaced);
-                const bool sprite = (static_cast<BatchTextureMode>(texture_mode) >= BatchTextureMode::SpriteStart &&
-                                     static_cast<BatchTextureMode>(texture_mode) != BatchTextureMode::Replaced);
+                  (base_mode == BatchTextureMode::Palette4Bit || base_mode == BatchTextureMode::Palette8Bit);
+                const bool sprite = IsSpriteTextureMode(batch_mode);
                 const bool uv_limits = ShouldClampUVs(sprite ? m_sprite_texture_filtering : m_texture_filtering);
                 const bool use_shader_blending = (render_mode == static_cast<u8>(BatchRenderMode::ShaderBlend));
                 const bool use_rov = (use_shader_blending && m_use_rov_for_shader_blend);
@@ -1406,6 +1382,9 @@ bool GPU_HW::CompilePipelines(Error* error)
                                                                                NUM_BATCH_TEXTURED_VERTEX_ATTRIBUTES)) :
                     std::span<const GPUPipeline::VertexAttribute>(vertex_attributes, NUM_BATCH_VERTEX_ATTRIBUTES);
 
+                // Replaced pages sample VRAM at slot 0 and the page as drawn with its replacements at slot 1.
+                plconfig.layout =
+                  replaced ? GPUPipeline::Layout::MultiTextureAndUBO : GPUPipeline::Layout::SingleTextureAndUBO;
                 plconfig.vertex_shader =
                   batch_vertex_shaders[BoolToUInt8(textured)][BoolToUInt8(palette)][BoolToUInt8(sprite)].get();
                 plconfig.fragment_shader =
@@ -1520,6 +1499,7 @@ bool GPU_HW::CompilePipelines(Error* error)
     GL_OBJECT_NAME(gs, "Batch Wireframe Geometry Shader");
     GL_OBJECT_NAME(fs, "Batch Wireframe Fragment Shader");
 
+    plconfig.layout = GPUPipeline::Layout::SingleTextureAndUBO;
     plconfig.input_layout.vertex_attributes =
       std::span<const GPUPipeline::VertexAttribute>(vertex_attributes, NUM_BATCH_VERTEX_ATTRIBUTES);
     plconfig.blend = (m_wireframe_mode == GPUWireframeMode::OverlayWireframe) ?
@@ -1658,16 +1638,23 @@ bool GPU_HW::CompilePipelines(Error* error)
 
     progress.Increment();
 
-    // Texture cache: draws a page and its replacements into a page source, an RGBA8 target of its own.
+    // Texture cache: draws replacements into a page as drawn with them, an RGBA8 target of its own, coverage in alpha.
     if (m_replaced_pipelines)
     {
-      GPUPipeline::GraphicsConfig blit_config = plconfig;
-      blit_config.samples = 1;
-      blit_config.per_sample_shading = false;
-      blit_config.render_pass_flags = GPUPipeline::NoRenderPassFlags;
-      blit_config.blend = GPUPipeline::BlendState::GetNoBlendingState();
-      blit_config.SetTargetFormats(GPUTexture::Format::RGBA8);
-      if (!(m_texture_source_blit_pipeline = g_gpu_device->CreatePipeline(blit_config, error)))
+      std::unique_ptr<GPUShader> compose_fs =
+        g_gpu_device->CreateShader(GPUShaderStage::Fragment, shadergen.GetLanguage(),
+                                   shadergen.GenerateReplacementComposeFragmentShader(), error);
+      if (!compose_fs)
+        return false;
+
+      GPUPipeline::GraphicsConfig compose_config = plconfig;
+      compose_config.fragment_shader = compose_fs.get();
+      compose_config.samples = 1;
+      compose_config.per_sample_shading = false;
+      compose_config.render_pass_flags = GPUPipeline::NoRenderPassFlags;
+      compose_config.blend = GPUPipeline::BlendState::GetNoBlendingState();
+      compose_config.SetTargetFormats(GPUTexture::Format::RGBA8);
+      if (!(m_replacement_compose_pipeline = g_gpu_device->CreatePipeline(compose_config, error)))
         return false;
 
       progress.Increment();
@@ -1879,7 +1866,7 @@ void GPU_HW::DestroyPipelines()
   destroy(m_vram_readback_pipeline);
   destroy(m_vram_update_depth_pipeline);
   destroy(m_vram_write_replacement_pipeline);
-  destroy(m_texture_source_blit_pipeline);
+  destroy(m_replacement_compose_pipeline);
 
   destroy(m_downsample_first_pass_pipeline);
   destroy(m_downsample_mid_pass_pipeline);
@@ -2056,9 +2043,12 @@ ALWAYS_INLINE_RELEASE void GPU_HW::DrawBatchVertices(BatchRenderMode render_mode
 {
   // [depth_test][transparency_mode][render_mode][texture_mode][dithering][interlacing][check_mask]
   u8 texture_mode;
-  if (m_batch.texture_mode == BatchTextureMode::Replaced)
+  if (IsReplacedTextureMode(m_batch.texture_mode))
   {
-    texture_mode = static_cast<u8>(m_batch.sprite_mode ? BatchTextureMode::SpriteReplaced : BatchTextureMode::Replaced);
+    texture_mode = static_cast<u8>(m_batch.texture_mode) +
+                   (m_batch.sprite_mode ? static_cast<u8>(BatchTextureMode::SpriteReplacedStart) -
+                                            static_cast<u8>(BatchTextureMode::ReplacedStart) :
+                                          0);
   }
   else
   {
@@ -3717,7 +3707,8 @@ void GPU_HW::DispatchRenderCommand()
         const GPUTextureCache::Source* cache_source =
           m_texture_cache->LookupSource(m_texture_cache_key, g_gpu_device->GetMaxTextureSize());
         if (cache_source && (source = GetReplacementSource(*cache_source)))
-          texture_mode = BatchTextureMode::Replaced;
+          texture_mode = static_cast<BatchTextureMode>(static_cast<u8>(BatchTextureMode::ReplacedStart) +
+                                                       static_cast<u8>(texture_mode));
       }
     }
   }
@@ -3854,14 +3845,11 @@ void GPU_HW::FlushRender()
     m_batch_ubo_dirty = false;
   }
 
-  const bool replaced = (m_batch.texture_mode == BatchTextureMode::Replaced);
+  // Replaced batches read VRAM at slot 0 as others do, and the page as drawn with replacements at slot 1, nearest:
+  // its alpha is the coverage marker, which filtering would blur (ReplacementScaleLinearFilter applies when composing).
+  const bool replaced = IsReplacedTextureMode(m_batch.texture_mode);
   if (replaced)
-  {
-    g_gpu_device->SetTextureSampler(0, m_batch.source,
-                                    TextureReplacements::GetConfig().replacement_scale_linear_filter ?
-                                      g_gpu_device->GetLinearSampler() :
-                                      g_gpu_device->GetNearestSampler());
-  }
+    g_gpu_device->SetTextureSampler(1, m_batch.source, g_gpu_device->GetNearestSampler());
 
   if (m_wireframe_mode != GPUWireframeMode::OnlyWireframe)
   {
@@ -3882,7 +3870,7 @@ void GPU_HW::FlushRender()
   }
 
   if (replaced)
-    g_gpu_device->SetTextureSampler(0, m_vram_read_texture.get(), g_gpu_device->GetNearestSampler());
+    g_gpu_device->SetTextureSampler(1, nullptr, g_gpu_device->GetNearestSampler());
 
   if (m_wireframe_mode != GPUWireframeMode::Disabled)
   {

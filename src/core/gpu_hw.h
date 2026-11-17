@@ -46,15 +46,46 @@ public:
     SpritePalette8Bit,
     SpriteDirect16Bit,
 
-    /// A page drawn with its texture replacements; only with the texture cache on. Sprites have their own, as the
+    /// A page with texture replacements, per real mode; only with the texture cache on. Texels the replacements cover
+    /// come from the page as drawn with them, the rest from VRAM as in the real mode. Sprites have their own, as the
     /// other modes do, so they keep sprites' coordinate rounding.
-    Replaced,
-    SpriteReplaced,
+    ReplacedPalette4Bit,
+    ReplacedPalette8Bit,
+    ReplacedDirect16Bit,
+    SpriteReplacedPalette4Bit,
+    SpriteReplacedPalette8Bit,
+    SpriteReplacedDirect16Bit,
 
     MaxCount,
 
     SpriteStart = SpritePalette4Bit,
+    ReplacedStart = ReplacedPalette4Bit,
+    SpriteReplacedStart = SpriteReplacedPalette4Bit,
   };
+
+  static constexpr bool IsReplacedTextureMode(BatchTextureMode mode)
+  {
+    return (mode >= BatchTextureMode::ReplacedStart && mode < BatchTextureMode::MaxCount);
+  }
+  static constexpr bool IsSpriteTextureMode(BatchTextureMode mode)
+  {
+    return ((mode >= BatchTextureMode::SpriteStart && mode < BatchTextureMode::ReplacedStart) ||
+            mode >= BatchTextureMode::SpriteReplacedStart);
+  }
+  /// Palette4Bit, Palette8Bit or Direct16Bit for a textured mode, sprite or replaced; Disabled otherwise.
+  static constexpr BatchTextureMode GetBaseTextureMode(BatchTextureMode mode)
+  {
+    if (mode == BatchTextureMode::Disabled)
+      return mode;
+    const u8 m = static_cast<u8>(mode);
+    if (mode >= BatchTextureMode::SpriteReplacedStart)
+      return static_cast<BatchTextureMode>(m - static_cast<u8>(BatchTextureMode::SpriteReplacedStart));
+    if (mode >= BatchTextureMode::ReplacedStart)
+      return static_cast<BatchTextureMode>(m - static_cast<u8>(BatchTextureMode::ReplacedStart));
+    if (mode >= BatchTextureMode::SpriteStart)
+      return static_cast<BatchTextureMode>(m - static_cast<u8>(BatchTextureMode::SpriteStart));
+    return mode;
+  }
   static_assert(static_cast<u8>(BatchTextureMode::Palette4Bit) == static_cast<u8>(GPUTextureMode::Palette4Bit) &&
                 static_cast<u8>(BatchTextureMode::Palette8Bit) == static_cast<u8>(GPUTextureMode::Palette8Bit) &&
                 static_cast<u8>(BatchTextureMode::Direct16Bit) == static_cast<u8>(GPUTextureMode::Direct16Bit));
@@ -123,7 +154,7 @@ private:
     bool use_depth_buffer = false;
     bool sprite_mode = false;
 
-    /// The page drawn with replacements, for BatchTextureMode::Replaced.
+    /// The page as drawn with its replacements (coverage in alpha), for the replaced modes; bound at slot 1.
     GPUTexture* source = nullptr;
 
     // Returns the render mode for this batch.
@@ -289,7 +320,8 @@ private:
   };
   std::unordered_map<u64, ReplacementSourceTexture> m_replacement_sources;
   u64 m_replacement_source_counter = 0;
-  std::unique_ptr<GPUPipeline> m_texture_source_blit_pipeline;
+  /// Draws a replacement into a composed page, its alpha turned into the coverage marker.
+  std::unique_ptr<GPUPipeline> m_replacement_compose_pipeline;
 
   BatchVertex* m_batch_vertex_ptr = nullptr;
   u16* m_batch_index_ptr = nullptr;

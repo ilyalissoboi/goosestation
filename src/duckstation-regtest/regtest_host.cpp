@@ -50,6 +50,7 @@ static std::unique_ptr<MemorySettingsInterface> s_base_settings_interface;
 static u32 s_frames_to_run = 60 * 60;
 static u32 s_frames_remaining = 0;
 static u32 s_frame_dump_interval = 0;
+static bool s_dump_vram = false;
 static std::string s_dump_base_directory;
 
 bool RegTestHost::SetFolders()
@@ -365,6 +366,8 @@ void Host::FrameDone()
   {
     std::string dump_filename(RegTestHost::GetFrameDumpFilename(frame));
     g_gpu->WriteDisplayTextureToFile(std::move(dump_filename));
+    if (s_dump_vram)
+      System::DumpVRAM(Path::Combine(EmuFolders::DataRoot, fmt::format("vram_{:05d}.png", frame)).c_str());
   }
 }
 
@@ -526,6 +529,7 @@ void RegTestHost::PrintCommandLineHelp(const char* progname)
   std::fprintf(stderr, "  -version: Displays version information and exits.\n");
   std::fprintf(stderr, "  -dumpdir: Set frame dump base directory (will be dumped to basedir/gametitle).\n");
   std::fprintf(stderr, "  -dumpinterval: Dumps every N frames.\n");
+  std::fprintf(stderr, "  -dumpvram: With each frame dump, also dumps VRAM (vram_NNNNN.png, at 1x).\n");
   std::fprintf(stderr, "  -frames: Sets the number of frames to execute.\n");
   std::fprintf(stderr, "  -log <level>: Sets the log level. Defaults to verbose.\n");
   std::fprintf(stderr, "  -renderer <renderer>: Sets the graphics renderer. Default to software.\n");
@@ -679,6 +683,11 @@ bool RegTestHost::ParseCommandLineParameters(int argc, char* argv[], std::option
         INFO_LOG("Setting CPU execution mode to {}.", Settings::GetCPUExecutionModeName(cpu.value()));
         s_base_settings_interface->SetStringValue("CPU", "ExecutionMode",
                                                   Settings::GetCPUExecutionModeName(cpu.value()));
+        continue;
+      }
+      else if (CHECK_ARG("-dumpvram"))
+      {
+        s_dump_vram = true;
         continue;
       }
       else if (CHECK_ARG("-pgxp"))

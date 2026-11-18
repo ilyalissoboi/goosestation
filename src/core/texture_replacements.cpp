@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: (GPL-3.0 OR CC-BY-NC-ND-4.0)
 
 #include "texture_replacements.h"
+#include "gpu.h"
 #include "gpu_types.h"
 #include "texture_names.h"
 #include "host.h"
@@ -441,8 +442,11 @@ void TextureReplacements::Reload()
   if (g_settings.texture_replacements.preload_textures)
     PreloadTextures();
 
+  // A reload with nothing to say takes down the last one's notice, which no longer holds.
   if (std::optional<std::string> notice = GetLoadNotice())
     Host::AddIconOSDMessage("TextureReplacementsLoad", ICON_FA_IMAGES, std::move(*notice), Host::OSD_INFO_DURATION);
+  else
+    Host::RemoveKeyedOSDMessage("TextureReplacementsLoad");
 }
 
 std::optional<std::string> TextureReplacements::FormatLoadNotice(const LoadNoticeState& state)
@@ -463,13 +467,20 @@ std::optional<std::string> TextureReplacements::FormatLoadNotice(const LoadNotic
                            fmt::format(TRANSLATE_FS("TextureReplacements", "{} VRAM write replacements"), vram_writes);
     if (textures > 0 && vram_writes > 0)
       return fmt::format(TRANSLATE_FS("TextureReplacements", "Texture pack: {} and {}"), texture_part, vram_part);
+    if (textures == 0 && state.textures > 0 && state.texture_replacements && !state.texture_cache)
+    {
+      // Its VRAM writes apply, but its textures are switched on without the cache they need.
+      return fmt::format(
+        TRANSLATE_FS("TextureReplacements", "Texture pack: {}; its {} texture replacements need the texture cache"),
+        vram_part, state.textures);
+    }
     return fmt::format(TRANSLATE_FS("TextureReplacements", "Texture pack: {}"),
                        (textures > 0) ? texture_part : vram_part);
   }
 
   if (state.textures == 0 && state.vram_writes == 0)
   {
-    return fmt::format(TRANSLATE_FS("TextureReplacements", "No texture pack found in textures/{}"), state.game_id);
+    return fmt::format(TRANSLATE_FS("TextureReplacements", "No texture pack found in {}"), state.folder);
   }
 
   // Found, but nothing applies: the first reason that fits.
@@ -482,14 +493,36 @@ std::optional<std::string> TextureReplacements::FormatLoadNotice(const LoadNotic
   return TRANSLATE_STR("TextureReplacements", "Texture pack found, but it needs VRAM write replacements on");
 }
 
+bool TextureReplacements::IsUsingHardwareRenderer()
+{
+  // The renderer that started, which is software after a fallback or the software rendering hotkey; the configured
+  // one before a GPU exists.
+  return g_gpu ? g_gpu->IsHardwareRenderer() : !g_settings.IsUsingSoftwareRenderer();
+}
+
 std::optional<std::string> TextureReplacements::GetLoadNotice()
 {
+  // The folder as the player knows it: the data folder's textures/ (Android's is always that, through content://),
+  // else a textures folder of its own, named in full.
+  std::string folder;
+  if (!s_pack_folder.empty())
+  {
+    folder = Path::Combine("textures", s_game_id);
+  }
+  else
+  {
+    const std::string game_dir = Path::Combine(EmuFolders::Textures, s_game_id);
+    const std::string relative = Path::MakeRelative(game_dir, EmuFolders::DataRoot);
+    folder = (Path::IsAbsolute(relative) || relative.starts_with("..")) ? game_dir : relative;
+  }
+
   const Settings::TextureReplacementSettings& tr = g_settings.texture_replacements;
   return FormatLoadNotice(LoadNoticeState{.game_id = s_game_id,
+                                          .folder = folder,
                                           .texture_replacements = tr.enable_texture_replacements,
                                           .vram_write_replacements = tr.enable_vram_write_replacements,
                                           .texture_cache = g_settings.gpu_texture_cache,
-                                          .hardware_renderer = !g_settings.IsUsingSoftwareRenderer(),
+                                          .hardware_renderer = IsUsingHardwareRenderer(),
                                           .textures = s_index.GetTextureCount(),
                                           .vram_writes = s_index.GetVRAMWriteCount()});
 }

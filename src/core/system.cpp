@@ -1183,6 +1183,7 @@ bool System::RecreateGPU(GPURenderer renderer, bool force_recreate_device, bool 
 {
   ClearMemorySaveStates();
   g_gpu->RestoreDeviceContext();
+  const bool was_hardware = g_gpu->IsHardwareRenderer();
 
   // save current state
   DynamicHeapArray<u8> state_data(GetMaxSaveStateSize());
@@ -1220,6 +1221,10 @@ bool System::RecreateGPU(GPURenderer renderer, bool force_recreate_device, bool 
     g_gpu->DoState(sw, nullptr, update_display);
     TimingEvents::DoState(sw);
   }
+
+  // Replacements are drawn by the hardware renderers only: the load notice follows a change to or from software.
+  if (g_gpu->IsHardwareRenderer() != was_hardware)
+    TextureReplacements::Reload();
 
   // fix up vsync etc
   UpdateSpeedLimiterState();
@@ -4512,10 +4517,9 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
         tr.preload_textures != old_tr.preload_textures || tr.always_track_uploads != old_tr.always_track_uploads ||
         tr.dump_textures != old_tr.dump_textures || tr.dump_replaced_textures != old_tr.dump_replaced_textures ||
         tr.dump_texture_force_alpha_channel != old_tr.dump_texture_force_alpha_channel || tr.config != old_tr.config ||
-        g_settings.gpu_texture_cache != old_settings.gpu_texture_cache ||
-        g_settings.gpu_renderer != old_settings.gpu_renderer)
+        g_settings.gpu_texture_cache != old_settings.gpu_texture_cache)
     {
-      // The hardware renderer picks up the change on its next frame; the load notice follows the renderer too.
+      // The hardware renderer picks up the change on its next frame. A renderer change reloads in RecreateGPU().
       TextureReplacements::Reload();
     }
 

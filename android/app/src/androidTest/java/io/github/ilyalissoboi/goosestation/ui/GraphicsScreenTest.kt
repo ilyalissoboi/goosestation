@@ -255,6 +255,114 @@ class GraphicsScreenTest : ControllerKeys {
         walkTo("Preload replacement textures")
     }
 
+    private val cacheOn = pageValues(GraphicsSettings.all, "GPU/EnableTextureCache" to "true")
+
+    @Test
+    fun noReplacementRowsWithoutTheCache() {
+        show()
+
+        rule.onNodeWithText("Texture cache").assertExists()
+        for (row in listOf("Texture replacements", "Dump textures", "Replacement memory", "Hash cache memory")) {
+            rule.onNodeWithText(row).assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun theCacheShowsItsRows() {
+        show(cacheOn)
+
+        for (row in listOf(
+            "Texture replacements",
+            "Dump textures",
+            "Replacement memory",
+            "Hash cache memory",
+            "Hash cache entries",
+        )) {
+            walkTo(row)
+        }
+    }
+
+    @Test
+    fun eachCacheSwitchChangesOnlyItsSetting() {
+        show(cacheOn)
+
+        walkTo("Texture cache")
+        press(Key.ButtonA)
+        walkTo("Texture replacements")
+        press(Key.ButtonA)
+        walkTo("Dump textures")
+        press(Key.ButtonA)
+
+        assertEquals(
+            listOf(
+                cacheOn.with(GraphicsSettings.TEXTURE_CACHE, false),
+                cacheOn.with(GraphicsSettings.TEXTURE_REPLACEMENTS, true),
+                cacheOn.with(GraphicsSettings.DUMP_TEXTURES, true),
+            ),
+            changes,
+        )
+    }
+
+    @Test
+    fun preloadingGoesWithTextureReplacements() {
+        show(
+            pageValues(
+                GraphicsSettings.all,
+                "GPU/EnableTextureCache" to "true",
+                "TextureReplacements/EnableTextureReplacements" to "true",
+            ),
+        )
+
+        walkTo("Preload replacement textures")
+    }
+
+    // The game's own value decides, not the global one.
+    @Test
+    fun aGamesOwnCacheOffHidesItsRows() {
+        show(
+            gamePageValues(
+                GraphicsSettings.all,
+                global = mapOf("GPU/EnableTextureCache" to "true"),
+                game = mapOf("GPU/EnableTextureCache" to "false"),
+            ),
+        )
+
+        rule.onNodeWithText("Texture cache").assertExists()
+        rule.onNodeWithText("Texture replacements").assertDoesNotExist()
+        rule.onNodeWithText("Replacement memory").assertDoesNotExist()
+    }
+
+    @Test
+    fun softwareHidesTheCacheRows() {
+        show(pageValues(GraphicsSettings.all, "GPU/Renderer" to "Software", "GPU/EnableTextureCache" to "true"))
+
+        for (row in listOf("Texture cache", "Texture replacements", "Dump textures", "Replacement memory")) {
+            rule.onNodeWithText(row).assertDoesNotExist()
+        }
+        rule.onNodeWithText("VRAM write replacements").assertExists()
+    }
+
+    @Test
+    fun theLimitsWriteTheirKeys() {
+        show(cacheOn)
+
+        walkTo("Replacement memory")
+        press(Key.DirectionRight)
+        walkTo("Hash cache memory")
+        press(Key.DirectionRight)
+        walkTo("Hash cache entries")
+        press(Key.DirectionRight)
+
+        assertEquals(
+            listOf(
+                cacheOn.with(GraphicsSettings.REPLACEMENT_MEMORY, 320),
+                cacheOn.with(GraphicsSettings.HASH_CACHE_MEMORY, 576),
+                cacheOn.with(GraphicsSettings.HASH_CACHE_ENTRIES, 1300),
+            ),
+            changes,
+        )
+    }
+
     @Test
     fun openGlIsCalledOpenGlEs() {
         show(pageValues(GraphicsSettings.all, "GPU/Renderer" to "OpenGL"))

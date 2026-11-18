@@ -403,6 +403,11 @@ void EndSession()
   s_built_sign_in = false;
 }
 
+bool ConnectionToastsApply()
+{
+  return !s_in_session;
+}
+
 std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,
                                          s64 now)
 {

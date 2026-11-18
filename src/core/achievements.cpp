@@ -705,6 +705,12 @@ void Achievements::UpdateSettings(const Settings& old_config)
   {
     // we're done here
     Shutdown(false);
+    // A game started offline, as far as achievements go, ends here: they're off, and the game's stop won't be seen
+    // (GameChanged() returns while inactive), so a later sign-in must not look like the game's built one.
+    AchievementsOffline::EndSession();
+#ifndef __ANDROID__
+    s_offline_start_said = false;
+#endif
     return;
   }
 
@@ -1807,7 +1813,7 @@ void Achievements::HandleServerDisconnectedEvent(const rc_client_event_t* event)
   // The app says it quietly: the unlock card's note and the count of what's waiting.
   s_android_disconnected = true;
 #else
-  if (CanNotify())
+  if (AchievementsOffline::ConnectionToastsApply() && CanNotify())
   {
     Toast(
       TRANSLATE_STR("Achievements", "Achievements Disconnected"),
@@ -1826,7 +1832,8 @@ void Achievements::HandleServerReconnectedEvent(const rc_client_event_t* event)
   // The app says what was sent (AchievementsOffline's sent callback).
   s_android_disconnected = false;
 #else
-  if (CanNotify())
+  // In a game started offline, the queue says what was sent ("1 unlock sent to RetroAchievements").
+  if (AchievementsOffline::ConnectionToastsApply() && CanNotify())
   {
     Toast(TRANSLATE_STR("Achievements", "Achievements Reconnected"),
                                TRANSLATE_STR("Achievements", "All pending unlock requests have completed."),

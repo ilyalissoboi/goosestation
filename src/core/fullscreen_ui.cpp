@@ -6687,7 +6687,7 @@ void FullscreenUI::DrawAchievementsAccountNotes(const Achievements::AccountStatu
   for (size_t i = 0; i < notes.size(); i++)
   {
     ActiveButton(SmallString::from_format("{} {}",
-                                          (i == 0 && first_is_connection) ? ICON_FA_PLUG : ICON_FA_CLOUD_UPLOAD_ALT,
+                                          (i == 0 && first_is_connection) ? ICON_FA_PLUG : ICON_FA_CLOUD,
                                           notes[i]),
                  false, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
   }

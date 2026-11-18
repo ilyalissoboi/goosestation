@@ -64,6 +64,10 @@ void BeginSession(bool built_sign_in);
 bool SignInIsBuilt();
 void EndSession();
 
+/// Whether the core's "Achievements Disconnected" and "Reconnected" toasts apply: in a game started online. One started
+/// offline said its unlocks are sent later, and its failed sends aren't a lost connection.
+bool ConnectionToastsApply();
+
 /// The answer for a request that couldn't reach the server, from what was saved online (OfflineAnswer()), for the
 /// game booting (booting_hash); nullopt when there's none.
 std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,

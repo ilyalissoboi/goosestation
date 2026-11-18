@@ -363,3 +363,14 @@ TEST_F(AchievementsOfflineQueue, CountsAreByUserAndGame)
   EXPECT_EQ(AchievementsOffline::CountForGame("GOOSE", HASH), 2u);
   EXPECT_EQ(AchievementsOffline::CountForGame("goose", "ffffffffffffffffffffffffffffffff"), 0u);
 }
+
+// A game started offline said its unlocks are sent later: rcheevos's failed sends there aren't a lost connection.
+TEST_F(AchievementsOfflineQueue, ConnectionToastsAreForGamesStartedOnline)
+{
+  Enable(false);
+  EXPECT_TRUE(AchievementsOffline::ConnectionToastsApply());
+  AchievementsOffline::BeginSession(false);
+  EXPECT_FALSE(AchievementsOffline::ConnectionToastsApply());
+  AchievementsOffline::EndSession();
+  EXPECT_TRUE(AchievementsOffline::ConnectionToastsApply());
+}

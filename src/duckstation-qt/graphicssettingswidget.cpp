@@ -258,6 +258,22 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
                                               static_cast<int>(pack_defaults.max_replacement_cache_vram_usage_mb));
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.alwaysTrackUploads, "TextureReplacements",
                                                "AlwaysTrackUploads", false);
+  if (!sif)
+  {
+    // settings.ini is shared with Android through the data folder, whose budgets are smaller: a budget back at this
+    // platform's default is left out of the file, so each platform reads its own (as TexturePackConfig::Save does).
+    const auto leave_out_default = [this](QSpinBox* box, const char* key, u32 default_value) {
+      connect(box, &QSpinBox::valueChanged, this, [key, default_value](int value) {
+        if (static_cast<u32>(value) != default_value)
+          return;
+        Host::DeleteBaseSettingValue("TextureReplacements", key);
+        Host::CommitBaseSettingChanges();
+      });
+    };
+    leave_out_default(m_ui.maxHashCacheVRAMUsage, "MaxHashCacheVRAMUsageMB", pack_defaults.max_hash_cache_vram_usage_mb);
+    leave_out_default(m_ui.maxReplacementCacheVRAMUsage, "MaxReplacementCacheVRAMUsage",
+                      pack_defaults.max_replacement_cache_vram_usage_mb);
+  }
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.vramWriteReplacement, "TextureReplacements",
                                                "EnableVRAMWriteReplacements", false);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.preloadTextureReplacements, "TextureReplacements",
@@ -596,7 +612,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
   dialog->registerWidgetHelp(m_ui.dumpReplacedTextures, tr("Dump Replaced Textures"), tr("Checked"),
                              tr("Also dumps textures the pack already replaces."));
   dialog->registerWidgetHelp(m_ui.dumpTextureForceAlphaChannel, tr("Force Alpha Channel"), tr("Unchecked"),
-                             tr("Writes dumped textures fully opaque, ignoring their semi-transparency."));
+                             tr("Writes dumped textures fully opaque, ignoring their transparency."));
   dialog->registerWidgetHelp(m_ui.maxHashCacheEntries, tr("Hash Cache Entries"), tr("1200"),
                              tr("How many textures the texture cache keeps track of at once."));
   dialog->registerWidgetHelp(m_ui.maxHashCacheVRAMUsage, tr("Hash Cache Memory"),

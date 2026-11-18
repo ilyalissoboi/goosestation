@@ -106,8 +106,9 @@ object GraphicsSettings {
     val TEXTURE_REPLACEMENTS = BoolSetting("TextureReplacements", "EnableTextureReplacements", false)
     val DUMP_TEXTURES = BoolSetting("TextureReplacements", "DumpTextures", false)
     val HASH_CACHE_ENTRIES = IntSetting("TextureReplacements", "MaxHashCacheEntries", 1200)
-    val HASH_CACHE_MEMORY = IntSetting("TextureReplacements", "MaxHashCacheVRAMUsageMB", 512)
-    val REPLACEMENT_MEMORY = IntSetting("TextureReplacements", "MaxReplacementCacheVRAMUsage", 256)
+    val HASH_CACHE_MEMORY = IntSetting("TextureReplacements", "MaxHashCacheVRAMUsageMB", 512, deleteAtDefault = true)
+    val REPLACEMENT_MEMORY =
+        IntSetting("TextureReplacements", "MaxReplacementCacheVRAMUsage", 256, deleteAtDefault = true)
 
     val all: List<Setting<*>> =
         listOf(

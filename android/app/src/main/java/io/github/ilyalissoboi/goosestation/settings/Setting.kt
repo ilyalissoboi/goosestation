@@ -31,10 +31,15 @@ data class BoolSetting(
     ) = s.setBool(section, key, value)
 }
 
+/**
+ * A whole-number setting; with [deleteAtDefault], its global value back at [default] deletes the key, for a default
+ * that differs by platform in a settings.ini shared with desktop.
+ */
 data class IntSetting(
     override val section: String,
     override val key: String,
     override val default: Int,
+    val deleteAtDefault: Boolean = false,
 ) : Setting<Int> {
     override fun read(s: CoreSettings) = s.getInt(section, key, default)
 

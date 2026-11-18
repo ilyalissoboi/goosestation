@@ -5032,7 +5032,7 @@ void FullscreenUI::DrawDisplaySettingsPage()
                         FSUI_CSTR("Also dumps textures the pack already replaces."), "TextureReplacements",
                         "DumpReplacedTextures", true);
       DrawToggleSetting(bsi, FSUI_CSTR("Force Dump Alpha Channel"),
-                        FSUI_CSTR("Writes dumped textures fully opaque, ignoring their semi-transparency."),
+                        FSUI_CSTR("Writes dumped textures fully opaque, ignoring their transparency."),
                         "TextureReplacements", "DumpTextureForceAlphaChannel", false);
     }
   }
@@ -5059,6 +5059,23 @@ void FullscreenUI::DrawDisplaySettingsPage()
                         FSUI_CSTR("The most memory loaded replacement images may use, preloaded ones included."),
                         "TextureReplacements", "MaxReplacementCacheVRAMUsage",
                         static_cast<int>(pack_defaults.max_replacement_cache_vram_usage_mb), 64, 8192, "%d MB");
+    // settings.ini is shared with Android through the data folder, whose budgets are smaller: a budget back at this
+    // platform's default is left out of the file, so each platform reads its own (as TexturePackConfig::Save does).
+    if (!IsEditingGameSettings(bsi))
+    {
+      for (const auto& [key, default_value] :
+           {std::pair<const char*, u32>("MaxHashCacheVRAMUsageMB", pack_defaults.max_hash_cache_vram_usage_mb),
+            std::pair<const char*, u32>("MaxReplacementCacheVRAMUsage",
+                                        pack_defaults.max_replacement_cache_vram_usage_mb)})
+      {
+        if (bsi->ContainsValue("TextureReplacements", key) &&
+            bsi->GetUIntValue("TextureReplacements", key, default_value) == default_value)
+        {
+          bsi->DeleteValue("TextureReplacements", key);
+          SetSettingsChanged(bsi);
+        }
+      }
+    }
     DrawToggleSetting(bsi, FSUI_CSTR("Always Track Uploads"),
                       FSUI_CSTR("Tracks textures even when the game has no pack and nothing is dumped. For "
                                 "debugging the texture cache."),
@@ -9482,7 +9499,7 @@ TRANSLATE_NOOP("FullscreenUI", "Writes each new texture the game draws to textur
 TRANSLATE_NOOP("FullscreenUI", "Dump Replaced Textures");
 TRANSLATE_NOOP("FullscreenUI", "Also dumps textures the pack already replaces.");
 TRANSLATE_NOOP("FullscreenUI", "Force Dump Alpha Channel");
-TRANSLATE_NOOP("FullscreenUI", "Writes dumped textures fully opaque, ignoring their semi-transparency.");
+TRANSLATE_NOOP("FullscreenUI", "Writes dumped textures fully opaque, ignoring their transparency.");
 TRANSLATE_NOOP("FullscreenUI", "Texture Cache Limits");
 TRANSLATE_NOOP("FullscreenUI", "Hash Cache Entries");
 TRANSLATE_NOOP("FullscreenUI", "How many textures the texture cache keeps track of at once.");

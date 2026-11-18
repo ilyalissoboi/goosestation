@@ -89,6 +89,34 @@ class GraphicsSettingsTest {
         )
     }
 
+    // settings.ini is shared with desktop through the data folder, whose budgets are larger: a budget at Android's
+    // default is left out, so each platform reads its own (as the core's own Save does).
+    @Test
+    fun aBudgetBackAtItsDefaultLeavesTheFile() {
+        val store = MemoryCoreSettings()
+        store.values["TextureReplacements/MaxReplacementCacheVRAMUsage"] = "320"
+        store.values["TextureReplacements/MaxHashCacheVRAMUsageMB"] = "2048"
+        val old = SettingValues.read(store, GraphicsSettings.all)
+
+        old
+            .with(GraphicsSettings.REPLACEMENT_MEMORY, 256)
+            .with(GraphicsSettings.HASH_CACHE_MEMORY, 512)
+            .save(store, old)
+
+        assertEquals(emptyMap<String, String>(), store.values)
+    }
+
+    @Test
+    fun aGamesOwnBudgetAtTheDefaultIsKept() {
+        val global = MemoryCoreSettings()
+        val game = MemoryCoreSettings()
+        val old = SettingValues.readGame(global, game, GraphicsSettings.all)
+
+        old.with(GraphicsSettings.REPLACEMENT_MEMORY, 256).save(game, old)
+
+        assertEquals(mapOf("TextureReplacements/MaxReplacementCacheVRAMUsage" to "256"), game.values)
+    }
+
     @Test
     fun megabytesShowAsMB() {
         assertEquals("256 MB", GraphicsSettings.CACHE_MEGABYTES.label(256))

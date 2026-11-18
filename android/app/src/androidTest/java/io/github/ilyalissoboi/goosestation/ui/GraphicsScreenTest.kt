@@ -316,6 +316,28 @@ class GraphicsScreenTest : ControllerKeys {
         walkTo("Preload replacement textures")
     }
 
+    // The note points at the replacement memory only while its row shows, under the cache's limits.
+    @Test
+    fun thePreloadNoteNamesTheLimitOnlyWhenItShows() {
+        show(pageValues(GraphicsSettings.all, "TextureReplacements/EnableVRAMWriteReplacements" to "true"))
+
+        rule.onNodeWithText("Loads the pack at the game's start.").assertExists()
+        rule.onNodeWithText("within the replacement memory below", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun thePreloadNoteNamesTheLimitWithTheCache() {
+        show(
+            pageValues(
+                GraphicsSettings.all,
+                "GPU/EnableTextureCache" to "true",
+                "TextureReplacements/EnableTextureReplacements" to "true",
+            ),
+        )
+
+        rule.onNodeWithText("within the replacement memory below", substring = true).assertExists()
+    }
+
     // The game's own value decides, not the global one.
     @Test
     fun aGamesOwnCacheOffHidesItsRows() {

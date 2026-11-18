@@ -24,6 +24,7 @@ GooseStation has a full desktop frontend built with Qt, and a fullscreen/TV UI (
  - Motion adaptive deinterlacing.
  - Adaptive downsampling filter.
  - Screen rotation for vertical or "TATE" shmup games.
+ - Texture packs: per-texture dumping and replacement through a hardware texture cache, playing packs published for DuckStation on desktop and Android ([guide](docs/texture-replacement.md)).
  - Post processing shader chains (GLSL, Reshade FX and RetroArch slang presets through librashader), with a shader browser and in-app downloads of the libretro, Retro Crisis, satpixie and lola-retro slang packs.
  - "Fast boot" for skipping BIOS splash/intro.
  - Save state support, with runahead and rewind.

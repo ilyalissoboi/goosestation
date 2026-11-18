@@ -1349,7 +1349,9 @@ are kept and sent once you sign in again" when some are waiting).
 RetroAchievements' FAQ says sessions should start online ("We don't currently support a fully offline mode"), which is
 why a game started offline is casual only; its hardcore compliance requirements ask for exactly this queue ("Unlocks
 created while offline must be securely cached and sync to RetroAchievements when connectivity returns"). Desktop
-doesn't keep a queue yet (roadmap, Later).
+keeps the same queue, in its own data folder's `achievements/`, with the same words (README, "RetroAchievements
+without a connection"); a desktop data folder shared with the app shows that folder among the others, and it's never
+copied.
 
 **Hardcore mode** (Settings → Achievements, off by default) starts with the next game start. While it's active the
 menu's Load state, Patch codes and Fast forward are greyed out ("Off in hardcore mode"), no patch code applies, and

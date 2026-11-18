@@ -246,6 +246,9 @@ static std::optional<AchievementProgressIndicator> s_active_progress_indicator;
 static bool s_token_refused = false;
 
 #ifndef __ANDROID__
+// Desktop: the running game, started offline, has said so (OfflineStart()), once until it stops.
+static bool s_offline_start_said = false;
+
 // Desktop has no network listener: while not connected, or with records waiting, the core tries again this often.
 static constexpr float OFFLINE_RETRY_INTERVAL = 120.0f;
 static Common::Timer s_offline_retry_timer;
@@ -733,8 +736,13 @@ void Achievements::UpdateSettings(const Settings& old_config)
         g_settings.achievements_spectator_mode != old_config.achievements_spectator_mode ||
         g_settings.achievements_unofficial_test_mode != old_config.achievements_unofficial_test_mode)
     {
+      // A game started offline stays so: the new client's sign-in, set and session, answered once it's polled, come
+      // from what was saved again, which the store does only outside a session.
+      const bool offline = AchievementsOffline::InSession();
       Shutdown(false);
       Initialize();
+      if (offline)
+        AchievementsOffline::EndSession();
       return;
     }
   }
@@ -1097,6 +1105,11 @@ void Achievements::GameChanged(const std::string& path, CDImage* image)
 
   IdentifyGame(path, image);
 
+#ifndef __ANDROID__
+  if (path.empty())
+    s_offline_start_said = false;
+#endif
+
   // A game started offline takes a sign-in built from the store with it: the next game start, or a network coming
   // back, signs in for real. A real sign-in stays. The stored username and token stay either way.
   if (path.empty() && AchievementsOffline::InSession())
@@ -1355,6 +1368,16 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
   if (display_summary)
     DisplayAchievementSummary();
 
+#ifndef __ANDROID__
+  // Android's app says it in its own words and places.
+  if (AchievementsOffline::InSession() && !s_offline_start_said)
+  {
+    s_offline_start_said = true;
+    Host::AddKeyedOSDMessage("achievements_offline_start", AchievementsOfflineWords::OfflineStart(),
+                             Host::OSD_INFO_DURATION);
+  }
+#endif
+
   Host::OnAchievementsRefreshed();
 }
 
@@ -1434,9 +1457,12 @@ void Achievements::DisplayHardcoreDeferredMessage()
 {
   if (g_settings.achievements_hardcore_mode && !s_hardcore_mode && System::IsValid() && CanNotify())
   {
+    // A game started offline stays casual until it stops, reset or not (ResetHardcoreMode()).
     Toast(std::string(),
-                               TRANSLATE_STR("Achievements", "Hardcore mode will be enabled on system reset."),
-                               Host::OSD_WARNING_DURATION);
+          AchievementsOffline::InSession() ?
+            AchievementsOfflineWords::HardcoreStaysOff() :
+            TRANSLATE_STR("Achievements", "Hardcore mode will be enabled on system reset."),
+          Host::OSD_WARNING_DURATION);
   }
 }
 
@@ -1468,9 +1494,16 @@ void Achievements::HandleUnlockEvent(const rc_client_event_t* event)
 
     std::string badge_path = GetAchievementBadgePath(cheevo, cheevo->state);
 
+    std::string text = cheevo->description;
+#ifndef __ANDROID__
+    // Android's app adds its own note (IsAndroidOffline()).
+    if (AchievementsOffline::InSession())
+      text = fmt::format("{}\n{}", text, AchievementsOfflineWords::CardNote());
+#endif
+
     Notify(fmt::format("achievement_unlock_{}", cheevo->id),
-                                     static_cast<float>(g_settings.achievements_notification_duration),
-                                     std::move(title), cheevo->description, std::move(badge_path));
+           static_cast<float>(g_settings.achievements_notification_duration), std::move(title), std::move(text),
+           std::move(badge_path));
   }
 
   if (g_settings.achievements_sound_effects)
@@ -2243,7 +2276,8 @@ void Achievements::ShowLoginSuccess(const rc_client_t* client)
 
   Host::OnAchievementsLoginSuccess(user->username, user->score, user->score_softcore, user->num_unread_messages);
 
-  if (System::IsValid())
+  // A sign-in built for a game started offline isn't news: the game says it started offline.
+  if (System::IsValid() && !AchievementsOffline::SignInIsBuilt())
   {
     const auto lock = GetLock();
     if (s_client == client)

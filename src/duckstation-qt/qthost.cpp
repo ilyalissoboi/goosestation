@@ -11,6 +11,8 @@
 #include "setupwizarddialog.h"
 
 #include "core/achievements.h"
+#include "core/achievements_offline.h"
+#include "core/achievements_offline_words.h"
 #include "core/cheats.h"
 #include "core/controller.h"
 #include "core/fullscreen_ui.h"
@@ -1597,11 +1599,15 @@ void Host::OnAchievementsLoginRequested(Achievements::LoginRequestReason reason)
 
 void Host::OnAchievementsLoginSuccess(const char* username, u32 points, u32 sc_points, u32 unread_messages)
 {
-  const QString message = qApp->translate("QtHost", "RA: Logged in as %1 (%2, %3 softcore). %4 unread messages.")
-                            .arg(QString::fromUtf8(username))
-                            .arg(points)
-                            .arg(sc_points)
-                            .arg(unread_messages);
+  // A game started offline is signed in from what was saved online.
+  const QString message =
+    AchievementsOffline::SignInIsBuilt() ?
+      QString::fromStdString(AchievementsOfflineWords::StatusBarOffline(username)) :
+      qApp->translate("QtHost", "RA: Logged in as %1 (%2, %3 softcore). %4 unread messages.")
+        .arg(QString::fromUtf8(username))
+        .arg(points)
+        .arg(sc_points)
+        .arg(unread_messages);
 
   emit g_emu_thread->statusMessage(message);
 }
@@ -1772,6 +1778,24 @@ void EmuThread::run()
 {
   m_event_loop = new QEventLoop();
   m_started_semaphore.release();
+
+  // Unlocks and leaderboard entries are kept until RetroAchievements has them, and games start offline from what was
+  // saved online (achievements_offline.h). Before the core's start, which signs in.
+  static constexpr auto show_queue_message = [](std::string key, const std::string& message) {
+    Host::AddKeyedOSDMessage(std::move(key), message, Host::OSD_INFO_DURATION);
+    emit g_emu_thread->statusMessage(QString::fromStdString(message));
+  };
+  AchievementsOffline::Enable(
+    Path::Combine(EmuFolders::DataRoot, "achievements"),
+    AchievementsOffline::Callbacks{
+      .changed = []() { Host::OnAchievementsRefreshed(); },
+      .refused =
+        [](std::string_view title) {
+          show_queue_message(fmt::format("achievements_refused_{}", title), AchievementsOfflineWords::Refused(title));
+        },
+      .sent = [](u32 count) { show_queue_message("achievements_sent", AchievementsOfflineWords::Sent(count)); },
+    },
+    false);
 
   // input source setup must happen on emu thread
   {

@@ -477,3 +477,11 @@ TEST(TextureReplacementIndex, DuplicatesAreFoundWhateverLiesBetween)
   index.Build(game.path(), TexturePackConfig());
   EXPECT_EQ(index.GetTextureCount(), 25u);
 }
+
+// A disc or homebrew program without a serial is named by its hash, and its pack goes in that folder.
+TEST(TextureReplacementNotice, AGameWithoutASerialIsNamedByItsHash)
+{
+  LoadNoticeState state = Notice();
+  state.game_id = "HASH-1A2B3C4D5E6F7081";
+  EXPECT_EQ(FormatLoadNotice(state), Says("No texture pack found in textures/HASH-1A2B3C4D5E6F7081"));
+}

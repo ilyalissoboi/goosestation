@@ -19,7 +19,8 @@ images (whole backgrounds) work too.
 ### Where a pack goes
 
 Each game's pack goes in a folder named after the game's serial, such as `SLUS-01040` for Vagrant Story (USA). The
-serial is shown with the game in the game list and in the game's properties or settings.
+serial is shown with the game in the game list and in the game's properties or settings. A disc or homebrew program
+without a serial uses an ID made from its hash instead, `HASH-` and 16 hex digits, which the notice below names.
 
 - **Desktop:** the data folder's `textures/<serial>/` (the data folder is the user directory, see
   [User Directories](../README.md#user-directories)). For example `textures/SLUS-01040/config.yaml` and
@@ -27,22 +28,28 @@ serial is shown with the game in the game list and in the game's properties or s
 - **Android:** the same `textures/<serial>/` inside the app's data folder (Settings → Folders). The app reads the pack
   there through the folder's permission, in place: a pack is never copied into the app's own storage, however large.
 
-Unpack the pack so that its own `config.yaml` (if it has one) and its image folders sit directly in
-`textures/<serial>/`: a ZIP often holds a `textures/` folder of its own, which goes over the data folder's.
+Unpack the pack so that its own `config.yaml` (if it has one) sits directly in `textures/<serial>/`: a ZIP often
+holds a `textures/` folder of its own, which goes over the data folder's. Images are found at any depth under
+`textures/<serial>/`, but a `config.yaml` one folder down isn't read (nothing says so: the pack then plays with the
+global settings), and a serial folder inside another folder isn't found at all.
 
 ### Turning it on
 
 In **Settings → Graphics**, under **Texture Replacements** (Qt: its tab; Big Picture and Android: its section), or in
-one game's settings to use the pack for that game alone:
+one game's settings to use the pack for that game alone. The rows' names differ a little between Qt, Big Picture and
+Android; each step gives all three where they differ.
 
 1. Turn on **Enable Texture Cache** (Android: **Texture cache**). It works with the hardware renderers only (Vulkan,
    OpenGL, OpenGL ES, D3D11, D3D12, Metal), not the software renderer.
 2. Turn on **Enable Texture Replacements** (Android: **Texture replacements**), shown or enabled once the cache is on.
-3. For a pack of `vram-write-` images, turn on **Enable VRAM Write Replacement** instead (or as well).
-4. Optionally, **Preload Replacement Textures** loads the whole pack when the game starts rather than each image the
-   first time it's drawn, so there's no pause the first time a replaced texture appears. On Android this is worth
-   turning on for packs that fit the **replacement cache memory** (256 MB by default there, 512 MB on desktop, under
-   the limits): a larger pack keeps only what fits and loads the rest again as it's drawn.
+3. For a pack of `vram-write-` images, turn on **Enable VRAM Write Replacement** (Big Picture: **Enable VRAM Write
+   Texture Replacement**; Android: **VRAM write replacements**) instead, or as well.
+4. Optionally, **Preload Texture Replacements** (Big Picture and Android: **Preload Replacement Textures**) loads the
+   whole pack when the game starts rather than each image the first time it's drawn, so there's no pause the first
+   time a replaced texture appears. On Android this is worth turning on for packs that fit the **replacement cache
+   memory** (256 MB by default there, 512 MB on desktop; Qt: **Replacement Cache Memory** in the **Advanced** group;
+   Big Picture: under **Texture Cache Limits**; Android: **Replacement memory** under **Texture cache limits**): a
+   larger pack keeps only what fits and loads the rest again as it's drawn.
 
 ### The notice
 
@@ -52,7 +59,7 @@ says what was found:
 | Notice | What it means |
 | --- | --- |
 | Texture pack: 161 replacements | The pack is in use; the count is the images that apply (and its VRAM write replacements, if any). |
-| No texture pack found in textures/SLUS-01040 | The game's folder has no replacement images: check the folder's name is the game's serial, that the images aren't one folder too deep, and on Android that the app still has the data folder's permission (Settings → Folders). |
+| No texture pack found in textures/SLUS-01040 | The game's folder has no replacement images: check the folder's name is the game's serial (or its `HASH-` ID), that it isn't inside another folder, and on Android that the app still has the data folder's permission (Settings → Folders). |
 | Texture pack found, but it needs the texture cache | Turn on the texture cache, globally or in the game's settings. |
 | Texture pack found, but it needs a hardware renderer | The software renderer can't replace textures: pick another renderer. |
 | Texture pack found, but it needs texture replacements on | The pack has texture replacements, and only VRAM write replacements are on. |
@@ -86,12 +93,13 @@ Nothing is shown while both replacement switches are off.
    replacements to see them.
 
 On desktop, **Dump Replaced Textures** (on by default) also dumps textures the pack already replaces, and **Force
-Alpha Channel** writes dumps fully opaque. Dumping is for the game you're making a pack for: it writes many files.
+Alpha Channel** (Big Picture: **Force Dump Alpha Channel**) writes dumps fully opaque. Dumping is for the game you're
+making a pack for: it writes many files.
 
 ### config.yaml
 
 A pack's `config.yaml` sets options for its game, over the global settings; lines left out or commented out keep the
-global values. The options:
+global values ([how it's read](#configyaml-1), below, in the reference). The options:
 
 | Option | What it does |
 | --- | --- |

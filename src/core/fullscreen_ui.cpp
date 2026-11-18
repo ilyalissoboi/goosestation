@@ -5046,19 +5046,30 @@ void FullscreenUI::DrawDisplaySettingsPage()
   if (texture_cache)
   {
     const TexturePackConfig pack_defaults;
+    // In a game's settings the row deletes the game's value when it equals the default given, so give the global
+    // value: choosing it follows the global setting, and the platform's own default stays the game's if chosen.
+    const bool game_settings = IsEditingGameSettings(bsi);
+    const auto limit_default = [game_settings](const char* key, u32 platform_default) {
+      const u32 value =
+        game_settings ? Host::GetBaseUIntSettingValue("TextureReplacements", key, platform_default) : platform_default;
+      return static_cast<int>(value);
+    };
     MenuHeading(FSUI_CSTR("Texture Cache Limits"));
     DrawIntRangeSetting(bsi, FSUI_CSTR("Hash Cache Entries"),
                         FSUI_CSTR("How many textures the texture cache keeps track of at once."),
                         "TextureReplacements", "MaxHashCacheEntries",
-                        static_cast<int>(pack_defaults.max_hash_cache_entries), 100, 10000);
+                        limit_default("MaxHashCacheEntries", pack_defaults.max_hash_cache_entries), 100, 10000);
     DrawIntRangeSetting(bsi, FSUI_CSTR("Hash Cache Memory"),
                         FSUI_CSTR("The most video memory the texture cache's textures may use."),
                         "TextureReplacements", "MaxHashCacheVRAMUsageMB",
-                        static_cast<int>(pack_defaults.max_hash_cache_vram_usage_mb), 64, 8192, "%d MB");
+                        limit_default("MaxHashCacheVRAMUsageMB", pack_defaults.max_hash_cache_vram_usage_mb), 64, 8192,
+                        "%d MB");
     DrawIntRangeSetting(bsi, FSUI_CSTR("Replacement Cache Memory"),
                         FSUI_CSTR("The most memory loaded replacement images may use, preloaded ones included."),
                         "TextureReplacements", "MaxReplacementCacheVRAMUsage",
-                        static_cast<int>(pack_defaults.max_replacement_cache_vram_usage_mb), 64, 8192, "%d MB");
+                        limit_default("MaxReplacementCacheVRAMUsage",
+                                      pack_defaults.max_replacement_cache_vram_usage_mb),
+                        64, 8192, "%d MB");
     // settings.ini is shared with Android through the data folder, whose budgets are smaller: a budget back at this
     // platform's default is left out of the file, so each platform reads its own (as TexturePackConfig::Save does).
     if (!IsEditingGameSettings(bsi))

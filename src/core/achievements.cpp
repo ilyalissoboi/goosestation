@@ -2959,6 +2959,7 @@ void Achievements::DrawAchievementsWindow()
       {
         text.assign(TRANSLATE_SV("Achievements", "This game has no achievements."));
       }
+      text.append(AchievementsOfflineWords::ToSendSuffix(GetWaitingCountForGame()));
 
       top += g_medium_font->FontSize + spacing;
 
@@ -3354,7 +3355,10 @@ void Achievements::DrawLeaderboardsWindow()
         u32 count = 0;
         for (u32 i = 0; i < s_leaderboard_list->num_buckets; i++)
           count += s_leaderboard_list->buckets[i].num_leaderboards;
-        text = TRANSLATE_PLURAL_SSTR("Achievements", "This game has %n leaderboards.", "Leaderboard count", count);
+        // A game started offline has no leaderboards to show: the server has them.
+        text = AchievementsOffline::InSession() ?
+                 SmallString(std::string_view(AchievementsOfflineWords::LeaderboardsOffline())) :
+                 TRANSLATE_PLURAL_SSTR("Achievements", "This game has %n leaderboards.", "Leaderboard count", count);
       }
 
       const ImRect summary_bb(ImVec2(left, top), ImVec2(right, top + g_medium_font->FontSize));
@@ -3479,7 +3483,8 @@ void Achievements::DrawLeaderboardsWindow()
       ImGuiFullscreen::ResetFocusHere();
       ImGuiFullscreen::BeginMenuButtons();
 
-      for (u32 bucket_index = 0; bucket_index < s_leaderboard_list->num_buckets; bucket_index++)
+      for (u32 bucket_index = 0; !AchievementsOffline::InSession() && bucket_index < s_leaderboard_list->num_buckets;
+           bucket_index++)
       {
         const rc_client_leaderboard_bucket_t& bucket = s_leaderboard_list->buckets[bucket_index];
         for (u32 i = 0; i < bucket.num_leaderboards; i++)

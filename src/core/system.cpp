@@ -4512,9 +4512,10 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
         tr.preload_textures != old_tr.preload_textures || tr.always_track_uploads != old_tr.always_track_uploads ||
         tr.dump_textures != old_tr.dump_textures || tr.dump_replaced_textures != old_tr.dump_replaced_textures ||
         tr.dump_texture_force_alpha_channel != old_tr.dump_texture_force_alpha_channel || tr.config != old_tr.config ||
-        g_settings.gpu_texture_cache != old_settings.gpu_texture_cache)
+        g_settings.gpu_texture_cache != old_settings.gpu_texture_cache ||
+        g_settings.gpu_renderer != old_settings.gpu_renderer)
     {
-      // The hardware renderer picks up the change on its next frame.
+      // The hardware renderer picks up the change on its next frame; the load notice follows the renderer too.
       TextureReplacements::Reload();
     }
 

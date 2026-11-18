@@ -10,6 +10,7 @@
 
 #include "util/image.h"
 
+#include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -75,7 +76,27 @@ void SetPackFolder(std::string folder);
 
 void SetGameID(std::string game_id);
 
+/// Indexes the running game's pack again, and shows the load notice (below) if there is one.
 void Reload();
+
+/// What the load notice is worked out from: the game, the switches and renderer in effect, and what its folder holds.
+struct LoadNoticeState
+{
+  std::string_view game_id;
+  bool texture_replacements;
+  bool vram_write_replacements;
+  bool texture_cache;
+  bool hardware_renderer;
+  size_t textures;
+  size_t vram_writes;
+};
+
+/// The notice a load shows: how many replacements apply, why a pack found doesn't apply (the first reason that fits),
+/// or that none was found in textures/<serial>. None without a game, or with both replacement switches off.
+std::optional<std::string> FormatLoadNotice(const LoadNoticeState& state);
+
+/// The notice for the index as last loaded, with the settings in effect.
+std::optional<std::string> GetLoadNotice();
 
 /// Changes with every Reload (a new game, settings, or the reload hotkey).
 u32 GetReloadCount();

@@ -310,7 +310,156 @@ TEST_F(ContentPack, ChangingThePackFolderMovesTheIndex)
   g_settings.texture_replacements.enable_texture_replacements = old_enabled;
 }
 
+namespace {
+
+// The settings the notice reads, put back afterwards.
+class NoticeSettings
+{
+public:
+  NoticeSettings()
+    : m_tr(g_settings.texture_replacements), m_cache(g_settings.gpu_texture_cache),
+      m_renderer(g_settings.gpu_renderer)
+  {
+    g_settings.texture_replacements.enable_texture_replacements = true;
+    g_settings.gpu_texture_cache = true;
+    g_settings.gpu_renderer = GPURenderer::HardwareOpenGL;
+  }
+  ~NoticeSettings()
+  {
+    g_settings.texture_replacements = m_tr;
+    g_settings.gpu_texture_cache = m_cache;
+    g_settings.gpu_renderer = m_renderer;
+  }
+
+private:
+  Settings::TextureReplacementSettings m_tr;
+  bool m_cache;
+  GPURenderer m_renderer;
+};
+
+} // namespace
+
+TEST_F(ContentPack, ReloadNoticesThePack)
+{
+  const NoticeSettings settings;
+  m_tree.Write(fmt::format("textures/SLUS-00000/replacements/{}.png", UPLOAD_NAME));
+  SetPackFolder(fmt::format("{}/textures", FakeProvider::ROOT));
+  SetGameID("SLUS-00000");
+  EXPECT_EQ(GetLoadNotice(), std::optional<std::string>("Texture pack: 1 replacement"));
+}
+
+TEST_F(ContentPack, AnUnreadablePackFolderSaysNoPack)
+{
+  const NoticeSettings settings;
+  m_tree.Write(fmt::format("textures/SLUS-00000/replacements/{}.png", UPLOAD_NAME));
+  m_provider->SetRefuseAll(true);
+  SetPackFolder(fmt::format("{}/textures", FakeProvider::ROOT));
+  SetGameID("SLUS-00000");
+  // The folder as the guide names it, never the data folder's content:// address.
+  EXPECT_EQ(GetLoadNotice(), std::optional<std::string>("No texture pack found in textures/SLUS-00000"));
+}
+
 #endif
+
+namespace {
+
+// Everything on, on a hardware renderer, for Vagrant Story with nothing found: each test changes what it's about.
+LoadNoticeState Notice(size_t textures = 0, size_t vram_writes = 0)
+{
+  return LoadNoticeState{.game_id = "SLUS-01040",
+                         .texture_replacements = true,
+                         .vram_write_replacements = true,
+                         .texture_cache = true,
+                         .hardware_renderer = true,
+                         .textures = textures,
+                         .vram_writes = vram_writes};
+}
+
+std::optional<std::string> Says(std::string_view text)
+{
+  return std::string(text);
+}
+
+} // namespace
+
+TEST(TextureReplacementNotice, NoNoticeWithReplacementsOff)
+{
+  LoadNoticeState state = Notice(161, 3);
+  state.texture_replacements = false;
+  state.vram_write_replacements = false;
+  EXPECT_EQ(FormatLoadNotice(state), std::nullopt);
+}
+
+TEST(TextureReplacementNotice, NoNoticeWithoutAGame)
+{
+  LoadNoticeState state = Notice(161);
+  state.game_id = "";
+  EXPECT_EQ(FormatLoadNotice(state), std::nullopt);
+}
+
+TEST(TextureReplacementNotice, APackSaysHowManyApply)
+{
+  EXPECT_EQ(FormatLoadNotice(Notice(161)), Says("Texture pack: 161 replacements"));
+}
+
+TEST(TextureReplacementNotice, VRAMWritesAreCountedToo)
+{
+  EXPECT_EQ(FormatLoadNotice(Notice(161, 3)), Says("Texture pack: 161 replacements and 3 VRAM write replacements"));
+}
+
+TEST(TextureReplacementNotice, OnlyWhatAppliesIsCounted)
+{
+  LoadNoticeState state = Notice(161, 3);
+  state.texture_replacements = false;
+  EXPECT_EQ(FormatLoadNotice(state), Says("Texture pack: 3 VRAM write replacements"));
+}
+
+TEST(TextureReplacementNotice, OneIsSingular)
+{
+  EXPECT_EQ(FormatLoadNotice(Notice(1)), Says("Texture pack: 1 replacement"));
+  EXPECT_EQ(FormatLoadNotice(Notice(0, 1)), Says("Texture pack: 1 VRAM write replacement"));
+}
+
+TEST(TextureReplacementNotice, NoPackSaysWhere)
+{
+  EXPECT_EQ(FormatLoadNotice(Notice()), Says("No texture pack found in textures/SLUS-01040"));
+}
+
+TEST(TextureReplacementNotice, ACacheOffPackSaysSo)
+{
+  LoadNoticeState state = Notice(161);
+  state.texture_cache = false;
+  EXPECT_EQ(FormatLoadNotice(state), Says("Texture pack found, but it needs the texture cache"));
+}
+
+TEST(TextureReplacementNotice, SoftwareSaysSo)
+{
+  LoadNoticeState state = Notice(161);
+  state.hardware_renderer = false;
+  EXPECT_EQ(FormatLoadNotice(state), Says("Texture pack found, but it needs a hardware renderer"));
+}
+
+TEST(TextureReplacementNotice, ACacheOffAndSoftwareSaysTheCacheFirst)
+{
+  LoadNoticeState state = Notice(161);
+  state.texture_cache = false;
+  state.hardware_renderer = false;
+  EXPECT_EQ(FormatLoadNotice(state), Says("Texture pack found, but it needs the texture cache"));
+}
+
+TEST(TextureReplacementNotice, AFontPackWithOnlyVRAMWritesOnSaysSo)
+{
+  LoadNoticeState state = Notice(161);
+  state.texture_replacements = false;
+  EXPECT_EQ(FormatLoadNotice(state), Says("Texture pack found, but it needs texture replacements on"));
+}
+
+TEST(TextureReplacementNotice, VRAMWritesWithOnlyTexturesOnSaysSo)
+{
+  LoadNoticeState state = Notice(0, 3);
+  state.vram_write_replacements = false;
+  EXPECT_EQ(FormatLoadNotice(state), Says("Texture pack found, but it needs VRAM write replacements on"));
+}
 
 TEST(TextureReplacementIndex, DuplicatesAreFoundWhateverLiesBetween)
 {

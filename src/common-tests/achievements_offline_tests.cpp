@@ -374,3 +374,62 @@ TEST_F(AchievementsOfflineQueue, ConnectionToastsAreForGamesStartedOnline)
   AchievementsOffline::EndSession();
   EXPECT_TRUE(AchievementsOffline::ConnectionToastsApply());
 }
+
+namespace {
+
+std::map<std::string, std::string> LoginForm()
+{
+  return {{"r", "login2"}, {"u", "goose"}, {"t", TOKEN}};
+}
+
+// What a game's online start saved: the account, the hash's game and its set.
+void SaveForOfflineStart(const std::string& folder)
+{
+  Store store(folder);
+  ASSERT_TRUE(store.SaveUser(AchievementsOffline::UserInfo{"goose", "Goose", "", 300, 940}));
+  ASSERT_TRUE(store.SaveHash(HASH, 3001));
+  ASSERT_TRUE(store.SaveSet(3001, R"({"Success":true,"GameId":3001})"));
+}
+
+} // namespace
+
+// Review Focus 5: a client restarted mid-game (Encore, Spectator, Unofficial) signs in again from what was saved,
+// and the game stays started offline.
+TEST_F(AchievementsOfflineQueue, ARestartKeepsTheSessionAndSignsInAgain)
+{
+  SaveForOfflineStart(m_tmp.GetPath());
+  Enable(false);
+  AchievementsOffline::BeginSession(true);
+
+  AchievementsOffline::RestartSession();
+  EXPECT_TRUE(AchievementsOffline::InSession());
+  EXPECT_FALSE(AchievementsOffline::SignInIsBuilt());
+
+  EXPECT_TRUE(AchievementsOffline::AnswerOffline(LoginForm(), HASH, T0).has_value());
+  EXPECT_TRUE(AchievementsOffline::InSession());
+  EXPECT_TRUE(AchievementsOffline::SignInIsBuilt());
+
+  // Once: the session's sign-in is made.
+  EXPECT_FALSE(AchievementsOffline::AnswerOffline(LoginForm(), HASH, T0).has_value());
+}
+
+// The network came back before the restart: its real sign-in isn't built, and the game still started offline.
+TEST_F(AchievementsOfflineQueue, ARealSignInAfterARestartKeepsTheSession)
+{
+  SaveForOfflineStart(m_tmp.GetPath());
+  Enable(false);
+  AchievementsOffline::BeginSession(true);
+
+  AchievementsOffline::RestartSession();
+  AchievementsOffline::OnAnswer(LoginForm(), 200, R"({"Success":true,"User":"goose","Token":"x"})");
+  EXPECT_TRUE(AchievementsOffline::InSession());
+  EXPECT_FALSE(AchievementsOffline::SignInIsBuilt());
+  EXPECT_FALSE(AchievementsOffline::AnswerOffline(LoginForm(), HASH, T0).has_value());
+}
+
+TEST_F(AchievementsOfflineQueue, ARestartOutsideASessionDoesNothing)
+{
+  Enable(false);
+  AchievementsOffline::RestartSession();
+  EXPECT_FALSE(AchievementsOffline::InSession());
+}

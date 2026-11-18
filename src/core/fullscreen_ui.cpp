@@ -3,7 +3,6 @@
 
 #include "fullscreen_ui.h"
 #include "achievements.h"
-#include "achievements_offline.h"
 #include "achievements_offline_words.h"
 #include "bios.h"
 #include "cheats.h"
@@ -450,6 +449,9 @@ struct MemcardSyncState
 static MemcardSyncState s_memcard_sync_state;
 static Common::Timer s_memcard_sync_state_timer;
 static bool s_memcard_sync_state_stale = true;
+
+// The Achievements page's account, read before the page takes the settings lock: reading it takes that lock too.
+static Achievements::AccountStatus s_achievements_account;
 static std::unique_ptr<INISettingsInterface> s_game_settings_interface;
 static std::unique_ptr<GameList::Entry> s_game_settings_entry;
 static std::vector<std::pair<std::string, bool>> s_game_list_directories_cache;
@@ -3098,6 +3100,8 @@ void FullscreenUI::DrawSettingsWindow()
 
     if (s_settings_page == SettingsPage::MemoryCards)
       UpdateMemcardSyncState();
+    else if (s_settings_page == SettingsPage::Achievements)
+      s_achievements_account = Achievements::GetAccountStatus();
 
     auto lock = Host::GetSettingsLock();
 
@@ -6729,13 +6733,9 @@ void FullscreenUI::DrawAchievementsSettingsPage()
     if (System::IsValid() && bsi->GetBoolValue("Cheevos", "ChallengeMode", false))
     {
       // A game started offline stays casual until it stops.
-      bool offline;
-      {
-        const auto lock = Achievements::GetLock();
-        offline = AchievementsOffline::InSession();
-      }
-      ShowToast(std::string(), offline ? AchievementsOfflineWords::HardcoreStaysOff() :
-                                         FSUI_STR("Hardcore mode will be enabled on next game restart."));
+      ShowToast(std::string(), s_achievements_account.offline_session ?
+                                 AchievementsOfflineWords::HardcoreStaysOff() :
+                                 FSUI_STR("Hardcore mode will be enabled on next game restart."));
     }
   }
   DrawToggleSetting(
@@ -6769,7 +6769,7 @@ void FullscreenUI::DrawAchievementsSettingsPage()
   if (!IsEditingGameSettings(bsi))
   {
     MenuHeading(FSUI_CSTR("Account"));
-    const Achievements::AccountStatus account = Achievements::GetAccountStatus();
+    const Achievements::AccountStatus& account = s_achievements_account;
     // The token itself is in secrets.ini, so the username says whether there is a login.
     if (!bsi->GetTinyStringValue("Cheevos", "Username").empty())
     {

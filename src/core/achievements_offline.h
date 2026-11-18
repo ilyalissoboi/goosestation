@@ -63,6 +63,9 @@ bool InSession();
 void BeginSession(bool built_sign_in);
 bool SignInIsBuilt();
 void EndSession();
+/// The client is restarted mid-game (an Encore, Spectator or Unofficial change): the game stays started offline, and
+/// the new client's sign-in may be built from the store once more (it's real, and not built, if the network is back).
+void RestartSession();
 
 /// Whether the core's "Achievements Disconnected" and "Reconnected" toasts apply: in a game started online. One started
 /// offline said its unlocks are sent later, and its failed sends aren't a lost connection.

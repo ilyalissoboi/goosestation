@@ -41,6 +41,9 @@ std::vector<std::pair<Record::Kind, u32>> s_reported_refusals;
 bool s_in_session = false;
 bool s_built_sign_in = false;
 
+// The session's client was restarted (RestartSession()): its next sign-in may be built from the store, in session.
+bool s_sign_in_again = false;
+
 std::string_view Field(const std::map<std::string, std::string>& form, const char* name)
 {
   const auto it = form.find(name);
@@ -271,6 +274,10 @@ void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::s
   if (!s_store)
     return;
 
+  // A restarted session's real sign-in: nothing more to build.
+  if (status == 200 && Field(form, "r") == "login2")
+    s_sign_in_again = false;
+
   SaveForOffline(form, status, body);
 
   const std::optional<Record> request = RecordFor(form);
@@ -397,10 +404,19 @@ bool SignInIsBuilt()
   return s_in_session && s_built_sign_in;
 }
 
+void RestartSession()
+{
+  if (!s_in_session)
+    return;
+  s_built_sign_in = false;
+  s_sign_in_again = true;
+}
+
 void EndSession()
 {
   s_in_session = false;
   s_built_sign_in = false;
+  s_sign_in_again = false;
 }
 
 bool ConnectionToastsApply()
@@ -411,7 +427,19 @@ bool ConnectionToastsApply()
 std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,
                                          s64 now)
 {
-  return s_store ? OfflineAnswer(*s_store, form, booting_hash, s_in_session, now) : std::nullopt;
+  if (!s_store)
+    return std::nullopt;
+
+  // A sign-in is built only outside a session, or once for a restarted one's new client.
+  const bool sign_in = (Field(form, "r") == "login2");
+  std::optional<std::string> answer =
+    OfflineAnswer(*s_store, form, booting_hash, s_in_session && !(sign_in && s_sign_in_again), now);
+  if (sign_in && s_in_session && s_sign_in_again)
+  {
+    s_sign_in_again = false;
+    s_built_sign_in = answer.has_value();
+  }
+  return answer;
 }
 
 std::vector<std::pair<std::string, u32>> CountsByUser()

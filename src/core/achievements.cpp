@@ -703,14 +703,16 @@ void Achievements::UpdateSettings(const Settings& old_config)
 
   if (!g_settings.achievements_enabled)
   {
-    // we're done here
-    Shutdown(false);
     // A game started offline, as far as achievements go, ends here: they're off, and the game's stop won't be seen
-    // (GameChanged() returns while inactive), so a later sign-in must not look like the game's built one.
+    // (GameChanged() returns while inactive), so a later sign-in must not look like the game's built one. Before the
+    // shutdown, whose refresh then shows it.
     AchievementsOffline::EndSession();
 #ifndef __ANDROID__
     s_offline_start_said = false;
 #endif
+
+    // we're done here
+    Shutdown(false);
     return;
   }
 
@@ -742,13 +744,11 @@ void Achievements::UpdateSettings(const Settings& old_config)
         g_settings.achievements_spectator_mode != old_config.achievements_spectator_mode ||
         g_settings.achievements_unofficial_test_mode != old_config.achievements_unofficial_test_mode)
     {
-      // A game started offline stays so: the new client's sign-in, set and session, answered once it's polled, come
-      // from what was saved again, which the store does only outside a session.
-      const bool offline = AchievementsOffline::InSession();
+      // A game started offline stays so until it stops, network or not: the new client signs in from what was saved
+      // again if it can't reach the server.
       Shutdown(false);
+      AchievementsOffline::RestartSession();
       Initialize();
-      if (offline)
-        AchievementsOffline::EndSession();
       return;
     }
   }

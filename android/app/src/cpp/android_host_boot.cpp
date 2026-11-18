@@ -213,7 +213,7 @@ void AndroidHost::BootPendingGame()
   QueueReleaseAllInputs();
 
   // A sign-in that failed for want of a connection is tried again, so this game's set can load.
-  Achievements::RetryAndroidSignIn();
+  Achievements::RetrySignIn();
 
   SystemBootParameters parameters(s_boot_path);
   parameters.save_state = std::move(s_pending_boot_state);

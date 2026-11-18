@@ -5,6 +5,7 @@
 
 #include "achievements.h"
 #include "achievements_offline.h"
+#include "achievements_offline_words.h"
 #include "achievements_offline_store.h"
 #include "achievements_private.h"
 #include "bios.h"
@@ -237,6 +238,19 @@ static bool s_is_showing_all_leaderboard_entries = false;
 static std::vector<LeaderboardTrackerIndicator> s_active_leaderboard_trackers;
 static std::vector<AchievementChallengeIndicator> s_active_challenge_indicators;
 static std::optional<AchievementProgressIndicator> s_active_progress_indicator;
+
+// Desktop: the server refused the stored token, and a new login was asked for. Until one succeeds, nothing signs in
+// with that token again (no retries), the player counts as signed out, and a game waiting for the login keeps hardcore
+// (the login reloads it; the login dialog turns hardcore off if cancelled), as before. Always false on Android, whose app
+// signs out.
+static bool s_token_refused = false;
+
+#ifndef __ANDROID__
+// Desktop has no network listener: while not connected, or with records waiting, the core tries again this often.
+static constexpr float OFFLINE_RETRY_INTERVAL = 120.0f;
+static Common::Timer s_offline_retry_timer;
+static void RetryPeriodically();
+#endif
 
 // The server the clients talk to, when a test has set one (SetServerForTest()); empty for RetroAchievements.
 static std::string s_server_host;
@@ -603,6 +617,10 @@ bool Achievements::Initialize()
 
   // Hardcore starts off. We enable it on first boot.
   s_hardcore_mode = false;
+  s_token_refused = false;
+#ifndef __ANDROID__
+  s_offline_retry_timer.Reset();
+#endif
 
   rc_client_set_event_handler(s_client, ClientEventHandler);
 
@@ -903,6 +921,9 @@ void Achievements::IdleUpdate()
 
   s_http_downloader->PollRequests();
   rc_client_idle(s_client);
+#ifndef __ANDROID__
+  RetryPeriodically();
+#endif
 }
 
 bool Achievements::NeedsIdleUpdate()
@@ -931,9 +952,32 @@ void Achievements::FrameUpdate()
 
   s_http_downloader->PollRequests();
   rc_client_do_frame(s_client);
+#ifndef __ANDROID__
+  RetryPeriodically();
+#endif
 
   UpdateRichPresence(lock);
 }
+
+#ifndef __ANDROID__
+
+void Achievements::RetryPeriodically()
+{
+  if (s_offline_retry_timer.GetTimeSeconds() < OFFLINE_RETRY_INTERVAL)
+    return;
+  s_offline_retry_timer.Reset();
+
+  const SignInState state = GetSignInState();
+  const rc_client_user_t* user = rc_client_get_user_info(s_client);
+  const auto counts = AchievementsOffline::CountsByUser();
+  const bool waiting = user && std::any_of(counts.begin(), counts.end(), [user](const auto& it) {
+                         return StringUtil::EqualNoCase(it.first, user->username);
+                       });
+  if (state == SignInState::NotConnected || waiting)
+    OnNetworkBack();
+}
+
+#endif
 
 void Achievements::ClientEventHandler(const rc_client_event_t* event, rc_client_t* client)
 {
@@ -1219,14 +1263,11 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
   }
   else if (result == RC_LOGIN_REQUIRED)
   {
-#ifdef __ANDROID__
     // With the sign-in over and failed, the game runs without achievements, and so without hardcore. A later sign-in
-    // (a network coming back) loads the set, in casual: hardcore can't come back without a reset.
-    if (!s_login_request)
+    // (a network coming back, or a new login after a refused token) loads the set, in casual: hardcore can't come back
+    // without a reset.
+    if (!s_login_request && !s_token_refused)
       DisableHardcoreMode();
-#endif
-    // We would've asked to re-authenticate, so leave HC on for now.
-    // Once we've done so, we'll reload the game.
     return;
   }
   else if (result != RC_OK)
@@ -2068,6 +2109,8 @@ bool Achievements::Login(const char* username, const char* password, Error* erro
   if (!params.result)
     return false;
 
+  s_token_refused = false;
+
   if (!is_temporary_client)
     SendWaitingRecords();
 
@@ -2131,25 +2174,38 @@ void Achievements::ClientLoginWithTokenCallback(int result, const char* error_me
 
   if (result != RC_OK)
   {
-#ifdef __ANDROID__
-    // Only the server's rejection ends the sign-in. Anything else (no connection) keeps the token, and the next game
-    // start tries again (RetryAndroidSignIn()).
+    // Only the server's rejection ends the sign-in. Anything else (no connection) keeps the token, and the player is
+    // "Not connected": a game start, or the network coming back, tries again (RetrySignIn(), OnNetworkBack()).
     ERROR_LOG("Login failed: {}", error_message ? error_message : rc_error_str(result));
     if (result == RC_INVALID_CREDENTIALS || result == RC_EXPIRED_TOKEN || result == RC_ACCESS_DENIED)
     {
+#ifdef __ANDROID__
       Host::OnAchievementsLoginRequested(LoginRequestReason::TokenInvalid);
       Host::OnAchievementsLoginExpired();
+#else
+      // What's waiting for this user is kept for the next sign-in, and the message says so.
+      const std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
+      u32 waiting = 0;
+      for (const auto& [user, count] : AchievementsOffline::CountsByUser())
+      {
+        if (StringUtil::EqualNoCase(user, username))
+          waiting += count;
+      }
+      const std::string kept = AchievementsOfflineWords::KeptUntilSignIn(waiting);
+      s_token_refused = true;
+      ReportError(kept.empty() ? fmt::format("Login failed: {}", error_message ? error_message : "") :
+                                 fmt::format("Login failed: {}\n{}", error_message ? error_message : "", kept));
+      Host::OnAchievementsLoginRequested(LoginRequestReason::TokenInvalid);
+#endif
     }
     else
     {
+#ifdef __ANDROID__
       if (System::IsValid())
         s_android_load_result = result;
+#endif
       Host::OnAchievementsRefreshed();
     }
-#else
-    ReportFmtError("Login failed: {}", error_message);
-    Host::OnAchievementsLoginRequested(LoginRequestReason::TokenInvalid);
-#endif
     return;
   }
 
@@ -2314,26 +2370,6 @@ bool Achievements::ConfirmSystemReset()
 
 #ifdef __ANDROID__
 
-Achievements::AndroidSignIn Achievements::GetAndroidSignIn()
-{
-  const auto lock = GetLock();
-  if (!IsActive() || !s_client)
-    return AndroidSignIn::SignedOut;
-  // A game started offline is signed in from what was saved: the player isn't connected.
-  if (AchievementsOffline::SignInIsBuilt())
-    return AndroidSignIn::NotConnected;
-  if (rc_client_get_user_info(s_client))
-    return AndroidSignIn::SignedIn;
-  if (s_login_request)
-    return AndroidSignIn::Connecting;
-  if (!Host::GetBaseStringSettingValue("Cheevos", "Username").empty() &&
-      !Host::GetSecretSettingValue("Cheevos", "Token").empty())
-  {
-    return AndroidSignIn::NotConnected;
-  }
-  return AndroidSignIn::SignedOut;
-}
-
 Achievements::AndroidGameStatus Achievements::GetAndroidGameStatus()
 {
   const auto lock = GetLock();
@@ -2373,7 +2409,51 @@ bool Achievements::IsAndroidOffline()
   return AchievementsOffline::InSession() || s_android_disconnected;
 }
 
-void Achievements::OnAndroidNetworkBack()
+void Achievements::SetGameHashForTest(std::string hash)
+{
+  const auto lock = GetLock();
+  s_game_hash_for_test = std::move(hash);
+}
+
+#endif // __ANDROID__
+
+Achievements::SignInState Achievements::GetSignInState()
+{
+  const auto lock = GetLock();
+  if (!IsActive() || !s_client)
+    return SignInState::SignedOut;
+  // A game started offline is signed in from what was saved: the player isn't connected.
+  if (AchievementsOffline::SignInIsBuilt())
+    return SignInState::NotConnected;
+  if (rc_client_get_user_info(s_client))
+    return SignInState::SignedIn;
+  if (s_login_request)
+    return SignInState::Connecting;
+  if (!s_token_refused && !Host::GetBaseStringSettingValue("Cheevos", "Username").empty() &&
+      !Host::GetSecretSettingValue("Cheevos", "Token").empty())
+  {
+    return SignInState::NotConnected;
+  }
+  return SignInState::SignedOut;
+}
+
+Achievements::AccountStatus Achievements::GetAccountStatus()
+{
+  const auto lock = GetLock();
+  AccountStatus status = {GetSignInState(), AchievementsOffline::InSession(), {}, AchievementsOffline::CountsByUser()};
+  const rc_client_user_t* user = s_client ? rc_client_get_user_info(s_client) : nullptr;
+  status.user = user ? std::string(user->username) : Host::GetBaseStringSettingValue("Cheevos", "Username");
+  return status;
+}
+
+u32 Achievements::GetWaitingCountForGame()
+{
+  const auto lock = GetLock();
+  const rc_client_user_t* user = s_client ? rc_client_get_user_info(s_client) : nullptr;
+  return user ? AchievementsOffline::CountForGame(user->username, s_game_hash) : 0;
+}
+
+void Achievements::OnNetworkBack()
 {
   const auto lock = GetLock();
   if (!IsActive() || !s_client)
@@ -2387,19 +2467,13 @@ void Achievements::OnAndroidNetworkBack()
   }
 
   // Not connected: a sign-in now sends what's waiting once it succeeds (ClientLoginWithTokenCallback()).
-  RetryAndroidSignIn();
+  RetrySignIn();
 }
 
-void Achievements::SetGameHashForTest(std::string hash)
+void Achievements::RetrySignIn()
 {
   const auto lock = GetLock();
-  s_game_hash_for_test = std::move(hash);
-}
-
-void Achievements::RetryAndroidSignIn()
-{
-  const auto lock = GetLock();
-  if (!IsActive() || !s_client || s_login_request)
+  if (!IsActive() || !s_client || s_login_request || s_token_refused)
     return;
 
   // Signed in already: what's still waiting (a send the server turned away) goes again.
@@ -2415,12 +2489,12 @@ void Achievements::RetryAndroidSignIn()
     return;
 
   INFO_LOG("Signing in again as '{}'...", username);
+#ifdef __ANDROID__
   s_android_load_result = RC_OK;
+#endif
   s_login_request = rc_client_begin_login_with_token(s_client, username.c_str(), api_token.c_str(),
                                                      ClientLoginWithTokenCallback, nullptr);
 }
-
-#endif // __ANDROID__
 
 bool Achievements::ConfirmHardcoreModeDisable(const char* trigger)
 {

@@ -16,7 +16,7 @@ namespace AchievementsBridge {
 
 struct Account
 {
-  Achievements::AndroidSignIn state;
+  Achievements::SignInState state;
   std::string username;     // the login name, from settings.ini
   std::string display_name; // the server's, when signed in
   u32 score;                // hardcore points, when signed in

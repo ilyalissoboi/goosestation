@@ -1588,6 +1588,10 @@ bool System::SaveResumeState(Error* error)
 bool System::BootSystem(SystemBootParameters parameters, Error* error)
 {
 #ifndef __ANDROID__
+  // A sign-in that failed for want of a connection is tried again, so this game's set can load (Android's host does
+  // this itself before it boots).
+  Achievements::RetrySignIn();
+
   if (!parameters.save_state.empty())
   {
     // loading a state, so pull the media path from the save state to avoid a double change

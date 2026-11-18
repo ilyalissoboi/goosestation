@@ -154,6 +154,24 @@ struct AccountStatus
   std::vector<std::pair<std::string, u32>> waiting; // records waiting, for each user with any
 };
 
+SignInState GetSignInState();
+
+/// The account, for the Achievements settings page. Takes the lock.
+AccountStatus GetAccountStatus();
+
+/// How many of the signed-in user's records are for the running game (any disc of it seen online). Takes the lock.
+u32 GetWaitingCountForGame();
+
+/// Signs in again with the stored token if a sign-in failed (no connection at startup); signed in, sends what's still
+/// waiting. Called before a game boots (Android's host, desktop's System::BootSystem()), so the game's set loads once
+/// the sign-in succeeds.
+void RetrySignIn();
+
+/// The network may be back (Android: a validated network arrived; desktop: every two minutes while not connected or
+/// with records waiting): what's waiting is sent, signing in again first if the sign-in hadn't reached the server. On
+/// the CPU thread.
+void OnNetworkBack();
+
 #ifndef __ANDROID__
 
 /// Queries the achievement list, and if no achievements are available, returns false.
@@ -172,9 +190,6 @@ void DrawLeaderboardsWindow();
 
 #ifdef __ANDROID__
 
-using AndroidSignIn = SignInState;
-AndroidSignIn GetAndroidSignIn();
-
 /// The running game's achievements, as the Android menu shows them. Takes the lock.
 enum class AndroidGameStatus : u8
 {
@@ -186,17 +201,9 @@ enum class AndroidGameStatus : u8
 };
 AndroidGameStatus GetAndroidGameStatus();
 
-/// Signs in again with the stored token if a sign-in failed (no connection at startup); signed in, sends what's still
-/// waiting. The host calls it before a game boots, so the game's set loads once the sign-in succeeds.
-void RetryAndroidSignIn();
-
 /// For the instrumented tests only: the server the clients talk to (as "http://127.0.0.1:port"), or RetroAchievements
 /// with an empty host. Applies to the current client and every one created after.
 void SetServerForTest(std::string host);
-
-/// A validated network arrived: what's waiting is sent, signing in again first if the sign-in hadn't reached the
-/// server. On the CPU thread.
-void OnAndroidNetworkBack();
 
 /// An unlock now is earned without a connection: the game started offline, or rcheevos has one it hasn't got through.
 /// Takes the lock.

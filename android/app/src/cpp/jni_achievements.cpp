@@ -214,7 +214,7 @@ NATIVE_LIBRARY_FUNCTION(void, skipAchievementsRetryWaitNative)(JNIEnv*, jobject)
 
 NATIVE_LIBRARY_FUNCTION(void, achievementsNetworkBack)(JNIEnv*, jobject)
 {
-  EmuThread::RunOnThread([]() { Achievements::OnAndroidNetworkBack(); }, false);
+  EmuThread::RunOnThread([]() { Achievements::OnNetworkBack(); }, false);
 }
 
 } // extern "C"

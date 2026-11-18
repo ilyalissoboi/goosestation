@@ -1085,6 +1085,26 @@
         <number>0</number>
        </property>
        <item>
+        <widget class="QGroupBox" name="textureCacheGroup">
+         <property name="title">
+          <string>Texture Cache</string>
+         </property>
+         <layout class="QFormLayout" name="textureCacheFormLayout">
+          <item row="0" column="0" colspan="2">
+           <layout class="QGridLayout" name="textureCacheGridLayout">
+            <item row="0" column="0">
+             <widget class="QCheckBox" name="enableTextureCache">
+              <property name="text">
+               <string>Enable Texture Cache</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="groupBox_5">
          <property name="title">
           <string>General Settings</string>
@@ -1093,23 +1113,64 @@
           <item row="0" column="0" colspan="2">
            <layout class="QGridLayout" name="gridLayout_6">
             <item row="0" column="0">
+             <widget class="QCheckBox" name="enableTextureReplacements">
+              <property name="text">
+               <string>Enable Texture Replacements</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
              <widget class="QCheckBox" name="vramWriteReplacement">
               <property name="text">
                <string>Enable VRAM Write Replacement</string>
               </property>
              </widget>
             </item>
-            <item row="0" column="1">
+            <item row="1" column="0">
              <widget class="QCheckBox" name="preloadTextureReplacements">
               <property name="text">
                <string>Preload Texture Replacements</string>
               </property>
              </widget>
             </item>
-            <item row="1" column="0">
+            <item row="1" column="1">
              <widget class="QCheckBox" name="useOldMDECRoutines">
               <property name="text">
                <string>Use Old MDEC Routines</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="textureDumpingGroup">
+         <property name="title">
+          <string>Texture Dumping</string>
+         </property>
+         <layout class="QFormLayout" name="textureDumpingFormLayout">
+          <item row="0" column="0" colspan="2">
+           <layout class="QGridLayout" name="textureDumpingGridLayout">
+            <item row="0" column="0">
+             <widget class="QCheckBox" name="dumpTextures">
+              <property name="text">
+               <string>Enable Texture Dumping</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QCheckBox" name="dumpReplacedTextures">
+              <property name="text">
+               <string>Dump Replaced Textures</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QCheckBox" name="dumpTextureForceAlphaChannel">
+              <property name="text">
+               <string>Force Alpha Channel</string>
               </property>
              </widget>
             </item>
@@ -1185,6 +1246,88 @@
              </widget>
             </item>
            </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="textureCacheAdvancedGroup">
+         <property name="title">
+          <string>Advanced</string>
+         </property>
+         <layout class="QFormLayout" name="textureCacheAdvancedFormLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="maxHashCacheEntriesLabel">
+            <property name="text">
+             <string>Hash Cache Entries:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QSpinBox" name="maxHashCacheEntries">
+            <property name="minimum">
+             <number>100</number>
+            </property>
+            <property name="maximum">
+             <number>10000</number>
+            </property>
+            <property name="singleStep">
+             <number>100</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="maxHashCacheVRAMUsageLabel">
+            <property name="text">
+             <string>Hash Cache Memory:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="maxHashCacheVRAMUsage">
+              <property name="suffix">
+               <string> MB</string>
+              </property>
+            <property name="minimum">
+             <number>64</number>
+            </property>
+            <property name="maximum">
+             <number>8192</number>
+            </property>
+            <property name="singleStep">
+             <number>64</number>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="maxReplacementCacheVRAMUsageLabel">
+            <property name="text">
+             <string>Replacement Cache Memory:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="maxReplacementCacheVRAMUsage">
+              <property name="suffix">
+               <string> MB</string>
+              </property>
+            <property name="minimum">
+             <number>64</number>
+            </property>
+            <property name="maximum">
+             <number>8192</number>
+            </property>
+            <property name="singleStep">
+             <number>64</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0" colspan="2">
+           <widget class="QCheckBox" name="alwaysTrackUploads">
+            <property name="text">
+             <string>Always Track Uploads</string>
+            </property>
+           </widget>
           </item>
          </layout>
         </widget>

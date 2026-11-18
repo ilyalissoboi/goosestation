@@ -53,14 +53,15 @@ Android; each step gives all three where they differ.
 
 ### The notice
 
-When a game starts with either replacement switch on, and whenever those settings or the renderer change, a notice
-says what was found:
+When a game starts with either replacement switch on, whenever those settings change, when the renderer changes
+between hardware and software, and on the reload hotkey, a notice says what was found:
 
 | Notice | What it means |
 | --- | --- |
 | Texture pack: 161 replacements | The pack is in use; the count is the images that apply (and its VRAM write replacements, if any). |
-| No texture pack found in textures/SLUS-01040 | The game's folder has no replacement images: check the folder's name is the game's serial (or its `HASH-` ID), that it isn't inside another folder, and on Android that the app still has the data folder's permission (Settings → Folders). |
+| No texture pack found in textures/SLUS-01040 | The game's folder (on desktop, a textures folder set elsewhere is named in full) has no replacement images: check the folder's name is the game's serial (or its `HASH-` ID), that it isn't inside another folder, and on Android that the app still has the data folder's permission (Settings → Folders). |
 | Texture pack found, but it needs the texture cache | Turn on the texture cache, globally or in the game's settings. |
+| Texture pack: 3 VRAM write replacements; its 161 texture replacements need the texture cache | The pack's `vram-write-` images are in use, and its texture replacements wait for the texture cache. |
 | Texture pack found, but it needs a hardware renderer | The software renderer can't replace textures: pick another renderer. |
 | Texture pack found, but it needs texture replacements on | The pack has texture replacements, and only VRAM write replacements are on. |
 | Texture pack found, but it needs VRAM write replacements on | The pack has only `vram-write-` images, and VRAM write replacements are off. |
@@ -96,10 +97,10 @@ On desktop, **Dump Replaced Textures** (on by default) also dumps textures the p
 Alpha Channel** (Big Picture: **Force Dump Alpha Channel**) writes dumps fully opaque. Dumping is for the game you're
 making a pack for: it writes many files.
 
-### config.yaml
+### Pack options (config.yaml)
 
 A pack's `config.yaml` sets options for its game, over the global settings; lines left out or commented out keep the
-global values ([how it's read](#configyaml-1), below, in the reference). The options:
+global values ([how it's read](#configyaml), below, in the reference). The options:
 
 | Option | What it does |
 | --- | --- |

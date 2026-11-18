@@ -291,7 +291,12 @@ fun GraphicsScreen(
                 onChange,
                 "Preload replacement textures",
                 GraphicsSettings.PRELOAD_TEXTURES,
-                "Loads the pack at the game's start, within the replacement memory below.",
+                // The replacement memory row shows with the cache only.
+                if (cache) {
+                    "Loads the pack at the game's start, within the replacement memory below."
+                } else {
+                    "Loads the pack at the game's start."
+                },
             )
         }
         if (cache) {

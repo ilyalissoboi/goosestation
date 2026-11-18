@@ -83,6 +83,7 @@ void Reload();
 struct LoadNoticeState
 {
   std::string_view game_id;
+  std::string_view folder; // the game's folder as the notice names it
   bool texture_replacements;
   bool vram_write_replacements;
   bool texture_cache;
@@ -91,12 +92,16 @@ struct LoadNoticeState
   size_t vram_writes;
 };
 
-/// The notice a load shows: how many replacements apply, why a pack found doesn't apply (the first reason that fits),
-/// or that none was found in textures/<serial>. None without a game, or with both replacement switches off.
+/// The notice a load shows: how many replacements apply (with why a pack's textures don't, when only its VRAM writes
+/// do), why a pack found doesn't apply (the first reason that fits), or that none was found in its folder. None without
+/// a game, or with both replacement switches off.
 std::optional<std::string> FormatLoadNotice(const LoadNoticeState& state);
 
 /// The notice for the index as last loaded, with the settings in effect.
 std::optional<std::string> GetLoadNotice();
+
+/// Whether the running renderer (the configured one before a GPU exists) can draw replacements.
+bool IsUsingHardwareRenderer();
 
 /// Changes with every Reload (a new game, settings, or the reload hotkey).
 u32 GetReloadCount();

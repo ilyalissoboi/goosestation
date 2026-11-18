@@ -359,6 +359,30 @@ TEST_F(ContentPack, AnUnreadablePackFolderSaysNoPack)
   EXPECT_EQ(GetLoadNotice(), std::optional<std::string>("No texture pack found in textures/SLUS-00000"));
 }
 
+// A textures folder of its own, outside the data folder, is named as it is.
+TEST_F(ContentPack, ACustomTexturesFolderIsNamedInFull)
+{
+  const NoticeSettings settings;
+  const std::string old_root = EmuFolders::DataRoot;
+  EmuFolders::DataRoot = m_tree.path();
+  SetGameID("SLUS-00000");
+  EXPECT_EQ(GetLoadNotice(), std::optional<std::string>(fmt::format("No texture pack found in {}",
+                                                                    Path::Combine(EmuFolders::Textures, "SLUS-00000"))));
+  EmuFolders::DataRoot = old_root;
+}
+
+// The data folder's own textures folder is named from the data folder, as the guide does.
+TEST_F(ContentPack, TheDataFoldersTexturesFolderIsNamedFromIt)
+{
+  const NoticeSettings settings;
+  const std::string old_root = EmuFolders::DataRoot;
+  EmuFolders::DataRoot = m_local.path();
+  SetGameID("SLUS-00000");
+  EXPECT_EQ(GetLoadNotice(),
+            std::optional<std::string>(fmt::format("No texture pack found in {}", Path::Combine("textures", "SLUS-00000"))));
+  EmuFolders::DataRoot = old_root;
+}
+
 #endif
 
 namespace {
@@ -367,6 +391,7 @@ namespace {
 LoadNoticeState Notice(size_t textures = 0, size_t vram_writes = 0)
 {
   return LoadNoticeState{.game_id = "SLUS-01040",
+                         .folder = "textures/SLUS-01040",
                          .texture_replacements = true,
                          .vram_write_replacements = true,
                          .texture_cache = true,
@@ -483,5 +508,15 @@ TEST(TextureReplacementNotice, AGameWithoutASerialIsNamedByItsHash)
 {
   LoadNoticeState state = Notice();
   state.game_id = "HASH-1A2B3C4D5E6F7081";
+  state.folder = "textures/HASH-1A2B3C4D5E6F7081";
   EXPECT_EQ(FormatLoadNotice(state), Says("No texture pack found in textures/HASH-1A2B3C4D5E6F7081"));
+}
+
+// Its VRAM writes apply, its textures can't: both said, the reason for the textures with them.
+TEST(TextureReplacementNotice, AMixedPackWithTheCacheOffSaysWhyItsTexturesDont)
+{
+  LoadNoticeState state = Notice(161, 3);
+  state.texture_cache = false;
+  EXPECT_EQ(FormatLoadNotice(state),
+            Says("Texture pack: 3 VRAM write replacements; its 161 texture replacements need the texture cache"));
 }

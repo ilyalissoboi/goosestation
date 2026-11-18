@@ -505,9 +505,13 @@ DEFINE_HOTKEY("ReloadTextureReplacements", TRANSLATE_NOOP("Hotkeys", "Graphics")
               TRANSLATE_NOOP("Hotkeys", "Reload Texture Replacements"), [](s32 pressed) {
                 if (!pressed && System::IsValid())
                 {
-                  Host::AddKeyedOSDMessage("ReloadTextureReplacements",
-                                           TRANSLATE_STR("OSDMessage", "Texture replacements reloaded."), 10.0f);
+                  // The reload's own notice says what it found; this says it happened when there's none.
                   TextureReplacements::Reload();
+                  if (!TextureReplacements::GetLoadNotice())
+                  {
+                    Host::AddKeyedOSDMessage("ReloadTextureReplacements",
+                                             TRANSLATE_STR("OSDMessage", "Texture replacements reloaded."), 10.0f);
+                  }
                 }
               })
 

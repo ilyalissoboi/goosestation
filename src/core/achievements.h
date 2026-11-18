@@ -136,6 +136,24 @@ void DrawGameOverlays();
 /// Draws ImGui overlays when paused.
 void DrawPauseMenuOverlays();
 
+/// The sign-in, as the settings show it. Takes the lock.
+enum class SignInState : u8
+{
+  SignedOut,    // no token, or achievements are off
+  Connecting,   // a sign-in is under way
+  NotConnected, // a username and token are stored, but the sign-in hasn't succeeded (no connection)
+  SignedIn,
+};
+
+/// What the Achievements settings page says about the account.
+struct AccountStatus
+{
+  SignInState state;
+  bool offline_session;                             // the running game started offline (AchievementsOffline)
+  std::string user;                                 // signed in as, or else the stored username
+  std::vector<std::pair<std::string, u32>> waiting; // records waiting, for each user with any
+};
+
 #ifndef __ANDROID__
 
 /// Queries the achievement list, and if no achievements are available, returns false.
@@ -154,14 +172,7 @@ void DrawLeaderboardsWindow();
 
 #ifdef __ANDROID__
 
-/// The Android app's view of the sign-in. Takes the lock.
-enum class AndroidSignIn : u8
-{
-  SignedOut,    // no token, or achievements are off
-  Connecting,   // a sign-in is under way
-  NotConnected, // a username and token are stored, but the sign-in hasn't succeeded (no connection)
-  SignedIn,
-};
+using AndroidSignIn = SignInState;
 AndroidSignIn GetAndroidSignIn();
 
 /// The running game's achievements, as the Android menu shows them. Takes the lock.

@@ -15,7 +15,9 @@ class AchievementLoginDialog : public QDialog
   Q_OBJECT
 
 public:
-  AchievementLoginDialog(QWidget* parent, Achievements::LoginRequestReason reason);
+  /// kept_note: what a refused token keeps (AchievementsOfflineWords::KeptUntilSignIn()), or empty.
+  AchievementLoginDialog(QWidget* parent, Achievements::LoginRequestReason reason,
+                         const QString& kept_note = QString());
   ~AchievementLoginDialog();
 
 private Q_SLOTS:

@@ -71,6 +71,17 @@ std::string Refused(std::string_view title)
   return fmt::format(TRANSLATE_FS("Achievements", "Couldn't send '{}': RetroAchievements refused it"), title);
 }
 
+u32 OwnWaiting(const Achievements::AccountStatus& status)
+{
+  u32 total = 0;
+  for (const auto& [user, count] : status.waiting)
+  {
+    if (!status.user.empty() && StringUtil::EqualNoCase(user, status.user))
+      total += count;
+  }
+  return total;
+}
+
 std::vector<std::string> AccountNotes(const Achievements::AccountStatus& status)
 {
   std::vector<std::string> notes;

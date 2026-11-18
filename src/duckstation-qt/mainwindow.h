@@ -142,7 +142,7 @@ private Q_SLOTS:
   void onRunningGameChanged(const QString& filename, const QString& game_serial, const QString& game_title);
   void onMediaCaptureStarted();
   void onMediaCaptureStopped();
-  void onAchievementsLoginRequested(Achievements::LoginRequestReason reason);
+  void onAchievementsLoginRequested(Achievements::LoginRequestReason reason, const QString& kept_note);
   void onAchievementsChallengeModeChanged(bool enabled);
   void onApplicationStateChanged(Qt::ApplicationState state);
 

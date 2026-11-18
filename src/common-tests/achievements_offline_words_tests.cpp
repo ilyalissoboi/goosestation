@@ -89,3 +89,9 @@ TEST(AchievementsOfflineWords, AnOfflineSessionSaysSoFirst)
             (std::vector<std::string>{"Offline: signed in as goose until this game stops",
                                       "1 unlock waiting to be sent"}));
 }
+
+TEST(AchievementsOfflineWords, OwnWaitingCountsTheAccountsRecordsInAnyCase)
+{
+  EXPECT_EQ(Words::OwnWaiting(Account(SignInState::SignedOut, "Goose", {{"duck", 4}, {"goose", 2}})), 2u);
+  EXPECT_EQ(Words::OwnWaiting(Account(SignInState::SignedOut, "", {{"goose", 2}})), 0u);
+}

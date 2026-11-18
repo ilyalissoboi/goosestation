@@ -1594,7 +1594,12 @@ void EmuThread::saveScreenshot()
 
 void Host::OnAchievementsLoginRequested(Achievements::LoginRequestReason reason)
 {
-  emit g_emu_thread->achievementsLoginRequested(reason);
+  // A refused token keeps what's waiting for the account, and the dialog says so. Read here, on the CPU thread.
+  const std::string kept =
+    (reason == Achievements::LoginRequestReason::TokenInvalid) ?
+      AchievementsOfflineWords::KeptUntilSignIn(AchievementsOfflineWords::OwnWaiting(Achievements::GetAccountStatus())) :
+      std::string();
+  emit g_emu_thread->achievementsLoginRequested(reason, QString::fromStdString(kept));
 }
 
 void Host::OnAchievementsLoginSuccess(const char* username, u32 points, u32 sc_points, u32 unread_messages)
@@ -1638,6 +1643,13 @@ void Host::OnAchievementsRefreshed()
   }
 
   emit g_emu_thread->achievementsRefreshed(game_id, game_info);
+
+  // The settings' account lines, read here: the UI thread doesn't take the achievements lock.
+  const Achievements::AccountStatus account = Achievements::GetAccountStatus();
+  QStringList notes;
+  for (const std::string& note : AchievementsOfflineWords::AccountNotes(account))
+    notes.push_back(QString::fromStdString(note));
+  emit g_emu_thread->achievementsAccountRefreshed(notes, account.offline_session);
 }
 
 void Host::OnAchievementsHardcoreModeChanged(bool enabled)

@@ -45,6 +45,9 @@ std::string KeptUntilSignIn(u32 count);
 std::string Sent(u32 count);
 std::string Refused(std::string_view title);
 
+/// How many records are waiting for the account (status.user, in any case), as a refused token keeps them.
+u32 OwnWaiting(const Achievements::AccountStatus& status);
+
 /// The lines the Achievements settings page shows under the account, in order: the offline session or the missing
 /// connection, then a line for each user's waiting records.
 std::vector<std::string> AccountNotes(const Achievements::AccountStatus& status);

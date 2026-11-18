@@ -10,7 +10,8 @@
 
 #include <QtWidgets/QMessageBox>
 
-AchievementLoginDialog::AchievementLoginDialog(QWidget* parent, Achievements::LoginRequestReason reason)
+AchievementLoginDialog::AchievementLoginDialog(QWidget* parent, Achievements::LoginRequestReason reason,
+                                               const QString& kept_note)
   : QDialog(parent), m_reason(reason)
 {
   m_ui.setupUi(this);
@@ -19,9 +20,15 @@ AchievementLoginDialog::AchievementLoginDialog(QWidget* parent, Achievements::Lo
   // Adjust text if needed based on reason.
   if (reason == Achievements::LoginRequestReason::TokenInvalid)
   {
-    m_ui.instructionText->setText(tr("<strong>Your RetroAchievements login token is no longer valid.</strong> You must "
-                                     "re-enter your credentials for achievements to be tracked. Your password will not "
-                                     "be saved in GooseStation, an access token will be generated and used instead."));
+    QString text = tr("<strong>Your RetroAchievements login token is no longer valid.</strong> You must "
+                      "re-enter your credentials for achievements to be tracked. Your password will not "
+                      "be saved in GooseStation, an access token will be generated and used instead.");
+
+    // What's waiting for this account is kept for the new login.
+    if (!kept_note.isEmpty())
+      text.append(QStringLiteral("<br><br>")).append(kept_note.toHtmlEscaped());
+
+    m_ui.instructionText->setText(text);
   }
 
   m_login = m_ui.buttonBox->addButton(tr("&Login"), QDialogButtonBox::AcceptRole);

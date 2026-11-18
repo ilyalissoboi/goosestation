@@ -9,6 +9,7 @@
 #include "settingwidgetbinder.h"
 
 #include "core/achievements.h"
+#include "core/achievements_offline_words.h"
 #include "core/system.h"
 
 #include "common/string_util.h"
@@ -88,6 +89,8 @@ AchievementSettingsWidget::AchievementSettingsWidget(SettingsWindow* dialog, QWi
     connect(m_ui.loginButton, &QPushButton::clicked, this, &AchievementSettingsWidget::onLoginLogoutPressed);
     connect(m_ui.viewProfile, &QPushButton::clicked, this, &AchievementSettingsWidget::onViewProfilePressed);
     connect(g_emu_thread, &EmuThread::achievementsRefreshed, this, &AchievementSettingsWidget::onAchievementsRefreshed);
+    connect(g_emu_thread, &EmuThread::achievementsAccountRefreshed, this,
+            &AchievementSettingsWidget::onAchievementsAccountRefreshed);
     updateLoginState();
 
     // force a refresh of game info
@@ -141,6 +144,14 @@ void AchievementSettingsWidget::onHardcoreModeStateChanged()
   if (!enabled || !challenge)
     return;
 
+  // A game started offline stays casual until it stops, reset or not.
+  if (m_offline_session)
+  {
+    QMessageBox::information(QtUtils::GetRootWidget(this), tr("Hardcore Mode"),
+                             QString::fromStdString(AchievementsOfflineWords::HardcoreStaysOff()));
+    return;
+  }
+
   // don't bother prompting if the game doesn't have achievements
   auto lock = Achievements::GetLock();
   if (!Achievements::HasActiveGame())
@@ -176,30 +187,44 @@ void AchievementSettingsWidget::updateLoginState()
   const std::string username(Host::GetBaseStringSettingValue("Cheevos", "Username"));
   const bool logged_in = !username.empty();
 
+  QString status;
   if (logged_in)
   {
     const u64 login_unix_timestamp =
       StringUtil::FromChars<u64>(Host::GetBaseStringSettingValue("Cheevos", "LoginTimestamp", "0")).value_or(0);
     const QDateTime login_timestamp(QDateTime::fromSecsSinceEpoch(static_cast<qint64>(login_unix_timestamp)));
-    m_ui.loginStatus->setText(tr("Username: %1\nLogin token generated on %2.")
-                                .arg(QString::fromStdString(username))
-                                .arg(login_timestamp.toString(Qt::TextDate)));
+    status = tr("Username: %1\nLogin token generated on %2.")
+               .arg(QString::fromStdString(username))
+               .arg(login_timestamp.toString(Qt::TextDate));
     m_ui.loginButton->setText(tr("Logout"));
   }
   else
   {
-    m_ui.loginStatus->setText(tr("Not Logged In."));
+    status = tr("Not Logged In.");
     m_ui.loginButton->setText(tr("Login..."));
   }
 
-  m_ui.viewProfile->setEnabled(logged_in);
+  // Not connected, a game started offline, and the unlocks waiting to be sent.
+  for (const QString& note : m_account_notes)
+    status.append(QChar('\n')).append(note);
+  m_ui.loginStatus->setText(status);
+
+  // Nothing is sent under another account while a game started offline runs.
+  m_ui.loginButton->setEnabled(!m_offline_session);
+  m_ui.viewProfile->setEnabled(logged_in && !m_offline_session);
 }
 
 void AchievementSettingsWidget::onLoginLogoutPressed()
 {
   if (!Host::GetBaseStringSettingValue("Cheevos", "Username").empty())
   {
-    Host::RunOnCPUThread([]() { Achievements::Logout(); }, true);
+    // The account lines follow (onAchievementsAccountRefreshed()).
+    Host::RunOnCPUThread(
+      []() {
+        Achievements::Logout();
+        Host::OnAchievementsRefreshed();
+      },
+      true);
     updateLoginState();
     return;
   }
@@ -210,6 +235,7 @@ void AchievementSettingsWidget::onLoginLogoutPressed()
     return;
 
   updateLoginState();
+  Host::RunOnCPUThread(Host::OnAchievementsRefreshed);
 
   // Login can enable achievements/hardcore.
   if (!m_ui.enable->isChecked() && Host::GetBaseBoolSettingValue("Cheevos", "Enabled", false))
@@ -240,4 +266,11 @@ void AchievementSettingsWidget::onViewProfilePressed()
 void AchievementSettingsWidget::onAchievementsRefreshed(quint32 id, const QString& game_info_string)
 {
   m_ui.gameInfo->setText(game_info_string);
+}
+
+void AchievementSettingsWidget::onAchievementsAccountRefreshed(const QStringList& notes, bool offline_session)
+{
+  m_account_notes = notes;
+  m_offline_session = offline_session;
+  updateLoginState();
 }

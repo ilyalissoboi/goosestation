@@ -2217,14 +2217,8 @@ void Achievements::ClientLoginWithTokenCallback(int result, const char* error_me
       Host::OnAchievementsLoginExpired();
 #else
       // What's waiting for this user is kept for the next sign-in, and the message says so.
-      const std::string username = Host::GetBaseStringSettingValue("Cheevos", "Username");
-      u32 waiting = 0;
-      for (const auto& [user, count] : AchievementsOffline::CountsByUser())
-      {
-        if (StringUtil::EqualNoCase(user, username))
-          waiting += count;
-      }
-      const std::string kept = AchievementsOfflineWords::KeptUntilSignIn(waiting);
+      const std::string kept = AchievementsOfflineWords::KeptUntilSignIn(AchievementsOfflineWords::OwnWaiting(
+        GetAccountStatus()));
       s_token_refused = true;
       ReportError(kept.empty() ? fmt::format("Login failed: {}", error_message ? error_message : "") :
                                  fmt::format("Login failed: {}\n{}", error_message ? error_message : "", kept));

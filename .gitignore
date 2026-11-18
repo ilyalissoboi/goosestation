@@ -55,3 +55,5 @@ android/replay_pid*.log
 
 # emusync's Android library, when placed here for builds without network (android/app/build.gradle.kts).
 /dep/emusync/*.aar
+# emusync's Windows packages, downloaded and unpacked here by dep/emusync/emusync.props.
+/dep/msvc/emusync-*

@@ -2,25 +2,29 @@
 <!--
   Memory card sync (src/core/memcard_sync.h) with emusync. The core loads emusync.dll at run time and
   builds against the vendored header (include/emusync.h), so this only puts the DLL next to the
-  program: from a pinned release, emusync-X.Y.Z-windows-x64.zip (for duckstation-qt only), checked against its SHA-256 from
-  the release's SHA256SUMS and unpacked into dep\msvc\. Without it (offline, /p:EmuSync=false, or not
-  x64) the program runs without memory card sync.
+  program: from a pinned release, emusync-X.Y.Z-windows-x64.zip or emusync-X.Y.Z-windows-arm64.zip by
+  the platform (for duckstation-qt only), checked against its SHA-256 from the release's SHA256SUMS
+  and unpacked into dep\msvc\. Without it (offline, /p:EmuSync=false, or another platform) the
+  program runs without memory card sync.
 
   Use a package built from emusync's source (scripts/build-desktop.sh) with /p:EmuSyncDir=<package>\.
   Keep EmuSyncVersion in step with README.md here and CMakeModules/EmuSync.cmake.
 -->
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <EmuSyncVersion>0.3.0</EmuSyncVersion>
-    <EmuSyncSha256>4a799ca384517be5667fd2296cd9a765798aa984fe9dac0a57207da423afd5eb</EmuSyncSha256>
-    <EmuSync Condition="'$(EmuSync)' == '' and '$(Platform)' == 'x64' and '$(MSBuildProjectName)' == 'duckstation-qt'">true</EmuSync>
-    <EmuSyncDir Condition="'$(EmuSyncDir)' == ''">$(MSBuildThisFileDirectory)..\msvc\emusync-$(EmuSyncVersion)-windows-x64\</EmuSyncDir>
+    <EmuSyncVersion>0.3.1</EmuSyncVersion>
+    <EmuSyncPackage Condition="'$(Platform)' == 'x64'">windows-x64</EmuSyncPackage>
+    <EmuSyncSha256 Condition="'$(Platform)' == 'x64'">7f088e58d429da68cb3f608d187347e5004d288c9554064882877a64505bc2f5</EmuSyncSha256>
+    <EmuSyncPackage Condition="'$(Platform)' == 'ARM64'">windows-arm64</EmuSyncPackage>
+    <EmuSyncSha256 Condition="'$(Platform)' == 'ARM64'">e37a246081cd34570366952ff2fd92213337158d78e8d642c236544ed04472b4</EmuSyncSha256>
+    <EmuSync Condition="'$(EmuSync)' == '' and '$(EmuSyncPackage)' != '' and '$(MSBuildProjectName)' == 'duckstation-qt'">true</EmuSync>
+    <EmuSyncDir Condition="'$(EmuSyncDir)' == ''">$(MSBuildThisFileDirectory)..\msvc\emusync-$(EmuSyncVersion)-$(EmuSyncPackage)\</EmuSyncDir>
   </PropertyGroup>
 
   <Target Name="EmuSyncFetch" BeforeTargets="PrepareForBuild"
           Condition="'$(EmuSync)' == 'true' and !Exists('$(EmuSyncDir)bin\emusync.dll')">
     <PropertyGroup>
-      <EmuSyncZipName>emusync-$(EmuSyncVersion)-windows-x64.zip</EmuSyncZipName>
+      <EmuSyncZipName>emusync-$(EmuSyncVersion)-$(EmuSyncPackage).zip</EmuSyncZipName>
       <EmuSyncDownloadDir>$(MSBuildThisFileDirectory)..\msvc\</EmuSyncDownloadDir>
       <EmuSyncZip>$(EmuSyncDownloadDir)$(EmuSyncZipName)</EmuSyncZip>
     </PropertyGroup>

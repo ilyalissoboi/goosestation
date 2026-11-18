@@ -102,6 +102,14 @@ jobs:
       run: |
         "C:\Program Files\7-Zip\7z.exe" a -r goosestation-windows-x64-release.zip ./bin/x64/*
 
+    # Memory card sync needs emusync.dll next to the program (dep/emusync/emusync.props); without it the
+    # build would quietly run without sync.
+    - name: Check the x64 release archive has emusync.dll
+      shell: bash
+      run: |
+        "/c/Program Files/7-Zip/7z.exe" l goosestation-windows-x64-release.zip | tr -d '\r' | grep -qE ' emusync\.dll$' \
+          || { echo "::error::emusync.dll is not in goosestation-windows-x64-release.zip"; exit 1; }
+
     - name: Upload x64 release artifact
       uses: actions/upload-artifact@v4.3.3
       with:
@@ -196,6 +204,14 @@ jobs:
       shell: cmd
       run: |
         "C:\Program Files\7-Zip\7z.exe" a -r goosestation-windows-arm64-release.zip ./bin/ARM64/*
+
+    # Memory card sync needs emusync.dll next to the program (dep/emusync/emusync.props); without it the
+    # build would quietly run without sync.
+    - name: Check the arm64 release archive has emusync.dll
+      shell: bash
+      run: |
+        "/c/Program Files/7-Zip/7z.exe" l goosestation-windows-arm64-release.zip | tr -d '\r' | grep -qE ' emusync\.dll$' \
+          || { echo "::error::emusync.dll is not in goosestation-windows-arm64-release.zip"; exit 1; }
 
     - name: Upload arm64 release artifact
       uses: actions/upload-artifact@v4.3.3

@@ -29,8 +29,11 @@ struct Callbacks
   std::function<void(u32 count)> sent;                  // every record a user had waiting has been sent
 };
 
-/// Turns the module on, keeping its files in folder. Before Achievements::Initialize().
-void Enable(std::string folder, Callbacks callbacks);
+/// Turns the module on, keeping its files in folder, with nothing in flight, counted or in session. Before
+/// Achievements::Initialize(). count_online_retries false (desktop): an unlock or entry rcheevos gets through itself in
+/// a game started online isn't counted in Callbacks::sent (the core's Reconnected toast says it), while one from an
+/// earlier run, a game started offline, or one rcheevos gave up on is.
+void Enable(std::string folder, Callbacks callbacks, bool count_online_retries = true);
 
 bool IsEnabled();
 

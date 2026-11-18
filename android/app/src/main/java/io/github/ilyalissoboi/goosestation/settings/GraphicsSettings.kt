@@ -101,6 +101,14 @@ object GraphicsSettings {
     val VRAM_REPLACEMENTS = BoolSetting("TextureReplacements", "EnableVRAMWriteReplacements", false)
     val PRELOAD_TEXTURES = BoolSetting("TextureReplacements", "PreloadTextures", false)
 
+    // The texture cache: per-texture replacement and dumping, and its limits (Android's own budgets, as the core's).
+    val TEXTURE_CACHE = BoolSetting("GPU", "EnableTextureCache", false)
+    val TEXTURE_REPLACEMENTS = BoolSetting("TextureReplacements", "EnableTextureReplacements", false)
+    val DUMP_TEXTURES = BoolSetting("TextureReplacements", "DumpTextures", false)
+    val HASH_CACHE_ENTRIES = IntSetting("TextureReplacements", "MaxHashCacheEntries", 1200)
+    val HASH_CACHE_MEMORY = IntSetting("TextureReplacements", "MaxHashCacheVRAMUsageMB", 512)
+    val REPLACEMENT_MEMORY = IntSetting("TextureReplacements", "MaxReplacementCacheVRAMUsage", 256)
+
     val all: List<Setting<*>> =
         listOf(
             RENDERER,
@@ -162,6 +170,12 @@ object GraphicsSettings {
             SCREENSHOT_QUALITY,
             VRAM_REPLACEMENTS,
             PRELOAD_TEXTURES,
+            TEXTURE_CACHE,
+            TEXTURE_REPLACEMENTS,
+            DUMP_TEXTURES,
+            HASH_CACHE_ENTRIES,
+            HASH_CACHE_MEMORY,
+            REPLACEMENT_MEMORY,
         )
 
     val RESOLUTIONS =
@@ -178,6 +192,10 @@ object GraphicsSettings {
     val OSD_SCALES = NumberScale.Range(25, 500, 5, presets = listOf(50, 75, 100, 150, 200)) { "$it%" }
 
     val SCREENSHOT_QUALITIES = NumberScale.Range(1, 100, 1, presets = listOf(50, 75, 85, 90, 95, 100)) { "$it%" }
+
+    val CACHE_ENTRIES = NumberScale.Range(100, 10000, 100, presets = listOf(600, 1200, 2400, 4800)) { "$it" }
+
+    val CACHE_MEGABYTES = NumberScale.Range(64, 4096, 64, presets = listOf(128, 256, 512, 1024, 2048)) { "$it MB" }
 
     val DOWNSAMPLE_SCALES = NumberScale.Range(1, 16, 1, presets = listOf(1, 2, 3, 4)) { "${it}x" }
 

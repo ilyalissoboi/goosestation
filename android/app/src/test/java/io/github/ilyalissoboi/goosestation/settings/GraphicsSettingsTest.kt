@@ -49,6 +49,52 @@ class GraphicsSettingsTest {
         )
     }
 
+    // Android's own budgets, as the core's (texture_pack_config.h): a phone or handheld has less memory.
+    @Test
+    fun theCacheLimitsDefaultToAndroidsBudgets() {
+        val values = SettingValues.read(MemoryCoreSettings(), GraphicsSettings.all)
+
+        assertEquals(1200, values[GraphicsSettings.HASH_CACHE_ENTRIES])
+        assertEquals(512, values[GraphicsSettings.HASH_CACHE_MEMORY])
+        assertEquals(256, values[GraphicsSettings.REPLACEMENT_MEMORY])
+        assertEquals(false, values[GraphicsSettings.TEXTURE_CACHE])
+        assertEquals(false, values[GraphicsSettings.TEXTURE_REPLACEMENTS])
+        assertEquals(false, values[GraphicsSettings.DUMP_TEXTURES])
+    }
+
+    @Test
+    fun theCacheSettingsAreSavedUnderTheirKeys() {
+        val store = MemoryCoreSettings()
+        val old = SettingValues.read(store, GraphicsSettings.all)
+
+        old
+            .with(GraphicsSettings.TEXTURE_CACHE, true)
+            .with(GraphicsSettings.TEXTURE_REPLACEMENTS, true)
+            .with(GraphicsSettings.DUMP_TEXTURES, true)
+            .with(GraphicsSettings.HASH_CACHE_ENTRIES, 2400)
+            .with(GraphicsSettings.HASH_CACHE_MEMORY, 1024)
+            .with(GraphicsSettings.REPLACEMENT_MEMORY, 128)
+            .save(store, old)
+
+        assertEquals(
+            mapOf(
+                "GPU/EnableTextureCache" to "true",
+                "TextureReplacements/EnableTextureReplacements" to "true",
+                "TextureReplacements/DumpTextures" to "true",
+                "TextureReplacements/MaxHashCacheEntries" to "2400",
+                "TextureReplacements/MaxHashCacheVRAMUsageMB" to "1024",
+                "TextureReplacements/MaxReplacementCacheVRAMUsage" to "128",
+            ),
+            store.values,
+        )
+    }
+
+    @Test
+    fun megabytesShowAsMB() {
+        assertEquals("256 MB", GraphicsSettings.CACHE_MEGABYTES.label(256))
+        assertEquals("1200", GraphicsSettings.CACHE_ENTRIES.label(1200))
+    }
+
     @Test
     fun renderersAreTheCoresWithTheirNotes() {
         val choices = GraphicsSettings.renderers(renderers, "Vulkan")

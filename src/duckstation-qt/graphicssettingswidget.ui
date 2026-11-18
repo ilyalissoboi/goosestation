@@ -1285,9 +1285,9 @@
           </item>
           <item row="1" column="1">
            <widget class="QSpinBox" name="maxHashCacheVRAMUsage">
-              <property name="suffix">
-               <string> MB</string>
-              </property>
+            <property name="suffix">
+             <string> MB</string>
+            </property>
             <property name="minimum">
              <number>64</number>
             </property>
@@ -1308,9 +1308,9 @@
           </item>
           <item row="2" column="1">
            <widget class="QSpinBox" name="maxReplacementCacheVRAMUsage">
-              <property name="suffix">
-               <string> MB</string>
-              </property>
+            <property name="suffix">
+             <string> MB</string>
+            </property>
             <property name="minimum">
              <number>64</number>
             </property>

@@ -1,8 +1,8 @@
 # GooseStation roadmap
 
 What to build next, in order of priority, with what each item waits on. Written on 2026-10-24,
-after the memory card sync (#2), the rebrand (#4) and the new logo (#5); last updated on 2026-11-02,
-after the Android in-game menu (#33, #37, #38).
+after the memory card sync (#2), the rebrand (#4) and the new logo (#5); last updated on 2026-11-18,
+after sync on Windows ARM64 and Linux aarch64 (item 10).
 
 **Size** is a rough effort guess: **S** a day or two, **M** a week or two, **L** longer.
 **After** names the items that must be finished first. Items from DuckStation's post-fork feature
@@ -33,7 +33,7 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 | # | Item | Size | After |
 |---|---|---|---|
 | 9 | ~~A conflict screen.~~ Done (#13): when a save was changed on two devices, the player chooses which version to keep (Settings > Memory Cards > Resolve...); the card keeps this device's version until then, and the other stays in emusync's history. Big Picture has one too (item 12). | M | 2 |
-| 10 | More platforms: emusync runtimes for Windows ARM64 and Linux aarch64 (today Windows x64, Linux x86_64 and macOS). Needs emusync releases for those targets first. | M | 1, emusync |
+| 10 | ~~More platforms.~~ Done: emusync 0.3.1 publishes libraries for Windows ARM64 and Linux aarch64, built on GitHub's ARM runners (emusync #33), next to Windows x64, Linux x86_64 and macOS. The Windows ARM64 build carries `emusync.dll` (CI checks both Windows archives for it), and CMake builds and the Flatpak on Linux aarch64 take the aarch64 library; GooseStation publishes no Linux aarch64 build yet. Still unchecked: a sync on a Windows ARM64 device. | M | 1, emusync |
 | 11 | ~~Memory card editor additions.~~ Done (#20, upstream P1): the editor renames saves, both the title (stored as Shift-JIS, typed text made full-width) and the file name the game looks for, with a warning when the new name doesn't follow the usual pattern or when sync is on (other devices see the old save deleted and a new one added). When a game saves, the message shows that save's icon, animated, and its title. Icon extraction was dropped as too narrow; multitap cards are in [Later](#later). | M | none |
 | 12 | ~~Sync settings in Big Picture.~~ Done (#18): Settings > Memory Cards has the sync settings Qt has (the switch, storage, access key ID, secret access key and encryption passphrase, masked and never shown back, device name, status and Sync Now) and the conflict screen, one row per save with a choice of version. Secrets can be pasted (item 14). | M | 14 |
 

@@ -1,7 +1,7 @@
 # Memory card sync (src/core/memcard_sync.h) with emusync (https://github.com/ilyalissoboi/emusync).
 # The core loads the library at run time and builds against the vendored header (dep/emusync), so
 # this only puts the library next to the program, from a pinned release (no Rust needed):
-#   - Linux x86_64 and macOS: downloads emusync-<version>-<platform>.tar.gz into the build folder and
+#   - Linux x86_64 and aarch64, and macOS: downloads emusync-<version>-<platform>.tar.gz into the build folder and
 #     checks its SHA-256 (from the release's SHA256SUMS); emusync_deploy_runtime(<target>) copies the
 #     library next to the program, or into the app bundle's Frameworks on macOS. A copy of that archive
 #     placed in dep/emusync/ is used instead of downloading (builds without network, like the Flatpak).
@@ -11,12 +11,13 @@
 # Anything else, -DUSE_EMUSYNC=OFF, or a download that fails: the program runs without sync.
 # -DEMUSYNC_LIBRARY=<file> uses a library built from emusync's source instead.
 # Keep EMUSYNC_VERSION in step with dep/emusync/emusync.props, dep/emusync/README.md, the Flatpak manifest and
-# android/app/build.gradle.kts.
+# android/gradle/libs.versions.toml.
 
 option(USE_EMUSYNC "Memory card sync with emusync" ON)
-set(EMUSYNC_VERSION 0.3.0)
-set(EMUSYNC_SHA256_LINUX_X86_64 "395f0098c8f622941fd4cea6592fa873902df3b46fafd06e58269786322b5e6a")
-set(EMUSYNC_SHA256_MACOS "313f75515f8175418779f49c48082783d0187ce6dbb93c19748498beef1b846b")
+set(EMUSYNC_VERSION 0.3.1)
+set(EMUSYNC_SHA256_LINUX_X86_64 "7144604dc1418f9c8776b66cf8fb21384c9872b85f4f27515ab63ba14e6f9af1")
+set(EMUSYNC_SHA256_LINUX_AARCH64 "f4b03cc253542534e4956b75e817aff8e88f3a1d882fe03cbc57c60a49c8a251")
+set(EMUSYNC_SHA256_MACOS "6c21834a4a5a43fa7b2118f22e2e791abb41937904ca1f1a2d53542c9019cf69")
 set(EMUSYNC_RUNTIME "")
 
 if(USE_EMUSYNC AND EMUSYNC_LIBRARY)
@@ -30,6 +31,10 @@ elseif(USE_EMUSYNC AND NOT WIN32 AND NOT ANDROID)
   elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
     set(_emusync_package linux-x86_64)
     set(_emusync_sha256 ${EMUSYNC_SHA256_LINUX_X86_64})
+    set(_emusync_library libemusync.so)
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+    set(_emusync_package linux-aarch64)
+    set(_emusync_sha256 ${EMUSYNC_SHA256_LINUX_AARCH64})
     set(_emusync_library libemusync.so)
   endif()
   if(_emusync_package)

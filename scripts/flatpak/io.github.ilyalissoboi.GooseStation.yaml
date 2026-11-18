@@ -74,10 +74,16 @@ modules:
       - type: dir
         path: ../..
       # Memory card sync: the pinned emusync release that CMakeModules/EmuSync.cmake would download,
-      # fetched here because the build itself has no network.
+      # fetched here because the build itself has no network. One per architecture.
       - type: file
-        url: "https://github.com/ilyalissoboi/emusync/releases/download/v0.3.0/emusync-0.3.0-linux-x86_64.tar.gz"
-        sha256: "395f0098c8f622941fd4cea6592fa873902df3b46fafd06e58269786322b5e6a"
+        only-arches: [x86_64]
+        url: "https://github.com/ilyalissoboi/emusync/releases/download/v0.3.1/emusync-0.3.1-linux-x86_64.tar.gz"
+        sha256: "7144604dc1418f9c8776b66cf8fb21384c9872b85f4f27515ab63ba14e6f9af1"
+        dest: dep/emusync
+      - type: file
+        only-arches: [aarch64]
+        url: "https://github.com/ilyalissoboi/emusync/releases/download/v0.3.1/emusync-0.3.1-linux-aarch64.tar.gz"
+        sha256: "f4b03cc253542534e4956b75e817aff8e88f3a1d882fe03cbc57c60a49c8a251"
         dest: dep/emusync
 
     post-install:

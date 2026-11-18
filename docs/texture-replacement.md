@@ -4,10 +4,129 @@
 # Texture replacement
 
 GooseStation's hardware renderers can dump the textures a game draws and replace them one by one from texture packs
-in the layout packs are published in. This page is the reference for how that works. The user guide (turning it on,
-installing a pack, making one) comes with the settings, in stage 3 of roadmap item 20.
+in the layout packs are published in. The guide comes first: playing with a pack, then making one. The reference
+after it says how every rule was established.
 
-## How names and hashes work here
+## Using texture packs
+
+### What a pack is
+
+A texture pack is a folder of images, each named after the texture it replaces, with an optional `config.yaml` of
+settings for the game. Packs made for DuckStation's texture replacement work here: the kinds of names checked against
+DuckStation are listed in [Which names are compatible](#which-names-are-compatible). Older packs of `vram-write-`
+images (whole backgrounds) work too.
+
+### Where a pack goes
+
+Each game's pack goes in a folder named after the game's serial, such as `SLUS-01040` for Vagrant Story (USA). The
+serial is shown with the game in the game list and in the game's properties or settings. A disc or homebrew program
+without a serial uses an ID made from its hash instead, `HASH-` and 16 hex digits, which the notice below names.
+
+- **Desktop:** the data folder's `textures/<serial>/` (the data folder is the user directory, see
+  [User Directories](../README.md#user-directories)). For example `textures/SLUS-01040/config.yaml` and
+  `textures/SLUS-01040/replacements/…`.
+- **Android:** the same `textures/<serial>/` inside the app's data folder (Settings → Folders). The app reads the pack
+  there through the folder's permission, in place: a pack is never copied into the app's own storage, however large.
+
+Unpack the pack so that its own `config.yaml` (if it has one) sits directly in `textures/<serial>/`: a ZIP often
+holds a `textures/` folder of its own, which goes over the data folder's. Images are found at any depth under
+`textures/<serial>/`, but a `config.yaml` one folder down isn't read (nothing says so: the pack then plays with the
+global settings), and a serial folder inside another folder isn't found at all.
+
+### Turning it on
+
+In **Settings → Graphics**, under **Texture Replacements** (Qt: its tab; Big Picture and Android: its section), or in
+one game's settings to use the pack for that game alone. The rows' names differ a little between Qt, Big Picture and
+Android; each step gives all three where they differ.
+
+1. Turn on **Enable Texture Cache** (Android: **Texture cache**). It works with the hardware renderers only (Vulkan,
+   OpenGL, OpenGL ES, D3D11, D3D12, Metal), not the software renderer.
+2. Turn on **Enable Texture Replacements** (Android: **Texture replacements**), shown or enabled once the cache is on.
+3. For a pack of `vram-write-` images, turn on **Enable VRAM Write Replacement** (Big Picture: **Enable VRAM Write
+   Texture Replacement**; Android: **VRAM write replacements**) instead, or as well.
+4. Optionally, **Preload Texture Replacements** (Big Picture and Android: **Preload Replacement Textures**) loads the
+   whole pack when the game starts rather than each image the first time it's drawn, so there's no pause the first
+   time a replaced texture appears. On Android this is worth turning on for packs that fit the **replacement cache
+   memory** (256 MB by default there, 512 MB on desktop; Qt: **Replacement Cache Memory** in the **Advanced** group;
+   Big Picture: under **Texture Cache Limits**; Android: **Replacement memory** under **Texture cache limits**): a
+   larger pack keeps only what fits and loads the rest again as it's drawn.
+
+### The notice
+
+When a game starts with either replacement switch on, and whenever those settings or the renderer change, a notice
+says what was found:
+
+| Notice | What it means |
+| --- | --- |
+| Texture pack: 161 replacements | The pack is in use; the count is the images that apply (and its VRAM write replacements, if any). |
+| No texture pack found in textures/SLUS-01040 | The game's folder has no replacement images: check the folder's name is the game's serial (or its `HASH-` ID), that it isn't inside another folder, and on Android that the app still has the data folder's permission (Settings → Folders). |
+| Texture pack found, but it needs the texture cache | Turn on the texture cache, globally or in the game's settings. |
+| Texture pack found, but it needs a hardware renderer | The software renderer can't replace textures: pick another renderer. |
+| Texture pack found, but it needs texture replacements on | The pack has texture replacements, and only VRAM write replacements are on. |
+| Texture pack found, but it needs VRAM write replacements on | The pack has only `vram-write-` images, and VRAM write replacements are off. |
+
+Nothing is shown while both replacement switches are off.
+
+### When a pack still doesn't show
+
+- A pack may replace only some textures (the Vagrant Story HD dialogue font pack replaces the menus' and dialogue's
+  letters, not the world); the count says how many images apply, not how many are on screen.
+- A pack's `config.yml` is read like a `config.yaml`. A `config.yaml` with an error is ignored, with the error in the
+  log, and the pack is used with the global settings.
+- A game's own settings override the global ones: a game set to texture cache Off stays off.
+
+## Making a pack
+
+### Dumping textures
+
+1. Turn on the texture cache, then **Enable Texture Dumping** (Big Picture: **Dump Textures**; Android: **Dump
+   textures**), for the game you're working on.
+2. Play: each texture drawn for the first time is written to `textures/<serial>/dumps/` as a PNG named after it. On
+   Android the dumps are written to the app's storage and sent to the data folder's `textures/<serial>/dumps/`.
+   By default textures are named, and dumped, by the upload that brought them into VRAM, so start dumping before the
+   scene you want loads: a save state's textures are already in VRAM and aren't dumped until the game uploads them
+   again. With `DumpTexturePages` (below) textures are dumped from the pages they're drawn from, a save state's too.
+3. The first dump also writes `textures/<serial>/config.yaml` (when the game has none) with every option commented
+   out, and an empty `replacements/` folder.
+4. Redraw the textures you want, at any scale (2×, 4×, 8×; the image's own size decides), keep their names, and put
+   them in `textures/<serial>/replacements/` (or any folder under `textures/<serial>/` but `dumps/`). Turn on texture
+   replacements to see them.
+
+On desktop, **Dump Replaced Textures** (on by default) also dumps textures the pack already replaces, and **Force
+Alpha Channel** (Big Picture: **Force Dump Alpha Channel**) writes dumps fully opaque. Dumping is for the game you're
+making a pack for: it writes many files.
+
+### config.yaml
+
+A pack's `config.yaml` sets options for its game, over the global settings; lines left out or commented out keep the
+global values ([how it's read](#configyaml-1), below, in the reference). The options:
+
+| Option | What it does |
+| --- | --- |
+| `DumpTexturePages` | Name textures by the page and rect they're drawn from, instead of by the upload they came from (`texpage-` names instead of `texupload-`). |
+| `DumpFullTexturePages` | In page mode, dump and replace whole 256×256 pages instead of the rects drawn. |
+| `DumpC16Textures` | Dump direct-colour (16-bit) textures too. |
+| `ReducePaletteRange` | Name and hash only the part of a palette a texture uses (on by default). |
+| `ConvertCopiesToWrites` | Track VRAM copies out of a tracked upload as uploads of their own. |
+| `MaxVRAMWriteSplits` | How many times a partly overwritten upload keeps its remaining parts as uploads. |
+| `MaxVRAMWriteCoalesceWidth`, `MaxVRAMWriteCoalesceHeight` | The widest and tallest upload joined to the one directly above it. |
+| `DumpTextureWidthThreshold`, `DumpTextureHeightThreshold` | Textures narrower or shorter than this many texels aren't dumped (16). |
+| `DumpVRAMWriteWidthThreshold`, `DumpVRAMWriteHeightThreshold` | The same for `vram-write-` dumps (128). |
+| `MaxHashCacheEntries`, `MaxHashCacheVRAMUsageMB`, `MaxReplacementCacheVRAMUsage` | The cache's limits, as in the settings. |
+| `ReplacementScaleLinearFilter` | Filter replacements linearly when they're scaled to fit their page. |
+| `Aliases` | A map of texture names to files, so one image can stand in for several names: `name: file` lines, indented under `Aliases:`. |
+
+Set the options before dumping: page mode and palette range change the names dumps get.
+
+### Reading a name
+
+`texupload-P4-B5E04041144CABCE-D7ADDCD353C6521A-64x256-96-192-32x63-P0-15` is, in order: how the texture was found
+(`texupload-` from an upload, `texpage-` from a page), its mode (`P4` 4-bit, `P8` 8-bit, `C16` direct colour; `ST`
+in front when drawn semi-transparent), the texture's hash and the palette's hash, the source's size in VRAM words,
+the drawn rect (its position and size in texels), and the palette range hashed. Renaming a file to a smaller rect
+inside the same source replaces just that part. [Names](#names) and [Hashes](#hashes) below have the details.
+
+## Reference: how names and hashes work here
 
 Every rule below says how it was established. "Black box" means a released DuckStation build, run as published on
 games the user owns, whose dump names and dumped images were compared with what our own run of the same game gives;

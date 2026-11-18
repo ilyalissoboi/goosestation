@@ -9,6 +9,7 @@
 #include "core/game_database.h"
 #include "core/gpu.h"
 #include "core/settings.h"
+#include "core/texture_pack_config.h"
 
 #include "util/media_capture.h"
 
@@ -237,6 +238,42 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
 
   // Texture Replacements Tab
 
+  const TexturePackConfig pack_defaults;
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enableTextureCache, "GPU", "EnableTextureCache", false);
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enableTextureReplacements, "TextureReplacements",
+                                               "EnableTextureReplacements", false);
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.dumpTextures, "TextureReplacements", "DumpTextures", false);
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.dumpReplacedTextures, "TextureReplacements",
+                                               "DumpReplacedTextures", true);
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.dumpTextureForceAlphaChannel, "TextureReplacements",
+                                               "DumpTextureForceAlphaChannel", false);
+  SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.maxHashCacheEntries, "TextureReplacements",
+                                              "MaxHashCacheEntries",
+                                              static_cast<int>(pack_defaults.max_hash_cache_entries));
+  SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.maxHashCacheVRAMUsage, "TextureReplacements",
+                                              "MaxHashCacheVRAMUsageMB",
+                                              static_cast<int>(pack_defaults.max_hash_cache_vram_usage_mb));
+  SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.maxReplacementCacheVRAMUsage, "TextureReplacements",
+                                              "MaxReplacementCacheVRAMUsage",
+                                              static_cast<int>(pack_defaults.max_replacement_cache_vram_usage_mb));
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.alwaysTrackUploads, "TextureReplacements",
+                                               "AlwaysTrackUploads", false);
+  if (!sif)
+  {
+    // settings.ini is shared with Android through the data folder, whose budgets are smaller: a budget back at this
+    // platform's default is left out of the file, so each platform reads its own (as TexturePackConfig::Save does).
+    const auto leave_out_default = [this](QSpinBox* box, const char* key, u32 default_value) {
+      connect(box, &QSpinBox::valueChanged, this, [key, default_value](int value) {
+        if (static_cast<u32>(value) != default_value)
+          return;
+        Host::DeleteBaseSettingValue("TextureReplacements", key);
+        Host::CommitBaseSettingChanges();
+      });
+    };
+    leave_out_default(m_ui.maxHashCacheVRAMUsage, "MaxHashCacheVRAMUsageMB", pack_defaults.max_hash_cache_vram_usage_mb);
+    leave_out_default(m_ui.maxReplacementCacheVRAMUsage, "MaxReplacementCacheVRAMUsage",
+                      pack_defaults.max_replacement_cache_vram_usage_mb);
+  }
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.vramWriteReplacement, "TextureReplacements",
                                                "EnableVRAMWriteReplacements", false);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.preloadTextureReplacements, "TextureReplacements",
@@ -253,8 +290,14 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
                                               "DumpVRAMWriteHeightThreshold",
                                               Settings::DEFAULT_VRAM_WRITE_DUMP_HEIGHT_THRESHOLD);
 
+  connect(m_ui.enableTextureCache, &QCheckBox::checkStateChanged, this,
+          &GraphicsSettingsWidget::onEnableAnyTextureReplacementsChanged);
+  connect(m_ui.enableTextureReplacements, &QCheckBox::checkStateChanged, this,
+          &GraphicsSettingsWidget::onEnableAnyTextureReplacementsChanged);
   connect(m_ui.vramWriteReplacement, &QCheckBox::checkStateChanged, this,
           &GraphicsSettingsWidget::onEnableAnyTextureReplacementsChanged);
+  connect(m_ui.dumpTextures, &QCheckBox::checkStateChanged, this,
+          &GraphicsSettingsWidget::onEnableTextureDumpingChanged);
   connect(m_ui.vramWriteDumping, &QCheckBox::checkStateChanged, this,
           &GraphicsSettingsWidget::onEnableVRAMWriteDumpingChanged);
 
@@ -556,6 +599,31 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
 
   // Texture Replacements Tab
 
+  dialog->registerWidgetHelp(
+    m_ui.enableTextureCache, tr("Enable Texture Cache"), tr("Unchecked"),
+    tr("Tracks the textures a game uploads to VRAM so they can be dumped and replaced one by one. Needed for texture "
+       "packs and texture dumping. Works with the hardware renderers only."));
+  dialog->registerWidgetHelp(m_ui.enableTextureReplacements, tr("Enable Texture Replacements"), tr("Unchecked"),
+                             tr("Replaces textures with the game's texture pack, from textures/&lt;serial&gt;/ in "
+                                "the data folder. Needs the texture cache."));
+  dialog->registerWidgetHelp(m_ui.dumpTextures, tr("Enable Texture Dumping"), tr("Unchecked"),
+                             tr("Writes each new texture the game draws to textures/&lt;serial&gt;/dumps/, to make a "
+                                "texture pack from. Needs the texture cache."));
+  dialog->registerWidgetHelp(m_ui.dumpReplacedTextures, tr("Dump Replaced Textures"), tr("Checked"),
+                             tr("Also dumps textures the pack already replaces."));
+  dialog->registerWidgetHelp(m_ui.dumpTextureForceAlphaChannel, tr("Force Alpha Channel"), tr("Unchecked"),
+                             tr("Writes dumped textures fully opaque, ignoring their transparency."));
+  dialog->registerWidgetHelp(m_ui.maxHashCacheEntries, tr("Hash Cache Entries"), tr("1200"),
+                             tr("How many textures the texture cache keeps track of at once."));
+  dialog->registerWidgetHelp(m_ui.maxHashCacheVRAMUsage, tr("Hash Cache Memory"),
+                             tr("%1 MB").arg(TexturePackConfig().max_hash_cache_vram_usage_mb),
+                             tr("The most video memory the texture cache's textures may use."));
+  dialog->registerWidgetHelp(m_ui.maxReplacementCacheVRAMUsage, tr("Replacement Cache Memory"),
+                             tr("%1 MB").arg(TexturePackConfig().max_replacement_cache_vram_usage_mb),
+                             tr("The most memory loaded replacement images may use, preloaded ones included."));
+  dialog->registerWidgetHelp(m_ui.alwaysTrackUploads, tr("Always Track Uploads"), tr("Unchecked"),
+                             tr("Tracks textures even when the game has no texture pack and nothing is dumped. For "
+                                "debugging the texture cache."));
   dialog->registerWidgetHelp(m_ui.vramWriteReplacement, tr("Enable VRAM Write Replacement"), tr("Unchecked"),
                              tr("Enables the replacement of background textures in supported games. <strong>This is "
                                 "not general texture replacement.</strong>"));
@@ -1114,9 +1182,25 @@ void GraphicsSettingsWidget::onMediaCaptureAudioEnabledChanged()
 
 void GraphicsSettingsWidget::onEnableAnyTextureReplacementsChanged()
 {
+  const bool cache = m_dialog->getEffectiveBoolValue("GPU", "EnableTextureCache", false);
+  m_ui.enableTextureReplacements->setEnabled(cache);
+  m_ui.dumpTextures->setEnabled(cache);
+  m_ui.textureCacheAdvancedGroup->setEnabled(cache);
+
   const bool any_replacements_enabled =
+    (cache && m_dialog->getEffectiveBoolValue("TextureReplacements", "EnableTextureReplacements", false)) ||
     m_dialog->getEffectiveBoolValue("TextureReplacements", "EnableVRAMWriteReplacements", false);
   m_ui.preloadTextureReplacements->setEnabled(any_replacements_enabled);
+
+  onEnableTextureDumpingChanged();
+}
+
+void GraphicsSettingsWidget::onEnableTextureDumpingChanged()
+{
+  const bool enabled = m_dialog->getEffectiveBoolValue("GPU", "EnableTextureCache", false) &&
+                       m_dialog->getEffectiveBoolValue("TextureReplacements", "DumpTextures", false);
+  m_ui.dumpReplacedTextures->setEnabled(enabled);
+  m_ui.dumpTextureForceAlphaChannel->setEnabled(enabled);
 }
 
 void GraphicsSettingsWidget::onEnableVRAMWriteDumpingChanged()

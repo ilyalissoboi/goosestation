@@ -4995,23 +4995,103 @@ void FullscreenUI::DrawDisplaySettingsPage()
 
   MenuHeading(FSUI_CSTR("Texture Replacements"));
 
+  DrawToggleSetting(bsi, FSUI_CSTR("Enable Texture Cache"),
+                    FSUI_CSTR("Tracks textures in VRAM so they can be dumped and replaced one by one. Hardware "
+                              "renderers only."),
+                    "GPU", "EnableTextureCache", false);
+  const bool texture_cache = GetEffectiveBoolSetting(bsi, "GPU", "EnableTextureCache", false);
+  if (texture_cache)
+  {
+    DrawToggleSetting(bsi, FSUI_CSTR("Enable Texture Replacements"),
+                      FSUI_CSTR("Replaces textures from the game's pack in textures/<serial>."), "TextureReplacements",
+                      "EnableTextureReplacements", false);
+  }
   DrawToggleSetting(bsi, FSUI_CSTR("Enable VRAM Write Texture Replacement"),
                     FSUI_CSTR("Enables the replacement of background textures in supported games."),
                     "TextureReplacements", "EnableVRAMWriteReplacements", false);
-  DrawToggleSetting(bsi, FSUI_CSTR("Preload Replacement Textures"),
-                    FSUI_CSTR("Loads all replacement texture to RAM, reducing stuttering at runtime."),
-                    "TextureReplacements", "PreloadTextures", false);
+  if ((texture_cache && GetEffectiveBoolSetting(bsi, "TextureReplacements", "EnableTextureReplacements", false)) ||
+      GetEffectiveBoolSetting(bsi, "TextureReplacements", "EnableVRAMWriteReplacements", false))
+  {
+    DrawToggleSetting(bsi, FSUI_CSTR("Preload Replacement Textures"),
+                      FSUI_CSTR("Loads all replacement texture to RAM, reducing stuttering at runtime."),
+                      "TextureReplacements", "PreloadTextures", false);
+  }
   DrawToggleSetting(bsi, FSUI_CSTR("Use Old MDEC Routines"),
                     FSUI_CSTR("Enables the older, less accurate MDEC decoding routines. May be required for old "
                               "replacement backgrounds to match/load."),
                     "Hacks", "UseOldMDECRoutines", false);
 
+  if (texture_cache)
+  {
+    DrawToggleSetting(bsi, FSUI_CSTR("Dump Textures"),
+                      FSUI_CSTR("Writes each new texture the game draws to textures/<serial>/dumps."),
+                      "TextureReplacements", "DumpTextures", false);
+    if (GetEffectiveBoolSetting(bsi, "TextureReplacements", "DumpTextures", false))
+    {
+      DrawToggleSetting(bsi, FSUI_CSTR("Dump Replaced Textures"),
+                        FSUI_CSTR("Also dumps textures the pack already replaces."), "TextureReplacements",
+                        "DumpReplacedTextures", true);
+      DrawToggleSetting(bsi, FSUI_CSTR("Force Dump Alpha Channel"),
+                        FSUI_CSTR("Writes dumped textures fully opaque, ignoring their transparency."),
+                        "TextureReplacements", "DumpTextureForceAlphaChannel", false);
+    }
+  }
   DrawToggleSetting(bsi, FSUI_CSTR("Dump Replaceable VRAM Writes"),
                     FSUI_CSTR("Writes textures which can be replaced to the dump directory."), "TextureReplacements",
                     "DumpVRAMWrites", false);
   DrawToggleSetting(bsi, FSUI_CSTR("Set VRAM Write Dump Alpha Channel"),
                     FSUI_CSTR("Clears the mask/transparency bit in VRAM write dumps."), "TextureReplacements",
                     "DumpVRAMWriteForceAlphaChannel", true);
+
+  if (texture_cache)
+  {
+    const TexturePackConfig pack_defaults;
+    // In a game's settings the row deletes the game's value when it equals the default given, so give the global
+    // value: choosing it follows the global setting, and the platform's own default stays the game's if chosen.
+    const bool game_settings = IsEditingGameSettings(bsi);
+    const auto limit_default = [game_settings](const char* key, u32 platform_default) {
+      const u32 value =
+        game_settings ? Host::GetBaseUIntSettingValue("TextureReplacements", key, platform_default) : platform_default;
+      return static_cast<int>(value);
+    };
+    MenuHeading(FSUI_CSTR("Texture Cache Limits"));
+    DrawIntRangeSetting(bsi, FSUI_CSTR("Hash Cache Entries"),
+                        FSUI_CSTR("How many textures the texture cache keeps track of at once."),
+                        "TextureReplacements", "MaxHashCacheEntries",
+                        limit_default("MaxHashCacheEntries", pack_defaults.max_hash_cache_entries), 100, 10000);
+    DrawIntRangeSetting(bsi, FSUI_CSTR("Hash Cache Memory"),
+                        FSUI_CSTR("The most video memory the texture cache's textures may use."),
+                        "TextureReplacements", "MaxHashCacheVRAMUsageMB",
+                        limit_default("MaxHashCacheVRAMUsageMB", pack_defaults.max_hash_cache_vram_usage_mb), 64, 8192,
+                        "%d MB");
+    DrawIntRangeSetting(bsi, FSUI_CSTR("Replacement Cache Memory"),
+                        FSUI_CSTR("The most memory loaded replacement images may use, preloaded ones included."),
+                        "TextureReplacements", "MaxReplacementCacheVRAMUsage",
+                        limit_default("MaxReplacementCacheVRAMUsage",
+                                      pack_defaults.max_replacement_cache_vram_usage_mb),
+                        64, 8192, "%d MB");
+    // settings.ini is shared with Android through the data folder, whose budgets are smaller: a budget back at this
+    // platform's default is left out of the file, so each platform reads its own (as TexturePackConfig::Save does).
+    if (!IsEditingGameSettings(bsi))
+    {
+      for (const auto& [key, default_value] :
+           {std::pair<const char*, u32>("MaxHashCacheVRAMUsageMB", pack_defaults.max_hash_cache_vram_usage_mb),
+            std::pair<const char*, u32>("MaxReplacementCacheVRAMUsage",
+                                        pack_defaults.max_replacement_cache_vram_usage_mb)})
+      {
+        if (bsi->ContainsValue("TextureReplacements", key) &&
+            bsi->GetUIntValue("TextureReplacements", key, default_value) == default_value)
+        {
+          bsi->DeleteValue("TextureReplacements", key);
+          SetSettingsChanged(bsi);
+        }
+      }
+    }
+    DrawToggleSetting(bsi, FSUI_CSTR("Always Track Uploads"),
+                      FSUI_CSTR("Tracks textures even when the game has no pack and nothing is dumped. For "
+                                "debugging the texture cache."),
+                      "TextureReplacements", "AlwaysTrackUploads", false);
+  }
 
   EndMenuButtons();
 }
@@ -9421,6 +9501,25 @@ TRANSLATE_NOOP("FullscreenUI", "Temporarily disables all enhancements, useful wh
 TRANSLATE_NOOP("FullscreenUI", "Test Unofficial Achievements");
 TRANSLATE_NOOP("FullscreenUI", "Texture Filtering");
 TRANSLATE_NOOP("FullscreenUI", "Texture Replacements");
+TRANSLATE_NOOP("FullscreenUI", "Enable Texture Cache");
+TRANSLATE_NOOP("FullscreenUI", "Tracks textures in VRAM so they can be dumped and replaced one by one. Hardware renderers only.");
+TRANSLATE_NOOP("FullscreenUI", "Enable Texture Replacements");
+TRANSLATE_NOOP("FullscreenUI", "Replaces textures from the game's pack in textures/<serial>.");
+TRANSLATE_NOOP("FullscreenUI", "Dump Textures");
+TRANSLATE_NOOP("FullscreenUI", "Writes each new texture the game draws to textures/<serial>/dumps.");
+TRANSLATE_NOOP("FullscreenUI", "Dump Replaced Textures");
+TRANSLATE_NOOP("FullscreenUI", "Also dumps textures the pack already replaces.");
+TRANSLATE_NOOP("FullscreenUI", "Force Dump Alpha Channel");
+TRANSLATE_NOOP("FullscreenUI", "Writes dumped textures fully opaque, ignoring their transparency.");
+TRANSLATE_NOOP("FullscreenUI", "Texture Cache Limits");
+TRANSLATE_NOOP("FullscreenUI", "Hash Cache Entries");
+TRANSLATE_NOOP("FullscreenUI", "How many textures the texture cache keeps track of at once.");
+TRANSLATE_NOOP("FullscreenUI", "Hash Cache Memory");
+TRANSLATE_NOOP("FullscreenUI", "The most video memory the texture cache's textures may use.");
+TRANSLATE_NOOP("FullscreenUI", "Replacement Cache Memory");
+TRANSLATE_NOOP("FullscreenUI", "The most memory loaded replacement images may use, preloaded ones included.");
+TRANSLATE_NOOP("FullscreenUI", "Always Track Uploads");
+TRANSLATE_NOOP("FullscreenUI", "Tracks textures even when the game has no pack and nothing is dumped. For debugging the texture cache.");
 TRANSLATE_NOOP("FullscreenUI", "The Retro Crisis presets need the libretro slang shaders and will stop working.");
 TRANSLATE_NOOP("FullscreenUI", "The SDL input source supports most controllers.");
 TRANSLATE_NOOP("FullscreenUI", "The XInput source provides support for XBox 360/XBox One/XBox Series controllers.");

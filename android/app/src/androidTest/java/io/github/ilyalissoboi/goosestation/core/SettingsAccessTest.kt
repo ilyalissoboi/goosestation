@@ -284,6 +284,11 @@ class SettingsAccessTest {
                 // Left out while empty (Settings::Save), which is their default: the slot's own shared card.
                 "MemoryCards/Card1Path",
                 "MemoryCards/Card2Path",
+                // Left out at the platform's default (TexturePackConfig::Save): Android's differ from desktop's in a
+                // shared settings.ini. The core's are pinned by TexturePackConfig.TheDefaultsAreTheReleasesDefaults
+                // on the device (run-native-tests.sh), the page's by GraphicsSettingsTest.
+                "TextureReplacements/MaxHashCacheVRAMUsageMB",
+                "TextureReplacements/MaxReplacementCacheVRAMUsage",
             )
 
         /** Every choice list the bridge names. */

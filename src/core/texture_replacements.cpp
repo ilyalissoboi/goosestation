@@ -17,6 +17,9 @@
 #include "common/string_util.h"
 #include "common/timer.h"
 
+#include "util/imgui_manager.h"
+
+#include "IconsFontAwesome5.h"
 #include "fmt/format.h"
 #include "xxhash.h"
 #if defined(CPU_ARCH_X86) || defined(CPU_ARCH_X64)
@@ -437,6 +440,58 @@ void TextureReplacements::Reload()
 
   if (g_settings.texture_replacements.preload_textures)
     PreloadTextures();
+
+  if (std::optional<std::string> notice = GetLoadNotice())
+    Host::AddIconOSDMessage("TextureReplacementsLoad", ICON_FA_IMAGES, std::move(*notice), Host::OSD_INFO_DURATION);
+}
+
+std::optional<std::string> TextureReplacements::FormatLoadNotice(const LoadNoticeState& state)
+{
+  if (state.game_id.empty() || (!state.texture_replacements && !state.vram_write_replacements))
+    return std::nullopt;
+
+  const size_t textures =
+    (state.texture_replacements && state.texture_cache && state.hardware_renderer) ? state.textures : 0;
+  const size_t vram_writes = (state.vram_write_replacements && state.hardware_renderer) ? state.vram_writes : 0;
+  if (textures > 0 || vram_writes > 0)
+  {
+    const std::string texture_part =
+      (textures == 1) ? TRANSLATE_STR("TextureReplacements", "1 replacement") :
+                        fmt::format(TRANSLATE_FS("TextureReplacements", "{} replacements"), textures);
+    const std::string vram_part =
+      (vram_writes == 1) ? TRANSLATE_STR("TextureReplacements", "1 VRAM write replacement") :
+                           fmt::format(TRANSLATE_FS("TextureReplacements", "{} VRAM write replacements"), vram_writes);
+    if (textures > 0 && vram_writes > 0)
+      return fmt::format(TRANSLATE_FS("TextureReplacements", "Texture pack: {} and {}"), texture_part, vram_part);
+    return fmt::format(TRANSLATE_FS("TextureReplacements", "Texture pack: {}"),
+                       (textures > 0) ? texture_part : vram_part);
+  }
+
+  if (state.textures == 0 && state.vram_writes == 0)
+  {
+    return fmt::format(TRANSLATE_FS("TextureReplacements", "No texture pack found in textures/{}"), state.game_id);
+  }
+
+  // Found, but nothing applies: the first reason that fits.
+  if (state.textures > 0 && state.texture_replacements && !state.texture_cache)
+    return TRANSLATE_STR("TextureReplacements", "Texture pack found, but it needs the texture cache");
+  if (!state.hardware_renderer)
+    return TRANSLATE_STR("TextureReplacements", "Texture pack found, but it needs a hardware renderer");
+  if (state.textures > 0 && !state.texture_replacements)
+    return TRANSLATE_STR("TextureReplacements", "Texture pack found, but it needs texture replacements on");
+  return TRANSLATE_STR("TextureReplacements", "Texture pack found, but it needs VRAM write replacements on");
+}
+
+std::optional<std::string> TextureReplacements::GetLoadNotice()
+{
+  const Settings::TextureReplacementSettings& tr = g_settings.texture_replacements;
+  return FormatLoadNotice(LoadNoticeState{.game_id = s_game_id,
+                                          .texture_replacements = tr.enable_texture_replacements,
+                                          .vram_write_replacements = tr.enable_vram_write_replacements,
+                                          .texture_cache = g_settings.gpu_texture_cache,
+                                          .hardware_renderer = !g_settings.IsUsingSoftwareRenderer(),
+                                          .textures = s_index.GetTextureCount(),
+                                          .vram_writes = s_index.GetVRAMWriteCount()});
 }
 
 void TextureReplacements::PreloadTextures()

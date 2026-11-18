@@ -258,6 +258,26 @@ fun GraphicsScreen(
         )
 
         SettingsSection("Texture replacement")
+        // The texture cache works on the hardware renderers only.
+        val cache = hardware && values[GraphicsSettings.TEXTURE_CACHE]
+        if (hardware) {
+            GameSwitch(
+                values,
+                onChange,
+                "Texture cache",
+                GraphicsSettings.TEXTURE_CACHE,
+                "Needed for texture packs and dumping textures.",
+            )
+        }
+        if (cache) {
+            GameSwitch(
+                values,
+                onChange,
+                "Texture replacements",
+                GraphicsSettings.TEXTURE_REPLACEMENTS,
+                "From the data folder's textures folder.",
+            )
+        }
         GameSwitch(
             values,
             onChange,
@@ -265,8 +285,46 @@ fun GraphicsScreen(
             GraphicsSettings.VRAM_REPLACEMENTS,
             "From the data folder's textures folder.",
         )
-        if (values[GraphicsSettings.VRAM_REPLACEMENTS]) {
-            GameSwitch(values, onChange, "Preload replacement textures", GraphicsSettings.PRELOAD_TEXTURES)
+        if ((cache && values[GraphicsSettings.TEXTURE_REPLACEMENTS]) || values[GraphicsSettings.VRAM_REPLACEMENTS]) {
+            GameSwitch(
+                values,
+                onChange,
+                "Preload replacement textures",
+                GraphicsSettings.PRELOAD_TEXTURES,
+                "Loads the pack at the game's start, within the replacement memory below.",
+            )
+        }
+        if (cache) {
+            GameSwitch(
+                values,
+                onChange,
+                "Dump textures",
+                GraphicsSettings.DUMP_TEXTURES,
+                "To the data folder's textures/<serial>/dumps.",
+            )
+
+            SettingsSection("Texture cache limits")
+            GameNumber(
+                values,
+                onChange,
+                "Replacement memory",
+                GraphicsSettings.REPLACEMENT_MEMORY,
+                GraphicsSettings.CACHE_MEGABYTES,
+            )
+            GameNumber(
+                values,
+                onChange,
+                "Hash cache memory",
+                GraphicsSettings.HASH_CACHE_MEMORY,
+                GraphicsSettings.CACHE_MEGABYTES,
+            )
+            GameNumber(
+                values,
+                onChange,
+                "Hash cache entries",
+                GraphicsSettings.HASH_CACHE_ENTRIES,
+                GraphicsSettings.CACHE_ENTRIES,
+            )
         }
     }
 }

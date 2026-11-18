@@ -76,6 +76,8 @@ class SettingValues private constructor(
             if (isGame && setting !in set) {
                 val layer = requireNotNull(s as? LayerSettings) { "A game's values save to its own settings" }
                 layer.delete(setting.section, setting.key)
+            } else if (!isGame && setting is IntSetting && setting.deleteAtDefault && get(setting) == setting.default) {
+                s.setString(setting.section, setting.key, null)
             } else {
                 write(s, setting)
             }

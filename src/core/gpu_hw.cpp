@@ -1177,8 +1177,8 @@ bool GPU_HW::CompilePipelines(Error* error)
   for (u8 texture_mode = 0; texture_mode < NUM_TEXTURE_MODES; texture_mode++)
     active_texture_modes += BoolToUInt32(IsTextureModeCompiled(static_cast<BatchTextureMode>(texture_mode)));
   const u32 total_pipelines =
-    (m_allow_sprite_mode ? 5 : 3) +                                                    // vertex shaders
-    (active_texture_modes * 5 * 9 * 2 * 2 * 2 * (1 + BoolToUInt32(needs_rov_depth))) + // fragment shaders
+    5 +                                                                                // vertex shaders
+    (active_texture_modes * 5 * 5 * 2 * 2 * 2 * (1 + BoolToUInt32(needs_rov_depth))) + // fragment shaders
     ((m_pgxp_depth_buffer ? 2 : 1) * 5 * 5 * active_texture_modes * 2 * 2 * 2) +       // batch pipelines
     ((m_wireframe_mode != GPUWireframeMode::Disabled) ? 1 : 0) +                       // wireframe
     1 +                                                                                // fullscreen quad VS
@@ -1189,7 +1189,7 @@ bool GPU_HW::CompilePipelines(Error* error)
     (m_replaced_pipelines ? 1 : 0) +                                                   // replacement compose
     (m_write_mask_as_depth ? 1 : 0) +                                                  // mask -> depth
     1 +                                                                                // vram read
-    2 +                                                                                // extract/display
+    (2 + BoolToUInt32(m_pgxp_depth_buffer)) +                                          // extract/display
     ((m_downsample_mode != GPUDownsampleMode::Disabled) ? 1 : 0);                      // downsample
 
   ShaderCompileProgressTracker progress("Compiling Pipelines", total_pipelines);
@@ -1349,7 +1349,7 @@ bool GPU_HW::CompilePipelines(Error* error)
           // If using ROV depth, we only draw with shader blending.
           (needs_rov_depth && render_mode != static_cast<u8>(BatchRenderMode::ShaderBlend)))
         {
-          progress.Increment(9 * 2 * 2 * 2);
+          progress.Increment(active_texture_modes * 2 * 2 * 2);
           continue;
         }
 

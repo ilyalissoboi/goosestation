@@ -378,7 +378,8 @@ private:
   static PipelineLayoutType GetPipelineLayoutType(GPUPipeline::RenderPassFlag flags);
   VkPipelineLayout GetCurrentVkPipelineLayout() const;
   void SetInitialPipelineState();
-  void PreDrawCheck();
+  /// Begins the render pass and binds what the draw needs; false if its descriptor sets can't be allocated.
+  bool PreDrawCheck(bool retrying = false);
 
   template<GPUPipeline::Layout layout>
   bool UpdateDescriptorSetsForLayout(u32 dirty);
@@ -483,6 +484,7 @@ private:
 
   // Which bindings/state has to be updated before the next draw.
   u32 m_dirty_flags = ALL_DIRTY_STATE;
+  bool m_reported_descriptor_pool_too_small = false;
 
   u32 m_num_current_render_targets = 0;
   GPUPipeline::RenderPassFlag m_current_render_pass_flags = GPUPipeline::NoRenderPassFlags;

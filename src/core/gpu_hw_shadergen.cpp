@@ -873,22 +873,21 @@ float4 SampleFromVRAM(TEXPAGE_VALUE texpage, float2 coords)
 // samp1 is the page drawn with its replacements, 256 texels square at any scale. Its alpha says what covers a texel:
 // 0 nothing (the texel comes from VRAM, as for any draw), 85 a transparent replacement pixel, 170 a semi-transparent
 // one, 255 an opaque one. Covered texels are returned in the VRAM texel's form.
-bool SampleReplacement(float2 coords, out float4 result)
+// The texel is the one the base mode takes at tcoords (VRAM's coordinates, so the same texel as any draw); scoords
+// only says where within it to sample, as replacements have detail within a texel.
+bool SampleReplacement(float2 tcoords, float2 scoords, out float4 result)
 {
   result = TRANSPARENT_PIXEL_COLOR;
 
-  // The texel the base mode takes, and where in it the coordinate falls.
   #if PALETTE || !UPSCALED
-    uint2 icoords = FloatToIntegerCoords(coords);
-    float2 sub = (RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ?
-                   clamp(coords - float2(icoords) + 0.5, float2(0.0, 0.0), float2(0.999, 0.999)) :
-                   (coords - float2(icoords));
+    uint2 icoords = FloatToIntegerCoords(tcoords);
+    float2 sub = scoords - float2(icoords) + ((RESOLUTION_SCALE == 1u || FORCE_ROUND_TEXCOORDS != 0) ? 0.5 : 0.0);
   #else
     // Upscaled direct coordinates: the direct path floors them in page texels.
-    float2 ncoords = coords / float(RESOLUTION_SCALE);
-    uint2 icoords = uint2(floor(ncoords));
-    float2 sub = frac(ncoords);
+    uint2 icoords = uint2(floor(tcoords / float(RESOLUTION_SCALE)));
+    float2 sub = (scoords / float(RESOLUTION_SCALE)) - float2(icoords);
   #endif
+  sub = clamp(sub, float2(0.0, 0.0), float2(0.999, 0.999));
 
   float4 texel = SAMPLE_TEXTURE_LEVEL(samp1, (float2(ApplyTextureWindow(icoords)) + sub) * (1.0 / 256.0), 0.0);
   if (texel.a < (42.5 / 255.0))
@@ -987,10 +986,10 @@ float3 ApplyDebanding(float2 frag_coord)
         #else
           float2 rcoords = vcoords;
         #endif
-        if (!SampleReplacement(rcoords, texcol))
+        if (!SampleReplacement(vcoords, rcoords, texcol))
           texcol = SampleFromVRAM(v_texpage, vcoords);
       #elif REPLACED
-        if (!SampleReplacement(v_tex0, texcol))
+        if (!SampleReplacement(v_tex0, v_tex0, texcol))
           texcol = SampleFromVRAM(v_texpage, v_tex0);
       #elif UV_LIMITS
         texcol = SampleFromVRAM(v_texpage, clamp(v_tex0, v_uv_limits.xy, v_uv_limits.zw));

@@ -55,6 +55,7 @@ enum : u32
   MAX_DRAW_CALLS_PER_FRAME = 2048,
   MAX_COMBINED_IMAGE_SAMPLER_DESCRIPTORS_PER_FRAME = GPUDevice::MAX_TEXTURE_SAMPLERS * MAX_DRAW_CALLS_PER_FRAME,
   MAX_INPUT_ATTACHMENT_DESCRIPTORS_PER_FRAME = MAX_DRAW_CALLS_PER_FRAME,
+  MAX_STORAGE_IMAGE_DESCRIPTORS_PER_FRAME = GPUDevice::MAX_IMAGE_RENDER_TARGETS * MAX_DRAW_CALLS_PER_FRAME,
   MAX_DESCRIPTOR_SETS_PER_FRAME = MAX_DRAW_CALLS_PER_FRAME,
   MAX_SAMPLER_DESCRIPTORS = 8192,
 
@@ -971,13 +972,16 @@ bool VulkanDevice::CreateCommandBuffers()
     Vulkan::SetObjectName(m_device, resources.fence, TinyString::from_format("Frame Fence {}", frame_index));
 
     u32 num_pools = 0;
-    VkDescriptorPoolSize pool_sizes[2];
+    VkDescriptorPoolSize pool_sizes[3];
     if (!m_optional_extensions.vk_khr_push_descriptor)
     {
       pool_sizes[num_pools++] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                  MAX_COMBINED_IMAGE_SAMPLER_DESCRIPTORS_PER_FRAME};
     }
     pool_sizes[num_pools++] = {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, MAX_INPUT_ATTACHMENT_DESCRIPTORS_PER_FRAME};
+    // Rasterizer-ordered views bind the render targets as storage images, a set per draw.
+    if (m_features.raster_order_views)
+      pool_sizes[num_pools++] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, MAX_STORAGE_IMAGE_DESCRIPTORS_PER_FRAME};
 
     VkDescriptorPoolCreateInfo pool_create_info = {
       VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, nullptr, 0, MAX_DESCRIPTOR_SETS_PER_FRAME, num_pools, pool_sizes};

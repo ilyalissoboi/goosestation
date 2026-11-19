@@ -529,7 +529,8 @@ void RegTestHost::PrintCommandLineHelp(const char* progname)
   std::fprintf(stderr, "  -version: Displays version information and exits.\n");
   std::fprintf(stderr, "  -dumpdir: Set frame dump base directory (will be dumped to basedir/gametitle).\n");
   std::fprintf(stderr, "  -dumpinterval: Dumps every N frames.\n");
-  std::fprintf(stderr, "  -dumpvram: With each frame dump, also dumps VRAM (vram_NNNNN.png, at 1x).\n");
+  std::fprintf(stderr, "  -dumpvram: With each frame dump, also dumps VRAM beside it (vram_NNNNN.png, at 1x),\n"
+                       "    read back from the GPU each time.\n");
   std::fprintf(stderr, "  -frames: Sets the number of frames to execute.\n");
   std::fprintf(stderr, "  -log <level>: Sets the log level. Defaults to verbose.\n");
   std::fprintf(stderr, "  -renderer <renderer>: Sets the graphics renderer. Default to software.\n");

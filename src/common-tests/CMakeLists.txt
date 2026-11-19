@@ -1,5 +1,9 @@
 add_executable(common-tests
   achievements_offline_store_tests.cpp
+  achievements_offline_tests.cpp
+  ../core/achievements_offline.cpp
+  achievements_offline_words_tests.cpp
+  ../core/achievements_offline_words.cpp
   ../core/achievements_offline_store.cpp
   android_cover_downloads_tests.cpp
   ../util/android_cover_downloads.cpp

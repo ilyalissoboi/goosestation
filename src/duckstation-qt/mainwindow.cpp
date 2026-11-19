@@ -2740,11 +2740,11 @@ void MainWindow::openMemoryCardEditor(const QString& card_a_path, const QString&
   }
 }
 
-void MainWindow::onAchievementsLoginRequested(Achievements::LoginRequestReason reason)
+void MainWindow::onAchievementsLoginRequested(Achievements::LoginRequestReason reason, const QString& kept_note)
 {
   const auto lock = pauseAndLockSystem();
 
-  AchievementLoginDialog dlg(lock.getDialogParent(), reason);
+  AchievementLoginDialog dlg(lock.getDialogParent(), reason, kept_note);
   dlg.exec();
 }
 

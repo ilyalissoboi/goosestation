@@ -45,7 +45,7 @@ GooseStation has a full desktop frontend built with Qt, and a fullscreen/TV UI (
  - Emulated CPU overclocking.
  - Integrated and remote debugging.
  - Multitap controllers (up to 8 devices).
- - RetroAchievements.
+ - RetroAchievements, without a connection too ([below](#retroachievements-without-a-connection)).
  - Video capture with Media Foundation (Windows) and [FFmpeg](https://www.ffmpeg.org/) (All Platforms) backends.
 
 ## System Requirements
@@ -77,6 +77,28 @@ For these games, make sure that the CD image and its corresponding SBI (.sbi) fi
 For example, if your disc image was named `Spyro3.cue`, you would place the SBI file in the same directory, and name it `Spyro3.sbi`.
 
 CHD images with built-in subchannel information are also supported.
+
+## RetroAchievements without a connection
+
+As on Android, nothing earned is lost for want of a connection, on desktop too (Qt and Big Picture alike):
+
+- Every unlock and leaderboard entry is written to `achievements/queue.json` in the user directory before it's sent,
+  and taken out once RetroAchievements has it, already had it, or refused it ("Couldn't send 'Ace Pilot':
+  RetroAchievements refused it"). One left over when GooseStation closed is sent at the next sign-in, dated with its
+  age (the server backdates by up to two weeks), and only while its own account is signed in. No file holds the login
+  token.
+- Without a connection, the token stays: the account is "Not connected. RetroAchievements is checked again shortly.",
+  with no login dialog, and GooseStation tries again every two minutes and at each game start. Only RetroAchievements
+  refusing the token asks for a new login, which keeps what's waiting ("2 unlocks are kept and sent once you sign in
+  again").
+- A game started online once can start offline, from the set saved then (in `achievements/` too): it says "Offline:
+  achievements are saved and sent later (casual mode)", runs in casual even with Hardcore on, until it stops, and its
+  unlocks say "Sent when you're online". The Achievements settings then say "Offline: signed in as goose until this
+  game stops", with Logout and Login off; leaderboards are "Not available offline".
+- The settings say what's waiting ("2 unlocks waiting to be sent", or "… for goose are kept until goose signs in
+  again" for another account), as do Big Picture's pause menu and achievements screen (" · 2 to send"). Once sent:
+  "3 unlocks sent to RetroAchievements", in the on-screen messages and Qt's status bar. Unlocks a game started online
+  gets through itself after a dropped connection are covered by the "Achievements Reconnected" message instead.
 
 ## Building
 

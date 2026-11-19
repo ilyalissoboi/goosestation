@@ -3,6 +3,7 @@
 
 #include "fullscreen_ui.h"
 #include "achievements.h"
+#include "achievements_offline_words.h"
 #include "bios.h"
 #include "cheats.h"
 #include "controller.h"
@@ -324,6 +325,7 @@ static void DrawMemcardSyncSecretSetting(const char* title, const char* summary,
 static void DrawControllerSettingsPage();
 static void DrawHotkeySettingsPage();
 static void DrawAchievementsSettingsPage();
+static void DrawAchievementsAccountNotes(const Achievements::AccountStatus& account);
 static void DrawAdvancedSettingsPage();
 
 static bool IsEditingGameSettings(SettingsInterface* bsi);
@@ -447,6 +449,9 @@ struct MemcardSyncState
 static MemcardSyncState s_memcard_sync_state;
 static Common::Timer s_memcard_sync_state_timer;
 static bool s_memcard_sync_state_stale = true;
+
+// The Achievements page's account, read before the page takes the settings lock: reading it takes that lock too.
+static Achievements::AccountStatus s_achievements_account;
 static std::unique_ptr<INISettingsInterface> s_game_settings_interface;
 static std::unique_ptr<GameList::Entry> s_game_settings_entry;
 static std::vector<std::pair<std::string, bool>> s_game_list_directories_cache;
@@ -3095,6 +3100,8 @@ void FullscreenUI::DrawSettingsWindow()
 
     if (s_settings_page == SettingsPage::MemoryCards)
       UpdateMemcardSyncState();
+    else if (s_settings_page == SettingsPage::Achievements)
+      s_achievements_account = Achievements::GetAccountStatus();
 
     auto lock = Host::GetSettingsLock();
 
@@ -6674,6 +6681,23 @@ void FullscreenUI::DrawAudioSettingsPage()
   EndMenuButtons();
 }
 
+void FullscreenUI::DrawAchievementsAccountNotes(const Achievements::AccountStatus& account)
+{
+  // Not connected, or a game started offline, first; then the unlocks waiting for each account.
+  const bool first_is_connection =
+    account.offline_session || account.state == Achievements::SignInState::NotConnected;
+  const std::vector<std::string> notes = AchievementsOfflineWords::AccountNotes(account);
+  ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::GetStyle().Colors[ImGuiCol_Text]);
+  for (size_t i = 0; i < notes.size(); i++)
+  {
+    ActiveButton(SmallString::from_format("{} {}",
+                                          (i == 0 && first_is_connection) ? ICON_FA_PLUG : ICON_FA_CLOUD,
+                                          notes[i]),
+                 false, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+  }
+  ImGui::PopStyleColor();
+}
+
 void FullscreenUI::DrawAchievementsSettingsPage()
 {
 #ifdef ENABLE_RAINTEGRATION
@@ -6707,7 +6731,12 @@ void FullscreenUI::DrawAchievementsSettingsPage()
         "Cheevos", "ChallengeMode", false, enabled))
   {
     if (System::IsValid() && bsi->GetBoolValue("Cheevos", "ChallengeMode", false))
-      ShowToast(std::string(), FSUI_STR("Hardcore mode will be enabled on next game restart."));
+    {
+      // A game started offline stays casual until it stops.
+      ShowToast(std::string(), s_achievements_account.offline_session ?
+                                 AchievementsOfflineWords::HardcoreStaysOff() :
+                                 FSUI_STR("Hardcore mode will be enabled on next game restart."));
+    }
   }
   DrawToggleSetting(
     bsi, FSUI_ICONSTR(ICON_FA_INBOX, "Achievement Notifications"),
@@ -6740,6 +6769,7 @@ void FullscreenUI::DrawAchievementsSettingsPage()
   if (!IsEditingGameSettings(bsi))
   {
     MenuHeading(FSUI_CSTR("Account"));
+    const Achievements::AccountStatus& account = s_achievements_account;
     // The token itself is in secrets.ini, so the username says whether there is a login.
     if (!bsi->GetTinyStringValue("Cheevos", "Username").empty())
     {
@@ -6757,8 +6787,11 @@ void FullscreenUI::DrawAchievementsSettingsPage()
         SmallString::from_format(fmt::runtime(FSUI_ICONSTR(ICON_FA_CLOCK, "Login token generated on {}")), ts_string),
         false, false, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
       ImGui::PopStyleColor();
+      DrawAchievementsAccountNotes(account);
 
-      if (MenuButton(FSUI_ICONSTR(ICON_FA_KEY, "Logout"), FSUI_CSTR("Logs out of RetroAchievements.")))
+      // Nothing is sent under another account while a game started offline runs.
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_KEY, "Logout"), FSUI_CSTR("Logs out of RetroAchievements."),
+                     !account.offline_session))
       {
         Host::RunOnCPUThread([]() { Achievements::Logout(); });
       }
@@ -6767,9 +6800,13 @@ void FullscreenUI::DrawAchievementsSettingsPage()
     {
       ActiveButton(FSUI_ICONSTR(ICON_FA_USER, "Not Logged In"), false, false,
                    ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+      DrawAchievementsAccountNotes(account);
 
-      if (MenuButton(FSUI_ICONSTR(ICON_FA_KEY, "Login"), FSUI_CSTR("Logs in to RetroAchievements.")))
+      if (MenuButton(FSUI_ICONSTR(ICON_FA_KEY, "Login"), FSUI_CSTR("Logs in to RetroAchievements."),
+                     !account.offline_session))
+      {
         Host::OnAchievementsLoginRequested(Achievements::LoginRequestReason::UserInitiated);
+      }
     }
 
     MenuHeading(FSUI_CSTR("Current Game"));
@@ -7056,8 +7093,11 @@ void FullscreenUI::DrawPauseMenu()
           SwitchToGameSettings();
         }
 
-        if (ActiveButton(FSUI_ICONSTR(ICON_FA_TROPHY, "Achievements"), false,
-                         Achievements::HasAchievementsOrLeaderboards()))
+        // " · 2 to send" while some of this game's unlocks wait.
+        if (ActiveButton(SmallString::from_format("{}{}", FSUI_ICONSTR(ICON_FA_TROPHY, "Achievements"),
+                                                  AchievementsOfflineWords::ToSendSuffix(
+                                                    Achievements::GetWaitingCountForGame())),
+                         false, Achievements::HasAchievementsOrLeaderboards()))
         {
           // skip second menu and go straight to cheevos if there's no lbs
           if (!Achievements::HasLeaderboards())

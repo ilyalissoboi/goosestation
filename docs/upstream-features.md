@@ -66,7 +66,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 | Feature | What it does | Priority |
 |---|---|---|
 | Achievement UI | Progress indicators and their position and scale, pinning measured achievements, leaderboard trackers in the pause menu, unlock popups with points and categories, subsets. | P2 |
-| Offline progress and hash library | Tracking progress offline; achievement info in the game list. | P2 |
+| Offline progress and hash library | Tracking progress offline; achievement info in the game list. | P2 (unlocks kept and sent later, and games started offline, are done our own way on desktop and Android: README, "RetroAchievements without a connection") |
 | Encrypted login token | The token is no longer stored in plain text in the settings file. | P1 (security) |
 
 ## Big Picture / fullscreen UI

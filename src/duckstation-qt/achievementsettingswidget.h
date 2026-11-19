@@ -23,6 +23,7 @@ private Q_SLOTS:
   void onLoginLogoutPressed();
   void onViewProfilePressed();
   void onAchievementsRefreshed(quint32 id, const QString& game_info_string);
+  void onAchievementsAccountRefreshed(const QStringList& notes, bool offline_session);
 
 private:
   void updateLoginState();
@@ -30,4 +31,9 @@ private:
   Ui::AchievementSettingsWidget m_ui;
 
   SettingsWindow* m_dialog;
+
+  // From the CPU thread (EmuThread::achievementsAccountRefreshed): not connected, a game started offline, and what's
+  // waiting to be sent.
+  QStringList m_account_notes;
+  bool m_offline_session = false;
 };

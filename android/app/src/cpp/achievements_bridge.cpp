@@ -27,12 +27,12 @@ Log_SetChannel(AndroidHost);
 
 AchievementsBridge::Account AchievementsBridge::GetAccount()
 {
-  Account account = {Achievements::AndroidSignIn::SignedOut, {}, {}, 0, 0};
+  Account account = {Achievements::SignInState::SignedOut, {}, {}, 0, 0};
   EmuThread::RunOnThread(
     [&account]() {
-      account.state = Achievements::GetAndroidSignIn();
+      account.state = Achievements::GetSignInState();
       account.username = Host::GetBaseStringSettingValue("Cheevos", "Username");
-      if (account.state != Achievements::AndroidSignIn::SignedIn)
+      if (account.state != Achievements::SignInState::SignedIn)
         return;
 
       const auto lock = Achievements::GetLock();
@@ -309,7 +309,7 @@ void AchievementsBridge::FetchLeaderboard(u32 id, s32 request)
 bool AchievementsBridge::HardcoreWouldStart()
 {
   return g_settings.achievements_enabled && g_settings.achievements_hardcore_mode &&
-         Achievements::GetAndroidSignIn() != Achievements::AndroidSignIn::SignedOut;
+         Achievements::GetSignInState() != Achievements::SignInState::SignedOut;
 }
 
 bool AchievementsBridge::IsHardcoreActive()

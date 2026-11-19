@@ -67,6 +67,7 @@
     <ClCompile Include="achievements.cpp" />
     <ClCompile Include="achievements_offline.cpp" />
     <ClCompile Include="achievements_offline_store.cpp" />
+    <ClCompile Include="achievements_offline_words.cpp" />
     <ClCompile Include="hotkeys.cpp" />
     <ClCompile Include="gpu_shadergen.cpp" />
     <ClCompile Include="pch.cpp" />
@@ -159,6 +160,7 @@
     <ClInclude Include="achievements_private.h" />
     <ClInclude Include="achievements_offline.h" />
     <ClInclude Include="achievements_offline_store.h" />
+    <ClInclude Include="achievements_offline_words.h" />
     <ClInclude Include="justifier.h" />
     <ClInclude Include="pine_server.h" />
     <ClInclude Include="gdb_server.h" />

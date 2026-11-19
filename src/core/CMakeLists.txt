@@ -6,6 +6,8 @@ add_library(core
   achievements_offline.h
   achievements_offline_store.cpp
   achievements_offline_store.h
+  achievements_offline_words.cpp
+  achievements_offline_words.h
   analog_controller.cpp
   analog_controller.h
   analog_joystick.cpp

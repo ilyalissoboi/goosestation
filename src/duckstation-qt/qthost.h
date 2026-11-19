@@ -144,8 +144,9 @@ Q_SIGNALS:
   void inputProfileLoaded();
   void mouseModeRequested(bool relative, bool hide_cursor);
   void fullscreenUIStateChange(bool running);
-  void achievementsLoginRequested(Achievements::LoginRequestReason reason);
+  void achievementsLoginRequested(Achievements::LoginRequestReason reason, const QString& kept_note);
   void achievementsRefreshed(quint32 id, const QString& game_info_string);
+  void achievementsAccountRefreshed(const QStringList& notes, bool offline_session);
   void achievementsChallengeModeChanged(bool enabled);
   void cheatEnabled(quint32 index, bool enabled);
   void mediaCaptureStarted();

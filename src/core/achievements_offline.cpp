@@ -26,6 +26,7 @@ namespace {
 
 std::unique_ptr<Store> s_store;
 Callbacks s_callbacks;
+bool s_count_online_retries = true;
 
 // The records a request is out for, which nothing else sends: rcheevos retries its own for the rest of the run.
 std::vector<Record> s_in_flight;
@@ -39,6 +40,9 @@ std::vector<std::pair<Record::Kind, u32>> s_reported_refusals;
 // The running game started offline (InSession()), and whether its sign-in was built from the store.
 bool s_in_session = false;
 bool s_built_sign_in = false;
+
+// The session's client was restarted (RestartSession()): its next sign-in may be built from the store, in session.
+bool s_sign_in_again = false;
 
 std::string_view Field(const std::map<std::string, std::string>& form, const char* name)
 {
@@ -138,8 +142,9 @@ void ReportIfAllSent(std::string_view user)
     s_callbacks.sent(count);
 }
 
-/// What the server's answer means for a waiting record.
-void Settle(const Record& record, Outcome outcome)
+/// What the server's answer means for a waiting record. counted: a record kept now counts as one that waited, for the
+/// sent message.
+void Settle(const Record& record, Outcome outcome, bool counted = true)
 {
   const char* what = (record.kind == Record::Kind::Unlock) ? "achievement" : "leaderboard";
   switch (outcome)
@@ -163,7 +168,8 @@ void Settle(const Record& record, Outcome outcome)
       break;
 
     case Outcome::Keep:
-      s_store->MarkWaited(record);
+      if (counted)
+        s_store->MarkWaited(record);
       break;
   }
   Changed();
@@ -171,10 +177,15 @@ void Settle(const Record& record, Outcome outcome)
 
 } // namespace
 
-void Enable(std::string folder, Callbacks callbacks)
+void Enable(std::string folder, Callbacks callbacks, bool count_online_retries)
 {
   s_store = std::make_unique<Store>(std::move(folder));
   s_callbacks = std::move(callbacks);
+  s_count_online_retries = count_online_retries;
+  s_in_flight.clear();
+  s_sent.clear();
+  s_reported_refusals.clear();
+  EndSession();
   INFO_LOG("Offline achievements are on: {} waiting.", s_store->Records().size());
 }
 
@@ -263,6 +274,10 @@ void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::s
   if (!s_store)
     return;
 
+  // A restarted session's real sign-in: nothing more to build.
+  if (status == 200 && Field(form, "r") == "login2")
+    s_sign_in_again = false;
+
   SaveForOffline(form, status, body);
 
   const std::optional<Record> request = RecordFor(form);
@@ -278,9 +293,10 @@ void OnAnswer(const std::map<std::string, std::string>& form, s32 status, std::s
   if (outcome == Outcome::Refused)
     s_reported_refusals.emplace_back(record.kind, record.id);
   // Kept, but rcheevos won't try again: it's the module's to send, at the next sign-in, game start or network return.
-  if (outcome == Outcome::Keep && !WillRcheevosRetry(record.kind, status, body))
+  const bool rcheevos_retries = (outcome == Outcome::Keep && WillRcheevosRetry(record.kind, status, body));
+  if (outcome == Outcome::Keep && !rcheevos_retries)
     SetInFlight(record, false);
-  Settle(record, outcome);
+  Settle(record, outcome, s_count_online_retries || s_in_session || !rcheevos_retries);
 }
 
 void SendWaiting(HTTPDownloader& http, const rc_api_host_t* host, std::string_view user, std::string_view token,
@@ -388,16 +404,42 @@ bool SignInIsBuilt()
   return s_in_session && s_built_sign_in;
 }
 
+void RestartSession()
+{
+  if (!s_in_session)
+    return;
+  s_built_sign_in = false;
+  s_sign_in_again = true;
+}
+
 void EndSession()
 {
   s_in_session = false;
   s_built_sign_in = false;
+  s_sign_in_again = false;
+}
+
+bool ConnectionToastsApply()
+{
+  return !s_in_session;
 }
 
 std::optional<std::string> AnswerOffline(const std::map<std::string, std::string>& form, std::string_view booting_hash,
                                          s64 now)
 {
-  return s_store ? OfflineAnswer(*s_store, form, booting_hash, s_in_session, now) : std::nullopt;
+  if (!s_store)
+    return std::nullopt;
+
+  // A sign-in is built only outside a session, or once for a restarted one's new client.
+  const bool sign_in = (Field(form, "r") == "login2");
+  std::optional<std::string> answer =
+    OfflineAnswer(*s_store, form, booting_hash, s_in_session && !(sign_in && s_sign_in_again), now);
+  if (sign_in && s_in_session && s_sign_in_again)
+  {
+    s_sign_in_again = false;
+    s_built_sign_in = answer.has_value();
+  }
+  return answer;
 }
 
 std::vector<std::pair<std::string, u32>> CountsByUser()

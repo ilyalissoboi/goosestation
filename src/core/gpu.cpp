@@ -2286,6 +2286,9 @@ bool GPU::Deinterlace(u32 field, u32 line_skip)
       g_gpu_device->SetViewportAndScissor(0, 0, width, height);
       g_gpu_device->Draw(3, 0);
 
+      // The other buffer is drawn into later: don't leave it bound where multi-texture pipelines read every slot.
+      g_gpu_device->SetTextureSampler(1, nullptr, g_gpu_device->GetNearestSampler());
+
       m_deinterlace_texture->MakeReadyForSampling();
       SetDisplayTexture(m_deinterlace_texture.get(), m_display_depth_buffer, 0, 0, width, height);
       return true;
@@ -2320,6 +2323,10 @@ bool GPU::Deinterlace(u32 field, u32 line_skip)
       g_gpu_device->PushUniformBuffer(uniforms, sizeof(uniforms));
       g_gpu_device->SetViewportAndScissor(0, 0, width, full_height);
       g_gpu_device->Draw(3, 0);
+
+      // The other buffers are drawn into later: don't leave them bound where multi-texture pipelines read every slot.
+      for (u32 slot = 1; slot < 4; slot++)
+        g_gpu_device->SetTextureSampler(slot, nullptr, g_gpu_device->GetNearestSampler());
 
       m_deinterlace_texture->MakeReadyForSampling();
       SetDisplayTexture(m_deinterlace_texture.get(), m_display_depth_buffer, 0, 0, width, full_height);

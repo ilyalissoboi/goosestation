@@ -3846,7 +3846,7 @@ void VulkanDevice::SetScissor(const GSVector4i rc)
   vkCmdSetScissor(GetCurrentCommandBuffer(), 0, 1, &vrc);
 }
 
-void VulkanDevice::PreDrawCheck()
+bool VulkanDevice::PreDrawCheck(bool retrying /* = false */)
 {
   if (!InRenderPass())
     BeginRenderPass();
@@ -3856,15 +3856,26 @@ void VulkanDevice::PreDrawCheck()
   const u32 dirty = m_dirty_flags & update_mask;
   m_dirty_flags = m_dirty_flags & ~update_mask;
 
-  if (dirty != 0)
+  if (dirty != 0 && !UpdateDescriptorSets(dirty))
   {
-    if (!UpdateDescriptorSets(dirty))
+    // A new command buffer has a fresh descriptor pool. If even that can't hold the draw's sets, the pool is too
+    // small for them: drop the draw (its sets stay dirty for the next) rather than trying again forever.
+    if (retrying)
     {
-      SubmitCommandBufferAndRestartRenderPass("out of descriptor sets");
-      PreDrawCheck();
-      return;
+      m_dirty_flags |= dirty;
+      if (!m_reported_descriptor_pool_too_small)
+      {
+        ERROR_LOG("A draw's descriptor sets don't fit a fresh descriptor pool; dropping such draws.");
+        m_reported_descriptor_pool_too_small = true;
+      }
+      return false;
     }
+
+    SubmitCommandBufferAndRestartRenderPass("out of descriptor sets");
+    return PreDrawCheck(true);
   }
+
+  return true;
 }
 
 template<GPUPipeline::Layout layout>
@@ -4044,14 +4055,16 @@ bool VulkanDevice::UpdateDescriptorSets(u32 dirty)
 
 void VulkanDevice::Draw(u32 vertex_count, u32 base_vertex)
 {
-  PreDrawCheck();
+  if (!PreDrawCheck()) [[unlikely]]
+    return;
   s_stats.num_draws++;
   vkCmdDraw(GetCurrentCommandBuffer(), vertex_count, 1, base_vertex, 0);
 }
 
 void VulkanDevice::DrawIndexed(u32 index_count, u32 base_index, u32 base_vertex)
 {
-  PreDrawCheck();
+  if (!PreDrawCheck()) [[unlikely]]
+    return;
   s_stats.num_draws++;
   vkCmdDrawIndexed(GetCurrentCommandBuffer(), index_count, 1, base_index, base_vertex, 0);
 }
@@ -4077,7 +4090,8 @@ VkImageMemoryBarrier VulkanDevice::GetColorBufferBarrier(const VulkanTexture* rt
 
 void VulkanDevice::DrawIndexedWithBarrier(u32 index_count, u32 base_index, u32 base_vertex, DrawBarrier type)
 {
-  PreDrawCheck();
+  if (!PreDrawCheck()) [[unlikely]]
+    return;
 
   // TODO: The first barrier is unnecessary if we're starting the render pass.
 

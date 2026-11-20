@@ -654,6 +654,10 @@ jobs:
             fi
           fi
 
+      - name: Test the release notes script
+        if: inputs.versioned
+        run: python3 -m unittest discover -s scripts/release/tests -t scripts/release
+
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.7
         with:
@@ -667,7 +671,8 @@ jobs:
       # tags are lightweight, so git describe never picks them up as versions.
       #
       # A versioned run also publishes "GooseStation MAJOR.MINOR" on the version's own annotated tag, from the same
-      # files, with docs/releases/MAJOR.MINOR.md (less its licence header) as its notes. It is a full release, marked
+      # files, with docs/releases/MAJOR.MINOR.md as its notes (scripts/release/release_notes.py joins its wrapped
+      # lines, which GitHub would show as breaks, and leaves out its licence header). It is a full release, marked
       # Latest, and later runs never replace or delete it; dev's Rolling release isn't marked Latest, so it can't take
       # that from it. Its builds follow the Preview channel for updates.
       - name: Publish release
@@ -705,8 +710,7 @@ jobs:
 
           if [ "${VERSIONED}" = "true" ]; then
             NOTES="${RUNNER_TEMP}/notes.md"
-            grep -v '^<!-- SPDX-' "docs/releases/${VERSION}.md" > "${NOTES}"
-            printf '\nBuilt from %s.\n' "${GITHUB_SHA}" >> "${NOTES}"
+            python3 scripts/release/release_notes.py "docs/releases/${VERSION}.md" "${GITHUB_SHA}" > "${NOTES}"
             gh release create "${VERSION}" --verify-tag --latest --title "GooseStation ${VERSION}" \
               --notes-file "${NOTES}" "${ASSETS[@]}"
           fi

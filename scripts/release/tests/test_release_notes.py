@@ -26,6 +26,22 @@ class UnwrapTest(unittest.TestCase):
         text = "Run:\n\n```bash\ngit tag -a 0.2\ngit push origin 0.2\n```\n\nDone."
         self.assertEqual(unwrap(text), text)
 
+    def test_leaves_tilde_fenced_code_alone(self):
+        text = "~~~sh\necho one\necho two\n~~~\nAfter\nit."
+        self.assertEqual(unwrap(text), "~~~sh\necho one\necho two\n~~~\nAfter it.")
+
+    def test_a_shorter_fence_inside_a_longer_one_doesnt_close_it(self):
+        text = "````md\n```\nline one\nline two\n````\nAfter\nit."
+        self.assertEqual(unwrap(text), "````md\n```\nline one\nline two\n````\nAfter it.")
+
+    def test_a_fence_of_the_other_kind_doesnt_close_it(self):
+        text = "```\n~~~\nline one\nline two\n```"
+        self.assertEqual(unwrap(text), text)
+
+    def test_keeps_a_licence_header_inside_code(self):
+        text = "```\n<!-- SPDX-License-Identifier: GPL-3.0 -->\n```"
+        self.assertEqual(unwrap(text), text)
+
     def test_drops_the_licence_header(self):
         text = "<!-- SPDX-FileCopyrightText: x -->\n<!-- SPDX-License-Identifier: GPL-3.0 -->\n\nNotes."
         self.assertEqual(unwrap(text), "Notes.")

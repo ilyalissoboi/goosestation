@@ -16,22 +16,27 @@ import sys
 
 # A line that starts a block of its own rather than continuing the one before.
 BLOCK_START = re.compile(r"(#{1,6} |[-*+] |\d+[.)] |>|\|)")
+# A code fence: three or more backticks or tildes. Only a fence of the same character, at least as long and with
+# nothing after it, closes one.
+FENCE = re.compile(r"`{3,}|~{3,}")
 
 
 def unwrap(text: str) -> str:
     out: list[str] = []
     joinable = False  # whether the last line out is prose a next line may continue
-    in_fence = False
+    fence = ""  # the open code fence's delimiter, if any
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("<!-- SPDX-"):
+        if fence:
+            out.append(line)
+            if FENCE.fullmatch(stripped) and stripped[0] == fence[0] and len(stripped) >= len(fence):
+                fence = ""
+        elif stripped.startswith("<!-- SPDX-"):
             continue
-        if stripped.startswith("```"):
-            in_fence = not in_fence
+        elif opening := FENCE.match(stripped):
+            fence = opening.group(0)
             out.append(line)
             joinable = False
-        elif in_fence:
-            out.append(line)
         elif not stripped:
             out.append("")
             joinable = False

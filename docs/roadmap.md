@@ -1,8 +1,8 @@
 # GooseStation roadmap
 
 What to build next, in order of priority, with what each item waits on. Written on 2026-10-24,
-after the memory card sync (#2), the rebrand (#4) and the new logo (#5); last updated on 2026-11-18,
-after sync on Windows ARM64 and Linux aarch64 (item 10).
+after the memory card sync (#2), the rebrand (#4) and the new logo (#5); last updated on 2026-11-20,
+after adding what players notice most from the upstream gaps (items 21 to 30).
 
 **Size** is a rough effort guess: **S** a day or two, **M** a week or two, **L** longer.
 **After** names the items that must be finished first. Items from DuckStation's post-fork feature
@@ -55,6 +55,27 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 | 19 | Accuracy fixes, with regression tests, as games show problems (upstream P1, ongoing). | ongoing | none |
 | 20 | Hardware texture cache with per-texture replacement (upstream P1), playing the packs published for DuckStation, in three stages (`docs/superpowers/specs/2026-11-16-texture-cache-design.md`). Stage 1, desktop, is done: the cache on the hardware renderers (its own copy of VRAM, uploads, invalidation), dumping to `textures/<serial>/dumps/` and replacing from `replacements/` with `config.yaml`, aliases, crops, any scale and preloading, and the legacy `vram-write-` names fixed (always 32 digits). Names were worked out against a DuckStation release run as a black box: upload and page names are compatible for 4-bit and 8-bit textures, semi-transparent or not, with full and reduced palette ranges (XXH3_64 over the upload's words, the rect's words in page mode, and the palette's first entries); direct-colour names use the same rule unchecked; dumps match its names for 23 of 32. Every rule, and how it was established, is in [texture-replacement.md](texture-replacement.md). Checked on Metal, Vulkan (MoltenVK) and OpenGL on the Mac, and D3D11, D3D12, Vulkan and OpenGL on Windows. The Vagrant Story HD font pack plays as published (its menu glyphs, from save states). Stage 2, Android, is done: packs are read in place from the data folder through `content://` (the mirror copies only dumps and a first dump's `config.yaml`), dumps go to the app's storage, smaller memory budgets by default, and the font pack checked on the emulators and the AYN Thor under Vulkan and OpenGL ES (on the Thor: 1.5–2.4 points of a core's time, a slow first frame of 89–106 ms while the pack's images load, 25–33 ms preloaded). Stage 3 is done: the cache's settings on Qt, Big Picture and Android (the cache and texture replacements as separate switches, dumping in full on desktop and one switch on Android, the limits), a notice when a game starts saying whether its pack applies and why not, and the guide at the top of [texture-replacement.md](texture-replacement.md). | L | 13 helps |
 
+## 5. What players notice (from the upstream gaps)
+
+The gaps in [upstream-features.md](upstream-features.md) that an ordinary player notices most while
+playing ("What players notice most" there), as far as they can be built now. Its first two, accuracy
+fixes and per-game fixes in the game database, stay as items 19 and 18: they need games tested or
+reported one by one, which GooseStation doesn't have yet. Each is built clean-room, from behaviour and
+our own design.
+
+| # | Item | Size | After |
+|---|---|---|---|
+| 21 | GPU work on its own thread: the hardware renderers' backend work moved off the emulation thread, as the software renderer can already do (`[GPU] UseThread`). Smoother play on multi-core devices, the AYN Thor among them. | L | none |
+| 22 | Frame presentation and pacing: optimal frame pacing on by default where it's safe, presenting between frames, syncing to host refresh rates that are a multiple of the console's, vsync off while fast-forwarding, and lower-latency present waits where the API has them (Vulkan `present_wait`, a D3D12 frame-latency waitable). Less judder and lower input latency. | M | 21 helps |
+| 23 | Shader and pipeline compilation on several threads, so a game's first scenes stutter less while its pipelines are built. | M | none |
+| 24 | The audio stream reworked for slow devices: fading around underruns, more buffering when emulation can't keep up, and stretching on the audio thread. Fewer crackles and dropouts, on the Thor especially. | M | none |
+| 25 | Faster loading: a maximum CD read speedup, no speedup while FMVs or CD audio play (so they stay in time), and fast-forward while a game is loading. | S | none |
+| 26 | PGXP improvements: PGXP for lines and unaligned loads and stores, a more precise CPU mode, and a reworked depth buffer, for less wobbling geometry and z-fighting when upscaled. Checked with our own test games and regression tests. | M | none |
+| 27 | Upscaling defaults: a rewritten automatic internal resolution, nearest sprite filtering by default, and an option not to upscale direct-colour textures, for fewer seams and artefacts in 2D at higher resolutions. | S | none |
+| 28 | Patch codes with options: patches that offer choices (a widescreen ratio, a frame rate), shown as settings in the patch lists on Qt, Big Picture and Android. The system only: the widescreen and 60 fps patches themselves come from our own testing and public sources, as they're found, like the game database. | M | none |
+| 29 | More picture options: texture filters (Scale2x, Scale3x, MMPX, hybrid bilinear), Lanczos display scaling, separate scaling for FMVs, and finer crop controls. | M | none |
+| 30 | Border overlays (bezels): images drawn around the game picture, chosen from a list, with presets of our own. | M | 29 helps |
+
 ## Later
 
 - Register GooseStation with RetroAchievements (item 6, low priority for now); until then its user agent
@@ -77,3 +98,6 @@ built clean-room, from behaviour and our own design, never from DuckStation's co
 14 and 12 (in that order: 14 gives Big Picture the platforms' keyboards, which 12's settings
 use). With 12, 14 and 15 done, Android (16) is next. Items 17 and 18 block nothing and can be
 picked up at any time.
+
+Items 21 to 30 are ordered by what players notice: 21 and 22 together (smoothness), then 24 and 25
+(sound and loading, both small), then 23, then the enhancements 26 to 30.

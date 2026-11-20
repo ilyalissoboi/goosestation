@@ -47,6 +47,33 @@ progress, and a release for each would bury the ones worth installing.
 
 Each channel has a single release, so the release history does not grow with every build.
 
+## Versioned releases
+
+A versioned release, "GooseStation 0.2", is a full release of its own on the version's annotated tag. It's marked
+Latest, and later runs never replace or delete it. It's published by the same workflow, from the same builds as
+the Preview it refreshes:
+
+1. On a branch, add its release notes as `docs/releases/MAJOR.MINOR.md` (what players notice since the last
+   version, and known limits), and merge it to `master`. The licence header is left out of the published notes.
+2. Tag `master`'s commit, once its CI run passed (as under [Version numbers](#version-numbers)):
+
+   ```bash
+   git tag -a 0.2 -m "GooseStation 0.2" origin/master
+   git push origin 0.2
+   ```
+
+3. Run **Create rolling release** on `master` with **versioned** ticked, or
+
+   ```bash
+   gh workflow run rolling-release.yml --ref master -f versioned=true
+   ```
+
+Before publishing anything, `create-release` checks that the run is on `master`, that `git describe` gives exactly
+`MAJOR.MINOR` (the tag is on this commit; a later push to `master` makes it `0.2-1-g…`), that the notes exist, and
+that the version has no release yet. It then replaces Preview ("Preview 0.2"), and publishes "GooseStation 0.2" with
+the same files and the notes. The builds name the Preview channel for updates, so they're offered the next Preview.
+dev's Rolling release isn't marked Latest, so it can't take that from a versioned release.
+
 ## The updater
 
 Builds from these workflow runs carry `src/scmversion/tag.h`, which names their channel and the

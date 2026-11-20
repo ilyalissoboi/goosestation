@@ -55,7 +55,7 @@ GooseStation has a full desktop frontend built with Qt, and a fullscreen/TV UI (
  - SDL, XInput or DInput compatible game controller (e.g. XB360/XBOne/XBSeries). DualShock 3 users on Windows will need to install the official DualShock 3 drivers included as part of PlayStation Now.
 
 ## Downloading and running
-GooseStation is in early development. Its builds are published as the [preview release](https://github.com/ilyalissoboi/goosestation/releases/tag/preview), which is replaced by hand with newer builds from time to time; its title gives the version, such as `0.1-49`. Or [build it yourself](#building).
+GooseStation is in early development. Its versions are published as [releases](https://github.com/ilyalissoboi/goosestation/releases/latest), such as GooseStation 0.2. Between them, newer builds go to the [preview release](https://github.com/ilyalissoboi/goosestation/releases/tag/preview), which is replaced by hand from time to time; its title gives the version, such as `0.2-49`. Or [build it yourself](#building).
 
 | Platform | Download |
 |---|---|
@@ -63,8 +63,9 @@ GooseStation is in early development. Its builds are published as the [preview r
 | Windows ARM64 | `goosestation-windows-arm64-release.zip`, the same way. |
 | Linux x86_64 | `GooseStation-x64.AppImage`: make it executable (`chmod +x`) and run it. `goosestation-x64.flatpak` installs with `flatpak install --user goosestation-x64.flatpak`. |
 | macOS (Universal) | `goosestation-mac-release.zip`: extract it and move `GooseStation.app` to Applications. The app is not notarized yet, so the first time, right-click it and choose Open. |
+| Android (arm64) | `goosestation-android-arm64.apk`: open it on the device and allow installing apps from your browser or file manager when Android asks. Needs Android 10 or later on a 64-bit ARM device. |
 
-The Windows, macOS and AppImage builds can update themselves from the preview release (Help > Check for Updates).
+The Windows, macOS and AppImage builds, and the Android app, can update themselves from the preview release (Help > Check for Updates; on Android, a banner in the library).
 
 GooseStation keeps its own settings, memory cards and save states, separate from DuckStation's (see [User directories](#user-directories)).
 

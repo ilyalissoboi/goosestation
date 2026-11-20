@@ -22,6 +22,11 @@ on:
   schedule:
     - cron: '0 4 * * 1,4'
   workflow_dispatch:
+    inputs:
+      versioned:
+        description: Also publish a versioned release (master, at a MAJOR.MINOR tag; see docs/releasing.md)
+        type: boolean
+        default: false
 
 # A new push to a pull request cancels the run for its previous push. Branch pushes, schedules and
 # manual runs each get their own group, so they are never cancelled or skipped.
@@ -615,9 +620,13 @@ jobs:
           fetch-depth: 0
 
       # The builds took their version from the same annotated tag (see docs/releasing.md). Without one they would all
-      # report an empty version, so nothing is published.
+      # report an empty version, so nothing is published. A versioned run is checked here too, before anything is
+      # published: master, exactly at a MAJOR.MINOR tag with no release yet, and release notes for it.
       - name: Get version
         id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSIONED: ${{ inputs.versioned }}
         run: |
           if ! VERSION=$(git describe); then
             echo "::error::No annotated version tag (such as 0.1) is reachable from this commit, see docs/releasing.md."
@@ -625,6 +634,25 @@ jobs:
           fi
           echo "Version: ${VERSION}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [ "${VERSIONED}" = "true" ]; then
+            if [ "${GITHUB_REF}" != "refs/heads/master" ]; then
+              echo "::error::Versioned releases are made from master only."
+              exit 1
+            fi
+            if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::${VERSION} is not a MAJOR.MINOR tag: tag this commit first, see docs/releasing.md."
+              exit 1
+            fi
+            if [ ! -f "docs/releases/${VERSION}.md" ]; then
+              echo "::error::No release notes for ${VERSION}: add docs/releases/${VERSION}.md."
+              exit 1
+            fi
+            if gh release view "${VERSION}" > /dev/null 2>&1; then
+              echo "::error::${VERSION} already has a release: versioned releases are never replaced."
+              exit 1
+            fi
+          fi
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.7
@@ -637,11 +665,28 @@ jobs:
       # Each channel is a single release whose tag the updater follows: master publishes "preview", dev "latest". The
       # release is replaced and its tag moved to this commit, so the history holds one release per channel. The channel
       # tags are lightweight, so git describe never picks them up as versions.
+      #
+      # A versioned run also publishes "GooseStation MAJOR.MINOR" on the version's own annotated tag, from the same
+      # files, with docs/releases/MAJOR.MINOR.md (less its licence header) as its notes. It is a full release, marked
+      # Latest, and later runs never replace or delete it; dev's Rolling release isn't marked Latest, so it can't take
+      # that from it. Its builds follow the Preview channel for updates.
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
+          VERSIONED: ${{ inputs.versioned }}
         run: |
+          ASSETS=(
+            ./artifacts/windows/goosestation-windows-x64-release.zip
+            ./artifacts/windows/goosestation-windows-x64-release-symbols.zip
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release.zip
+            ./artifacts/windows-arm64/goosestation-windows-arm64-release-symbols.zip
+            ./artifacts/linux-x64-appimage-qt/GooseStation-x64.AppImage
+            ./artifacts/linux-flatpak/goosestation-x64.flatpak
+            ./artifacts/macos/goosestation-mac-release.zip
+            ./artifacts/android/goosestation-android-arm64.apk
+          )
+
           if [ "${GITHUB_REF}" = "refs/heads/master" ]; then
             TAG=preview
             TITLE="Preview ${VERSION}"
@@ -649,19 +694,19 @@ jobs:
           else
             TAG=latest
             TITLE="Rolling release ${VERSION}"
-            PRERELEASE=
+            PRERELEASE=--latest=false
           fi
 
           gh release delete "${TAG}" --yes || true
           git push origin ":refs/tags/${TAG}" || true
 
-          gh release create "${TAG}" ${PRERELEASE} --target "${GITHUB_SHA}" --title "${TITLE}" \
-            --notes "GooseStation ${VERSION}, built from ${GITHUB_SHA}." \
-            ./artifacts/windows/goosestation-windows-x64-release.zip \
-            ./artifacts/windows/goosestation-windows-x64-release-symbols.zip \
-            ./artifacts/windows-arm64/goosestation-windows-arm64-release.zip \
-            ./artifacts/windows-arm64/goosestation-windows-arm64-release-symbols.zip \
-            ./artifacts/linux-x64-appimage-qt/GooseStation-x64.AppImage \
-            ./artifacts/linux-flatpak/goosestation-x64.flatpak \
-            ./artifacts/macos/goosestation-mac-release.zip \
-            ./artifacts/android/goosestation-android-arm64.apk
+          gh release create "${TAG}" ${PRERELEASE} --target "${GITHUB_SHA}" \
+            --title "${TITLE}" --notes "GooseStation ${VERSION}, built from ${GITHUB_SHA}." "${ASSETS[@]}"
+
+          if [ "${VERSIONED}" = "true" ]; then
+            NOTES="${RUNNER_TEMP}/notes.md"
+            grep -v '^<!-- SPDX-' "docs/releases/${VERSION}.md" > "${NOTES}"
+            printf '\nBuilt from %s.\n' "${GITHUB_SHA}" >> "${NOTES}"
+            gh release create "${VERSION}" --verify-tag --latest --title "GooseStation ${VERSION}" \
+              --notes-file "${NOTES}" "${ASSETS[@]}"
+          fi

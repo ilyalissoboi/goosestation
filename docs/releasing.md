@@ -54,7 +54,9 @@ Latest, and later runs never replace or delete it. It's published by the same wo
 the Preview it refreshes:
 
 1. On a branch, add its release notes as `docs/releases/MAJOR.MINOR.md` (what players notice since the last
-   version, and known limits), and merge it to `master`. The licence header is left out of the published notes.
+   version, and known limits), and merge it to `master`. Wrap it as the other docs are:
+   `scripts/release/release_notes.py` joins each paragraph and list item onto one line, since GitHub shows every
+   line break in a release's notes, and leaves out the licence header (try it on the file to see the result).
 2. Tag `master`'s commit, once its CI run passed (as under [Version numbers](#version-numbers)):
 
    ```bash

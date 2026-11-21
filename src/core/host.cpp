@@ -345,7 +345,21 @@ bool Host::CreateGPUDevice(RenderAPI api, Error* error)
   const bool debug_device = g_settings.gpu_use_debug_device;
   const GPUVSyncMode vsync_mode = System::GetEffectiveVSyncMode();
   const bool allow_present_throttle = System::ShouldAllowPresentThrottle();
-  const bool threaded_presentation = g_settings.gpu_threaded_presentation;
+  // Vulkan's present thread has nothing to do while the GPU thread presents.
+  const bool threaded_presentation = g_settings.gpu_threaded_presentation && !g_settings.gpu_use_gpu_thread;
+
+  // The GPU thread's mode changes only between devices: the device belongs to the thread it was made on.
+  if (GPUThread::IsUsingThread() != g_settings.gpu_use_gpu_thread)
+  {
+    INFO_LOG("{} the GPU thread.", g_settings.gpu_use_gpu_thread ? "Starting" : "Stopping");
+    GPUThread::Stop();
+    if (!GPUThread::Start(g_settings.gpu_use_gpu_thread))
+    {
+      Error::SetStringView(error, "Failed to start the GPU thread.");
+      GPUThread::Start(false);
+      return false;
+    }
+  }
 
   Error create_error;
   bool created = false;
@@ -394,16 +408,22 @@ bool Host::CreateGPUDevice(RenderAPI api, Error* error)
   return true;
 }
 
-void Host::UpdateDisplayWindow()
+bool Host::Internal::UpdateDisplayWindowOnGPUThread()
 {
-  if (!GPUThread::GetDeviceInfo().has_device)
-    return;
+  const bool updated = g_gpu_device && g_gpu_device->UpdateWindow();
+  GPUThread::PublishDeviceInfo();
+  return updated;
+}
 
-  bool updated = false;
-  GPUThread::RunOnThreadAndWait([&updated]() {
-    updated = g_gpu_device->UpdateWindow();
-    GPUThread::PublishDeviceInfo();
-  });
+void Host::Internal::ResizeDisplayWindowOnGPUThread(s32 width, s32 height, float scale)
+{
+  if (g_gpu_device)
+    g_gpu_device->ResizeWindow(width, height, scale);
+  GPUThread::PublishDeviceInfo();
+}
+
+void Host::Internal::OnDisplayWindowUpdated(bool updated)
+{
   if (!updated)
   {
     Host::ReportErrorAsync("Error", "Failed to change window after update. The log may contain more information.");
@@ -427,18 +447,8 @@ void Host::UpdateDisplayWindow()
   }
 }
 
-void Host::ResizeDisplayWindow(s32 width, s32 height, float scale)
+void Host::Internal::OnDisplayWindowResized()
 {
-  if (!GPUThread::GetDeviceInfo().has_device)
-    return;
-
-  DEV_LOG("Display window resized to {}x{}", width, height);
-
-  GPUThread::RunOnThreadAndWait([width, height, scale]() {
-    g_gpu_device->ResizeWindow(width, height, scale);
-    GPUThread::PublishDeviceInfo();
-  });
-
   const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
   const float f_width = static_cast<float>(info.window_width);
   const float f_height = static_cast<float>(info.window_height);
@@ -458,6 +468,28 @@ void Host::ResizeDisplayWindow(s32 width, s32 height, float scale)
 
     System::HostDisplayResized();
   }
+}
+
+void Host::UpdateDisplayWindow()
+{
+  if (!GPUThread::GetDeviceInfo().has_device)
+    return;
+
+  bool updated = false;
+  GPUThread::RunOnThreadAndWait([&updated]() { updated = Internal::UpdateDisplayWindowOnGPUThread(); });
+  Internal::OnDisplayWindowUpdated(updated);
+}
+
+void Host::ResizeDisplayWindow(s32 width, s32 height, float scale)
+{
+  if (!GPUThread::GetDeviceInfo().has_device)
+    return;
+
+  DEV_LOG("Display window resized to {}x{}", width, height);
+
+  GPUThread::RunOnThreadAndWait(
+    [width, height, scale]() { Internal::ResizeDisplayWindowOnGPUThread(width, height, scale); });
+  Internal::OnDisplayWindowResized();
 }
 
 void Host::ReleaseGPUDevice()

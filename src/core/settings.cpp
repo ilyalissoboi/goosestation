@@ -202,6 +202,7 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   gpu_disable_raster_order_views = si.GetBoolValue("GPU", "DisableRasterOrderViews", false);
   gpu_per_sample_shading = si.GetBoolValue("GPU", "PerSampleShading", false);
   gpu_use_thread = si.GetBoolValue("GPU", "UseThread", true);
+  gpu_use_gpu_thread = si.GetBoolValue("GPU", "UseGPUThread", DEFAULT_GPU_THREAD);
   gpu_use_software_renderer_for_readbacks = si.GetBoolValue("GPU", "UseSoftwareRendererForReadbacks", false);
   gpu_threaded_presentation = si.GetBoolValue("GPU", "ThreadedPresentation", DEFAULT_THREADED_PRESENTATION);
   gpu_true_color = si.GetBoolValue("GPU", "TrueColor", true);
@@ -522,6 +523,7 @@ void Settings::Save(SettingsInterface& si, bool ignore_base) const
 
   si.SetBoolValue("GPU", "PerSampleShading", gpu_per_sample_shading);
   si.SetBoolValue("GPU", "UseThread", gpu_use_thread);
+  si.SetBoolValue("GPU", "UseGPUThread", gpu_use_gpu_thread);
   si.SetBoolValue("GPU", "ThreadedPresentation", gpu_threaded_presentation);
   si.SetBoolValue("GPU", "UseSoftwareRendererForReadbacks", gpu_use_software_renderer_for_readbacks);
   si.SetBoolValue("GPU", "TrueColor", gpu_true_color);

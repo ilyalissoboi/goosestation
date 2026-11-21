@@ -132,7 +132,7 @@ struct SaveStateBuffer
 };
 struct MemorySaveState
 {
-  std::unique_ptr<GPUTexture> vram_texture;
+  GPUThread::TexturePtr vram_texture;
   DynamicHeapArray<u8> state_data;
 #ifdef PROFILE_MEMORY_SAVE_STATES
   size_t state_size;
@@ -1240,7 +1240,7 @@ bool System::RecreateGPU(GPURenderer renderer, bool force_recreate_device, bool 
 
   // Replacements are drawn by the hardware renderers only: the load notice follows a change to or from software.
   if (g_gpu->IsHardwareRenderer() != was_hardware)
-    TextureReplacements::Reload();
+    GPUThread::RunOnThreadAndWait(&TextureReplacements::Reload);
 
   // fix up vsync etc
   UpdateSpeedLimiterState();
@@ -1826,7 +1826,7 @@ bool System::BootSystem(SystemBootParameters parameters, Error* error)
 
   // Texture replacement preloading.
   // TODO: Move this and everything else below OnSystemStarted().
-  TextureReplacements::SetGameID(s_running_game_serial);
+  GPUThread::RunOnThreadAndWait([]() { TextureReplacements::SetGameID(s_running_game_serial); });
 
   // Good to go.
   s_state = State::Running;
@@ -2010,7 +2010,7 @@ void System::DestroySystem()
 
   ClearMemorySaveStates();
 
-  TextureReplacements::Shutdown();
+  GPUThread::RunOnThreadAndWait(&TextureReplacements::Shutdown);
 
   PCDrv::Shutdown();
   SIO::Shutdown();
@@ -4155,7 +4155,7 @@ void System::UpdateRunningGame(const std::string_view path, CDImage* image, bool
   }
 
   if (!booting)
-    TextureReplacements::SetGameID(s_running_game_serial);
+    GPUThread::RunOnThreadAndWait([]() { TextureReplacements::SetGameID(s_running_game_serial); });
 
   if (booting)
     Achievements::ResetHardcoreMode(true);
@@ -4553,7 +4553,7 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
         g_settings.gpu_texture_cache != old_settings.gpu_texture_cache)
     {
       // The hardware renderer picks up the change on its next frame. A renderer change reloads in RecreateGPU().
-      TextureReplacements::Reload();
+      GPUThread::RunOnThreadAndWait(&TextureReplacements::Reload);
     }
 
     if (g_settings.audio_backend != old_settings.audio_backend ||
@@ -4845,7 +4845,7 @@ bool System::SaveMemoryState(MemorySaveState* mss)
   if (!DoState(sw, &host_texture, false, true))
   {
     ERROR_LOG("Failed to create rewind state.");
-    delete host_texture;
+    GPUThread::TextureDeleter()(host_texture);
     return false;
   }
 
@@ -4889,7 +4889,7 @@ bool System::LoadRewindState(u32 skip_saves /*= 0*/, bool consume_state /*=true 
 {
   while (skip_saves > 0 && !s_rewind_states.empty())
   {
-    g_gpu_device->RecycleTexture(std::move(s_rewind_states.back().vram_texture));
+    s_rewind_states.back().vram_texture.reset();
     s_rewind_states.pop_back();
     skip_saves--;
   }

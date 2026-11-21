@@ -507,7 +507,7 @@ DEFINE_HOTKEY("ReloadTextureReplacements", TRANSLATE_NOOP("Hotkeys", "Graphics")
                 if (!pressed && System::IsValid())
                 {
                   // The reload's own notice says what it found; this says it happened when there's none.
-                  TextureReplacements::Reload();
+                  GPUThread::RunOnThreadAndWait(&TextureReplacements::Reload);
                   if (!TextureReplacements::GetLoadNotice())
                   {
                     Host::AddKeyedOSDMessage("ReloadTextureReplacements",

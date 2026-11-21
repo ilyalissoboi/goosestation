@@ -5852,6 +5852,8 @@ void System::ToggleWidescreen()
                   Settings::GetDisplayAspectRatioDisplayName(g_settings.display_aspect_ratio), 5.0f));
   }
 
+  // The GPU thread's renderer reads the widescreen hack (the automatic resolution scale) from its own copy.
+  PushGPUSettings();
   GTE::UpdateAspectRatio();
 }
 

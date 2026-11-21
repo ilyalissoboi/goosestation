@@ -363,6 +363,9 @@ void AndroidHost::SetPictureAtTop(bool top)
     [top]() {
       s_picture_at_top = top;
       g_settings.display_alignment = top ? DisplayAlignment::LeftOrTop : s_loaded_display_alignment;
+
+      // The presenter, on the GPU thread, reads its own copy of the settings.
+      System::PushGPUSettings();
     },
     false);
 }

@@ -399,10 +399,14 @@ void GPUThread::FramePushed()
 void GPUThread::FramePresented()
 {
   {
+    // FramePushed() counts up without the lock: one read-modify-write, so a frame pushed meanwhile isn't lost.
     std::unique_lock lock(s_frames_mutex);
-    const u32 queued = s_queued_frames.load(std::memory_order_acquire);
-    if (queued > 0)
-      s_queued_frames.store(queued - 1, std::memory_order_release);
+    u32 queued = s_queued_frames.load(std::memory_order_acquire);
+    while (queued > 0 &&
+           !s_queued_frames.compare_exchange_weak(queued, queued - 1, std::memory_order_acq_rel,
+                                                  std::memory_order_acquire))
+    {
+    }
   }
   s_frames_cv.notify_all();
 }

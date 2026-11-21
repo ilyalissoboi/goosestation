@@ -254,6 +254,36 @@ TEST_F(GPUThreadTest, ZeroAheadWaitsForThePresent)
   EXPECT_EQ(GPUThread::GetQueuedFrames(), 0u);
 }
 
+// A frame pushed while another's present finishes is still counted: the emulation thread pushes as the GPU thread
+// presents, and neither loses the other's count.
+TEST_F(GPUThreadTest, PushesAndPresentsAtOnceKeepTheCount)
+{
+  ASSERT_TRUE(GPUThread::Start(false));
+  constexpr u32 COUNT = 200000;
+  std::atomic_bool pushed{false};
+  std::thread pusher([&pushed]() {
+    for (u32 i = 0; i < 2 * COUNT; i++)
+      GPUThread::FramePushed();
+    pushed.store(true);
+  });
+  u32 presented = 0;
+  while (presented < COUNT)
+  {
+    if (GPUThread::GetQueuedFrames() > 0)
+    {
+      GPUThread::FramePresented();
+      presented++;
+    }
+    else if (pushed.load())
+    {
+      break; // counts were lost: nothing left to present
+    }
+  }
+  pusher.join();
+  EXPECT_EQ(presented, COUNT);
+  EXPECT_EQ(GPUThread::GetQueuedFrames(), COUNT);
+}
+
 TEST_F(GPUThreadTest, MaxFramesAheadIsOneUnlessVSyncBlocks)
 {
   EXPECT_EQ(GPUThread::MaxFramesAhead(false), 1u);

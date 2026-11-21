@@ -244,6 +244,33 @@ TEST_F(GPUThreadTest, StopWhileTheThreadIsBusyReturns)
   EXPECT_FALSE(GPUThread::IsUsingThread());
 }
 
+// Android's surface changes come from the UI thread whenever they like, also while the thread stops and starts again
+// (a device made again, the emulation thread shutting down): each one runs, once, and its caller returns.
+TEST_F(GPUThreadTest, APriorityClosureRacingStopAndStartRunsOnce)
+{
+  std::atomic_bool done{false};
+  std::atomic<u32> sent{0};
+  std::atomic<u32> ran{0};
+  std::thread ui([&]() {
+    while (!done.load())
+    {
+      GPUThread::RunOnThreadPriority([&]() { ran.fetch_add(1); }, true);
+      sent.fetch_add(1);
+    }
+  });
+
+  for (u32 i = 0; i < 300; i++)
+  {
+    ASSERT_TRUE(GPUThread::Start((i % 3) != 0));
+    Push(RECORD, i);
+    GPUThread::Stop();
+  }
+
+  done.store(true);
+  ui.join();
+  EXPECT_EQ(ran.load(), sent.load());
+}
+
 TEST_F(GPUThreadTest, AForeignTextureDeleteWaitsForQueuedWork)
 {
   ASSERT_TRUE(GPUThread::Start(true));

@@ -82,9 +82,11 @@ void (*s_recycle_hook)(GPUTexture*) = nullptr;
 std::vector<std::vector<u8>> s_direct_buffers;
 u32 s_direct_depth = 0;
 
+// Guards the closures, and s_queue's replacement against the wake that follows a push.
 std::mutex s_priority_mutex;
 std::deque<PriorityClosure> s_priority;
 std::atomic<u32> s_priority_count{0};
+bool s_priority_accepted = false; // stopped: callers run their closures themselves
 
 std::atomic<u32> s_queued_frames{0};
 std::mutex s_frames_mutex;
@@ -174,15 +176,24 @@ void ThreadMain()
 bool GPUThread::Start(bool use_thread)
 {
   Assert(!s_started);
-  s_queue = std::make_unique<GPUThreadQueue>(QUEUE_SIZE);
-  s_use_thread = use_thread;
   s_queued_frames.store(0, std::memory_order_release);
   s_started = true;
 
   if (!use_thread)
   {
+    std::unique_lock lock(s_priority_mutex);
+    s_queue = std::make_unique<GPUThreadQueue>(QUEUE_SIZE);
+    s_use_thread = false;
     s_owner.store(std::this_thread::get_id(), std::memory_order_release);
+    s_priority_accepted = true;
     return true;
+  }
+
+  {
+    std::unique_lock lock(s_priority_mutex);
+    s_queue = std::make_unique<GPUThreadQueue>(QUEUE_SIZE);
+    s_use_thread = true;
+    s_priority_accepted = true;
   }
 
   Signal started;
@@ -194,8 +205,13 @@ bool GPUThread::Start(bool use_thread)
   {
     ERROR_LOG("Failed to start the GPU thread.");
     s_started = false;
-    s_use_thread = false;
-    s_queue.reset();
+    {
+      std::unique_lock lock(s_priority_mutex);
+      s_priority_accepted = false;
+      s_use_thread = false;
+      s_queue.reset();
+    }
+    RunPriorityClosures();
     return false;
   }
 
@@ -215,15 +231,18 @@ void GPUThread::Stop()
     s_thread.Join();
     INFO_LOG("GPU thread stopped.");
   }
-  else
+
+  // Closures pushed from here on run on their callers; the ones pushed before run here.
   {
-    RunPriorityClosures();
+    std::unique_lock lock(s_priority_mutex);
+    s_priority_accepted = false;
+    s_use_thread = false;
+    s_owner.store(std::thread::id(), std::memory_order_release);
+    s_queue.reset();
   }
+  RunPriorityClosures();
 
   s_started = false;
-  s_use_thread = false;
-  s_owner.store(std::thread::id(), std::memory_order_release);
-  s_queue.reset();
   s_queued_frames.store(0, std::memory_order_release);
   s_frames_cv.notify_all();
 }
@@ -326,12 +345,19 @@ void GPUThread::RunOnThreadPriority(std::function<void()> fn, bool wait)
   Signal signal;
   {
     std::unique_lock lock(s_priority_mutex);
+    if (!s_priority_accepted)
+    {
+      // Stopped, or not started: nothing owns the device, so the caller does.
+      lock.unlock();
+      fn();
+      return;
+    }
+
     s_priority.push_back(PriorityClosure{std::move(fn), wait ? &signal : nullptr});
     s_priority_count.fetch_add(1, std::memory_order_acq_rel);
+    if (s_use_thread)
+      s_queue->WakeConsumer();
   }
-
-  if (s_use_thread)
-    s_queue->WakeConsumer();
 
   if (wait)
     signal.Wait();

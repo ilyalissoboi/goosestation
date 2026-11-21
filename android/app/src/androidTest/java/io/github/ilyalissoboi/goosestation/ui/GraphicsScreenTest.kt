@@ -115,13 +115,13 @@ class GraphicsScreenTest : ControllerKeys {
         walkTo("Use a GPU thread")
         press(Key.ButtonA)
 
-        assertEquals(start.with(GraphicsSettings.GPU_THREAD, true), changes.single())
+        assertEquals(start.with(GraphicsSettings.GPU_THREAD, false), changes.single())
     }
 
     // Vulkan's present thread has nothing to do while the GPU thread presents.
     @Test
     fun threadedPresentationHidesWhileTheGPUThreadIsOn() {
-        show(pageValues(GraphicsSettings.all, "GPU/Renderer" to "Vulkan", "GPU/UseGPUThread" to "true"))
+        show(pageValues(GraphicsSettings.all, "GPU/Renderer" to "Vulkan"))
 
         rule.onNodeWithText("Threaded presentation").assertDoesNotExist()
     }

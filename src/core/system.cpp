@@ -1379,9 +1379,6 @@ void System::SetDefaultSettings(SettingsInterface& si)
   for (u32 i = 0; i < NUM_CONTROLLER_AND_CARD_PORTS; i++)
     temp.controller_types[i] = g_settings.controller_types[i];
 
-  // The GPU thread's default is the renderer's: Settings() can't know the automatic one's.
-  temp.gpu_use_gpu_thread = Settings::GetDefaultGPUThread(temp.gpu_renderer);
-
   temp.Save(si, false);
 
 #ifndef __ANDROID__

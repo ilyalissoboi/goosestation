@@ -49,13 +49,12 @@ class GraphicsSettingsTest {
         )
     }
 
-    // Off by default, as the core has it for Vulkan, Android's Automatic (Settings::GetDefaultGPUThread; the core writes
-    // the key for OpenGL ES), under its own key: not the software renderer's.
+    // On by default, as the core has it (Settings::DEFAULT_GPU_THREAD), under its own key: not the software renderer's.
     @Test
-    fun theGPUThreadIsOffByDefault() {
+    fun theGPUThreadIsOnByDefault() {
         val values = SettingValues.read(MemoryCoreSettings(), GraphicsSettings.all)
 
-        assertEquals(false, values[GraphicsSettings.GPU_THREAD])
+        assertEquals(true, values[GraphicsSettings.GPU_THREAD])
         assertEquals("GPU", GraphicsSettings.GPU_THREAD.section)
         assertEquals("UseGPUThread", GraphicsSettings.GPU_THREAD.key)
     }

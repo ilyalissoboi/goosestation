@@ -124,7 +124,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
                                                Settings::DEFAULT_DISPLAY_ROTATION);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.gpuThread, "GPU", "UseThread", true);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.useGPUThread, "GPU", "UseGPUThread",
-                                               Settings::GetDefaultGPUThread(getEffectiveRenderer()));
+                                               Settings::DEFAULT_GPU_THREAD);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.threadedPresentation, "GPU", "ThreadedPresentation",
                                                Settings::DEFAULT_THREADED_PRESENTATION);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.disableMailboxPresentation, "Display",
@@ -431,10 +431,9 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
                              tr("Uses a second thread for drawing graphics. Currently only available for the software "
                                 "renderer, but can provide a significant speed improvement, and is safe to use."));
   dialog->registerWidgetHelp(
-    m_ui.useGPUThread, tr("Use a GPU Thread"), tr("Checked for OpenGL and Metal"),
+    m_ui.useGPUThread, tr("Use a GPU Thread"), tr("Checked"),
     tr("Draws and presents on a thread of its own, beside the emulation, at most one frame behind it. Unchecked runs "
-       "everything on the emulation thread, as before. Unchecked by default for Vulkan, D3D11 and D3D12, which "
-       "measured slower with it."));
+       "everything on the emulation thread, as before."));
   dialog->registerWidgetHelp(m_ui.threadedPresentation, tr("Threaded Presentation"), tr("Checked"),
                              tr("Presents frames on a background thread when fast forwarding or vsync is disabled. "
                                 "This can measurably improve performance in the Vulkan renderer."));
@@ -853,7 +852,7 @@ void GraphicsSettingsWidget::updateRendererDependentOptions()
   // Vulkan's present thread has nothing to do while the GPU thread presents.
   m_ui.threadedPresentation->setEnabled(render_api == RenderAPI::Vulkan &&
                                         !m_dialog->getEffectiveBoolValue("GPU", "UseGPUThread",
-                                                                         Settings::GetDefaultGPUThread(renderer)));
+                                                                         Settings::DEFAULT_GPU_THREAD));
 
   m_ui.exclusiveFullscreenLabel->setEnabled(render_api == RenderAPI::D3D11 || render_api == RenderAPI::D3D12 ||
                                             render_api == RenderAPI::Vulkan);

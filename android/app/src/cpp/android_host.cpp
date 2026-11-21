@@ -266,17 +266,6 @@ bool AndroidHost::InitializeConfig(Error* error)
   changed = AdaptForeignSettings(si, s_install_id, s_device_name) || changed;
   changed = MoveAnalogBindings(si) || changed;
 
-  // The GPU thread's default is its renderer's (off for Vulkan): written once, so the app's switch shows what runs.
-  if (!si.ContainsValue("GPU", "UseGPUThread"))
-  {
-    const GPURenderer renderer =
-      Settings::ParseRendererName(
-        si.GetStringValue("GPU", "Renderer", Settings::GetRendererName(Settings::DEFAULT_GPU_RENDERER)).c_str())
-        .value_or(Settings::DEFAULT_GPU_RENDERER);
-    si.SetBoolValue("GPU", "UseGPUThread", Settings::GetDefaultGPUThread(renderer));
-    changed = true;
-  }
-
   // The controllers this install has seen, at the indices their bindings use. An adapted file has none.
   s_descriptors = si.GetStringList(DESCRIPTORS_SECTION, DESCRIPTORS_KEY);
 

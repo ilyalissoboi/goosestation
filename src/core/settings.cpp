@@ -202,7 +202,7 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   gpu_disable_raster_order_views = si.GetBoolValue("GPU", "DisableRasterOrderViews", false);
   gpu_per_sample_shading = si.GetBoolValue("GPU", "PerSampleShading", false);
   gpu_use_thread = si.GetBoolValue("GPU", "UseThread", true);
-  gpu_use_gpu_thread = si.GetBoolValue("GPU", "UseGPUThread", GetDefaultGPUThread(gpu_renderer));
+  gpu_use_gpu_thread = si.GetBoolValue("GPU", "UseGPUThread", DEFAULT_GPU_THREAD);
   gpu_use_software_renderer_for_readbacks = si.GetBoolValue("GPU", "UseSoftwareRendererForReadbacks", false);
   gpu_threaded_presentation = si.GetBoolValue("GPU", "ThreadedPresentation", DEFAULT_THREADED_PRESENTATION);
   gpu_true_color = si.GetBoolValue("GPU", "TrueColor", true);
@@ -1151,22 +1151,6 @@ RenderAPI Settings::GetRenderAPIForRenderer(GPURenderer renderer)
     case GPURenderer::Automatic:
     default:
       return GPUDevice::GetPreferredAPI();
-  }
-}
-
-bool Settings::GetDefaultGPUThread(GPURenderer renderer)
-{
-  // At unlimited speed, 1x, the thread costs more than it saves where the API's own work is light: D3D11 and D3D12
-  // 6-9% slower, Vulkan 1-7% (Windows, MoltenVK, the AYN Thor). OpenGL (ES) and Metal are faster with it.
-  switch (GetRenderAPIForRenderer(renderer))
-  {
-    case RenderAPI::D3D11:
-    case RenderAPI::D3D12:
-    case RenderAPI::Vulkan:
-      return false;
-
-    default:
-      return true;
   }
 }
 

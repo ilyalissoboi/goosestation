@@ -54,6 +54,8 @@ add_library(core
   gpu_backend.h
   gpu_commands.cpp
   gpu_hw.cpp
+  gpu_hw_frontend.cpp
+  gpu_hw_frontend.h
   gpu_presenter.cpp
   gpu_presenter.h
   gpu_thread_commands.cpp

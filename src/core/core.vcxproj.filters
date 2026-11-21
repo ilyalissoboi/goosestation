@@ -8,6 +8,7 @@
     <ClCompile Include="dma.cpp" />
     <ClCompile Include="gpu.cpp" />
     <ClCompile Include="gpu_hw.cpp" />
+    <ClCompile Include="gpu_hw_frontend.cpp" />
     <ClCompile Include="gpu_presenter.cpp" />
     <ClCompile Include="gpu_thread_commands.cpp" />
     <ClCompile Include="interrupt_controller.cpp" />
@@ -93,6 +94,7 @@
     <ClInclude Include="dma.h" />
     <ClInclude Include="gpu.h" />
     <ClInclude Include="gpu_hw.h" />
+    <ClInclude Include="gpu_hw_frontend.h" />
     <ClInclude Include="gpu_presenter.h" />
     <ClInclude Include="gpu_thread_commands.h" />
     <ClInclude Include="interrupt_controller.h" />

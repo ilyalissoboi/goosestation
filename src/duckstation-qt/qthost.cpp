@@ -1341,7 +1341,7 @@ void EmuThread::reloadPostProcessingShaders()
   }
 
   if (System::IsValid())
-    GPUThread::RunOnThread([]() { PostProcessing::ReloadShaders(); });
+    GPUThread::RunOnThreadAndWait([]() { PostProcessing::ReloadShaders(); });
 }
 
 void EmuThread::updatePostProcessingSettings()
@@ -1353,7 +1353,7 @@ void EmuThread::updatePostProcessingSettings()
   }
 
   if (System::IsValid())
-    GPUThread::RunOnThread(&PostProcessing::UpdateSettings);
+    GPUThread::RunOnThreadAndWait(&PostProcessing::UpdateSettings);
 }
 
 void EmuThread::clearInputBindStateFromSource(InputBindingKey key)
@@ -1844,11 +1844,12 @@ void EmuThread::run()
 
       m_event_loop->processEvents(QEventLoop::AllEvents);
       System::Internal::IdlePollUpdate();
-      if (g_gpu_device)
+      if (GPUThread::GetDeviceInfo().has_device)
       {
+        System::WaitForPresents();
         System::PresentDisplay(false, false);
-        if (!g_gpu_device->IsVSyncModeBlocking())
-          g_gpu_device->ThrottlePresentation();
+        if (!GPUThread::GetDeviceInfo().vsync_blocking)
+          System::ThrottlePresentation();
       }
     }
   }

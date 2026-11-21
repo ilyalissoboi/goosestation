@@ -345,6 +345,12 @@ void UpdateSpeedLimiterState();
 /// Hands the GPU thread a copy of g_settings (g_gpu_settings), in order with the work already pushed.
 void PushGPUSettings();
 
+/// Returns once the presents queued are few enough to poll input for the next frame (GPUThread::MaxFramesAhead).
+void WaitForPresents();
+
+/// Sleeps to the window's refresh rate, for presents not paced by vsync (paused Big Picture).
+void ThrottlePresentation();
+
 /// Toggles fast forward state.
 bool IsFastForwardEnabled();
 void SetFastForwardEnabled(bool enabled);

@@ -1833,13 +1833,10 @@ bool GPU::RenderScreenshotToFile(std::string filename, DisplayScreenshotMode mod
   return result;
 }
 
-bool GPU::PresentDisplay()
+void GPU::PrepareToPresent()
 {
   FlushRender();
   SendDisplayParams();
-  bool result = false;
-  GPUThread::RunOnThreadAndWait([&result]() { result = g_gpu_presenter->PresentDisplay(); });
-  return result;
 }
 
 bool GPU::SendDisplayToMediaCapture(MediaCapture* cap)

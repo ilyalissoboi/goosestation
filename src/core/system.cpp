@@ -177,6 +177,13 @@ static void UpdatePerformanceCounters();
 static void AccumulatePreFrameSleepTime();
 static void UpdatePreFrameSleepTime();
 static void UpdateDisplayVSync();
+
+// What the frame's end decides presents by: the device as last published, and its own present-throttle clock.
+static GPUThread::DeviceInfo s_device_info_for_present;
+static u64 s_last_frame_displayed_time = 0;
+
+// When the input the frame being emulated reads was polled.
+static Common::Timer::Value s_input_poll_time = 0;
 static void ResetPerformanceCounters();
 
 static bool UpdateGameSettingsLayer();
@@ -2159,8 +2166,10 @@ void System::FrameDone()
       // For runahead, poll input early, that way we can use the remainder of this frame to replay.
       // *technically* this means higher input latency (by less than a frame), but runahead itself
       // counter-acts that.
+      WaitForPresents();
       Host::PumpMessagesOnCPUThread();
       InputManager::PollSources();
+      s_input_poll_time = Common::Timer::GetCurrentValue();
       g_gpu->RestoreDeviceContext();
       CheckForAndExitExecution();
     }
@@ -2211,25 +2220,26 @@ void System::FrameDone()
   const bool is_unique_frame = (s_last_presented_internal_frame_number != s_internal_frame_number);
   s_last_presented_internal_frame_number = s_internal_frame_number;
 
+  s_device_info_for_present = GPUThread::GetDeviceInfo();
   const bool skip_this_frame =
     (((s_skip_presenting_duplicate_frames && !is_unique_frame &&
        s_skipped_frame_count < MAX_SKIPPED_DUPLICATE_FRAME_COUNT) ||
       (!s_optimal_frame_pacing && current_time > s_next_frame_time &&
        s_skipped_frame_count < MAX_SKIPPED_TIMEOUT_FRAME_COUNT) ||
-      g_gpu_device->ShouldSkipPresentingFrame()) &&
+      GPUDevice::ShouldSkipPresentingFrame(s_device_info_for_present.allow_present_throttle,
+                                           s_device_info_for_present.refresh_rate, &s_last_frame_displayed_time)) &&
      !s_syncing_to_host_with_vsync && !IsExecutionInterrupted() && !ImGuiManager::IsTextInputActive());
   if (!skip_this_frame)
   {
     s_skipped_frame_count = 0;
 
     const bool throttle_before_present = (s_optimal_frame_pacing && s_throttler_enabled && !IsExecutionInterrupted());
-    const bool explicit_present = (throttle_before_present && g_gpu_device->GetFeatures().explicit_present);
+    const bool explicit_present = (throttle_before_present && s_device_info_for_present.explicit_present);
     if (explicit_present)
     {
-      const bool do_present = PresentDisplay(false, true);
+      PresentDisplay(false, true);
       Throttle(current_time);
-      if (do_present)
-        g_gpu_device->SubmitPresent();
+      GPUThreadCommands::PushSubmitPresent();
     }
     else
     {
@@ -2268,8 +2278,10 @@ void System::FrameDone()
   // Input poll already done above
   if (s_runahead_frames == 0)
   {
+    WaitForPresents();
     Host::PumpMessagesOnCPUThread();
     InputManager::PollSources();
+    s_input_poll_time = Common::Timer::GetCurrentValue();
     CheckForAndExitExecution();
   }
 
@@ -3380,6 +3392,7 @@ void System::UpdatePerformanceCounters()
 
   s_fps_timer.ResetTo(now_ticks);
 
+  GPUThreadCommands::GetAndResetGPUTime(&s_accumulated_gpu_time, &s_presents_since_last_update);
   if (GPUThread::GetDeviceInfo().gpu_timing)
   {
     s_average_gpu_time = s_accumulated_gpu_time / static_cast<float>(std::max(s_presents_since_last_update, 1u));
@@ -5859,29 +5872,27 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
 
   // The UI's frame is done: drawn from a copy, so the next one can be built while it's drawn.
   ImGui::Render();
-  const std::unique_ptr<ImGuiDrawCopy> ui_frame = ImGuiDrawCopy::Capture(*ImGui::GetDrawData());
 
-  bool do_present;
-  if (g_gpu && !skip_present)
-    do_present = g_gpu->PresentDisplay();
-  else
-    do_present = g_gpu_device->BeginPresent(skip_present);
+  const bool show_display = (g_gpu && !skip_present);
+  if (show_display)
+    g_gpu->PrepareToPresent();
 
-  if (do_present)
-  {
-    g_gpu_device->RenderImGui(ui_frame->Get());
-    g_gpu_device->EndPresent(explicit_present);
-
-    if (g_gpu_device->IsGPUTimingEnabled())
-    {
-      s_accumulated_gpu_time += g_gpu_device->GetAndResetAccumulatedGPUTime();
-      s_presents_since_last_update++;
-    }
-  }
+  GPUThreadCommands::PushPresent(ImGuiDrawCopy::Capture(*ImGui::GetDrawData()), s_input_poll_time, show_display,
+                                 skip_present, explicit_present);
 
   ImGuiManager::NewFrame();
 
-  return do_present;
+  return true;
+}
+
+void System::WaitForPresents()
+{
+  GPUThread::WaitForQueuedFrames(GPUThread::MaxFramesAhead(GPUThread::GetDeviceInfo().vsync_blocking));
+}
+
+void System::ThrottlePresentation()
+{
+  GPUDevice::ThrottlePresentation(GPUThread::GetDeviceInfo().refresh_rate, &s_last_frame_displayed_time);
 }
 
 void System::InvalidateDisplay()

@@ -1165,25 +1165,37 @@ bool GPUDevice::ResizeTexture(std::unique_ptr<GPUTexture>* tex, u32 new_width, u
 
 bool GPUDevice::ShouldSkipPresentingFrame()
 {
+  return ShouldSkipPresentingFrame(m_allow_present_throttle, m_window_info.surface_refresh_rate,
+                                   &m_last_frame_displayed_time);
+}
+
+bool GPUDevice::ShouldSkipPresentingFrame(bool allow_present_throttle, float refresh_rate,
+                                          u64* last_frame_displayed_time)
+{
   // Only needed with FIFO. But since we're so fast, we allow it always.
-  if (!m_allow_present_throttle)
+  if (!allow_present_throttle)
     return false;
 
-  const float throttle_rate = (m_window_info.surface_refresh_rate > 0.0f) ? m_window_info.surface_refresh_rate : 60.0f;
+  const float throttle_rate = (refresh_rate > 0.0f) ? refresh_rate : 60.0f;
   const float throttle_period = 1.0f / throttle_rate;
 
   const u64 now = Common::Timer::GetCurrentValue();
-  const double diff = Common::Timer::ConvertValueToSeconds(now - m_last_frame_displayed_time);
+  const double diff = Common::Timer::ConvertValueToSeconds(now - *last_frame_displayed_time);
   if (diff < throttle_period)
     return true;
 
-  m_last_frame_displayed_time = now;
+  *last_frame_displayed_time = now;
   return false;
 }
 
 void GPUDevice::ThrottlePresentation()
 {
-  const float throttle_rate = (m_window_info.surface_refresh_rate > 0.0f) ? m_window_info.surface_refresh_rate : 60.0f;
+  ThrottlePresentation(m_window_info.surface_refresh_rate, &m_last_frame_displayed_time);
+}
+
+void GPUDevice::ThrottlePresentation(float refresh_rate, u64* last_frame_displayed_time)
+{
+  const float throttle_rate = (refresh_rate > 0.0f) ? refresh_rate : 60.0f;
 
   const u64 sleep_period = Common::Timer::ConvertNanosecondsToValue(1e+9f / static_cast<double>(throttle_rate));
   const u64 current_ts = Common::Timer::GetCurrentValue();
@@ -1191,12 +1203,12 @@ void GPUDevice::ThrottlePresentation()
   // Allow it to fall behind/run ahead up to 2*period. Sleep isn't that precise, plus we need to
   // allow time for the actual rendering.
   const u64 max_variance = sleep_period * 2;
-  if (static_cast<u64>(std::abs(static_cast<s64>(current_ts - m_last_frame_displayed_time))) > max_variance)
-    m_last_frame_displayed_time = current_ts + sleep_period;
+  if (static_cast<u64>(std::abs(static_cast<s64>(current_ts - *last_frame_displayed_time))) > max_variance)
+    *last_frame_displayed_time = current_ts + sleep_period;
   else
-    m_last_frame_displayed_time += sleep_period;
+    *last_frame_displayed_time += sleep_period;
 
-  Common::Timer::SleepUntil(m_last_frame_displayed_time, false);
+  Common::Timer::SleepUntil(*last_frame_displayed_time, false);
 }
 
 SlangChain::~SlangChain() = default;

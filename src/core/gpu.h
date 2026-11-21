@@ -237,8 +237,8 @@ public:
   bool RenderScreenshotToFile(std::string filename, DisplayScreenshotMode mode, u8 quality, bool compress_on_thread,
                               bool show_osd_message);
 
-  /// Draws the current display texture, with any post-processing.
-  bool PresentDisplay();
+  /// Before a present command: everything drawn so far flushed, and the presenter told what the screen shows.
+  void PrepareToPresent();
 
   /// Sends the current frame to media capture.
   bool SendDisplayToMediaCapture(MediaCapture* cap);

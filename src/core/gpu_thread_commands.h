@@ -7,9 +7,11 @@
 #include "gpu_types.h"
 
 #include "util/gpu_texture.h"
+#include "util/imgui_draw_copy.h"
 #include "util/gpu_thread.h"
 #include "util/gpu_thread_queue.h"
 
+#include "common/timer.h"
 #include "common/types.h"
 
 #ifdef _MSC_VER
@@ -36,6 +38,10 @@ enum class GPUThreadCommandType : u8
   HWDrawLine,
   HWUpdateDisplay,
   HWBufferSwapped,
+
+  // The frame's end.
+  Present,
+  SubmitPresent,
 
   MaxCount
 };
@@ -162,10 +168,30 @@ struct GPUThreadHWUpdateDisplayCommand : public GPUThreadCommand
   bool show_vram;
 };
 
+/// A present: the display (if shown) and the UI's frame, ended and counted as presented.
+struct GPUThreadPresentCommand : public GPUThreadCommand
+{
+  ImGuiDrawCopy* ui;                 // owned by the command
+  Common::Timer::Value input_poll_time; // when the input the frame read was polled
+  bool show_display;                 // the game's display under the UI; else the UI alone
+  bool skip_present;                 // BeginPresent(skip) without the display
+  bool explicit_present;             // optimal pacing: submitted by the SubmitPresent that follows
+};
+
 namespace GPUThreadCommands {
 
 /// The GPU thread's handler for the core's commands.
 void Handle(const GPUThreadCommand* cmd);
+
+/// Pushes a present (and counts it with GPUThread::FramePushed()).
+void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time, bool show_display,
+                 bool skip_present, bool explicit_present);
+
+/// Pushes the submit of an explicit present, after the throttle.
+void PushSubmitPresent();
+
+/// The GPU time the GPU thread's presents measured since the last call, and how many presents it took.
+void GetAndResetGPUTime(float* time_ms, u32* presents);
 
 /// A command of type and size (header included), its header filled, for GPUThread::PushCommand().
 template<typename T>

@@ -743,6 +743,12 @@ public:
                      GPUTexture::Format format, bool preserve = true);
   bool ShouldSkipPresentingFrame();
   void ThrottlePresentation();
+  ALWAYS_INLINE bool IsPresentThrottleAllowed() const { return m_allow_present_throttle; }
+
+  /// The same, for a thread other than the device's: its own last-displayed time, the window's refresh rate.
+  static bool ShouldSkipPresentingFrame(bool allow_present_throttle, float refresh_rate,
+                                        u64* last_frame_displayed_time);
+  static void ThrottlePresentation(float refresh_rate, u64* last_frame_displayed_time);
 
   virtual bool SupportsTextureFormat(GPUTexture::Format format) const = 0;
 

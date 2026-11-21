@@ -73,7 +73,7 @@ struct PriorityClosure
 std::unique_ptr<GPUThreadQueue> s_queue;
 Threading::Thread s_thread;
 bool s_started = false;
-bool s_use_thread = false;
+std::atomic_bool s_use_thread{false}; // read by other threads (Android's surface changes)
 std::atomic<std::thread::id> s_owner{};
 CommandHandler s_handler = nullptr;
 void (*s_recycle_hook)(GPUTexture*) = nullptr;
@@ -410,6 +410,7 @@ void GPUThread::PublishDeviceInfo()
     info.exclusive_fullscreen = g_gpu_device->SupportsExclusiveFullscreen();
     info.gpu_timing = g_gpu_device->IsGPUTimingEnabled();
     info.debug_device = g_gpu_device->IsDebugDevice();
+    info.allow_present_throttle = g_gpu_device->IsPresentThrottleAllowed();
     info.max_texture_size = g_gpu_device->GetMaxTextureSize();
     info.max_multisamples = g_gpu_device->GetMaxMultisamples();
   }

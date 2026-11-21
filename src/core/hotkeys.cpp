@@ -499,7 +499,7 @@ DEFINE_HOTKEY("PreviousPostProcessingFavourite", TRANSLATE_NOOP("Hotkeys", "Grap
 DEFINE_HOTKEY("ReloadPostProcessingShaders", TRANSLATE_NOOP("Hotkeys", "Graphics"),
               TRANSLATE_NOOP("Hotkeys", "Reload Post Processing Shaders"), [](s32 pressed) {
                 if (!pressed && System::IsValid())
-                  GPUThread::RunOnThread([]() { PostProcessing::ReloadShaders(); });
+                  GPUThread::RunOnThreadAndWait([]() { PostProcessing::ReloadShaders(); });
               })
 
 DEFINE_HOTKEY("ReloadTextureReplacements", TRANSLATE_NOOP("Hotkeys", "Graphics"),

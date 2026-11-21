@@ -94,6 +94,7 @@ struct DeviceInfo
   bool vsync_blocking = false;
   bool exclusive_fullscreen = false;
   bool gpu_timing = false;
+  bool debug_device = false;
   u32 max_texture_size = 0;
   u32 max_multisamples = 1;
 };

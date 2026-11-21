@@ -8,6 +8,7 @@
 #include "system.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_manager.h"
 #include "util/input_manager.h"
 #include "util/media_capture.h"
@@ -1430,10 +1431,11 @@ float Settings::GetDisplayAspectRatioValue() const
   {
     case DisplayAspectRatio::MatchWindow:
     {
-      if (!g_gpu_device)
+      const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
+      if (!info.has_device)
         return s_display_aspect_ratio_values[static_cast<int>(DEFAULT_DISPLAY_ASPECT_RATIO)];
 
-      return static_cast<float>(g_gpu_device->GetWindowWidth()) / static_cast<float>(g_gpu_device->GetWindowHeight());
+      return static_cast<float>(info.window_width) / static_cast<float>(info.window_height);
     }
 
     case DisplayAspectRatio::Custom:

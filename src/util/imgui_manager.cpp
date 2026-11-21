@@ -4,6 +4,7 @@
 #include "imgui_manager.h"
 #include "fallback_fonts.h"
 #include "gpu_device.h"
+#include "gpu_thread.h"
 #include "host.h"
 #include "image.h"
 #include "imgui_fullscreen.h"
@@ -271,7 +272,8 @@ bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error*
   }
 
   s_global_prescale = global_scale;
-  s_global_scale = std::max(g_gpu_device->GetWindowScale() * global_scale, 1.0f);
+  const GPUThread::DeviceInfo device_info = GPUThread::GetDeviceInfo();
+  s_global_scale = std::max(device_info.window_scale * global_scale, 1.0f);
   s_scale_changed = false;
   s_show_osd_messages = show_osd_messages;
 
@@ -297,8 +299,8 @@ bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error*
   };
   io.SetClipboardTextFn = [](void*, const char* text) { Host::CopyTextToClipboard(text); };
 
-  s_window_width = static_cast<float>(g_gpu_device->GetWindowWidth());
-  s_window_height = static_cast<float>(g_gpu_device->GetWindowHeight());
+  s_window_width = static_cast<float>(device_info.window_width);
+  s_window_height = static_cast<float>(device_info.window_height);
   io.DisplayFramebufferScale = ImVec2(1, 1); // We already scale things ourselves, this would double-apply scaling
   io.DisplaySize = ImVec2(s_window_width, s_window_height);
 
@@ -374,7 +376,8 @@ void ImGuiManager::RequestScaleUpdate()
 
 void ImGuiManager::UpdateScale()
 {
-  const float window_scale = g_gpu_device ? g_gpu_device->GetWindowScale() : 1.0f;
+  const GPUThread::DeviceInfo device_info = GPUThread::GetDeviceInfo();
+  const float window_scale = device_info.has_device ? device_info.window_scale : 1.0f;
   const float scale = std::max(window_scale * s_global_prescale, 1.0f);
 
   if ((!HasFullscreenFonts() || !ImGuiFullscreen::UpdateLayoutScale()) && scale == s_global_scale)

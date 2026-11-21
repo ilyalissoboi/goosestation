@@ -12,6 +12,7 @@
 
 #include "util/compress_helpers.h"
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_manager.h"
 #include "util/input_manager.h"
 
@@ -316,10 +317,7 @@ std::string Host::GetHTTPUserAgent()
 
 bool Host::CreateGPUDevice(RenderAPI api, Error* error)
 {
-  DebugAssert(!g_gpu_device);
-
-  INFO_LOG("Trying to create a {} GPU device...", GPUDevice::RenderAPIToString(api));
-  g_gpu_device = GPUDevice::CreateDeviceForAPI(api);
+  DebugAssert(!GPUThread::GetDeviceInfo().has_device);
 
   std::optional<bool> exclusive_fullscreen_control;
   if (g_settings.display_exclusive_fullscreen_control != DisplayExclusiveFullscreenControl::Automatic)
@@ -340,20 +338,36 @@ bool Host::CreateGPUDevice(RenderAPI api, Error* error)
   if (g_settings.gpu_disable_raster_order_views)
     disabled_features |= GPUDevice::FEATURE_MASK_RASTER_ORDER_VIEWS;
 
-  Error create_error;
-  if (!g_gpu_device || !g_gpu_device->Create(g_settings.gpu_adapter,
-                                             g_settings.gpu_disable_shader_cache ? std::string_view() :
-                                                                                   std::string_view(EmuFolders::Cache),
-                                             SHADER_CACHE_VERSION, g_settings.gpu_use_debug_device,
-                                             System::GetEffectiveVSyncMode(), System::ShouldAllowPresentThrottle(),
-                                             g_settings.gpu_threaded_presentation, exclusive_fullscreen_control,
-                                             static_cast<GPUDevice::FeatureMask>(disabled_features), &create_error))
-  {
-    ERROR_LOG("Failed to create GPU device: {}", create_error.GetDescription());
-    if (g_gpu_device)
-      g_gpu_device->Destroy();
-    g_gpu_device.reset();
+  // Everything the device is made with, taken here: the GPU thread reads no emulation-thread state.
+  const std::string adapter = g_settings.gpu_adapter;
+  const std::string shader_cache =
+    g_settings.gpu_disable_shader_cache ? std::string() : std::string(EmuFolders::Cache);
+  const bool debug_device = g_settings.gpu_use_debug_device;
+  const GPUVSyncMode vsync_mode = System::GetEffectiveVSyncMode();
+  const bool allow_present_throttle = System::ShouldAllowPresentThrottle();
+  const bool threaded_presentation = g_settings.gpu_threaded_presentation;
 
+  Error create_error;
+  bool created = false;
+  GPUThread::RunOnThreadAndWait([&]() {
+    INFO_LOG("Trying to create a {} GPU device...", GPUDevice::RenderAPIToString(api));
+    g_gpu_device = GPUDevice::CreateDeviceForAPI(api);
+    created = g_gpu_device &&
+              g_gpu_device->Create(adapter, shader_cache, SHADER_CACHE_VERSION, debug_device, vsync_mode,
+                                   allow_present_throttle, threaded_presentation, exclusive_fullscreen_control,
+                                   static_cast<GPUDevice::FeatureMask>(disabled_features), &create_error);
+    if (!created)
+    {
+      ERROR_LOG("Failed to create GPU device: {}", create_error.GetDescription());
+      if (g_gpu_device)
+        g_gpu_device->Destroy();
+      g_gpu_device.reset();
+    }
+    GPUThread::PublishDeviceInfo();
+  });
+
+  if (!created)
+  {
     Error::SetStringFmt(
       error,
       TRANSLATE_FS("System", "Failed to create render device:\n\n{0}\n\nThis may be due to your GPU not supporting the "
@@ -367,29 +381,38 @@ bool Host::CreateGPUDevice(RenderAPI api, Error* error)
   {
     ERROR_LOG("Failed to initialize ImGuiManager: {}", create_error.GetDescription());
     Error::SetStringFmt(error, "Failed to initialize ImGuiManager: {}", create_error.GetDescription());
-    g_gpu_device->Destroy();
-    g_gpu_device.reset();
+    GPUThread::RunOnThreadAndWait([]() {
+      g_gpu_device->Destroy();
+      g_gpu_device.reset();
+      GPUThread::PublishDeviceInfo();
+    });
     return false;
   }
 
-  InputManager::SetDisplayWindowSize(static_cast<float>(g_gpu_device->GetWindowWidth()),
-                                     static_cast<float>(g_gpu_device->GetWindowHeight()));
+  const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
+  InputManager::SetDisplayWindowSize(static_cast<float>(info.window_width), static_cast<float>(info.window_height));
   return true;
 }
 
 void Host::UpdateDisplayWindow()
 {
-  if (!g_gpu_device)
+  if (!GPUThread::GetDeviceInfo().has_device)
     return;
 
-  if (!g_gpu_device->UpdateWindow())
+  bool updated = false;
+  GPUThread::RunOnThreadAndWait([&updated]() {
+    updated = g_gpu_device->UpdateWindow();
+    GPUThread::PublishDeviceInfo();
+  });
+  if (!updated)
   {
     Host::ReportErrorAsync("Error", "Failed to change window after update. The log may contain more information.");
     return;
   }
 
-  const float f_width = static_cast<float>(g_gpu_device->GetWindowWidth());
-  const float f_height = static_cast<float>(g_gpu_device->GetWindowHeight());
+  const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
+  const float f_width = static_cast<float>(info.window_width);
+  const float f_height = static_cast<float>(info.window_height);
   ImGuiManager::WindowResized(f_width, f_height);
   InputManager::SetDisplayWindowSize(f_width, f_height);
 
@@ -406,15 +429,19 @@ void Host::UpdateDisplayWindow()
 
 void Host::ResizeDisplayWindow(s32 width, s32 height, float scale)
 {
-  if (!g_gpu_device)
+  if (!GPUThread::GetDeviceInfo().has_device)
     return;
 
   DEV_LOG("Display window resized to {}x{}", width, height);
 
-  g_gpu_device->ResizeWindow(width, height, scale);
+  GPUThread::RunOnThreadAndWait([width, height, scale]() {
+    g_gpu_device->ResizeWindow(width, height, scale);
+    GPUThread::PublishDeviceInfo();
+  });
 
-  const float f_width = static_cast<float>(g_gpu_device->GetWindowWidth());
-  const float f_height = static_cast<float>(g_gpu_device->GetWindowHeight());
+  const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
+  const float f_width = static_cast<float>(info.window_width);
+  const float f_height = static_cast<float>(info.window_height);
   ImGuiManager::WindowResized(f_width, f_height);
   InputManager::SetDisplayWindowSize(f_width, f_height);
 
@@ -435,14 +462,17 @@ void Host::ResizeDisplayWindow(s32 width, s32 height, float scale)
 
 void Host::ReleaseGPUDevice()
 {
-  if (!g_gpu_device)
+  if (!GPUThread::GetDeviceInfo().has_device)
     return;
 
   ImGuiManager::DestroyOverlayTextures();
   FullscreenUI::Shutdown();
   ImGuiManager::Shutdown();
 
-  INFO_LOG("Destroying {} GPU device...", GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI()));
-  g_gpu_device->Destroy();
-  g_gpu_device.reset();
+  GPUThread::RunOnThreadAndWait([]() {
+    INFO_LOG("Destroying {} GPU device...", GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI()));
+    g_gpu_device->Destroy();
+    g_gpu_device.reset();
+    GPUThread::PublishDeviceInfo();
+  });
 }

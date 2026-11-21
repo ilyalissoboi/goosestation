@@ -9,6 +9,7 @@
 #include "settings.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/state_wrapper.h"
 
 #include "common/assert.h"
@@ -243,14 +244,15 @@ void GTE::UpdateAspectRatio()
   {
     case DisplayAspectRatio::MatchWindow:
     {
-      if (!g_gpu_device)
+      const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
+      if (!info.has_device)
       {
         s_config.aspect_ratio = DisplayAspectRatio::R4_3;
         return;
       }
 
-      num = g_gpu_device->GetWindowWidth();
-      denom = g_gpu_device->GetWindowHeight();
+      num = info.window_width;
+      denom = info.window_height;
     }
     break;
 

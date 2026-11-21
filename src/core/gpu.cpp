@@ -11,6 +11,7 @@
 #include "timers.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/image.h"
 #include "util/imgui_manager.h"
 #include "util/media_capture.h"
@@ -83,7 +84,10 @@ GPU::~GPU()
   g_gpu_device->RecycleTexture(std::move(m_chroma_smoothing_texture));
 
   if (g_gpu_device)
+  {
     g_gpu_device->SetGPUTimingEnabled(false);
+    GPUThread::PublishDeviceInfo();
+  }
 }
 
 bool GPU::Initialize()
@@ -103,6 +107,7 @@ bool GPU::Initialize()
   }
 
   g_gpu_device->SetGPUTimingEnabled(g_settings.display_show_gpu_usage);
+  GPUThread::PublishDeviceInfo();
 
 #ifdef PSX_GPU_STATS
   s_active_gpu_cycles = 0;
@@ -148,6 +153,7 @@ void GPU::UpdateSettings(const Settings& old_settings)
   }
 
   g_gpu_device->SetGPUTimingEnabled(g_settings.display_show_gpu_usage);
+  GPUThread::PublishDeviceInfo();
 }
 
 void GPU::CPUClockChanged()

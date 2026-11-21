@@ -409,6 +409,7 @@ void GPUThread::PublishDeviceInfo()
     info.vsync_blocking = g_gpu_device->IsVSyncModeBlocking();
     info.exclusive_fullscreen = g_gpu_device->SupportsExclusiveFullscreen();
     info.gpu_timing = g_gpu_device->IsGPUTimingEnabled();
+    info.debug_device = g_gpu_device->IsDebugDevice();
     info.max_texture_size = g_gpu_device->GetMaxTextureSize();
     info.max_multisamples = g_gpu_device->GetMaxMultisamples();
   }

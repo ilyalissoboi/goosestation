@@ -37,6 +37,7 @@
 #include "common/string_util.h"
 
 #include "util/audio_stream.h"
+#include "util/gpu_thread.h"
 #include "util/http_downloader.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
@@ -660,8 +661,8 @@ void EmuThread::checkForSettingsChanges(const Settings& old_settings)
   if (m_is_rendering_to_main != render_to_main)
   {
     m_is_rendering_to_main = render_to_main;
-    if (g_gpu_device)
-      g_gpu_device->UpdateWindow();
+    if (GPUThread::GetDeviceInfo().has_device)
+      Host::UpdateDisplayWindow();
   }
 }
 
@@ -822,7 +823,7 @@ void EmuThread::stopFullscreenUI()
     QMetaObject::invokeMethod(this, &EmuThread::stopFullscreenUI, Qt::QueuedConnection);
 
     // wait until the host display is gone
-    while (!QtHost::IsSystemValid() && g_gpu_device)
+    while (!QtHost::IsSystemValid() && GPUThread::GetDeviceInfo().has_device)
       QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
 
     return;
@@ -836,7 +837,7 @@ void EmuThread::stopFullscreenUI()
     emit fullscreenUIStateChange(false);
   }
 
-  if (!g_gpu_device)
+  if (!GPUThread::GetDeviceInfo().has_device)
     return;
 
   Host::ReleaseGPUDevice();
@@ -958,7 +959,7 @@ void EmuThread::redrawDisplayWindow()
     return;
   }
 
-  if (!g_gpu_device || System::IsShutdown())
+  if (!GPUThread::GetDeviceInfo().has_device || System::IsShutdown())
     return;
 
   System::InvalidateDisplay();
@@ -984,7 +985,7 @@ void EmuThread::setFullscreen(bool fullscreen, bool allow_render_to_main)
     return;
   }
 
-  if (!g_gpu_device || m_is_fullscreen == fullscreen)
+  if (!GPUThread::GetDeviceInfo().has_device || m_is_fullscreen == fullscreen)
     return;
 
   m_is_fullscreen = fullscreen;
@@ -1010,7 +1011,7 @@ void EmuThread::setSurfaceless(bool surfaceless)
     return;
   }
 
-  if (!g_gpu_device || m_is_surfaceless == surfaceless)
+  if (!GPUThread::GetDeviceInfo().has_device || m_is_surfaceless == surfaceless)
     return;
 
   m_is_surfaceless = surfaceless;
@@ -2096,7 +2097,8 @@ void Host::ReleaseRenderWindow()
 
 void EmuThread::updatePerformanceCounters()
 {
-  const RenderAPI render_api = g_gpu_device ? g_gpu_device->GetRenderAPI() : RenderAPI::None;
+  const GPUThread::DeviceInfo device_info = GPUThread::GetDeviceInfo();
+  const RenderAPI render_api = device_info.has_device ? device_info.render_api : RenderAPI::None;
   const bool hardware_renderer = g_gpu && g_gpu->IsHardwareRenderer();
   u32 render_width = 0;
   u32 render_height = 0;

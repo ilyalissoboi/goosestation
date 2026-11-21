@@ -15,6 +15,7 @@
 #include "system.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_animated.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
@@ -378,7 +379,7 @@ void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, float 
 #endif
     }
 
-    if (g_settings.display_show_gpu_usage && g_gpu_device->IsGPUTimingEnabled())
+    if (g_settings.display_show_gpu_usage && GPUThread::GetDeviceInfo().gpu_timing)
     {
       text.assign("GPU: ");
       FormatProcessorStat(text, System::GetGPUUsage(), System::GetGPUAverageTime());
@@ -409,7 +410,7 @@ void ImGuiManager::DrawEnhancementsOverlay()
 {
   LargeString text;
   text.append_format("{} {}-{}", Settings::GetConsoleRegionName(System::GetRegion()),
-                     GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI()),
+                     GPUDevice::RenderAPIToString(GPUThread::GetDeviceInfo().render_api),
                      g_gpu->IsHardwareRenderer() ? "HW" : "SW");
 
   if (g_settings.rewind_enable)

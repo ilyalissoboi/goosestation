@@ -39,6 +39,7 @@
 #include "util/audio_stream.h"
 #include "util/cd_image.h"
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
@@ -505,6 +506,13 @@ bool System::Internal::CPUThreadInitialize(Error* error)
   // This will call back to Host::LoadSettings() -> ReloadSources().
   LoadSettings(false);
 
+  // The GPU device's owner. Inline for now: the emulation thread does the GPU thread's work as it pushes it.
+  if (!GPUThread::Start(false))
+  {
+    Error::SetStringView(error, "Failed to start the GPU thread.");
+    return false;
+  }
+
   LogStartupInformation();
 
   if (g_settings.achievements_enabled)
@@ -542,6 +550,11 @@ void System::Internal::CPUThreadShutdown()
   MemcardSync::Shutdown();
 
   InputManager::CloseSources();
+
+  // The device goes with the thread that owns it.
+  if (GPUThread::GetDeviceInfo().has_device)
+    Host::ReleaseGPUDevice();
+  GPUThread::Stop();
 
 #ifdef _WIN32
   CoUninitialize();
@@ -1612,7 +1625,7 @@ bool System::BootSystem(SystemBootParameters parameters, Error* error)
   Assert(s_state == State::Shutdown);
   s_state = State::Starting;
   s_startup_cancelled.store(false);
-  s_keep_gpu_device_on_shutdown = static_cast<bool>(g_gpu_device);
+  s_keep_gpu_device_on_shutdown = GPUThread::GetDeviceInfo().has_device;
   s_region = g_settings.region;
   Host::OnSystemStarting();
 
@@ -2013,7 +2026,7 @@ void System::DestroySystem()
   ClearRunningGame();
 
   // Restore present-all-frames behavior.
-  if (s_keep_gpu_device_on_shutdown && g_gpu_device)
+  if (s_keep_gpu_device_on_shutdown && GPUThread::GetDeviceInfo().has_device)
   {
     UpdateDisplayVSync();
   }
@@ -2371,13 +2384,14 @@ bool System::CreateGPU(GPURenderer renderer, bool is_switching, Error* error)
   const RenderAPI api = Settings::GetRenderAPIForRenderer(renderer);
 #endif
 
-  if (!g_gpu_device ||
-      (renderer != GPURenderer::Software && !GPUDevice::IsSameRenderAPI(g_gpu_device->GetRenderAPI(), api)))
+  const GPUThread::DeviceInfo device_info = GPUThread::GetDeviceInfo();
+  if (!device_info.has_device ||
+      (renderer != GPURenderer::Software && !GPUDevice::IsSameRenderAPI(device_info.render_api, api)))
   {
-    if (g_gpu_device)
+    if (device_info.has_device)
     {
       WARNING_LOG("Recreating GPU device, expecting {} got {}", GPUDevice::RenderAPIToString(api),
-                  GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI()));
+                  GPUDevice::RenderAPIToString(device_info.render_api));
       PostProcessing::Shutdown();
     }
 
@@ -3118,7 +3132,7 @@ bool System::SaveStateToBuffer(SaveStateBuffer* buffer, Error* error, u32 screen
       }
       else
       {
-        if (g_gpu_device->UsesLowerLeftOrigin())
+        if (GPUThread::GetDeviceInfo().lower_left_origin)
         {
           GPUTexture::FlipTextureDataRGBA8(screenshot_width, screenshot_height,
                                            reinterpret_cast<u8*>(screenshot_buffer.data()), screenshot_stride);
@@ -3362,7 +3376,7 @@ void System::UpdatePerformanceCounters()
 
   s_fps_timer.ResetTo(now_ticks);
 
-  if (g_gpu_device->IsGPUTimingEnabled())
+  if (GPUThread::GetDeviceInfo().gpu_timing)
   {
     s_average_gpu_time = s_accumulated_gpu_time / static_cast<float>(std::max(s_presents_since_last_update, 1u));
     s_gpu_usage = s_accumulated_gpu_time / (time * 10.0f);
@@ -3468,7 +3482,7 @@ void System::UpdateSpeedLimiterState()
 
   if (g_settings.sync_to_host_refresh_rate)
   {
-    const float host_refresh_rate = g_gpu_device->GetWindowInfo().surface_refresh_rate;
+    const float host_refresh_rate = GPUThread::GetDeviceInfo().refresh_rate;
     if (host_refresh_rate > 0.0f)
     {
       const float ratio = host_refresh_rate / System::GetThrottleFrequency();
@@ -3523,7 +3537,10 @@ void System::UpdateDisplayVSync()
               s_syncing_to_host_with_vsync ? " (for throttling)" : "",
               allow_present_throttle ? " (present throttle allowed)" : "");
 
-  g_gpu_device->SetVSyncMode(vsync_mode, allow_present_throttle);
+  GPUThread::RunOnThreadAndWait([vsync_mode, allow_present_throttle]() {
+    g_gpu_device->SetVSyncMode(vsync_mode, allow_present_throttle);
+    GPUThread::PublishDeviceInfo();
+  });
 }
 
 GPUVSyncMode System::GetEffectiveVSyncMode()
@@ -4564,7 +4581,7 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
   }
   else
   {
-    if (g_gpu_device)
+    if (GPUThread::GetDeviceInfo().has_device)
     {
       if (g_settings.display_vsync != old_settings.display_vsync ||
           g_settings.display_disable_mailbox_presentation != old_settings.display_disable_mailbox_presentation)
@@ -4574,7 +4591,7 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
     }
   }
 
-  if (g_gpu_device)
+  if (GPUThread::GetDeviceInfo().has_device)
   {
     if (g_settings.display_osd_scale != old_settings.display_osd_scale)
       ImGuiManager::SetGlobalScale(g_settings.display_osd_scale / 100.0f);
@@ -5230,8 +5247,9 @@ bool System::StartMediaCapture(std::string path, bool capture_video, bool captur
     Host::GetUIntSettingValue("MediaCapture", "VideoWidth", Settings::DEFAULT_MEDIA_CAPTURE_VIDEO_WIDTH);
   u32 capture_height =
     Host::GetUIntSettingValue("MediaCapture", "VideoHeight", Settings::DEFAULT_MEDIA_CAPTURE_VIDEO_HEIGHT);
+  const GPUThread::DeviceInfo device_info = GPUThread::GetDeviceInfo();
   const GPUTexture::Format capture_format =
-    g_gpu_device->HasSurface() ? g_gpu_device->GetWindowFormat() : GPUTexture::Format::RGBA8;
+    device_info.has_surface ? device_info.window_format : GPUTexture::Format::RGBA8;
   const float fps = System::GetThrottleFrequency();
   if (capture_video)
   {

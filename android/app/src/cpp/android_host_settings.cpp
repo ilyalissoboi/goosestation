@@ -25,6 +25,7 @@
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
@@ -300,8 +301,8 @@ float AndroidHost::GetSurfaceRefreshRateForTest()
   float rate = 0.0f;
   EmuThread::RunOnThread(
     [&rate]() {
-      if (g_gpu_device)
-        rate = g_gpu_device->GetWindowInfo().surface_refresh_rate;
+      if (const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo(); info.has_device)
+        rate = info.refresh_rate;
     },
     true);
   return rate;

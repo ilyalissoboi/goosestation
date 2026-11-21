@@ -870,10 +870,6 @@ protected:
 
 extern std::unique_ptr<GPUDevice> g_gpu_device;
 
-ALWAYS_INLINE void GPUDevice::PooledTextureDeleter::operator()(GPUTexture* const tex)
-{
-  g_gpu_device->RecycleTexture(std::unique_ptr<GPUTexture>(tex));
-}
 
 namespace Host {
 /// Called when the core is creating a render device.

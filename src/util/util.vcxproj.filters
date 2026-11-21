@@ -54,6 +54,7 @@
     <ClInclude Include="gpu_device.h" />
     <ClInclude Include="gpu_shader_cache.h" />
     <ClInclude Include="gpu_texture.h" />
+    <ClInclude Include="gpu_thread.h" />
     <ClInclude Include="gpu_thread_queue.h" />
     <ClInclude Include="metal_device.h" />
     <ClInclude Include="postprocessing_shader_glsl.h" />
@@ -149,6 +150,7 @@
     <ClCompile Include="gpu_device.cpp" />
     <ClCompile Include="gpu_shader_cache.cpp" />
     <ClCompile Include="gpu_texture.cpp" />
+    <ClCompile Include="gpu_thread.cpp" />
     <ClCompile Include="gpu_thread_queue.cpp" />
     <ClCompile Include="postprocessing_shader_glsl.cpp" />
     <ClCompile Include="postprocessing_browser.cpp" />

@@ -6,6 +6,7 @@
 #include "core/host.h"     // TODO: Remove, needed for getting fullscreen mode.
 #include "core/settings.h" // TODO: Remove, needed for dump directory.
 #include "gpu_framebuffer_manager.h"
+#include "gpu_thread.h"
 #include "shadergen.h"
 
 #include "common/assert.h"
@@ -26,6 +27,23 @@
 #include "xxhash.h"
 
 Log_SetChannel(GPUDevice);
+
+// The device belongs to the GPU thread: a call from elsewhere is a bug, reported once per place.
+#define CHECK_OWNER_THREAD()                                                                                           \
+  do                                                                                                                   \
+  {                                                                                                                    \
+    static bool s_reported = false;                                                                                    \
+    if (!GPUThread::IsOnThread() && !s_reported) [[unlikely]]                                                          \
+    {                                                                                                                  \
+      s_reported = true;                                                                                               \
+      ERROR_LOG("{}() called off the GPU thread", __func__);                                                           \
+    }                                                                                                                  \
+  } while (0)
+
+void GPUDevice::PooledTextureDeleter::operator()(GPUTexture* const tex)
+{
+  GPUThread::TextureDeleter()(tex);
+}
 
 #ifdef _WIN32
 #include "common/windows_headers.h"
@@ -650,6 +668,7 @@ void GPUDevice::DestroyResources()
 
 void GPUDevice::RenderImGui()
 {
+  CHECK_OWNER_THREAD();
   GL_SCOPE("RenderImGui");
 
   ImGui::Render();
@@ -902,6 +921,7 @@ std::array<float, 4> GPUDevice::RGBA8ToFloat(u32 rgba)
 
 bool GPUDevice::UpdateImGuiFontTexture()
 {
+  CHECK_OWNER_THREAD();
   ImGuiIO& io = ImGui::GetIO();
 
   unsigned char* pixels;
@@ -953,6 +973,7 @@ std::unique_ptr<GPUTexture> GPUDevice::FetchTexture(u32 width, u32 height, u32 l
                                                     GPUTexture::Type type, GPUTexture::Format format,
                                                     const void* data /*= nullptr*/, u32 data_stride /*= 0*/)
 {
+  CHECK_OWNER_THREAD();
   std::unique_ptr<GPUTexture> ret;
 
   const TexturePoolKey key = {static_cast<u16>(width),
@@ -1030,6 +1051,7 @@ GPUDevice::FetchAutoRecycleTexture(u32 width, u32 height, u32 layers, u32 levels
 
 void GPUDevice::RecycleTexture(std::unique_ptr<GPUTexture> texture)
 {
+  CHECK_OWNER_THREAD();
   if (!texture)
     return;
 

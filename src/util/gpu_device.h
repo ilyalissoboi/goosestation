@@ -469,6 +469,8 @@ public:
   virtual bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) = 0;
 };
 
+struct ImDrawData;
+
 class GPUDevice
 {
 public:
@@ -723,7 +725,8 @@ public:
   virtual void SubmitPresent() = 0;
 
   /// Renders ImGui screen elements. Call before EndPresent().
-  void RenderImGui();
+  /// Draws a frame of ImGui (built on the emulation thread, ImGui::Render() already called, and copied).
+  void RenderImGui(const ImDrawData* draw_data);
 
   ALWAYS_INLINE GPUVSyncMode GetVSyncMode() const { return m_vsync_mode; }
   ALWAYS_INLINE bool IsVSyncModeBlocking() const { return (m_vsync_mode == GPUVSyncMode::FIFO); }
@@ -732,7 +735,8 @@ public:
   ALWAYS_INLINE bool IsDebugDevice() const { return m_debug_device; }
   ALWAYS_INLINE size_t GetVRAMUsage() const { return s_total_vram_usage; }
 
-  bool UpdateImGuiFontTexture();
+  /// The font atlas's texture, made or updated from its RGBA8 pixels; nullptr if it couldn't be.
+  GPUTexture* UpdateImGuiFontTexture(const void* pixels, u32 width, u32 height);
   bool UsesLowerLeftOrigin() const;
   static GSVector4i FlipToLowerLeft(GSVector4i rc, s32 target_height);
   bool ResizeTexture(std::unique_ptr<GPUTexture>* tex, u32 new_width, u32 new_height, GPUTexture::Type type,

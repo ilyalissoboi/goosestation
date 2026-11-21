@@ -666,15 +666,12 @@ void GPUDevice::DestroyResources()
   m_shader_cache.Close();
 }
 
-void GPUDevice::RenderImGui()
+void GPUDevice::RenderImGui(const ImDrawData* draw_data)
 {
   CHECK_OWNER_THREAD();
   GL_SCOPE("RenderImGui");
 
-  ImGui::Render();
-
-  const ImDrawData* draw_data = ImGui::GetDrawData();
-  if (draw_data->CmdListsCount == 0)
+  if (!draw_data || draw_data->CmdListsCount == 0)
     return;
 
   SetPipeline(m_imgui_pipeline.get());
@@ -919,34 +916,25 @@ std::array<float, 4> GPUDevice::RGBA8ToFloat(u32 rgba)
                               static_cast<float>(rgba >> 24) * (1.0f / 255.0f)};
 }
 
-bool GPUDevice::UpdateImGuiFontTexture()
+GPUTexture* GPUDevice::UpdateImGuiFontTexture(const void* pixels, u32 width, u32 height)
 {
   CHECK_OWNER_THREAD();
-  ImGuiIO& io = ImGui::GetIO();
-
-  unsigned char* pixels;
-  int width, height;
-  io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
   const u32 pitch = sizeof(u32) * width;
-
-  if (m_imgui_font_texture && m_imgui_font_texture->GetWidth() == static_cast<u32>(width) &&
-      m_imgui_font_texture->GetHeight() == static_cast<u32>(height) &&
-      m_imgui_font_texture->Update(0, 0, static_cast<u32>(width), static_cast<u32>(height), pixels, pitch))
+  if (m_imgui_font_texture && m_imgui_font_texture->GetWidth() == width && m_imgui_font_texture->GetHeight() == height &&
+      m_imgui_font_texture->Update(0, 0, width, height, pixels, pitch))
   {
-    io.Fonts->SetTexID(m_imgui_font_texture.get());
-    return true;
+    return m_imgui_font_texture.get();
   }
 
   std::unique_ptr<GPUTexture> new_font =
     FetchTexture(width, height, 1, 1, 1, GPUTexture::Type::Texture, GPUTexture::Format::RGBA8, pixels, pitch);
   if (!new_font)
-    return false;
+    return nullptr;
 
   RecycleTexture(std::move(m_imgui_font_texture));
   m_imgui_font_texture = std::move(new_font);
-  io.Fonts->SetTexID(m_imgui_font_texture.get());
-  return true;
+  return m_imgui_font_texture.get();
 }
 
 bool GPUDevice::UsesLowerLeftOrigin() const

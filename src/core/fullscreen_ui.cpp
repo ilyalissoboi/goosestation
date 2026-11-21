@@ -21,6 +21,7 @@
 
 #include "util/cd_image.h"
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
@@ -566,7 +567,7 @@ struct SaveStateListEntry
   std::string title;
   std::string summary;
   std::string path;
-  std::unique_ptr<GPUTexture> preview_texture;
+  GPUThread::TexturePtr preview_texture;
   time_t timestamp;
   s32 slot;
   bool global;
@@ -7245,8 +7246,7 @@ void FullscreenUI::ClearSaveStateEntryList()
 {
   for (SaveStateListEntry& entry : s_save_state_selector_slots)
   {
-    if (entry.preview_texture)
-      g_gpu_device->RecycleTexture(std::move(entry.preview_texture));
+    entry.preview_texture.reset();
   }
   s_save_state_selector_slots.clear();
 }

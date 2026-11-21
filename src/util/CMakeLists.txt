@@ -34,6 +34,8 @@ add_library(util
   gpu_thread.h
   gpu_thread_queue.cpp
   gpu_thread_queue.h
+  imgui_draw_copy.cpp
+  imgui_draw_copy.h
   host.cpp
   host.h
   http_downloader.cpp

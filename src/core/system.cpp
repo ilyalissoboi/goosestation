@@ -40,6 +40,7 @@
 #include "util/cd_image.h"
 #include "util/gpu_device.h"
 #include "util/gpu_thread.h"
+#include "util/imgui_draw_copy.h"
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
@@ -5842,6 +5843,10 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
   ImGuiManager::RenderOverlayWindows();
   ImGuiManager::RenderDebugWindows();
 
+  // The UI's frame is done: drawn from a copy, so the next one can be built while it's drawn.
+  ImGui::Render();
+  const std::unique_ptr<ImGuiDrawCopy> ui_frame = ImGuiDrawCopy::Capture(*ImGui::GetDrawData());
+
   bool do_present;
   if (g_gpu && !skip_present)
     do_present = g_gpu->PresentDisplay();
@@ -5850,7 +5855,7 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
 
   if (do_present)
   {
-    g_gpu_device->RenderImGui();
+    g_gpu_device->RenderImGui(ui_frame->Get());
     g_gpu_device->EndPresent(explicit_present);
 
     if (g_gpu_device->IsGPUTimingEnabled())
@@ -5858,11 +5863,6 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
       s_accumulated_gpu_time += g_gpu_device->GetAndResetAccumulatedGPUTime();
       s_presents_since_last_update++;
     }
-  }
-  else
-  {
-    // Still need to kick ImGui or it gets cranky.
-    ImGui::Render();
   }
 
   ImGuiManager::NewFrame();

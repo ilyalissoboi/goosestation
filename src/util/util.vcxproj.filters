@@ -56,6 +56,7 @@
     <ClInclude Include="gpu_texture.h" />
     <ClInclude Include="gpu_thread.h" />
     <ClInclude Include="gpu_thread_queue.h" />
+    <ClInclude Include="imgui_draw_copy.h" />
     <ClInclude Include="metal_device.h" />
     <ClInclude Include="postprocessing_shader_glsl.h" />
     <ClInclude Include="postprocessing_browser.h" />
@@ -152,6 +153,7 @@
     <ClCompile Include="gpu_texture.cpp" />
     <ClCompile Include="gpu_thread.cpp" />
     <ClCompile Include="gpu_thread_queue.cpp" />
+    <ClCompile Include="imgui_draw_copy.cpp" />
     <ClCompile Include="postprocessing_shader_glsl.cpp" />
     <ClCompile Include="postprocessing_browser.cpp" />
     <ClCompile Include="postprocessing_favourites.cpp" />

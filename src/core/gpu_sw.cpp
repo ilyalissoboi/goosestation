@@ -24,9 +24,12 @@ GPU_SW::GPU_SW() = default;
 
 GPU_SW::~GPU_SW()
 {
+  // GPU::Initialize() leaves no presenter when it fails.
   GPUThread::RunOnThreadAndWait([]() {
-    g_gpu_presenter->ClearDisplayTexture();
-    g_gpu_device->RecycleTexture(std::move(s_upload_texture));
+    if (g_gpu_presenter)
+      g_gpu_presenter->ClearDisplayTexture();
+    if (s_upload_texture)
+      g_gpu_device->RecycleTexture(std::move(s_upload_texture));
   });
   m_backend.Shutdown();
 }

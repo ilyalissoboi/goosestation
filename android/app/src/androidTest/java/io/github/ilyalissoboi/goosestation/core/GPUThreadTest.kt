@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
  * the switch and a stop under load all leave the game drawing, never crashed or hung.
  *
  * Needs the emulator's /sdcard/GooseTest bios/ps-30j.bin, games/Vagrant Story (USA).chd and
- * savestates/SLUS-01040_2.sav (the command menu, a still picture); without them the tests are skipped.
+ * savestates/SLUS-01040_2.sav (the command menu, a still picture but for its cursor); without them the tests are skipped.
  */
 @BootsGames
 @LargeTest
@@ -93,8 +93,7 @@ class GPUThreadTest {
                 NativeLibrary.shutdownGame()
                 assertTrue("stopped", stopped.await(20, TimeUnit.SECONDS))
                 val on = boot(frames, gpuThread = true)
-                val differing = FrameReader.differing(off, on)
-                assertTrue("$differing of the pixels differ", differing < 0.001)
+                assertSamePicture(off, on)
             }
         }
 
@@ -258,13 +257,24 @@ class GPUThreadTest {
         expected: IntArray,
         actual: IntArray,
     ) {
-        val differing = FrameReader.differing(expected, actual)
+        val differing = FrameReader.differing(withoutTheCursor(expected), withoutTheCursor(actual))
         assertTrue("$differing of the pixels differ", differing < 0.001)
     }
+
+    // The menu's cursor bobs, wherever the game has got to when a frame is read: its corner of the picture is left out.
+    private fun withoutTheCursor(frame: IntArray): IntArray =
+        frame.copyOf().also {
+            for (y in CURSOR_TOP until CURSOR_BOTTOM) it.fill(0, y * WIDTH + CURSOR_LEFT, y * WIDTH + CURSOR_RIGHT)
+        }
 
     companion object {
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val SERIAL = "SLUS-01040"
         const val DISC = "Vagrant Story (USA).chd"
+        const val WIDTH = 640
+        const val CURSOR_LEFT = 340
+        const val CURSOR_RIGHT = 400
+        const val CURSOR_TOP = 180
+        const val CURSOR_BOTTOM = 240
     }
 }

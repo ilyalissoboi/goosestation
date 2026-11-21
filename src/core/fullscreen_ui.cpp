@@ -4904,6 +4904,12 @@ void FullscreenUI::DrawDisplaySettingsPage()
               "Usually results in worse frame pacing."),
     "Display", "DisableMailboxPresentation", false);
 
+  DrawToggleSetting(bsi, FSUI_CSTR("Use a GPU Thread"),
+                    FSUI_CSTR("Draws and presents on a thread of its own, beside the emulation, at most one frame "
+                              "behind it. Off runs everything on the emulation thread, as before."),
+                    "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
+  const bool gpu_thread = GetEffectiveBoolSetting(bsi, "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
+
   switch (renderer)
   {
 #ifdef _WIN32
@@ -4920,9 +4926,13 @@ void FullscreenUI::DrawDisplaySettingsPage()
 #ifdef ENABLE_VULKAN
     case GPURenderer::HardwareVulkan:
     {
-      DrawToggleSetting(bsi, FSUI_CSTR("Threaded Presentation"),
-                        FSUI_CSTR("Presents frames on a background thread when fast forwarding or vsync is disabled."),
-                        "GPU", "ThreadedPresentation", true);
+      // Vulkan's present thread has nothing to do while the GPU thread presents.
+      if (!gpu_thread)
+      {
+        DrawToggleSetting(bsi, FSUI_CSTR("Threaded Presentation"),
+                          FSUI_CSTR("Presents frames on a background thread when fast forwarding or vsync is disabled."),
+                          "GPU", "ThreadedPresentation", true);
+      }
     }
     break;
 #endif

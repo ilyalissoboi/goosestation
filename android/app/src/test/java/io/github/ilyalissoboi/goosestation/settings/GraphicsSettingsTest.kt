@@ -49,6 +49,16 @@ class GraphicsSettingsTest {
         )
     }
 
+    // On by default, as the core has it (Settings::DEFAULT_GPU_THREAD), under its own key: not the software renderer's.
+    @Test
+    fun theGPUThreadIsOnByDefault() {
+        val values = SettingValues.read(MemoryCoreSettings(), GraphicsSettings.all)
+
+        assertEquals(true, values[GraphicsSettings.GPU_THREAD])
+        assertEquals("GPU", GraphicsSettings.GPU_THREAD.section)
+        assertEquals("UseGPUThread", GraphicsSettings.GPU_THREAD.key)
+    }
+
     // Android's own budgets, as the core's (texture_pack_config.h): a phone or handheld has less memory.
     @Test
     fun theCacheLimitsDefaultToAndroidsBudgets() {

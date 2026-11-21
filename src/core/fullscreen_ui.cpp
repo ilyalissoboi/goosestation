@@ -6298,7 +6298,10 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
                  FSUI_CSTR("Reloads the shaders from disk, applying any changes."),
                  bsi->GetBoolValue(section, "Enabled", false)))
   {
-    if (System::IsValid() && PostProcessing::ReloadShaders())
+    bool reloaded = false;
+    if (System::IsValid())
+      GPUThread::RunOnThreadAndWait([&reloaded]() { reloaded = PostProcessing::ReloadShaders(); });
+    if (reloaded)
       ShowToast(std::string(), FSUI_STR("Post-processing shaders reloaded."));
   }
 

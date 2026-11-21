@@ -15,6 +15,7 @@
 #include "texture_replacements.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/input_manager.h"
 #include "util/postprocessing.h"
 #include "util/postprocessing_favourites.h"
@@ -473,13 +474,13 @@ DEFINE_HOTKEY("DecreaseResolutionScale", TRANSLATE_NOOP("Hotkeys", "Graphics"),
 DEFINE_HOTKEY("TogglePostProcessing", TRANSLATE_NOOP("Hotkeys", "Graphics"),
               TRANSLATE_NOOP("Hotkeys", "Toggle Post-Processing"), [](s32 pressed) {
                 if (!pressed && System::IsValid())
-                  PostProcessing::DisplayChain.Toggle();
+                  GPUThread::RunOnThread([]() { PostProcessing::DisplayChain.Toggle(); });
               })
 
 DEFINE_HOTKEY("ToggleInternalPostProcessing", TRANSLATE_NOOP("Hotkeys", "Graphics"),
               TRANSLATE_NOOP("Hotkeys", "Toggle Internal Post-Processing"), [](s32 pressed) {
                 if (!pressed && System::IsValid())
-                  PostProcessing::InternalChain.Toggle();
+                  GPUThread::RunOnThread([]() { PostProcessing::InternalChain.Toggle(); });
               })
 
 DEFINE_HOTKEY("NextPostProcessingFavourite", TRANSLATE_NOOP("Hotkeys", "Graphics"),
@@ -498,7 +499,7 @@ DEFINE_HOTKEY("PreviousPostProcessingFavourite", TRANSLATE_NOOP("Hotkeys", "Grap
 DEFINE_HOTKEY("ReloadPostProcessingShaders", TRANSLATE_NOOP("Hotkeys", "Graphics"),
               TRANSLATE_NOOP("Hotkeys", "Reload Post Processing Shaders"), [](s32 pressed) {
                 if (!pressed && System::IsValid())
-                  PostProcessing::ReloadShaders();
+                  GPUThread::RunOnThread([]() { PostProcessing::ReloadShaders(); });
               })
 
 DEFINE_HOTKEY("ReloadTextureReplacements", TRANSLATE_NOOP("Hotkeys", "Graphics"),
@@ -584,6 +585,7 @@ DEFINE_HOTKEY("RotateClockwise", TRANSLATE_NOOP("Hotkeys", "Graphics"),
                 {
                   g_settings.display_rotation = static_cast<DisplayRotation>(
                     (static_cast<u8>(g_settings.display_rotation) + 1) % static_cast<u8>(DisplayRotation::Count));
+                  System::PushGPUSettings();
                 }
               })
 
@@ -596,6 +598,7 @@ DEFINE_HOTKEY("RotateCounterclockwise", TRANSLATE_NOOP("Hotkeys", "Graphics"),
                       static_cast<DisplayRotation>((static_cast<u8>(g_settings.display_rotation) - 1) %
                                                    static_cast<u8>(DisplayRotation::Count)) :
                       static_cast<DisplayRotation>(static_cast<u8>(DisplayRotation::Count) - 1);
+                  System::PushGPUSettings();
                 }
               })
 

@@ -610,8 +610,11 @@ bool AndroidHost::IsPostProcessingActiveForTest(const std::string& section)
     [&section, &active]() {
       if (System::IsValid())
       {
-        active = (section == PostProcessing::Config::INTERNAL_CHAIN_SECTION) ? PostProcessing::InternalChain.IsActive() :
-                                                                               PostProcessing::DisplayChain.IsActive();
+        GPUThread::RunOnThreadAndWait([&section, &active]() {
+          active = (section == PostProcessing::Config::INTERNAL_CHAIN_SECTION) ?
+                     PostProcessing::InternalChain.IsActive() :
+                     PostProcessing::DisplayChain.IsActive();
+        });
       }
     },
     true);

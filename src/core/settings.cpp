@@ -27,6 +27,7 @@
 Log_SetChannel(Settings);
 
 Settings g_settings;
+Settings g_gpu_settings;
 
 const char* SettingInfo::StringDefaultValue() const
 {

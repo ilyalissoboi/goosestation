@@ -569,6 +569,10 @@ struct Settings
 
 extern Settings g_settings;
 
+/// The GPU thread's copy of the settings: what its renderer, presenter and post-processing read, never g_settings.
+/// Updated in order with the GPU thread's work by System::PushGPUSettings().
+extern Settings g_gpu_settings;
+
 namespace EmuFolders {
 extern std::string AppRoot;
 extern std::string DataRoot;

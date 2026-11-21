@@ -54,6 +54,10 @@ add_library(core
   gpu_backend.h
   gpu_commands.cpp
   gpu_hw.cpp
+  gpu_presenter.cpp
+  gpu_presenter.h
+  gpu_thread_commands.cpp
+  gpu_thread_commands.h
   gpu_hw.h
   gpu_hw_shadergen.cpp
   gpu_hw_shadergen.h

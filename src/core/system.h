@@ -342,6 +342,9 @@ void SetCheatList(std::unique_ptr<CheatList> cheats);
 /// Updates throttler.
 void UpdateSpeedLimiterState();
 
+/// Hands the GPU thread a copy of g_settings (g_gpu_settings), in order with the work already pushed.
+void PushGPUSettings();
+
 /// Toggles fast forward state.
 bool IsFastForwardEnabled();
 void SetFastForwardEnabled(bool enabled);

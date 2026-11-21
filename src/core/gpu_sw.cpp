@@ -5,6 +5,7 @@
 #include "system.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 
 #include "common/align.h"
 #include "common/assert.h"
@@ -16,11 +17,17 @@
 
 Log_SetChannel(GPU_SW);
 
+// The frame's texture, on the GPU thread.
+static std::unique_ptr<GPUTexture> s_upload_texture;
+
 GPU_SW::GPU_SW() = default;
 
 GPU_SW::~GPU_SW()
 {
-  g_gpu_device->RecycleTexture(std::move(m_upload_texture));
+  GPUThread::RunOnThreadAndWait([]() {
+    g_gpu_presenter->ClearDisplayTexture();
+    g_gpu_device->RecycleTexture(std::move(s_upload_texture));
+  });
   m_backend.Shutdown();
 }
 
@@ -43,22 +50,24 @@ bool GPU_SW::Initialize()
                                                          GPUTexture::Format::RGBA8, GPUTexture::Format::BGRA8};
   static constexpr const std::array formats_for_24bit = {GPUTexture::Format::RGBA8, GPUTexture::Format::BGRA8,
                                                          GPUTexture::Format::RGB565, GPUTexture::Format::RGBA5551};
-  for (const GPUTexture::Format format : formats_for_16bit)
-  {
-    if (g_gpu_device->SupportsTextureFormat(format))
+  GPUThread::RunOnThreadAndWait([this]() {
+    for (const GPUTexture::Format format : formats_for_16bit)
     {
-      m_16bit_display_format = format;
-      break;
+      if (g_gpu_device->SupportsTextureFormat(format))
+      {
+        m_16bit_display_format = format;
+        break;
+      }
     }
-  }
-  for (const GPUTexture::Format format : formats_for_24bit)
-  {
-    if (g_gpu_device->SupportsTextureFormat(format))
+    for (const GPUTexture::Format format : formats_for_24bit)
     {
-      m_24bit_display_format = format;
-      break;
+      if (g_gpu_device->SupportsTextureFormat(format))
+      {
+        m_24bit_display_format = format;
+        break;
+      }
     }
-  }
+  });
 
   return true;
 }
@@ -87,18 +96,18 @@ void GPU_SW::UpdateSettings(const Settings& old_settings)
 
 GPUTexture* GPU_SW::GetDisplayTexture(u32 width, u32 height, GPUTexture::Format format)
 {
-  if (!m_upload_texture || m_upload_texture->GetWidth() != width || m_upload_texture->GetHeight() != height ||
-      m_upload_texture->GetFormat() != format)
+  if (!s_upload_texture || s_upload_texture->GetWidth() != width || s_upload_texture->GetHeight() != height ||
+      s_upload_texture->GetFormat() != format)
   {
-    ClearDisplayTexture();
-    g_gpu_device->RecycleTexture(std::move(m_upload_texture));
-    m_upload_texture =
+    g_gpu_presenter->ClearDisplayTexture();
+    g_gpu_device->RecycleTexture(std::move(s_upload_texture));
+    s_upload_texture =
       g_gpu_device->FetchTexture(width, height, 1, 1, 1, GPUTexture::Type::DynamicTexture, format, nullptr, 0);
-    if (!m_upload_texture) [[unlikely]]
+    if (!s_upload_texture) [[unlikely]]
       ERROR_LOG("Failed to create {}x{} {} texture", width, height, static_cast<u32>(format));
   }
 
-  return m_upload_texture.get();
+  return s_upload_texture.get();
 }
 
 template<GPUTexture::Format out_format, typename out_type>
@@ -202,19 +211,12 @@ ALWAYS_INLINE void CopyOutRow16<GPUTexture::Format::BGRA8, u32>(const u16* src_p
 }
 
 template<GPUTexture::Format display_format>
-ALWAYS_INLINE_RELEASE bool GPU_SW::CopyOut15Bit(u32 src_x, u32 src_y, u32 width, u32 height, u32 line_skip)
+ALWAYS_INLINE_RELEASE void GPU_SW::CopyOut15Bit(u8* dst_ptr, u32 dst_stride, u32 src_x, u32 src_y, u32 width,
+                                                u32 height, u32 line_skip)
 {
   using OutputPixelType =
     std::conditional_t<display_format == GPUTexture::Format::RGBA8 || display_format == GPUTexture::Format::BGRA8, u32,
                        u16>;
-
-  GPUTexture* texture = GetDisplayTexture(width, height, display_format);
-  if (!texture) [[unlikely]]
-    return false;
-
-  u32 dst_stride = width * sizeof(OutputPixelType);
-  u8* dst_ptr = m_upload_buffer.data();
-  const bool mapped = texture->Map(reinterpret_cast<void**>(&dst_ptr), &dst_stride, 0, 0, width, height);
 
   // Fast path when not wrapping around.
   if ((src_x + width) <= VRAM_WIDTH && (src_y + height) <= VRAM_HEIGHT)
@@ -245,28 +247,15 @@ ALWAYS_INLINE_RELEASE bool GPU_SW::CopyOut15Bit(u32 src_x, u32 src_y, u32 width,
     }
   }
 
-  if (mapped)
-    texture->Unmap();
-  else
-    texture->Update(0, 0, width, height, m_upload_buffer.data(), dst_stride);
-
-  return true;
 }
 
 template<GPUTexture::Format display_format>
-ALWAYS_INLINE_RELEASE bool GPU_SW::CopyOut24Bit(u32 src_x, u32 src_y, u32 skip_x, u32 width, u32 height, u32 line_skip)
+ALWAYS_INLINE_RELEASE void GPU_SW::CopyOut24Bit(u8* dst_ptr, u32 dst_stride, u32 src_x, u32 src_y, u32 skip_x,
+                                                u32 width, u32 height, u32 line_skip)
 {
   using OutputPixelType =
     std::conditional_t<display_format == GPUTexture::Format::RGBA8 || display_format == GPUTexture::Format::BGRA8, u32,
                        u16>;
-
-  GPUTexture* texture = GetDisplayTexture(width, height, display_format);
-  if (!texture) [[unlikely]]
-    return false;
-
-  u32 dst_stride = Common::AlignUpPow2<u32>(width * sizeof(OutputPixelType), 4);
-  u8* dst_ptr = m_upload_buffer.data();
-  const bool mapped = texture->Map(reinterpret_cast<void**>(&dst_ptr), &dst_stride, 0, 0, width, height);
 
   if ((src_x + width) <= VRAM_WIDTH && (src_y + (height << line_skip)) <= VRAM_HEIGHT)
   {
@@ -366,15 +355,10 @@ ALWAYS_INLINE_RELEASE bool GPU_SW::CopyOut24Bit(u32 src_x, u32 src_y, u32 skip_x
     }
   }
 
-  if (mapped)
-    texture->Unmap();
-  else
-    texture->Update(0, 0, width, height, m_upload_buffer.data(), dst_stride);
-
-  return true;
 }
 
-bool GPU_SW::CopyOut(u32 src_x, u32 src_y, u32 skip_x, u32 width, u32 height, u32 line_skip, bool is_24bit)
+void GPU_SW::CopyOut(u8* dst, u32 dst_stride, u32 src_x, u32 src_y, u32 skip_x, u32 width, u32 height, u32 line_skip,
+                     bool is_24bit)
 {
   if (!is_24bit)
   {
@@ -383,16 +367,16 @@ bool GPU_SW::CopyOut(u32 src_x, u32 src_y, u32 skip_x, u32 width, u32 height, u3
     switch (m_16bit_display_format)
     {
       case GPUTexture::Format::RGBA5551:
-        return CopyOut15Bit<GPUTexture::Format::RGBA5551>(src_x, src_y, width, height, line_skip);
+        return CopyOut15Bit<GPUTexture::Format::RGBA5551>(dst, dst_stride, src_x, src_y, width, height, line_skip);
 
       case GPUTexture::Format::RGB565:
-        return CopyOut15Bit<GPUTexture::Format::RGB565>(src_x, src_y, width, height, line_skip);
+        return CopyOut15Bit<GPUTexture::Format::RGB565>(dst, dst_stride, src_x, src_y, width, height, line_skip);
 
       case GPUTexture::Format::RGBA8:
-        return CopyOut15Bit<GPUTexture::Format::RGBA8>(src_x, src_y, width, height, line_skip);
+        return CopyOut15Bit<GPUTexture::Format::RGBA8>(dst, dst_stride, src_x, src_y, width, height, line_skip);
 
       case GPUTexture::Format::BGRA8:
-        return CopyOut15Bit<GPUTexture::Format::BGRA8>(src_x, src_y, width, height, line_skip);
+        return CopyOut15Bit<GPUTexture::Format::BGRA8>(dst, dst_stride, src_x, src_y, width, height, line_skip);
 
       default:
         UnreachableCode();
@@ -403,16 +387,16 @@ bool GPU_SW::CopyOut(u32 src_x, u32 src_y, u32 skip_x, u32 width, u32 height, u3
     switch (m_24bit_display_format)
     {
       case GPUTexture::Format::RGBA5551:
-        return CopyOut24Bit<GPUTexture::Format::RGBA5551>(src_x, src_y, skip_x, width, height, line_skip);
+        return CopyOut24Bit<GPUTexture::Format::RGBA5551>(dst, dst_stride, src_x, src_y, skip_x, width, height, line_skip);
 
       case GPUTexture::Format::RGB565:
-        return CopyOut24Bit<GPUTexture::Format::RGB565>(src_x, src_y, skip_x, width, height, line_skip);
+        return CopyOut24Bit<GPUTexture::Format::RGB565>(dst, dst_stride, src_x, src_y, skip_x, width, height, line_skip);
 
       case GPUTexture::Format::RGBA8:
-        return CopyOut24Bit<GPUTexture::Format::RGBA8>(src_x, src_y, skip_x, width, height, line_skip);
+        return CopyOut24Bit<GPUTexture::Format::RGBA8>(dst, dst_stride, src_x, src_y, skip_x, width, height, line_skip);
 
       case GPUTexture::Format::BGRA8:
-        return CopyOut24Bit<GPUTexture::Format::BGRA8>(src_x, src_y, skip_x, width, height, line_skip);
+        return CopyOut24Bit<GPUTexture::Format::BGRA8>(dst, dst_stride, src_x, src_y, skip_x, width, height, line_skip);
 
       default:
         UnreachableCode();
@@ -420,16 +404,43 @@ bool GPU_SW::CopyOut(u32 src_x, u32 src_y, u32 skip_x, u32 width, u32 height, u3
   }
 }
 
+u32 GPU_SW::GetCopyOutStride(u32 width, bool is_24bit) const
+{
+  const GPUTexture::Format format = is_24bit ? m_24bit_display_format : m_16bit_display_format;
+  const u32 pixel_size = (format == GPUTexture::Format::RGBA8 || format == GPUTexture::Format::BGRA8) ? 4 : 2;
+  return is_24bit ? Common::AlignUpPow2<u32>(width * pixel_size, 4) : (width * pixel_size);
+}
+
+void GPU_SW::PushDisplay(GPUThreadUpdateSWDisplayCommand::Mode mode, u32 src_x, u32 src_y, u32 skip_x, u32 width,
+                         u32 height, u32 line_skip, bool is_24bit, u8 field, bool chroma_smoothing)
+{
+  const u32 stride = (mode == GPUThreadUpdateSWDisplayCommand::MODE_CLEAR) ? 0 : GetCopyOutStride(width, is_24bit);
+  GPUThreadUpdateSWDisplayCommand* cmd = static_cast<GPUThreadUpdateSWDisplayCommand*>(
+    GPUThread::AllocateCommand(static_cast<u8>(GPUThreadCommandType::UpdateSWDisplay),
+                               sizeof(GPUThreadUpdateSWDisplayCommand) + stride * height));
+  cmd->width = static_cast<u16>(width);
+  cmd->height = static_cast<u16>(height);
+  cmd->stride = stride;
+  cmd->format = is_24bit ? m_24bit_display_format : m_16bit_display_format;
+  cmd->mode = mode;
+  cmd->field = field;
+  cmd->chroma_smoothing = chroma_smoothing;
+  if (stride > 0)
+    CopyOut(cmd->pixels, stride, src_x, src_y, skip_x, width, height, line_skip, is_24bit);
+  GPUThread::PushCommand(cmd);
+}
+
 void GPU_SW::UpdateDisplay()
 {
   // fill display texture
   m_backend.Sync(true);
 
+  using Command = GPUThreadUpdateSWDisplayCommand;
   if (!g_settings.debugging.show_vram)
   {
     if (IsDisplayDisabled())
     {
-      ClearDisplayTexture();
+      PushDisplay(Command::MODE_CLEAR, 0, 0, 0, 0, 0, 0, false, 0, false);
       return;
     }
 
@@ -442,38 +453,48 @@ void GPU_SW::UpdateDisplay()
     const u32 skip_x = is_24bit ? (m_crtc_state.display_vram_left - m_crtc_state.regs.X) : 0;
     const u32 read_width = m_crtc_state.display_vram_width;
     const u32 read_height = interlaced ? (m_crtc_state.display_vram_height / 2) : m_crtc_state.display_vram_height;
+    const bool chroma_smoothing = is_24bit && g_settings.display_24bit_chroma_smoothing;
 
-    if (IsInterlacedDisplayEnabled())
+    if (interlaced)
     {
       const u32 line_skip = m_GPUSTAT.vertical_resolution;
-      if (CopyOut(vram_offset_x, vram_offset_y, skip_x, read_width, read_height, line_skip, is_24bit))
-      {
-        SetDisplayTexture(m_upload_texture.get(), nullptr, 0, 0, read_width, read_height);
-        if (is_24bit && g_settings.display_24bit_chroma_smoothing)
-        {
-          if (ApplyChromaSmoothing())
-            Deinterlace(field, 0);
-        }
-        else
-        {
-          Deinterlace(field, 0);
-        }
-      }
+      PushDisplay(Command::MODE_INTERLACED, vram_offset_x, vram_offset_y, skip_x, read_width, read_height, line_skip,
+                  is_24bit, static_cast<u8>(field), chroma_smoothing);
     }
     else
     {
-      if (CopyOut(vram_offset_x, vram_offset_y, skip_x, read_width, read_height, 0, is_24bit))
-      {
-        SetDisplayTexture(m_upload_texture.get(), nullptr, 0, 0, read_width, read_height);
-        if (is_24bit && g_settings.display_24bit_chroma_smoothing)
-          ApplyChromaSmoothing();
-      }
+      PushDisplay(Command::MODE_PROGRESSIVE, vram_offset_x, vram_offset_y, skip_x, read_width, read_height, 0,
+                  is_24bit, 0, chroma_smoothing);
     }
   }
   else
   {
-    if (CopyOut(0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT, 0, false))
-      SetDisplayTexture(m_upload_texture.get(), nullptr, 0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+    PushDisplay(Command::MODE_VRAM, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT, 0, false, 0, false);
+  }
+}
+
+void GPU_SW::UpdateDisplayOnGPUThread(const GPUThreadUpdateSWDisplayCommand* cmd)
+{
+  using Command = GPUThreadUpdateSWDisplayCommand;
+  if (cmd->mode == Command::MODE_CLEAR)
+  {
+    g_gpu_presenter->ClearDisplayTexture();
+    return;
+  }
+
+  GPUTexture* const texture = GetDisplayTexture(cmd->width, cmd->height, cmd->format);
+  if (!texture || !texture->Update(0, 0, cmd->width, cmd->height, cmd->pixels, cmd->stride)) [[unlikely]]
+    return;
+
+  g_gpu_presenter->SetDisplayTexture(texture, nullptr, 0, 0, cmd->width, cmd->height);
+  if (cmd->mode == Command::MODE_INTERLACED)
+  {
+    if (!cmd->chroma_smoothing || g_gpu_presenter->ApplyChromaSmoothing())
+      g_gpu_presenter->Deinterlace(cmd->field, 0);
+  }
+  else if (cmd->mode == Command::MODE_PROGRESSIVE && cmd->chroma_smoothing)
+  {
+    g_gpu_presenter->ApplyChromaSmoothing();
   }
 }
 

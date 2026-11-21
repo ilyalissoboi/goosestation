@@ -1341,7 +1341,7 @@ void EmuThread::reloadPostProcessingShaders()
   }
 
   if (System::IsValid())
-    PostProcessing::ReloadShaders();
+    GPUThread::RunOnThread([]() { PostProcessing::ReloadShaders(); });
 }
 
 void EmuThread::updatePostProcessingSettings()
@@ -1353,7 +1353,7 @@ void EmuThread::updatePostProcessingSettings()
   }
 
   if (System::IsValid())
-    PostProcessing::UpdateSettings();
+    GPUThread::RunOnThread(&PostProcessing::UpdateSettings);
 }
 
 void EmuThread::clearInputBindStateFromSource(InputBindingKey key)

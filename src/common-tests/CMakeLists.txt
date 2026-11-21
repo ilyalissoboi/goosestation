@@ -55,6 +55,7 @@ add_executable(common-tests
   gpu_thread_queue_tests.cpp
   gpu_thread_tests.cpp
   imgui_draw_copy_tests.cpp
+  gpu_presenter_tests.cpp
   texture_cache_reference_tests.cpp
   settings_texture_cache_tests.cpp
   ../util/text_input.cpp

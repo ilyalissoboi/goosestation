@@ -16,6 +16,7 @@
 #include "game_database.h"
 #include "game_list.h"
 #include "gpu.h"
+#include "gpu_thread_commands.h"
 #include "gte.h"
 #include "host.h"
 #include "host_interface_progress_callback.h"
@@ -513,6 +514,7 @@ bool System::Internal::CPUThreadInitialize(Error* error)
     Error::SetStringView(error, "Failed to start the GPU thread.");
     return false;
   }
+  GPUThread::SetCommandHandler(&GPUThreadCommands::Handle);
 
   LogStartupInformation();
 
@@ -1214,7 +1216,7 @@ bool System::RecreateGPU(GPURenderer renderer, bool force_recreate_device, bool 
   g_gpu.reset();
   if (force_recreate_device)
   {
-    PostProcessing::Shutdown();
+    GPUThread::RunOnThreadAndWait(&PostProcessing::Shutdown);
     Host::ReleaseGPUDevice();
   }
 
@@ -1963,7 +1965,7 @@ bool System::Initialize(bool force_software_renderer, Error* error)
   MDEC::Initialize();
   SIO::Initialize();
   PCDrv::Initialize();
-  PostProcessing::Initialize();
+  GPUThread::RunOnThreadAndWait(&PostProcessing::Initialize);
 
   s_cpu_thread_handle = Threading::ThreadHandle::GetForCallingThread();
 
@@ -1991,7 +1993,7 @@ void System::DestroySystem()
 
   Host::ClearOSDMessages();
 
-  PostProcessing::Shutdown();
+  GPUThread::RunOnThreadAndWait(&PostProcessing::Shutdown);
 
   SaveStateSelectorUI::Clear();
   FullscreenUI::OnSystemDestroyed();
@@ -2393,7 +2395,7 @@ bool System::CreateGPU(GPURenderer renderer, bool is_switching, Error* error)
     {
       WARNING_LOG("Recreating GPU device, expecting {} got {}", GPUDevice::RenderAPIToString(api),
                   GPUDevice::RenderAPIToString(device_info.render_api));
-      PostProcessing::Shutdown();
+      GPUThread::RunOnThreadAndWait(&PostProcessing::Shutdown);
     }
 
     Host::ReleaseGPUDevice();
@@ -2421,9 +2423,10 @@ bool System::CreateGPU(GPURenderer renderer, bool is_switching, Error* error)
     }
 
     if (is_switching)
-      PostProcessing::Initialize();
+      GPUThread::RunOnThreadAndWait(&PostProcessing::Initialize);
   }
 
+  PushGPUSettings();
   if (renderer == GPURenderer::Software)
     g_gpu = GPU::CreateSoftwareRenderer();
   else
@@ -2444,7 +2447,7 @@ bool System::CreateGPU(GPURenderer renderer, bool is_switching, Error* error)
       ERROR_LOG("Failed to create fallback software renderer.");
       if (!s_keep_gpu_device_on_shutdown)
       {
-        PostProcessing::Shutdown();
+        GPUThread::RunOnThreadAndWait(&PostProcessing::Shutdown);
         Host::ReleaseGPUDevice();
         Host::ReleaseRenderWindow();
       }
@@ -4330,8 +4333,16 @@ void System::SetCheatList(std::unique_ptr<CheatList> cheats)
   }
 }
 
+void System::PushGPUSettings()
+{
+  GPUThread::RunOnThread([settings = g_settings]() { g_gpu_settings = settings; });
+}
+
 void System::CheckForSettingsChanges(const Settings& old_settings)
 {
+  // Display settings (alignment, rotation, stretch) are read by the presenter without anything else changing.
+  PushGPUSettings();
+
   if (IsValid() &&
       (g_settings.gpu_renderer != old_settings.gpu_renderer ||
        g_settings.gpu_use_debug_device != old_settings.gpu_use_debug_device ||
@@ -4568,7 +4579,7 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
         PlatformMisc::ResumeScreensaver();
     }
 
-    PostProcessing::UpdateSettings();
+    GPUThread::RunOnThreadAndWait(&PostProcessing::UpdateSettings);
 
 #ifdef ENABLE_GDB_SERVER
     if (g_settings.debugging.enable_gdb_server != old_settings.debugging.enable_gdb_server ||
@@ -5303,7 +5314,7 @@ bool System::StartMediaCapture(std::string path, bool capture_video, bool captur
       "MediaCapture", ICON_FA_EXCLAMATION_TRIANGLE,
       fmt::format(TRANSLATE_FS("System", "Failed to create media capture: {0}"), error.GetDescription()),
       Host::OSD_ERROR_DURATION);
-    s_media_capture.reset();
+    GPUThread::RunOnThreadAndWait([]() { s_media_capture.reset(); });
     Host::OnMediaCaptureStopped();
     return false;
   }
@@ -5327,8 +5338,11 @@ void System::StopMediaCapture()
   const bool was_capturing_audio = s_media_capture->IsCapturingAudio();
   const bool was_capturing_video = s_media_capture->IsCapturingVideo();
 
+  // Its frames' textures are the GPU thread's: they're freed there.
   Error error;
-  if (s_media_capture->EndCapture(&error))
+  bool ended = false;
+  GPUThread::RunOnThreadAndWait([&error, &ended]() { ended = s_media_capture->EndCapture(&error); });
+  if (ended)
   {
     Host::AddIconOSDMessage("MediaCapture", ICON_FA_CAMERA,
                             fmt::format(TRANSLATE_FS("System", "Stopped {0} to '{1}'."),
@@ -5345,7 +5359,7 @@ void System::StopMediaCapture()
                   error.GetDescription()),
       Host::OSD_INFO_DURATION);
   }
-  s_media_capture.reset();
+  GPUThread::RunOnThreadAndWait([]() { s_media_capture.reset(); });
 
   Host::OnMediaCaptureStopped();
 }

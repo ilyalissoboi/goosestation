@@ -13,10 +13,17 @@ import androidx.test.platform.app.InstrumentationRegistry
 object TestRenderer {
     const val ARGUMENT = "gooseRenderer"
 
-    /** Writes the argument's renderer as `[GPU] Renderer` and applies it, if there is one: just before a game boots. */
+    /** `true` or `false`: the GPU thread, as `[GPU] UseGPUThread`; the full tier runs the game classes again without. */
+    const val GPU_THREAD_ARGUMENT = "gooseGPUThread"
+
+    /** Writes the arguments' renderer and GPU thread, if given, and applies them: just before a game boots. */
     fun apply() {
-        val renderer = InstrumentationRegistry.getArguments().getString(ARGUMENT) ?: return
-        NativeLibrary.setStringSetting("GPU", "Renderer", renderer)
+        val arguments = InstrumentationRegistry.getArguments()
+        val renderer = arguments.getString(ARGUMENT)
+        val gpuThread = arguments.getString(GPU_THREAD_ARGUMENT)
+        if (renderer == null && gpuThread == null) return
+        renderer?.let { NativeLibrary.setStringSetting("GPU", "Renderer", it) }
+        gpuThread?.let { NativeLibrary.setBoolSetting("GPU", "UseGPUThread", it.toBoolean()) }
         NativeLibrary.applySettings()
     }
 }

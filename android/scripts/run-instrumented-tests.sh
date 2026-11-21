@@ -15,7 +15,8 @@
 # can't run the core's OpenGL ES renderer, so goose-test-2 (emulator-5582) is restarted with SwiftShader for it, and
 # the tests write [GPU] Renderer = OpenGL (the gooseRenderer argument) before each boot. The part fails unless the
 # log says an OpenGL ES context was created, and never a Vulkan device. goose-test-2 is back on the host's GPU after,
-# however the part ended; the run fails if it isn't.
+# however the part ended; the run fails if it isn't. Before that, the same classes run once more on the first emulator
+# with the GPU thread off (the gooseGPUThread argument, [GPU] UseGPUThread = false), as the off switch still runs.
 #
 # One run at a time on this machine: a run takes the lock /tmp/goose-test-emulators.lock (GOOSE_TEST_LOCK) before it
 # asks the emulators anything, and a second waits for it, saying who holds it. Each step has a time limit (a Gradle
@@ -230,6 +231,20 @@ run_gles() {
 	return $failed
 }
 
+# The classes that boot a game, again, with the GPU thread off, on the first emulator (unsharded).
+run_gpu_thread_off() {
+	local start=$SECONDS result=0 serial="${SERIALS[0]}" log="$LOGS/goose-tests-gputhreadoff.log"
+	with_limit 2700 env ANDROID_SERIAL="$serial" ./gradlew connectedDebugAndroidTest \
+		"$RUNNER_ARGS.annotation=io.github.ilyalissoboi.goosestation.core.BootsGames" \
+		"$RUNNER_ARGS.gooseGPUThread=false" -Pgoose.testResults=gputhreadoff >"$log" 2>&1 || result=$?
+	case $result in
+	0) echo "GPU thread off ($serial): done in $((SECONDS - start)) s" ;;
+	124) echo "GPU thread off ($serial): timed out after $((SECONDS - start)) s (see $log)" ;;
+	*) echo "GPU thread off ($serial): failed after $((SECONDS - start)) s (see $log)" ;;
+	esac
+	[ "$result" -eq 0 ]
+}
+
 # goose-test-2 back on the host's GPU for the next run, however run_gles ended. False, saying so, if it isn't:
 # start-test-emulators.sh falls back to SwiftShader when the host's GPU doesn't boot, which would leave the next run's
 # Vulkan shard on it.
@@ -253,7 +268,7 @@ status=0
 PARTS=()
 if want tests; then
 echo "Running the $TIER tests on ${SERIALS[*]}."
-rm -rf "$RESULTS"/shard* "$RESULTS"/gles
+rm -rf "$RESULTS"/shard* "$RESULTS"/gles "$RESULTS"/gputhreadoff
 pids=()
 for shard in "${!SERIALS[@]}"; do
 	run_shard "$shard" "${SERIALS[$shard]}" &
@@ -271,6 +286,8 @@ done
 
 # full: the classes that boot a game, again, under OpenGL ES on SwiftShader, then goose-test-2 back as it was.
 if [ "$TIER" = full ]; then
+	PARTS+=(gputhreadoff)
+	run_gpu_thread_off || status=1
 	PARTS+=(gles)
 	run_gles || status=1
 	restore_gles || status=1

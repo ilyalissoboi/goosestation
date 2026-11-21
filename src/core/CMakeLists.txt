@@ -112,6 +112,7 @@ add_library(core
   negcon_rumble.h
   pad.cpp
   pad.h
+  performance_counters_math.h
   pcdrv.cpp
   pcdrv.h
   pine_server.cpp

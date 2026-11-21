@@ -176,6 +176,7 @@
     <ClInclude Include="negcon.h" />
     <ClInclude Include="negcon_rumble.h" />
     <ClInclude Include="pad.h" />
+    <ClInclude Include="performance_counters_math.h" />
     <ClInclude Include="controller.h" />
     <ClInclude Include="pcdrv.h" />
     <ClInclude Include="pch.h" />

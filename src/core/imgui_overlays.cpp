@@ -376,6 +376,13 @@ void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, float 
         DRAW_LINE(fixed_font, text, IM_COL32(255, 255, 255, 255));
       }
 
+      if (GPUThread::GetThread())
+      {
+        text.assign("GPU Thread: ");
+        FormatProcessorStat(text, System::GetGPUThreadUsage(), System::GetGPUThreadAverageTime());
+        DRAW_LINE(fixed_font, text, IM_COL32(255, 255, 255, 255));
+      }
+
 #ifndef __ANDROID__
       if (MediaCapture* cap = System::GetMediaCapture())
       {
@@ -386,7 +393,7 @@ void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, float 
 #endif
     }
 
-    if (g_settings.display_show_gpu_usage && GPUThread::GetDeviceInfo().gpu_timing)
+    if (g_settings.display_show_gpu_usage && GPUThread::GetDeviceInfo().gpu_timing && System::IsGPUTimePlausible())
     {
       text.assign("GPU: ");
       FormatProcessorStat(text, System::GetGPUUsage(), System::GetGPUAverageTime());

@@ -12,6 +12,7 @@
 
 #include "common/assert.h"
 
+#include <atomic>
 #include <mutex>
 
 namespace GPUThreadCommands {
@@ -24,6 +25,12 @@ static u32 s_gpu_time_presents = 0;
 
 // Whether the last present began, for the explicit present's submit.
 static bool s_last_present_done = false;
+
+// Input latency and the last frame's active time, from the GPU thread's presents.
+static std::mutex s_latency_mutex;
+static double s_latency_total_ms = 0.0;
+static u32 s_latency_frames = 0;
+static std::atomic<Common::Timer::Value> s_last_present_active_time{0};
 } // namespace GPUThreadCommands
 
 void GPUThreadCommands::Handle(const GPUThreadCommand* cmd)
@@ -89,15 +96,28 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
   }
 
   s_last_present_done = do_present;
+
+  const Common::Timer::Value now = Common::Timer::GetCurrentValue();
+  if (do_present && cmd->input_poll_time != 0)
+  {
+    std::unique_lock lock(s_latency_mutex);
+    s_latency_total_ms += Common::Timer::ConvertValueToMilliseconds(now - cmd->input_poll_time);
+    s_latency_frames++;
+  }
+  if (cmd->frame_start_time != 0)
+    s_last_present_active_time.store(now - cmd->frame_start_time, std::memory_order_relaxed);
+
   GPUThread::FramePresented();
 }
 
 void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
-                                    bool show_display, bool skip_present, bool explicit_present)
+                                    Common::Timer::Value frame_start_time, bool show_display, bool skip_present,
+                                    bool explicit_present)
 {
   GPUThreadPresentCommand* cmd = Allocate<GPUThreadPresentCommand>(GPUThreadCommandType::Present);
   cmd->ui = ui.release();
   cmd->input_poll_time = input_poll_time;
+  cmd->frame_start_time = frame_start_time;
   cmd->show_display = show_display;
   cmd->skip_present = skip_present;
   cmd->explicit_present = explicit_present;
@@ -117,4 +137,18 @@ void GPUThreadCommands::GetAndResetGPUTime(float* time_ms, u32* presents)
   *presents = s_gpu_time_presents;
   s_gpu_time_ms = 0.0f;
   s_gpu_time_presents = 0;
+}
+
+void GPUThreadCommands::GetAndResetInputLatency(double* total_ms, u32* frames)
+{
+  std::unique_lock lock(s_latency_mutex);
+  *total_ms = s_latency_total_ms;
+  *frames = s_latency_frames;
+  s_latency_total_ms = 0.0;
+  s_latency_frames = 0;
+}
+
+Common::Timer::Value GPUThreadCommands::GetLastPresentActiveTime()
+{
+  return s_last_present_active_time.load(std::memory_order_relaxed);
 }

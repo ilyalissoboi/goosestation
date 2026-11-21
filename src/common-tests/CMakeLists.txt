@@ -59,6 +59,7 @@ add_executable(common-tests
   texture_cache_reference_tests.cpp
   settings_texture_cache_tests.cpp
   settings_gpu_thread_tests.cpp
+  performance_counters_math_tests.cpp
   ../util/text_input.cpp
 )
 

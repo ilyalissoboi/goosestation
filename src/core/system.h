@@ -233,6 +233,14 @@ float GetCPUThreadUsage();
 float GetCPUThreadAverageTime();
 float GetSWThreadUsage();
 float GetSWThreadAverageTime();
+float GetGPUThreadUsage();
+float GetGPUThreadAverageTime();
+
+/// Input polled to its frame's present finished, the last second's mean, ms (0 without presents).
+float GetInputLatency();
+
+/// False while the GPU's timer queries give times no GPU could have measured: GPU % is then not shown.
+bool IsGPUTimePlausible();
 float GetGPUUsage();
 float GetGPUAverageTime();
 const FrameTimeHistory& GetFrameTimeHistory();

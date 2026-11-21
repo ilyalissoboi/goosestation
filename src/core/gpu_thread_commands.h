@@ -172,7 +172,8 @@ struct GPUThreadHWUpdateDisplayCommand : public GPUThreadCommand
 struct GPUThreadPresentCommand : public GPUThreadCommand
 {
   ImGuiDrawCopy* ui;                 // owned by the command
-  Common::Timer::Value input_poll_time; // when the input the frame read was polled
+  Common::Timer::Value input_poll_time;  // when the input the frame read was polled
+  Common::Timer::Value frame_start_time; // when the frame's emulation started
   bool show_display;                 // the game's display under the UI; else the UI alone
   bool skip_present;                 // BeginPresent(skip) without the display
   bool explicit_present;             // optimal pacing: submitted by the SubmitPresent that follows
@@ -184,14 +185,21 @@ namespace GPUThreadCommands {
 void Handle(const GPUThreadCommand* cmd);
 
 /// Pushes a present (and counts it with GPUThread::FramePushed()).
-void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time, bool show_display,
-                 bool skip_present, bool explicit_present);
+void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
+                 Common::Timer::Value frame_start_time, bool show_display, bool skip_present, bool explicit_present);
 
 /// Pushes the submit of an explicit present, after the throttle.
 void PushSubmitPresent();
 
 /// The GPU time the GPU thread's presents measured since the last call, and how many presents it took.
 void GetAndResetGPUTime(float* time_ms, u32* presents);
+
+/// Input latency since the last call: the time from each presented frame's input poll until its present finished,
+/// summed, and how many frames.
+void GetAndResetInputLatency(double* total_ms, u32* frames);
+
+/// From the start of the last presented frame until its present finished (the pre-frame sleep's active time).
+Common::Timer::Value GetLastPresentActiveTime();
 
 /// A command of type and size (header included), its header filled, for GPUThread::PushCommand().
 template<typename T>

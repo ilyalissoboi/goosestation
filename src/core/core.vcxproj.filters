@@ -101,6 +101,7 @@
     <ClInclude Include="cdrom.h" />
     <ClInclude Include="gte.h" />
     <ClInclude Include="pad.h" />
+    <ClInclude Include="performance_counters_math.h" />
     <ClInclude Include="digital_controller.h" />
     <ClInclude Include="timers.h" />
     <ClInclude Include="spu.h" />

@@ -17,6 +17,7 @@
 #include "game_list.h"
 #include "gpu.h"
 #include "gpu_thread_commands.h"
+#include "performance_counters_math.h"
 #include "gte.h"
 #include "host.h"
 #include "host_interface_progress_callback.h"
@@ -315,6 +316,10 @@ static float s_cpu_thread_usage = 0.0f;
 static float s_cpu_thread_time = 0.0f;
 static float s_sw_thread_usage = 0.0f;
 static float s_sw_thread_time = 0.0f;
+static float s_gpu_thread_usage = 0.0f;
+static float s_gpu_thread_time = 0.0f;
+static float s_input_latency = 0.0f; // input polled to present finished, the second's mean, ms
+static bool s_gpu_time_plausible = true;
 static float s_average_gpu_time = 0.0f;
 static float s_accumulated_gpu_time = 0.0f;
 static float s_gpu_usage = 0.0f;
@@ -325,6 +330,7 @@ static u32 s_last_internal_frame_number = 0;
 static GlobalTicks s_last_global_tick_counter = 0;
 static u64 s_last_cpu_time = 0;
 static u64 s_last_sw_time = 0;
+static u64 s_last_gpu_thread_time = 0;
 static u32 s_presents_since_last_update = 0;
 static Common::Timer s_fps_timer;
 static Common::Timer s_frame_timer;
@@ -802,6 +808,22 @@ float System::GetSWThreadUsage()
 float System::GetSWThreadAverageTime()
 {
   return s_sw_thread_time;
+}
+float System::GetGPUThreadUsage()
+{
+  return s_gpu_thread_usage;
+}
+float System::GetGPUThreadAverageTime()
+{
+  return s_gpu_thread_time;
+}
+float System::GetInputLatency()
+{
+  return s_input_latency;
+}
+bool System::IsGPUTimePlausible()
+{
+  return s_gpu_time_plausible;
 }
 float System::GetGPUUsage()
 {
@@ -1911,6 +1933,9 @@ bool System::Initialize(bool force_software_renderer, Error* error)
   s_cpu_thread_time = 0.0f;
   s_sw_thread_usage = 0.0f;
   s_sw_thread_time = 0.0f;
+  s_gpu_thread_usage = 0.0f;
+  s_gpu_thread_time = 0.0f;
+  s_input_latency = 0.0f;
   s_average_gpu_time = 0.0f;
   s_accumulated_gpu_time = 0.0f;
   s_gpu_usage = 0.0f;
@@ -2212,7 +2237,11 @@ void System::FrameDone()
 
   // pre-frame sleep accounting (input lag reduction)
   const Common::Timer::Value pre_frame_sleep_until = s_next_frame_time + s_pre_frame_sleep_time;
+  // With a GPU thread, until the present finished: its tail of the last frame runs past this thread's own work.
+  // Without one, as before (the present follows on this thread, outside the frame's active time).
   s_last_active_frame_time = current_time - s_frame_start_time;
+  if (GPUThread::IsUsingThread())
+    s_last_active_frame_time = std::max(s_last_active_frame_time, GPUThreadCommands::GetLastPresentActiveTime());
   if (s_pre_frame_sleep)
     AccumulatePreFrameSleepTime();
 
@@ -3384,6 +3413,20 @@ void System::UpdatePerformanceCounters()
 
   s_cpu_thread_usage = static_cast<float>(static_cast<double>(cpu_delta) * pct_divider);
   s_cpu_thread_time = static_cast<float>(static_cast<double>(cpu_delta) * time_divider);
+  // The GPU thread counted apart, as the software renderer's is; a thread started since begins its count again.
+  const Threading::Thread* gpu_thread = GPUThread::GetThread();
+  const u64 gpu_thread_time = gpu_thread ? gpu_thread->GetCPUTime() : 0;
+  const u64 gpu_thread_delta =
+    (gpu_thread_time >= s_last_gpu_thread_time) ? (gpu_thread_time - s_last_gpu_thread_time) : gpu_thread_time;
+  s_last_gpu_thread_time = gpu_thread_time;
+  s_gpu_thread_usage = static_cast<float>(static_cast<double>(gpu_thread_delta) * pct_divider);
+  s_gpu_thread_time = static_cast<float>(static_cast<double>(gpu_thread_delta) * time_divider);
+
+  double latency_total_ms;
+  u32 latency_frames;
+  GPUThreadCommands::GetAndResetInputLatency(&latency_total_ms, &latency_frames);
+  s_input_latency = (latency_frames > 0) ? static_cast<float>(latency_total_ms / latency_frames) : 0.0f;
+
   s_sw_thread_usage = static_cast<float>(static_cast<double>(sw_delta) * pct_divider);
   s_sw_thread_time = static_cast<float>(static_cast<double>(sw_delta) * time_divider);
 
@@ -3393,7 +3436,8 @@ void System::UpdatePerformanceCounters()
   s_fps_timer.ResetTo(now_ticks);
 
   GPUThreadCommands::GetAndResetGPUTime(&s_accumulated_gpu_time, &s_presents_since_last_update);
-  if (GPUThread::GetDeviceInfo().gpu_timing)
+  s_gpu_time_plausible = PerformanceCountersMath::IsPlausibleGPUTime(s_accumulated_gpu_time, time * 1000.0f);
+  if (GPUThread::GetDeviceInfo().gpu_timing && s_gpu_time_plausible)
   {
     s_average_gpu_time = s_accumulated_gpu_time / static_cast<float>(std::max(s_presents_since_last_update, 1u));
     s_gpu_usage = s_accumulated_gpu_time / (time * 10.0f);
@@ -3407,8 +3451,12 @@ void System::UpdatePerformanceCounters()
   if (s_pre_frame_sleep)
     UpdatePreFrameSleepTime();
 
-  VERBOSE_LOG("FPS: {:.2f} VPS: {:.2f} CPU: {:.2f} GPU: {:.2f} Average: {:.2f}ms Min: {:.2f}ms Max: {:.2f}ms", s_fps,
-              s_vps, s_cpu_thread_usage, s_gpu_usage, s_average_frame_time, s_minimum_frame_time, s_maximum_frame_time);
+  // The GPU thread's figures go last, so the fields before keep their places for what reads them.
+  VERBOSE_LOG("FPS: {:.2f} VPS: {:.2f} CPU: {:.2f} GPU: {} Average: {:.2f}ms Min: {:.2f}ms Max: {:.2f}ms GPUThread: "
+              "{:.2f} Lat: {:.2f}ms",
+              s_fps, s_vps, s_cpu_thread_usage,
+              s_gpu_time_plausible ? TinyString::from_format("{:.2f}", s_gpu_usage) : TinyString("-"),
+              s_average_frame_time, s_minimum_frame_time, s_maximum_frame_time, s_gpu_thread_usage, s_input_latency);
 
   Host::OnPerformanceCountersUpdated();
 }
@@ -3423,6 +3471,10 @@ void System::ResetPerformanceCounters()
     s_last_sw_time = sw_thread->GetCPUTime();
   else
     s_last_sw_time = 0;
+  if (const Threading::Thread* gpu_thread = GPUThread::GetThread(); gpu_thread)
+    s_last_gpu_thread_time = gpu_thread->GetCPUTime();
+  else
+    s_last_gpu_thread_time = 0;
 
   s_average_frame_time_accumulator = 0.0f;
   s_minimum_frame_time_accumulator = 0.0f;
@@ -5879,8 +5931,8 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
   if (show_display)
     g_gpu->PrepareToPresent();
 
-  GPUThreadCommands::PushPresent(ImGuiDrawCopy::Capture(*ImGui::GetDrawData()), s_input_poll_time, show_display,
-                                 skip_present, explicit_present);
+  GPUThreadCommands::PushPresent(ImGuiDrawCopy::Capture(*ImGui::GetDrawData()), s_input_poll_time,
+                                 s_frame_start_time, show_display, skip_present, explicit_present);
 
   ImGuiManager::NewFrame();
 

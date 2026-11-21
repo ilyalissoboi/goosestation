@@ -130,6 +130,27 @@ class GPUThreadTest {
             }
         }
 
+    // Optimal frame pacing on Vulkan: each present begins, the throttle sleeps, then it's submitted. The surface taken
+    // away, given back or resized in between leaves the game drawing.
+    @Test
+    fun surfaceChangesBetweenAPresentAndItsSubmitKeepDrawing() =
+        FrameReader(640, 480).use { frames ->
+            withSurface(frames) {
+                NativeLibrary.setStringSetting("GPU", "Renderer", "Vulkan")
+                NativeLibrary.setBoolSetting("Display", "OptimalFramePacing", true)
+                val before = boot(frames, gpuThread = true)
+                repeat(20) { i ->
+                    NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
+                    Thread.sleep((i % 4).toLong() * 5)
+                    NativeLibrary.surfaceChanged(frames.surface, 640, 480, 1f, 60f)
+                    Thread.sleep((i % 3).toLong() * 7)
+                    NativeLibrary.surfaceChanged(frames.surface, 640, 360, 1f, 60f)
+                }
+                NativeLibrary.surfaceChanged(frames.surface, 640, 480, 1f, 60f)
+                assertSamePicture(before, frames.nextFrame(30))
+            }
+        }
+
     // Paused, the frame stays what it was; resumed, frames come again.
     @Test
     fun pausingAndResumingKeepsTheFrame() =

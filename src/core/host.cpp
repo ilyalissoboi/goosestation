@@ -4,6 +4,7 @@
 #include "host.h"
 #include "fullscreen_ui.h"
 #include "gpu.h"
+#include "gpu_thread_commands.h"
 #include "imgui_overlays.h"
 #include "shader_cache_version.h"
 #include "system.h"
@@ -410,15 +411,19 @@ bool Host::CreateGPUDevice(RenderAPI api, Error* error)
 
 bool Host::Internal::UpdateDisplayWindowOnGPUThread()
 {
+  GPUThreadCommands::BeforeWindowChange();
   const bool updated = g_gpu_device && g_gpu_device->UpdateWindow();
+  GPUThreadCommands::AfterWindowChange();
   GPUThread::PublishDeviceInfo();
   return updated;
 }
 
 void Host::Internal::ResizeDisplayWindowOnGPUThread(s32 width, s32 height, float scale)
 {
+  GPUThreadCommands::BeforeWindowChange();
   if (g_gpu_device)
     g_gpu_device->ResizeWindow(width, height, scale);
+  GPUThreadCommands::AfterWindowChange();
   GPUThread::PublishDeviceInfo();
 }
 

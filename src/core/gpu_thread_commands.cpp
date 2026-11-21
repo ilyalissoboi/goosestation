@@ -23,8 +23,8 @@ static std::mutex s_gpu_time_mutex;
 static float s_gpu_time_ms = 0.0f;
 static u32 s_gpu_time_presents = 0;
 
-// Whether the last present began, for the explicit present's submit.
-static bool s_last_present_done = false;
+// An explicit present began and not yet submitted.
+static bool s_submit_pending = false;
 
 // Input latency and the last frame's active time, from the GPU thread's presents.
 static std::mutex s_latency_mutex;
@@ -61,8 +61,11 @@ void GPUThreadCommands::Handle(const GPUThreadCommand* cmd)
       break;
 
     case GPUThreadCommandType::SubmitPresent:
-      if (s_last_present_done)
+      if (s_submit_pending)
+      {
+        s_submit_pending = false;
         g_gpu_device->SubmitPresent();
+      }
       break;
 
     default:
@@ -95,7 +98,7 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
     }
   }
 
-  s_last_present_done = do_present;
+  s_submit_pending = do_present && cmd->explicit_present;
 
   const Common::Timer::Value now = Common::Timer::GetCurrentValue();
   if (do_present && cmd->input_poll_time != 0)
@@ -123,6 +126,25 @@ void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::T
   cmd->explicit_present = explicit_present;
   GPUThread::FramePushed();
   GPUThread::PushCommand(cmd);
+}
+
+void GPUThreadCommands::BeforeWindowChange()
+{
+  if (g_gpu_hw)
+    g_gpu_hw->FlushRenderForDeviceChange();
+
+  if (s_submit_pending)
+  {
+    s_submit_pending = false;
+    if (g_gpu_device)
+      g_gpu_device->SubmitPresent();
+  }
+}
+
+void GPUThreadCommands::AfterWindowChange()
+{
+  if (g_gpu_hw)
+    g_gpu_hw->RestoreDeviceContext();
 }
 
 void GPUThreadCommands::PushSubmitPresent()

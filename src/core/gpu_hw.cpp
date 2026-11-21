@@ -3150,6 +3150,11 @@ void GPU_HW::FillVRAM(u32 x, u32 y, u32 width, u32 height, u32 color)
   RestoreDeviceContext();
 }
 
+void GPU_HW::FlushRenderForDeviceChange()
+{
+  FlushRender();
+}
+
 void GPU_HW::ReadVRAM(u32 x, u32 y, u32 width, u32 height)
 {
   FlushRender();

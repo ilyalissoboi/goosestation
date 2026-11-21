@@ -118,6 +118,9 @@ public:
   /// Rebinds the renderer's state after anything else used the device.
   void RestoreDeviceContext();
 
+  /// Draws the batch being built, before something else (a window change) uses the device.
+  void FlushRenderForDeviceChange();
+
   /// Everything before it drawn, the rect read back into g_vram.
   void ReadVRAM(u32 x, u32 y, u32 width, u32 height);
 

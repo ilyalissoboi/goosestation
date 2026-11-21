@@ -191,6 +191,13 @@ void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_p
 /// Pushes the submit of an explicit present, after the throttle.
 void PushSubmitPresent();
 
+/// On the GPU thread, before the window changes under the device: the batch being built drawn, and an explicit
+/// present waiting for its submit submitted to the swap chain it began on.
+void BeforeWindowChange();
+
+/// On the GPU thread, after the window changed: the renderer's state bound again.
+void AfterWindowChange();
+
 /// The GPU time the GPU thread's presents measured since the last call, and how many presents it took.
 void GetAndResetGPUTime(float* time_ms, u32* presents);
 

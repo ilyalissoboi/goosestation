@@ -26,8 +26,12 @@ object GraphicsSettings {
     /** The software renderer's own thread. */
     val THREADED_RENDERING = BoolSetting("GPU", "UseThread", true)
 
-    /** The device and its work on a thread of their own, every renderer: on by default (`Settings::DEFAULT_GPU_THREAD`). */
-    val GPU_THREAD = BoolSetting("GPU", "UseGPUThread", true)
+    /**
+     * The device and its work on a thread of their own, every renderer. Its default is the renderer's
+     * (`Settings::GetDefaultGPUThread`): off for Vulkan, Automatic's here, on for OpenGL ES. The core writes the key
+     * when it's missing, so this default is only Automatic's.
+     */
+    val GPU_THREAD = BoolSetting("GPU", "UseGPUThread", false)
 
     // Enhancements.
     val TEXTURE_FILTER = NameSetting("GPU", "TextureFilter", "Nearest", NameList.TextureFilter)

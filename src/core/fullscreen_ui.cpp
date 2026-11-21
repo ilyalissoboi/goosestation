@@ -4906,9 +4906,11 @@ void FullscreenUI::DrawDisplaySettingsPage()
 
   DrawToggleSetting(bsi, FSUI_CSTR("Use a GPU Thread"),
                     FSUI_CSTR("Draws and presents on a thread of its own, beside the emulation, at most one frame "
-                              "behind it. Off runs everything on the emulation thread, as before."),
-                    "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
-  const bool gpu_thread = GetEffectiveBoolSetting(bsi, "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
+                              "behind it. Off runs everything on the emulation thread, as before. Off by default for "
+                              "Vulkan, D3D11 and D3D12, which measured slower with it."),
+                    "GPU", "UseGPUThread", Settings::GetDefaultGPUThread(renderer));
+  const bool gpu_thread =
+    GetEffectiveBoolSetting(bsi, "GPU", "UseGPUThread", Settings::GetDefaultGPUThread(renderer));
 
   switch (renderer)
   {

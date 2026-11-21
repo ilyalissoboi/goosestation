@@ -153,7 +153,8 @@ void HandleCommand(const GPUThreadCommand* cmd)
       break;
   }
 
-  RunPriorityClosures();
+  if (s_priority_count.load(std::memory_order_relaxed) > 0)
+    RunPriorityClosures();
 }
 
 void ThreadMain()
@@ -227,6 +228,7 @@ void GPUThread::Stop()
 
   if (s_use_thread)
   {
+    s_queue->Publish();
     s_queue->Shutdown();
     s_thread.Join();
     INFO_LOG("GPU thread stopped.");
@@ -296,7 +298,13 @@ void GPUThread::PushCommand(void* cmd)
     return;
   }
 
-  s_queue->Push();
+  s_queue->Commit();
+}
+
+void GPUThread::Publish()
+{
+  if (s_use_thread && !IsOnThread())
+    s_queue->Publish();
 }
 
 void GPUThread::SetCommandHandler(CommandHandler handler)
@@ -316,6 +324,7 @@ void GPUThread::RunOnThread(std::function<void()> fn)
   cmd->fn = new std::function<void()>(std::move(fn));
   cmd->signal = nullptr;
   PushCommand(cmd);
+  Publish();
 }
 
 void GPUThread::RunOnThreadAndWait(std::function<void()> fn)
@@ -331,6 +340,7 @@ void GPUThread::RunOnThreadAndWait(std::function<void()> fn)
   cmd->fn = new std::function<void()>(std::move(fn));
   cmd->signal = &signal;
   PushCommand(cmd);
+  Publish();
   signal.Wait();
 }
 
@@ -372,6 +382,7 @@ void GPUThread::Sync(bool spin)
   SyncCommand* cmd = static_cast<SyncCommand*>(AllocateCommand(COMMAND_SYNC, sizeof(SyncCommand)));
   cmd->signal = &signal;
   PushCommand(cmd);
+  Publish();
   if (spin)
   {
     while (!s_queue->IsEmpty())
@@ -406,6 +417,7 @@ void GPUThread::WaitForQueuedFrames(u32 max_queued)
   if (s_queued_frames.load(std::memory_order_acquire) <= max_queued)
     return;
 
+  Publish();
   std::unique_lock lock(s_frames_mutex);
   s_frames_cv.wait(lock, [max_queued]() { return s_queued_frames.load(std::memory_order_acquire) <= max_queued; });
 }

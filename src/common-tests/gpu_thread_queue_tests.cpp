@@ -219,3 +219,76 @@ TEST(GPUThreadQueue, APushWakesASleepingReader)
   consumer.join();
   EXPECT_TRUE(result);
 }
+
+namespace {
+void CommitTestCommand(GPUThreadQueue& queue, u32 index, u32 size)
+{
+  TestCommand* cmd = static_cast<TestCommand*>(queue.Allocate(TEST_TYPE, size));
+  cmd->index = index;
+  for (u32 i = 0; i < PatternSize(cmd); i++)
+    cmd->pattern[i] = static_cast<u8>(index + i);
+  queue.Commit();
+}
+} // namespace
+
+// A committed command waits, with the others behind it, for the producer to publish them: the reader sees nothing
+// until then.
+TEST(GPUThreadQueue, ACommittedCommandWaitsForThePublish)
+{
+  GPUThreadQueue queue(SMALL_RING);
+  CommitTestCommand(queue, 0, 64);
+  CommitTestCommand(queue, 1, 64);
+  EXPECT_TRUE(queue.IsEmpty());
+  EXPECT_FALSE(queue.Drain([](const GPUThreadCommand*) {}));
+
+  queue.Publish();
+  u32 next = 0;
+  EXPECT_TRUE(queue.Drain([&](const GPUThreadCommand* cmd) {
+    EXPECT_EQ(static_cast<const TestCommand*>(cmd)->index, next++);
+  }));
+  EXPECT_EQ(next, 2u);
+}
+
+// Commands go out on their own once a batch of them is waiting, so the reader works alongside the producer.
+TEST(GPUThreadQueue, CommittedCommandsPublishThemselvesPastABatch)
+{
+  GPUThreadQueue queue(SMALL_RING);
+  u32 committed = 0;
+  while (queue.IsEmpty())
+  {
+    ASSERT_LT(committed, GPUThreadQueue::PUBLISH_BYTES / 64 + 1);
+    CommitTestCommand(queue, committed++, 64);
+  }
+  EXPECT_GE(queue.GetPendingBytes(), GPUThreadQueue::PUBLISH_BYTES);
+}
+
+// A producer that only commits still gets room: a full ring publishes what it holds before it waits.
+TEST(GPUThreadQueue, AFullRingPublishesBeforeItWaits)
+{
+  GPUThreadQueue queue(SMALL_RING);
+  constexpr u32 SIZE = 24;
+  constexpr u32 COUNT = (SMALL_RING * 8) / SIZE;
+  std::atomic_bool done{false};
+
+  std::thread producer([&]() {
+    for (u32 i = 0; i < COUNT; i++)
+      CommitTestCommand(queue, i, SIZE);
+    queue.Publish();
+    done.store(true);
+  });
+
+  u32 next = 0;
+  bool in_order = true;
+  const auto start = std::chrono::steady_clock::now();
+  while (next < COUNT && std::chrono::steady_clock::now() - start < std::chrono::seconds(10))
+  {
+    queue.Drain([&](const GPUThreadCommand* cmd) {
+      in_order &= (static_cast<const TestCommand*>(cmd)->index == next++) &&
+                  PatternIsIntact(static_cast<const TestCommand*>(cmd));
+    });
+  }
+  ASSERT_EQ(next, COUNT);
+  producer.join();
+  EXPECT_TRUE(in_order);
+  EXPECT_TRUE(done.load());
+}

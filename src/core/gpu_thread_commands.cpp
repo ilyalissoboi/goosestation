@@ -126,6 +126,7 @@ void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::T
   cmd->explicit_present = explicit_present;
   GPUThread::FramePushed();
   GPUThread::PushCommand(cmd);
+  GPUThread::Publish(); // the frame is drawn while the next is emulated
 }
 
 void GPUThreadCommands::BeforeWindowChange()
@@ -150,6 +151,7 @@ void GPUThreadCommands::AfterWindowChange()
 void GPUThreadCommands::PushSubmitPresent()
 {
   GPUThread::PushCommand(Allocate<GPUThreadCommand>(GPUThreadCommandType::SubmitPresent));
+  GPUThread::Publish();
 }
 
 void GPUThreadCommands::GetAndResetGPUTime(float* time_ms, u32* presents)

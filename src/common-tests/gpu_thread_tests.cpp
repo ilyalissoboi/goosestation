@@ -144,6 +144,34 @@ TEST_F(GPUThreadTest, SyncReturnsAfterEverythingBefore)
   EXPECT_EQ(s_slow_done.load(), 5u);
 }
 
+// Draws go out in batches, but a closure, waited for or not, takes them and itself to the thread at once.
+TEST_F(GPUThreadTest, AClosureReachesTheThreadWithNothingWaiting)
+{
+  ASSERT_TRUE(GPUThread::Start(true));
+  Push(RECORD, 1);
+  std::atomic_bool ran{false};
+  GPUThread::RunOnThread([&ran]() { ran.store(true); });
+
+  const auto start = std::chrono::steady_clock::now();
+  while (!ran.load() && std::chrono::steady_clock::now() - start < std::chrono::seconds(2))
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  EXPECT_TRUE(ran.load());
+  EXPECT_EQ(Recorded(), std::vector<u32>{1});
+}
+
+// A present goes out at once, so its frame is drawn while the next is emulated.
+TEST_F(GPUThreadTest, APublishTakesCommandsToTheThread)
+{
+  ASSERT_TRUE(GPUThread::Start(true));
+  Push(RECORD, 5);
+  GPUThread::Publish();
+
+  const auto start = std::chrono::steady_clock::now();
+  while (Recorded().empty() && std::chrono::steady_clock::now() - start < std::chrono::seconds(2))
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  EXPECT_EQ(Recorded(), std::vector<u32>{5});
+}
+
 TEST_F(GPUThreadTest, RunOnThreadKeepsItsPlaceInTheStream)
 {
   ASSERT_TRUE(GPUThread::Start(true));

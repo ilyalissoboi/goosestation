@@ -35,6 +35,10 @@ public:
   static constexpr u8 FIRST_USER_TYPE = 16; // 1..15 are GPUThread's own
   static constexpr u32 ALIGNMENT = 8;
 
+  /// Committed commands publish themselves once this many bytes of them wait: the reader sees work in batches, not
+  /// one cache-line handover per command.
+  static constexpr u32 PUBLISH_BYTES = 4096;
+
   /// capacity is a power of two, at least 64 KiB.
   explicit GPUThreadQueue(u32 capacity);
   ~GPUThreadQueue();
@@ -43,7 +47,14 @@ public:
   /// size is at most half the capacity.
   void* Allocate(u8 type, u32 size);
 
-  /// Producer: publishes the last Allocate()'s command, and wakes a sleeping consumer.
+  /// Producer: the last Allocate()'s command is complete. The consumer sees it at the next Publish(), Push(), or full
+  /// ring, or once PUBLISH_BYTES of committed commands wait.
+  void Commit();
+
+  /// Producer: every committed command to the consumer, and wakes it if it sleeps.
+  void Publish();
+
+  /// Producer: Commit() and Publish() the last Allocate()'s command.
   void Push();
 
   /// Consumer: hands every command published so far to handler, in order. False if there were none.
@@ -74,8 +85,12 @@ private:
   std::unique_ptr<u8[]> m_buffer;
   u32 m_capacity;
 
-  // Producer only.
-  u32 m_pending_end = 0;
+  // Producer only, on a line of their own: the last Allocate()'s end, the committed end, and the reader as last seen
+  // (only ever behind the real one, so it never shows room that isn't there).
+  alignas(64) u32 m_pending_end = 0;
+  u32 m_committed_end = 0;
+  u32 m_published_end = 0;
+  u32 m_cached_read = 0;
 
   alignas(64) std::atomic<u32> m_read{0};
   alignas(64) std::atomic<u32> m_write{0};

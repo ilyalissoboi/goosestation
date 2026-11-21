@@ -9,6 +9,24 @@
 
 #include <chrono>
 
+#if defined(CPU_ARCH_X64)
+#include <immintrin.h>
+#elif defined(CPU_ARCH_ARM64) && defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
+// A hint to the core that this is a spin: less power, and the other hardware thread runs.
+static inline void SpinPause()
+{
+#if defined(CPU_ARCH_X64)
+  _mm_pause();
+#elif defined(CPU_ARCH_ARM64) && defined(_MSC_VER)
+  __yield();
+#elif defined(CPU_ARCH_ARM64)
+  __asm__ __volatile__("yield");
+#endif
+}
+
 // Positions run from 0 to capacity - 1. The ring is empty when read == write, so a command may never move write onto
 // read: there is always at least one free byte between the writer and the reader.
 
@@ -40,18 +58,25 @@ void* GPUThreadQueue::Allocate(u8 type, u32 size)
   size = Common::AlignUpPow2(size, ALIGNMENT);
   DebugAssert(size >= sizeof(GPUThreadCommand) && size <= m_capacity / 2);
 
-  const u32 write = m_write.load(std::memory_order_relaxed);
-  if (!HasRoom(m_read.load(std::memory_order_acquire), write, size))
+  const u32 write = m_committed_end;
+  if (!HasRoom(m_cached_read, write, size))
   {
-    m_producer_waits.fetch_add(1, std::memory_order_relaxed);
-    WakeConsumer();
+    m_cached_read = m_read.load(std::memory_order_acquire);
+    if (!HasRoom(m_cached_read, write, size))
+    {
+      // What it holds goes to the reader first: it may be all there is to make room with.
+      Publish();
+      m_producer_waits.fetch_add(1, std::memory_order_relaxed);
+      WakeConsumer();
 
-    std::unique_lock lock(m_mutex);
-    m_producer_waiting.store(true, std::memory_order_seq_cst);
-    m_producer_cv.wait(lock, [this, write, size]() {
-      return HasRoom(m_read.load(std::memory_order_seq_cst), write, size);
-    });
-    m_producer_waiting.store(false, std::memory_order_relaxed);
+      std::unique_lock lock(m_mutex);
+      m_producer_waiting.store(true, std::memory_order_seq_cst);
+      m_producer_cv.wait(lock, [this, write, size]() {
+        return HasRoom(m_read.load(std::memory_order_seq_cst), write, size);
+      });
+      m_producer_waiting.store(false, std::memory_order_relaxed);
+      m_cached_read = m_read.load(std::memory_order_acquire);
+    }
   }
 
   u32 start = write;
@@ -75,14 +100,32 @@ void* GPUThreadQueue::Allocate(u8 type, u32 size)
   return cmd;
 }
 
-void GPUThreadQueue::Push()
+void GPUThreadQueue::Commit()
 {
-  m_write.store(m_pending_end, std::memory_order_seq_cst);
+  m_committed_end = m_pending_end;
+  const u32 waiting = (m_committed_end - m_published_end) & (m_capacity - 1);
+  if (waiting >= PUBLISH_BYTES)
+    Publish();
+}
+
+void GPUThreadQueue::Publish()
+{
+  if (m_published_end == m_committed_end)
+    return;
+
+  m_published_end = m_committed_end;
+  m_write.store(m_committed_end, std::memory_order_seq_cst);
   if (m_consumer_sleeping.load(std::memory_order_seq_cst))
   {
     std::unique_lock lock(m_mutex);
     m_consumer_cv.notify_one();
   }
+}
+
+void GPUThreadQueue::Push()
+{
+  Commit();
+  Publish();
 }
 
 bool GPUThreadQueue::Drain(const std::function<void(const GPUThreadCommand*)>& handler)
@@ -118,15 +161,26 @@ bool GPUThreadQueue::WaitForWork(u64 spin_ns)
 
   if (spin_ns > 0)
   {
+    // The clock is read every so many turns, and the flags only read until one is set: nothing here writes to a line
+    // the producer reads, or costs a system call each turn.
     const Common::Timer::Value start = Common::Timer::GetCurrentValue();
-    while (Common::Timer::ConvertValueToNanoseconds(Common::Timer::GetCurrentValue() - start) < spin_ns)
+    for (u32 turn = 1;; turn++)
     {
       if (!IsEmpty())
         return true;
-      if (m_wake_requested.exchange(false, std::memory_order_acq_rel))
+      if (m_wake_requested.load(std::memory_order_relaxed) &&
+          m_wake_requested.exchange(false, std::memory_order_acq_rel))
+      {
         return true;
+      }
       if (m_shutdown.load(std::memory_order_relaxed))
         return !IsEmpty();
+      if ((turn % 64) == 0 &&
+          Common::Timer::ConvertValueToNanoseconds(Common::Timer::GetCurrentValue() - start) >= spin_ns)
+      {
+        break;
+      }
+      SpinPause();
     }
   }
 

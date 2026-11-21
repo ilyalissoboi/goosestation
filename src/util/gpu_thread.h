@@ -45,7 +45,13 @@ const Threading::Thread* GetThread();
 
 /// A command of type (at least GPUThreadQueue::FIRST_USER_TYPE) and size bytes, header included, for PushCommand().
 void* AllocateCommand(u8 type, u32 size);
+
+/// Queues the command. Threaded, commands go to the thread in batches: at Publish(), at any closure, Sync() or wait
+/// for frames, or once enough of them wait.
 void PushCommand(void* cmd);
+
+/// Takes the commands pushed so far to the thread now (a present, so its frame is drawn while the next is emulated).
+void Publish();
 
 using CommandHandler = void (*)(const GPUThreadCommand* cmd);
 void SetCommandHandler(CommandHandler handler);

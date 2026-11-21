@@ -860,7 +860,23 @@ void OpenGLDevice::PopTimestampQuery()
 
     u64 result = 0;
     GetQueryObjectui64v(m_timestamp_queries[m_read_timestamp_query], GL_QUERY_RESULT, &result);
-    m_accumulated_gpu_time += static_cast<float>(static_cast<double>(result) / 1000000.0);
+
+    // Some drivers (Adreno's GLES) give elapsed times no frame could take: they're dropped rather than counted.
+    static constexpr u64 MAX_PLAUSIBLE_QUERY_NS = 1000000000;
+    if (result <= MAX_PLAUSIBLE_QUERY_NS)
+    {
+      m_accumulated_gpu_time += static_cast<float>(static_cast<double>(result) / 1000000.0);
+    }
+    else
+    {
+      static bool s_warned = false;
+      if (!s_warned)
+      {
+        s_warned = true;
+        WARNING_LOG("Dropping GPU timer query results of {} ns and over: the driver's queries can't be trusted.",
+                    MAX_PLAUSIBLE_QUERY_NS);
+      }
+    }
     m_read_timestamp_query = (m_read_timestamp_query + 1) % NUM_TIMESTAMP_QUERIES;
     m_waiting_timestamp_queries--;
   }

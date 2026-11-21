@@ -87,7 +87,7 @@ std::vector<InputEvent> s_input_events;
 std::vector<ConnectedDevice> s_connected_devices;
 std::vector<u32> s_unmapped_indices; // new descriptors' indices, whose defaults aren't on Port 1 yet
 AndroidInputSource* s_input_source = nullptr;
-ANativeWindow* s_window = nullptr;
+std::atomic<ANativeWindow*> s_window{nullptr};
 u32 s_window_width = 0;
 u32 s_window_height = 0;
 float s_window_scale = 1.0f;

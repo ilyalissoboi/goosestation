@@ -54,6 +54,12 @@ add_library(core
   gpu_backend.h
   gpu_commands.cpp
   gpu_hw.cpp
+  gpu_hw_frontend.cpp
+  gpu_hw_frontend.h
+  gpu_presenter.cpp
+  gpu_presenter.h
+  gpu_thread_commands.cpp
+  gpu_thread_commands.h
   gpu_hw.h
   gpu_hw_shadergen.cpp
   gpu_hw_shadergen.h
@@ -106,6 +112,7 @@ add_library(core
   negcon_rumble.h
   pad.cpp
   pad.h
+  performance_counters_math.h
   pcdrv.cpp
   pcdrv.h
   pine_server.cpp

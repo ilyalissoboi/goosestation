@@ -31,6 +31,7 @@
 
 #include "util/cd_image.h"
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 
 #include "common/assert.h"
 #include "common/error.h"
@@ -483,7 +484,7 @@ void MainWindow::updateDisplayWidgetCursor()
 void MainWindow::updateDisplayRelatedActions(bool has_surface, bool render_to_main, bool fullscreen)
 {
   // rendering to main, or switched to gamelist/grid
-  m_ui.actionViewSystemDisplay->setEnabled((has_surface && render_to_main) || (!has_surface && g_gpu_device));
+  m_ui.actionViewSystemDisplay->setEnabled((has_surface && render_to_main) || (!has_surface && GPUThread::GetDeviceInfo().has_device));
   m_ui.menuWindowSize->setEnabled(has_surface && !fullscreen);
   m_ui.actionFullscreen->setEnabled(has_surface);
 
@@ -1968,7 +1969,7 @@ bool MainWindow::isShowingGameList() const
 
 bool MainWindow::isRenderingFullscreen() const
 {
-  if (!g_gpu_device || !m_display_widget)
+  if (!GPUThread::GetDeviceInfo().has_device || !m_display_widget)
     return false;
 
   return getDisplayContainer()->isFullScreen();

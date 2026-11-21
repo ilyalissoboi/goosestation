@@ -137,5 +137,11 @@ void SetGameSettingsLayer(SettingsInterface* sif, std::unique_lock<std::mutex>& 
 
 /// Sets the input profile settings layer. Called by VMManager when the game changes.
 void SetInputSettingsLayer(SettingsInterface* sif, std::unique_lock<std::mutex>& lock);
+/// UpdateDisplayWindow() and ResizeDisplayWindow() in halves, for a host that changes the window on the GPU thread
+/// itself (Android's surface): the device's half there, then the rest on the CPU thread.
+bool UpdateDisplayWindowOnGPUThread();
+void ResizeDisplayWindowOnGPUThread(s32 width, s32 height, float scale);
+void OnDisplayWindowUpdated(bool updated);
+void OnDisplayWindowResized();
 } // namespace Internal
 } // namespace Host

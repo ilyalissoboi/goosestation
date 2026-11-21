@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: (GPL-3.0 OR CC-BY-NC-ND-4.0)
 
 #pragma once
+#include "gpu_presenter.h"
 #include "gpu_types.h"
 #include "timers.h"
 #include "timing_event.h"
@@ -61,7 +62,6 @@ public:
     DOT_TIMER_INDEX = 0,
     HBLANK_TIMER_INDEX = 1,
     MAX_RESOLUTION_SCALE = 32,
-    DEINTERLACE_BUFFER_COUNT = 4,
     DRAWING_AREA_COORD_MASK = 1023,
   };
 
@@ -211,6 +211,12 @@ public:
   // Ensures all buffered vertices are drawn.
   virtual void FlushRender() = 0;
 
+  /// What the screen shows now, for the presenter.
+  GPUDisplayParams GetDisplayParams() const;
+
+  /// Hands the presenter what the screen shows now (before it draws or captures it).
+  void SendDisplayParams() const;
+
   /// Helper function for computing the draw rectangle in a larger window.
   void CalculateDrawRect(s32 window_width, s32 window_height, bool apply_rotation, bool apply_aspect_ratio,
                          GSVector4i* display_rect, GSVector4i* draw_rect) const;
@@ -231,8 +237,8 @@ public:
   bool RenderScreenshotToFile(std::string filename, DisplayScreenshotMode mode, u8 quality, bool compress_on_thread,
                               bool show_osd_message);
 
-  /// Draws the current display texture, with any post-processing.
-  bool PresentDisplay();
+  /// Before a present command: everything drawn so far flushed, and the presenter told what the screen shows.
+  void PrepareToPresent();
 
   /// Sends the current frame to media capture.
   bool SendDisplayToMediaCapture(MediaCapture* cap);
@@ -625,34 +631,6 @@ protected:
   TickCount m_max_run_ahead = 128;
   u32 m_fifo_size = 128;
 
-  void ClearDisplayTexture();
-  void SetDisplayTexture(GPUTexture* texture, GPUTexture* depth_texture, s32 view_x, s32 view_y, s32 view_width,
-                         s32 view_height);
-
-  bool RenderDisplay(GPUTexture* target, const GSVector4i display_rect, const GSVector4i draw_rect, bool postfx);
-
-  bool Deinterlace(u32 field, u32 line_skip);
-  bool DeinterlaceExtractField(u32 dst_bufidx, GPUTexture* src, u32 x, u32 y, u32 width, u32 height, u32 line_skip);
-  bool DeinterlaceSetTargetSize(u32 width, u32 height, bool preserve);
-  void DestroyDeinterlaceTextures();
-  bool ApplyChromaSmoothing();
-
-  u32 m_current_deinterlace_buffer = 0;
-  std::unique_ptr<GPUPipeline> m_deinterlace_pipeline;
-  std::unique_ptr<GPUPipeline> m_deinterlace_extract_pipeline;
-  std::array<std::unique_ptr<GPUTexture>, DEINTERLACE_BUFFER_COUNT> m_deinterlace_buffers;
-  std::unique_ptr<GPUTexture> m_deinterlace_texture;
-
-  std::unique_ptr<GPUPipeline> m_chroma_smoothing_pipeline;
-  std::unique_ptr<GPUTexture> m_chroma_smoothing_texture;
-
-  std::unique_ptr<GPUPipeline> m_display_pipeline;
-  GPUTexture* m_display_texture = nullptr;
-  GPUTexture* m_display_depth_buffer = nullptr;
-  s32 m_display_texture_view_x = 0;
-  s32 m_display_texture_view_y = 0;
-  s32 m_display_texture_view_width = 0;
-  s32 m_display_texture_view_height = 0;
 
   struct Counters
   {
@@ -681,7 +659,6 @@ protected:
   Stats m_stats = {};
 
 private:
-  bool CompileDisplayPipelines(bool display, bool deinterlace, bool chroma_smoothing);
 
   using GP0CommandHandler = bool (GPU::*)();
   using GP0CommandHandlerTable = std::array<GP0CommandHandler, 256>;

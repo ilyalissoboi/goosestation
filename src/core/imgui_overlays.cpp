@@ -15,6 +15,8 @@
 #include "system.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
+#include "util/imgui_draw_copy.h"
 #include "util/imgui_animated.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
@@ -84,7 +86,7 @@ static std::tuple<float, float> GetMinMax(std::span<const float> values)
 void Host::DisplayLoadingScreen(const char* message, int progress_min /*= -1*/, int progress_max /*= -1*/,
                                 int progress_value /*= -1*/)
 {
-  if (!g_gpu_device)
+  if (!GPUThread::GetDeviceInfo().has_device)
   {
     INFO_LOG("{}: {}/{}", message, progress_value, progress_max);
     return;
@@ -157,14 +159,20 @@ void Host::DisplayLoadingScreen(const char* message, int progress_min /*= -1*/, 
   ImGui::PopStyleVar(2);
 
   ImGui::EndFrame();
+  ImGui::Render();
 
   // TODO: Glass effect or something.
 
-  if (g_gpu_device->BeginPresent(false))
-  {
-    g_gpu_device->RenderImGui();
-    g_gpu_device->EndPresent(false);
-  }
+  // Its own present, waited for: called from the emulation thread in the middle of loading, or from the GPU thread
+  // (pipeline and post-processing compiles) while the emulation thread waits for it.
+  const std::unique_ptr<ImGuiDrawCopy> frame = ImGuiDrawCopy::Capture(*ImGui::GetDrawData());
+  GPUThread::RunOnThreadAndWait([&frame]() {
+    if (g_gpu_device->BeginPresent(false))
+    {
+      g_gpu_device->RenderImGui(frame->Get());
+      g_gpu_device->EndPresent(false);
+    }
+  });
 
   ImGui::NewFrame();
 }
@@ -368,6 +376,13 @@ void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, float 
         DRAW_LINE(fixed_font, text, IM_COL32(255, 255, 255, 255));
       }
 
+      if (GPUThread::GetThread())
+      {
+        text.assign("GPU Thread: ");
+        FormatProcessorStat(text, System::GetGPUThreadUsage(), System::GetGPUThreadAverageTime());
+        DRAW_LINE(fixed_font, text, IM_COL32(255, 255, 255, 255));
+      }
+
 #ifndef __ANDROID__
       if (MediaCapture* cap = System::GetMediaCapture())
       {
@@ -378,7 +393,7 @@ void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, float 
 #endif
     }
 
-    if (g_settings.display_show_gpu_usage && g_gpu_device->IsGPUTimingEnabled())
+    if (g_settings.display_show_gpu_usage && GPUThread::GetDeviceInfo().gpu_timing && System::IsGPUTimePlausible())
     {
       text.assign("GPU: ");
       FormatProcessorStat(text, System::GetGPUUsage(), System::GetGPUAverageTime());
@@ -409,7 +424,7 @@ void ImGuiManager::DrawEnhancementsOverlay()
 {
   LargeString text;
   text.append_format("{} {}-{}", Settings::GetConsoleRegionName(System::GetRegion()),
-                     GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI()),
+                     GPUDevice::RenderAPIToString(GPUThread::GetDeviceInfo().render_api),
                      g_gpu->IsHardwareRenderer() ? "HW" : "SW");
 
   if (g_settings.rewind_enable)
@@ -714,7 +729,7 @@ struct ListEntry
   std::string summary;
   std::string game_details; // only in global slots
   std::string filename;
-  std::unique_ptr<GPUTexture> preview_texture;
+  GPUThread::TexturePtr preview_texture;
   s32 slot;
   bool global;
 };
@@ -789,8 +804,7 @@ void SaveStateSelectorUI::RefreshList(const std::string& serial)
 {
   for (ListEntry& entry : s_slots)
   {
-    if (entry.preview_texture)
-      g_gpu_device->RecycleTexture(std::move(entry.preview_texture));
+    entry.preview_texture.reset();
   }
   s_slots.clear();
 
@@ -845,8 +859,7 @@ void SaveStateSelectorUI::ClearList()
 {
   for (ListEntry& li : s_slots)
   {
-    if (li.preview_texture)
-      g_gpu_device->RecycleTexture(std::move(li.preview_texture));
+    li.preview_texture.reset();
   }
   s_slots.clear();
 }
@@ -857,8 +870,7 @@ void SaveStateSelectorUI::DestroyTextures()
 
   for (ListEntry& entry : s_slots)
   {
-    if (entry.preview_texture)
-      g_gpu_device->RecycleTexture(std::move(entry.preview_texture));
+    entry.preview_texture.reset();
   }
 
   s_placeholder_texture.reset();
@@ -948,15 +960,15 @@ void SaveStateSelectorUI::InitializeListEntry(ListEntry* li, ExtendedSaveStateIn
   li->global = global;
 
   // Might not have a display yet, we're called at startup..
-  if (g_gpu_device)
+  if (GPUThread::GetDeviceInfo().has_device)
   {
-    g_gpu_device->RecycleTexture(std::move(li->preview_texture));
+    li->preview_texture.reset();
 
     if (ssi->screenshot.IsValid())
     {
-      li->preview_texture = g_gpu_device->FetchTexture(ssi->screenshot.GetWidth(), ssi->screenshot.GetHeight(), 1, 1, 1,
-                                                       GPUTexture::Type::Texture, GPUTexture::Format::RGBA8,
-                                                       ssi->screenshot.GetPixels(), ssi->screenshot.GetPitch());
+      li->preview_texture =
+        GPUThread::CreateTexture(ssi->screenshot.GetWidth(), ssi->screenshot.GetHeight(), GPUTexture::Format::RGBA8,
+                                 ssi->screenshot.GetPixels(), ssi->screenshot.GetPitch());
       if (!li->preview_texture) [[unlikely]]
         ERROR_LOG("Failed to upload save state image to GPU");
     }

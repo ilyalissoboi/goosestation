@@ -26,6 +26,9 @@
     <ClInclude Include="gpu_framebuffer_manager.h" />
     <ClInclude Include="gpu_shader_cache.h" />
     <ClInclude Include="gpu_texture.h" />
+    <ClInclude Include="gpu_thread.h" />
+    <ClInclude Include="gpu_thread_queue.h" />
+    <ClInclude Include="imgui_draw_copy.h" />
     <ClInclude Include="host.h" />
     <ClInclude Include="http_downloader.h" />
     <ClInclude Include="http_downloader_curl.h">
@@ -146,6 +149,9 @@
     <ClCompile Include="gpu_device.cpp" />
     <ClCompile Include="gpu_shader_cache.cpp" />
     <ClCompile Include="gpu_texture.cpp" />
+    <ClCompile Include="gpu_thread.cpp" />
+    <ClCompile Include="gpu_thread_queue.cpp" />
+    <ClCompile Include="imgui_draw_copy.cpp" />
     <ClCompile Include="host.cpp" />
     <ClCompile Include="http_downloader.cpp" />
     <ClCompile Include="http_downloader_curl.cpp">

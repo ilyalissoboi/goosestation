@@ -469,6 +469,8 @@ public:
   virtual bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) = 0;
 };
 
+struct ImDrawData;
+
 class GPUDevice
 {
 public:
@@ -723,7 +725,8 @@ public:
   virtual void SubmitPresent() = 0;
 
   /// Renders ImGui screen elements. Call before EndPresent().
-  void RenderImGui();
+  /// Draws a frame of ImGui (built on the emulation thread, ImGui::Render() already called, and copied).
+  void RenderImGui(const ImDrawData* draw_data);
 
   ALWAYS_INLINE GPUVSyncMode GetVSyncMode() const { return m_vsync_mode; }
   ALWAYS_INLINE bool IsVSyncModeBlocking() const { return (m_vsync_mode == GPUVSyncMode::FIFO); }
@@ -732,13 +735,20 @@ public:
   ALWAYS_INLINE bool IsDebugDevice() const { return m_debug_device; }
   ALWAYS_INLINE size_t GetVRAMUsage() const { return s_total_vram_usage; }
 
-  bool UpdateImGuiFontTexture();
+  /// The font atlas's texture, made or updated from its RGBA8 pixels; nullptr if it couldn't be.
+  GPUTexture* UpdateImGuiFontTexture(const void* pixels, u32 width, u32 height);
   bool UsesLowerLeftOrigin() const;
   static GSVector4i FlipToLowerLeft(GSVector4i rc, s32 target_height);
   bool ResizeTexture(std::unique_ptr<GPUTexture>* tex, u32 new_width, u32 new_height, GPUTexture::Type type,
                      GPUTexture::Format format, bool preserve = true);
   bool ShouldSkipPresentingFrame();
   void ThrottlePresentation();
+  ALWAYS_INLINE bool IsPresentThrottleAllowed() const { return m_allow_present_throttle; }
+
+  /// The same, for a thread other than the device's: its own last-displayed time, the window's refresh rate.
+  static bool ShouldSkipPresentingFrame(bool allow_present_throttle, float refresh_rate,
+                                        u64* last_frame_displayed_time);
+  static void ThrottlePresentation(float refresh_rate, u64* last_frame_displayed_time);
 
   virtual bool SupportsTextureFormat(GPUTexture::Format format) const = 0;
 
@@ -870,10 +880,6 @@ protected:
 
 extern std::unique_ptr<GPUDevice> g_gpu_device;
 
-ALWAYS_INLINE void GPUDevice::PooledTextureDeleter::operator()(GPUTexture* const tex)
-{
-  g_gpu_device->RecycleTexture(std::unique_ptr<GPUTexture>(tex));
-}
 
 namespace Host {
 /// Called when the core is creating a render device.

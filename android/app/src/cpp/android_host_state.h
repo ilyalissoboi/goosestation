@@ -152,7 +152,9 @@ extern std::vector<u32> s_unmapped_indices;
 
 extern AndroidInputSource* s_input_source;
 
-extern ANativeWindow* s_window;
+// The surface the device draws on. Changed on the GPU thread while it runs one (SurfaceChanged()), read by the CPU
+// thread too (a boot waits for it).
+extern std::atomic<ANativeWindow*> s_window;
 
 extern u32 s_window_width;
 

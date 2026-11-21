@@ -39,6 +39,11 @@ class FrameReader(
     init {
         reader.setOnImageAvailableListener({ r ->
             val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+            // A surface the core resized (a rotation) draws frames of another size: those are left out.
+            if (image.width != width || image.height != height) {
+                image.close()
+                return@setOnImageAvailableListener
+            }
             val plane = image.planes[0]
             // Each pixel's R, G, B and A bytes, as 0xAABBGGRR.
             val buffer = plane.buffer.order(ByteOrder.LITTLE_ENDIAN)

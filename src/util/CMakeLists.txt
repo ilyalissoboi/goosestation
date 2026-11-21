@@ -30,6 +30,12 @@ add_library(util
   gpu_shader_cache.h
   gpu_texture.cpp
   gpu_texture.h
+  gpu_thread.cpp
+  gpu_thread.h
+  gpu_thread_queue.cpp
+  gpu_thread_queue.h
+  imgui_draw_copy.cpp
+  imgui_draw_copy.h
   host.cpp
   host.h
   http_downloader.cpp

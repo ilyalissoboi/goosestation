@@ -109,6 +109,7 @@ struct Settings
   u8 gpu_resolution_scale = 1;
   u8 gpu_multisamples = 1;
   bool gpu_use_thread : 1 = true;
+  bool gpu_use_gpu_thread : 1 = DEFAULT_GPU_THREAD; // the device and its work on a GPU thread of their own
   bool gpu_use_software_renderer_for_readbacks : 1 = false;
   bool gpu_threaded_presentation : 1 = DEFAULT_THREADED_PRESENTATION;
   bool gpu_use_debug_device : 1 = false;
@@ -560,6 +561,9 @@ struct Settings
   static constexpr bool DEFAULT_THREADED_PRESENTATION = true;
 #endif
 
+  /// The GPU thread, on by default (GPU_HWFrontend and GPUThread; docs/superpowers/specs/2026-11-20-gpu-thread-and-pacing-design.md).
+  static constexpr bool DEFAULT_GPU_THREAD = true;
+
   // PINE uses a concept of "slot" to be able to communicate with multiple
   // emulators at the same time, each slot should be unique to each emulator to
   // allow PnP and configurable by the end user so that several runs don't
@@ -568,6 +572,10 @@ struct Settings
 };
 
 extern Settings g_settings;
+
+/// The GPU thread's copy of the settings: what its renderer, presenter and post-processing read, never g_settings.
+/// Updated in order with the GPU thread's work by System::PushGPUSettings().
+extern Settings g_gpu_settings;
 
 namespace EmuFolders {
 extern std::string AppRoot;

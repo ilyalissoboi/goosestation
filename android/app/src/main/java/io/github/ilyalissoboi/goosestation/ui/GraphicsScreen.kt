@@ -83,8 +83,15 @@ fun GraphicsScreen(
                 note = "The device's maximum applies.",
             )
         }
-        // As Automatic picks Vulkan on most devices.
-        if (renderer == VULKAN || renderer == AUTOMATIC) {
+        GameSwitch(
+            values,
+            onChange,
+            "Use a GPU thread",
+            GraphicsSettings.GPU_THREAD,
+            "Draws on a thread of its own, at most a frame behind. Off runs it all on the emulation thread.",
+        )
+        // As Automatic picks Vulkan on most devices. Vulkan's present thread has nothing to do beside the GPU thread.
+        if ((renderer == VULKAN || renderer == AUTOMATIC) && !values[GraphicsSettings.GPU_THREAD]) {
             GameSwitch(
                 values,
                 onChange,

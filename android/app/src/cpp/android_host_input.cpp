@@ -21,6 +21,8 @@
 #include "core/pad.h"
 #include "core/settings.h"
 #include "core/system.h"
+#include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
@@ -65,6 +67,16 @@ using AndroidInputKeys::ParseDeviceIndex;
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
 
+enum class WindowChange : u8
+{
+  None,
+  Resized,
+  Updated,
+  UpdateFailed,
+};
+static WindowChange SetWindowOnGPUThread(ANativeWindow* window, s32 width, s32 height, float scale,
+                                         float refresh_rate);
+
 static void ApplyTouchPad();
 
 } // namespace AndroidHost
@@ -79,9 +91,73 @@ void AndroidHost::SurfaceChanged(ANativeWindow* window, s32 width, s32 height, f
     return;
   }
 
+  if (GPUThread::IsUsingThread())
+  {
+    // Straight to the GPU thread, ahead of the frames queued there, and waited for, so the app's surface outlives the
+    // device's use of it: the UI thread waits only for the command the GPU thread is in. The CPU thread hears after.
+    WindowChange change = WindowChange::None;
+    GPUThread::RunOnThreadPriority(
+      [window, width, height, scale, refresh_rate, &change]() {
+        change = SetWindowOnGPUThread(window, width, height, scale, refresh_rate);
+      },
+      true);
+    EmuThread::RunOnThread(
+      [change]() {
+        if (change == WindowChange::Resized)
+          Host::Internal::OnDisplayWindowResized();
+        else if (change != WindowChange::None)
+          Host::Internal::OnDisplayWindowUpdated(change == WindowChange::Updated);
+      },
+      false);
+    return;
+  }
+
   // Blocks, so the app's surface outlives the GPU device's use of it.
   EmuThread::RunOnThread(
     [window, width, height, scale, refresh_rate]() { SetWindow(window, width, height, scale, refresh_rate); }, true);
+}
+
+AndroidHost::WindowChange AndroidHost::SetWindowOnGPUThread(ANativeWindow* window, s32 width, s32 height, float scale,
+                                                            float refresh_rate)
+{
+  if (window)
+  {
+    s_window_width = static_cast<u32>((width > 0) ? width : ANativeWindow_getWidth(window));
+    s_window_height = static_cast<u32>((height > 0) ? height : ANativeWindow_getHeight(window));
+    s_window_scale = (scale > 0.0f) ? scale : 1.0f;
+    s_window_refresh_rate = std::max(refresh_rate, 0.0f);
+  }
+
+  if (window && window == s_window)
+  {
+    // Same surface, new size. Drop the extra reference the app took for this call.
+    ANativeWindow_release(window);
+    if (!g_gpu_device)
+      return WindowChange::None;
+    Host::Internal::ResizeDisplayWindowOnGPUThread(static_cast<s32>(s_window_width),
+                                                   static_cast<s32>(s_window_height), s_window_scale);
+    return WindowChange::Resized;
+  }
+
+  if (!window && !s_window)
+    return WindowChange::None;
+
+  if (window)
+    INFO_LOG("New surface, {}x{}.", s_window_width, s_window_height);
+  else
+    INFO_LOG("Surface destroyed.");
+
+  ANativeWindow* const old_window = s_window;
+  s_window = window;
+
+  // Moves the GPU device to the new window, or makes it surfaceless, before the old window goes.
+  WindowChange change = WindowChange::None;
+  if (g_gpu_device)
+    change = Host::Internal::UpdateDisplayWindowOnGPUThread() ? WindowChange::Updated : WindowChange::UpdateFailed;
+  if (old_window)
+    ANativeWindow_release(old_window);
+
+  return change;
 }
 
 void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate)
@@ -287,6 +363,9 @@ void AndroidHost::SetPictureAtTop(bool top)
     [top]() {
       s_picture_at_top = top;
       g_settings.display_alignment = top ? DisplayAlignment::LeftOrTop : s_loaded_display_alignment;
+
+      // The presenter, on the GPU thread, reads its own copy of the settings.
+      System::PushGPUSettings();
     },
     false);
 }

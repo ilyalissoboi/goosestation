@@ -34,6 +34,7 @@
 #include "imgui.h"
 
 #include <cmath>
+#include <mutex>
 #include <numbers>
 #include <thread>
 
@@ -51,6 +52,23 @@ static TimingEvent s_crtc_tick_event(
 static TimingEvent s_command_tick_event(
   "GPU Command Tick", 1, 1, [](void* param, TickCount ticks, TickCount ticks_late) { g_gpu->CommandTickEvent(ticks); },
   nullptr);
+
+// The device's counters, averaged over a second by the GPU thread, which owns them; read by the emulation thread.
+namespace {
+struct HostStats
+{
+  size_t buffer_streamed = 0;
+  size_t vram_usage = 0;
+  u32 num_draws = 0;
+  u32 num_barriers = 0;
+  u32 num_render_passes = 0;
+  u32 num_copies = 0;
+  u32 num_downloads = 0;
+  u32 num_uploads = 0;
+};
+} // namespace
+static std::mutex s_host_stats_mutex;
+static HostStats s_host_stats;
 
 // #define PSX_GPU_STATS
 #ifdef PSX_GPU_STATS
@@ -1973,20 +1991,25 @@ void GPU::GetStatsString(SmallStringBase& str)
   if (IsHardwareRenderer())
   {
     str.format("{} HW | {} P | {} DC | {} B | {} RP | {} RB | {} C | {} W",
-               GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI()), m_stats.num_primitives,
+               GPUDevice::RenderAPIToString(GPUThread::GetDeviceInfo().render_api), m_stats.num_primitives,
                m_stats.host_num_draws, m_stats.host_num_barriers, m_stats.host_num_render_passes,
                m_stats.host_num_downloads, m_stats.num_copies, m_stats.num_writes);
   }
   else
   {
-    str.format("{} SW | {} P | {} R | {} C | {} W", GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI()),
+    str.format("{} SW | {} P | {} R | {} C | {} W", GPUDevice::RenderAPIToString(GPUThread::GetDeviceInfo().render_api),
                m_stats.num_primitives, m_stats.num_reads, m_stats.num_copies, m_stats.num_writes);
   }
 }
 
 void GPU::GetMemoryStatsString(SmallStringBase& str)
 {
-  const u32 vram_usage_mb = static_cast<u32>((g_gpu_device->GetVRAMUsage() + (1048576 - 1)) / 1048576);
+  size_t vram_usage;
+  {
+    std::unique_lock lock(s_host_stats_mutex);
+    vram_usage = s_host_stats.vram_usage;
+  }
+  const u32 vram_usage_mb = static_cast<u32>((vram_usage + (1048576 - 1)) / 1048576);
   const u32 stream_kb = static_cast<u32>((m_stats.host_buffer_streamed + (1024 - 1)) / 1024);
 
   str.format("{} MB VRAM | {} KB STR | {} TC | {} TU", vram_usage_mb, stream_kb, m_stats.host_num_copies,
@@ -1996,16 +2019,17 @@ void GPU::GetMemoryStatsString(SmallStringBase& str)
 void GPU::ResetStatistics()
 {
   m_counters = {};
-  g_gpu_device->ResetStatistics();
+  GPUThread::RunOnThread([]() {
+    if (g_gpu_device)
+      g_gpu_device->ResetStatistics();
+  });
 }
 
 void GPU::UpdateStatistics(u32 frame_count)
 {
-  const GPUDevice::Statistics& stats = g_gpu_device->GetStatistics();
   const u32 round = (frame_count - 1);
 
 #define UPDATE_COUNTER(x) m_stats.x = (m_counters.x + round) / frame_count
-#define UPDATE_GPU_STAT(x) m_stats.host_##x = (stats.x + round) / frame_count
 
   UPDATE_COUNTER(num_reads);
   UPDATE_COUNTER(num_writes);
@@ -2016,16 +2040,39 @@ void GPU::UpdateStatistics(u32 frame_count)
   // UPDATE_COUNTER(num_read_texture_updates);
   // UPDATE_COUNTER(num_ubo_updates);
 
-  UPDATE_GPU_STAT(buffer_streamed);
-  UPDATE_GPU_STAT(num_draws);
-  UPDATE_GPU_STAT(num_barriers);
-  UPDATE_GPU_STAT(num_render_passes);
-  UPDATE_GPU_STAT(num_copies);
-  UPDATE_GPU_STAT(num_downloads);
-  UPDATE_GPU_STAT(num_uploads);
-
-#undef UPDATE_GPU_STAT
 #undef UPDATE_COUNTER
 
-  ResetStatistics();
+  m_counters = {};
+
+  // The device's own, after the frames queued before them: the GPU thread's second, shown a second later.
+  GPUThread::RunOnThread([frame_count, round]() {
+    if (!g_gpu_device)
+      return;
+
+    const GPUDevice::Statistics& stats = g_gpu_device->GetStatistics();
+    HostStats hs;
+#define UPDATE_GPU_STAT(x) hs.x = (stats.x + round) / frame_count
+    UPDATE_GPU_STAT(buffer_streamed);
+    UPDATE_GPU_STAT(num_draws);
+    UPDATE_GPU_STAT(num_barriers);
+    UPDATE_GPU_STAT(num_render_passes);
+    UPDATE_GPU_STAT(num_copies);
+    UPDATE_GPU_STAT(num_downloads);
+    UPDATE_GPU_STAT(num_uploads);
+#undef UPDATE_GPU_STAT
+    hs.vram_usage = g_gpu_device->GetVRAMUsage();
+    g_gpu_device->ResetStatistics();
+
+    std::unique_lock lock(s_host_stats_mutex);
+    s_host_stats = hs;
+  });
+
+  std::unique_lock lock(s_host_stats_mutex);
+  m_stats.host_buffer_streamed = s_host_stats.buffer_streamed;
+  m_stats.host_num_draws = s_host_stats.num_draws;
+  m_stats.host_num_barriers = s_host_stats.num_barriers;
+  m_stats.host_num_render_passes = s_host_stats.num_render_passes;
+  m_stats.host_num_copies = s_host_stats.num_copies;
+  m_stats.host_num_downloads = s_host_stats.num_downloads;
+  m_stats.host_num_uploads = s_host_stats.num_uploads;
 }

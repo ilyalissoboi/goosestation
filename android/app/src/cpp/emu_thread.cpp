@@ -3,6 +3,7 @@
 
 #include "emu_thread.h"
 #include "android_host.h"
+#include "android_vsync.h"
 
 #include "core/system.h"
 
@@ -150,7 +151,11 @@ void EmuThread::ThreadMain()
   }
 
   if (started)
+  {
     s_running.store(true, std::memory_order_release);
+    // The screen's refreshes, which a game locked to them paces by (Host::GetDisplayTimeline()).
+    AndroidVsync::Start();
+  }
   {
     std::unique_lock lock(s_startup_mutex);
     s_startup_done = true;

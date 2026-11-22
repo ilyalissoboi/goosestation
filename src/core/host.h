@@ -18,6 +18,7 @@
 class Error;
 class SettingsInterface;
 struct WindowInfo;
+struct DisplayTimeline;
 enum class AudioBackend : u8;
 enum class AudioExpansionMode : u8;
 enum class AudioStretchMode : u8;
@@ -26,6 +27,10 @@ class AudioStream;
 class CDImage;
 
 namespace Host {
+/// The screen's refresh timeline, where the host has one (Android's Choreographer): false otherwise, or when it has
+/// stopped ticking. Called on the emulation thread.
+bool GetDisplayTimeline(DisplayTimeline* timeline);
+
 // Base setting retrieval, bypasses layers.
 std::string GetBaseStringSettingValue(const char* section, const char* key, const char* default_value = "");
 SmallString GetBaseSmallStringSettingValue(const char* section, const char* key, const char* default_value = "");

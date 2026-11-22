@@ -282,6 +282,15 @@ object NativeLibrary {
     /** Tests: syncs memory cards every [ms] instead of every 5 minutes (0 for 5 minutes again), from now. */
     external fun setMemcardSyncPeriodForTest(ms: Long)
 
+    /** Tests: starts the screen's refresh timeline the core paces frames to (it runs anyway once the core has). */
+    external fun startVsyncTimelineForTest()
+
+    /** Tests: stops it. */
+    external fun stopVsyncTimelineForTest()
+
+    /** Tests: the latest refresh, the period and the deadline's lead, in nanoseconds, or null without a timeline. */
+    external fun getVsyncTimelineForTest(): LongArray?
+
     /** Tests: the core's card hooks, as a game's card at [path] calls them. */
     external fun memcardCardOpenedForTest(path: String)
 

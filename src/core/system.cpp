@@ -2261,7 +2261,9 @@ void System::FrameDone()
     s_last_active_frame_time = std::max(s_last_active_frame_time, GPUThreadCommands::GetLastPresentActiveTime());
   if (s_pre_frame_sleep)
     AccumulatePreFrameSleepTime();
-  if (s_display_lock_refreshes > 0)
+  // With a GPU thread, the frame's active time runs to its present's end already; without one it's taken after the
+  // present below.
+  if (s_display_lock_refreshes > 0 && GPUThread::IsUsingThread())
     s_display_lock_frame_times.Add(s_last_active_frame_time);
 
   // The screen's rate or the timeline changed (60 to 120 Hz, the surface gone), and has stayed so: lock, unlock or
@@ -2297,6 +2299,8 @@ void System::FrameDone()
     PresentDisplay(false, false);
     s_present_deadline = 0;
     s_present_ran_long = false;
+    if (!GPUThread::IsUsingThread())
+      s_display_lock_frame_times.Add(Common::Timer::GetCurrentValue() - s_frame_start_time);
     SleepToDisplayDeadline(Common::Timer::GetCurrentValue());
   }
   else if (!skip_this_frame)

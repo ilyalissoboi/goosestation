@@ -2520,7 +2520,10 @@ void VulkanDevice::EndPresent(bool explicit_present)
 
 void VulkanDevice::SubmitPresent()
 {
-  DebugAssert(m_swap_chain);
+  // The surface went away since the present began (its frame went with it).
+  if (!m_swap_chain)
+    return;
+
   DoPresent(m_swap_chain.get());
 }
 

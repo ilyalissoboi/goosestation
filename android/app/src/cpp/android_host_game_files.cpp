@@ -25,6 +25,7 @@
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
@@ -571,10 +572,11 @@ bool AndroidHost::PostProcessingUsesOpenGLES(const std::optional<std::string>& k
   bool gles = false;
   EmuThread::RunOnThread(
     [&running, &gles]() {
-      if (System::IsValid() && g_gpu_device)
+      const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
+      if (System::IsValid() && info.has_device)
       {
         running = true;
-        gles = (g_gpu_device->GetRenderAPI() == RenderAPI::OpenGLES);
+        gles = (info.render_api == RenderAPI::OpenGLES);
       }
     },
     true);
@@ -608,8 +610,11 @@ bool AndroidHost::IsPostProcessingActiveForTest(const std::string& section)
     [&section, &active]() {
       if (System::IsValid())
       {
-        active = (section == PostProcessing::Config::INTERNAL_CHAIN_SECTION) ? PostProcessing::InternalChain.IsActive() :
-                                                                               PostProcessing::DisplayChain.IsActive();
+        GPUThread::RunOnThreadAndWait([&section, &active]() {
+          active = (section == PostProcessing::Config::INTERNAL_CHAIN_SECTION) ?
+                     PostProcessing::InternalChain.IsActive() :
+                     PostProcessing::DisplayChain.IsActive();
+        });
       }
     },
     true);

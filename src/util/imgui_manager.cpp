@@ -4,6 +4,7 @@
 #include "imgui_manager.h"
 #include "fallback_fonts.h"
 #include "gpu_device.h"
+#include "gpu_thread.h"
 #include "host.h"
 #include "image.h"
 #include "imgui_fullscreen.h"
@@ -46,7 +47,7 @@ namespace {
 struct SoftwareCursor
 {
   std::string image_path;
-  std::unique_ptr<GPUTexture> texture;
+  GPUThread::TexturePtr texture;
   u32 color;
   float scale;
   float extent_x;
@@ -64,7 +65,7 @@ struct OSDMessage
   float target_y;
   float last_y;
   std::optional<Host::OSDImage> image;
-  std::unique_ptr<GPUTexture> texture; // created from image when first drawn
+  GPUThread::TexturePtr texture; // created from image when first drawn
 };
 
 struct FallbackFont
@@ -84,6 +85,7 @@ static void SetKeyMap();
 static bool LoadFontData();
 static void ReloadFontDataIfActive();
 static bool AddImGuiFonts(bool fullscreen_fonts);
+static bool UpdateFontTexture();
 static ImFont* AddTextFont(float size);
 static ImFont* AddFixedFont(float size);
 static bool AddIconFonts(float size);
@@ -262,6 +264,27 @@ void ImGuiManager::SetShowOSDMessages(bool enable)
     Host::ClearOSDMessages();
 }
 
+// The atlas's pixels go to the GPU thread, which makes or updates the texture; waited for, so the atlas is left alone
+// meanwhile, and frames already queued draw with the texture as it was.
+bool ImGuiManager::UpdateFontTexture()
+{
+  ImGuiIO& io = ImGui::GetIO();
+  unsigned char* pixels;
+  int width, height;
+  io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+
+  GPUTexture* texture = nullptr;
+  GPUThread::RunOnThreadAndWait([pixels, width, height, &texture]() {
+    if (g_gpu_device)
+      texture = g_gpu_device->UpdateImGuiFontTexture(pixels, static_cast<u32>(width), static_cast<u32>(height));
+  });
+  if (!texture)
+    return false;
+
+  io.Fonts->SetTexID(texture);
+  return true;
+}
+
 bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error* error)
 {
   if (!LoadFontData())
@@ -271,7 +294,8 @@ bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error*
   }
 
   s_global_prescale = global_scale;
-  s_global_scale = std::max(g_gpu_device->GetWindowScale() * global_scale, 1.0f);
+  const GPUThread::DeviceInfo device_info = GPUThread::GetDeviceInfo();
+  s_global_scale = std::max(device_info.window_scale * global_scale, 1.0f);
   s_scale_changed = false;
   s_show_osd_messages = show_osd_messages;
 
@@ -297,15 +321,15 @@ bool ImGuiManager::Initialize(float global_scale, bool show_osd_messages, Error*
   };
   io.SetClipboardTextFn = [](void*, const char* text) { Host::CopyTextToClipboard(text); };
 
-  s_window_width = static_cast<float>(g_gpu_device->GetWindowWidth());
-  s_window_height = static_cast<float>(g_gpu_device->GetWindowHeight());
+  s_window_width = static_cast<float>(device_info.window_width);
+  s_window_height = static_cast<float>(device_info.window_height);
   io.DisplayFramebufferScale = ImVec2(1, 1); // We already scale things ourselves, this would double-apply scaling
   io.DisplaySize = ImVec2(s_window_width, s_window_height);
 
   SetKeyMap();
   SetStyle();
 
-  if (!AddImGuiFonts(false) || !g_gpu_device->UpdateImGuiFontTexture())
+  if (!AddImGuiFonts(false) || !UpdateFontTexture())
   {
     Error::SetString(error, "Failed to create ImGui font text");
     ImGui::DestroyContext();
@@ -374,7 +398,8 @@ void ImGuiManager::RequestScaleUpdate()
 
 void ImGuiManager::UpdateScale()
 {
-  const float window_scale = g_gpu_device ? g_gpu_device->GetWindowScale() : 1.0f;
+  const GPUThread::DeviceInfo device_info = GPUThread::GetDeviceInfo();
+  const float window_scale = device_info.has_device ? device_info.window_scale : 1.0f;
   const float scale = std::max(window_scale * s_global_prescale, 1.0f);
 
   if ((!HasFullscreenFonts() || !ImGuiFullscreen::UpdateLayoutScale()) && scale == s_global_scale)
@@ -390,7 +415,7 @@ void ImGuiManager::UpdateScale()
   if (!AddImGuiFonts(HasFullscreenFonts()))
     Panic("Failed to create ImGui font text");
 
-  if (!g_gpu_device->UpdateImGuiFontTexture())
+  if (!UpdateFontTexture())
     Panic("Failed to recreate font texture after scale+resize");
 }
 
@@ -832,7 +857,7 @@ void ImGuiManager::ReloadFontDataIfActive()
   if (!AddImGuiFonts(HasFullscreenFonts()))
     Panic("Failed to create ImGui font text");
 
-  if (!g_gpu_device->UpdateImGuiFontTexture())
+  if (!UpdateFontTexture())
     Panic("Failed to recreate font texture after scale+resize");
 
   NewFrame();
@@ -905,7 +930,7 @@ void ImGuiManager::UpdateFallbackGlyphs()
     WARNING_LOG("No fallback font has {} of the glyphs needed.", missing - s_fallback_unavailable);
   s_fallback_unavailable = missing;
 
-  if (rebuilt && !g_gpu_device->UpdateImGuiFontTexture())
+  if (rebuilt && !UpdateFontTexture())
     Panic("Failed to recreate font texture after adding glyphs");
 }
 
@@ -929,7 +954,7 @@ bool ImGuiManager::AddFullscreenFontsIfMissing()
     AddImGuiFonts(false);
   }
 
-  g_gpu_device->UpdateImGuiFontTexture();
+  UpdateFontTexture();
   NewFrame();
 
   return HasFullscreenFonts();
@@ -1026,9 +1051,8 @@ void ImGuiManager::CreateOSDMessageTexture(OSDMessage& msg)
   const u32 height = image.frame_height * image.frame_count;
   if (image.width > 0 && height > 0 && image.pixels.size() == image.width * height)
   {
-    msg.texture = g_gpu_device->FetchTexture(image.width, height, 1, 1, 1, GPUTexture::Type::Texture,
-                                             GPUTexture::Format::RGBA8, image.pixels.data(),
-                                             image.width * sizeof(u32));
+    msg.texture =
+      GPUThread::CreateTexture(image.width, height, GPUTexture::Format::RGBA8, image.pixels.data(), image.width * sizeof(u32));
   }
 
   // Without a texture, the message is shown as text alone.
@@ -1041,8 +1065,7 @@ void ImGuiManager::CreateOSDMessageTexture(OSDMessage& msg)
 
 void ImGuiManager::ReleaseOSDMessageTexture(OSDMessage& msg)
 {
-  if (msg.texture)
-    g_gpu_device->RecycleTexture(std::move(msg.texture));
+  msg.texture.reset();
 }
 
 void ImGuiManager::AcquirePendingOSDMessages(Common::Timer::Value current_time)
@@ -1408,9 +1431,9 @@ void ImGuiManager::UpdateSoftwareCursorTexture(u32 index)
     ERROR_LOG("Failed to load software cursor {} image '{}'", index, sc.image_path);
     return;
   }
-  g_gpu_device->RecycleTexture(std::move(sc.texture));
-  sc.texture = g_gpu_device->FetchTexture(image.GetWidth(), image.GetHeight(), 1, 1, 1, GPUTexture::Type::Texture,
-                                          GPUTexture::Format::RGBA8, image.GetPixels(), image.GetPitch());
+  sc.texture.reset();
+  sc.texture =
+    GPUThread::CreateTexture(image.GetWidth(), image.GetHeight(), GPUTexture::Format::RGBA8, image.GetPixels(), image.GetPitch());
   if (!sc.texture)
   {
     ERROR_LOG("Failed to upload {}x{} software cursor {} image '{}'", image.GetWidth(), image.GetHeight(), index,
@@ -1458,7 +1481,7 @@ void ImGuiManager::SetSoftwareCursor(u32 index, std::string image_path, float im
   const bool is_hiding_or_showing = (image_path.empty() != sc.image_path.empty());
   sc.image_path = std::move(image_path);
   sc.scale = image_scale;
-  if (g_gpu_device)
+  if (GPUThread::GetDeviceInfo().has_device)
     UpdateSoftwareCursorTexture(index);
 
   // Hide the system cursor when we activate a software cursor.

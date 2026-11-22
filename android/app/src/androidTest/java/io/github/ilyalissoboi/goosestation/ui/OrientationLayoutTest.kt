@@ -975,7 +975,7 @@ class OrientationLayoutTest : ControllerKeys {
                     "Downsampling",
                     "Downsampling scale",
                     "Multisampling",
-                    "Threaded presentation",
+                    "Use a GPU thread",
                     "Texture filtering",
                     "Sprite texture filtering",
                     "True colour",

@@ -233,6 +233,14 @@ float GetCPUThreadUsage();
 float GetCPUThreadAverageTime();
 float GetSWThreadUsage();
 float GetSWThreadAverageTime();
+float GetGPUThreadUsage();
+float GetGPUThreadAverageTime();
+
+/// Input polled to its frame's present finished, the last second's mean, ms (0 without presents).
+float GetInputLatency();
+
+/// False while the GPU's timer queries give times no GPU could have measured: GPU % is then not shown.
+bool IsGPUTimePlausible();
 float GetGPUUsage();
 float GetGPUAverageTime();
 const FrameTimeHistory& GetFrameTimeHistory();
@@ -341,6 +349,15 @@ void SetCheatList(std::unique_ptr<CheatList> cheats);
 
 /// Updates throttler.
 void UpdateSpeedLimiterState();
+
+/// Hands the GPU thread a copy of g_settings (g_gpu_settings), in order with the work already pushed.
+void PushGPUSettings();
+
+/// Returns once the presents queued are few enough to poll input for the next frame (GPUThread::MaxFramesAhead).
+void WaitForPresents();
+
+/// Sleeps to the window's refresh rate, for presents not paced by vsync (paused Big Picture).
+void ThrottlePresentation();
 
 /// Toggles fast forward state.
 bool IsFastForwardEnabled();

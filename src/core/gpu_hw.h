@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "gpu.h"
+#include "gpu_presenter.h"
+#include "gpu_types.h"
 #include "gpu_texture_cache.h"
 #include "texture_replacements.h"
 
@@ -19,11 +20,16 @@
 
 class Error;
 
-class GPU_SW_Backend;
-struct GPUBackendCommand;
-struct GPUBackendDrawCommand;
+struct GPUThreadCommand;
+struct GPUThreadHWDrawPolygonCommand;
+struct GPUThreadHWDrawRectangleCommand;
+struct GPUThreadHWDrawLineCommand;
+struct Settings;
+class StateWrapper;
 
-class GPU_HW final : public GPU
+/// The hardware renderer, on the GPU thread: batches and draws what GPU_HWFrontend sends it. It reads nothing of the
+/// emulation thread's GPU but the commands, and g_gpu_settings.
+class GPU_HW final
 {
 public:
   enum class BatchRenderMode : u8
@@ -91,23 +97,43 @@ public:
                 static_cast<u8>(BatchTextureMode::Direct16Bit) == static_cast<u8>(GPUTextureMode::Direct16Bit));
 
   GPU_HW();
-  ~GPU_HW() override;
+  ~GPU_HW();
 
-  const Threading::Thread* GetSWThread() const override;
-  bool IsHardwareRenderer() const override;
+  /// The resolution scale in use, for the emulation thread (GPU_HWFrontend's display resolutions).
+  static u32 GetPublishedResolutionScale();
 
-  bool Initialize() override;
-  void Reset(bool clear_vram) override;
-  bool DoState(StateWrapper& sw, GPUTexture** host_texture, bool update_display) override;
+  bool Initialize(const GPUDisplayParams& params);
 
-  void RestoreDeviceContext() override;
+  /// Before GPU::Reset(): drops the batch being built.
+  void BeginReset();
+  /// After GPU::Reset() and the draw state it leaves.
+  void Reset(bool clear_vram);
 
-  void UpdateSettings(const Settings& old_settings) override;
-  void UpdateResolutionScale() override final;
-  std::tuple<u32, u32> GetEffectiveDisplayResolution(bool scaled = true) override;
-  std::tuple<u32, u32> GetFullDisplayResolution(bool scaled = true) override;
+  void HandleCommand(const GPUThreadCommand* cmd);
 
-  void UpdateDisplay() override;
+  void UpdateSettings(const Settings& old_settings, const GPUDisplayParams& params);
+  u32 CalculateResolutionScale(const GPUDisplayParams& params) const;
+  ALWAYS_INLINE u32 GetResolutionScale() const { return m_resolution_scale; }
+
+  /// Rebinds the renderer's state after anything else used the device.
+  void RestoreDeviceContext();
+
+  /// Draws the batch being built, before something else (a window change) uses the device.
+  void FlushRenderForDeviceChange();
+
+  /// Everything before it drawn, the rect read back into g_vram.
+  void ReadVRAM(u32 x, u32 y, u32 width, u32 height);
+
+  /// Rewind and runahead states: VRAM copied into or out of a texture of the state's own.
+  bool DoHostTextureState(GPUTexture** host_texture, bool reading);
+
+  /// After a state's VRAM is loaded. readback_vram: the state was a host texture, so VRAM is read back for the cache.
+  void OnStateLoaded(bool readback_vram);
+
+  /// With software readbacks, g_vram is VRAM as drawn, and what rebuilds restore from.
+  void SetSoftwareReadbacks(bool enabled);
+
+  void DrawRendererStats();
 
 private:
   enum : u32
@@ -170,6 +196,24 @@ private:
     u32 u_set_mask_while_drawing;
   };
 
+  /// The draw mode, palette and texture window as GPU_HWFrontend last sent them, with the changes flagged since.
+  struct DrawMode
+  {
+    GPUDrawModeReg mode_reg;
+    GPUTexturePaletteReg palette_reg;
+    GPUTextureWindow texture_window;
+    bool texture_page_changed;
+    bool texture_window_changed;
+
+    ALWAYS_INLINE bool IsTexturePageChanged() const { return texture_page_changed; }
+    ALWAYS_INLINE void SetTexturePageChanged() { texture_page_changed = true; }
+    ALWAYS_INLINE void ClearTexturePageChangedFlag() { texture_page_changed = false; }
+
+    ALWAYS_INLINE bool IsTextureWindowChanged() const { return texture_window_changed; }
+    ALWAYS_INLINE void SetTextureWindowChanged() { texture_window_changed = true; }
+    ALWAYS_INLINE void ClearTextureWindowChangedFlag() { texture_window_changed = false; }
+  };
+
   struct RendererStats
   {
     u32 num_batches;
@@ -208,7 +252,6 @@ private:
   void UnmapGPUBuffer(u32 used_vertices, u32 used_indices);
   void DrawBatchVertices(BatchRenderMode render_mode, u32 num_indices, u32 base_index, u32 base_vertex);
 
-  u32 CalculateResolutionScale() const;
   GPUDownsampleMode GetDownsampleMode(u32 resolution_scale) const;
 
   bool IsUsingMultisampling() const;
@@ -251,19 +294,23 @@ private:
   /// Returns true if the draw is going to use shader blending/framebuffer fetch.
   bool NeedsShaderBlending(GPUTransparencyMode transparency, BatchTextureMode texture, bool check_mask) const;
 
-  void FillBackendCommandParameters(GPUBackendCommand* cmd) const;
-  void FillDrawCommand(GPUBackendDrawCommand* cmd, GPURenderCommand rc) const;
-  void UpdateSoftwareRenderer(bool copy_vram_from_hw);
+  /// VRAM at native resolution, for a rebuild or the texture cache: g_vram with software readbacks, else read back
+  /// into a buffer of this renderer's own (which g_vram's other writers never touch).
+  const u16* ReadBackVRAMShadow();
+  void ReadVRAMInto(u32 x, u32 y, u32 width, u32 height, u16* shadow);
 
-  void FillVRAM(u32 x, u32 y, u32 width, u32 height, u32 color) override;
-  void ReadVRAM(u32 x, u32 y, u32 width, u32 height) override;
-  void UpdateVRAM(u32 x, u32 y, u32 width, u32 height, const void* data, bool set_mask, bool check_mask) override;
-  void CopyVRAM(u32 src_x, u32 src_y, u32 dst_x, u32 dst_y, u32 width, u32 height) override;
-  void DispatchRenderCommand() override;
-  void UpdateCLUT(GPUTexturePaletteReg reg, bool clut_is_8bit) override;
-  void FlushRender() override;
-  void DrawRendererStats() override;
-  void OnBufferSwapped() override;
+  void FillVRAM(u32 x, u32 y, u32 width, u32 height, u32 color);
+  void UpdateVRAM(u32 x, u32 y, u32 width, u32 height, const void* data, bool set_mask, bool check_mask);
+  void CopyVRAM(u32 src_x, u32 src_y, u32 dst_x, u32 dst_y, u32 width, u32 height);
+  void SetupBatch(GPURenderCommand rc, u32 num_line_vertices);
+  void DrawPolygon(const GPUThreadHWDrawPolygonCommand* cmd);
+  void DrawRectangle(const GPUThreadHWDrawRectangleCommand* cmd);
+  void DrawLine(const GPUThreadHWDrawLineCommand* cmd);
+  void FlushRender();
+  void UpdateDisplay();
+
+  ALWAYS_INLINE bool IsInterlacedRenderingEnabled() const { return m_params.interlaced_rendering; }
+  ALWAYS_INLINE u32 GetActiveLineLSB() const { return m_params.active_line_lsb; }
 
   void UpdateVRAMOnGPU(u32 x, u32 y, u32 width, u32 height, const void* data, u32 data_pitch, bool set_mask,
                        bool check_mask, const GSVector4i bounds);
@@ -303,7 +350,19 @@ private:
   std::unique_ptr<GPUTextureBuffer> m_vram_upload_buffer;
   std::unique_ptr<GPUTexture> m_vram_write_texture;
 
-  std::unique_ptr<GPU_SW_Backend> m_sw_renderer;
+  // What GPU_HWFrontend sent last: the draw state, drawing area, the GPUSTAT bits of the command being handled, and
+  // what the screen shows.
+  DrawMode m_draw_mode = {};
+  GPUDrawingArea m_drawing_area = {};
+  GSVector4i m_clamped_drawing_area = {};
+  bool m_drawing_area_changed = true;
+  GPUBackendCommandParameters m_params = {};
+  GPURenderCommand m_render_command = {}; // the draw being batched
+  u32 m_line_vertex_count = 0;
+  GPUDisplayParams m_display_params = {};
+
+  bool m_software_readbacks = false;
+  std::unique_ptr<u16[]> m_vram_shadow;
 
   std::unique_ptr<GPUTextureCache> m_texture_cache;
   GPUTextureCache::DrawKey m_texture_cache_key = {};
@@ -402,3 +461,6 @@ private:
   // [depth_test][transparency_mode][render_mode][texture_mode][dithering][interlacing][check_mask]
   DimensionalArray<std::unique_ptr<GPUPipeline>, 2, 2, 2, NUM_TEXTURE_MODES, 5, 5, 2> m_batch_pipelines{};
 };
+
+/// The GPU thread's hardware renderer, while one is in use.
+extern std::unique_ptr<GPU_HW> g_gpu_hw;

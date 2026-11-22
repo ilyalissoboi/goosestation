@@ -4,6 +4,7 @@
 #pragma once
 
 #include "common/types.h"
+#include "gpu_thread.h"
 
 #include "IconsFontAwesome5.h"
 #include "imgui.h"
@@ -129,7 +130,7 @@ void Shutdown();
 
 /// Texture cache.
 const std::shared_ptr<GPUTexture>& GetPlaceholderTexture();
-std::unique_ptr<GPUTexture> CreateTextureFromImage(const RGBA8Image& image);
+GPUThread::TexturePtr CreateTextureFromImage(const RGBA8Image& image);
 std::shared_ptr<GPUTexture> LoadTexture(std::string_view path);
 GPUTexture* GetCachedTexture(std::string_view name);
 GPUTexture* GetCachedTextureAsync(std::string_view name);

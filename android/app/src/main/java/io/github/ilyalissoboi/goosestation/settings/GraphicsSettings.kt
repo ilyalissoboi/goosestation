@@ -26,6 +26,9 @@ object GraphicsSettings {
     /** The software renderer's own thread. */
     val THREADED_RENDERING = BoolSetting("GPU", "UseThread", true)
 
+    /** The device and its work on a thread of their own, every renderer: on by default (`Settings::DEFAULT_GPU_THREAD`). */
+    val GPU_THREAD = BoolSetting("GPU", "UseGPUThread", true)
+
     // Enhancements.
     val TEXTURE_FILTER = NameSetting("GPU", "TextureFilter", "Nearest", NameList.TextureFilter)
 
@@ -120,6 +123,7 @@ object GraphicsSettings {
             PER_SAMPLE_SHADING,
             THREADED_PRESENTATION,
             THREADED_RENDERING,
+            GPU_THREAD,
             TEXTURE_FILTER,
             SPRITE_TEXTURE_FILTER,
             TRUE_COLOR,

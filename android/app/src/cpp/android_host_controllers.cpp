@@ -24,6 +24,7 @@
 #include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
 #include "util/android_input_source.h"
+#include "util/gpu_thread.h"
 #include "util/gpu_device.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
@@ -728,7 +729,7 @@ bool AndroidHost::ReloadPostProcessingShaders()
   EmuThread::RunOnThread(
     [&reloaded]() {
       if (System::IsValid())
-        reloaded = PostProcessing::ReloadShaders();
+        GPUThread::RunOnThreadAndWait([&reloaded]() { reloaded = PostProcessing::ReloadShaders(); });
     },
     true);
   return reloaded;

@@ -334,7 +334,7 @@ const TextureReplacements::ReplacementImage* TextureReplacements::GetTextureImag
 const TextureReplacements::ReplacementImage* TextureReplacements::GetVRAMReplacement(u32 width, u32 height,
                                                                                      const void* pixels)
 {
-  if (!g_settings.texture_replacements.enable_vram_write_replacements)
+  if (!g_gpu_settings.texture_replacements.enable_vram_write_replacements)
     return nullptr;
 
   const XXH128_hash_t hash = XXH3_128bits(pixels, width * height * sizeof(u16));

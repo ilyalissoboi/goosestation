@@ -21,6 +21,7 @@
 
 #include "util/cd_image.h"
 #include "util/gpu_device.h"
+#include "util/gpu_thread.h"
 #include "util/imgui_fullscreen.h"
 #include "util/imgui_manager.h"
 #include "util/ini_settings_interface.h"
@@ -566,7 +567,7 @@ struct SaveStateListEntry
   std::string title;
   std::string summary;
   std::string path;
-  std::unique_ptr<GPUTexture> preview_texture;
+  GPUThread::TexturePtr preview_texture;
   time_t timestamp;
   s32 slot;
   bool global;
@@ -4903,6 +4904,12 @@ void FullscreenUI::DrawDisplaySettingsPage()
               "Usually results in worse frame pacing."),
     "Display", "DisableMailboxPresentation", false);
 
+  DrawToggleSetting(bsi, FSUI_CSTR("Use a GPU Thread"),
+                    FSUI_CSTR("Draws and presents on a thread of its own, beside the emulation, at most one frame "
+                              "behind it. Off runs everything on the emulation thread, as before."),
+                    "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
+  const bool gpu_thread = GetEffectiveBoolSetting(bsi, "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
+
   switch (renderer)
   {
 #ifdef _WIN32
@@ -4919,9 +4926,13 @@ void FullscreenUI::DrawDisplaySettingsPage()
 #ifdef ENABLE_VULKAN
     case GPURenderer::HardwareVulkan:
     {
-      DrawToggleSetting(bsi, FSUI_CSTR("Threaded Presentation"),
-                        FSUI_CSTR("Presents frames on a background thread when fast forwarding or vsync is disabled."),
-                        "GPU", "ThreadedPresentation", true);
+      // Vulkan's present thread has nothing to do while the GPU thread presents.
+      if (!gpu_thread)
+      {
+        DrawToggleSetting(bsi, FSUI_CSTR("Threaded Presentation"),
+                          FSUI_CSTR("Presents frames on a background thread when fast forwarding or vsync is disabled."),
+                          "GPU", "ThreadedPresentation", true);
+      }
     }
     break;
 #endif
@@ -6297,7 +6308,10 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
                  FSUI_CSTR("Reloads the shaders from disk, applying any changes."),
                  bsi->GetBoolValue(section, "Enabled", false)))
   {
-    if (System::IsValid() && PostProcessing::ReloadShaders())
+    bool reloaded = false;
+    if (System::IsValid())
+      GPUThread::RunOnThreadAndWait([&reloaded]() { reloaded = PostProcessing::ReloadShaders(); });
+    if (reloaded)
       ShowToast(std::string(), FSUI_STR("Post-processing shaders reloaded."));
   }
 
@@ -7245,8 +7259,7 @@ void FullscreenUI::ClearSaveStateEntryList()
 {
   for (SaveStateListEntry& entry : s_save_state_selector_slots)
   {
-    if (entry.preview_texture)
-      g_gpu_device->RecycleTexture(std::move(entry.preview_texture));
+    entry.preview_texture.reset();
   }
   s_save_state_selector_slots.clear();
 }

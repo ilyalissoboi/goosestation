@@ -4,6 +4,7 @@
 #include "postprocessing_shader_fx.h"
 #include "image.h"
 #include "input_manager.h"
+#include "gpu_thread.h"
 #include "shadergen.h"
 
 // TODO: Remove me
@@ -38,7 +39,9 @@ static constexpr s32 DEFAULT_BUFFER_HEIGHT = 2160;
 
 static RenderAPI GetRenderAPI()
 {
-  return g_gpu_device ? g_gpu_device->GetRenderAPI() : RenderAPI::D3D11;
+  // From any thread: config-only loads come from the UI threads.
+  const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
+  return info.has_device ? info.render_api : RenderAPI::D3D11;
 }
 
 static bool PreprocessorFileExistsCallback(const std::string& path)
@@ -65,7 +68,7 @@ static bool PreprocessorReadFileCallback(const std::string& path, std::string& d
 
 static std::unique_ptr<reshadefx::codegen> CreateRFXCodegen()
 {
-  const bool debug_info = g_gpu_device ? g_gpu_device->IsDebugDevice() : false;
+  const bool debug_info = GPUThread::GetDeviceInfo().debug_device;
   const bool uniforms_to_spec_constants = false;
   const RenderAPI rapi = GetRenderAPI();
 

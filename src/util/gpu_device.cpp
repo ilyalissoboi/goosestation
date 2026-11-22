@@ -6,6 +6,7 @@
 #include "core/host.h"     // TODO: Remove, needed for getting fullscreen mode.
 #include "core/settings.h" // TODO: Remove, needed for dump directory.
 #include "gpu_framebuffer_manager.h"
+#include "gpu_thread.h"
 #include "shadergen.h"
 
 #include "common/assert.h"
@@ -26,6 +27,23 @@
 #include "xxhash.h"
 
 Log_SetChannel(GPUDevice);
+
+// The device belongs to the GPU thread: a call from elsewhere is a bug, reported once per place.
+#define CHECK_OWNER_THREAD()                                                                                           \
+  do                                                                                                                   \
+  {                                                                                                                    \
+    static bool s_reported = false;                                                                                    \
+    if (!GPUThread::IsOnThread() && !s_reported) [[unlikely]]                                                          \
+    {                                                                                                                  \
+      s_reported = true;                                                                                               \
+      ERROR_LOG("{}() called off the GPU thread", __func__);                                                           \
+    }                                                                                                                  \
+  } while (0)
+
+void GPUDevice::PooledTextureDeleter::operator()(GPUTexture* const tex)
+{
+  GPUThread::TextureDeleter()(tex);
+}
 
 #ifdef _WIN32
 #include "common/windows_headers.h"
@@ -648,14 +666,12 @@ void GPUDevice::DestroyResources()
   m_shader_cache.Close();
 }
 
-void GPUDevice::RenderImGui()
+void GPUDevice::RenderImGui(const ImDrawData* draw_data)
 {
+  CHECK_OWNER_THREAD();
   GL_SCOPE("RenderImGui");
 
-  ImGui::Render();
-
-  const ImDrawData* draw_data = ImGui::GetDrawData();
-  if (draw_data->CmdListsCount == 0)
+  if (!draw_data || draw_data->CmdListsCount == 0)
     return;
 
   SetPipeline(m_imgui_pipeline.get());
@@ -900,33 +916,25 @@ std::array<float, 4> GPUDevice::RGBA8ToFloat(u32 rgba)
                               static_cast<float>(rgba >> 24) * (1.0f / 255.0f)};
 }
 
-bool GPUDevice::UpdateImGuiFontTexture()
+GPUTexture* GPUDevice::UpdateImGuiFontTexture(const void* pixels, u32 width, u32 height)
 {
-  ImGuiIO& io = ImGui::GetIO();
-
-  unsigned char* pixels;
-  int width, height;
-  io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+  CHECK_OWNER_THREAD();
 
   const u32 pitch = sizeof(u32) * width;
-
-  if (m_imgui_font_texture && m_imgui_font_texture->GetWidth() == static_cast<u32>(width) &&
-      m_imgui_font_texture->GetHeight() == static_cast<u32>(height) &&
-      m_imgui_font_texture->Update(0, 0, static_cast<u32>(width), static_cast<u32>(height), pixels, pitch))
+  if (m_imgui_font_texture && m_imgui_font_texture->GetWidth() == width && m_imgui_font_texture->GetHeight() == height &&
+      m_imgui_font_texture->Update(0, 0, width, height, pixels, pitch))
   {
-    io.Fonts->SetTexID(m_imgui_font_texture.get());
-    return true;
+    return m_imgui_font_texture.get();
   }
 
   std::unique_ptr<GPUTexture> new_font =
     FetchTexture(width, height, 1, 1, 1, GPUTexture::Type::Texture, GPUTexture::Format::RGBA8, pixels, pitch);
   if (!new_font)
-    return false;
+    return nullptr;
 
   RecycleTexture(std::move(m_imgui_font_texture));
   m_imgui_font_texture = std::move(new_font);
-  io.Fonts->SetTexID(m_imgui_font_texture.get());
-  return true;
+  return m_imgui_font_texture.get();
 }
 
 bool GPUDevice::UsesLowerLeftOrigin() const
@@ -953,6 +961,7 @@ std::unique_ptr<GPUTexture> GPUDevice::FetchTexture(u32 width, u32 height, u32 l
                                                     GPUTexture::Type type, GPUTexture::Format format,
                                                     const void* data /*= nullptr*/, u32 data_stride /*= 0*/)
 {
+  CHECK_OWNER_THREAD();
   std::unique_ptr<GPUTexture> ret;
 
   const TexturePoolKey key = {static_cast<u16>(width),
@@ -1030,6 +1039,7 @@ GPUDevice::FetchAutoRecycleTexture(u32 width, u32 height, u32 layers, u32 levels
 
 void GPUDevice::RecycleTexture(std::unique_ptr<GPUTexture> texture)
 {
+  CHECK_OWNER_THREAD();
   if (!texture)
     return;
 
@@ -1155,25 +1165,37 @@ bool GPUDevice::ResizeTexture(std::unique_ptr<GPUTexture>* tex, u32 new_width, u
 
 bool GPUDevice::ShouldSkipPresentingFrame()
 {
+  return ShouldSkipPresentingFrame(m_allow_present_throttle, m_window_info.surface_refresh_rate,
+                                   &m_last_frame_displayed_time);
+}
+
+bool GPUDevice::ShouldSkipPresentingFrame(bool allow_present_throttle, float refresh_rate,
+                                          u64* last_frame_displayed_time)
+{
   // Only needed with FIFO. But since we're so fast, we allow it always.
-  if (!m_allow_present_throttle)
+  if (!allow_present_throttle)
     return false;
 
-  const float throttle_rate = (m_window_info.surface_refresh_rate > 0.0f) ? m_window_info.surface_refresh_rate : 60.0f;
+  const float throttle_rate = (refresh_rate > 0.0f) ? refresh_rate : 60.0f;
   const float throttle_period = 1.0f / throttle_rate;
 
   const u64 now = Common::Timer::GetCurrentValue();
-  const double diff = Common::Timer::ConvertValueToSeconds(now - m_last_frame_displayed_time);
+  const double diff = Common::Timer::ConvertValueToSeconds(now - *last_frame_displayed_time);
   if (diff < throttle_period)
     return true;
 
-  m_last_frame_displayed_time = now;
+  *last_frame_displayed_time = now;
   return false;
 }
 
 void GPUDevice::ThrottlePresentation()
 {
-  const float throttle_rate = (m_window_info.surface_refresh_rate > 0.0f) ? m_window_info.surface_refresh_rate : 60.0f;
+  ThrottlePresentation(m_window_info.surface_refresh_rate, &m_last_frame_displayed_time);
+}
+
+void GPUDevice::ThrottlePresentation(float refresh_rate, u64* last_frame_displayed_time)
+{
+  const float throttle_rate = (refresh_rate > 0.0f) ? refresh_rate : 60.0f;
 
   const u64 sleep_period = Common::Timer::ConvertNanosecondsToValue(1e+9f / static_cast<double>(throttle_rate));
   const u64 current_ts = Common::Timer::GetCurrentValue();
@@ -1181,12 +1203,12 @@ void GPUDevice::ThrottlePresentation()
   // Allow it to fall behind/run ahead up to 2*period. Sleep isn't that precise, plus we need to
   // allow time for the actual rendering.
   const u64 max_variance = sleep_period * 2;
-  if (static_cast<u64>(std::abs(static_cast<s64>(current_ts - m_last_frame_displayed_time))) > max_variance)
-    m_last_frame_displayed_time = current_ts + sleep_period;
+  if (static_cast<u64>(std::abs(static_cast<s64>(current_ts - *last_frame_displayed_time))) > max_variance)
+    *last_frame_displayed_time = current_ts + sleep_period;
   else
-    m_last_frame_displayed_time += sleep_period;
+    *last_frame_displayed_time += sleep_period;
 
-  Common::Timer::SleepUntil(m_last_frame_displayed_time, false);
+  Common::Timer::SleepUntil(*last_frame_displayed_time, false);
 }
 
 SlangChain::~SlangChain() = default;

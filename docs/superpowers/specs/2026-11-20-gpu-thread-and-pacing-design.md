@@ -214,3 +214,36 @@ today; the measure agreed in conversation; the numbers and the split by stage ar
 The GPU thread's design (its command stream, how device work and the UI's device use reach it, how readbacks wait),
 how the emulation thread is held to one frame ahead, which APIs pace how, the refresh-rate request on each platform,
 the settings keys, the way frame times are read on the Thor's screen, and the order within each stage.
+
+## Stage 2, revised (2026-11-22)
+
+Measured again once stage 1 had landed, on the Thor's own screen (60 Hz, as the user has it): SurfaceFlinger's
+present times for the game's surface (`dumpsys SurfaceFlinger --latency`), beside the core's per-second line.
+
+- **The screen is already even.** In every case measured (Vulkan 1× and 3×, OpenGL ES 1× and the heavy 8×, 4× MSAA,
+  CRT-Lottes case), every frame was shown for exactly one refresh, in all 30 seconds. The 19–28 ms above were the
+  emulation thread's own frame intervals, measured offscreen: Mailbox (3 images, vsync off) absorbs them.
+- **The price is lag.** A frame reaches the screen 36–37 ms after the GPU finishes it (median; 22 ms in the heavy
+  case), because it lands at a random point of the refresh and waits for SurfaceFlinger's next latch.
+- Today's settings: vsync (FIFO) adds about 20 ms of lag and no evenness; optimal frame pacing with pre-frame sleep
+  takes 7 ms off on Vulkan (29.3 ms) but adds 16 ms on OpenGL ES, where the throttle's sleep falls between the input
+  poll and the present (no explicit present there).
+- The Thor's Vulkan driver has no `VK_KHR_present_wait`; it has `VK_GOOGLE_display_timing`. Android's Choreographer
+  gives every refresh's deadline and expected present time (API 33; the refresh time and period from API 29).
+
+So **stage 2 lowers the lag and keeps the screen even** *(the player's choice, 2026-11-22)*, and is split *(writer's
+call, pending the player's yes)*:
+
+- **2a, Android:** the emulation thread's frames locked to the screen's refresh timeline — it sleeps before a frame,
+  not between the input poll and the present, so a frame is presented as soon as it's done, timed to land just before
+  SurfaceFlinger's deadline; the game's speed locked to the refresh rate when it's a multiple of the console's (60, or
+  120 with each frame shown twice); the console's frame rate asked of the platform for the surface; vsync off while
+  fast-forwarding.
+- **2b, desktop:** the present waits (Vulkan `present_wait`, D3D12 and D3D11 frame-latency waitables, Metal's
+  presented handlers) and vsync on by default only where one keeps at most a frame queued — checked by hand on Windows,
+  where SSH can't present.
+
+**Success for 2a**, on the Thor's own screen at the defaults: still at least 95% of seconds with every frame shown for
+one refresh (today 100%); input lag (the core's input poll to on screen) at least 10 ms lower than today on Vulkan and
+OpenGL ES at 1×, and no higher in the heavy case; at 120 Hz, each NTSC frame shown for two refreshes; PAL games as
+even as today; nothing drawn differently, and the Mac and Windows unchanged.

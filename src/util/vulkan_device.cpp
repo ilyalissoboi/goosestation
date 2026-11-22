@@ -1464,7 +1464,8 @@ void VulkanDevice::DoPresent(VulkanSwapChain* present_swap_chain)
   const VkPresentTimeGOOGLE present_time = {static_cast<u32>(present_id), 0};
   const VkPresentTimesInfoGOOGLE present_times = {VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, nullptr, 1,
                                                   &present_time};
-  const bool timed = (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE);
+  const bool timed = (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE &&
+                      !m_present_thread.joinable());
   const VkPresentInfoKHR present_info = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
                                          timed ? &present_times : nullptr,
                                          1,
@@ -2539,7 +2540,10 @@ void VulkanDevice::SubmitPresent()
 
 bool VulkanDevice::HasPresentFeedback() const
 {
-  return (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE && m_swap_chain);
+  // Not with the present thread (threaded presentation, the GPU thread off): it presents on the swap chain while the
+  // feedback would be read here, and the swap chain allows one at a time.
+  return (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE && m_swap_chain &&
+          !m_present_thread.joinable());
 }
 
 u64 VulkanDevice::GetLastPresentId() const

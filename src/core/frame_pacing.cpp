@@ -29,7 +29,8 @@ float FramePacing::LockedSpeed(float refresh_hz, float console_hz, u32 refreshes
 
 FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common::Timer::Value now,
                                         u32 refreshes_per_frame, Common::Timer::Value last_deadline,
-                                        Common::Timer::Value predicted_frame_time, Common::Timer::Value margin)
+                                        Common::Timer::Value predicted_frame_time, Common::Timer::Value margin,
+                                        Common::Timer::Value last_wake)
 {
   if (timeline.period == 0 || refreshes_per_frame == 0)
     return Wake{now, 0};
@@ -57,7 +58,9 @@ FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common:
   const s64 k = (diff >= 0) ? ((diff + period - 1) / period) : -((-diff) / period);
   const s64 deadline = origin + k * period;
 
-  const Common::Timer::Value wake = overlong ? now : static_cast<Common::Timer::Value>(deadline - frame_time);
+  Common::Timer::Value wake = static_cast<Common::Timer::Value>(deadline - frame_time);
+  if (overlong)
+    wake = (last_wake != 0) ? std::max(now, last_wake + static_cast<Common::Timer::Value>(slot)) : now;
   return Wake{wake, static_cast<Common::Timer::Value>(deadline)};
 }
 
@@ -95,7 +98,7 @@ void FramePacing::FrameTimePredictor::Reset()
   m_next = 0;
 }
 
-void FramePacing::CutoffTracker::Report(Common::Timer::Value start_to_screen, Common::Timer::Value offset,
+void FramePacing::CutoffTracker::Report(Common::Timer::Value start_to_screen, s64 offset,
                                         Common::Timer::Value period, bool ran_long)
 {
   static constexpr u32 MIN_JUDGED = 16;
@@ -105,11 +108,15 @@ void FramePacing::CutoffTracker::Report(Common::Timer::Value start_to_screen, Co
     return;
 
   const s64 max_offset = p * 9 / 10;
+  const s64 min_offset = -p / 2;
+  if (m_count == 0 && !m_has_ceiling)
+    m_offset = min_offset; // start on the safe side, and creep up to the cutoff
   const auto ms = [](double v) { return static_cast<s64>(Common::Timer::ConvertMillisecondsToValue(v)); };
 
   // Where the frame landed against the deadline grid, whatever its own offset: steady while frames are on time, a
   // refresh more when one is late (over half a refresh above the window's 10th percentile).
-  const Common::Timer::Value landed = start_to_screen + offset;
+  const Common::Timer::Value landed =
+    static_cast<Common::Timer::Value>(std::max<s64>(static_cast<s64>(start_to_screen) + offset, 0));
   bool missed = false;
   if (m_count >= MIN_JUDGED)
   {
@@ -141,8 +148,9 @@ void FramePacing::CutoffTracker::Report(Common::Timer::Value start_to_screen, Co
     // The cutoff, or near it: rest below it from now on (not while starting, when nothing has settled).
     if (m_count == WINDOW)
     {
-      const s64 below = std::max<s64>(m_offset - ms(CEILING_MARGIN_MS), 0);
-      m_ceiling = (m_ceiling < 0) ? below : std::min(m_ceiling, below);
+      const s64 below = std::max<s64>(m_offset - ms(CEILING_MARGIN_MS), min_offset);
+      m_ceiling = m_has_ceiling ? std::min(m_ceiling, below) : below;
+      m_has_ceiling = true;
     }
     m_offset -= ms(STEP_BACK_MS);
     m_in_flight = IN_FLIGHT_FRAMES;
@@ -151,26 +159,27 @@ void FramePacing::CutoffTracker::Report(Common::Timer::Value start_to_screen, Co
   else
   {
     m_in_flight = 0;
-    if (m_ceiling >= 0 && ++m_since_miss >= RELAX_FRAMES)
+    if (m_has_ceiling && ++m_since_miss >= RELAX_FRAMES)
     {
       m_ceiling += ms(CEILING_MARGIN_MS);
       m_since_miss = 0;
     }
 
-    const s64 limit = (m_ceiling >= 0) ? std::min(m_ceiling, max_offset) : max_offset;
+    const s64 limit = m_has_ceiling ? std::min(m_ceiling, max_offset) : max_offset;
     if (m_offset < limit)
-      m_offset = std::min(m_offset + ms(PROBE_MS_PER_FRAME), limit);
+      m_offset = std::min(m_offset + ms(m_has_ceiling ? PROBE_MS_PER_FRAME : SEARCH_MS_PER_FRAME), limit);
   }
 
-  m_offset = std::clamp<s64>(m_offset, 0, max_offset);
-  if (m_ceiling >= 0)
-    m_ceiling = std::clamp<s64>(m_ceiling, 0, max_offset);
+  m_offset = std::clamp<s64>(m_offset, min_offset, max_offset);
+  if (m_has_ceiling)
+    m_ceiling = std::clamp<s64>(m_ceiling, min_offset, max_offset);
 }
 
 void FramePacing::CutoffTracker::Reset()
 {
   m_offset = 0;
-  m_ceiling = -1;
+  m_ceiling = 0;
+  m_has_ceiling = false;
   m_in_flight = 0;
   m_since_miss = 0;
   m_count = 0;
@@ -185,4 +194,32 @@ float FramePacing::RequestedFrameRate(float console_hz)
 bool FramePacing::VSyncWhileFastForwarding(bool vsync, bool fast_forwarding)
 {
   return (vsync && !fast_forwarding);
+}
+
+u32 FramePacing::LockDebounce::Update(u32 wanted)
+{
+  if (wanted == m_current)
+  {
+    m_held = 0;
+    return m_current;
+  }
+
+  if (wanted != m_candidate)
+  {
+    m_candidate = wanted;
+    m_held = 0;
+  }
+  if (++m_held >= HOLD_FRAMES)
+  {
+    m_current = wanted;
+    m_held = 0;
+  }
+  return m_current;
+}
+
+void FramePacing::LockDebounce::Reset()
+{
+  m_current = 0;
+  m_candidate = 0;
+  m_held = 0;
 }

@@ -119,7 +119,10 @@ class FramePacingTest {
                     return@withSurface
                 }
                 assertTrue("$reports of $locked presents reported back", reports >= locked * 8 / 10)
-                assertTrue("an offset within 0.6 of a refresh: ${after[4]} ns", after[4] in 0..10_000_000)
+                assertTrue(
+                    "an offset within half a refresh before and 0.9 after: ${after[4]} ns",
+                    after[4] in -9_000_000..15_000_000,
+                )
                 assertTrue(
                     "${after[1] - before[1]} of $locked done by their deadlines",
                     after[1] - before[1] >= locked * 9 / 10,

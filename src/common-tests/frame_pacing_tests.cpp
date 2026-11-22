@@ -168,12 +168,13 @@ struct Screen
 
   bool Present(FramePacing::CutoffTracker& tracker, bool ran_long = false)
   {
-    const double offset_ms = ToMs(tracker.Offset());
+    const double offset_ms = static_cast<double>(tracker.SignedOffset()) / Ms(1.0);
     crossed = offset_ms > cutoff_ms - (crossed ? hysteresis_ms : 0.0);
     in_flight.emplace_back(base_ms - offset_ms + (crossed ? PERIOD_MS : 0.0), offset_ms);
     if (static_cast<int>(in_flight.size()) > lag)
     {
-      tracker.Report(Ms(in_flight.front().first), Ms(in_flight.front().second), Ms(PERIOD_MS), ran_long);
+      tracker.Report(Ms(in_flight.front().first), static_cast<s64>(in_flight.front().second * Ms(1.0)), Ms(PERIOD_MS),
+                     ran_long);
       in_flight.erase(in_flight.begin());
     }
     return crossed;
@@ -189,10 +190,12 @@ struct Screen
 };
 } // namespace
 
-TEST(FramePacing, CutoffTrackerStartsAtTheDeadline)
+TEST(FramePacing, CutoffTrackerStartsHalfARefreshBeforeTheDeadline)
 {
+  // On the safe side, to creep up to the cutoff from below.
   FramePacing::CutoffTracker tracker;
-  EXPECT_EQ(tracker.Offset(), 0u);
+  tracker.Report(Ms(30.0), 0, Ms(PERIOD_MS), false);
+  EXPECT_LE(tracker.SignedOffset(), -static_cast<s64>(Ms(PERIOD_MS / 2)) + static_cast<s64>(Ms(0.1)));
 }
 
 TEST(FramePacing, CutoffTrackerFindsTheCutoffAndMissesRarely)
@@ -249,7 +252,7 @@ TEST(FramePacing, CutoffTrackerIgnoresAFrameThatRanLong)
   screen.Run(tracker, 60 * 60);
   const auto settled = tracker.Offset();
   // A frame that took far longer than planned (a shader compile) is late whatever the offset: no lesson there.
-  tracker.Report(Ms(30.0 - ToMs(settled) + PERIOD_MS), settled, Ms(PERIOD_MS), true);
+  tracker.Report(Ms(30.0 - ToMs(settled) + PERIOD_MS), static_cast<s64>(settled), Ms(PERIOD_MS), true);
   EXPECT_GE(tracker.Offset(), settled);
 }
 
@@ -258,9 +261,10 @@ TEST(FramePacing, CutoffTrackerDoesNotHoldWhileItStarts)
   // The lock's first frames come out of a state load or a boot: a miss among them doesn't stop the search.
   FramePacing::CutoffTracker tracker;
   tracker.Report(Ms(60.0), 0, Ms(PERIOD_MS), false);
+  const s64 start = tracker.SignedOffset();
   Screen screen{8.0};
   screen.Run(tracker, 2 * FramePacing::CutoffTracker::WINDOW);
-  EXPECT_GT(ToMs(tracker.Offset()), 1.0);
+  EXPECT_GT(tracker.SignedOffset() - start, static_cast<s64>(Ms(5.0)));
 }
 
 TEST(FramePacing, CutoffTrackerIsNotFooledByAnEarlyFrame)
@@ -270,7 +274,7 @@ TEST(FramePacing, CutoffTrackerIsNotFooledByAnEarlyFrame)
   screen.Run(tracker, 60 * 60);
   const auto settled = tracker.Offset();
   // One frame shown a refresh sooner than its usual: the frames after it, at their usual time, aren't late.
-  tracker.Report(Ms(10.0), settled, Ms(PERIOD_MS), false);
+  tracker.Report(Ms(10.0), static_cast<s64>(settled), Ms(PERIOD_MS), false);
   screen.Run(tracker, 60);
   EXPECT_GE(tracker.Offset() + Ms(1.6), settled);
 }
@@ -297,12 +301,64 @@ TEST(FramePacing, FramesLongerThanTheirRefreshesNeverWait)
   // A device that can't quite hold full speed: 17 ms of work a frame at 60 Hz. Unlocked it runs at 59 frames a
   // second; locked it mustn't sleep a refresh away after each frame and run at 30.
   Common::Timer::Value now = Ms(100);
-  Common::Timer::Value last = 0;
+  Common::Timer::Value last = 0, last_wake = 0;
   for (int i = 0; i < 60; i++)
   {
-    const FramePacing::Wake w = FramePacing::NextWake(Screen60(), now, 1, last, Ms(17.0), Ms(2.0));
+    const FramePacing::Wake w = FramePacing::NextWake(Screen60(), now, 1, last, Ms(17.0), Ms(2.0), last_wake);
     EXPECT_EQ(w.wake_time, now) << "frame " << i;
     last = w.deadline;
+    last_wake = w.wake_time;
     now += Ms(17.0);
   }
+}
+
+TEST(FramePacing, AnOverlongPlanStillRunsNoFasterThanItsRefreshes)
+{
+  // Planned long (the present's own wait counted in), but the frames themselves take 5 ms: they mustn't start more
+  // often than their refreshes, or the game runs fast.
+  Common::Timer::Value now = Ms(100);
+  Common::Timer::Value last = 0, last_wake = 0;
+  for (int i = 0; i < 60; i++)
+  {
+    const FramePacing::Wake w = FramePacing::NextWake(Screen60(), now, 1, last, Ms(17.0), Ms(2.0), last_wake);
+    if (i > 0)
+      EXPECT_GE(ToMs(w.wake_time - last_wake), 1000.0 / 60.0 - 0.01) << "frame " << i;
+    last_wake = w.wake_time;
+    last = w.deadline;
+    now = w.wake_time + Ms(5.0);
+  }
+}
+
+TEST(FramePacing, TheLockChangesOnlyOnceTheChangeHolds)
+{
+  FramePacing::LockDebounce lock;
+  for (int i = 0; i < FramePacing::LockDebounce::HOLD_FRAMES - 1; i++)
+    EXPECT_EQ(lock.Update(2), 0u); // not yet: wanted for fewer than HOLD_FRAMES frames
+  EXPECT_EQ(lock.Update(2), 2u);
+
+  // One odd frame from the timeline (a skipped tick, a stale reading) changes nothing.
+  EXPECT_EQ(lock.Update(0), 2u);
+  EXPECT_EQ(lock.Update(1), 2u);
+  EXPECT_EQ(lock.Update(2), 2u);
+
+  // A real change (the screen to 60 Hz) does, once it has held.
+  u32 now = 2;
+  for (int i = 0; i < FramePacing::LockDebounce::HOLD_FRAMES; i++)
+    now = lock.Update(1);
+  EXPECT_EQ(now, 1u);
+
+  lock.Reset();
+  EXPECT_EQ(lock.Update(1), 0u);
+}
+
+TEST(FramePacing, CutoffTrackerGoesBeforeTheDeadlineWhenTheScreenNeedsIt)
+{
+  // A screen (the Thor at 120 Hz) that only takes frames done 3 ms before the timeline's deadline.
+  FramePacing::CutoffTracker tracker;
+  Screen screen{-3.0, 1.0};
+  screen.Run(tracker, 60 * 30);
+  const int missed = screen.Run(tracker, 60 * 60);
+  EXPECT_LE(tracker.SignedOffset(), -static_cast<s64>(Ms(3.0)));
+  EXPECT_GE(tracker.SignedOffset(), -static_cast<s64>(Ms(PERIOD_MS)) / 2);
+  EXPECT_LE(missed, 10);
 }

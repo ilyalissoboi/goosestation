@@ -180,6 +180,7 @@ static void AccumulatePreFrameSleepTime();
 static void UpdatePreFrameSleepTime();
 static void UpdateDisplayVSync();
 static u32 WantedDisplayLock();
+static u32 TimelineRefreshes();
 static void SleepToDisplayDeadline(Common::Timer::Value current_time);
 
 // What the frame's end decides presents by: the device as last published, and its own present-throttle clock.
@@ -296,10 +297,12 @@ static bool s_skip_presenting_duplicate_frames = false;
 // the deadline the frame being emulated is due by, and how long frames take.
 static u32 s_display_lock_refreshes = 0;
 static Common::Timer::Value s_display_lock_deadline = 0;
+static Common::Timer::Value s_display_lock_last_wake = 0; // when the frame being emulated started
 static FramePacing::FrameTimePredictor s_display_lock_frame_times;
+static FramePacing::LockDebounce s_display_lock_debounce; // the timeline's refreshes per frame, once they hold
 static Common::Timer::Value s_display_lock_period = 0;
 static Common::Timer::Value s_display_lock_planned_time = 0;
-static Common::Timer::Value s_display_lock_offset = 0; // the aim past the deadline of the frame being emulated
+static s64 s_display_lock_offset = 0; // the aim past the deadline of the frame being emulated (negative: before)
 static bool s_present_ran_long = false; // the frame being presented: its own work ran past its plan
 static Common::Timer::Value s_present_deadline = 0; // the frame being presented's deadline, for its present
 static u32 s_skipped_frame_count = 0;
@@ -2261,9 +2264,14 @@ void System::FrameDone()
   if (s_display_lock_refreshes > 0)
     s_display_lock_frame_times.Add(s_last_active_frame_time);
 
-  // The screen's rate or the timeline changed (60 to 120 Hz, the surface gone): lock, unlock or relock.
-  if (g_settings.sync_to_host_refresh_rate && WantedDisplayLock() != s_display_lock_refreshes) [[unlikely]]
-    UpdateSpeedLimiterState();
+  // The screen's rate or the timeline changed (60 to 120 Hz, the surface gone), and has stayed so: lock, unlock or
+  // relock.
+  if (g_settings.sync_to_host_refresh_rate)
+  {
+    s_display_lock_debounce.Update(TimelineRefreshes());
+    if (WantedDisplayLock() != s_display_lock_refreshes) [[unlikely]]
+      UpdateSpeedLimiterState();
+  }
 
   // explicit present (frame pacing)
   const bool is_unique_frame = (s_last_presented_internal_frame_number != s_internal_frame_number);
@@ -3614,15 +3622,19 @@ void System::UpdateSpeedLimiterState()
   if (lock_refreshes != s_display_lock_refreshes)
   {
     s_display_lock_deadline = 0;
+    s_display_lock_last_wake = 0;
     s_display_lock_frame_times.Reset();
     GPUThreadCommands::ResetCutoffOffset();
   }
   s_display_lock_refreshes = lock_refreshes;
   if (s_display_lock_refreshes > 0)
   {
+    // The timeline gone for a moment (the debounce keeps the lock): normal speed until it's back.
     DisplayTimeline timeline;
-    Host::GetDisplayTimeline(&timeline);
-    const float refresh_rate = static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period));
+    const float refresh_rate =
+      (Host::GetDisplayTimeline(&timeline) && timeline.period > 0) ?
+        static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period)) :
+        System::GetThrottleFrequency() * static_cast<float>(s_display_lock_refreshes);
     s_target_speed = FramePacing::LockedSpeed(refresh_rate, System::GetThrottleFrequency(), s_display_lock_refreshes);
     s_syncing_to_host = true;
     s_syncing_to_host_with_vsync = false;
@@ -3670,18 +3682,24 @@ void System::UpdateDisplayVSync()
 
 u32 System::WantedDisplayLock()
 {
+  // The settings and the speed allow it at once (fast-forward lets go straight away); the timeline's say, debounced.
   if (!g_settings.sync_to_host_refresh_rate)
     return 0;
 
   const float base_speed = s_turbo_enabled ? g_settings.turbo_speed :
                                              (s_fast_forward_enabled ? g_settings.fast_forward_speed :
                                                                        g_settings.emulation_speed);
+  return FramePacing::ShouldLock(true, true, 1, base_speed, false) ? s_display_lock_debounce.Current() : 0;
+}
+
+u32 System::TimelineRefreshes()
+{
   DisplayTimeline timeline;
-  const bool has_timeline = Host::GetDisplayTimeline(&timeline);
-  const float refresh_rate =
-    has_timeline ? static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period)) : 0.0f;
-  const u32 refreshes = FramePacing::RefreshesPerFrame(refresh_rate, System::GetThrottleFrequency());
-  return FramePacing::ShouldLock(true, has_timeline, refreshes, base_speed, false) ? refreshes : 0;
+  if (!Host::GetDisplayTimeline(&timeline))
+    return 0;
+
+  const float refresh_rate = static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period));
+  return FramePacing::RefreshesPerFrame(refresh_rate, System::GetThrottleFrequency());
 }
 
 void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
@@ -3691,19 +3709,22 @@ void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
   {
     // The timeline stopped (the surface went): the next frame unlocks.
     s_display_lock_deadline = 0;
+    s_display_lock_last_wake = 0;
     return;
   }
 
   const Common::Timer::Value predicted = s_display_lock_frame_times.Predicted();
   const Common::Timer::Value margin =
     Common::Timer::ConvertMillisecondsToValue(g_settings.display_pre_frame_sleep_buffer);
-  // Aimed past the timeline's deadline by what the presents' feedback found (the screen's real cutoff), never past
-  // the refresh itself.
-  const Common::Timer::Value offset = std::min(GPUThreadCommands::GetCutoffOffset(), timeline.deadline_lead);
+  // Aimed past the timeline's deadline by what the presents' feedback found (the screen's real cutoff), or before it;
+  // never past the refresh itself.
+  const s64 offset = std::min(GPUThreadCommands::GetCutoffOffset(), static_cast<s64>(timeline.deadline_lead));
   DisplayTimeline aimed = timeline;
-  aimed.deadline_lead -= offset;
+  aimed.deadline_lead = static_cast<Common::Timer::Value>(static_cast<s64>(timeline.deadline_lead) - offset);
   const FramePacing::Wake wake = FramePacing::NextWake(aimed, current_time, s_display_lock_refreshes,
-                                                       s_display_lock_deadline, predicted, margin);
+                                                       s_display_lock_deadline, predicted, margin,
+                                                       s_display_lock_last_wake);
+  s_display_lock_last_wake = wake.wake_time;
   s_display_lock_deadline = wake.deadline;
   s_display_lock_period = timeline.period;
   s_display_lock_planned_time = predicted + margin;

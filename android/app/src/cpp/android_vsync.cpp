@@ -127,8 +127,10 @@ void OnVsync(const FrameData* data, void*)
     const size_t index = s_api.preferred_index(data);
     const int64_t present = s_api.expected_present(data, index);
     const int64_t deadline = s_api.deadline(data, index);
+    // The refresh period from tick to tick (a skipped tick left out): the timelines' own spacing can be two refreshes
+    // at 120 Hz. Only before the second tick, the timelines'.
     Common::Timer::Value period = SmoothedPeriod(s_api.frame_time(data));
-    if (index + 1 < count)
+    if (period == 0 && index + 1 < count)
       period = static_cast<Common::Timer::Value>(s_api.expected_present(data, index + 1) - present);
 
     s_timeline.vsync_time = static_cast<Common::Timer::Value>(present);

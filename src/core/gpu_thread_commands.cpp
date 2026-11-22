@@ -43,7 +43,7 @@ static std::atomic<u64> s_deadline_made{0};
 
 // The screen's real cutoff, from the presents' feedback (on the GPU thread), and the targets the presents aimed at.
 static FramePacing::CutoffTracker s_cutoff_tracker;
-static std::atomic<Common::Timer::Value> s_cutoff_offset{0};
+static std::atomic<s64> s_cutoff_offset{0};
 static std::atomic_bool s_cutoff_reset{false};
 static std::atomic<u64> s_cutoff_reports{0};
 struct PresentTarget
@@ -51,7 +51,7 @@ struct PresentTarget
   u64 id;
   Common::Timer::Value frame_start_time;
   Common::Timer::Value period;
-  Common::Timer::Value offset;
+  s64 offset;
   bool ran_long;
 };
 static std::array<PresentTarget, 16> s_present_targets = {};
@@ -149,7 +149,7 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
 void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                                     Common::Timer::Value frame_start_time, bool show_display, bool skip_present,
                                     bool explicit_present, Common::Timer::Value deadline,
-                                    Common::Timer::Value period, Common::Timer::Value offset, bool ran_long)
+                                    Common::Timer::Value period, s64 offset, bool ran_long)
 {
   GPUThreadPresentCommand* cmd = Allocate<GPUThreadPresentCommand>(GPUThreadCommandType::Present);
   cmd->ui = ui.release();
@@ -222,7 +222,7 @@ void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool pre
     s_cutoff_reports.fetch_add(1, std::memory_order_relaxed);
   }
   if (changed)
-    s_cutoff_offset.store(s_cutoff_tracker.Offset(), std::memory_order_release);
+    s_cutoff_offset.store(s_cutoff_tracker.SignedOffset(), std::memory_order_release);
 }
 
 u64 GPUThreadCommands::GetCutoffReports()
@@ -230,7 +230,7 @@ u64 GPUThreadCommands::GetCutoffReports()
   return s_cutoff_reports.load(std::memory_order_relaxed);
 }
 
-Common::Timer::Value GPUThreadCommands::GetCutoffOffset()
+s64 GPUThreadCommands::GetCutoffOffset()
 {
   return s_cutoff_offset.load(std::memory_order_acquire);
 }

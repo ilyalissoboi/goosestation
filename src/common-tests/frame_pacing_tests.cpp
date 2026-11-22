@@ -362,3 +362,25 @@ TEST(FramePacing, CutoffTrackerGoesBeforeTheDeadlineWhenTheScreenNeedsIt)
   EXPECT_GE(tracker.SignedOffset(), -static_cast<s64>(Ms(PERIOD_MS)) / 2);
   EXPECT_LE(missed, 10);
 }
+
+TEST(FramePacing, ThePeriodSkipsAMissedTickButFollowsANewRate)
+{
+  FramePacing::PeriodEstimator period;
+  for (int i = 0; i < 20; i++)
+    period.Add(Ms(1000.0 / 120.0));
+  EXPECT_NEAR(ToMs(period.Period()), 1000.0 / 120.0, 0.01);
+
+  // One tick skipped: twice the gap once, no change.
+  period.Add(Ms(2000.0 / 120.0));
+  EXPECT_NEAR(ToMs(period.Period()), 1000.0 / 120.0, 0.01);
+
+  // The screen drops to 60 Hz and stays there: the new rate is taken once it has held.
+  for (int i = 0; i < FramePacing::PeriodEstimator::NEW_RATE_TICKS; i++)
+    period.Add(Ms(1000.0 / 60.0));
+  EXPECT_NEAR(ToMs(period.Period()), 1000.0 / 60.0, 0.05);
+
+  // And back up to 120 Hz just as surely.
+  for (int i = 0; i < FramePacing::PeriodEstimator::NEW_RATE_TICKS; i++)
+    period.Add(Ms(1000.0 / 120.0));
+  EXPECT_NEAR(ToMs(period.Period()), 1000.0 / 120.0, 0.05);
+}

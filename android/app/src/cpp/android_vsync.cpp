@@ -105,18 +105,15 @@ bool LoadApi()
 
 void Post();
 
-// A period from the gap between two refreshes, kept only when it looks like one refresh (a skipped tick doubles it).
+// The refresh period from the gaps between ticks (a skipped tick left out, a new rate followed).
+FramePacing::PeriodEstimator s_period;
+
 Common::Timer::Value SmoothedPeriod(int64_t frame_time)
 {
-  const int64_t gap = (s_last_frame_time != 0) ? (frame_time - s_last_frame_time) : 0;
+  if (s_last_frame_time != 0 && frame_time > s_last_frame_time)
+    s_period.Add(static_cast<Common::Timer::Value>(frame_time - s_last_frame_time));
   s_last_frame_time = frame_time;
-  if (gap <= 0)
-    return s_timeline.period;
-  if (s_timeline.period == 0)
-    return static_cast<Common::Timer::Value>(gap);
-  if (gap > static_cast<int64_t>(s_timeline.period) * 3 / 2)
-    return s_timeline.period;
-  return static_cast<Common::Timer::Value>((s_timeline.period * 7 + static_cast<Common::Timer::Value>(gap)) / 8);
+  return s_period.Period();
 }
 
 void OnVsync(const FrameData* data, void*)
@@ -201,6 +198,7 @@ bool AndroidVsync::Start()
   s_timeline = {};
   s_last_tick = 0;
   s_last_frame_time = 0;
+  s_period.Reset();
   s_thread = std::thread(&ThreadMain);
   s_cv.wait(lock, []() { return s_looper != nullptr; });
   return true;

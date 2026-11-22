@@ -223,3 +223,46 @@ void FramePacing::LockDebounce::Reset()
   m_candidate = 0;
   m_held = 0;
 }
+
+void FramePacing::PeriodEstimator::Add(Common::Timer::Value gap)
+{
+  if (gap == 0)
+    return;
+
+  if (m_period == 0)
+  {
+    m_period = gap;
+    return;
+  }
+
+  const s64 diff = static_cast<s64>(gap) - static_cast<s64>(m_period);
+  if (std::abs(diff) <= static_cast<s64>(m_period / 4))
+  {
+    m_period = (m_period * 7 + gap) / 8;
+    m_other_count = 0;
+    return;
+  }
+
+  // Far from the period: a skipped tick, or the start of a new rate if more like it follow.
+  const bool like_the_last = (m_other_count > 0 &&
+                              std::abs(static_cast<s64>(gap) - static_cast<s64>(m_other_first)) <=
+                                static_cast<s64>(m_other_first / 10));
+  if (!like_the_last)
+  {
+    m_other_first = gap;
+    m_other_sum = 0;
+    m_other_count = 0;
+  }
+  m_other_sum += gap;
+  if (++m_other_count >= NEW_RATE_TICKS)
+  {
+    m_period = m_other_sum / m_other_count;
+    m_other_count = 0;
+  }
+}
+
+void FramePacing::PeriodEstimator::Reset()
+{
+  m_period = 0;
+  m_other_count = 0;
+}

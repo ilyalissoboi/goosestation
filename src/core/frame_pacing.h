@@ -125,6 +125,25 @@ private:
   u32 m_held = 0;
 };
 
+/// The screen's refresh period from the gaps between its ticks: smoothed while they stay near it; a gap far from it
+/// (a skipped tick) left out, unless gaps like it keep coming for NEW_RATE_TICKS ticks: then that's the new rate (the
+/// screen went from 120 to 60 Hz, or back).
+class PeriodEstimator
+{
+public:
+  static constexpr u32 NEW_RATE_TICKS = 8;
+
+  void Add(Common::Timer::Value gap);
+  Common::Timer::Value Period() const { return m_period; }
+  void Reset();
+
+private:
+  Common::Timer::Value m_period = 0;
+  Common::Timer::Value m_other_sum = 0;
+  Common::Timer::Value m_other_first = 0;
+  u32 m_other_count = 0;
+};
+
 /// Whether frames lock to the screen: sync to host refresh rate is on, the host has a timeline, the screen's rate is a
 /// multiple of the console's, the game runs at normal speed, and nothing (pause, frame step, rewind) interrupts it.
 bool ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes_per_frame, float target_speed, bool interrupted);

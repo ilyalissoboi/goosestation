@@ -283,3 +283,11 @@ TEST(FramePacing, TheConsolesRateIsAskedOfTheScreen)
   EXPECT_FLOAT_EQ(FramePacing::RequestedFrameRate(0.0f), 0.0f);  // no game: no request
   EXPECT_FLOAT_EQ(FramePacing::RequestedFrameRate(-1.0f), 0.0f);
 }
+
+TEST(FramePacing, VSyncIsOffWhileFastForwarding)
+{
+  EXPECT_TRUE(FramePacing::VSyncWhileFastForwarding(true, false));
+  EXPECT_FALSE(FramePacing::VSyncWhileFastForwarding(true, true)); // fast-forward or turbo: not held to the screen
+  EXPECT_FALSE(FramePacing::VSyncWhileFastForwarding(false, false));
+  EXPECT_FALSE(FramePacing::VSyncWhileFastForwarding(false, true));
+}

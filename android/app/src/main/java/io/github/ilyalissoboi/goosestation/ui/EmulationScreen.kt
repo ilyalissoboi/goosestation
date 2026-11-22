@@ -65,7 +65,7 @@ fun EmulationScreen(
             onChange,
             "Sync to host refresh rate",
             EmulationSettings.SYNC_TO_HOST,
-            "Runs at the screen's rate when it's within 5% of the game's.",
+            "Lands each frame on a refresh, just in time, for less lag. When the screen's rate is a multiple of the game's.",
         )
         GameSwitch(
             values,

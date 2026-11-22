@@ -262,6 +262,15 @@ bool AndroidHost::InitializeConfig(Error* error)
     changed = true;
   }
 
+  // Sync to host refresh rate became the default with the screen lock (pacing stage 2a): a file from before has it
+  // off as the old default, so it's turned on once.
+  if (si.GetUIntValue("Android", "PacingDefaultsVersion", 0u) < 1)
+  {
+    si.SetBoolValue("Main", "SyncToHostRefreshRate", true);
+    si.SetUIntValue("Android", "PacingDefaultsVersion", 1);
+    changed = true;
+  }
+
   // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
   changed = AdaptForeignSettings(si, s_install_id, s_device_name) || changed;
   changed = MoveAnalogBindings(si) || changed;

@@ -107,6 +107,18 @@ class SettingsSetupTest {
         assertEquals(listOf("/Users/x/games"), ini.values("GameList", "RecursivePaths"))
     }
 
+    // A file from before the screen lock wrote sync to host off as its default: it's turned on once, and stays as
+    // the player sets it after.
+    @Test
+    fun syncToHostIsTurnedOnOnce() {
+        initialize("[Main]\nSettingsVersion = 3\nSyncToHostRefreshRate = false\n\n[Android]\nInstallID = $INSTALL_ID\n")
+        assertEquals("true", readSettings().value("Main", "SyncToHostRefreshRate"))
+
+        NativeLibrary.setBoolSetting("Main", "SyncToHostRefreshRate", false)
+        NativeLibrary.reloadSettings()
+        assertEquals("false", readSettings().value("Main", "SyncToHostRefreshRate"))
+    }
+
     @Test
     fun plan1FileIsUpgraded() {
         initialize("[Main]\nSettingsVersion = 1\n\n[Display]\nShowFPS = true\n")

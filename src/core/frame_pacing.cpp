@@ -178,3 +178,8 @@ float FramePacing::RequestedFrameRate(float console_hz)
 {
   return (console_hz > 0.0f) ? console_hz : 0.0f;
 }
+
+bool FramePacing::VSyncWhileFastForwarding(bool vsync, bool fast_forwarding)
+{
+  return (vsync && !fast_forwarding);
+}

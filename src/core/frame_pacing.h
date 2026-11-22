@@ -98,6 +98,9 @@ private:
 /// The frame rate to ask of the screen for the running game: the console's (59.83 Hz NTSC, 50 PAL), 0 for none.
 float RequestedFrameRate(float console_hz);
 
+/// Whether vsync stays on: not while fast-forwarding (or in turbo), so fast-forward isn't held to the screen.
+bool VSyncWhileFastForwarding(bool vsync, bool fast_forwarding);
+
 /// Whether frames lock to the screen: sync to host refresh rate is on, the host has a timeline, the screen's rate is a
 /// multiple of the console's, the game runs at normal speed, and nothing (pause, frame step, rewind) interrupts it.
 bool ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes_per_frame, float target_speed, bool interrupted);

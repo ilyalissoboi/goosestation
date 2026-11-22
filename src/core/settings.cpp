@@ -147,7 +147,7 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   emulation_speed = si.GetFloatValue("Main", "EmulationSpeed", 1.0f);
   fast_forward_speed = si.GetFloatValue("Main", "FastForwardSpeed", 0.0f);
   turbo_speed = si.GetFloatValue("Main", "TurboSpeed", 0.0f);
-  sync_to_host_refresh_rate = si.GetBoolValue("Main", "SyncToHostRefreshRate", false);
+  sync_to_host_refresh_rate = si.GetBoolValue("Main", "SyncToHostRefreshRate", DEFAULT_SYNC_TO_HOST_REFRESH_RATE);
   increase_timer_resolution = si.GetBoolValue("Main", "IncreaseTimerResolution", true);
   inhibit_screensaver = si.GetBoolValue("Main", "InhibitScreensaver", true);
   start_paused = si.GetBoolValue("Main", "StartPaused", false);

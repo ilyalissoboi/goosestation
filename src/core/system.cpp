@@ -3722,8 +3722,8 @@ u32 System::GetDisplayLockStats(u64* presents, u64* made)
 
 GPUVSyncMode System::GetEffectiveVSyncMode()
 {
-  // Vsync off => always disabled.
-  if (!g_settings.display_vsync)
+  // Vsync off => always disabled. So is it while fast-forwarding, and back after.
+  if (!FramePacing::VSyncWhileFastForwarding(g_settings.display_vsync, s_fast_forward_enabled || s_turbo_enabled))
     return GPUVSyncMode::Disabled;
 
   // If there's no VM, or we're using vsync for timing, then we always use double-buffered (blocking).

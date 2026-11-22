@@ -291,3 +291,18 @@ TEST(FramePacing, VSyncIsOffWhileFastForwarding)
   EXPECT_FALSE(FramePacing::VSyncWhileFastForwarding(false, false));
   EXPECT_FALSE(FramePacing::VSyncWhileFastForwarding(false, true));
 }
+
+TEST(FramePacing, FramesLongerThanTheirRefreshesNeverWait)
+{
+  // A device that can't quite hold full speed: 17 ms of work a frame at 60 Hz. Unlocked it runs at 59 frames a
+  // second; locked it mustn't sleep a refresh away after each frame and run at 30.
+  Common::Timer::Value now = Ms(100);
+  Common::Timer::Value last = 0;
+  for (int i = 0; i < 60; i++)
+  {
+    const FramePacing::Wake w = FramePacing::NextWake(Screen60(), now, 1, last, Ms(17.0), Ms(2.0));
+    EXPECT_EQ(w.wake_time, now) << "frame " << i;
+    last = w.deadline;
+    now += Ms(17.0);
+  }
+}

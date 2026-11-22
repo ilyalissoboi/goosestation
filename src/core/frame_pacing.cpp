@@ -36,9 +36,11 @@ FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common:
 
   const s64 period = static_cast<s64>(timeline.period);
 
-  // A frame longer than its refreshes can't be helped by starting earlier: never plan further out than that.
-  const s64 frame_time = std::min(static_cast<s64>(predicted_frame_time + margin),
-                                  static_cast<s64>(refreshes_per_frame) * period);
+  // A frame longer than its refreshes can't be helped by starting earlier: never plan further out than that, and
+  // never wait for it either (the game runs as fast as it can, as unlocked).
+  const s64 slot = static_cast<s64>(refreshes_per_frame) * period;
+  const bool overlong = (static_cast<s64>(predicted_frame_time + margin) >= slot);
+  const s64 frame_time = std::min(static_cast<s64>(predicted_frame_time + margin), slot);
 
   // The earliest a deadline may be: made from now, and refreshes_per_frame refreshes on from the last one (less half
   // a refresh, for the timeline's own jitter or a change of rate).
@@ -55,7 +57,8 @@ FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common:
   const s64 k = (diff >= 0) ? ((diff + period - 1) / period) : -((-diff) / period);
   const s64 deadline = origin + k * period;
 
-  return Wake{static_cast<Common::Timer::Value>(deadline - frame_time), static_cast<Common::Timer::Value>(deadline)};
+  const Common::Timer::Value wake = overlong ? now : static_cast<Common::Timer::Value>(deadline - frame_time);
+  return Wake{wake, static_cast<Common::Timer::Value>(deadline)};
 }
 
 bool FramePacing::ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes_per_frame, float target_speed,

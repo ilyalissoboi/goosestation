@@ -34,8 +34,9 @@ struct Wake
 };
 
 /// When to start the next frame: the first deadline at least refreshes_per_frame refreshes after last_deadline (0
-/// for none) that can still be made, the frame taking predicted_frame_time plus margin (at most its refreshes).
-/// Without a timeline, now.
+/// for none) that can still be made, the frame taking predicted_frame_time plus margin (at most its refreshes). A
+/// frame that takes its refreshes or more starts now: waiting would only halve the game's speed. Without a timeline,
+/// now.
 Wake NextWake(const DisplayTimeline& timeline, Common::Timer::Value now, u32 refreshes_per_frame,
               Common::Timer::Value last_deadline, Common::Timer::Value predicted_frame_time,
               Common::Timer::Value margin);

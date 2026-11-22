@@ -57,6 +57,44 @@ private:
   u32 m_next = 0;
 };
 
+/// Where the screen really takes frames: how long after the timeline's deadline to aim, from each frame's time from
+/// its start (just after its input was read) to the screen. That time falls by what a frame starts later, until it
+/// misses the screen's real cutoff and jumps by a refresh: judged on the time plus the frame's own offset, which is
+/// steady while frames are on time (late: more than half a refresh above the 10th percentile of the window).
+/// The tracker creeps later until a frame misses, remembers a ceiling 1.5 ms below that, and steps 3 ms back (the
+/// Thor's compositor only takes frames on time again from well below where they started to miss), further while they
+/// stay late; then it creeps back up to the ceiling and rests there. Three minutes without a miss raise the ceiling 1.5 ms,
+/// in case the screen allows more now. The frames already on their way when a miss comes back count with it. Not
+/// judged while its first frames come in, nor for a frame whose own work ran over its plan. Between the deadline and
+/// 0.9 of a refresh after it.
+class CutoffTracker
+{
+public:
+  static constexpr double PROBE_MS_PER_FRAME = 0.01;
+  static constexpr double CEILING_MARGIN_MS = 1.5;
+  static constexpr double STEP_BACK_MS = 3.0;
+  static constexpr u32 IN_FLIGHT_FRAMES = 8;
+  static constexpr u32 RELAX_FRAMES = 3 * 60 * 60;
+  static constexpr u32 WINDOW = 240;
+
+  /// A frame shown start_to_screen after it started, aimed offset past the deadline; ran_long: its own work took
+  /// longer than planned.
+  void Report(Common::Timer::Value start_to_screen, Common::Timer::Value offset, Common::Timer::Value period,
+              bool ran_long);
+
+  Common::Timer::Value Offset() const { return static_cast<Common::Timer::Value>(m_offset); }
+  void Reset();
+
+private:
+  s64 m_offset = 0;
+  s64 m_ceiling = -1; // none yet
+  u32 m_in_flight = 0;
+  u32 m_since_miss = 0;
+  std::array<Common::Timer::Value, WINDOW> m_times = {};
+  u32 m_count = 0;
+  u32 m_next = 0;
+};
+
 /// Whether frames lock to the screen: sync to host refresh rate is on, the host has a timeline, the screen's rate is a
 /// multiple of the console's, the game runs at normal speed, and nothing (pause, frame step, rewind) interrupts it.
 bool ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes_per_frame, float target_speed, bool interrupted);

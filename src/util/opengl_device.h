@@ -115,6 +115,9 @@ public:
   bool BeginPresent(bool skip_present, u32 clear_color) override;
   void EndPresent(bool explicit_present) override;
   void SubmitPresent() override;
+  bool HasPresentFeedback() const override;
+  u64 GetLastPresentId() const override;
+  u32 FetchPresentFeedback(std::span<PresentFeedback> out) override;
 
   bool SetGPUTimingEnabled(bool enabled) override;
   float GetAndResetAccumulatedGPUTime() override;

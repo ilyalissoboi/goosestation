@@ -91,3 +91,85 @@ void FramePacing::FrameTimePredictor::Reset()
   m_count = 0;
   m_next = 0;
 }
+
+void FramePacing::CutoffTracker::Report(Common::Timer::Value start_to_screen, Common::Timer::Value offset,
+                                        Common::Timer::Value period, bool ran_long)
+{
+  static constexpr u32 MIN_JUDGED = 16;
+
+  const s64 p = static_cast<s64>(period);
+  if (p <= 0)
+    return;
+
+  const s64 max_offset = p * 9 / 10;
+  const auto ms = [](double v) { return static_cast<s64>(Common::Timer::ConvertMillisecondsToValue(v)); };
+
+  // Where the frame landed against the deadline grid, whatever its own offset: steady while frames are on time, a
+  // refresh more when one is late (over half a refresh above the window's 10th percentile).
+  const Common::Timer::Value landed = start_to_screen + offset;
+  bool missed = false;
+  if (m_count >= MIN_JUDGED)
+  {
+    std::array<Common::Timer::Value, WINDOW> sorted;
+    std::copy_n(m_times.begin(), m_count, sorted.begin());
+    const u32 index = (m_count - 1) / 10;
+    std::nth_element(sorted.begin(), sorted.begin() + index, sorted.begin() + m_count);
+    missed = (static_cast<s64>(landed) > static_cast<s64>(sorted[index]) + p / 2);
+  }
+  m_times[m_next] = landed;
+  m_next = (m_next + 1) % WINDOW;
+  m_count = std::min(m_count + 1, WINDOW);
+
+  if (ran_long)
+  {
+    // Late because the frame itself ran long: the aim was fine.
+  }
+  else if (missed && m_in_flight > 0)
+  {
+    // On its way when the last step back was taken; still missing after that, further back.
+    if (--m_in_flight == 0)
+    {
+      m_offset -= ms(STEP_BACK_MS);
+      m_in_flight = IN_FLIGHT_FRAMES;
+    }
+  }
+  else if (missed)
+  {
+    // The cutoff, or near it: rest below it from now on (not while starting, when nothing has settled).
+    if (m_count == WINDOW)
+    {
+      const s64 below = std::max<s64>(m_offset - ms(CEILING_MARGIN_MS), 0);
+      m_ceiling = (m_ceiling < 0) ? below : std::min(m_ceiling, below);
+    }
+    m_offset -= ms(STEP_BACK_MS);
+    m_in_flight = IN_FLIGHT_FRAMES;
+    m_since_miss = 0;
+  }
+  else
+  {
+    m_in_flight = 0;
+    if (m_ceiling >= 0 && ++m_since_miss >= RELAX_FRAMES)
+    {
+      m_ceiling += ms(CEILING_MARGIN_MS);
+      m_since_miss = 0;
+    }
+
+    const s64 limit = (m_ceiling >= 0) ? std::min(m_ceiling, max_offset) : max_offset;
+    if (m_offset < limit)
+      m_offset = std::min(m_offset + ms(PROBE_MS_PER_FRAME), limit);
+  }
+
+  m_offset = std::clamp<s64>(m_offset, 0, max_offset);
+  if (m_ceiling >= 0)
+    m_ceiling = std::clamp<s64>(m_ceiling, 0, max_offset);
+}
+
+void FramePacing::CutoffTracker::Reset()
+{
+  m_offset = 0;
+  m_ceiling = -1;
+  m_in_flight = 0;
+  m_since_miss = 0;
+  m_count = 0;
+  m_next = 0;
+}

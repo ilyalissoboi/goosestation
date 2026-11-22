@@ -158,6 +158,46 @@ notes folder.
   ruling.
 - [ ] **Step 6:** Commit.
 
+### Task 4b: The real cutoff, from present-timing feedback (added 2026-11-22, the user's choice)
+
+Measured on the Thor, SurfaceFlinger takes this surface's frames up to about 6 ms after Choreographer's deadline, and
+that point is the device's own. Each present reports back when it reached the screen and how long it sat ready, and
+the target moves to just before the real cutoff.
+
+**Files:**
+- Modify: `src/core/frame_pacing.{h,cpp}`, `src/util/gpu_device.h`, `src/util/vulkan_device.{h,cpp}` (+ its
+  extension list), `src/util/opengl_device.{h,cpp}`, `src/util/opengl_context_egl.{h,cpp}`,
+  `src/core/gpu_thread_commands.{h,cpp}`, `src/core/system.cpp`
+- Test: `src/common-tests/frame_pacing_tests.cpp`; `FramePacingTest.kt` (feedback present and deadlines made)
+
+**Interfaces:**
+- Produces:
+  - `FramePacing::CutoffTracker` (as built, after the Thor: see the ledger's rulings):
+    - `Report(start_to_screen, offset, period, ran_long)` and `Offset()`, plus `Reset()`;
+    - judged on start-to-screen plus the frame's own offset, steady while on time, a refresh more when late;
+    - creeps later, keeps a ceiling 1.5 ms below the first miss and steps back 3 ms;
+    - rests at the ceiling, relaxing it after 3 minutes without a miss;
+    - frames overrunning their plan are ignored;
+    - kept between 0 and 0.9 of a refresh.
+  - `GPUDevice::PresentFeedback {u64 id; Common::Timer::Value present_time; s64 slack;}`, plus `virtual bool
+    HasPresentFeedback()`, `virtual u64 GetLastPresentId()` and `virtual u32 FetchPresentFeedback(std::span<PresentFeedback>)`
+    (none by default). Vulkan uses `VK_GOOGLE_display_timing` (`presentMargin` as the slack). EGL on Android uses
+    `EGL_ANDROID_get_frame_timestamps` (latch − rendering complete).
+  - The present command's `target_present`, and `GPUThreadCommands::GetCutoffOffset()`, read by
+    `System::SleepToDisplayDeadline`.
+
+- [ ] **Step 1:** Write the failing `FramePacing.CutoffTracker*` tests:
+  - on-time frames with 8 ms of slack settle to 2 ms of slack;
+  - a late frame backs off;
+  - the offset stays in its bounds;
+  - without reports, 0.
+- [ ] **Step 2:** Run them. Expected: FAIL (no tracker). Implement. Run them. Expected: PASS.
+- [ ] **Step 3:** Add the feedback to the device API, Vulkan and EGL, and wire it through the present and the lock.
+  Extend `FramePacingTest` so that on the emulator the feedback arrives and deadlines are still made ≥ 90%.
+- [ ] **Step 4:** Measure on the Thor, Vulkan and OpenGL ES 1×. Expected: even 30/30, and GPU ready → on screen
+  about 28 ms or lower without the harness's fixed offset.
+- [ ] **Step 5:** Commit.
+
 ### Task 5: The console's frame rate asked of the platform
 
 **Files:**

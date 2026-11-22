@@ -292,8 +292,9 @@ object NativeLibrary {
     external fun getVsyncTimelineForTest(): LongArray?
 
     /**
-     * Tests: frames locked to the screen's refreshes so far, those whose present was done by their deadline, and the
-     * refreshes per frame now (0 unlocked).
+     * Tests: frames locked to the screen's refreshes so far, those whose present was done by their deadline, the
+     * refreshes per frame now (0 unlocked), presents whose feedback reached the cutoff tracker so far, and the target
+     * offset past the timeline's deadline it found (ns).
      */
     external fun getFramePacingStatsForTest(): LongArray
 

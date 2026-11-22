@@ -254,4 +254,7 @@ VULKAN_DEVICE_ENTRY_POINT(vkGetMemoryHostPointerPropertiesEXT, false)
 // VK_EXT_swapchain_maintenance1
 VULKAN_DEVICE_ENTRY_POINT(vkReleaseSwapchainImagesEXT, false)
 
+// VK_GOOGLE_display_timing
+VULKAN_DEVICE_ENTRY_POINT(vkGetPastPresentationTimingGOOGLE, false)
+
 #endif // VULKAN_DEVICE_ENTRY_POINT

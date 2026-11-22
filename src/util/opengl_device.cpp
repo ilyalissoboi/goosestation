@@ -593,6 +593,28 @@ void OpenGLDevice::ExecuteAndWaitForGPUIdle()
   glFlush();
 }
 
+bool OpenGLDevice::HasPresentFeedback() const
+{
+  return (m_gl_context && m_gl_context->HasFrameTimings());
+}
+
+u64 OpenGLDevice::GetLastPresentId() const
+{
+  return m_gl_context ? m_gl_context->GetLastFrameId() : 0;
+}
+
+u32 OpenGLDevice::FetchPresentFeedback(std::span<PresentFeedback> out)
+{
+  if (!HasPresentFeedback())
+    return 0;
+
+  std::array<OpenGLContext::FrameTiming, 16> timings;
+  const u32 count = m_gl_context->FetchFrameTimings(std::span(timings.data(), std::min(out.size(), timings.size())));
+  for (u32 i = 0; i < count; i++)
+    out[i] = PresentFeedback{timings[i].id, timings[i].present_time, timings[i].slack};
+  return count;
+}
+
 void OpenGLDevice::SetSwapInterval()
 {
   if (m_window_info.type == WindowInfo::Type::Surfaceless)

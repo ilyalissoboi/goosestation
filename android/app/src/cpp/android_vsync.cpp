@@ -6,6 +6,7 @@
 
 #include "core/frame_pacing.h"
 #include "core/host.h"
+#include "core/gpu_thread_commands.h"
 #include "core/system.h"
 
 #include "common/log.h"
@@ -271,9 +272,11 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getFramePacingStatsForTest)(JNIEnv* env, job
 {
   u64 presents = 0, made = 0;
   const u32 refreshes = System::GetDisplayLockStats(&presents, &made);
-  const jlong values[3] = {static_cast<jlong>(presents), static_cast<jlong>(made), static_cast<jlong>(refreshes)};
-  jlongArray array = env->NewLongArray(3);
-  env->SetLongArrayRegion(array, 0, 3, values);
+  const jlong values[5] = {static_cast<jlong>(presents), static_cast<jlong>(made), static_cast<jlong>(refreshes),
+                           static_cast<jlong>(GPUThreadCommands::GetCutoffReports()),
+                           static_cast<jlong>(GPUThreadCommands::GetCutoffOffset())};
+  jlongArray array = env->NewLongArray(5);
+  env->SetLongArrayRegion(array, 0, 5, values);
   return array;
 }
 

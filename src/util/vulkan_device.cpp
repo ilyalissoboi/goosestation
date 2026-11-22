@@ -469,6 +469,8 @@ bool VulkanDevice::SelectDeviceExtensions(ExtensionList* extension_list, bool en
   m_optional_extensions.vk_ext_swapchain_maintenance1 =
     m_optional_extensions.vk_ext_swapchain_maintenance1 &&
     SupportsExtension(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, false);
+  m_optional_extensions.vk_google_display_timing =
+    SupportsExtension(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME, false);
 
   // Dynamic rendering isn't strictly needed for FSI, but we want it with framebufferless rendering.
   m_optional_extensions.vk_ext_fragment_shader_interlock =
@@ -1457,8 +1459,14 @@ void VulkanDevice::DoSubmitCommandBuffer(u32 index, VulkanSwapChain* present_swa
 
 void VulkanDevice::DoPresent(VulkanSwapChain* present_swap_chain)
 {
+  // Each present gets an ID, so its timing can be read back when the screen has shown it.
+  const u64 present_id = m_last_present_id.load(std::memory_order_relaxed) + 1;
+  const VkPresentTimeGOOGLE present_time = {static_cast<u32>(present_id), 0};
+  const VkPresentTimesInfoGOOGLE present_times = {VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, nullptr, 1,
+                                                  &present_time};
+  const bool timed = (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE);
   const VkPresentInfoKHR present_info = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-                                         nullptr,
+                                         timed ? &present_times : nullptr,
                                          1,
                                          present_swap_chain->GetRenderingFinishedSemaphorePtr(),
                                          1,
@@ -1469,6 +1477,8 @@ void VulkanDevice::DoPresent(VulkanSwapChain* present_swap_chain)
   present_swap_chain->ResetImageAcquireResult();
 
   const VkResult res = vkQueuePresentKHR(m_present_queue, &present_info);
+  if (timed)
+    m_last_present_id.store(present_id, std::memory_order_release);
   if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR)
   {
     // VK_ERROR_OUT_OF_DATE_KHR is not fatal, just means we need to recreate our swap chain.
@@ -2525,6 +2535,40 @@ void VulkanDevice::SubmitPresent()
     return;
 
   DoPresent(m_swap_chain.get());
+}
+
+bool VulkanDevice::HasPresentFeedback() const
+{
+  return (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE && m_swap_chain);
+}
+
+u64 VulkanDevice::GetLastPresentId() const
+{
+  return HasPresentFeedback() ? m_last_present_id.load(std::memory_order_acquire) : 0;
+}
+
+u32 VulkanDevice::FetchPresentFeedback(std::span<PresentFeedback> out)
+{
+  if (!HasPresentFeedback() || out.empty())
+    return 0;
+
+  std::array<VkPastPresentationTimingGOOGLE, 16> timings;
+  u32 count = static_cast<u32>(std::min(out.size(), timings.size()));
+  const VkResult res =
+    vkGetPastPresentationTimingGOOGLE(m_device, m_swap_chain->GetSwapChain(), &count, timings.data());
+  if (res != VK_SUCCESS && res != VK_INCOMPLETE)
+    return 0;
+
+  // Present IDs are 32-bit in the extension: put back the top half from the last ID given out.
+  const u64 last = m_last_present_id.load(std::memory_order_acquire);
+  for (u32 i = 0; i < count; i++)
+  {
+    u64 id = (last & ~u64(0xFFFFFFFFu)) | timings[i].presentID;
+    if (id > last)
+      id -= u64(1) << 32;
+    out[i] = PresentFeedback{id, timings[i].actualPresentTime, static_cast<s64>(timings[i].presentMargin)};
+  }
+  return count;
 }
 
 #ifdef _DEBUG

@@ -7,6 +7,8 @@
 
 #include "glad/egl.h"
 
+#include <array>
+
 class OpenGLContextEGL : public OpenGLContext
 {
 public:
@@ -20,6 +22,9 @@ public:
   virtual bool ChangeSurface(const WindowInfo& new_wi) override;
   virtual void ResizeSurface(u32 new_surface_width = 0, u32 new_surface_height = 0) override;
   bool SwapBuffers() override;
+  bool HasFrameTimings() const override;
+  u64 GetLastFrameId() const override;
+  u32 FetchFrameTimings(std::span<FrameTiming> out) override;
   bool IsCurrent() const override;
   bool MakeCurrent() override;
   bool DoneCurrent() override;
@@ -54,4 +59,11 @@ protected:
 
   bool m_use_ext_platform_base = false;
   bool m_supports_negative_swap_interval = false;
+
+  // EGL_ANDROID_get_frame_timestamps on the surface: the frames swapped whose timing hasn't been read, oldest first.
+  static constexpr u32 MAX_PENDING_FRAMES = 8;
+  bool m_frame_timestamps = false;
+  u64 m_last_frame_id = 0;
+  std::array<u64, MAX_PENDING_FRAMES> m_pending_frames = {};
+  u32 m_pending_frame_count = 0;
 };

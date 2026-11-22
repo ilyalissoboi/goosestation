@@ -297,6 +297,10 @@ static bool s_skip_presenting_duplicate_frames = false;
 static u32 s_display_lock_refreshes = 0;
 static Common::Timer::Value s_display_lock_deadline = 0;
 static FramePacing::FrameTimePredictor s_display_lock_frame_times;
+static Common::Timer::Value s_display_lock_period = 0;
+static Common::Timer::Value s_display_lock_planned_time = 0;
+static Common::Timer::Value s_display_lock_offset = 0; // the aim past the deadline of the frame being emulated
+static bool s_present_ran_long = false; // the frame being presented: its own work ran past its plan
 static Common::Timer::Value s_present_deadline = 0; // the frame being presented's deadline, for its present
 static u32 s_skipped_frame_count = 0;
 static u32 s_last_presented_internal_frame_number = 0;
@@ -2280,8 +2284,11 @@ void System::FrameDone()
     // Presented as soon as it's done; the wait comes before the next frame, so its input is read as late as it can.
     s_skipped_frame_count = 0;
     s_present_deadline = s_display_lock_deadline;
+    // Measured here, before the present: a present's own time includes waiting on the screen for a buffer.
+    s_present_ran_long = (current_time - s_frame_start_time > s_display_lock_planned_time);
     PresentDisplay(false, false);
     s_present_deadline = 0;
+    s_present_ran_long = false;
     SleepToDisplayDeadline(Common::Timer::GetCurrentValue());
   }
   else if (!skip_this_frame)
@@ -3608,6 +3615,7 @@ void System::UpdateSpeedLimiterState()
   {
     s_display_lock_deadline = 0;
     s_display_lock_frame_times.Reset();
+    GPUThreadCommands::ResetCutoffOffset();
   }
   s_display_lock_refreshes = lock_refreshes;
   if (s_display_lock_refreshes > 0)
@@ -3689,9 +3697,17 @@ void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
   const Common::Timer::Value predicted = s_display_lock_frame_times.Predicted();
   const Common::Timer::Value margin =
     Common::Timer::ConvertMillisecondsToValue(g_settings.display_pre_frame_sleep_buffer);
-  const FramePacing::Wake wake = FramePacing::NextWake(timeline, current_time, s_display_lock_refreshes,
+  // Aimed past the timeline's deadline by what the presents' feedback found (the screen's real cutoff), never past
+  // the refresh itself.
+  const Common::Timer::Value offset = std::min(GPUThreadCommands::GetCutoffOffset(), timeline.deadline_lead);
+  DisplayTimeline aimed = timeline;
+  aimed.deadline_lead -= offset;
+  const FramePacing::Wake wake = FramePacing::NextWake(aimed, current_time, s_display_lock_refreshes,
                                                        s_display_lock_deadline, predicted, margin);
   s_display_lock_deadline = wake.deadline;
+  s_display_lock_period = timeline.period;
+  s_display_lock_planned_time = predicted + margin;
+  s_display_lock_offset = offset;
   Common::Timer::SleepUntil(wake.wake_time, false);
 
   // Unlocked again, the throttle carries on from here, not from where it last was.
@@ -6026,7 +6042,8 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
     g_gpu->PrepareToPresent();
 
   GPUThreadCommands::PushPresent(ImGuiDrawCopy::Capture(*ImGui::GetDrawData()), s_input_poll_time,
-                                 s_frame_start_time, show_display, skip_present, explicit_present, s_present_deadline);
+                                 s_frame_start_time, show_display, skip_present, explicit_present, s_present_deadline,
+                                 s_display_lock_period, s_display_lock_offset, s_present_ran_long);
 
   ImGuiManager::NewFrame();
 

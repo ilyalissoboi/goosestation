@@ -724,6 +724,24 @@ public:
   virtual void EndPresent(bool explicit_submit) = 0;
   virtual void SubmitPresent() = 0;
 
+  /// A present as the screen showed it: its ID (GetLastPresentId() after its EndPresent()), when it was shown, and
+  /// how long it sat ready before the screen took it.
+  struct PresentFeedback
+  {
+    u64 id;
+    u64 present_time; // Common::Timer's clock
+    s64 slack;        // Common::Timer's units
+  };
+
+  /// Whether presents report back (Vulkan's VK_GOOGLE_display_timing, EGL_ANDROID_get_frame_timestamps).
+  virtual bool HasPresentFeedback() const { return false; }
+
+  /// The ID of the last present, for its feedback; 0 without feedback.
+  virtual u64 GetLastPresentId() const { return 0; }
+
+  /// The presents shown since the last call, oldest first, up to out.size(); how many.
+  virtual u32 FetchPresentFeedback(std::span<PresentFeedback> out) { return 0; }
+
   /// Renders ImGui screen elements. Call before EndPresent().
   /// Draws a frame of ImGui (built on the emulation thread, ImGui::Render() already called, and copied).
   void RenderImGui(const ImDrawData* draw_data);

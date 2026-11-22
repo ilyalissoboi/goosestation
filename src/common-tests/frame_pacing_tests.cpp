@@ -8,6 +8,8 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <utility>
+#include <vector>
 
 namespace {
 constexpr float NTSC = 59.826f;
@@ -148,3 +150,128 @@ TEST(FramePacing, ThePredictionIsNothingWithoutFramesAndSkipsTheAbsurd)
   predictor.Reset();
   EXPECT_EQ(predictor.Predicted(), 0u);
 }
+
+namespace {
+constexpr double PERIOD_MS = 1000.0 / 60.0;
+
+// A screen that takes a frame started up to cutoff_ms past the timeline's deadline at the next refresh: its
+// start-to-screen time falls as the offset grows, then jumps by a refresh. Once late, frames stay late until they
+// start hysteresis_ms earlier than the cutoff (as the Thor does). Feedback comes lag frames late.
+struct Screen
+{
+  double cutoff_ms;
+  double hysteresis_ms = 3.0;
+  double base_ms = 30.0;
+  bool crossed = false;
+  std::vector<std::pair<double, double>> in_flight; // start-to-screen times not yet reported, and their offsets
+  int lag = 4;
+
+  bool Present(FramePacing::CutoffTracker& tracker, bool ran_long = false)
+  {
+    const double offset_ms = ToMs(tracker.Offset());
+    crossed = offset_ms > cutoff_ms - (crossed ? hysteresis_ms : 0.0);
+    in_flight.emplace_back(base_ms - offset_ms + (crossed ? PERIOD_MS : 0.0), offset_ms);
+    if (static_cast<int>(in_flight.size()) > lag)
+    {
+      tracker.Report(Ms(in_flight.front().first), Ms(in_flight.front().second), Ms(PERIOD_MS), ran_long);
+      in_flight.erase(in_flight.begin());
+    }
+    return crossed;
+  }
+
+  int Run(FramePacing::CutoffTracker& tracker, int frames)
+  {
+    int missed = 0;
+    for (int i = 0; i < frames; i++)
+      missed += Present(tracker) ? 1 : 0;
+    return missed;
+  }
+};
+} // namespace
+
+TEST(FramePacing, CutoffTrackerStartsAtTheDeadline)
+{
+  FramePacing::CutoffTracker tracker;
+  EXPECT_EQ(tracker.Offset(), 0u);
+}
+
+TEST(FramePacing, CutoffTrackerFindsTheCutoffAndMissesRarely)
+{
+  // The Thor: frames can start up to 11 ms past the timeline's deadline and still make their refresh.
+  FramePacing::CutoffTracker tracker;
+  Screen screen{11.0};
+  screen.Run(tracker, 60 * 60);                     // a minute to find it
+  const int missed = screen.Run(tracker, 60 * 120); // then two more
+  EXPECT_GE(ToMs(tracker.Offset()), 8.5);
+  EXPECT_LE(ToMs(tracker.Offset()), 11.0);
+  EXPECT_LE(missed, 20); // it rests below the cutoff: a crossing only when it looks again, each minute
+}
+
+TEST(FramePacing, CutoffTrackerTakesFramesInFlightAsOneMiss)
+{
+  FramePacing::CutoffTracker tracker;
+  Screen screen{8.0};
+  screen.lag = 6;
+  screen.Run(tracker, 60 * 60);
+  // However many late frames were already queued when the first came back, one step back, not a run of them.
+  EXPECT_GE(ToMs(tracker.Offset()), 5.0);
+}
+
+TEST(FramePacing, CutoffTrackerBacksOffWhenTheCutoffMovesEarlier)
+{
+  FramePacing::CutoffTracker tracker;
+  Screen screen{8.0};
+  screen.Run(tracker, 60 * 60);
+  screen.cutoff_ms = 4.0; // a busier compositor
+  const int missed = screen.Run(tracker, 60 * 10);
+  EXPECT_LE(ToMs(tracker.Offset()), 4.0);
+  EXPECT_LE(missed, 30); // steps back, each with the frames already on their way
+}
+
+TEST(FramePacing, CutoffTrackerStaysInItsBounds)
+{
+  FramePacing::CutoffTracker tracker;
+  Screen screen{50.0};
+  screen.Run(tracker, 60 * 600); // never a miss: no more than 0.9 of a refresh
+  EXPECT_LE(ToMs(tracker.Offset()), 0.9 * PERIOD_MS + 0.01);
+
+  screen.cutoff_ms = 0.0; // the screen takes frames only up to the deadline itself
+  screen.hysteresis_ms = 0.0;
+  const int missed = screen.Run(tracker, 60 * 120);
+  EXPECT_LE(ToMs(tracker.Offset()), 0.1);
+  EXPECT_LE(missed, 70); // the whole way down once, then a frame or so each time it looks again
+}
+
+TEST(FramePacing, CutoffTrackerIgnoresAFrameThatRanLong)
+{
+  FramePacing::CutoffTracker tracker;
+  Screen screen{8.0};
+  screen.Run(tracker, 60 * 60);
+  const auto settled = tracker.Offset();
+  // A frame that took far longer than planned (a shader compile) is late whatever the offset: no lesson there.
+  tracker.Report(Ms(30.0 - ToMs(settled) + PERIOD_MS), settled, Ms(PERIOD_MS), true);
+  EXPECT_GE(tracker.Offset(), settled);
+}
+
+TEST(FramePacing, CutoffTrackerDoesNotHoldWhileItStarts)
+{
+  // The lock's first frames come out of a state load or a boot: a miss among them doesn't stop the search.
+  FramePacing::CutoffTracker tracker;
+  tracker.Report(Ms(60.0), 0, Ms(PERIOD_MS), false);
+  Screen screen{8.0};
+  screen.Run(tracker, 2 * FramePacing::CutoffTracker::WINDOW);
+  EXPECT_GT(ToMs(tracker.Offset()), 1.0);
+}
+
+TEST(FramePacing, CutoffTrackerIsNotFooledByAnEarlyFrame)
+{
+  FramePacing::CutoffTracker tracker;
+  Screen screen{8.0};
+  screen.Run(tracker, 60 * 60);
+  const auto settled = tracker.Offset();
+  // One frame shown a refresh sooner than its usual: the frames after it, at their usual time, aren't late.
+  tracker.Report(Ms(10.0), settled, Ms(PERIOD_MS), false);
+  screen.Run(tracker, 60);
+  EXPECT_GE(tracker.Offset() + Ms(1.6), settled);
+}
+

@@ -126,6 +126,64 @@ class FramePacingTest {
             }
         }
 
+    // Switching apps over and over while locked: the surface goes mid-sleep and comes back; it never hangs, and the
+    // lock picks up again.
+    @Test
+    fun aSurfaceGoneMidSleepDoesNotHang() =
+        FrameReader(640, 480).use { frames ->
+            withSurface(frames) {
+                boot(frames, syncToHost = true)
+                repeat(20) { i ->
+                    NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
+                    Thread.sleep((i % 4).toLong() * 6)
+                    NativeLibrary.surfaceChanged(frames.surface, 640, 480, 1f, 60f)
+                    Thread.sleep((i % 3).toLong() * 9)
+                }
+                frames.nextFrame(30)
+                assertLockedAgain()
+            }
+        }
+
+    // Paused and resumed: the lock lets go and comes back, frames at the screen's rate again.
+    @Test
+    fun pausingAndResumingKeepsTheLock() =
+        FrameReader(640, 480).use { frames ->
+            withSurface(frames) {
+                boot(frames, syncToHost = true)
+                NativeLibrary.setPaused(true)
+                Thread.sleep(1_000)
+                NativeLibrary.setPaused(false)
+                assertLockedAgain()
+            }
+        }
+
+    // Fast-forward lets go of the screen (and of vsync), and the lock comes back after.
+    @Test
+    fun fastForwardLetsGoAndComesBack() =
+        FrameReader(640, 480).use { frames ->
+            withSurface(frames) {
+                boot(frames, syncToHost = true)
+                NativeLibrary.setFastForward(true)
+                Thread.sleep(1_000)
+                assertEquals("unlocked while fast-forwarding", 0L, NativeLibrary.getFramePacingStatsForTest()[2])
+                NativeLibrary.setFastForward(false)
+                assertLockedAgain()
+            }
+        }
+
+    // Within 2 s: locked again, one refresh a frame, presents coming at about the screen's rate.
+    private fun assertLockedAgain() {
+        val until = System.nanoTime() + 2_000_000_000L
+        while (NativeLibrary.getFramePacingStatsForTest()[2] != 1L && System.nanoTime() < until) {
+            Thread.sleep(20)
+        }
+        assertEquals("locked again", 1L, NativeLibrary.getFramePacingStatsForTest()[2])
+        val before = NativeLibrary.getFramePacingStatsForTest()[0]
+        Thread.sleep(2_000)
+        val presents = NativeLibrary.getFramePacingStatsForTest()[0] - before
+        assertTrue("$presents locked presents in 2 s", presents in 110..130)
+    }
+
     private fun withSurface(
         frames: FrameReader,
         body: () -> Unit,

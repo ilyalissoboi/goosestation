@@ -3,6 +3,7 @@
 
 #pragma once
 
+struct ANativeWindow;
 struct DisplayTimeline;
 
 /// The screen's refresh timeline, from Choreographer on a thread of its own (it needs a looper): each refresh's
@@ -18,5 +19,9 @@ void Stop();
 
 /// The latest refreshes, or false without a tick in the last 100 ms.
 bool Get(DisplayTimeline* timeline);
+
+/// Asks the platform to run the screen for content at rate Hz on window (ANativeWindow_setFrameRate, Android 11 and
+/// up, as fixed-rate content; 0 withdraws the request). The player's own choice of rate still decides.
+void SetWindowFrameRate(ANativeWindow* window, float rate);
 
 } // namespace AndroidVsync

@@ -238,6 +238,23 @@ bool AndroidVsync::Get(DisplayTimeline* timeline)
   return true;
 }
 
+void AndroidVsync::SetWindowFrameRate(ANativeWindow* window, float rate)
+{
+  using SetFrameRateFn = int32_t (*)(ANativeWindow*, float, int8_t);
+  static const SetFrameRateFn set_frame_rate = []() {
+    // libnativewindow has the ANativeWindow functions (libandroid only some of them).
+    void* lib = dlopen("libnativewindow.so", RTLD_NOW | RTLD_LOCAL);
+    return lib ? reinterpret_cast<SetFrameRateFn>(dlsym(lib, "ANativeWindow_setFrameRate")) : nullptr;
+  }();
+  if (!set_frame_rate || !window)
+    return;
+
+  // ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE: a game's frames come at their own fixed rate.
+  static constexpr int8_t FIXED_SOURCE = 1;
+  const int32_t result = set_frame_rate(window, rate, FIXED_SOURCE);
+  INFO_LOG("Asked for {:.3f} Hz for the surface{}", rate, (result == 0) ? "" : " (refused)");
+}
+
 bool Host::GetDisplayTimeline(DisplayTimeline* timeline)
 {
   return AndroidVsync::Get(timeline);

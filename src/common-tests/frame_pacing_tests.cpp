@@ -275,3 +275,11 @@ TEST(FramePacing, CutoffTrackerIsNotFooledByAnEarlyFrame)
   EXPECT_GE(tracker.Offset() + Ms(1.6), settled);
 }
 
+
+TEST(FramePacing, TheConsolesRateIsAskedOfTheScreen)
+{
+  EXPECT_FLOAT_EQ(FramePacing::RequestedFrameRate(59.826f), 59.826f);
+  EXPECT_FLOAT_EQ(FramePacing::RequestedFrameRate(50.0f), 50.0f);
+  EXPECT_FLOAT_EQ(FramePacing::RequestedFrameRate(0.0f), 0.0f);  // no game: no request
+  EXPECT_FLOAT_EQ(FramePacing::RequestedFrameRate(-1.0f), 0.0f);
+}

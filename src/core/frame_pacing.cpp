@@ -173,3 +173,8 @@ void FramePacing::CutoffTracker::Reset()
   m_count = 0;
   m_next = 0;
 }
+
+float FramePacing::RequestedFrameRate(float console_hz)
+{
+  return (console_hz > 0.0f) ? console_hz : 0.0f;
+}

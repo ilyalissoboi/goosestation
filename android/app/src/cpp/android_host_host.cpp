@@ -20,6 +20,7 @@
 #include "core/memory_card.h"
 #include "core/pad.h"
 #include "core/settings.h"
+#include "core/frame_pacing.h"
 #include "core/system.h"
 #include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
@@ -282,6 +283,8 @@ void Host::AdaptGameSettingsLayer(SettingsInterface& si)
 
 void Host::OnSystemDestroyed()
 {
+  AndroidHost::SetFrameRate(0.0f);
+
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
   AndroidHost::s_running_game.reset();
@@ -378,6 +381,9 @@ void Host::RequestResizeHostDisplay(s32 width, s32 height)
 
 void Host::FrameDone()
 {
+  // The console's frame rate (NTSC, PAL) for the surface, so the screen runs at a rate that suits it.
+  AndroidHost::SetFrameRate(FramePacing::RequestedFrameRate(System::GetThrottleFrequency()));
+
   // Hardcore mode allows no fast forward or turbo, which the core doesn't refuse: a hotkey's, or one already on when a
   // reset started hardcore, is turned off here.
   if (Achievements::IsHardcoreModeActive())

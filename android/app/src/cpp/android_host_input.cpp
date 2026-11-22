@@ -4,6 +4,7 @@
 #include "android_host_state.h"
 
 #include "android_host.h"
+#include "android_vsync.h"
 #include "achievements_bridge.h"
 #include "emu_thread.h"
 #include "foreign_settings.h"
@@ -66,6 +67,9 @@ using AndroidInputKeys::ParseDeviceIndex;
 
 static void QueueInputEvent(InputEvent event);
 static void SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
+
+// The frame rate asked of the screen for the game (FramePacing::RequestedFrameRate()), 0 for none.
+static std::atomic<float> s_frame_rate{0.0f};
 
 enum class WindowChange : u8
 {
@@ -149,6 +153,7 @@ AndroidHost::WindowChange AndroidHost::SetWindowOnGPUThread(ANativeWindow* windo
 
   ANativeWindow* const old_window = s_window;
   s_window = window;
+  AndroidVsync::SetWindowFrameRate(window, s_frame_rate.load(std::memory_order_relaxed));
 
   // Moves the GPU device to the new window, or makes it surfaceless, before the old window goes.
   WindowChange change = WindowChange::None;
@@ -158,6 +163,16 @@ AndroidHost::WindowChange AndroidHost::SetWindowOnGPUThread(ANativeWindow* windo
     ANativeWindow_release(old_window);
 
   return change;
+}
+
+void AndroidHost::SetFrameRate(float rate)
+{
+  if (s_frame_rate.exchange(rate, std::memory_order_relaxed) == rate)
+    return;
+
+  // Where the surface's life is (the GPU thread, or this one without it), so the window can't go meanwhile.
+  GPUThread::RunOnThread(
+    []() { AndroidVsync::SetWindowFrameRate(s_window.load(), s_frame_rate.load(std::memory_order_relaxed)); });
 }
 
 void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate)
@@ -188,6 +203,7 @@ void AndroidHost::SetWindow(ANativeWindow* window, s32 width, s32 height, float 
 
   ANativeWindow* const old_window = s_window;
   s_window = window;
+  AndroidVsync::SetWindowFrameRate(window, s_frame_rate.load(std::memory_order_relaxed));
 
   // Moves the GPU device to the new window, or makes it surfaceless, before the old window goes.
   Host::UpdateDisplayWindow();

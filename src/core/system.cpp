@@ -293,11 +293,10 @@ static bool s_syncing_to_host_with_vsync = false;
 static bool s_skip_presenting_duplicate_frames = false;
 
 // Locked to the screen's refreshes (sync to host with the host's refresh timeline): refreshes per frame (0 unlocked),
-// the deadline the frame being emulated is due by, and the longest frame of this second and the last.
+// the deadline the frame being emulated is due by, and how long frames take.
 static u32 s_display_lock_refreshes = 0;
 static Common::Timer::Value s_display_lock_deadline = 0;
-static Common::Timer::Value s_display_lock_max_active = 0;
-static Common::Timer::Value s_display_lock_predicted = 0;
+static FramePacing::FrameTimePredictor s_display_lock_frame_times;
 static Common::Timer::Value s_present_deadline = 0; // the frame being presented's deadline, for its present
 static u32 s_skipped_frame_count = 0;
 static u32 s_last_presented_internal_frame_number = 0;
@@ -2255,7 +2254,8 @@ void System::FrameDone()
     s_last_active_frame_time = std::max(s_last_active_frame_time, GPUThreadCommands::GetLastPresentActiveTime());
   if (s_pre_frame_sleep)
     AccumulatePreFrameSleepTime();
-  s_display_lock_max_active = std::max(s_display_lock_max_active, s_last_active_frame_time);
+  if (s_display_lock_refreshes > 0)
+    s_display_lock_frame_times.Add(s_last_active_frame_time);
 
   // The screen's rate or the timeline changed (60 to 120 Hz, the surface gone): lock, unlock or relock.
   if (g_settings.sync_to_host_refresh_rate && WantedDisplayLock() != s_display_lock_refreshes) [[unlikely]]
@@ -3477,9 +3477,6 @@ void System::UpdatePerformanceCounters()
   if (s_pre_frame_sleep)
     UpdatePreFrameSleepTime();
 
-  s_display_lock_predicted = s_display_lock_max_active;
-  s_display_lock_max_active = 0;
-
   // The GPU thread's figures go last, so the fields before keep their places for what reads them.
   VERBOSE_LOG("FPS: {:.2f} VPS: {:.2f} CPU: {:.2f} GPU: {} Average: {:.2f}ms Min: {:.2f}ms Max: {:.2f}ms GPUThread: "
               "{:.2f} Lat: {:.2f}ms",
@@ -3610,8 +3607,7 @@ void System::UpdateSpeedLimiterState()
   if (lock_refreshes != s_display_lock_refreshes)
   {
     s_display_lock_deadline = 0;
-    s_display_lock_max_active = 0;
-    s_display_lock_predicted = 0;
+    s_display_lock_frame_times.Reset();
   }
   s_display_lock_refreshes = lock_refreshes;
   if (s_display_lock_refreshes > 0)
@@ -3690,7 +3686,7 @@ void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
     return;
   }
 
-  const Common::Timer::Value predicted = std::max(s_display_lock_predicted, s_display_lock_max_active);
+  const Common::Timer::Value predicted = s_display_lock_frame_times.Predicted();
   const Common::Timer::Value margin =
     Common::Timer::ConvertMillisecondsToValue(g_settings.display_pre_frame_sleep_buffer);
   const FramePacing::Wake wake = FramePacing::NextWake(timeline, current_time, s_display_lock_refreshes,

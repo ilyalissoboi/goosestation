@@ -63,3 +63,31 @@ bool FramePacing::ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes
 {
   return (sync_to_host && has_timeline && refreshes_per_frame > 0 && target_speed == 1.0f && !interrupted);
 }
+
+void FramePacing::FrameTimePredictor::Add(Common::Timer::Value frame_time)
+{
+  if (frame_time > Common::Timer::ConvertSecondsToValue(1.0))
+    return;
+
+  m_times[m_next] = frame_time;
+  m_next = (m_next + 1) % WINDOW;
+  m_count = std::min(m_count + 1, WINDOW);
+}
+
+Common::Timer::Value FramePacing::FrameTimePredictor::Predicted() const
+{
+  if (m_count == 0)
+    return 0;
+
+  std::array<Common::Timer::Value, WINDOW> sorted;
+  std::copy_n(m_times.begin(), m_count, sorted.begin());
+  const u32 index = (m_count - 1) * 9 / 10;
+  std::nth_element(sorted.begin(), sorted.begin() + index, sorted.begin() + m_count);
+  return sorted[index];
+}
+
+void FramePacing::FrameTimePredictor::Reset()
+{
+  m_count = 0;
+  m_next = 0;
+}

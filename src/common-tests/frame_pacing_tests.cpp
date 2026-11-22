@@ -118,3 +118,33 @@ TEST(FramePacing, AnOverlongPredictionWaitsNoMoreThanItsRefreshes)
   EXPECT_GE(w.wake_time, Ms(101));
   EXPECT_LE(ToMs(w.deadline), 101.0 + 2 * (1000.0 / 60.0) + 1.0);
 }
+
+TEST(FramePacing, ThePredictionIgnoresARareSpike)
+{
+  FramePacing::FrameTimePredictor predictor;
+  for (int i = 0; i < 119; i++)
+    predictor.Add(Ms(2.0));
+  predictor.Add(Ms(12.0)); // a shader compile, a state load
+  EXPECT_NEAR(ToMs(predictor.Predicted()), 2.0, 0.01);
+}
+
+TEST(FramePacing, ThePredictionFollowsFramesThatGetLonger)
+{
+  FramePacing::FrameTimePredictor predictor;
+  for (int i = 0; i < 120; i++)
+    predictor.Add(Ms(2.0));
+  for (int i = 0; i < 30; i++)
+    predictor.Add(Ms(6.0)); // a heavier scene: a quarter of the frames now
+  EXPECT_NEAR(ToMs(predictor.Predicted()), 6.0, 0.01);
+}
+
+TEST(FramePacing, ThePredictionIsNothingWithoutFramesAndSkipsTheAbsurd)
+{
+  FramePacing::FrameTimePredictor predictor;
+  EXPECT_EQ(predictor.Predicted(), 0u);
+  predictor.Add(Ms(3.0));
+  predictor.Add(Ms(5000.0)); // a frame that never started (the first, after a load)
+  EXPECT_NEAR(ToMs(predictor.Predicted()), 3.0, 0.01);
+  predictor.Reset();
+  EXPECT_EQ(predictor.Predicted(), 0u);
+}

@@ -6,6 +6,8 @@
 #include "common/timer.h"
 #include "common/types.h"
 
+#include <array>
+
 /// The screen's refreshes, as the host last saw them: one refresh's time, the time between them, and how long before
 /// a refresh a frame must be queued to be shown on it. Zero period: no timeline.
 struct DisplayTimeline
@@ -37,6 +39,23 @@ struct Wake
 Wake NextWake(const DisplayTimeline& timeline, Common::Timer::Value now, u32 refreshes_per_frame,
               Common::Timer::Value last_deadline, Common::Timer::Value predicted_frame_time,
               Common::Timer::Value margin);
+
+/// How long the next frame will take, to be ready by its deadline: the 90th percentile of the last 120 frames, so a
+/// rare long one (a shader compile) costs that frame alone, not every frame's lag. Frames over a second are skipped.
+class FrameTimePredictor
+{
+public:
+  static constexpr u32 WINDOW = 120;
+
+  void Add(Common::Timer::Value frame_time);
+  Common::Timer::Value Predicted() const;
+  void Reset();
+
+private:
+  std::array<Common::Timer::Value, WINDOW> m_times = {};
+  u32 m_count = 0;
+  u32 m_next = 0;
+};
 
 /// Whether frames lock to the screen: sync to host refresh rate is on, the host has a timeline, the screen's rate is a
 /// multiple of the console's, the game runs at normal speed, and nothing (pause, frame step, rewind) interrupts it.

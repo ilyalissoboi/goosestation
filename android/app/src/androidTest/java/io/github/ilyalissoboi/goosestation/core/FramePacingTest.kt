@@ -38,6 +38,7 @@ class FramePacingTest {
     private val biosDir = File(root, "bios")
     private var disc = ""
     private var started = CountDownLatch(1)
+    private var stopped = CountDownLatch(1)
 
     @Before
     fun setUp() {
@@ -64,7 +65,7 @@ class FramePacingTest {
                     pauseOnDisconnect: Boolean,
                 ) = started.countDown()
 
-                override fun onGameStopped() {}
+                override fun onGameStopped() = stopped.countDown()
 
                 override fun onError(message: String) {}
             },
@@ -125,6 +126,36 @@ class FramePacingTest {
                 )
             }
         }
+
+    // The refresh timeline only runs while a game does, unpaused: nothing wakes 60 times a second in the library.
+    @Test
+    fun theTimelineRunsOnlyWhileAGameDoes() =
+        FrameReader(640, 480).use { frames ->
+            withSurface(frames) {
+                assertTimeline("before a game", false)
+                boot(frames, syncToHost = true)
+                assertTimeline("with a game", true)
+                NativeLibrary.setPaused(true)
+                assertTimeline("paused", false)
+                NativeLibrary.setPaused(false)
+                assertTimeline("resumed", true)
+                stopped = CountDownLatch(1)
+                NativeLibrary.shutdownGame()
+                assertTrue("stopped", stopped.await(20, TimeUnit.SECONDS))
+                assertTimeline("after the game", false)
+            }
+        }
+
+    private fun assertTimeline(
+        what: String,
+        running: Boolean,
+    ) {
+        val until = System.nanoTime() + 1_000_000_000L
+        while ((NativeLibrary.getVsyncTimelineForTest() != null) != running && System.nanoTime() < until) {
+            Thread.sleep(20)
+        }
+        assertEquals("timeline $what", running, NativeLibrary.getVsyncTimelineForTest() != null)
+    }
 
     // Switching apps over and over while locked: the surface goes mid-sleep and comes back; it never hangs, and the
     // lock picks up again.

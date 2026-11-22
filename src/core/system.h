@@ -486,6 +486,10 @@ void HostDisplayResized();
 
 /// Renders the display.
 bool PresentDisplay(bool skip_present, bool explicit_present);
+
+/// Frames locked to the screen's refreshes: presents with a deadline so far, those done by it, and the refreshes per
+/// frame now (0 when not locked).
+u32 GetDisplayLockStats(u64* presents, u64* made);
 void InvalidateDisplay();
 
 //////////////////////////////////////////////////////////////////////////

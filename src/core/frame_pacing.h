@@ -32,9 +32,14 @@ struct Wake
 };
 
 /// When to start the next frame: the first deadline at least refreshes_per_frame refreshes after last_deadline (0
-/// for none) that can still be made, the frame taking predicted_frame_time plus margin. Without a timeline, now.
+/// for none) that can still be made, the frame taking predicted_frame_time plus margin (at most its refreshes).
+/// Without a timeline, now.
 Wake NextWake(const DisplayTimeline& timeline, Common::Timer::Value now, u32 refreshes_per_frame,
               Common::Timer::Value last_deadline, Common::Timer::Value predicted_frame_time,
               Common::Timer::Value margin);
+
+/// Whether frames lock to the screen: sync to host refresh rate is on, the host has a timeline, the screen's rate is a
+/// multiple of the console's, the game runs at normal speed, and nothing (pause, frame step, rewind) interrupts it.
+bool ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes_per_frame, float target_speed, bool interrupted);
 
 } // namespace FramePacing

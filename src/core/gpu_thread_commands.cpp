@@ -31,6 +31,10 @@ static std::mutex s_latency_mutex;
 static double s_latency_total_ms = 0.0;
 static u32 s_latency_frames = 0;
 static std::atomic<Common::Timer::Value> s_last_present_active_time{0};
+
+// Frames locked to the screen: presents with a deadline, and those done by it.
+static std::atomic<u64> s_deadline_presents{0};
+static std::atomic<u64> s_deadline_made{0};
 } // namespace GPUThreadCommands
 
 void GPUThreadCommands::Handle(const GPUThreadCommand* cmd)
@@ -109,13 +113,19 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
   }
   if (cmd->frame_start_time != 0)
     s_last_present_active_time.store(now - cmd->frame_start_time, std::memory_order_relaxed);
+  if (cmd->deadline != 0 && do_present)
+  {
+    s_deadline_presents.fetch_add(1, std::memory_order_relaxed);
+    if (now <= cmd->deadline)
+      s_deadline_made.fetch_add(1, std::memory_order_relaxed);
+  }
 
   GPUThread::FramePresented();
 }
 
 void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                                     Common::Timer::Value frame_start_time, bool show_display, bool skip_present,
-                                    bool explicit_present)
+                                    bool explicit_present, Common::Timer::Value deadline)
 {
   GPUThreadPresentCommand* cmd = Allocate<GPUThreadPresentCommand>(GPUThreadCommandType::Present);
   cmd->ui = ui.release();
@@ -124,6 +134,7 @@ void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::T
   cmd->show_display = show_display;
   cmd->skip_present = skip_present;
   cmd->explicit_present = explicit_present;
+  cmd->deadline = deadline;
   GPUThread::FramePushed();
   GPUThread::PushCommand(cmd);
   GPUThread::Publish(); // the frame is drawn while the next is emulated
@@ -146,6 +157,12 @@ void GPUThreadCommands::AfterWindowChange()
 {
   if (g_gpu_hw)
     g_gpu_hw->RestoreDeviceContext();
+}
+
+void GPUThreadCommands::GetDeadlineStats(u64* presents, u64* made)
+{
+  *presents = s_deadline_presents.load(std::memory_order_relaxed);
+  *made = s_deadline_made.load(std::memory_order_relaxed);
 }
 
 void GPUThreadCommands::PushSubmitPresent()

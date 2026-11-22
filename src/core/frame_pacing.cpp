@@ -35,7 +35,10 @@ FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common:
     return Wake{now, 0};
 
   const s64 period = static_cast<s64>(timeline.period);
-  const s64 frame_time = static_cast<s64>(predicted_frame_time + margin);
+
+  // A frame longer than its refreshes can't be helped by starting earlier: never plan further out than that.
+  const s64 frame_time = std::min(static_cast<s64>(predicted_frame_time + margin),
+                                  static_cast<s64>(refreshes_per_frame) * period);
 
   // The earliest a deadline may be: made from now, and refreshes_per_frame refreshes on from the last one (less half
   // a refresh, for the timeline's own jitter or a change of rate).
@@ -53,4 +56,10 @@ FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common:
   const s64 deadline = origin + k * period;
 
   return Wake{static_cast<Common::Timer::Value>(deadline - frame_time), static_cast<Common::Timer::Value>(deadline)};
+}
+
+bool FramePacing::ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes_per_frame, float target_speed,
+                             bool interrupted)
+{
+  return (sync_to_host && has_timeline && refreshes_per_frame > 0 && target_speed == 1.0f && !interrupted);
 }

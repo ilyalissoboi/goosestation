@@ -6,6 +6,7 @@
 
 #include "core/frame_pacing.h"
 #include "core/host.h"
+#include "core/system.h"
 
 #include "common/log.h"
 #include "common/timer.h"
@@ -261,6 +262,16 @@ NATIVE_LIBRARY_FUNCTION(jlongArray, getVsyncTimelineForTest)(JNIEnv* env, jobjec
 
   const jlong values[3] = {static_cast<jlong>(timeline.vsync_time), static_cast<jlong>(timeline.period),
                            static_cast<jlong>(timeline.deadline_lead)};
+  jlongArray array = env->NewLongArray(3);
+  env->SetLongArrayRegion(array, 0, 3, values);
+  return array;
+}
+
+NATIVE_LIBRARY_FUNCTION(jlongArray, getFramePacingStatsForTest)(JNIEnv* env, jobject)
+{
+  u64 presents = 0, made = 0;
+  const u32 refreshes = System::GetDisplayLockStats(&presents, &made);
+  const jlong values[3] = {static_cast<jlong>(presents), static_cast<jlong>(made), static_cast<jlong>(refreshes)};
   jlongArray array = env->NewLongArray(3);
   env->SetLongArrayRegion(array, 0, 3, values);
   return array;

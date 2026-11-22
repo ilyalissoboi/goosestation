@@ -99,3 +99,22 @@ TEST(FramePacing, NoTimelineWakesNow)
   EXPECT_EQ(w.wake_time, Ms(50));
   EXPECT_EQ(w.deadline, 0u);
 }
+
+TEST(FramePacing, ShouldLockOnlyWhenEverythingAllows)
+{
+  EXPECT_TRUE(FramePacing::ShouldLock(true, true, 1, 1.0f, false));
+  EXPECT_FALSE(FramePacing::ShouldLock(false, true, 1, 1.0f, false)); // sync to host off
+  EXPECT_FALSE(FramePacing::ShouldLock(true, false, 1, 1.0f, false)); // no timeline
+  EXPECT_FALSE(FramePacing::ShouldLock(true, true, 0, 1.0f, false));  // no multiple (PAL on 60 Hz)
+  EXPECT_FALSE(FramePacing::ShouldLock(true, true, 1, 2.0f, false));  // fast-forward
+  EXPECT_FALSE(FramePacing::ShouldLock(true, true, 1, 0.0f, false));  // unlimited
+  EXPECT_FALSE(FramePacing::ShouldLock(true, true, 1, 1.0f, true));   // paused, stepping, rewinding
+}
+
+TEST(FramePacing, AnOverlongPredictionWaitsNoMoreThanItsRefreshes)
+{
+  // A frame time from a frame that never started (a state load, the first frame): at most the frame's own refreshes.
+  const FramePacing::Wake w = FramePacing::NextWake(Screen60(), Ms(101), 1, 0, Ms(10000), Ms(1));
+  EXPECT_GE(w.wake_time, Ms(101));
+  EXPECT_LE(ToMs(w.deadline), 101.0 + 2 * (1000.0 / 60.0) + 1.0);
+}

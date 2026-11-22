@@ -291,6 +291,12 @@ object NativeLibrary {
     /** Tests: the latest refresh, the period and the deadline's lead, in nanoseconds, or null without a timeline. */
     external fun getVsyncTimelineForTest(): LongArray?
 
+    /**
+     * Tests: frames locked to the screen's refreshes so far, those whose present was done by their deadline, and the
+     * refreshes per frame now (0 unlocked).
+     */
+    external fun getFramePacingStatsForTest(): LongArray
+
     /** Tests: the core's card hooks, as a game's card at [path] calls them. */
     external fun memcardCardOpenedForTest(path: String)
 

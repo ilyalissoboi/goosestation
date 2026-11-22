@@ -177,6 +177,7 @@ struct GPUThreadPresentCommand : public GPUThreadCommand
   bool show_display;                 // the game's display under the UI; else the UI alone
   bool skip_present;                 // BeginPresent(skip) without the display
   bool explicit_present;             // optimal pacing: submitted by the SubmitPresent that follows
+  Common::Timer::Value deadline;     // locked to the screen: the refresh's deadline it's due by (else 0)
 };
 
 namespace GPUThreadCommands {
@@ -186,7 +187,11 @@ void Handle(const GPUThreadCommand* cmd);
 
 /// Pushes a present (and counts it with GPUThread::FramePushed()).
 void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
-                 Common::Timer::Value frame_start_time, bool show_display, bool skip_present, bool explicit_present);
+                 Common::Timer::Value frame_start_time, bool show_display, bool skip_present, bool explicit_present,
+                 Common::Timer::Value deadline = 0);
+
+/// Presents that had a deadline (frames locked to the screen) since start, and those done by it.
+void GetDeadlineStats(u64* presents, u64* made);
 
 /// Pushes the submit of an explicit present, after the throttle.
 void PushSubmitPresent();

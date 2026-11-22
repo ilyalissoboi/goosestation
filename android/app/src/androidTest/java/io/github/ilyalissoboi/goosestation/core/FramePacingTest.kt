@@ -1,0 +1,134 @@
+// SPDX-FileCopyrightText: 2026 GooseStation contributors
+// SPDX-License-Identifier: GPL-3.0
+
+package io.github.ilyalissoboi.goosestation.core
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
+import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.storage.ContentBridge
+import io.github.ilyalissoboi.goosestation.storage.TestTrees
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+/**
+ * Frames locked to the screen's refreshes ([Main] SyncToHostRefreshRate with the Choreographer timeline): the game
+ * runs at the screen's rate, each frame done by its refresh's deadline.
+ *
+ * Needs the emulator's /sdcard/GooseTest bios/ps-30j.bin, games/Vagrant Story (USA).chd and
+ * savestates/SLUS-01040_2.sav (the command menu); without them the tests are skipped.
+ */
+@BootsGames
+@LargeTest
+@RunWith(AndroidJUnit4::class)
+class FramePacingTest {
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val root = File(context.cacheDir, "frame-pacing")
+    private val dataRoot = File(root, "data")
+    private val biosDir = File(root, "bios")
+    private var disc = ""
+    private var started = CountDownLatch(1)
+
+    @Before
+    fun setUp() {
+        root.deleteRecursively()
+        dataRoot.mkdirs()
+        ContentBridge.init(context)
+        val games = TestTrees.create(context, emptyMap())
+        assumeTrue(
+            "No BIOS, Vagrant Story or its menu state in /sdcard/GooseTest",
+            copyFromShell("$SDCARD_TESTS/bios/ps-30j.bin", File(biosDir, "ps-30j.bin")) &&
+                copyFromShell("$SDCARD_TESTS/games/Vagrant*.chd", File(TestTrees.directory(context, games), DISC)) &&
+                copyFromShell(
+                    "$SDCARD_TESTS/savestates/SLUS-01040_2.sav",
+                    File(dataRoot, "savestates/SLUS-01040_2.sav"),
+                ),
+        )
+        disc = "$games/$DISC"
+        NativeLibrary.setCallbacks(
+            object : NativeCallbacks {
+                override fun onGameStarted(
+                    title: String,
+                    serial: String,
+                    startPaused: Boolean,
+                    pauseOnDisconnect: Boolean,
+                ) = started.countDown()
+
+                override fun onGameStopped() {}
+
+                override fun onError(message: String) {}
+            },
+        )
+        initializeCore(context, dataRoot, biosDir, File(root, "offline"))
+        NativeLibrary.setGameFolders(arrayOf(games))
+        NativeLibrary.refreshGameList(true)
+        assertTrue("Vagrant Story listed", NativeLibrary.getGameList().any { it.path == disc })
+    }
+
+    @After
+    fun tearDown() {
+        NativeLibrary.shutdownGame()
+        NativeLibrary.setCallbacks(null)
+        TestTrees.deleteAll(context)
+    }
+
+    // 10 s at the menu: every frame locked, one refresh each, nearly all done by their deadlines.
+    @Test
+    fun aLockedGameMakesItsDeadlines() =
+        FrameReader(640, 480).use { frames ->
+            withSurface(frames) {
+                boot(frames, syncToHost = true)
+                val before = NativeLibrary.getFramePacingStatsForTest()
+                Thread.sleep(10_000)
+                val after = NativeLibrary.getFramePacingStatsForTest()
+                val locked = after[0] - before[0]
+                val made = after[1] - before[1]
+                assertEquals("one refresh a frame", 1L, after[2])
+                assertTrue("$locked frames locked in 10 s", locked in 570..630)
+                assertTrue("$made of $locked done by their deadlines", made >= locked * 9 / 10)
+            }
+        }
+
+    private fun withSurface(
+        frames: FrameReader,
+        body: () -> Unit,
+    ) {
+        NativeLibrary.surfaceChanged(frames.surface, 640, 480, 1f, 60f)
+        try {
+            body()
+        } finally {
+            NativeLibrary.surfaceChanged(null, 0, 0, 1f, 0f)
+        }
+    }
+
+    private fun boot(
+        frames: FrameReader,
+        syncToHost: Boolean,
+    ) {
+        NativeLibrary.setBoolSetting("Main", "SyncToHostRefreshRate", syncToHost)
+        NativeLibrary.applySettings()
+        TestRenderer.apply()
+        started = CountDownLatch(1)
+        NativeLibrary.startGame(disc, 1, false)
+        assertTrue("Vagrant Story booted", started.await(60, TimeUnit.SECONDS))
+        Thread.sleep(1_000)
+        assertNull("the menu state loads", NativeLibrary.loadState(SERIAL, 2))
+        Thread.sleep(2_000)
+        frames.nextFrame(30)
+    }
+
+    companion object {
+        const val SDCARD_TESTS = "/sdcard/GooseTest"
+        const val SERIAL = "SLUS-01040"
+        const val DISC = "Vagrant Story (USA).chd"
+    }
+}

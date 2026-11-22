@@ -56,6 +56,8 @@ add_library(core
   gpu_hw.cpp
   gpu_hw_frontend.cpp
   gpu_hw_frontend.h
+  frame_pacing.cpp
+  frame_pacing.h
   gpu_presenter.cpp
   gpu_presenter.h
   gpu_thread_commands.cpp

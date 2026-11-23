@@ -274,7 +274,8 @@ bool D3D11Device::CreateSwapChain()
     DXGI_SWAP_CHAIN_DESC1 fs_sd_desc = swap_chain_desc;
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fs_desc = {};
 
-    fs_sd_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    // No frame-latency waitable: DXGI supports it in fullscreen on D3D12 only, so exclusive fullscreen isn't waited on.
+    fs_sd_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
     fs_sd_desc.Width = fullscreen_mode.Width;
     fs_sd_desc.Height = fullscreen_mode.Height;
     fs_desc.RefreshRate = fullscreen_mode.RefreshRate;
@@ -326,7 +327,7 @@ bool D3D11Device::CreateSwapChain()
     WARNING_LOG("MakeWindowAssociation() to disable ALT+ENTER failed");
   }
 
-  if (m_using_flip_model_swap_chain && !m_latency_waiter.Attach(m_swap_chain.Get()))
+  if (m_using_flip_model_swap_chain && !m_is_exclusive_fullscreen && !m_latency_waiter.Attach(m_swap_chain.Get()))
     WARNING_LOG("The swap chain has no frame-latency waitable: presents won't be waited on.");
 
   if (!CreateSwapChainRTV())

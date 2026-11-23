@@ -565,7 +565,8 @@ u64 D3DCommon::FrameLatencyWaiter::Wait(u32 max_latency, u64 timeout)
   if (max_latency != m_max_latency && SUCCEEDED(m_swap_chain->SetMaximumFrameLatency(max_latency)))
     m_max_latency = max_latency;
 
-  const DWORD ms = static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(timeout), 1.0));
+  const DWORD ms =
+    (timeout == 0) ? 0 : static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(timeout), 1.0));
   const DWORD res = WaitForSingleObjectEx(m_handle, ms, TRUE);
   return (res == WAIT_OBJECT_0) ? Common::Timer::GetCurrentValue() : 0;
 }

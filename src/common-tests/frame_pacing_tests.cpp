@@ -530,8 +530,61 @@ TEST(PresentWaitDepth, ATimeoutPausesWaits)
   for (u32 i = 0; i < D::TIMEOUT_PAUSE; i++)
   {
     ASSERT_EQ(d.Depth(), D::NO_WAIT) << i;
-    d.NotWaited();
+    d.NotWaited(false);
   }
+  EXPECT_EQ(d.Depth(), 0u);
+}
+
+TEST(PresentWaitDepth, RepeatedTimeoutsPauseLonger)
+{
+  // A window that never presents (minimized, a locked screen) costs a timeout ever more rarely.
+  using D = FramePacing::PresentWaitDepth;
+  D d = Settled();
+  u32 pause = D::TIMEOUT_PAUSE;
+  for (u32 timeout = 0; timeout < 10; timeout++)
+  {
+    d.Report(0, P60, 1);
+    for (u32 i = 0; i < pause; i++)
+    {
+      ASSERT_EQ(d.Depth(), D::NO_WAIT) << "timeout " << timeout << " frame " << i;
+      d.NotWaited(false);
+    }
+    EXPECT_EQ(d.Depth(), 0u) << "timeout " << timeout;
+    pause = std::min(pause * 2, D::MAX_TIMEOUT_PAUSE);
+  }
+}
+
+TEST(PresentWaitDepth, AShownPresentEndsThePause)
+{
+  using D = FramePacing::PresentWaitDepth;
+  D d = Settled();
+  d.Report(0, P60, 1);
+  d.NotWaited(false);
+  ASSERT_EQ(d.Depth(), D::NO_WAIT);
+  d.NotWaited(true);
+  EXPECT_EQ(d.Depth(), 0u);
+
+  // And the next timeout pauses for the first pause again.
+  d.Report(0, P60, 1);
+  for (u32 i = 0; i < D::TIMEOUT_PAUSE; i++)
+    d.NotWaited(false);
+  EXPECT_EQ(d.Depth(), 0u);
+}
+
+TEST(PresentWaitDepth, AWaitThatReturnsResetsTheBackoff)
+{
+  using D = FramePacing::PresentWaitDepth;
+  D d = Settled();
+  for (u32 timeout = 0; timeout < 2; timeout++)
+  {
+    d.Report(0, P60, 1);
+    while (d.Depth() == D::NO_WAIT)
+      d.NotWaited(false);
+  }
+  OnTime(d, 1);
+  d.Report(0, P60, 1);
+  for (u32 i = 0; i < D::TIMEOUT_PAUSE; i++)
+    d.NotWaited(false);
   EXPECT_EQ(d.Depth(), 0u);
 }
 

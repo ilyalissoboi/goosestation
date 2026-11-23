@@ -747,7 +747,8 @@ public:
   virtual bool HasPresentWait() const { return false; }
 
   /// Waits until the present frames_back before the last one (0: the last) is shown, up to timeout. Returns when it
-  /// was shown (Common::Timer's clock; the time the wait returned where the API gives none), or 0 on a timeout.
+  /// was shown (Common::Timer's clock; the time the wait returned where the API gives none), or 0 on a timeout. A
+  /// timeout of 0 only looks.
   virtual u64 WaitForPresent(u32 frames_back, u64 timeout) { return 0; }
 
   /// Renders ImGui screen elements. Call before EndPresent().

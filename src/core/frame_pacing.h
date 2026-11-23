@@ -156,7 +156,8 @@ bool FifoForLock(bool vsync_wanted, bool sync_to_host, bool has_present_wait, fl
 /// Which present to wait for before the next frame reads its input: 0 the one just presented (at most one frame
 /// queued), 1 the one before, while frames keep missing their refreshes (two misses within MISS_WINDOW frames). It
 /// tries 0 again after a hold, which doubles each time the try fails at once. After a wait times out (a window that
-/// isn't presenting), no waits for TIMEOUT_PAUSE frames.
+/// isn't presenting: minimized, a locked screen), no waits for TIMEOUT_PAUSE frames, doubling with each timeout in a
+/// row up to MAX_TIMEOUT_PAUSE; a present seen shown meanwhile (a poll that doesn't wait) ends the pause.
 class PresentWaitDepth
 {
 public:
@@ -166,12 +167,13 @@ public:
   static constexpr u32 FIRST_HOLD = 600;
   static constexpr u32 MAX_HOLD = 9600;
   static constexpr u32 TIMEOUT_PAUSE = 60;
+  static constexpr u32 MAX_TIMEOUT_PAUSE = 3600;
 
   /// A frame's wait came back: shown_interval since the last frame shown (0: the wait timed out), period the
   /// refresh, refreshes those the frame should take (1, or the lock's n).
   void Report(Common::Timer::Value shown_interval, Common::Timer::Value period, u32 refreshes);
-  /// A frame presented without a wait (NO_WAIT).
-  void NotWaited();
+  /// A frame presented without a wait (NO_WAIT); shown: a poll found the screen showing presents again.
+  void NotWaited(bool shown);
   u32 Depth() const;
   void Reset();
 
@@ -183,6 +185,7 @@ private:
   u32 m_held = 0;             // frames at depth 1 so far
   u32 m_trying = 0;           // frames into a try at depth 0 (0: not trying)
   u32 m_pause = 0;            // frames left without waits
+  u32 m_timeouts = 0;         // timeouts in a row
 };
 
 /// The screen's refreshes, from the times presents were shown: the latest as a refresh, the period as the window's

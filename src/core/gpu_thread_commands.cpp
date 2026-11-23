@@ -290,7 +290,8 @@ void GPUThreadCommands::WaitForPresent(const GPUThreadPresentCommand* cmd)
   const u32 depth = s_wait_depth.Depth();
   if (depth == FramePacing::PresentWaitDepth::NO_WAIT)
   {
-    s_wait_depth.NotWaited();
+    // Paused after a timeout: a look that doesn't wait ends the pause once the screen shows presents again.
+    s_wait_depth.NotWaited(g_gpu_device->WaitForPresent(0, 0) != 0);
     return;
   }
 

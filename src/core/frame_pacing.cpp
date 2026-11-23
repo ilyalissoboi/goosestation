@@ -291,9 +291,11 @@ void FramePacing::PresentWaitDepth::Report(Common::Timer::Value shown_interval, 
 {
   if (shown_interval == 0)
   {
-    m_pause = TIMEOUT_PAUSE;
+    m_pause = std::min(TIMEOUT_PAUSE << std::min(m_timeouts, 16u), MAX_TIMEOUT_PAUSE);
+    m_timeouts++;
     return;
   }
+  m_timeouts = 0;
 
   const u32 frame = ++m_frames;
   if (frame <= JUDGE_AFTER)
@@ -336,10 +338,17 @@ void FramePacing::PresentWaitDepth::Report(Common::Timer::Value shown_interval, 
   }
 }
 
-void FramePacing::PresentWaitDepth::NotWaited()
+void FramePacing::PresentWaitDepth::NotWaited(bool shown)
 {
-  if (m_pause > 0)
+  if (shown)
+  {
+    m_pause = 0;
+    m_timeouts = 0;
+  }
+  else if (m_pause > 0)
+  {
     m_pause--;
+  }
 }
 
 u32 FramePacing::PresentWaitDepth::Depth() const

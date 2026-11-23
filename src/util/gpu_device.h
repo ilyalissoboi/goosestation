@@ -742,6 +742,14 @@ public:
   /// The presents shown since the last call, oldest first, up to out.size(); how many.
   virtual u32 FetchPresentFeedback(std::span<PresentFeedback> out) { return 0; }
 
+  /// Whether presents can be waited on until the screen shows them (Vulkan's VK_KHR_present_wait, a DXGI
+  /// frame-latency waitable, Metal's presented handlers).
+  virtual bool HasPresentWait() const { return false; }
+
+  /// Waits until the present frames_back before the last one (0: the last) is shown, up to timeout. Returns when it
+  /// was shown (Common::Timer's clock; the time the wait returned where the API gives none), or 0 on a timeout.
+  virtual u64 WaitForPresent(u32 frames_back, u64 timeout) { return 0; }
+
   /// Renders ImGui screen elements. Call before EndPresent().
   /// Draws a frame of ImGui (built on the emulation thread, ImGui::Render() already called, and copied).
   void RenderImGui(const ImDrawData* draw_data);

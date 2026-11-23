@@ -182,6 +182,8 @@ static void UpdateDisplayVSync();
 static u32 WantedDisplayLock();
 static u32 TimelineRefreshes();
 static bool IsVSyncWanted();
+static bool GetTimeline(DisplayTimeline* timeline);
+static u32 PresentRefreshes();
 static void SleepToDisplayDeadline(Common::Timer::Value current_time);
 
 // What the frame's end decides presents by: the device as last published, and its own present-throttle clock.
@@ -3637,7 +3639,7 @@ void System::UpdateSpeedLimiterState()
     // The timeline gone for a moment (the debounce keeps the lock): normal speed until it's back.
     DisplayTimeline timeline;
     const float refresh_rate =
-      (Host::GetDisplayTimeline(&timeline) && timeline.period > 0) ?
+      (GetTimeline(&timeline) && timeline.period > 0) ?
         static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period)) :
         System::GetThrottleFrequency() * static_cast<float>(s_display_lock_refreshes);
     s_target_speed = FramePacing::LockedSpeed(refresh_rate, System::GetThrottleFrequency(), s_display_lock_refreshes);
@@ -3687,8 +3689,15 @@ void System::UpdateDisplayVSync()
 
 bool System::IsVSyncWanted()
 {
-  // Automatic waits for the devices' present waits (pacing stage 2b): off until they exist.
-  return FramePacing::VSyncWanted(g_settings.display_vsync_mode, false, false);
+  // Automatic: on where the device can wait for its presents (no added lag), never on Android, where the screen lock
+  // paces from Choreographer's timeline.
+#ifdef __ANDROID__
+  static constexpr bool automatic_allowed = false;
+#else
+  static constexpr bool automatic_allowed = true;
+#endif
+  return FramePacing::VSyncWanted(g_settings.display_vsync_mode, automatic_allowed,
+                                  GPUThread::GetDeviceInfo().has_present_wait);
 }
 
 u32 System::WantedDisplayLock()
@@ -3703,10 +3712,30 @@ u32 System::WantedDisplayLock()
   return FramePacing::ShouldLock(true, true, 1, base_speed, false) ? s_display_lock_debounce.Current() : 0;
 }
 
+u32 System::PresentRefreshes()
+{
+  // The lock's refreshes, or those the throttle's frame period spans (two for 60 frames on a 120 Hz screen).
+  if (s_display_lock_refreshes > 0)
+    return s_display_lock_refreshes;
+
+  const float refresh_rate = GPUThread::GetDeviceInfo().refresh_rate;
+  if (refresh_rate <= 0.0f || s_frame_period <= 1)
+    return 1;
+
+  const double refreshes = Common::Timer::ConvertValueToSeconds(s_frame_period) * static_cast<double>(refresh_rate);
+  return std::clamp<u32>(static_cast<u32>(std::lround(refreshes)), 1u, 4u);
+}
+
+bool System::GetTimeline(DisplayTimeline* timeline)
+{
+  // The host's (Android's Choreographer), or else the one the present waits found (desktop).
+  return Host::GetDisplayTimeline(timeline) || GPUThreadCommands::GetPresentTimeline(timeline);
+}
+
 u32 System::TimelineRefreshes()
 {
   DisplayTimeline timeline;
-  if (!Host::GetDisplayTimeline(&timeline))
+  if (!GetTimeline(&timeline))
     return 0;
 
   const float refresh_rate = static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period));
@@ -3716,7 +3745,7 @@ u32 System::TimelineRefreshes()
 void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
 {
   DisplayTimeline timeline;
-  if (!Host::GetDisplayTimeline(&timeline))
+  if (!GetTimeline(&timeline))
   {
     // The timeline stopped (the surface went): the next frame unlocks.
     s_display_lock_deadline = 0;
@@ -3757,6 +3786,14 @@ GPUVSyncMode System::GetEffectiveVSyncMode()
   // Vsync off => always disabled. So is it while fast-forwarding, and back after.
   if (!FramePacing::VSyncWhileFastForwarding(IsVSyncWanted(), s_fast_forward_enabled || s_turbo_enabled))
     return GPUVSyncMode::Disabled;
+
+  // Where the screen lock can run from the present waits, presents block on the screen, whatever its rate.
+  const GPUThread::DeviceInfo& info = GPUThread::GetDeviceInfo();
+  if (FramePacing::FifoForLock(true, g_settings.sync_to_host_refresh_rate, info.has_present_wait, info.refresh_rate,
+                               System::GetThrottleFrequency()))
+  {
+    return GPUVSyncMode::FIFO;
+  }
 
   // If there's no VM, or we're using vsync for timing, then we always use double-buffered (blocking).
   // Try to keep the same present mode whether we're running or not, since it'll avoid flicker.
@@ -6075,7 +6112,8 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
 
   GPUThreadCommands::PushPresent(ImGuiDrawCopy::Capture(*ImGui::GetDrawData()), s_input_poll_time,
                                  s_frame_start_time, show_display, skip_present, explicit_present, s_present_deadline,
-                                 s_display_lock_period, s_display_lock_offset, s_present_ran_long);
+                                 s_display_lock_period, s_display_lock_offset, s_present_ran_long,
+                                 PresentRefreshes());
 
   ImGuiManager::NewFrame();
 

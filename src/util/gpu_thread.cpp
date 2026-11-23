@@ -453,6 +453,7 @@ void GPUThread::PublishDeviceInfo()
     info.gpu_timing = g_gpu_device->IsGPUTimingEnabled();
     info.debug_device = g_gpu_device->IsDebugDevice();
     info.allow_present_throttle = g_gpu_device->IsPresentThrottleAllowed();
+    info.has_present_wait = g_gpu_device->HasPresentWait();
     info.max_texture_size = g_gpu_device->GetMaxTextureSize();
     info.max_multisamples = g_gpu_device->GetMaxMultisamples();
   }

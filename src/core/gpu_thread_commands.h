@@ -14,6 +14,8 @@
 #include "common/timer.h"
 #include "common/types.h"
 
+struct DisplayTimeline;
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4200) // zero-sized array in struct/union
@@ -181,6 +183,7 @@ struct GPUThreadPresentCommand : public GPUThreadCommand
   Common::Timer::Value period;         // the screen's refresh period (with deadline)
   s64 offset;                          // how far past the timeline's deadline it was aimed (negative: before)
   bool ran_long;                       // its frame's own work took longer than planned (late whatever the aim)
+  u32 refreshes;                       // the refreshes it should be shown for (the lock's, or the frame rate's)
 };
 
 namespace GPUThreadCommands {
@@ -192,7 +195,11 @@ void Handle(const GPUThreadCommand* cmd);
 void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                  Common::Timer::Value frame_start_time, bool show_display, bool skip_present, bool explicit_present,
                  Common::Timer::Value deadline = 0, Common::Timer::Value period = 0, s64 offset = 0,
-                 bool ran_long = false);
+                 bool ran_long = false, u32 refreshes = 1);
+
+/// The screen's refreshes as the present waits found them (desktop's timeline for the lock); false without one: no
+/// wait, presents not blocking, or nothing shown lately.
+bool GetPresentTimeline(DisplayTimeline* timeline);
 
 /// Locked to the screen: how long after the timeline's deadline frames should be done by, from the presents' feedback
 /// (the screen's real cutoff, less a safety margin); 0 without feedback.

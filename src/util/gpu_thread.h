@@ -102,6 +102,7 @@ struct DeviceInfo
   bool gpu_timing = false;
   bool debug_device = false;
   bool allow_present_throttle = false;
+  bool has_present_wait = false;
   u32 max_texture_size = 0;
   u32 max_multisamples = 1;
 };

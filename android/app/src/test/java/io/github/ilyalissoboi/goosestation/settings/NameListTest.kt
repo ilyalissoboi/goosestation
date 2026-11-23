@@ -43,6 +43,7 @@ class NameListTest {
                 "DisplayScalingMode",
                 "DisplayAlignment",
                 "DisplayRotation",
+                "DisplayVSyncMode",
                 "DisplayScreenshotMode",
                 "DisplayScreenshotFormat",
                 "AudioStretchMode",

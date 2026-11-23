@@ -296,6 +296,11 @@ call)*.
     from Choreographer's.
 - **Sync to host changes the speed on desktop only while vsync is on** *(the player's choice)*, as its own help text
   says. Renderers left with vsync off run exactly as today.
+- **Automatic stays off on every desktop renderer for now** *(the player's choice, 2026-11-23, after the final
+  review)*.
+  - Windows can't be measured on screen from here, and on the Mac FIFO under the compositor cost a refresh.
+  - The waits and the lock serve vsync On.
+  - A follow-up turns Automatic on API by API once the player's on-screen check (lag against vsync off) passes.
 - **Success for 2b:**
   - On the Mac (Metal), measured from the presented handlers at the defaults: lag from input poll to screen no higher
     than the base branch's default (vsync off). Every frame shown for its refreshes (one at 60 Hz, two at 120) in at

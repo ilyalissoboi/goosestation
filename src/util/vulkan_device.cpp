@@ -2569,9 +2569,14 @@ void VulkanDevice::SubmitPresent()
 
 bool VulkanDevice::HasPresentWait() const
 {
+#ifdef __ANDROID__
+  // Android paces from Choreographer's timeline (the screen lock), with a driver's FIFO fallback left unwaited.
+  return false;
+#else
   // Not while the present thread presents (the IDs are set there).
   return (m_optional_extensions.vk_khr_present_wait && vkWaitForPresentKHR && m_swap_chain &&
           !m_present_thread.joinable());
+#endif
 }
 
 u64 VulkanDevice::WaitForPresent(u32 frames_back, u64 timeout)
@@ -2589,7 +2594,11 @@ u64 VulkanDevice::WaitForPresent(u32 frames_back, u64 timeout)
   if (res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR)
     return Common::Timer::GetCurrentValue();
 
-  // A timeout, or the swap chain out of date (the next present makes it again).
+  // Out of date: nothing to wait for (the next present makes the swap chain again), and not a window that stopped
+  // presenting.
+  if (res == VK_ERROR_OUT_OF_DATE_KHR)
+    return Common::Timer::GetCurrentValue();
+
   if (res != VK_TIMEOUT)
     LOG_VULKAN_ERROR(res, "vkWaitForPresentKHR failed: ");
   return 0;

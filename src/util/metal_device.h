@@ -275,7 +275,7 @@ public:
   void EndPresent(bool explicit_submit) override;
   void SubmitPresent() override;
   bool HasPresentWait() const override;
-  bool AutomaticVSync() const override;
+  bool LocksFromUnsyncedFeedback() const override;
   u64 WaitForPresent(u32 frames_back, u64 timeout) override;
   bool HasPresentFeedback() const override;
   u64 GetLastPresentId() const override;

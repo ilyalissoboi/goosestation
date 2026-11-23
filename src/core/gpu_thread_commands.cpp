@@ -223,7 +223,8 @@ void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool pre
 
   // Unsynced presents on a device that waits (Metal): their feedback makes the desktop's timeline, starting over with
   // another device or window.
-  const bool makes_timeline = FramePacing::TimelineFromFeedback(fifo, has_wait, true);
+  const bool makes_timeline =
+    FramePacing::TimelineFromFeedback(fifo, g_gpu_device->LocksFromUnsyncedFeedback(), true);
   const float refresh_hz = g_gpu_device->GetWindowInfo().surface_refresh_rate;
   if (makes_timeline &&
       (s_wait_reset.exchange(false, std::memory_order_acq_rel) || s_feedback_device != g_gpu_device.get()))
@@ -314,8 +315,9 @@ void GPUThreadCommands::WaitForPresent(const GPUThreadPresentCommand* cmd)
   const u32 depth = s_wait_depth.Depth();
   if (depth == FramePacing::PresentWaitDepth::NO_WAIT)
   {
-    // Paused after a timeout: a look that doesn't wait ends the pause once the screen shows presents again.
-    s_wait_depth.NotWaited(g_gpu_device->WaitForPresent(0, 0) != 0);
+    // Paused after a timeout: a look that doesn't wait ends the pause once the screen shows presents again (the one
+    // before: the one just presented can't be shown yet).
+    s_wait_depth.NotWaited(g_gpu_device->WaitForPresent(1, 0) != 0);
     return;
   }
 

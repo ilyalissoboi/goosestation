@@ -87,13 +87,14 @@ public:
   void Detach();
   bool IsAttached() const { return (m_handle != nullptr); }
 
-  /// Waits until fewer than max_latency presents are queued (1: the last one is shown), up to timeout. Returns when
-  /// it returned (Common::Timer's clock), or 0 on a timeout.
-  u64 Wait(u32 max_latency, u64 timeout);
+  /// Waits until the present frames_back before the last (GetLastPresentCount()) is shown, by the frame statistics'
+  /// PresentCount, sleeping on the waitable between looks (it's released as presents leave the queue; its count isn't
+  /// relied on), up to timeout. Returns its refresh's time (SyncQPCTime, Common::Timer's clock on Windows), the time
+  /// it returned where there are no statistics, or 0 on a timeout.
+  u64 Wait(u32 frames_back, u64 timeout);
 
 private:
   Microsoft::WRL::ComPtr<IDXGISwapChain2> m_swap_chain;
   HANDLE m_handle = nullptr;
-  u32 m_max_latency = 1;
 };
 } // namespace D3DCommon

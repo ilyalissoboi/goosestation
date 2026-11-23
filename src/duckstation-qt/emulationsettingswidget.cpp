@@ -111,9 +111,9 @@ EmulationSettingsWidget::EmulationSettingsWidget(SettingsWindow* dialog, QWidget
   dialog->registerWidgetHelp(
     m_ui.vsync, tr("Vertical Sync (VSync)"),
     QString::fromUtf8(Settings::GetDisplayVSyncModeDisplayName(Settings::DEFAULT_DISPLAY_VSYNC_MODE)),
-    tr("Synchronizes presentation of the console's frames to the host. Automatic turns it on where the renderer can "
-       "wait for each frame to be shown, with no added latency (Vulkan with present wait, D3D12, D3D11, Metal). On "
-       "turns it on everywhere, and can add latency. <strong>GSync/FreeSync users should enable Optimal Frame Pacing "
+    tr("Synchronizes presentation of the console's frames to the host. Automatic leaves it off for now (renderers turn "
+       "it on once it's measured to add no latency); on Metal it locks frames to the screen without it. On waits for "
+       "each frame to be shown, and can add latency. <strong>GSync/FreeSync users should enable Optimal Frame Pacing "
        "instead.</strong>"));
   dialog->registerWidgetHelp(
     m_ui.syncToHostRefreshRate, tr("Sync To Host Refresh Rate"), tr("Checked"),
@@ -237,14 +237,14 @@ void EmulationSettingsWidget::onPreFrameSleepChanged()
 
 void EmulationSettingsWidget::updateSkipDuplicateFramesEnabled()
 {
-  // Vsync counts as on unless it's off (Automatic is on wherever the renderer allows it).
+  // Only On is vsync for now (Automatic leaves it off on every renderer).
   const bool vsync =
     (Settings::ParseDisplayVSyncMode(
        m_dialog
          ->getEffectiveStringValue("Display", "VSyncMode",
                                    Settings::GetDisplayVSyncModeName(Settings::DEFAULT_DISPLAY_VSYNC_MODE))
          .c_str())
-       .value_or(Settings::DEFAULT_DISPLAY_VSYNC_MODE) != DisplayVSyncMode::Off);
+       .value_or(Settings::DEFAULT_DISPLAY_VSYNC_MODE) == DisplayVSyncMode::On);
   const bool sync_to_host =
     m_dialog->getEffectiveBoolValue("Main", "SyncToHostRefreshRate", Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE) &&
     vsync;

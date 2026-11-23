@@ -535,8 +535,7 @@ bool D3DCommon::FrameLatencyWaiter::Attach(IDXGISwapChain1* swap_chain)
   if (!handle)
     return false;
 
-  m_max_latency = 1;
-  if (FAILED(swap_chain2->SetMaximumFrameLatency(m_max_latency)))
+  if (FAILED(swap_chain2->SetMaximumFrameLatency(1)))
   {
     CloseHandle(handle);
     return false;
@@ -557,16 +556,36 @@ void D3DCommon::FrameLatencyWaiter::Detach()
   m_swap_chain.Reset();
 }
 
-u64 D3DCommon::FrameLatencyWaiter::Wait(u32 max_latency, u64 timeout)
+u64 D3DCommon::FrameLatencyWaiter::Wait(u32 frames_back, u64 timeout)
 {
   if (!m_handle)
     return 0;
 
-  if (max_latency != m_max_latency && SUCCEEDED(m_swap_chain->SetMaximumFrameLatency(max_latency)))
-    m_max_latency = max_latency;
+  UINT last = 0;
+  if (FAILED(m_swap_chain->GetLastPresentCount(&last)) || last <= frames_back)
+    return Common::Timer::GetCurrentValue();
 
-  const DWORD ms =
-    (timeout == 0) ? 0 : static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(timeout), 1.0));
-  const DWORD res = WaitForSingleObjectEx(m_handle, ms, TRUE);
-  return (res == WAIT_OBJECT_0) ? Common::Timer::GetCurrentValue() : 0;
+  const UINT target = last - frames_back;
+  const u64 deadline = Common::Timer::GetCurrentValue() + timeout;
+  for (;;)
+  {
+    DXGI_FRAME_STATISTICS stats;
+    const bool has_stats = SUCCEEDED(m_swap_chain->GetFrameStatistics(&stats));
+    if (has_stats && stats.PresentCount >= target)
+    {
+      return (stats.SyncQPCTime.QuadPart > 0) ? static_cast<u64>(stats.SyncQPCTime.QuadPart) :
+                                                 Common::Timer::GetCurrentValue();
+    }
+
+    const u64 now = Common::Timer::GetCurrentValue();
+    if (now >= deadline)
+      return 0;
+
+    // Until a present leaves the queue. Without statistics (disjoint for a moment), that alone is the answer.
+    const DWORD ms = static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(deadline - now), 1.0));
+    if (WaitForSingleObjectEx(m_handle, ms, FALSE) != WAIT_OBJECT_0)
+      return 0;
+    if (!has_stats)
+      return Common::Timer::GetCurrentValue();
+  }
 }

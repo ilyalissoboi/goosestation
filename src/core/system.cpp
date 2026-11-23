@@ -1492,10 +1492,20 @@ bool System::UpdateGameSettingsLayer()
         ERROR_LOG("Failed to parse game settings ini '{}'", new_interface->GetFileName());
         new_interface.reset();
       }
+#ifndef __ANDROID__
+      // The old vsync switch becomes the three-way setting, as the game's own (pacing stage 2b).
+      else if (Settings::MoveOldVSyncSwitch(*new_interface, true))
+      {
+        Error error;
+        if (!new_interface->Save(&error))
+          WARNING_LOG("Failed to save game settings: {}", error.GetDescription());
+      }
+#endif
 #ifdef __ANDROID__
       else
       {
         // In memory only: the file is desktop's too, and must never be saved with these dropped.
+        Settings::MoveOldVSyncSwitch(*new_interface, true);
         Host::AdaptGameSettingsLayer(*new_interface);
         new_interface->MarkClean();
       }

@@ -154,9 +154,9 @@ bool VSyncWanted(DisplayVSyncMode mode, bool automatic_allowed, bool has_present
 bool FifoForLock(bool vsync_wanted, bool sync_to_host, bool has_present_wait, float refresh_hz, float console_hz);
 
 /// Whether the desktop's refresh timeline comes from the presents' feedback: while presents don't block (with FIFO
-/// the waits make it), on devices that can also wait for their presents (Metal, whose presented handlers report
-/// either way; MoltenVK has feedback and no wait, so it's left as it was).
-bool TimelineFromFeedback(bool fifo, bool has_present_wait, bool has_present_feedback);
+/// the waits make it), on devices that lock from unsynced feedback (Metal; not MoltenVK or Linux's Vulkan, whose
+/// display timing is left as it was).
+bool TimelineFromFeedback(bool fifo, bool locks_from_unsynced_feedback, bool has_present_feedback);
 
 /// Whether sync to host refresh rate changes the game's speed to the screen's (within 5%): on desktop only while vsync
 /// is on, as the setting says; on Android as before (the screen lock paces there).

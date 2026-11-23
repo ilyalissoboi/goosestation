@@ -2407,11 +2407,11 @@ u64 MetalDevice::WaitForPresent(u32 frames_back, u64 timeout)
   return m_presented->shown_times[number % m_presented->shown_times.size()];
 }
 
-bool MetalDevice::AutomaticVSync() const
+bool MetalDevice::LocksFromUnsyncedFeedback() const
 {
   // In a window, unsynced presents are tear-free (the compositor syncs them) and display sync costs about a refresh:
-  // Automatic leaves vsync off, and the screen lock paces from the presented handlers' times instead.
-  return false;
+  // the screen lock paces from the presented handlers' times instead.
+  return (m_layer != nil);
 }
 
 bool MetalDevice::HasPresentFeedback() const

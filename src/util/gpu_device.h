@@ -746,9 +746,13 @@ public:
   /// frame-latency waitable, Metal's presented handlers).
   virtual bool HasPresentWait() const { return false; }
 
-  /// Whether vsync's Automatic turns it on here: where presents can be waited on, unless unsynced presents are already
-  /// tear-free and quicker (Metal in a window: the compositor syncs them, and display sync adds a refresh).
-  virtual bool AutomaticVSync() const { return HasPresentWait(); }
+  /// Whether vsync's Automatic turns it on here: nowhere yet. On the Mac display sync cost a refresh more than unsynced
+  /// (and tear-free) presents, waits or not; the waits elsewhere are turned on API by API once measured on screen.
+  virtual bool AutomaticVSync() const { return false; }
+
+  /// Whether the screen lock runs from this device's present feedback while presents don't block (Metal: unsynced
+  /// presents are tear-free in a window, and its presented handlers report when each was shown).
+  virtual bool LocksFromUnsyncedFeedback() const { return false; }
 
   /// Waits until the present frames_back before the last one (0: the last) is shown, up to timeout. Returns when it
   /// was shown (Common::Timer's clock; the time the wait returned where the API gives none), or 0 on a timeout. A

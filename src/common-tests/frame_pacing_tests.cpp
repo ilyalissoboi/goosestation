@@ -677,7 +677,7 @@ TEST(FramePacing, TimelineFromFeedbackOnlyWithoutFifo)
   EXPECT_TRUE(FramePacing::TimelineFromFeedback(false, true, true));
   // Blocking presents: the waits make it.
   EXPECT_FALSE(FramePacing::TimelineFromFeedback(true, true, true));
-  // MoltenVK: feedback, but no wait: unchanged.
+  // MoltenVK, Linux's Vulkan: feedback, but they don't lock from it: unchanged.
   EXPECT_FALSE(FramePacing::TimelineFromFeedback(false, false, true));
   // D3D, Vulkan without display timing: nothing to make it from.
   EXPECT_FALSE(FramePacing::TimelineFromFeedback(false, true, false));

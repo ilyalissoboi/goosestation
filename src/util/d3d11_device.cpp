@@ -704,9 +704,6 @@ void D3D11Device::EndPresent(bool explicit_present)
   const UINT flags = (m_vsync_mode == GPUVSyncMode::Disabled && m_using_allow_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
   m_swap_chain->Present(sync_interval, flags);
 
-  // The waitable stops Present() limiting the frames queued: outside FIFO (where the GPU thread waits), as DXGI did.
-  if (m_vsync_mode != GPUVSyncMode::FIFO)
-    m_latency_waiter.Wait(3, Common::Timer::ConvertMillisecondsToValue(100.0));
 
   if (m_gpu_timing_enabled)
     KickTimestampQuery();
@@ -726,7 +723,7 @@ bool D3D11Device::HasPresentWait() const
 
 u64 D3D11Device::WaitForPresent(u32 frames_back, u64 timeout)
 {
-  return m_latency_waiter.Wait(1 + frames_back, timeout);
+  return m_latency_waiter.Wait(frames_back, timeout);
 }
 
 bool D3D11Device::CreateTimestampQueries()

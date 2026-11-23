@@ -1495,7 +1495,7 @@ const char* Settings::GetDisplayAlignmentDisplayName(DisplayAlignment alignment)
 
 static constexpr const std::array s_display_vsync_mode_names = {"Automatic", "On", "Off"};
 static constexpr const std::array s_display_vsync_mode_display_names = {
-  TRANSLATE_NOOP("Settings", "Automatic (where it adds no lag)"), TRANSLATE_NOOP("Settings", "On"),
+  TRANSLATE_NOOP("Settings", "Automatic"), TRANSLATE_NOOP("Settings", "On"),
   TRANSLATE_NOOP("Settings", "Off")};
 
 std::optional<DisplayVSyncMode> Settings::ParseDisplayVSyncMode(const char* str)
@@ -1532,13 +1532,18 @@ bool Settings::ApplyDesktopPacingDefaults(SettingsInterface& si)
   return true;
 }
 
-bool Settings::MoveOldVSyncSwitch(SettingsInterface& si)
+bool Settings::MoveOldVSyncSwitch(SettingsInterface& si, bool game_file)
 {
   if (!si.ContainsValue("Display", "VSync"))
     return false;
 
-  if (!si.ContainsValue("Display", "VSyncMode") && si.GetBoolValue("Display", "VSync", false))
-    si.SetStringValue("Display", "VSyncMode", GetDisplayVSyncModeName(DisplayVSyncMode::On));
+  if (!si.ContainsValue("Display", "VSyncMode"))
+  {
+    if (si.GetBoolValue("Display", "VSync", false))
+      si.SetStringValue("Display", "VSyncMode", GetDisplayVSyncModeName(DisplayVSyncMode::On));
+    else if (game_file)
+      si.SetStringValue("Display", "VSyncMode", GetDisplayVSyncModeName(DisplayVSyncMode::Off));
+  }
   si.DeleteValue("Display", "VSync");
   return true;
 }

@@ -453,8 +453,8 @@ struct Settings
   static bool ApplyDesktopPacingDefaults(SettingsInterface& si);
 
   /// The old [Display] VSync switch moved to [Display] VSyncMode, as Load() reads it (on: On; off: the default), so
-  /// the UIs show what's used. True if the file changed.
-  static bool MoveOldVSyncSwitch(SettingsInterface& si);
+  /// the UIs show what's used. In a game's file, which holds only what it overrides, off is Off. True if it changed.
+  static bool MoveOldVSyncSwitch(SettingsInterface& si, bool game_file = false);
 
   static std::optional<DisplayRotation> ParseDisplayRotation(const char* str);
   static const char* GetDisplayRotationName(DisplayRotation alignment);

@@ -3600,9 +3600,10 @@ void FullscreenUI::DrawEmulationSettingsPage()
 
   MenuHeading(FSUI_CSTR("Latency Control"));
   DrawEnumSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Vertical Sync (VSync)"),
-                  FSUI_CSTR("Automatic turns it on where the renderer can wait for each frame to be shown, with no "
-                            "added latency (Vulkan with present wait, D3D12, D3D11, Metal). On turns it on everywhere, "
-                            "and can add latency. GSync/FreeSync users should enable Optimal Frame Pacing instead."),
+                  FSUI_CSTR("Automatic leaves it off for now (renderers turn it on once it's measured to add no "
+                            "latency); on Metal it locks frames to the screen without it. On waits for each frame to be "
+                            "shown and can add latency. GSync/FreeSync users should enable Optimal Frame Pacing "
+                            "instead."),
                   "Display", "VSyncMode", Settings::DEFAULT_DISPLAY_VSYNC_MODE, &Settings::ParseDisplayVSyncMode,
                   &Settings::GetDisplayVSyncModeName, &Settings::GetDisplayVSyncModeDisplayName,
                   DisplayVSyncMode::Count);
@@ -3632,7 +3633,7 @@ void FullscreenUI::DrawEmulationSettingsPage()
         GetEffectiveTinyStringSetting(bsi, "Display", "VSyncMode",
                                       Settings::GetDisplayVSyncModeName(Settings::DEFAULT_DISPLAY_VSYNC_MODE))
           .c_str())
-          .value_or(Settings::DEFAULT_DISPLAY_VSYNC_MODE) != DisplayVSyncMode::Off &&
+          .value_or(Settings::DEFAULT_DISPLAY_VSYNC_MODE) == DisplayVSyncMode::On &&
       GetEffectiveBoolSetting(bsi, "Main", "SyncToHostRefreshRate", Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE)));
 
   const bool pre_frame_sleep_active =

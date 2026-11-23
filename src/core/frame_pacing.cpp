@@ -286,9 +286,9 @@ bool FramePacing::FifoForLock(bool vsync_wanted, bool sync_to_host, bool has_pre
   return vsync_wanted && sync_to_host && has_present_wait && RefreshesPerFrame(refresh_hz, console_hz) > 0;
 }
 
-bool FramePacing::TimelineFromFeedback(bool fifo, bool has_present_wait, bool has_present_feedback)
+bool FramePacing::TimelineFromFeedback(bool fifo, bool locks_from_unsynced_feedback, bool has_present_feedback)
 {
-  return !fifo && has_present_wait && has_present_feedback;
+  return !fifo && locks_from_unsynced_feedback && has_present_feedback;
 }
 
 bool FramePacing::SyncsSpeedToHost(bool sync_to_host, bool vsync_on, bool desktop)

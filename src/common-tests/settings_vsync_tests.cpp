@@ -119,3 +119,18 @@ TEST(SettingsVSync, TheOldSwitchMoves)
   EXPECT_TRUE(Settings::MoveOldVSyncSwitch(both));
   EXPECT_EQ(both.GetStringValue("Display", "VSyncMode", ""), "Off");
 }
+
+TEST(SettingsVSync, TheOldSwitchMovesInAGameFile)
+{
+  // A game's file holds only what it overrides: its off was chosen, so it's Off, not the default.
+  MemorySettingsInterface game;
+  game.SetBoolValue("Display", "VSync", false);
+  EXPECT_TRUE(Settings::MoveOldVSyncSwitch(game, true));
+  EXPECT_EQ(game.GetStringValue("Display", "VSyncMode", ""), "Off");
+  EXPECT_FALSE(game.ContainsValue("Display", "VSync"));
+
+  MemorySettingsInterface on;
+  on.SetBoolValue("Display", "VSync", true);
+  EXPECT_TRUE(Settings::MoveOldVSyncSwitch(on, true));
+  EXPECT_EQ(on.GetStringValue("Display", "VSyncMode", ""), "On");
+}

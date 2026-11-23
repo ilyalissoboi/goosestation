@@ -466,6 +466,7 @@ bool VulkanSwapChain::CreateSwapChain()
     ERROR_LOG("Exclusive fullscreen control requested, but is not supported on this platform.");
 #endif
 
+  m_last_present_id = 0;
   res = vkCreateSwapchainKHR(dev.GetVulkanDevice(), &swap_chain_info, nullptr, &m_swap_chain);
   if (res != VK_SUCCESS)
   {

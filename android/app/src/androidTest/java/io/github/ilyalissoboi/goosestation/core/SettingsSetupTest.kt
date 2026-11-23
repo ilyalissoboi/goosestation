@@ -119,6 +119,15 @@ class SettingsSetupTest {
         assertEquals("false", readSettings().value("Main", "SyncToHostRefreshRate"))
     }
 
+    // The old vsync switch's on reads On in the three-way setting, as the rows show it (pacing stage 2b).
+    @Test
+    fun aFileWithTheOldVSyncKeyReadsOn() {
+        initialize("[Main]\nSettingsVersion = 3\n\n[Display]\nVSync = true\n\n[Android]\nInstallID = $INSTALL_ID\n")
+        val ini = readSettings()
+        assertEquals("On", ini.value("Display", "VSyncMode"))
+        assertNull(ini.value("Display", "VSync"))
+    }
+
     @Test
     fun plan1FileIsUpgraded() {
         initialize("[Main]\nSettingsVersion = 1\n\n[Display]\nShowFPS = true\n")

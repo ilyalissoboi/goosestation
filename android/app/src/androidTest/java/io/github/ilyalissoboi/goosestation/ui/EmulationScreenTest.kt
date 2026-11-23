@@ -100,7 +100,7 @@ class EmulationScreenTest : ControllerKeys {
 
     @Test
     fun skipDuplicatesGoesWithVsyncAndSync() {
-        show("Display/VSync" to "true", "Main/SyncToHostRefreshRate" to "true")
+        show("Display/VSyncMode" to "On", "Main/SyncToHostRefreshRate" to "true")
 
         rule.onNodeWithText("Skip duplicate frames").assertDoesNotExist()
     }

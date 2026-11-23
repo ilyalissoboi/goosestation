@@ -354,4 +354,5 @@ TEST_F(GPUThreadTest, WithoutADeviceTheInfoSaysSo)
   const GPUThread::DeviceInfo info = GPUThread::GetDeviceInfo();
   EXPECT_FALSE(info.has_device);
   EXPECT_EQ(info.window_width, 0);
+  EXPECT_FALSE(info.has_present_wait);
 }

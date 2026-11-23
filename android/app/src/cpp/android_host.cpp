@@ -271,6 +271,9 @@ bool AndroidHost::InitializeConfig(Error* error)
     changed = true;
   }
 
+  // The old vsync switch becomes the three-way setting the rows show (pacing stage 2b).
+  changed = Settings::MoveOldVSyncSwitch(si) || changed;
+
   // Defaults too: a file reset from another version keeps the keys the defaults don't have, such as the game folders.
   changed = AdaptForeignSettings(si, s_install_id, s_device_name) || changed;
   changed = MoveAnalogBindings(si) || changed;

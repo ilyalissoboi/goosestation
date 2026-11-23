@@ -52,6 +52,7 @@ public:
     bool vk_ext_rasterization_order_attachment_access : 1;
     bool vk_ext_swapchain_maintenance1 : 1;
     bool vk_google_display_timing : 1;
+    bool vk_khr_present_wait : 1; // with VK_KHR_present_id
     bool vk_khr_get_memory_requirements2 : 1;
     bool vk_khr_bind_memory2 : 1;
     bool vk_khr_get_physical_device_properties2 : 1;
@@ -153,6 +154,8 @@ public:
   void EndPresent(bool explicit_present) override;
   void SubmitPresent() override;
   bool HasPresentFeedback() const override;
+  bool HasPresentWait() const override;
+  u64 WaitForPresent(u32 frames_back, u64 timeout) override;
   u64 GetLastPresentId() const override;
   u32 FetchPresentFeedback(std::span<PresentFeedback> out) override;
   void SetNextPresentTime(u64 time) override;

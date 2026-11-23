@@ -83,11 +83,18 @@
        </widget>
       </item>
       <item row="0" column="0">
-       <widget class="QCheckBox" name="vsync">
-        <property name="text">
-         <string>Vertical Sync (VSync)</string>
-        </property>
-       </widget>
+       <layout class="QFormLayout" name="vsyncLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="vsyncLabel">
+          <property name="text">
+           <string>Vertical Sync (VSync):</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QComboBox" name="vsync"/>
+        </item>
+       </layout>
       </item>
       <item row="1" column="0">
        <widget class="QCheckBox" name="optimalFramePacing">

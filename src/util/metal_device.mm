@@ -2364,11 +2364,82 @@ void MetalDevice::EndPresent(bool explicit_present)
   DebugAssert(m_num_current_render_targets == 0 && !m_current_depth_target);
   EndAnyEncoding();
 
+  // Numbered, and reported when the screen shows it (WaitForPresent()).
+  const u64 number = ++m_presents;
+  std::shared_ptr<PresentedState> presented = m_presented;
+  [m_layer_drawable addPresentedHandler:^(id<MTLDrawable> drawable) {
+    // presentedTime is CACurrentMediaTime()'s clock (0 for a drawable never shown): brought onto Common::Timer's.
+    const double presented_time = [drawable presentedTime];
+    const double ago = (presented_time > 0.0) ? std::max(CACurrentMediaTime() - presented_time, 0.0) : 0.0;
+    const u64 shown = Common::Timer::GetCurrentValue() - static_cast<u64>(Common::Timer::ConvertSecondsToValue(ago));
+    std::unique_lock lock(presented->mutex);
+    presented->shown = std::max(presented->shown, number);
+    presented->shown_times[number % presented->shown_times.size()] = shown;
+    presented->feedback[number % presented->feedback.size()] = {number, (presented_time > 0.0) ? shown : 0};
+    presented->cv.notify_all();
+  }];
   [m_render_cmdbuf presentDrawable:m_layer_drawable];
   DeferRelease(m_layer_drawable);
   m_layer_drawable = nil;
   SubmitCommandBuffer();
   TrimTexturePool();
+}
+
+bool MetalDevice::HasPresentWait() const
+{
+  return (m_layer != nil);
+}
+
+u64 MetalDevice::WaitForPresent(u32 frames_back, u64 timeout)
+{
+  // Nothing that far back on this device: nothing to wait for.
+  if (m_presents <= frames_back)
+    return Common::Timer::GetCurrentValue();
+
+  const u64 number = m_presents - frames_back;
+  std::unique_lock lock(m_presented->mutex);
+  if (!m_presented->cv.wait_for(lock, std::chrono::nanoseconds(static_cast<s64>(Common::Timer::ConvertValueToNanoseconds(timeout))),
+                                [this, number]() { return m_presented->shown >= number; }))
+  {
+    return 0;
+  }
+
+  return m_presented->shown_times[number % m_presented->shown_times.size()];
+}
+
+bool MetalDevice::LocksFromUnsyncedFeedback() const
+{
+  // In a window, unsynced presents are tear-free (the compositor syncs them) and display sync costs about a refresh:
+  // the screen lock paces from the presented handlers' times instead.
+  return (m_layer != nil);
+}
+
+bool MetalDevice::HasPresentFeedback() const
+{
+  return (m_layer != nil);
+}
+
+u64 MetalDevice::GetLastPresentId() const
+{
+  return m_presents;
+}
+
+u32 MetalDevice::FetchPresentFeedback(std::span<PresentFeedback> out)
+{
+  std::unique_lock lock(m_presented->mutex);
+  const u64 shown = m_presented->shown;
+  if (shown > m_fetched + m_presented->feedback.size())
+    m_fetched = shown - m_presented->feedback.size(); // older ones are gone
+
+  u32 count = 0;
+  for (u64 number = m_fetched + 1; number <= shown && count < out.size(); number++)
+  {
+    const auto& [id, time] = m_presented->feedback[number % m_presented->feedback.size()];
+    m_fetched = number;
+    if (id == number && time != 0)
+      out[count++] = PresentFeedback{id, time, 0};
+  }
+  return count;
 }
 
 void MetalDevice::SubmitPresent()

@@ -17,6 +17,13 @@ class EmulationSettingsTest {
         assertEquals(true, values()[EmulationSettings.SYNC_TO_HOST])
     }
 
+    // Automatic leaves vsync off here (the screen lock paces), and on where desktop's renderer can wait for presents.
+    @Test
+    fun vsyncIsAutomaticByDefault() {
+        assertEquals("Automatic", values()[EmulationSettings.VSYNC])
+        assertEquals("On", values("Display/VSyncMode" to "On")[EmulationSettings.VSYNC])
+    }
+
     @Test
     fun speedsAreStoredAsFactors() {
         assertEquals(1.25f, EmulationSettings.factor(125))

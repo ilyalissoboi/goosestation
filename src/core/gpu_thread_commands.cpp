@@ -56,6 +56,23 @@ struct PresentTarget
 };
 static std::array<PresentTarget, 16> s_present_targets = {};
 static void TrackCutoff(const GPUThreadPresentCommand* cmd, bool presented);
+
+// Present waits (desktop, pacing stage 2b), on the GPU thread: which present to wait for, the presents counted since
+// the waits started over, the last one waited for and when it was shown, and what the waits must start over on.
+static constexpr double PRESENT_WAIT_TIMEOUT_MS = 100.0;
+static FramePacing::PresentWaitDepth s_wait_depth;
+static u64 s_waited_presents = 0;
+static u64 s_last_waited = 0;
+static Common::Timer::Value s_last_shown = 0;
+static const GPUDevice* s_wait_device = nullptr;
+static const GPUDevice* s_feedback_device = nullptr; // the device whose feedback makes the timeline (Metal unsynced)
+static GPUVSyncMode s_wait_vsync_mode = GPUVSyncMode::Disabled;
+static std::atomic_bool s_wait_reset{false};
+// The timeline they make, read by the emulation thread.
+static std::mutex s_present_timeline_mutex;
+static FramePacing::PresentTimeline s_present_timeline;
+static void WaitForPresent(const GPUThreadPresentCommand* cmd);
+static void ResetPresentWaits();
 } // namespace GPUThreadCommands
 
 void GPUThreadCommands::Handle(const GPUThreadCommand* cmd)
@@ -117,6 +134,7 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
   {
     g_gpu_device->RenderImGui(ui->Get());
     g_gpu_device->EndPresent(cmd->explicit_present);
+    WaitForPresent(cmd);
 
     if (g_gpu_device->IsGPUTimingEnabled())
     {
@@ -155,7 +173,7 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
 void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                                     Common::Timer::Value frame_start_time, bool show_display, bool skip_present,
                                     bool explicit_present, Common::Timer::Value deadline,
-                                    Common::Timer::Value period, s64 offset, bool ran_long,
+                                    Common::Timer::Value period, s64 offset, bool ran_long, u32 refreshes,
                                     Common::Timer::Value desired_present)
 {
   GPUThreadPresentCommand* cmd = Allocate<GPUThreadPresentCommand>(GPUThreadCommandType::Present);
@@ -169,6 +187,7 @@ void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::T
   cmd->period = period;
   cmd->offset = offset;
   cmd->ran_long = ran_long;
+  cmd->refreshes = std::max(refreshes, 1u);
   cmd->desired_present = desired_present;
   GPUThread::FramePushed();
   GPUThread::PushCommand(cmd);
@@ -190,6 +209,7 @@ void GPUThreadCommands::BeforeWindowChange()
 
 void GPUThreadCommands::AfterWindowChange()
 {
+  s_wait_reset.store(true, std::memory_order_release);
   if (g_gpu_hw)
     g_gpu_hw->RestoreDeviceContext();
 }
@@ -203,8 +223,27 @@ void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool pre
     s_cutoff_offset.store(0, std::memory_order_release);
   }
 
-  if (!g_gpu_device->HasPresentFeedback())
+  // Where presents are waited on (FIFO), the waits' times teach the tracker and make the timeline (WaitForPresent()).
+  const bool fifo = (g_gpu_device->GetVSyncMode() == GPUVSyncMode::FIFO);
+  const bool has_wait = g_gpu_device->HasPresentWait();
+  if (!g_gpu_device->HasPresentFeedback() || (has_wait && fifo))
     return;
+
+  // Unsynced presents on a device that waits (Metal): their feedback makes the desktop's timeline, starting over with
+  // another device or window.
+  const bool makes_timeline =
+    FramePacing::TimelineFromFeedback(fifo, g_gpu_device->LocksFromUnsyncedFeedback(), true);
+  const float refresh_hz = g_gpu_device->GetWindowInfo().surface_refresh_rate;
+  if (makes_timeline &&
+      (s_wait_reset.exchange(false, std::memory_order_acq_rel) || s_feedback_device != g_gpu_device.get()))
+  {
+    {
+      std::unique_lock lock(s_present_timeline_mutex);
+      s_present_timeline.Reset();
+    }
+    s_feedback_device = g_gpu_device.get();
+    ResetCutoffOffset();
+  }
 
   // This present's target, for when its feedback comes back.
   if (presented && cmd->deadline != 0 && cmd->frame_start_time != 0)
@@ -220,6 +259,12 @@ void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool pre
   bool changed = false;
   for (u32 i = 0; i < count; i++)
   {
+    if (makes_timeline)
+    {
+      std::unique_lock lock(s_present_timeline_mutex);
+      s_present_timeline.Add(feedback[i].present_time, refresh_hz);
+    }
+
     const PresentTarget& target = s_present_targets[feedback[i].id % s_present_targets.size()];
     if (target.id != feedback[i].id || target.frame_start_time == 0 || feedback[i].present_time < target.frame_start_time)
       continue; // not locked to the screen, or forgotten
@@ -231,6 +276,104 @@ void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool pre
   }
   if (changed)
     s_cutoff_offset.store(s_cutoff_tracker.SignedOffset(), std::memory_order_release);
+}
+
+void GPUThreadCommands::ResetPresentWaits()
+{
+  s_wait_depth.Reset();
+  s_waited_presents = 0;
+  s_last_waited = 0;
+  s_last_shown = 0;
+  std::unique_lock lock(s_present_timeline_mutex);
+  s_present_timeline.Reset();
+}
+
+void GPUThreadCommands::WaitForPresent(const GPUThreadPresentCommand* cmd)
+{
+  // Only presents that block on the screen and reach it now (an explicit present waits for its submit, and optimal
+  // frame pacing throttles itself).
+  const GPUVSyncMode vsync_mode = g_gpu_device->GetVSyncMode();
+  if (cmd->explicit_present || vsync_mode != GPUVSyncMode::FIFO || !g_gpu_device->HasPresentWait())
+  {
+    if (s_wait_device)
+    {
+      ResetPresentWaits();
+      s_wait_device = nullptr;
+    }
+    return;
+  }
+
+  // Another device, swap chain or window: the presents and the screen's refreshes start over.
+  if (s_wait_reset.exchange(false, std::memory_order_acq_rel) || s_wait_device != g_gpu_device.get() ||
+      s_wait_vsync_mode != vsync_mode)
+  {
+    ResetPresentWaits();
+    ResetCutoffOffset();
+    s_wait_device = g_gpu_device.get();
+    s_wait_vsync_mode = vsync_mode;
+  }
+
+  // This present's aim, for when it's shown.
+  const u64 id = ++s_waited_presents;
+  s_present_targets[id % s_present_targets.size()] =
+    (cmd->deadline != 0 && cmd->frame_start_time != 0) ?
+      PresentTarget{id, cmd->frame_start_time, cmd->period, cmd->offset, cmd->ran_long} :
+      PresentTarget{};
+
+  const u32 depth = s_wait_depth.Depth();
+  if (depth == FramePacing::PresentWaitDepth::NO_WAIT)
+  {
+    // Paused after a timeout: a look that doesn't wait ends the pause once the screen shows presents again (the one
+    // before: the one just presented can't be shown yet).
+    s_wait_depth.NotWaited(g_gpu_device->WaitForPresent(1, 0) != 0);
+    return;
+  }
+
+  // Already waited for (the depth just went up): nothing to wait for this time.
+  const u64 waited = (id > depth) ? (id - depth) : 0;
+  if (waited == 0 || waited <= s_last_waited)
+    return;
+
+  const float refresh_hz = g_gpu_device->GetWindowInfo().surface_refresh_rate;
+  const Common::Timer::Value shown =
+    g_gpu_device->WaitForPresent(depth, Common::Timer::ConvertMillisecondsToValue(PRESENT_WAIT_TIMEOUT_MS));
+
+  Common::Timer::Value period;
+  {
+    DisplayTimeline timeline;
+    std::unique_lock lock(s_present_timeline_mutex);
+    period = s_present_timeline.Get(Common::Timer::GetCurrentValue(), &timeline) ?
+               timeline.period :
+               Common::Timer::ConvertSecondsToValue(1.0 / ((refresh_hz > 0.0f) ? refresh_hz : 60.0f));
+    if (shown != 0)
+      s_present_timeline.Add(shown, refresh_hz);
+  }
+
+  if (shown == 0)
+  {
+    s_wait_depth.Report(0, period, 1);
+    return;
+  }
+
+  if (s_last_shown != 0 && shown > s_last_shown)
+    s_wait_depth.Report(shown - s_last_shown, period, cmd->refreshes * static_cast<u32>(waited - s_last_waited));
+  s_last_waited = waited;
+  s_last_shown = shown;
+
+  // The waited present's aim teaches the cutoff tracker where the screen takes frames.
+  const PresentTarget& target = s_present_targets[waited % s_present_targets.size()];
+  if (target.id == waited && target.frame_start_time != 0 && shown >= target.frame_start_time)
+  {
+    s_cutoff_tracker.Report(shown - target.frame_start_time, target.offset, target.period, target.ran_long);
+    s_cutoff_offset.store(s_cutoff_tracker.SignedOffset(), std::memory_order_release);
+    s_cutoff_reports.fetch_add(1, std::memory_order_relaxed);
+  }
+}
+
+bool GPUThreadCommands::GetPresentTimeline(DisplayTimeline* timeline)
+{
+  std::unique_lock lock(s_present_timeline_mutex);
+  return s_present_timeline.Get(Common::Timer::GetCurrentValue(), timeline);
 }
 
 u64 GPUThreadCommands::GetCutoffReports()

@@ -47,6 +47,10 @@ public:
   ALWAYS_INLINE float GetScale() const { return m_window_info.surface_scale; }
   ALWAYS_INLINE u32 GetCurrentImageIndex() const { return m_current_image; }
   ALWAYS_INLINE const u32* GetCurrentImageIndexPtr() const { return &m_current_image; }
+
+  /// VK_KHR_present_id: the ID of the last present to this swap chain (0: none), and the next one's.
+  ALWAYS_INLINE u64 GetLastPresentId() const { return m_last_present_id; }
+  ALWAYS_INLINE u64 NextPresentId() { return ++m_last_present_id; }
   ALWAYS_INLINE u32 GetImageCount() const { return static_cast<u32>(m_images.size()); }
   ALWAYS_INLINE VkFormat GetImageFormat() const { return m_format; }
   ALWAYS_INLINE VkImage GetCurrentImage() const { return m_images[m_current_image].image; }
@@ -113,6 +117,7 @@ private:
 
   VkSurfaceKHR m_surface = VK_NULL_HANDLE;
   VkSwapchainKHR m_swap_chain = VK_NULL_HANDLE;
+  u64 m_last_present_id = 0; // IDs belong to one VkSwapchainKHR: they start over with each
 
   std::vector<Image> m_images;
   std::array<ImageSemaphores, NUM_SEMAPHORES> m_semaphores = {};

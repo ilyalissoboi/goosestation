@@ -746,6 +746,23 @@ public:
   /// presents report back (VK_GOOGLE_display_timing's desiredPresentTime, eglPresentationTimeANDROID).
   virtual void SetNextPresentTime(u64 time) {}
 
+  /// Whether presents can be waited on until the screen shows them (Vulkan's VK_KHR_present_wait, a DXGI
+  /// frame-latency waitable, Metal's presented handlers).
+  virtual bool HasPresentWait() const { return false; }
+
+  /// Whether vsync's Automatic turns it on here: nowhere yet. On the Mac display sync cost a refresh more than unsynced
+  /// (and tear-free) presents, waits or not; the waits elsewhere are turned on API by API once measured on screen.
+  virtual bool AutomaticVSync() const { return false; }
+
+  /// Whether the screen lock runs from this device's present feedback while presents don't block (Metal: unsynced
+  /// presents are tear-free in a window, and its presented handlers report when each was shown).
+  virtual bool LocksFromUnsyncedFeedback() const { return false; }
+
+  /// Waits until the present frames_back before the last one (0: the last) is shown, up to timeout. Returns when it
+  /// was shown (Common::Timer's clock; the time the wait returned where the API gives none), or 0 on a timeout. A
+  /// timeout of 0 only looks.
+  virtual u64 WaitForPresent(u32 frames_back, u64 timeout) { return 0; }
+
   /// Renders ImGui screen elements. Call before EndPresent().
   /// Draws a frame of ImGui (built on the emulation thread, ImGui::Render() already called, and copied).
   void RenderImGui(const ImDrawData* draw_data);

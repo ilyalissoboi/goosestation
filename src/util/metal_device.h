@@ -22,7 +22,9 @@
 
 #include "common/timer.h"
 
+#include <array>
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -272,6 +274,8 @@ public:
   bool BeginPresent(bool skip_present, u32 clear_color) override;
   void EndPresent(bool explicit_submit) override;
   void SubmitPresent() override;
+  bool HasPresentWait() const override;
+  u64 WaitForPresent(u32 frames_back, u64 timeout) override;
 
   void WaitForFenceCounter(u64 counter);
 
@@ -366,6 +370,18 @@ private:
 
   CAMetalLayer* m_layer = nil;
   id<MTLDrawable> m_layer_drawable = nil;
+
+  // Present waits: each drawable presented is numbered, and its presented handler (any thread) records when it was
+  // shown. Shared with the handlers, which can run after the device is gone.
+  struct PresentedState
+  {
+    std::mutex mutex;
+    std::condition_variable cv;
+    u64 shown = 0; // the highest number shown
+    std::array<u64, 8> shown_times = {}; // Common::Timer's clock, by number
+  };
+  std::shared_ptr<PresentedState> m_presented = std::make_shared<PresentedState>();
+  u64 m_presents = 0;
   MTLRenderPassDescriptor* m_layer_pass_desc = nil;
 
   std::mutex m_fence_mutex;

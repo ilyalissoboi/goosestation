@@ -2364,11 +2364,46 @@ void MetalDevice::EndPresent(bool explicit_present)
   DebugAssert(m_num_current_render_targets == 0 && !m_current_depth_target);
   EndAnyEncoding();
 
+  // Numbered, and reported when the screen shows it (WaitForPresent()).
+  const u64 number = ++m_presents;
+  std::shared_ptr<PresentedState> presented = m_presented;
+  [m_layer_drawable addPresentedHandler:^(id<MTLDrawable> drawable) {
+    // presentedTime is CACurrentMediaTime()'s clock (0 for a drawable never shown): brought onto Common::Timer's.
+    const double presented_time = [drawable presentedTime];
+    const double ago = (presented_time > 0.0) ? std::max(CACurrentMediaTime() - presented_time, 0.0) : 0.0;
+    const u64 shown = Common::Timer::GetCurrentValue() - static_cast<u64>(Common::Timer::ConvertSecondsToValue(ago));
+    std::unique_lock lock(presented->mutex);
+    presented->shown = std::max(presented->shown, number);
+    presented->shown_times[number % presented->shown_times.size()] = shown;
+    presented->cv.notify_all();
+  }];
   [m_render_cmdbuf presentDrawable:m_layer_drawable];
   DeferRelease(m_layer_drawable);
   m_layer_drawable = nil;
   SubmitCommandBuffer();
   TrimTexturePool();
+}
+
+bool MetalDevice::HasPresentWait() const
+{
+  return (m_layer != nil);
+}
+
+u64 MetalDevice::WaitForPresent(u32 frames_back, u64 timeout)
+{
+  // Nothing that far back on this device: nothing to wait for.
+  if (m_presents <= frames_back)
+    return Common::Timer::GetCurrentValue();
+
+  const u64 number = m_presents - frames_back;
+  std::unique_lock lock(m_presented->mutex);
+  if (!m_presented->cv.wait_for(lock, std::chrono::nanoseconds(static_cast<s64>(Common::Timer::ConvertValueToNanoseconds(timeout))),
+                                [this, number]() { return m_presented->shown >= number; }))
+  {
+    return 0;
+  }
+
+  return m_presented->shown_times[number % m_presented->shown_times.size()];
 }
 
 void MetalDevice::SubmitPresent()

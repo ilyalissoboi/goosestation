@@ -16,8 +16,16 @@ EmulationSettingsWidget::EmulationSettingsWidget(SettingsWindow* dialog, QWidget
 
   m_ui.setupUi(this);
 
-  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.vsync, "Display", "VSync", false);
-  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.syncToHostRefreshRate, "Main", "SyncToHostRefreshRate", false);
+  for (u32 i = 0; i < static_cast<u32>(DisplayVSyncMode::Count); i++)
+  {
+    m_ui.vsync->addItem(
+      QString::fromUtf8(Settings::GetDisplayVSyncModeDisplayName(static_cast<DisplayVSyncMode>(i))));
+  }
+  SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_ui.vsync, "Display", "VSyncMode", &Settings::ParseDisplayVSyncMode,
+                                               &Settings::GetDisplayVSyncModeName,
+                                               Settings::DEFAULT_DISPLAY_VSYNC_MODE);
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.syncToHostRefreshRate, "Main", "SyncToHostRefreshRate",
+                                               Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.optimalFramePacing, "Display", "OptimalFramePacing", false);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.preFrameSleep, "Display", "PreFrameSleep", false);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.skipPresentingDuplicateFrames, "Display",
@@ -73,7 +81,8 @@ EmulationSettingsWidget::EmulationSettingsWidget(SettingsWindow* dialog, QWidget
   }
   connect(m_ui.turboSpeed, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
           &EmulationSettingsWidget::onTurboSpeedIndexChanged);
-  connect(m_ui.vsync, &QCheckBox::checkStateChanged, this, &EmulationSettingsWidget::updateSkipDuplicateFramesEnabled);
+  connect(m_ui.vsync, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          &EmulationSettingsWidget::updateSkipDuplicateFramesEnabled);
   connect(m_ui.syncToHostRefreshRate, &QCheckBox::checkStateChanged, this,
           &EmulationSettingsWidget::updateSkipDuplicateFramesEnabled);
   connect(m_ui.optimalFramePacing, &QCheckBox::checkStateChanged, this,
@@ -100,12 +109,14 @@ EmulationSettingsWidget::EmulationSettingsWidget(SettingsWindow* dialog, QWidget
     tr("Sets the turbo speed. This speed will be used when the turbo hotkey is pressed/toggled. Turboing will take "
        "priority over fast forwarding if both hotkeys are pressed/toggled."));
   dialog->registerWidgetHelp(
-    m_ui.vsync, tr("Vertical Sync (VSync)"), tr("Unchecked"),
-    tr("Synchronizes presentation of the console's frames to the host. Enabling may result in smoother animations, at "
-       "the cost of increased input lag. <strong>GSync/FreeSync users should enable Optimal Frame Pacing "
+    m_ui.vsync, tr("Vertical Sync (VSync)"),
+    QString::fromUtf8(Settings::GetDisplayVSyncModeDisplayName(Settings::DEFAULT_DISPLAY_VSYNC_MODE)),
+    tr("Synchronizes presentation of the console's frames to the host. Automatic turns it on where the renderer can "
+       "wait for each frame to be shown, with no added latency (Vulkan with present wait, D3D12, D3D11, Metal). On "
+       "turns it on everywhere, and can add latency. <strong>GSync/FreeSync users should enable Optimal Frame Pacing "
        "instead.</strong>"));
   dialog->registerWidgetHelp(
-    m_ui.syncToHostRefreshRate, tr("Sync To Host Refresh Rate"), tr("Unchecked"),
+    m_ui.syncToHostRefreshRate, tr("Sync To Host Refresh Rate"), tr("Checked"),
     tr(
       "Adjusts the emulation speed so the console's refresh rate matches the host's refresh rate when VSync is "
       "enabled. This results in the smoothest animations possible, at the cost of potentially increasing the emulation "
@@ -226,8 +237,17 @@ void EmulationSettingsWidget::onPreFrameSleepChanged()
 
 void EmulationSettingsWidget::updateSkipDuplicateFramesEnabled()
 {
-  const bool vsync = m_dialog->getEffectiveBoolValue("Display", "VSync", false);
-  const bool sync_to_host = m_dialog->getEffectiveBoolValue("Main", "SyncToHostRefreshRate", false) && vsync;
+  // Vsync counts as on unless it's off (Automatic is on wherever the renderer allows it).
+  const bool vsync =
+    (Settings::ParseDisplayVSyncMode(
+       m_dialog
+         ->getEffectiveStringValue("Display", "VSyncMode",
+                                   Settings::GetDisplayVSyncModeName(Settings::DEFAULT_DISPLAY_VSYNC_MODE))
+         .c_str())
+       .value_or(Settings::DEFAULT_DISPLAY_VSYNC_MODE) != DisplayVSyncMode::Off);
+  const bool sync_to_host =
+    m_dialog->getEffectiveBoolValue("Main", "SyncToHostRefreshRate", Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE) &&
+    vsync;
   m_ui.skipPresentingDuplicateFrames->setEnabled(!sync_to_host);
 }
 

@@ -3599,15 +3599,18 @@ void FullscreenUI::DrawEmulationSettingsPage()
     true);
 
   MenuHeading(FSUI_CSTR("Latency Control"));
-  DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Vertical Sync (VSync)"),
-                    FSUI_CSTR("Synchronizes presentation of the console's frames to the host. GSync/FreeSync users "
-                              "should enable Optimal Frame Pacing instead."),
-                    "Display", "VSync", false);
+  DrawEnumSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Vertical Sync (VSync)"),
+                  FSUI_CSTR("Automatic turns it on where the renderer can wait for each frame to be shown, with no "
+                            "added latency (Vulkan with present wait, D3D12, D3D11, Metal). On turns it on everywhere, "
+                            "and can add latency. GSync/FreeSync users should enable Optimal Frame Pacing instead."),
+                  "Display", "VSyncMode", Settings::DEFAULT_DISPLAY_VSYNC_MODE, &Settings::ParseDisplayVSyncMode,
+                  &Settings::GetDisplayVSyncModeName, &Settings::GetDisplayVSyncModeDisplayName,
+                  DisplayVSyncMode::Count);
 
   DrawToggleSetting(
     bsi, FSUI_ICONSTR(ICON_FA_LIGHTBULB, "Sync To Host Refresh Rate"),
     FSUI_CSTR("Adjusts the emulation speed so the console's refresh rate matches the host when VSync is enabled."),
-    "Main", "SyncToHostRefreshRate", false);
+    "Main", "SyncToHostRefreshRate", Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE);
 
   DrawToggleSetting(
     bsi, FSUI_ICONSTR(ICON_FA_TACHOMETER_ALT, "Optimal Frame Pacing"),
@@ -3625,8 +3628,12 @@ void FullscreenUI::DrawEmulationSettingsPage()
     bsi, FSUI_ICONSTR(ICON_FA_CHARGING_STATION, "Skip Duplicate Frame Display"),
     FSUI_CSTR("Skips the presentation/display of frames that are not unique. Can result in worse frame pacing."),
     "Display", "SkipPresentingDuplicateFrames", false,
-    !(GetEffectiveBoolSetting(bsi, "Display", "VSync", false) &&
-      GetEffectiveBoolSetting(bsi, "Main", "SyncToHostRefreshRate", false)));
+    !(Settings::ParseDisplayVSyncMode(
+        GetEffectiveTinyStringSetting(bsi, "Display", "VSyncMode",
+                                      Settings::GetDisplayVSyncModeName(Settings::DEFAULT_DISPLAY_VSYNC_MODE))
+          .c_str())
+          .value_or(Settings::DEFAULT_DISPLAY_VSYNC_MODE) != DisplayVSyncMode::Off &&
+      GetEffectiveBoolSetting(bsi, "Main", "SyncToHostRefreshRate", Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE)));
 
   const bool pre_frame_sleep_active =
     (optimal_frame_pacing_active && GetEffectiveBoolSetting(bsi, "Display", "PreFrameSleep", false));

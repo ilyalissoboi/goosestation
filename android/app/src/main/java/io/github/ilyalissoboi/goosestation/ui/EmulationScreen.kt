@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
+import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.FloatSetting
 import io.github.ilyalissoboi.goosestation.settings.Hardcore
@@ -27,6 +28,7 @@ fun EmulationScreen(
     rewindUsage: RewindUsage?,
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
+    names: CoreNames = emptyMap(),
 ) {
     val first = rememberInitialFocus()
     val hardcore = Hardcore.on(values)
@@ -59,7 +61,15 @@ fun EmulationScreen(
         Speed("Turbo speed", EmulationSettings.TURBO_SPEED, "While the Turbo hotkey is held.")
 
         SettingsSection("Frame pacing")
-        GameSwitch(values, onChange, "VSync", EmulationSettings.VSYNC, "Matches the screen's refresh. Can add latency.")
+        GameNames(
+            values,
+            onChange,
+            names,
+            "VSync",
+            EmulationSettings.VSYNC,
+            "Automatic leaves it off: the screen lock paces frames here. On matches every frame to the screen and can " +
+                "add latency.",
+        )
         GameSwitch(
             values,
             onChange,

@@ -1532,6 +1532,17 @@ bool Settings::ApplyDesktopPacingDefaults(SettingsInterface& si)
   return true;
 }
 
+bool Settings::MoveOldVSyncSwitch(SettingsInterface& si)
+{
+  if (!si.ContainsValue("Display", "VSync"))
+    return false;
+
+  if (!si.ContainsValue("Display", "VSyncMode") && si.GetBoolValue("Display", "VSync", false))
+    si.SetStringValue("Display", "VSyncMode", GetDisplayVSyncModeName(DisplayVSyncMode::On));
+  si.DeleteValue("Display", "VSync");
+  return true;
+}
+
 static constexpr const std::array s_display_rotation_names = {"Normal", "Rotate90", "Rotate180", "Rotate270"};
 static constexpr const std::array s_display_rotation_display_names = {
   TRANSLATE_NOOP("Settings", "No Rotation"),

@@ -95,3 +95,27 @@ TEST(SettingsVSync, DesktopDefaultsTurnSyncOnOnce)
   EXPECT_FALSE(Settings::ApplyDesktopPacingDefaults(si));
   EXPECT_FALSE(si.GetBoolValue("Main", "SyncToHostRefreshRate", true));
 }
+
+TEST(SettingsVSync, TheOldSwitchMoves)
+{
+  // The UIs show the new key: an old on becomes On there too, and the old key goes.
+  MemorySettingsInterface on;
+  on.SetBoolValue("Display", "VSync", true);
+  EXPECT_TRUE(Settings::MoveOldVSyncSwitch(on));
+  EXPECT_EQ(on.GetStringValue("Display", "VSyncMode", ""), "On");
+  EXPECT_FALSE(on.ContainsValue("Display", "VSync"));
+  EXPECT_FALSE(Settings::MoveOldVSyncSwitch(on));
+
+  MemorySettingsInterface off;
+  off.SetBoolValue("Display", "VSync", false);
+  EXPECT_TRUE(Settings::MoveOldVSyncSwitch(off));
+  EXPECT_FALSE(off.ContainsValue("Display", "VSyncMode"));
+  EXPECT_FALSE(off.ContainsValue("Display", "VSync"));
+
+  // The new key already set: the old one only goes.
+  MemorySettingsInterface both;
+  both.SetBoolValue("Display", "VSync", true);
+  both.SetStringValue("Display", "VSyncMode", "Off");
+  EXPECT_TRUE(Settings::MoveOldVSyncSwitch(both));
+  EXPECT_EQ(both.GetStringValue("Display", "VSyncMode", ""), "Off");
+}

@@ -23,7 +23,8 @@ object EmulationSettings {
 
     /** The core's default, 0 (unlimited); Big Picture shows 2.0 for it. */
     val TURBO_SPEED = FloatSetting("Main", "TurboSpeed", 0f)
-    val VSYNC = BoolSetting("Display", "VSync", false)
+    /** Automatic (the core's default) leaves it off on Android: the screen lock paces frames here. */
+    val VSYNC = NameSetting("Display", "VSyncMode", "Automatic", NameList.VSyncMode)
 
     /** On by default here (`Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE`): frames locked to the screen's refreshes. */
     val SYNC_TO_HOST = BoolSetting("Main", "SyncToHostRefreshRate", true)

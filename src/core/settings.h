@@ -452,6 +452,10 @@ struct Settings
   /// ([Main] DesktopPacingDefaultsVersion). True if the file changed.
   static bool ApplyDesktopPacingDefaults(SettingsInterface& si);
 
+  /// The old [Display] VSync switch moved to [Display] VSyncMode, as Load() reads it (on: On; off: the default), so
+  /// the UIs show what's used. True if the file changed.
+  static bool MoveOldVSyncSwitch(SettingsInterface& si);
+
   static std::optional<DisplayRotation> ParseDisplayRotation(const char* str);
   static const char* GetDisplayRotationName(DisplayRotation alignment);
   static const char* GetDisplayRotationDisplayName(DisplayRotation alignment);

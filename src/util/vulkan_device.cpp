@@ -18,6 +18,7 @@
 #include "common/log.h"
 #include "common/path.h"
 #include "common/scoped_guard.h"
+#include "common/timer.h"
 #include "common/small_string.h"
 
 #include "fmt/format.h"
@@ -471,6 +472,8 @@ bool VulkanDevice::SelectDeviceExtensions(ExtensionList* extension_list, bool en
     SupportsExtension(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, false);
   m_optional_extensions.vk_google_display_timing =
     SupportsExtension(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME, false);
+  m_optional_extensions.vk_khr_present_wait = (SupportsExtension(VK_KHR_PRESENT_ID_EXTENSION_NAME, false) &&
+                                               SupportsExtension(VK_KHR_PRESENT_WAIT_EXTENSION_NAME, false));
 
   // Dynamic rendering isn't strictly needed for FSI, but we want it with framebufferless rendering.
   m_optional_extensions.vk_ext_fragment_shader_interlock =
@@ -664,6 +667,15 @@ bool VulkanDevice::CreateDevice(VkSurfaceKHR surface, bool enable_validation_lay
     Vulkan::AddPointerToChain(&device_info, &rasterization_order_access_feature);
   if (m_optional_extensions.vk_ext_swapchain_maintenance1)
     Vulkan::AddPointerToChain(&device_info, &swapchain_maintenance1_feature);
+  VkPhysicalDevicePresentIdFeaturesKHR present_id_feature = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR,
+                                                             nullptr, VK_TRUE};
+  VkPhysicalDevicePresentWaitFeaturesKHR present_wait_feature = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR, nullptr, VK_TRUE};
+  if (m_optional_extensions.vk_khr_present_wait)
+  {
+    Vulkan::AddPointerToChain(&device_info, &present_id_feature);
+    Vulkan::AddPointerToChain(&device_info, &present_wait_feature);
+  }
   if (m_optional_extensions.vk_khr_dynamic_rendering)
   {
     Vulkan::AddPointerToChain(&device_info, &dynamic_rendering_feature);
@@ -727,6 +739,15 @@ void VulkanDevice::ProcessDeviceExtensions()
     Vulkan::AddPointerToChain(&features2, &rasterization_order_access_feature);
   if (m_optional_extensions.vk_ext_swapchain_maintenance1)
     Vulkan::AddPointerToChain(&features2, &swapchain_maintenance1_feature);
+  VkPhysicalDevicePresentIdFeaturesKHR present_id_feature = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR,
+                                                             nullptr, VK_FALSE};
+  VkPhysicalDevicePresentWaitFeaturesKHR present_wait_feature = {
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR, nullptr, VK_FALSE};
+  if (m_optional_extensions.vk_khr_present_wait)
+  {
+    Vulkan::AddPointerToChain(&features2, &present_id_feature);
+    Vulkan::AddPointerToChain(&features2, &present_wait_feature);
+  }
   if (m_optional_extensions.vk_khr_dynamic_rendering)
   {
     Vulkan::AddPointerToChain(&features2, &dynamic_rendering_feature);
@@ -768,6 +789,8 @@ void VulkanDevice::ProcessDeviceExtensions()
   m_optional_extensions.vk_ext_swapchain_maintenance1 &=
     (swapchain_maintenance1_feature.swapchainMaintenance1 == VK_TRUE);
   m_optional_extensions.vk_khr_dynamic_rendering &= (dynamic_rendering_feature.dynamicRendering == VK_TRUE);
+  m_optional_extensions.vk_khr_present_wait &=
+    (present_id_feature.presentId == VK_TRUE && present_wait_feature.presentWait == VK_TRUE);
   m_optional_extensions.vk_khr_dynamic_rendering_local_read &=
     (dynamic_rendering_local_read_feature.dynamicRenderingLocalRead == VK_TRUE);
   m_optional_extensions.vk_ext_fragment_shader_interlock &=
@@ -810,6 +833,7 @@ void VulkanDevice::ProcessDeviceExtensions()
   LOG_EXT("VK_EXT_fragment_shader_interlock", vk_ext_fragment_shader_interlock);
   LOG_EXT("VK_EXT_rasterization_order_attachment_access", vk_ext_rasterization_order_attachment_access);
   LOG_EXT("VK_EXT_swapchain_maintenance1", vk_ext_swapchain_maintenance1);
+  LOG_EXT("VK_KHR_present_wait", vk_khr_present_wait);
   LOG_EXT("VK_KHR_get_memory_requirements2", vk_khr_get_memory_requirements2);
   LOG_EXT("VK_KHR_bind_memory2", vk_khr_bind_memory2);
   LOG_EXT("VK_KHR_get_physical_device_properties2", vk_khr_get_physical_device_properties2);
@@ -1466,8 +1490,13 @@ void VulkanDevice::DoPresent(VulkanSwapChain* present_swap_chain)
                                                   &present_time};
   const bool timed = (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE &&
                       !m_present_thread.joinable());
+  // Each present to a swap chain gets an ID of its own (VK_KHR_present_id), to wait for (WaitForPresent()).
+  const bool waited = (m_optional_extensions.vk_khr_present_wait && !m_present_thread.joinable());
+  const u64 wait_id = waited ? present_swap_chain->NextPresentId() : 0;
+  const VkPresentIdKHR present_ids = {VK_STRUCTURE_TYPE_PRESENT_ID_KHR, timed ? &present_times : nullptr, 1, &wait_id};
   const VkPresentInfoKHR present_info = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-                                         timed ? &present_times : nullptr,
+                                         waited ? static_cast<const void*>(&present_ids) :
+                                                  (timed ? static_cast<const void*>(&present_times) : nullptr),
                                          1,
                                          present_swap_chain->GetRenderingFinishedSemaphorePtr(),
                                          1,
@@ -2536,6 +2565,34 @@ void VulkanDevice::SubmitPresent()
     return;
 
   DoPresent(m_swap_chain.get());
+}
+
+bool VulkanDevice::HasPresentWait() const
+{
+  // Not while the present thread presents (the IDs are set there).
+  return (m_optional_extensions.vk_khr_present_wait && vkWaitForPresentKHR && m_swap_chain &&
+          !m_present_thread.joinable());
+}
+
+u64 VulkanDevice::WaitForPresent(u32 frames_back, u64 timeout)
+{
+  if (!HasPresentWait())
+    return 0;
+
+  // Nothing that far back on this swap chain: nothing to wait for.
+  const u64 last = m_swap_chain->GetLastPresentId();
+  if (last <= frames_back)
+    return Common::Timer::GetCurrentValue();
+
+  const VkResult res = vkWaitForPresentKHR(m_device, m_swap_chain->GetSwapChain(), last - frames_back,
+                                           static_cast<u64>(Common::Timer::ConvertValueToNanoseconds(timeout)));
+  if (res == VK_SUCCESS || res == VK_SUBOPTIMAL_KHR)
+    return Common::Timer::GetCurrentValue();
+
+  // A timeout, or the swap chain out of date (the next present makes it again).
+  if (res != VK_TIMEOUT)
+    LOG_VULKAN_ERROR(res, "vkWaitForPresentKHR failed: ");
+  return 0;
 }
 
 bool VulkanDevice::HasPresentFeedback() const

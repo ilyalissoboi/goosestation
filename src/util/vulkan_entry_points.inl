@@ -257,4 +257,7 @@ VULKAN_DEVICE_ENTRY_POINT(vkReleaseSwapchainImagesEXT, false)
 // VK_GOOGLE_display_timing
 VULKAN_DEVICE_ENTRY_POINT(vkGetPastPresentationTimingGOOGLE, false)
 
+// VK_KHR_present_wait
+VULKAN_DEVICE_ENTRY_POINT(vkWaitForPresentKHR, false)
+
 #endif // VULKAN_DEVICE_ENTRY_POINT

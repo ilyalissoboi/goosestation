@@ -247,3 +247,52 @@ call, pending the player's yes)*:
 one refresh (today 100%); input lag (the core's input poll to on screen) at least 10 ms lower than today on Vulkan and
 OpenGL ES at 1×, and no higher in the heavy case; at 120 Hz, each NTSC frame shown for two refreshes; PAL games as
 even as today; nothing drawn differently, and the Mac and Windows unchanged.
+
+## Stage 2b, decided (2026-11-23)
+
+Desktop present waits. Decided with the player on 2026-11-23; calls made while planning are marked *(builder's
+call)*.
+
+- **What the drivers have.**
+  - The Windows machine is an RTX 4090 at 59 Hz, where Vulkan should have `VK_KHR_present_wait`.
+  - D3D12 always presents on the flip model; D3D11 does unless `[Display] UseBlitSwapChain` is set, or the flip model
+    failed to start.
+  - Metal has presented handlers.
+  - **MoltenVK has no `present_wait`**, only `VK_GOOGLE_display_timing`, which reports after the fact. **OpenGL has no
+    present wait** on any platform. So on these two, vsync stays off by default.
+- **The wait.** It runs where presents end, in `HandlePresent`, before the frame counts as presented, so the emulation
+  thread reads input for the next frame only once it returns. It runs only while presents block on the screen
+  (FIFO): the GPU thread on and off alike, and the same in every API.
+- **What it waits for** *(the player's choice: adaptive)*:
+  - The frame just presented is on screen before input is read for the next one (DXGI's maximum latency of 1).
+  - While frames keep missing their refresh, it waits for the frame before instead (latency 2), and tries the lower
+    one again later.
+  - It judges from the times its own waits return. The rule is pure and tested natively.
+- **Vsync becomes three-way: Automatic, On, Off** *(the player's choice)*, in `[Display] VSyncMode`, with Automatic the
+  default.
+  - **Automatic:** vsync on where the device has a present wait, off elsewhere. On Android, Automatic is off, as
+    today: the screen lock (2a) paces there.
+  - A file without the key reads `[Display] VSync = true` as On, and anything else as Automatic. `false` was the
+    old default written everywhere, so it says nothing about the player's choice.
+  - Qt, Big Picture and Android show the three choices.
+- **Automatic syncs to the host too** *(the player's choice)*, unless the player turns sync to host off.
+  - Desktop files store sync to host as `false`, the old default, so the desktop default becomes on, and existing
+    desktop files have it turned on once *(builder's call, as 2a did on Android)*.
+  - The "Sync to host" row stays; turning it off keeps Automatic's vsync without the sync.
+- **The screen lock on desktop too** *(the player's choice, 2026-11-23)*.
+  - **Why:** vsync with a wait alone reads input just after a refresh and shows the frame at the next one. That's
+    about a refresh from input to screen, against about half a refresh with vsync off: roughly 8 ms more at 60 Hz.
+  - **How:** where a present wait exists, the presents' own times give a refresh timeline (Metal's presented times;
+    the times the Vulkan and DXGI waits return). 2a's lock runs from it: it sleeps before the frame, so the frame
+    lands just before its refresh.
+  - **Reused from 2a:** `NextWake`, the frame-time predictor and the cutoff tracker. The tracker learns where each
+    screen really takes frames.
+  - **Where:** while locked, vsync is FIFO whatever the screen's rate, so 120 Hz desktop screens lock at two refreshes
+    a frame. MoltenVK and OpenGL get no timeline, so they're unchanged.
+- **Success for 2b:**
+  - On the Mac (Metal), measured from the presented handlers at the defaults: lag from input poll to screen no higher
+    than the base branch's default (vsync off). Every frame shown for its refreshes (one at 60 Hz, two at 120) in at
+    least 95% of seconds.
+  - Mac and Windows, every renderer: nothing drawn differently (regtest frames), and fast-forward no slower.
+  - MoltenVK and OpenGL unchanged at their defaults.
+  - Windows' on-screen check (D3D11, D3D12, Vulkan) is the player's own.

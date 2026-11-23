@@ -423,3 +423,27 @@ any (`grep -rn "VSync" docs/*.md`), `docs/android.md` (the row's text)
 - [ ] **Step 3:** Update the docs. Commit.
 - [ ] **Step 4:** Push. Open the PR against master (PR 140 merged on 2026-11-23), with the
   before-and-after tables and Task 10's checklist. Bind it.
+
+### Task 5b: Metal locks without FIFO, and sync to host only with vsync (added 2026-11-23, the user's choices)
+
+**Why:**
+- Measured on the Mac, windowed Metal with vsync off is already tear-free (the compositor syncs) and shows a frame
+  about 3 ms after its input poll.
+- Display sync (FIFO) costs about 18 ms more, on the base too, whatever the waits do.
+- So Automatic leaves vsync off on Metal, and the lock runs from the presented handlers' times instead, as Android's
+  runs from Choreographer's.
+
+**Interfaces:**
+- `FramePacing::TimelineFromFeedback(bool fifo, bool has_present_wait, bool has_present_feedback)`: the desktop's
+  timeline comes from the presents' feedback while presents don't block, on devices that also wait. In practice that's
+  Metal; MoltenVK has feedback but no wait, so it stays unchanged.
+- `FramePacing::SyncsSpeedToHost(bool sync_to_host, bool vsync_on, bool desktop)`: the ±5% speed change applies on
+  desktop only while vsync is on.
+- `GPUDevice::AutomaticVSync()` (default: `HasPresentWait()`; Metal: false), published as `DeviceInfo::automatic_vsync`
+  and used by `VSyncWanted`.
+- Metal implements the 2a feedback API (`HasPresentFeedback`, `GetLastPresentId`, `FetchPresentFeedback`) from its
+  presented handlers.
+
+- [ ] Tests: `FramePacing.TimelineFromFeedbackOnlyWithoutFifo`, `FramePacing.SyncToHostNeedsVSyncOnDesktop` RED →
+  GREEN.
+- [ ] Implement; the Mac's interleaved runs (Metal at the defaults against the base): lag no higher, more seconds even.

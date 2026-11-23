@@ -65,6 +65,7 @@ static u64 s_waited_presents = 0;
 static u64 s_last_waited = 0;
 static Common::Timer::Value s_last_shown = 0;
 static const GPUDevice* s_wait_device = nullptr;
+static const GPUDevice* s_feedback_device = nullptr; // the device whose feedback makes the timeline (Metal unsynced)
 static GPUVSyncMode s_wait_vsync_mode = GPUVSyncMode::Disabled;
 static std::atomic_bool s_wait_reset{false};
 // The timeline they make, read by the emulation thread.
@@ -214,9 +215,26 @@ void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool pre
     s_cutoff_offset.store(0, std::memory_order_release);
   }
 
-  // Where presents are waited on, the waits' times teach the tracker (WaitForPresent()).
-  if (!g_gpu_device->HasPresentFeedback() || g_gpu_device->HasPresentWait())
+  // Where presents are waited on (FIFO), the waits' times teach the tracker and make the timeline (WaitForPresent()).
+  const bool fifo = (g_gpu_device->GetVSyncMode() == GPUVSyncMode::FIFO);
+  const bool has_wait = g_gpu_device->HasPresentWait();
+  if (!g_gpu_device->HasPresentFeedback() || (has_wait && fifo))
     return;
+
+  // Unsynced presents on a device that waits (Metal): their feedback makes the desktop's timeline, starting over with
+  // another device or window.
+  const bool makes_timeline = FramePacing::TimelineFromFeedback(fifo, has_wait, true);
+  const float refresh_hz = g_gpu_device->GetWindowInfo().surface_refresh_rate;
+  if (makes_timeline &&
+      (s_wait_reset.exchange(false, std::memory_order_acq_rel) || s_feedback_device != g_gpu_device.get()))
+  {
+    {
+      std::unique_lock lock(s_present_timeline_mutex);
+      s_present_timeline.Reset();
+    }
+    s_feedback_device = g_gpu_device.get();
+    ResetCutoffOffset();
+  }
 
   // This present's target, for when its feedback comes back.
   if (presented && cmd->deadline != 0 && cmd->frame_start_time != 0)
@@ -232,6 +250,12 @@ void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool pre
   bool changed = false;
   for (u32 i = 0; i < count; i++)
   {
+    if (makes_timeline)
+    {
+      std::unique_lock lock(s_present_timeline_mutex);
+      s_present_timeline.Add(feedback[i].present_time, refresh_hz);
+    }
+
     const PresentTarget& target = s_present_targets[feedback[i].id % s_present_targets.size()];
     if (target.id != feedback[i].id || target.frame_start_time == 0 || feedback[i].present_time < target.frame_start_time)
       continue; // not locked to the screen, or forgotten

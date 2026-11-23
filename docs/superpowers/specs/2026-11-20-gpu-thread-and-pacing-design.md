@@ -289,6 +289,13 @@ call)*.
     screen really takes frames.
   - **Where:** while locked, vsync is FIFO whatever the screen's rate, so 120 Hz desktop screens lock at two refreshes
     a frame. MoltenVK and OpenGL get no timeline, so they're unchanged.
+- **Metal locks without FIFO** *(the player's choice, 2026-11-23, after measuring)*.
+  - On the Mac, windowed Metal with vsync off is tear-free and shows frames about 3 ms after input. Display sync costs
+    about 18 ms more, whatever the waits do.
+  - So Automatic leaves vsync off on Metal, and the lock runs from the presented handlers' times, as Android's does
+    from Choreographer's.
+- **Sync to host changes the speed on desktop only while vsync is on** *(the player's choice)*, as its own help text
+  says. Renderers left with vsync off run exactly as today.
 - **Success for 2b:**
   - On the Mac (Metal), measured from the presented handlers at the defaults: lag from input poll to screen no higher
     than the base branch's default (vsync off). Every frame shown for its refreshes (one at 60 Hz, two at 120) in at

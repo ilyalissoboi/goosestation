@@ -153,6 +153,15 @@ bool VSyncWanted(DisplayVSyncMode mode, bool automatic_allowed, bool has_present
 /// to host on, a present wait, and a screen whose rate is a multiple of the console's.
 bool FifoForLock(bool vsync_wanted, bool sync_to_host, bool has_present_wait, float refresh_hz, float console_hz);
 
+/// Whether the desktop's refresh timeline comes from the presents' feedback: while presents don't block (with FIFO
+/// the waits make it), on devices that can also wait for their presents (Metal, whose presented handlers report
+/// either way; MoltenVK has feedback and no wait, so it's left as it was).
+bool TimelineFromFeedback(bool fifo, bool has_present_wait, bool has_present_feedback);
+
+/// Whether sync to host refresh rate changes the game's speed to the screen's (within 5%): on desktop only while vsync
+/// is on, as the setting says; on Android as before (the screen lock paces there).
+bool SyncsSpeedToHost(bool sync_to_host, bool vsync_on, bool desktop);
+
 /// Which present to wait for before the next frame reads its input: 0 the one just presented (at most one frame
 /// queued), 1 the one before, while frames keep missing their refreshes (two misses within MISS_WINDOW frames). It
 /// tries 0 again after a hold, which doubles each time the try fails at once. After a wait times out (a window that
@@ -189,14 +198,17 @@ private:
 };
 
 /// The screen's refreshes, from the times presents were shown: the latest as a refresh, the period as the window's
-/// time over its refreshes (each interval a whole 1-4 of the reported period, within a quarter of one; others left
-/// out), a buffer due half a period before its refresh.
+/// time over its refreshes (each interval a whole 1-4 of the reported period, within FIT of one; others left out), a
+/// buffer due half a period before its refresh. None unless MIN_FIT_SHARE of the intervals fit: a variable refresh
+/// screen (ProMotion with unsynced presents) shows frames between refreshes, and has no timeline to lock to.
 class PresentTimeline
 {
 public:
   static constexpr u32 WINDOW = 60;
   static constexpr u32 MIN_INTERVALS = 8;
   static constexpr double STALE_MS = 100.0;
+  static constexpr double FIT = 0.1;
+  static constexpr double MIN_FIT_SHARE = 0.9;
 
   void Add(Common::Timer::Value shown_time, float reported_hz);
   /// False with fewer than MIN_INTERVALS intervals, or nothing shown for STALE_MS.
@@ -207,7 +219,7 @@ private:
   struct Interval
   {
     Common::Timer::Value time;
-    u32 refreshes;
+    u32 refreshes; // 0: it didn't fit
   };
   std::array<Interval, WINDOW> m_intervals = {};
   u32 m_count = 0;

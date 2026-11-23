@@ -2375,6 +2375,7 @@ void MetalDevice::EndPresent(bool explicit_present)
     std::unique_lock lock(presented->mutex);
     presented->shown = std::max(presented->shown, number);
     presented->shown_times[number % presented->shown_times.size()] = shown;
+    presented->feedback[number % presented->feedback.size()] = {number, (presented_time > 0.0) ? shown : 0};
     presented->cv.notify_all();
   }];
   [m_render_cmdbuf presentDrawable:m_layer_drawable];
@@ -2404,6 +2405,41 @@ u64 MetalDevice::WaitForPresent(u32 frames_back, u64 timeout)
   }
 
   return m_presented->shown_times[number % m_presented->shown_times.size()];
+}
+
+bool MetalDevice::AutomaticVSync() const
+{
+  // In a window, unsynced presents are tear-free (the compositor syncs them) and display sync costs about a refresh:
+  // Automatic leaves vsync off, and the screen lock paces from the presented handlers' times instead.
+  return false;
+}
+
+bool MetalDevice::HasPresentFeedback() const
+{
+  return (m_layer != nil);
+}
+
+u64 MetalDevice::GetLastPresentId() const
+{
+  return m_presents;
+}
+
+u32 MetalDevice::FetchPresentFeedback(std::span<PresentFeedback> out)
+{
+  std::unique_lock lock(m_presented->mutex);
+  const u64 shown = m_presented->shown;
+  if (shown > m_fetched + m_presented->feedback.size())
+    m_fetched = shown - m_presented->feedback.size(); // older ones are gone
+
+  u32 count = 0;
+  for (u64 number = m_fetched + 1; number <= shown && count < out.size(); number++)
+  {
+    const auto& [id, time] = m_presented->feedback[number % m_presented->feedback.size()];
+    m_fetched = number;
+    if (id == number && time != 0)
+      out[count++] = PresentFeedback{id, time, 0};
+  }
+  return count;
 }
 
 void MetalDevice::SubmitPresent()

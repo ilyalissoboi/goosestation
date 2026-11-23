@@ -3607,7 +3607,16 @@ void System::UpdateSpeedLimiterState()
       INFO_LOG("Refresh rate: Host={}hz Guest={}hz Ratio={} - {}", host_refresh_rate, System::GetThrottleFrequency(),
                ratio, s_can_sync_to_host ? "can sync" : "can't sync");
 
-      s_syncing_to_host = (s_can_sync_to_host && g_settings.sync_to_host_refresh_rate && s_target_speed == 1.0f);
+      // On desktop, only while vsync is on, as the setting says (pacing stage 2b).
+#ifdef __ANDROID__
+      static constexpr bool desktop = false;
+#else
+      static constexpr bool desktop = true;
+#endif
+      s_syncing_to_host =
+        (s_can_sync_to_host &&
+         FramePacing::SyncsSpeedToHost(g_settings.sync_to_host_refresh_rate, IsVSyncWanted(), desktop) &&
+         s_target_speed == 1.0f);
       if (s_syncing_to_host)
       {
         s_target_speed = ratio;
@@ -3697,7 +3706,7 @@ bool System::IsVSyncWanted()
   static constexpr bool automatic_allowed = true;
 #endif
   return FramePacing::VSyncWanted(g_settings.display_vsync_mode, automatic_allowed,
-                                  GPUThread::GetDeviceInfo().has_present_wait);
+                                  GPUThread::GetDeviceInfo().automatic_vsync);
 }
 
 u32 System::WantedDisplayLock()

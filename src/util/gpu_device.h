@@ -746,6 +746,10 @@ public:
   /// frame-latency waitable, Metal's presented handlers).
   virtual bool HasPresentWait() const { return false; }
 
+  /// Whether vsync's Automatic turns it on here: where presents can be waited on, unless unsynced presents are already
+  /// tear-free and quicker (Metal in a window: the compositor syncs them, and display sync adds a refresh).
+  virtual bool AutomaticVSync() const { return HasPresentWait(); }
+
   /// Waits until the present frames_back before the last one (0: the last) is shown, up to timeout. Returns when it
   /// was shown (Common::Timer's clock; the time the wait returned where the API gives none), or 0 on a timeout. A
   /// timeout of 0 only looks.

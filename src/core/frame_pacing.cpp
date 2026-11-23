@@ -286,6 +286,16 @@ bool FramePacing::FifoForLock(bool vsync_wanted, bool sync_to_host, bool has_pre
   return vsync_wanted && sync_to_host && has_present_wait && RefreshesPerFrame(refresh_hz, console_hz) > 0;
 }
 
+bool FramePacing::TimelineFromFeedback(bool fifo, bool has_present_wait, bool has_present_feedback)
+{
+  return !fifo && has_present_wait && has_present_feedback;
+}
+
+bool FramePacing::SyncsSpeedToHost(bool sync_to_host, bool vsync_on, bool desktop)
+{
+  return sync_to_host && (vsync_on || !desktop);
+}
+
 void FramePacing::PresentWaitDepth::Report(Common::Timer::Value shown_interval, Common::Timer::Value period,
                                            u32 refreshes)
 {
@@ -368,13 +378,11 @@ void FramePacing::PresentTimeline::Add(Common::Timer::Value shown_time, float re
     const Common::Timer::Value interval = shown_time - m_last_shown;
     const double reported_period = Common::Timer::ConvertSecondsToValue(1.0 / static_cast<double>(reported_hz));
     const double refreshes = std::round(static_cast<double>(interval) / reported_period);
-    if (refreshes >= 1.0 && refreshes <= 4.0 &&
-        std::abs(static_cast<double>(interval) - refreshes * reported_period) <= reported_period / 4.0)
-    {
-      m_intervals[m_next] = Interval{interval, static_cast<u32>(refreshes)};
-      m_next = (m_next + 1) % WINDOW;
-      m_count = std::min(m_count + 1, WINDOW);
-    }
+    const bool fits = (refreshes >= 1.0 && refreshes <= 4.0 &&
+                       std::abs(static_cast<double>(interval) - refreshes * reported_period) <= reported_period * FIT);
+    m_intervals[m_next] = Interval{interval, fits ? static_cast<u32>(refreshes) : 0u};
+    m_next = (m_next + 1) % WINDOW;
+    m_count = std::min(m_count + 1, WINDOW);
   }
   m_last_shown = std::max(m_last_shown, shown_time);
 }
@@ -389,11 +397,17 @@ bool FramePacing::PresentTimeline::Get(Common::Timer::Value now, DisplayTimeline
 
   Common::Timer::Value time = 0;
   u32 refreshes = 0;
+  u32 fitting = 0;
   for (u32 i = 0; i < m_count; i++)
   {
+    if (m_intervals[i].refreshes == 0)
+      continue;
     time += m_intervals[i].time;
     refreshes += m_intervals[i].refreshes;
+    fitting++;
   }
+  if (fitting < MIN_INTERVALS || static_cast<double>(fitting) < MIN_FIT_SHARE * static_cast<double>(m_count))
+    return false;
 
   out->vsync_time = m_last_shown;
   out->period = time / refreshes;

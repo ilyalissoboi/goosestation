@@ -670,3 +670,54 @@ TEST(PresentTimeline, ResetForgetsTheOldScreen)
   DisplayTimeline tl;
   EXPECT_FALSE(t.Get(Ms(100.0 + 39 * 1000.0 / 60.0 + 1), &tl));
 }
+
+TEST(FramePacing, TimelineFromFeedbackOnlyWithoutFifo)
+{
+  // Metal: presents unsynced, its presented handlers' times make the timeline.
+  EXPECT_TRUE(FramePacing::TimelineFromFeedback(false, true, true));
+  // Blocking presents: the waits make it.
+  EXPECT_FALSE(FramePacing::TimelineFromFeedback(true, true, true));
+  // MoltenVK: feedback, but no wait: unchanged.
+  EXPECT_FALSE(FramePacing::TimelineFromFeedback(false, false, true));
+  // D3D, Vulkan without display timing: nothing to make it from.
+  EXPECT_FALSE(FramePacing::TimelineFromFeedback(false, true, false));
+}
+
+TEST(FramePacing, SyncToHostNeedsVSyncOnDesktop)
+{
+  EXPECT_FALSE(FramePacing::SyncsSpeedToHost(true, false, true));
+  EXPECT_TRUE(FramePacing::SyncsSpeedToHost(true, true, true));
+  EXPECT_TRUE(FramePacing::SyncsSpeedToHost(true, false, false)); // Android, as before
+  EXPECT_FALSE(FramePacing::SyncsSpeedToHost(false, true, true));
+  EXPECT_FALSE(FramePacing::SyncsSpeedToHost(false, true, false));
+}
+
+TEST(PresentTimeline, AVariableRefreshScreenHasNone)
+{
+  // ProMotion with unsynced presents: frames shown at 80, 60 and 48 Hz steps, not on whole refreshes of 120.
+  FramePacing::PresentTimeline t;
+  const double steps[] = {12.5, 16.667, 20.833, 16.667, 12.5, 25.0};
+  double time = 100.0;
+  for (u32 i = 0; i < 60; i++)
+  {
+    time += steps[i % std::size(steps)];
+    t.Add(Ms(time), 120.0f);
+  }
+  DisplayTimeline tl;
+  EXPECT_FALSE(t.Get(Ms(time + 1), &tl));
+}
+
+TEST(PresentTimeline, AFewOddIntervalsStillMakeOne)
+{
+  // A fixed 60 Hz screen with the odd late callback: still a timeline.
+  FramePacing::PresentTimeline t;
+  double time = 100.0;
+  for (u32 i = 0; i < 60; i++)
+  {
+    time += (i % 20 == 7) ? 12.0 : 1000.0 / 60.0;
+    t.Add(Ms(time), 60.0f);
+  }
+  DisplayTimeline tl;
+  ASSERT_TRUE(t.Get(Ms(time + 1), &tl));
+  EXPECT_NEAR(ToMs(tl.period), 1000.0 / 60.0, 0.05);
+}

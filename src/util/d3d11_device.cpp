@@ -15,6 +15,7 @@
 #include "common/log.h"
 #include "common/path.h"
 #include "common/string_util.h"
+#include "common/timer.h"
 
 #include "fmt/format.h"
 
@@ -262,6 +263,10 @@ bool D3D11Device::CreateSwapChain()
   if (m_using_allow_tearing)
     swap_chain_desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
+  // On the flip model, presents are waited on (WaitForPresent()), so at most one frame stays queued with vsync.
+  if (m_using_flip_model_swap_chain)
+    swap_chain_desc.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+
   HRESULT hr = S_OK;
 
   if (m_is_exclusive_fullscreen)
@@ -269,7 +274,7 @@ bool D3D11Device::CreateSwapChain()
     DXGI_SWAP_CHAIN_DESC1 fs_sd_desc = swap_chain_desc;
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fs_desc = {};
 
-    fs_sd_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+    fs_sd_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
     fs_sd_desc.Width = fullscreen_mode.Width;
     fs_sd_desc.Height = fullscreen_mode.Height;
     fs_desc.RefreshRate = fullscreen_mode.RefreshRate;
@@ -320,6 +325,9 @@ bool D3D11Device::CreateSwapChain()
   {
     WARNING_LOG("MakeWindowAssociation() to disable ALT+ENTER failed");
   }
+
+  if (m_using_flip_model_swap_chain && !m_latency_waiter.Attach(m_swap_chain.Get()))
+    WARNING_LOG("The swap chain has no frame-latency waitable: presents won't be waited on.");
 
   if (!CreateSwapChainRTV())
   {
@@ -388,6 +396,7 @@ void D3D11Device::DestroySwapChain()
   if (SUCCEEDED(m_swap_chain->GetFullscreenState(&is_fullscreen, nullptr)) && is_fullscreen)
     m_swap_chain->SetFullscreenState(FALSE, nullptr);
 
+  m_latency_waiter.Detach();
   m_swap_chain.Reset();
   m_is_exclusive_fullscreen = false;
 }
@@ -428,8 +437,10 @@ void D3D11Device::ResizeWindow(s32 new_window_width, s32 new_window_height, floa
 
   m_swap_chain_rtv.Reset();
 
-  HRESULT hr = m_swap_chain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN,
-                                           m_using_allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+  HRESULT hr = m_swap_chain->ResizeBuffers(
+    0, 0, 0, DXGI_FORMAT_UNKNOWN,
+    (m_using_allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) |
+      (m_latency_waiter.IsAttached() ? DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT : 0));
   if (FAILED(hr)) [[unlikely]]
     ERROR_LOG("ResizeBuffers() failed: 0x{:08X}", static_cast<unsigned>(hr));
 
@@ -693,6 +704,10 @@ void D3D11Device::EndPresent(bool explicit_present)
   const UINT flags = (m_vsync_mode == GPUVSyncMode::Disabled && m_using_allow_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
   m_swap_chain->Present(sync_interval, flags);
 
+  // The waitable stops Present() limiting the frames queued: outside FIFO (where the GPU thread waits), as DXGI did.
+  if (m_vsync_mode != GPUVSyncMode::FIFO)
+    m_latency_waiter.Wait(3, Common::Timer::ConvertMillisecondsToValue(100.0));
+
   if (m_gpu_timing_enabled)
     KickTimestampQuery();
 
@@ -702,6 +717,16 @@ void D3D11Device::EndPresent(bool explicit_present)
 void D3D11Device::SubmitPresent()
 {
   Panic("Not supported by this API.");
+}
+
+bool D3D11Device::HasPresentWait() const
+{
+  return m_latency_waiter.IsAttached();
+}
+
+u64 D3D11Device::WaitForPresent(u32 frames_back, u64 timeout)
+{
+  return m_latency_waiter.Wait(1 + frames_back, timeout);
 }
 
 bool D3D11Device::CreateTimestampQueries()

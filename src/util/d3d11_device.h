@@ -4,6 +4,7 @@
 #pragma once
 
 #include "d3d11_stream_buffer.h"
+#include "d3d_common.h"
 #include "gpu_device.h"
 
 #include "common/windows_headers.h"
@@ -48,6 +49,8 @@ public:
   void InvalidateCachedState();
 
   bool HasSurface() const override;
+  bool HasPresentWait() const override;
+  u64 WaitForPresent(u32 frames_back, u64 timeout) override;
 
   bool UpdateWindow() override;
   void ResizeWindow(s32 new_window_width, s32 new_window_height, float new_window_scale) override;
@@ -174,6 +177,7 @@ private:
 
   ComPtr<IDXGIFactory5> m_dxgi_factory;
   ComPtr<IDXGISwapChain1> m_swap_chain;
+  D3DCommon::FrameLatencyWaiter m_latency_waiter; // flip model only
   ComPtr<ID3D11RenderTargetView> m_swap_chain_rtv;
 
   RasterizationStateMap m_rasterization_states;

@@ -10,12 +10,15 @@
 #include "common/gsvector.h"
 #include "common/log.h"
 #include "common/string_util.h"
+#include "common/timer.h"
 
 #include "fmt/format.h"
 
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dxgi1_5.h>
+
+#include <algorithm>
 
 Log_SetChannel(D3DCommon);
 
@@ -511,4 +514,58 @@ GPUTexture::Format D3DCommon::GetFormatForDXGIFormat(DXGI_FORMAT format)
   }
 
   return GPUTexture::Format::Unknown;
+}
+
+D3DCommon::FrameLatencyWaiter::FrameLatencyWaiter() = default;
+
+D3DCommon::FrameLatencyWaiter::~FrameLatencyWaiter()
+{
+  Detach();
+}
+
+bool D3DCommon::FrameLatencyWaiter::Attach(IDXGISwapChain1* swap_chain)
+{
+  Detach();
+
+  Microsoft::WRL::ComPtr<IDXGISwapChain2> swap_chain2;
+  if (FAILED(swap_chain->QueryInterface(IID_PPV_ARGS(swap_chain2.GetAddressOf()))))
+    return false;
+
+  HANDLE handle = swap_chain2->GetFrameLatencyWaitableObject();
+  if (!handle)
+    return false;
+
+  m_max_latency = 1;
+  if (FAILED(swap_chain2->SetMaximumFrameLatency(m_max_latency)))
+  {
+    CloseHandle(handle);
+    return false;
+  }
+
+  m_swap_chain = std::move(swap_chain2);
+  m_handle = handle;
+  return true;
+}
+
+void D3DCommon::FrameLatencyWaiter::Detach()
+{
+  if (m_handle)
+  {
+    CloseHandle(m_handle);
+    m_handle = nullptr;
+  }
+  m_swap_chain.Reset();
+}
+
+u64 D3DCommon::FrameLatencyWaiter::Wait(u32 max_latency, u64 timeout)
+{
+  if (!m_handle)
+    return 0;
+
+  if (max_latency != m_max_latency && SUCCEEDED(m_swap_chain->SetMaximumFrameLatency(max_latency)))
+    m_max_latency = max_latency;
+
+  const DWORD ms = static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(timeout), 1.0));
+  const DWORD res = WaitForSingleObjectEx(m_handle, ms, TRUE);
+  return (res == WAIT_OBJECT_0) ? Common::Timer::GetCurrentValue() : 0;
 }

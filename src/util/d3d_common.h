@@ -22,6 +22,8 @@ struct IDXGIFactory5;
 struct IDXGIAdapter1;
 struct IDXGIOutput;
 struct DXGI_MODE_DESC;
+struct IDXGISwapChain1;
+struct IDXGISwapChain2;
 
 namespace D3DCommon {
 // returns string representation of feature level
@@ -71,4 +73,27 @@ struct DXGIFormatMapping
 };
 const DXGIFormatMapping& GetFormatMapping(GPUTexture::Format format);
 GPUTexture::Format GetFormatForDXGIFormat(DXGI_FORMAT format);
+
+/// A flip-model swap chain's frame-latency waitable (DXGI 1.3; made with
+/// DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, which also stops Present() limiting the frames queued).
+class FrameLatencyWaiter
+{
+public:
+  FrameLatencyWaiter();
+  ~FrameLatencyWaiter();
+
+  /// Takes the swap chain's waitable, at a maximum latency of 1; false if it has none.
+  bool Attach(IDXGISwapChain1* swap_chain);
+  void Detach();
+  bool IsAttached() const { return (m_handle != nullptr); }
+
+  /// Waits until fewer than max_latency presents are queued (1: the last one is shown), up to timeout. Returns when
+  /// it returned (Common::Timer's clock), or 0 on a timeout.
+  u64 Wait(u32 max_latency, u64 timeout);
+
+private:
+  Microsoft::WRL::ComPtr<IDXGISwapChain2> m_swap_chain;
+  HANDLE m_handle = nullptr;
+  u32 m_max_latency = 1;
+};
 } // namespace D3DCommon

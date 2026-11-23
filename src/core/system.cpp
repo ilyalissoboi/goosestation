@@ -3769,7 +3769,8 @@ u32 System::TimelineRefreshes()
 void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
 {
   DisplayTimeline timeline;
-  if (!GetTimeline(&timeline))
+  const bool host_timeline = Host::GetDisplayTimeline(&timeline);
+  if (!host_timeline && !GPUThreadCommands::GetPresentTimeline(&timeline))
   {
     // The timeline stopped (the surface went): the next frame unlocks.
     s_display_lock_deadline = 0;
@@ -3791,8 +3792,10 @@ void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
                                                        s_display_lock_last_wake);
   s_display_lock_last_wake = wake.wake_time;
   s_display_lock_deadline = wake.deadline;
+  // Only from the host's timeline (Android's Choreographer), whose times are its presents' own clock; desktop's comes
+  // from present waits on blocking presents, and stays as stage 2b made it.
   s_display_lock_desired_present =
-    FramePacing::DesiredPresent(wake.refresh, timeline.period, s_display_lock_refreshes);
+    host_timeline ? FramePacing::DesiredPresent(wake.refresh, timeline.period, s_display_lock_refreshes) : 0;
   s_display_lock_period = timeline.period;
   s_display_lock_planned_time = predicted + margin;
   s_display_lock_offset = offset;

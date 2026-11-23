@@ -67,8 +67,8 @@ fun EmulationScreen(
             names,
             "VSync",
             EmulationSettings.VSYNC,
-            "Automatic leaves it off: the screen lock paces frames here. On matches every frame to the screen and can " +
-                "add latency.",
+            "Automatic leaves it off: the screen lock paces frames here. On matches every frame to the screen " +
+                "and can add latency.",
         )
         GameSwitch(
             values,
@@ -103,7 +103,8 @@ fun EmulationScreen(
                 )
             }
         }
-        if (!(values[EmulationSettings.VSYNC] && values[EmulationSettings.SYNC_TO_HOST])) {
+        // Automatic is off here (the screen lock paces): only On is vsync.
+        if (!(values[EmulationSettings.VSYNC] == "On" && values[EmulationSettings.SYNC_TO_HOST])) {
             GameSwitch(
                 values,
                 onChange,

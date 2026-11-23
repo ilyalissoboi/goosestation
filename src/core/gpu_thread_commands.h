@@ -181,6 +181,7 @@ struct GPUThreadPresentCommand : public GPUThreadCommand
   Common::Timer::Value period;         // the screen's refresh period (with deadline)
   s64 offset;                          // how far past the timeline's deadline it was aimed (negative: before)
   bool ran_long;                       // its frame's own work took longer than planned (late whatever the aim)
+  Common::Timer::Value desired_present; // not to be shown before then (two refreshes a frame), else 0
 };
 
 namespace GPUThreadCommands {
@@ -192,7 +193,7 @@ void Handle(const GPUThreadCommand* cmd);
 void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                  Common::Timer::Value frame_start_time, bool show_display, bool skip_present, bool explicit_present,
                  Common::Timer::Value deadline = 0, Common::Timer::Value period = 0, s64 offset = 0,
-                 bool ran_long = false);
+                 bool ran_long = false, Common::Timer::Value desired_present = 0);
 
 /// Locked to the screen: how long after the timeline's deadline frames should be done by, from the presents' feedback
 /// (the screen's real cutoff, less a safety margin); 0 without feedback.

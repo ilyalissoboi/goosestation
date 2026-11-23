@@ -598,6 +598,12 @@ bool OpenGLDevice::HasPresentFeedback() const
   return (m_gl_context && m_gl_context->HasFrameTimings());
 }
 
+void OpenGLDevice::SetNextPresentTime(u64 time)
+{
+  if (m_gl_context)
+    m_gl_context->SetNextPresentTime(time);
+}
+
 u64 OpenGLDevice::GetLastPresentId() const
 {
   return m_gl_context ? m_gl_context->GetLastFrameId() : 0;

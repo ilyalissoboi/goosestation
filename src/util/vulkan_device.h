@@ -155,6 +155,7 @@ public:
   bool HasPresentFeedback() const override;
   u64 GetLastPresentId() const override;
   u32 FetchPresentFeedback(std::span<PresentFeedback> out) override;
+  void SetNextPresentTime(u64 time) override;
 
   // Global state accessors
   ALWAYS_INLINE static VulkanDevice& GetInstance() { return *static_cast<VulkanDevice*>(g_gpu_device.get()); }
@@ -440,6 +441,7 @@ private:
 
   // VK_GOOGLE_display_timing: each present's ID, set where it's presented (the present thread, if any).
   std::atomic<u64> m_last_present_id{0};
+  u64 m_next_present_time = 0; // the next present's earliest time (VK_GOOGLE_display_timing), 0 for none
   std::mutex m_present_mutex;
   std::condition_variable m_present_queued_cv;
   std::condition_variable m_present_done_cv;

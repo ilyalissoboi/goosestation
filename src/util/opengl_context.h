@@ -58,6 +58,9 @@ public:
 
   /// Frames shown since the last call, oldest first, up to out.size(); how many.
   virtual u32 FetchFrameTimings(std::span<FrameTiming> out) { return 0; }
+
+  /// The earliest the next swap may be shown (nanoseconds, the monotonic clock; 0 for none).
+  virtual void SetNextPresentTime(u64 time) {}
   virtual bool IsCurrent() const = 0;
   virtual bool MakeCurrent() = 0;
   virtual bool DoneCurrent() = 0;

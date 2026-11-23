@@ -103,6 +103,10 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
 {
   const std::unique_ptr<ImGuiDrawCopy> ui(cmd->ui);
 
+  // A frame on two refreshes or more: not shown before its own refresh, however early it's ready.
+  if (cmd->desired_present != 0)
+    g_gpu_device->SetNextPresentTime(cmd->desired_present);
+
   bool do_present;
   if (cmd->show_display)
     do_present = g_gpu_presenter->PresentDisplay();
@@ -123,6 +127,8 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
     }
   }
 
+  if (cmd->desired_present != 0 && !do_present)
+    g_gpu_device->SetNextPresentTime(0); // not presented: the next present makes no request of its own
   s_submit_pending = do_present && cmd->explicit_present;
 
   const Common::Timer::Value now = Common::Timer::GetCurrentValue();
@@ -149,7 +155,8 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
 void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                                     Common::Timer::Value frame_start_time, bool show_display, bool skip_present,
                                     bool explicit_present, Common::Timer::Value deadline,
-                                    Common::Timer::Value period, s64 offset, bool ran_long)
+                                    Common::Timer::Value period, s64 offset, bool ran_long,
+                                    Common::Timer::Value desired_present)
 {
   GPUThreadPresentCommand* cmd = Allocate<GPUThreadPresentCommand>(GPUThreadCommandType::Present);
   cmd->ui = ui.release();
@@ -162,6 +169,7 @@ void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::T
   cmd->period = period;
   cmd->offset = offset;
   cmd->ran_long = ran_long;
+  cmd->desired_present = desired_present;
   GPUThread::FramePushed();
   GPUThread::PushCommand(cmd);
   GPUThread::Publish(); // the frame is drawn while the next is emulated

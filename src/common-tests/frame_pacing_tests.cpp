@@ -388,3 +388,23 @@ TEST(FramePacing, ThePeriodSkipsAMissedTickButFollowsANewRate)
     period.Add(Ms(1000.0 / 120.0));
   EXPECT_NEAR(ToMs(period.Period()), 1000.0 / 120.0, 0.05);
 }
+
+TEST(FramePacing, TheWakeKnowsItsRefresh)
+{
+  // Due 4 ms before the refresh it's for: 112.67 is the deadline of the refresh at 116.67.
+  const FramePacing::Wake w = FramePacing::NextWake(Screen60(), Ms(101), 1, 0, Ms(3), Ms(1));
+  EXPECT_NEAR(ToMs(w.refresh), ToMs(w.deadline) + 4.0, 0.001);
+  EXPECT_NEAR(ToMs(w.refresh), 116.667, 0.01);
+
+  EXPECT_EQ(FramePacing::NextWake(DisplayTimeline{}, Ms(50), 1, 0, Ms(3), Ms(1)).refresh, 0u);
+}
+
+TEST(FramePacing, TwoRefreshesAFrameAskNotToBeShownEarly)
+{
+  // 120 Hz: a frame on two (or more) refreshes may be shown no sooner than half a refresh before its own.
+  const double p = 1000.0 / 120.0;
+  EXPECT_NEAR(ToMs(FramePacing::DesiredPresent(Ms(500), Ms(p), 2)), 500.0 - p / 2, 0.001);
+  EXPECT_NEAR(ToMs(FramePacing::DesiredPresent(Ms(500), Ms(p), 3)), 500.0 - p / 2, 0.001);
+  EXPECT_EQ(FramePacing::DesiredPresent(Ms(500), Ms(p), 1), 0u); // one refresh a frame: no request
+  EXPECT_EQ(FramePacing::DesiredPresent(0, Ms(p), 2), 0u);       // no refresh known
+}

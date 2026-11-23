@@ -297,6 +297,7 @@ static bool s_skip_presenting_duplicate_frames = false;
 // the deadline the frame being emulated is due by, and how long frames take.
 static u32 s_display_lock_refreshes = 0;
 static Common::Timer::Value s_display_lock_deadline = 0;
+static Common::Timer::Value s_display_lock_desired_present = 0; // its earliest showing (two refreshes a frame), or 0
 static Common::Timer::Value s_display_lock_last_wake = 0; // when the frame being emulated started
 static FramePacing::FrameTimePredictor s_display_lock_frame_times;
 static FramePacing::LockDebounce s_display_lock_debounce; // the timeline's refreshes per frame, once they hold
@@ -305,6 +306,7 @@ static Common::Timer::Value s_display_lock_planned_time = 0;
 static s64 s_display_lock_offset = 0; // the aim past the deadline of the frame being emulated (negative: before)
 static bool s_present_ran_long = false; // the frame being presented: its own work ran past its plan
 static Common::Timer::Value s_present_deadline = 0; // the frame being presented's deadline, for its present
+static Common::Timer::Value s_present_desired = 0;  // and the earliest it may be shown (0 for no request)
 static u32 s_skipped_frame_count = 0;
 static u32 s_last_presented_internal_frame_number = 0;
 
@@ -2294,10 +2296,12 @@ void System::FrameDone()
     // Presented as soon as it's done; the wait comes before the next frame, so its input is read as late as it can.
     s_skipped_frame_count = 0;
     s_present_deadline = s_display_lock_deadline;
+    s_present_desired = s_display_lock_desired_present;
     // Measured here, before the present: a present's own time includes waiting on the screen for a buffer.
     s_present_ran_long = (current_time - s_frame_start_time > s_display_lock_planned_time);
     PresentDisplay(false, false);
     s_present_deadline = 0;
+    s_present_desired = 0;
     s_present_ran_long = false;
     if (!GPUThread::IsUsingThread())
       s_display_lock_frame_times.Add(Common::Timer::GetCurrentValue() - s_frame_start_time);
@@ -3626,6 +3630,7 @@ void System::UpdateSpeedLimiterState()
   if (lock_refreshes != s_display_lock_refreshes)
   {
     s_display_lock_deadline = 0;
+    s_display_lock_desired_present = 0;
     s_display_lock_last_wake = 0;
     s_display_lock_frame_times.Reset();
     GPUThreadCommands::ResetCutoffOffset();
@@ -3713,6 +3718,7 @@ void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
   {
     // The timeline stopped (the surface went): the next frame unlocks.
     s_display_lock_deadline = 0;
+    s_display_lock_desired_present = 0;
     s_display_lock_last_wake = 0;
     return;
   }
@@ -3730,6 +3736,8 @@ void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
                                                        s_display_lock_last_wake);
   s_display_lock_last_wake = wake.wake_time;
   s_display_lock_deadline = wake.deadline;
+  s_display_lock_desired_present =
+    FramePacing::DesiredPresent(wake.refresh, timeline.period, s_display_lock_refreshes);
   s_display_lock_period = timeline.period;
   s_display_lock_planned_time = predicted + margin;
   s_display_lock_offset = offset;
@@ -6068,7 +6076,7 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
 
   GPUThreadCommands::PushPresent(ImGuiDrawCopy::Capture(*ImGui::GetDrawData()), s_input_poll_time,
                                  s_frame_start_time, show_display, skip_present, explicit_present, s_present_deadline,
-                                 s_display_lock_period, s_display_lock_offset, s_present_ran_long);
+                                 s_display_lock_period, s_display_lock_offset, s_present_ran_long, s_present_desired);
 
   ImGuiManager::NewFrame();
 

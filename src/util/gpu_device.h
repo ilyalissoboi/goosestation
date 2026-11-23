@@ -742,6 +742,10 @@ public:
   /// The presents shown since the last call, oldest first, up to out.size(); how many.
   virtual u32 FetchPresentFeedback(std::span<PresentFeedback> out) { return 0; }
 
+  /// The earliest the next present may be shown (Common::Timer's clock, 0 for none), for that present only; where
+  /// presents report back (VK_GOOGLE_display_timing's desiredPresentTime, eglPresentationTimeANDROID).
+  virtual void SetNextPresentTime(u64 time) {}
+
   /// Renders ImGui screen elements. Call before EndPresent().
   /// Draws a frame of ImGui (built on the emulation thread, ImGui::Render() already called, and copied).
   void RenderImGui(const ImDrawData* draw_data);

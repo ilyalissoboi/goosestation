@@ -384,3 +384,236 @@ TEST(FramePacing, ThePeriodSkipsAMissedTickButFollowsANewRate)
     period.Add(Ms(1000.0 / 120.0));
   EXPECT_NEAR(ToMs(period.Period()), 1000.0 / 120.0, 0.05);
 }
+
+TEST(FramePacing, VSyncWantedFollowsTheMode)
+{
+  EXPECT_TRUE(FramePacing::VSyncWanted(DisplayVSyncMode::On, false, false));
+  EXPECT_FALSE(FramePacing::VSyncWanted(DisplayVSyncMode::Off, true, true));
+  EXPECT_TRUE(FramePacing::VSyncWanted(DisplayVSyncMode::Automatic, true, true));
+  EXPECT_FALSE(FramePacing::VSyncWanted(DisplayVSyncMode::Automatic, true, false));
+  EXPECT_FALSE(FramePacing::VSyncWanted(DisplayVSyncMode::Automatic, false, true));
+}
+
+TEST(FramePacing, FifoOnlyWhereTheLockCanRun)
+{
+  EXPECT_TRUE(FramePacing::FifoForLock(true, true, true, 60.0f, NTSC));
+  EXPECT_TRUE(FramePacing::FifoForLock(true, true, true, 120.0f, NTSC));
+  EXPECT_FALSE(FramePacing::FifoForLock(true, true, true, 144.0f, NTSC));
+  EXPECT_FALSE(FramePacing::FifoForLock(true, true, true, 60.0f, 50.0f));
+  EXPECT_FALSE(FramePacing::FifoForLock(true, true, false, 60.0f, NTSC));
+  EXPECT_FALSE(FramePacing::FifoForLock(true, false, true, 60.0f, NTSC));
+  EXPECT_FALSE(FramePacing::FifoForLock(false, true, true, 60.0f, NTSC));
+}
+
+namespace {
+const Common::Timer::Value P60 = Ms(1000.0 / 60.0);
+
+void OnTime(FramePacing::PresentWaitDepth& d, u32 frames, u32 refreshes = 1)
+{
+  for (u32 i = 0; i < frames; i++)
+    d.Report(P60 * refreshes, P60, refreshes);
+}
+
+void Miss(FramePacing::PresentWaitDepth& d)
+{
+  d.Report(P60 * 2, P60, 1);
+}
+
+// Past its first frames, which aren't judged.
+FramePacing::PresentWaitDepth Settled()
+{
+  FramePacing::PresentWaitDepth d;
+  OnTime(d, FramePacing::PresentWaitDepth::JUDGE_AFTER);
+  return d;
+}
+} // namespace
+
+TEST(PresentWaitDepth, StartsAtTheFrameJustPresented)
+{
+  FramePacing::PresentWaitDepth d;
+  EXPECT_EQ(d.Depth(), 0u);
+}
+
+TEST(PresentWaitDepth, TwoMissesWaitForTheFrameBefore)
+{
+  FramePacing::PresentWaitDepth d = Settled();
+  Miss(d);
+  OnTime(d, 50);
+  EXPECT_EQ(d.Depth(), 0u); // one miss alone
+  Miss(d);
+  EXPECT_EQ(d.Depth(), 1u);
+
+  FramePacing::PresentWaitDepth far = Settled();
+  Miss(far);
+  OnTime(far, FramePacing::PresentWaitDepth::MISS_WINDOW + 1);
+  Miss(far);
+  EXPECT_EQ(far.Depth(), 0u); // too far apart
+}
+
+TEST(PresentWaitDepth, TheFirstFramesAreNotJudged)
+{
+  FramePacing::PresentWaitDepth d;
+  Miss(d);
+  Miss(d);
+  EXPECT_EQ(d.Depth(), 0u);
+}
+
+TEST(PresentWaitDepth, ItTriesAgainAfterItsHold)
+{
+  FramePacing::PresentWaitDepth d = Settled();
+  Miss(d);
+  Miss(d);
+  ASSERT_EQ(d.Depth(), 1u);
+  OnTime(d, FramePacing::PresentWaitDepth::FIRST_HOLD - 1);
+  EXPECT_EQ(d.Depth(), 1u);
+  OnTime(d, 1);
+  EXPECT_EQ(d.Depth(), 0u);
+}
+
+TEST(PresentWaitDepth, AFailedTryDoublesTheHold)
+{
+  using D = FramePacing::PresentWaitDepth;
+  D d = Settled();
+  Miss(d);
+  Miss(d);
+  OnTime(d, D::FIRST_HOLD);
+  ASSERT_EQ(d.Depth(), 0u);
+
+  u32 hold = D::FIRST_HOLD;
+  for (u32 attempt = 0; attempt < 6; attempt++)
+  {
+    // The try fails at once: back to the frame before, for twice as long, never past MAX_HOLD.
+    Miss(d);
+    Miss(d);
+    ASSERT_EQ(d.Depth(), 1u);
+    hold = std::min(hold * 2, D::MAX_HOLD);
+    OnTime(d, hold - 1);
+    EXPECT_EQ(d.Depth(), 1u) << "attempt " << attempt;
+    OnTime(d, 1);
+    EXPECT_EQ(d.Depth(), 0u) << "attempt " << attempt;
+  }
+}
+
+TEST(PresentWaitDepth, ATryThatHoldsResetsTheHold)
+{
+  using D = FramePacing::PresentWaitDepth;
+  D d = Settled();
+  Miss(d);
+  Miss(d);
+  OnTime(d, D::FIRST_HOLD);
+  Miss(d);
+  Miss(d); // failed: the hold doubles
+  OnTime(d, D::FIRST_HOLD * 2);
+  ASSERT_EQ(d.Depth(), 0u);
+  OnTime(d, D::MISS_WINDOW); // this try holds
+  Miss(d);
+  Miss(d);
+  OnTime(d, D::FIRST_HOLD);
+  EXPECT_EQ(d.Depth(), 0u); // back to the first hold
+}
+
+TEST(PresentWaitDepth, TheLocksRefreshesAreNotMisses)
+{
+  FramePacing::PresentWaitDepth d = Settled();
+  OnTime(d, 200, 2);
+  EXPECT_EQ(d.Depth(), 0u);
+  d.Report(P60 * 3, P60, 2);
+  d.Report(P60 * 3, P60, 2);
+  EXPECT_EQ(d.Depth(), 1u);
+}
+
+TEST(PresentWaitDepth, ATimeoutPausesWaits)
+{
+  using D = FramePacing::PresentWaitDepth;
+  D d = Settled();
+  d.Report(0, P60, 1);
+  for (u32 i = 0; i < D::TIMEOUT_PAUSE; i++)
+  {
+    ASSERT_EQ(d.Depth(), D::NO_WAIT) << i;
+    d.NotWaited();
+  }
+  EXPECT_EQ(d.Depth(), 0u);
+}
+
+TEST(PresentWaitDepth, ResetStartsOver)
+{
+  FramePacing::PresentWaitDepth d = Settled();
+  Miss(d);
+  Miss(d);
+  ASSERT_EQ(d.Depth(), 1u);
+  d.Reset();
+  EXPECT_EQ(d.Depth(), 0u);
+}
+
+namespace {
+// Presents shown from 100 ms on, every interval_ms (with each frame's offset from offsets_ms, cycled).
+FramePacing::PresentTimeline ShownEvery(double interval_ms, float reported_hz, u32 count,
+                                        std::vector<double> offsets_ms = {0.0})
+{
+  FramePacing::PresentTimeline t;
+  for (u32 i = 0; i < count; i++)
+    t.Add(Ms(100.0 + i * interval_ms + offsets_ms[i % offsets_ms.size()]), reported_hz);
+  return t;
+}
+} // namespace
+
+TEST(PresentTimeline, SixtyHertzWithJitter)
+{
+  const FramePacing::PresentTimeline t = ShownEvery(16.683, 60.0f, 40, {0.0, 0.3, 0.0, -0.3});
+  DisplayTimeline tl;
+  const Common::Timer::Value last = Ms(100.0 + 39 * 16.683 - 0.3);
+  ASSERT_TRUE(t.Get(last + Ms(1), &tl));
+  EXPECT_NEAR(ToMs(tl.period), 16.683, 0.05);
+  EXPECT_EQ(tl.vsync_time, last);
+  EXPECT_NEAR(ToMs(tl.deadline_lead), ToMs(tl.period) / 2, 0.001);
+}
+
+TEST(PresentTimeline, TwoRefreshesAFrameAt120)
+{
+  const FramePacing::PresentTimeline t = ShownEvery(1000.0 / 60.0, 120.0f, 40);
+  DisplayTimeline tl;
+  ASSERT_TRUE(t.Get(Ms(100.0 + 39 * 1000.0 / 60.0 + 1), &tl));
+  EXPECT_NEAR(ToMs(tl.period), 1000.0 / 120.0, 0.05);
+}
+
+TEST(PresentTimeline, ARepeatedFrameDoesntStretchThePeriod)
+{
+  FramePacing::PresentTimeline t;
+  double time = 100.0;
+  for (u32 i = 0; i < 40; i++)
+  {
+    time += (i == 20) ? 2000.0 / 60.0 : 1000.0 / 60.0;
+    t.Add(Ms(time), 60.0f);
+  }
+  DisplayTimeline tl;
+  ASSERT_TRUE(t.Get(Ms(time + 1), &tl));
+  EXPECT_NEAR(ToMs(tl.period), 1000.0 / 60.0, 0.05);
+}
+
+TEST(PresentTimeline, StaleAfter100ms)
+{
+  const FramePacing::PresentTimeline t = ShownEvery(1000.0 / 60.0, 60.0f, 40);
+  const double last = 100.0 + 39 * 1000.0 / 60.0;
+  DisplayTimeline tl;
+  EXPECT_TRUE(t.Get(Ms(last + 99), &tl));
+  EXPECT_FALSE(t.Get(Ms(last + 101), &tl));
+}
+
+TEST(PresentTimeline, TooFewIntervalsIsNone)
+{
+  const FramePacing::PresentTimeline t =
+    ShownEvery(1000.0 / 60.0, 60.0f, FramePacing::PresentTimeline::MIN_INTERVALS);
+  DisplayTimeline tl;
+  EXPECT_FALSE(t.Get(Ms(100.0 + FramePacing::PresentTimeline::MIN_INTERVALS * 1000.0 / 60.0), &tl));
+  const FramePacing::PresentTimeline enough =
+    ShownEvery(1000.0 / 60.0, 60.0f, FramePacing::PresentTimeline::MIN_INTERVALS + 1);
+  EXPECT_TRUE(enough.Get(Ms(100.0 + FramePacing::PresentTimeline::MIN_INTERVALS * 1000.0 / 60.0), &tl));
+}
+
+TEST(PresentTimeline, ResetForgetsTheOldScreen)
+{
+  FramePacing::PresentTimeline t = ShownEvery(1000.0 / 60.0, 60.0f, 40);
+  t.Reset();
+  DisplayTimeline tl;
+  EXPECT_FALSE(t.Get(Ms(100.0 + 39 * 1000.0 / 60.0 + 1), &tl));
+}

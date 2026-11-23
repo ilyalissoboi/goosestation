@@ -266,3 +266,133 @@ void FramePacing::PeriodEstimator::Reset()
   m_period = 0;
   m_other_count = 0;
 }
+
+bool FramePacing::VSyncWanted(DisplayVSyncMode mode, bool automatic_allowed, bool has_present_wait)
+{
+  switch (mode)
+  {
+    case DisplayVSyncMode::On:
+      return true;
+    case DisplayVSyncMode::Automatic:
+      return automatic_allowed && has_present_wait;
+    default:
+      return false;
+  }
+}
+
+bool FramePacing::FifoForLock(bool vsync_wanted, bool sync_to_host, bool has_present_wait, float refresh_hz,
+                              float console_hz)
+{
+  return vsync_wanted && sync_to_host && has_present_wait && RefreshesPerFrame(refresh_hz, console_hz) > 0;
+}
+
+void FramePacing::PresentWaitDepth::Report(Common::Timer::Value shown_interval, Common::Timer::Value period,
+                                           u32 refreshes)
+{
+  if (shown_interval == 0)
+  {
+    m_pause = TIMEOUT_PAUSE;
+    return;
+  }
+
+  const u32 frame = ++m_frames;
+  if (frame <= JUDGE_AFTER)
+    return;
+
+  if (m_depth == 1)
+  {
+    // Waiting for the frame before: try the frame just presented again once the hold is over.
+    if (++m_held >= m_hold)
+    {
+      m_depth = 0;
+      m_held = 0;
+      m_trying = 1;
+      m_last_miss = 0;
+    }
+    return;
+  }
+
+  // Missed: shown more than half a refresh after its refreshes.
+  if (shown_interval * 2 > (refreshes * 2 + 1) * period)
+  {
+    if (m_last_miss != 0 && frame - m_last_miss <= MISS_WINDOW)
+    {
+      if (m_trying != 0)
+        m_hold = std::min(m_hold * 2, MAX_HOLD);
+      m_depth = 1;
+      m_held = 0;
+      m_trying = 0;
+      m_last_miss = 0;
+      return;
+    }
+    m_last_miss = frame;
+  }
+
+  // A try that held for a window: the next fall back starts from the first hold again.
+  if (m_trying != 0 && ++m_trying > MISS_WINDOW)
+  {
+    m_trying = 0;
+    m_hold = FIRST_HOLD;
+  }
+}
+
+void FramePacing::PresentWaitDepth::NotWaited()
+{
+  if (m_pause > 0)
+    m_pause--;
+}
+
+u32 FramePacing::PresentWaitDepth::Depth() const
+{
+  return (m_pause > 0) ? NO_WAIT : m_depth;
+}
+
+void FramePacing::PresentWaitDepth::Reset()
+{
+  *this = PresentWaitDepth();
+}
+
+void FramePacing::PresentTimeline::Add(Common::Timer::Value shown_time, float reported_hz)
+{
+  if (m_last_shown != 0 && shown_time > m_last_shown && reported_hz > 0.0f)
+  {
+    const Common::Timer::Value interval = shown_time - m_last_shown;
+    const double reported_period = Common::Timer::ConvertSecondsToValue(1.0 / static_cast<double>(reported_hz));
+    const double refreshes = std::round(static_cast<double>(interval) / reported_period);
+    if (refreshes >= 1.0 && refreshes <= 4.0 &&
+        std::abs(static_cast<double>(interval) - refreshes * reported_period) <= reported_period / 4.0)
+    {
+      m_intervals[m_next] = Interval{interval, static_cast<u32>(refreshes)};
+      m_next = (m_next + 1) % WINDOW;
+      m_count = std::min(m_count + 1, WINDOW);
+    }
+  }
+  m_last_shown = std::max(m_last_shown, shown_time);
+}
+
+bool FramePacing::PresentTimeline::Get(Common::Timer::Value now, DisplayTimeline* out) const
+{
+  if (m_count < MIN_INTERVALS || m_last_shown == 0 ||
+      (now > m_last_shown && Common::Timer::ConvertValueToMilliseconds(now - m_last_shown) > STALE_MS))
+  {
+    return false;
+  }
+
+  Common::Timer::Value time = 0;
+  u32 refreshes = 0;
+  for (u32 i = 0; i < m_count; i++)
+  {
+    time += m_intervals[i].time;
+    refreshes += m_intervals[i].refreshes;
+  }
+
+  out->vsync_time = m_last_shown;
+  out->period = time / refreshes;
+  out->deadline_lead = out->period / 2;
+  return true;
+}
+
+void FramePacing::PresentTimeline::Reset()
+{
+  *this = PresentTimeline();
+}

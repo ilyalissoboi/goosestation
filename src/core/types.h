@@ -153,6 +153,15 @@ enum class DisplayAlignment : u8
   Count
 };
 
+/// Vsync: Automatic is on where the device can wait for each present to be shown (no added lag), and off elsewhere.
+enum class DisplayVSyncMode : u8
+{
+  Automatic,
+  On,
+  Off,
+  Count
+};
+
 enum class DisplayRotation : u8
 {
   Normal,

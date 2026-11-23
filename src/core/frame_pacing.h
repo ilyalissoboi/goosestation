@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "types.h"
+
 #include "common/timer.h"
 #include "common/types.h"
 
@@ -142,6 +144,72 @@ private:
   Common::Timer::Value m_other_sum = 0;
   Common::Timer::Value m_other_first = 0;
   u32 m_other_count = 0;
+};
+
+/// Whether vsync is wanted: On yes, Off no, Automatic where it's allowed (desktop) and the device has a present wait.
+bool VSyncWanted(DisplayVSyncMode mode, bool automatic_allowed, bool has_present_wait);
+
+/// Whether presents should block on the screen (FIFO) so the lock can run from the present waits: vsync wanted, sync
+/// to host on, a present wait, and a screen whose rate is a multiple of the console's.
+bool FifoForLock(bool vsync_wanted, bool sync_to_host, bool has_present_wait, float refresh_hz, float console_hz);
+
+/// Which present to wait for before the next frame reads its input: 0 the one just presented (at most one frame
+/// queued), 1 the one before, while frames keep missing their refreshes (two misses within MISS_WINDOW frames). It
+/// tries 0 again after a hold, which doubles each time the try fails at once. After a wait times out (a window that
+/// isn't presenting), no waits for TIMEOUT_PAUSE frames.
+class PresentWaitDepth
+{
+public:
+  static constexpr u32 NO_WAIT = 0xFFFFFFFFu;
+  static constexpr u32 JUDGE_AFTER = 10;
+  static constexpr u32 MISS_WINDOW = 120;
+  static constexpr u32 FIRST_HOLD = 600;
+  static constexpr u32 MAX_HOLD = 9600;
+  static constexpr u32 TIMEOUT_PAUSE = 60;
+
+  /// A frame's wait came back: shown_interval since the last frame shown (0: the wait timed out), period the
+  /// refresh, refreshes those the frame should take (1, or the lock's n).
+  void Report(Common::Timer::Value shown_interval, Common::Timer::Value period, u32 refreshes);
+  /// A frame presented without a wait (NO_WAIT).
+  void NotWaited();
+  u32 Depth() const;
+  void Reset();
+
+private:
+  u32 m_depth = 0;
+  u32 m_frames = 0;           // reported since the reset
+  u32 m_last_miss = 0;        // frame of the last miss at depth 0, plus one (0: none)
+  u32 m_hold = FIRST_HOLD;    // frames at depth 1 before trying 0
+  u32 m_held = 0;             // frames at depth 1 so far
+  u32 m_trying = 0;           // frames into a try at depth 0 (0: not trying)
+  u32 m_pause = 0;            // frames left without waits
+};
+
+/// The screen's refreshes, from the times presents were shown: the latest as a refresh, the period as the window's
+/// time over its refreshes (each interval a whole 1-4 of the reported period, within a quarter of one; others left
+/// out), a buffer due half a period before its refresh.
+class PresentTimeline
+{
+public:
+  static constexpr u32 WINDOW = 60;
+  static constexpr u32 MIN_INTERVALS = 8;
+  static constexpr double STALE_MS = 100.0;
+
+  void Add(Common::Timer::Value shown_time, float reported_hz);
+  /// False with fewer than MIN_INTERVALS intervals, or nothing shown for STALE_MS.
+  bool Get(Common::Timer::Value now, DisplayTimeline* out) const;
+  void Reset();
+
+private:
+  struct Interval
+  {
+    Common::Timer::Value time;
+    u32 refreshes;
+  };
+  std::array<Interval, WINDOW> m_intervals = {};
+  u32 m_count = 0;
+  u32 m_next = 0;
+  Common::Timer::Value m_last_shown = 0;
 };
 
 /// Whether frames lock to the screen: sync to host refresh rate is on, the host has a timeline, the screen's rate is a

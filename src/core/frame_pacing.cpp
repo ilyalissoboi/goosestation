@@ -9,7 +9,7 @@
 u32 FramePacing::RefreshesPerFrame(float refresh_hz, float console_hz)
 {
   static constexpr u32 MAX_REFRESHES = 4;
-  static constexpr float TOLERANCE = 0.005f;
+  static constexpr float TOLERANCE = 0.02f;
 
   if (refresh_hz <= 0.0f || console_hz <= 0.0f)
     return 0;

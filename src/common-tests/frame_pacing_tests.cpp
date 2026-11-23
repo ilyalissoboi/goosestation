@@ -38,6 +38,8 @@ TEST(FramePacing, RefreshesPerFrameFindsTheMultiple)
   EXPECT_EQ(FramePacing::RefreshesPerFrame(59.94f, NTSC), 1u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(100.0f, 50.0f), 2u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(240.0f, NTSC), 4u);
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(118.36f, NTSC), 2u); // the Thor's 120 Hz panel, measured
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(59.77f, NTSC), 1u);  // and its 60 Hz
 }
 
 TEST(FramePacing, RefreshesPerFrameIsZeroWithoutOne)
@@ -47,6 +49,8 @@ TEST(FramePacing, RefreshesPerFrameIsZeroWithoutOne)
   EXPECT_EQ(FramePacing::RefreshesPerFrame(0.0f, NTSC), 0u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(60.0f, 0.0f), 0u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(300.0f, NTSC), 0u); // five refreshes a frame is past the limit
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(117.0f, NTSC), 0u); // 2.2% off two refreshes
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(61.3f, NTSC), 0u);  // 2.5% off one
 }
 
 TEST(FramePacing, LockedSpeedRunsTheGameAtTheRefresh)

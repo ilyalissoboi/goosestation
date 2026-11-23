@@ -22,7 +22,8 @@ struct DisplayTimeline
 namespace FramePacing {
 
 /// How many refreshes each console frame takes when the screen's rate is a whole multiple of the console's (within
-/// 0.5%), up to four; 0 when it isn't (PAL on 60 Hz, 144 Hz).
+/// 2%: a panel's real rate can be a percent off its nominal one, the Thor's 120 Hz is 118.36), up to four; 0 when it
+/// isn't (PAL on 60 Hz, 144 Hz).
 u32 RefreshesPerFrame(float refresh_hz, float console_hz);
 
 /// The game's speed that puts one frame on every refreshes_per_frame refreshes.

@@ -1461,8 +1461,8 @@ void VulkanDevice::DoPresent(VulkanSwapChain* present_swap_chain)
 {
   // Each present gets an ID, so its timing can be read back when the screen has shown it.
   const u64 present_id = m_last_present_id.load(std::memory_order_relaxed) + 1;
-  const VkPresentTimeGOOGLE present_time = {static_cast<u32>(present_id), m_next_present_time};
-  m_next_present_time = 0;
+  const VkPresentTimeGOOGLE present_time = {static_cast<u32>(present_id),
+                                            m_next_present_time.exchange(0, std::memory_order_relaxed)};
   const VkPresentTimesInfoGOOGLE present_times = {VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE, nullptr, 1,
                                                   &present_time};
   const bool timed = (m_optional_extensions.vk_google_display_timing && vkGetPastPresentationTimingGOOGLE &&
@@ -2549,7 +2549,7 @@ bool VulkanDevice::HasPresentFeedback() const
 
 void VulkanDevice::SetNextPresentTime(u64 time)
 {
-  m_next_present_time = HasPresentFeedback() ? time : 0;
+  m_next_present_time.store(HasPresentFeedback() ? time : 0, std::memory_order_relaxed);
 }
 
 u64 VulkanDevice::GetLastPresentId() const

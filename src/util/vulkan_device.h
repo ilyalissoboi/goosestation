@@ -441,7 +441,9 @@ private:
 
   // VK_GOOGLE_display_timing: each present's ID, set where it's presented (the present thread, if any).
   std::atomic<u64> m_last_present_id{0};
-  u64 m_next_present_time = 0; // the next present's earliest time (VK_GOOGLE_display_timing), 0 for none
+  // The next present's earliest time (VK_GOOGLE_display_timing), 0 for none: set on the thread that pushes presents,
+  // taken where it's presented (the present thread, if any).
+  std::atomic<u64> m_next_present_time{0};
   std::mutex m_present_mutex;
   std::condition_variable m_present_queued_cv;
   std::condition_variable m_present_done_cv;

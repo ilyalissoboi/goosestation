@@ -541,9 +541,20 @@ bool D3DCommon::FrameLatencyWaiter::Attach(IDXGISwapChain1* swap_chain)
     return false;
   }
 
+  // It starts with a release for the first frame's slot: taken, so each release after is a present leaving the queue.
+  WaitForSingleObjectEx(handle, 0, FALSE);
+
   m_swap_chain = std::move(swap_chain2);
   m_handle = handle;
+  m_presents = 0;
+  m_taken = 0;
   return true;
+}
+
+void D3DCommon::FrameLatencyWaiter::Presented()
+{
+  if (m_handle)
+    m_presents++;
 }
 
 void D3DCommon::FrameLatencyWaiter::Detach()
@@ -560,32 +571,26 @@ u64 D3DCommon::FrameLatencyWaiter::Wait(u32 frames_back, u64 timeout)
 {
   if (!m_handle)
     return 0;
-
-  UINT last = 0;
-  if (FAILED(m_swap_chain->GetLastPresentCount(&last)) || last <= frames_back)
+  if (m_presents <= frames_back)
     return Common::Timer::GetCurrentValue();
 
-  const UINT target = last - frames_back;
-  const u64 deadline = Common::Timer::GetCurrentValue() + timeout;
-  for (;;)
-  {
-    DXGI_FRAME_STATISTICS stats;
-    const bool has_stats = SUCCEEDED(m_swap_chain->GetFrameStatistics(&stats));
-    if (has_stats && stats.PresentCount >= target)
-    {
-      return (stats.SyncQPCTime.QuadPart > 0) ? static_cast<u64>(stats.SyncQPCTime.QuadPart) :
-                                                 Common::Timer::GetCurrentValue();
-    }
+  // The presents that must have left the queue, the one waited for last. The statistics can't say (windowed, they
+  // run two presents behind the screen), so the waitable's releases are counted, one a present.
+  const u64 target = m_presents - frames_back;
 
-    const u64 now = Common::Timer::GetCurrentValue();
-    if (now >= deadline)
-      return 0;
+  // Releases for presents nobody waited for: taken while they're there; any not there are counted as gone (the count
+  // may be capped, and those presents left the queue long since).
+  while (m_taken + 1 < target && WaitForSingleObjectEx(m_handle, 0, FALSE) == WAIT_OBJECT_0)
+    m_taken++;
+  m_taken = std::max(m_taken, target - 1);
+  if (m_taken >= target)
+    return Common::Timer::GetCurrentValue();
 
-    // Until a present leaves the queue. Without statistics (disjoint for a moment), that alone is the answer.
-    const DWORD ms = static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(deadline - now), 1.0));
-    if (WaitForSingleObjectEx(m_handle, ms, FALSE) != WAIT_OBJECT_0)
-      return 0;
-    if (!has_stats)
-      return Common::Timer::GetCurrentValue();
-  }
+  const DWORD ms =
+    (timeout == 0) ? 0 : static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(timeout), 1.0));
+  if (WaitForSingleObjectEx(m_handle, ms, FALSE) != WAIT_OBJECT_0)
+    return 0;
+
+  m_taken++;
+  return Common::Timer::GetCurrentValue();
 }

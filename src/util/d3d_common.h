@@ -87,14 +87,18 @@ public:
   void Detach();
   bool IsAttached() const { return (m_handle != nullptr); }
 
-  /// Waits until the present frames_back before the last (GetLastPresentCount()) is shown, by the frame statistics'
-  /// PresentCount, sleeping on the waitable between looks (it's released as presents leave the queue; its count isn't
-  /// relied on), up to timeout. Returns its refresh's time (SyncQPCTime, Common::Timer's clock on Windows), the time
-  /// it returned where there are no statistics, or 0 on a timeout.
+  /// After each Present() on the swap chain, the blank first frame's included.
+  void Presented();
+
+  /// Waits until the present frames_back before the last has left the queue (the waitable is released once for each,
+  /// at the refresh the compositor takes it), up to timeout; a timeout of 0 only looks. Returns when it returned
+  /// (Common::Timer's clock), or 0 on a timeout.
   u64 Wait(u32 frames_back, u64 timeout);
 
 private:
   Microsoft::WRL::ComPtr<IDXGISwapChain2> m_swap_chain;
   HANDLE m_handle = nullptr;
+  u64 m_presents = 0; // since Attach()
+  u64 m_taken = 0;    // releases taken, or counted as gone
 };
 } // namespace D3DCommon

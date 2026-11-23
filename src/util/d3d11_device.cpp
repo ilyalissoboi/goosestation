@@ -339,6 +339,7 @@ bool D3D11Device::CreateSwapChain()
   // Render a frame as soon as possible to clear out whatever was previously being displayed.
   m_context->ClearRenderTargetView(m_swap_chain_rtv.Get(), s_clear_color.data());
   m_swap_chain->Present(0, m_using_allow_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0);
+  m_latency_waiter.Presented();
   return true;
 }
 
@@ -704,6 +705,7 @@ void D3D11Device::EndPresent(bool explicit_present)
   const UINT sync_interval = static_cast<UINT>(m_vsync_mode == GPUVSyncMode::FIFO);
   const UINT flags = (m_vsync_mode == GPUVSyncMode::Disabled && m_using_allow_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
   m_swap_chain->Present(sync_interval, flags);
+  m_latency_waiter.Presented();
 
 
   if (m_gpu_timing_enabled)

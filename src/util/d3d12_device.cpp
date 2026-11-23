@@ -993,6 +993,7 @@ void D3D12Device::RenderBlankFrame()
                                              D3D12_RESOURCE_STATE_PRESENT);
   SubmitCommandList(false);
   m_swap_chain->Present(0, m_using_allow_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0);
+  m_latency_waiter.Presented();
 }
 
 bool D3D12Device::UpdateWindow()
@@ -1181,6 +1182,7 @@ void D3D12Device::SubmitPresent()
   const UINT sync_interval = static_cast<UINT>(m_vsync_mode == GPUVSyncMode::FIFO);
   const UINT flags = (m_vsync_mode == GPUVSyncMode::Disabled && m_using_allow_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
   m_swap_chain->Present(sync_interval, flags);
+  m_latency_waiter.Presented();
 
 }
 

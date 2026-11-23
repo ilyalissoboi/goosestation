@@ -299,7 +299,17 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   display_pre_frame_sleep_buffer =
     si.GetFloatValue("Display", "PreFrameSleepBuffer", DEFAULT_DISPLAY_PRE_FRAME_SLEEP_BUFFER);
   display_skip_presenting_duplicate_frames = si.GetBoolValue("Display", "SkipPresentingDuplicateFrames", false);
-  display_vsync = si.GetBoolValue("Display", "VSync", false);
+  // Without the mode, the old switch's on is On; its off was the default every file was written with, so Automatic.
+  if (si.ContainsValue("Display", "VSyncMode"))
+  {
+    display_vsync_mode = ParseDisplayVSyncMode(si.GetStringValue("Display", "VSyncMode", "").c_str())
+                           .value_or(DEFAULT_DISPLAY_VSYNC_MODE);
+  }
+  else
+  {
+    display_vsync_mode =
+      si.GetBoolValue("Display", "VSync", false) ? DisplayVSyncMode::On : DEFAULT_DISPLAY_VSYNC_MODE;
+  }
   display_disable_mailbox_presentation = si.GetBoolValue("Display", "DisableMailboxPresentation", false);
   display_force_4_3_for_24bit = si.GetBoolValue("Display", "Force4_3For24Bit", false);
   display_active_start_offset = static_cast<s16>(si.GetIntValue("Display", "ActiveStartOffset", 0));
@@ -571,7 +581,7 @@ void Settings::Save(SettingsInterface& si, bool ignore_base) const
   si.SetBoolValue("Display", "PreFrameSleep", display_pre_frame_sleep);
   si.SetBoolValue("Display", "SkipPresentingDuplicateFrames", display_skip_presenting_duplicate_frames);
   si.SetFloatValue("Display", "PreFrameSleepBuffer", display_pre_frame_sleep_buffer);
-  si.SetBoolValue("Display", "VSync", display_vsync);
+  si.SetStringValue("Display", "VSyncMode", GetDisplayVSyncModeName(display_vsync_mode));
   si.SetBoolValue("Display", "DisableMailboxPresentation", display_disable_mailbox_presentation);
   si.SetStringValue("Display", "ExclusiveFullscreenControl",
                     GetDisplayExclusiveFullscreenControlName(display_exclusive_fullscreen_control));
@@ -1481,6 +1491,45 @@ const char* Settings::GetDisplayAlignmentName(DisplayAlignment alignment)
 const char* Settings::GetDisplayAlignmentDisplayName(DisplayAlignment alignment)
 {
   return Host::TranslateToCString("DisplayAlignment", s_display_alignment_display_names[static_cast<int>(alignment)]);
+}
+
+static constexpr const std::array s_display_vsync_mode_names = {"Automatic", "On", "Off"};
+static constexpr const std::array s_display_vsync_mode_display_names = {
+  TRANSLATE_NOOP("Settings", "Automatic (where it adds no lag)"), TRANSLATE_NOOP("Settings", "On"),
+  TRANSLATE_NOOP("Settings", "Off")};
+
+std::optional<DisplayVSyncMode> Settings::ParseDisplayVSyncMode(const char* str)
+{
+  int index = 0;
+  for (const char* name : s_display_vsync_mode_names)
+  {
+    if (StringUtil::Strcasecmp(name, str) == 0)
+      return static_cast<DisplayVSyncMode>(index);
+
+    index++;
+  }
+
+  return std::nullopt;
+}
+
+const char* Settings::GetDisplayVSyncModeName(DisplayVSyncMode mode)
+{
+  return s_display_vsync_mode_names[static_cast<int>(mode)];
+}
+
+const char* Settings::GetDisplayVSyncModeDisplayName(DisplayVSyncMode mode)
+{
+  return Host::TranslateToCString("Settings", s_display_vsync_mode_display_names[static_cast<int>(mode)]);
+}
+
+bool Settings::ApplyDesktopPacingDefaults(SettingsInterface& si)
+{
+  if (si.GetUIntValue("Main", "DesktopPacingDefaultsVersion", 0u) >= 1)
+    return false;
+
+  si.SetBoolValue("Main", "SyncToHostRefreshRate", true);
+  si.SetUIntValue("Main", "DesktopPacingDefaultsVersion", 1);
+  return true;
 }
 
 static constexpr const std::array s_display_rotation_names = {"Normal", "Rotate90", "Rotate180", "Rotate270"};

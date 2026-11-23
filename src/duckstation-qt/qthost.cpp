@@ -719,6 +719,10 @@ void QtHost::MigrateSettings()
     s_base_settings_interface->DeleteValue("Display", "DisplayAllFrames");
     s_base_settings_interface->Save();
   }
+
+  // Sync to host refresh rate became the default with the desktop screen lock (pacing stage 2b).
+  if (Settings::ApplyDesktopPacingDefaults(*s_base_settings_interface))
+    s_base_settings_interface->Save();
 }
 
 bool EmuThread::shouldRenderToMain() const

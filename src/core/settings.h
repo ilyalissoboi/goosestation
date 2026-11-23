@@ -161,10 +161,10 @@ struct Settings
   s16 display_active_end_offset = 0;
   s8 display_line_start_offset = 0;
   s8 display_line_end_offset = 0;
+  DisplayVSyncMode display_vsync_mode = DEFAULT_DISPLAY_VSYNC_MODE;
   bool display_optimal_frame_pacing : 1 = false;
   bool display_pre_frame_sleep : 1 = false;
   bool display_skip_presenting_duplicate_frames : 1 = false;
-  bool display_vsync : 1 = false;
   bool display_disable_mailbox_presentation : 1 = true;
   bool display_force_4_3_for_24bit : 1 = false;
   bool display_24bit_chroma_smoothing : 1 = false;
@@ -444,6 +444,14 @@ struct Settings
   static const char* GetDisplayAlignmentName(DisplayAlignment alignment);
   static const char* GetDisplayAlignmentDisplayName(DisplayAlignment alignment);
 
+  static std::optional<DisplayVSyncMode> ParseDisplayVSyncMode(const char* str);
+  static const char* GetDisplayVSyncModeName(DisplayVSyncMode mode);
+  static const char* GetDisplayVSyncModeDisplayName(DisplayVSyncMode mode);
+
+  /// Desktop files from before pacing stage 2b have sync to host off, as the old default: it's turned on once
+  /// ([Main] DesktopPacingDefaultsVersion). True if the file changed.
+  static bool ApplyDesktopPacingDefaults(SettingsInterface& si);
+
   static std::optional<DisplayRotation> ParseDisplayRotation(const char* str);
   static const char* GetDisplayRotationName(DisplayRotation alignment);
   static const char* GetDisplayRotationDisplayName(DisplayRotation alignment);
@@ -564,12 +572,12 @@ struct Settings
   /// The GPU thread, on by default (GPU_HWFrontend and GPUThread; docs/superpowers/specs/2026-11-20-gpu-thread-and-pacing-design.md).
   static constexpr bool DEFAULT_GPU_THREAD = true;
 
-  /// On Android, frames lock to the screen's refreshes with it (FramePacing, pacing stage 2a); off on desktop.
-#ifdef __ANDROID__
+  /// Frames lock to the screen's refreshes with it (FramePacing): on Android from its timeline (pacing stage 2a), on
+  /// desktop from the present waits (2b).
   static constexpr bool DEFAULT_SYNC_TO_HOST_REFRESH_RATE = true;
-#else
-  static constexpr bool DEFAULT_SYNC_TO_HOST_REFRESH_RATE = false;
-#endif
+
+  /// On where the device can wait for its presents (FramePacing::VSyncWanted).
+  static constexpr DisplayVSyncMode DEFAULT_DISPLAY_VSYNC_MODE = DisplayVSyncMode::Automatic;
 
   // PINE uses a concept of "slot" to be able to communicate with multiple
   // emulators at the same time, each slot should be unique to each emulator to

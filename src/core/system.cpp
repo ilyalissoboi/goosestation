@@ -181,6 +181,7 @@ static void UpdatePreFrameSleepTime();
 static void UpdateDisplayVSync();
 static u32 WantedDisplayLock();
 static u32 TimelineRefreshes();
+static bool IsVSyncWanted();
 static void SleepToDisplayDeadline(Common::Timer::Value current_time);
 
 // What the frame's end decides presents by: the device as last published, and its own present-throttle clock.
@@ -3610,7 +3611,7 @@ void System::UpdateSpeedLimiterState()
         s_target_speed = ratio;
 
         // When syncing to host and using vsync, we don't need to sleep.
-        s_syncing_to_host_with_vsync = g_settings.display_vsync;
+        s_syncing_to_host_with_vsync = IsVSyncWanted();
         if (s_syncing_to_host_with_vsync)
         {
           INFO_LOG("Using host vsync for throttling.");
@@ -3684,6 +3685,12 @@ void System::UpdateDisplayVSync()
   });
 }
 
+bool System::IsVSyncWanted()
+{
+  // Automatic waits for the devices' present waits (pacing stage 2b): off until they exist.
+  return FramePacing::VSyncWanted(g_settings.display_vsync_mode, false, false);
+}
+
 u32 System::WantedDisplayLock()
 {
   // The settings and the speed allow it at once (fast-forward lets go straight away); the timeline's say, debounced.
@@ -3748,7 +3755,7 @@ u32 System::GetDisplayLockStats(u64* presents, u64* made)
 GPUVSyncMode System::GetEffectiveVSyncMode()
 {
   // Vsync off => always disabled. So is it while fast-forwarding, and back after.
-  if (!FramePacing::VSyncWhileFastForwarding(g_settings.display_vsync, s_fast_forward_enabled || s_turbo_enabled))
+  if (!FramePacing::VSyncWhileFastForwarding(IsVSyncWanted(), s_fast_forward_enabled || s_turbo_enabled))
     return GPUVSyncMode::Disabled;
 
   // If there's no VM, or we're using vsync for timing, then we always use double-buffered (blocking).
@@ -4764,7 +4771,7 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
         g_settings.display_skip_presenting_duplicate_frames != old_settings.display_skip_presenting_duplicate_frames ||
         g_settings.display_pre_frame_sleep != old_settings.display_pre_frame_sleep ||
         g_settings.display_pre_frame_sleep_buffer != old_settings.display_pre_frame_sleep_buffer ||
-        g_settings.display_vsync != old_settings.display_vsync ||
+        g_settings.display_vsync_mode != old_settings.display_vsync_mode ||
         g_settings.display_disable_mailbox_presentation != old_settings.display_disable_mailbox_presentation ||
         g_settings.sync_to_host_refresh_rate != old_settings.sync_to_host_refresh_rate)
     {
@@ -4795,7 +4802,7 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
   {
     if (GPUThread::GetDeviceInfo().has_device)
     {
-      if (g_settings.display_vsync != old_settings.display_vsync ||
+      if (g_settings.display_vsync_mode != old_settings.display_vsync_mode ||
           g_settings.display_disable_mailbox_presentation != old_settings.display_disable_mailbox_presentation)
       {
         UpdateDisplayVSync();

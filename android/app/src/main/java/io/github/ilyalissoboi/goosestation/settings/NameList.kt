@@ -21,6 +21,7 @@ enum class NameList(
     Scaling("DisplayScalingMode"),
     Alignment("DisplayAlignment"),
     Rotation("DisplayRotation"),
+    VSyncMode("DisplayVSyncMode"),
     ScreenshotMode("DisplayScreenshotMode"),
     ScreenshotFormat("DisplayScreenshotFormat"),
     StretchMode("AudioStretchMode"),

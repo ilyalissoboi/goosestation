@@ -22,7 +22,9 @@
 
 #include "common/timer.h"
 
+#include <array>
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -272,6 +274,12 @@ public:
   bool BeginPresent(bool skip_present, u32 clear_color) override;
   void EndPresent(bool explicit_submit) override;
   void SubmitPresent() override;
+  bool HasPresentWait() const override;
+  bool LocksFromUnsyncedFeedback() const override;
+  u64 WaitForPresent(u32 frames_back, u64 timeout) override;
+  bool HasPresentFeedback() const override;
+  u64 GetLastPresentId() const override;
+  u32 FetchPresentFeedback(std::span<PresentFeedback> out) override;
 
   void WaitForFenceCounter(u64 counter);
 
@@ -366,6 +374,21 @@ private:
 
   CAMetalLayer* m_layer = nil;
   id<MTLDrawable> m_layer_drawable = nil;
+
+  // Present waits: each drawable presented is numbered, and its presented handler (any thread) records when it was
+  // shown. Shared with the handlers, which can run after the device is gone.
+  struct PresentedState
+  {
+    std::mutex mutex;
+    std::condition_variable cv;
+    u64 shown = 0; // the highest number shown
+    std::array<u64, 8> shown_times = {}; // Common::Timer's clock, by number
+    // The feedback: each number and when it was shown, 0 for a drawable never shown.
+    std::array<std::pair<u64, u64>, 32> feedback = {};
+  };
+  std::shared_ptr<PresentedState> m_presented = std::make_shared<PresentedState>();
+  u64 m_presents = 0;
+  u64 m_fetched = 0; // the last number whose feedback was fetched
   MTLRenderPassDescriptor* m_layer_pass_desc = nil;
 
   std::mutex m_fence_mutex;

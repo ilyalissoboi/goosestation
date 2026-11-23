@@ -226,6 +226,10 @@ NATIVE_LIBRARY_FUNCTION(jobjectArray, getSettingNames)(JNIEnv* env, jobject, jst
      [](auto& n) {
        AppendSettingNames(n, &Settings::GetDisplayRotationName, &Settings::GetDisplayRotationDisplayName);
      }},
+    {"DisplayVSyncMode",
+     [](auto& n) {
+       AppendSettingNames(n, &Settings::GetDisplayVSyncModeName, &Settings::GetDisplayVSyncModeDisplayName);
+     }},
     {"DisplayScreenshotMode",
      [](auto& n) {
        AppendSettingNames(n, &Settings::GetDisplayScreenshotModeName, &Settings::GetDisplayScreenshotModeDisplayName);

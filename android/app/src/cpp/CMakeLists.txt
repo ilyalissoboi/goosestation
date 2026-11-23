@@ -17,6 +17,8 @@ add_library(goosestation SHARED
   android_host_state.cpp
   android_host_state.h
   android_host_states.cpp
+  android_vsync.cpp
+  android_vsync.h
   bios_import.cpp
   bios_import.h
   content_bridge.cpp

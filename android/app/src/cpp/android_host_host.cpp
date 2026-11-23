@@ -4,6 +4,7 @@
 #include "android_host_state.h"
 
 #include "android_host.h"
+#include "android_vsync.h"
 #include "achievements_bridge.h"
 #include "emu_thread.h"
 #include "foreign_settings.h"
@@ -20,6 +21,7 @@
 #include "core/memory_card.h"
 #include "core/pad.h"
 #include "core/settings.h"
+#include "core/frame_pacing.h"
 #include "core/system.h"
 #include "util/android_game_settings.h"
 #include "util/android_input_keys.h"
@@ -242,6 +244,9 @@ void Host::OnSystemStarting()
 
 void Host::OnSystemStarted()
 {
+  // The screen's refreshes, which a game locked to them paces by: only while a game runs, unpaused.
+  AndroidVsync::Start();
+
   const std::string& title = System::GetGameTitle();
   INFO_LOG("Game started: {}", title);
   AndroidHost::s_game_started = true;
@@ -282,6 +287,10 @@ void Host::AdaptGameSettingsLayer(SettingsInterface& si)
 
 void Host::OnSystemDestroyed()
 {
+  AndroidVsync::Stop();
+
+  AndroidHost::SetFrameRate(0.0f);
+
   // Whatever is held now is let go, so it doesn't stay pressed into the next game, nor swallow its first press.
   AndroidHost::QueueReleaseAllInputs();
   AndroidHost::s_running_game.reset();
@@ -320,10 +329,14 @@ void Host::OnSystemDestroyed()
 
 void Host::OnSystemPaused()
 {
+  AndroidVsync::Stop();
+
 }
 
 void Host::OnSystemResumed()
 {
+  AndroidVsync::Start();
+
 }
 
 void Host::OnIdleStateChanged()
@@ -378,6 +391,9 @@ void Host::RequestResizeHostDisplay(s32 width, s32 height)
 
 void Host::FrameDone()
 {
+  // The console's frame rate (NTSC, PAL) for the surface, so the screen runs at a rate that suits it.
+  AndroidHost::SetFrameRate(FramePacing::RequestedFrameRate(System::GetThrottleFrequency()));
+
   // Hardcore mode allows no fast forward or turbo, which the core doesn't refuse: a hotkey's, or one already on when a
   // reset started hardcore, is turned off here.
   if (Achievements::IsHardcoreModeActive())

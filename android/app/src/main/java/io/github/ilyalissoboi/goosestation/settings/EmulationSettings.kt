@@ -24,7 +24,9 @@ object EmulationSettings {
     /** The core's default, 0 (unlimited); Big Picture shows 2.0 for it. */
     val TURBO_SPEED = FloatSetting("Main", "TurboSpeed", 0f)
     val VSYNC = BoolSetting("Display", "VSync", false)
-    val SYNC_TO_HOST = BoolSetting("Main", "SyncToHostRefreshRate", false)
+
+    /** On by default here (`Settings::DEFAULT_SYNC_TO_HOST_REFRESH_RATE`): frames locked to the screen's refreshes. */
+    val SYNC_TO_HOST = BoolSetting("Main", "SyncToHostRefreshRate", true)
     val OPTIMAL_FRAME_PACING = BoolSetting("Display", "OptimalFramePacing", false)
     val PRE_FRAME_SLEEP = BoolSetting("Display", "PreFrameSleep", false)
 

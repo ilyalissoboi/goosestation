@@ -349,6 +349,10 @@ void SetPaused(bool paused);
 /// device has stopped using the old one.
 void SurfaceChanged(ANativeWindow* window, s32 width, s32 height, float scale, float refresh_rate);
 
+/// The frame rate asked of the screen for the game's surface (the console's, 0 for none): passed on when it changes,
+/// and to each new surface. On the CPU thread.
+void SetFrameRate(float rate);
+
 /// Tests: the refresh rate the running GPU device's window has, 0 without one. On the CPU thread, waiting for it.
 float GetSurfaceRefreshRateForTest();
 

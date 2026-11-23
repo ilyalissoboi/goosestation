@@ -80,7 +80,7 @@ struct Settings
   float emulation_speed = 1.0f;
   float fast_forward_speed = 0.0f;
   float turbo_speed = 0.0f;
-  bool sync_to_host_refresh_rate : 1 = false;
+  bool sync_to_host_refresh_rate : 1 = DEFAULT_SYNC_TO_HOST_REFRESH_RATE;
   bool increase_timer_resolution : 1 = true;
   bool inhibit_screensaver : 1 = true;
   bool start_paused : 1 = false;
@@ -563,6 +563,13 @@ struct Settings
 
   /// The GPU thread, on by default (GPU_HWFrontend and GPUThread; docs/superpowers/specs/2026-11-20-gpu-thread-and-pacing-design.md).
   static constexpr bool DEFAULT_GPU_THREAD = true;
+
+  /// On Android, frames lock to the screen's refreshes with it (FramePacing, pacing stage 2a); off on desktop.
+#ifdef __ANDROID__
+  static constexpr bool DEFAULT_SYNC_TO_HOST_REFRESH_RATE = true;
+#else
+  static constexpr bool DEFAULT_SYNC_TO_HOST_REFRESH_RATE = false;
+#endif
 
   // PINE uses a concept of "slot" to be able to communicate with multiple
   // emulators at the same time, each slot should be unique to each emulator to

@@ -288,6 +288,21 @@ void OpenGLContextEGL::ResizeSurface(u32 new_surface_width /*= 0*/, u32 new_surf
 
 bool OpenGLContextEGL::SwapBuffers()
 {
+  if (m_frame_timestamps)
+  {
+    EGLuint64KHR frame_id;
+    if (eglGetNextFrameIdANDROID(m_display, m_surface, &frame_id))
+    {
+      m_last_frame_id = frame_id;
+      if (m_pending_frame_count == MAX_PENDING_FRAMES)
+      {
+        std::copy(m_pending_frames.begin() + 1, m_pending_frames.end(), m_pending_frames.begin());
+        m_pending_frame_count--;
+      }
+      m_pending_frames[m_pending_frame_count++] = frame_id;
+    }
+  }
+
   return eglSwapBuffers(m_display, m_surface);
 }
 
@@ -353,6 +368,11 @@ bool OpenGLContextEGL::CreateSurface()
     ERROR_LOG("Failed to create platform surface: {}", error.GetDescription());
     return false;
   }
+
+  // Each frame's timing, read back once shown, where the platform has it (Android).
+  m_frame_timestamps = (GLAD_EGL_ANDROID_get_frame_timestamps &&
+                        eglSurfaceAttrib(m_display, m_surface, EGL_TIMESTAMPS_ANDROID, EGL_TRUE));
+  m_pending_frame_count = 0;
 
   // Some implementations may require the size to be queried at runtime.
   EGLint surface_width, surface_height;
@@ -464,8 +484,59 @@ void OpenGLContextEGL::DestroyContext()
   }
 }
 
+bool OpenGLContextEGL::HasFrameTimings() const
+{
+  return m_frame_timestamps;
+}
+
+u64 OpenGLContextEGL::GetLastFrameId() const
+{
+  return m_frame_timestamps ? m_last_frame_id : 0;
+}
+
+u32 OpenGLContextEGL::FetchFrameTimings(std::span<FrameTiming> out)
+{
+  static constexpr EGLint names[] = {EGL_RENDERING_COMPLETE_TIME_ANDROID, EGL_COMPOSITION_LATCH_TIME_ANDROID,
+                                     EGL_DISPLAY_PRESENT_TIME_ANDROID};
+
+  u32 count = 0;
+  u32 consumed = 0;
+  for (; consumed < m_pending_frame_count && count < out.size(); consumed++)
+  {
+    EGLnsecsANDROID values[std::size(names)];
+    if (!eglGetFrameTimestampsANDROID(m_display, m_surface, m_pending_frames[consumed],
+                                      static_cast<EGLint>(std::size(names)), names, values))
+    {
+      continue; // too old to know: dropped
+    }
+
+    // Not shown yet: neither are the frames after it.
+    if (values[0] == EGL_TIMESTAMP_PENDING_ANDROID || values[1] == EGL_TIMESTAMP_PENDING_ANDROID ||
+        values[2] == EGL_TIMESTAMP_PENDING_ANDROID)
+    {
+      break;
+    }
+    if (values[0] == EGL_TIMESTAMP_INVALID_ANDROID || values[1] == EGL_TIMESTAMP_INVALID_ANDROID ||
+        values[2] == EGL_TIMESTAMP_INVALID_ANDROID)
+    {
+      continue;
+    }
+
+    out[count++] = FrameTiming{m_pending_frames[consumed], static_cast<u64>(values[2]),
+                               static_cast<s64>(values[1] - values[0])};
+  }
+
+  std::copy(m_pending_frames.begin() + consumed, m_pending_frames.begin() + m_pending_frame_count,
+            m_pending_frames.begin());
+  m_pending_frame_count -= consumed;
+  return count;
+}
+
 void OpenGLContextEGL::DestroySurface()
 {
+  m_frame_timestamps = false;
+  m_pending_frame_count = 0;
+
   if (eglGetCurrentSurface(EGL_DRAW) == m_surface)
     eglMakeCurrent(m_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 

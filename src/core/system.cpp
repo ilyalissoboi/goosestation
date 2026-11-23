@@ -12,6 +12,7 @@
 #include "cpu_core.h"
 #include "cpu_pgxp.h"
 #include "dma.h"
+#include "frame_pacing.h"
 #include "fullscreen_ui.h"
 #include "game_database.h"
 #include "game_list.h"
@@ -178,6 +179,9 @@ static void UpdatePerformanceCounters();
 static void AccumulatePreFrameSleepTime();
 static void UpdatePreFrameSleepTime();
 static void UpdateDisplayVSync();
+static u32 WantedDisplayLock();
+static u32 TimelineRefreshes();
+static void SleepToDisplayDeadline(Common::Timer::Value current_time);
 
 // What the frame's end decides presents by: the device as last published, and its own present-throttle clock.
 static GPUThread::DeviceInfo s_device_info_for_present;
@@ -288,6 +292,19 @@ static bool s_can_sync_to_host = false;
 static bool s_syncing_to_host = false;
 static bool s_syncing_to_host_with_vsync = false;
 static bool s_skip_presenting_duplicate_frames = false;
+
+// Locked to the screen's refreshes (sync to host with the host's refresh timeline): refreshes per frame (0 unlocked),
+// the deadline the frame being emulated is due by, and how long frames take.
+static u32 s_display_lock_refreshes = 0;
+static Common::Timer::Value s_display_lock_deadline = 0;
+static Common::Timer::Value s_display_lock_last_wake = 0; // when the frame being emulated started
+static FramePacing::FrameTimePredictor s_display_lock_frame_times;
+static FramePacing::LockDebounce s_display_lock_debounce; // the timeline's refreshes per frame, once they hold
+static Common::Timer::Value s_display_lock_period = 0;
+static Common::Timer::Value s_display_lock_planned_time = 0;
+static s64 s_display_lock_offset = 0; // the aim past the deadline of the frame being emulated (negative: before)
+static bool s_present_ran_long = false; // the frame being presented: its own work ran past its plan
+static Common::Timer::Value s_present_deadline = 0; // the frame being presented's deadline, for its present
 static u32 s_skipped_frame_count = 0;
 static u32 s_last_presented_internal_frame_number = 0;
 
@@ -2244,13 +2261,27 @@ void System::FrameDone()
     s_last_active_frame_time = std::max(s_last_active_frame_time, GPUThreadCommands::GetLastPresentActiveTime());
   if (s_pre_frame_sleep)
     AccumulatePreFrameSleepTime();
+  // With a GPU thread, the frame's active time runs to its present's end already; without one it's taken after the
+  // present below.
+  if (s_display_lock_refreshes > 0 && GPUThread::IsUsingThread())
+    s_display_lock_frame_times.Add(s_last_active_frame_time);
+
+  // The screen's rate or the timeline changed (60 to 120 Hz, the surface gone), and has stayed so: lock, unlock or
+  // relock.
+  if (g_settings.sync_to_host_refresh_rate)
+  {
+    s_display_lock_debounce.Update(TimelineRefreshes());
+    if (WantedDisplayLock() != s_display_lock_refreshes) [[unlikely]]
+      UpdateSpeedLimiterState();
+  }
 
   // explicit present (frame pacing)
   const bool is_unique_frame = (s_last_presented_internal_frame_number != s_internal_frame_number);
   s_last_presented_internal_frame_number = s_internal_frame_number;
 
   s_device_info_for_present = GPUThread::GetDeviceInfo();
-  const bool skip_this_frame =
+  const bool locked_to_display = (s_display_lock_refreshes > 0 && !IsExecutionInterrupted());
+  const bool skip_this_frame = !locked_to_display &&
     (((s_skip_presenting_duplicate_frames && !is_unique_frame &&
        s_skipped_frame_count < MAX_SKIPPED_DUPLICATE_FRAME_COUNT) ||
       (!s_optimal_frame_pacing && current_time > s_next_frame_time &&
@@ -2258,7 +2289,21 @@ void System::FrameDone()
       GPUDevice::ShouldSkipPresentingFrame(s_device_info_for_present.allow_present_throttle,
                                            s_device_info_for_present.refresh_rate, &s_last_frame_displayed_time)) &&
      !s_syncing_to_host_with_vsync && !IsExecutionInterrupted() && !ImGuiManager::IsTextInputActive());
-  if (!skip_this_frame)
+  if (locked_to_display)
+  {
+    // Presented as soon as it's done; the wait comes before the next frame, so its input is read as late as it can.
+    s_skipped_frame_count = 0;
+    s_present_deadline = s_display_lock_deadline;
+    // Measured here, before the present: a present's own time includes waiting on the screen for a buffer.
+    s_present_ran_long = (current_time - s_frame_start_time > s_display_lock_planned_time);
+    PresentDisplay(false, false);
+    s_present_deadline = 0;
+    s_present_ran_long = false;
+    if (!GPUThread::IsUsingThread())
+      s_display_lock_frame_times.Add(Common::Timer::GetCurrentValue() - s_frame_start_time);
+    SleepToDisplayDeadline(Common::Timer::GetCurrentValue());
+  }
+  else if (!skip_this_frame)
   {
     s_skipped_frame_count = 0;
 
@@ -2291,7 +2336,7 @@ void System::FrameDone()
 
   // pre-frame sleep (input lag reduction)
   current_time = Common::Timer::GetCurrentValue();
-  if (s_pre_frame_sleep)
+  if (s_pre_frame_sleep && !locked_to_display)
   {
     // don't sleep if it's under 1ms, because we're just going to overshoot (or spin).
     if (pre_frame_sleep_until > current_time &&
@@ -3575,6 +3620,33 @@ void System::UpdateSpeedLimiterState()
     }
   }
 
+  // Locked to the screen's refreshes: the game's speed puts a frame on every n of them, timed by the host's timeline
+  // rather than vsync (FrameDone() sleeps before each frame, toward its refresh's deadline).
+  const u32 lock_refreshes = WantedDisplayLock();
+  if (lock_refreshes != s_display_lock_refreshes)
+  {
+    s_display_lock_deadline = 0;
+    s_display_lock_last_wake = 0;
+    s_display_lock_frame_times.Reset();
+    GPUThreadCommands::ResetCutoffOffset();
+  }
+  s_display_lock_refreshes = lock_refreshes;
+  if (s_display_lock_refreshes > 0)
+  {
+    // The timeline gone for a moment (the debounce keeps the lock): normal speed until it's back.
+    DisplayTimeline timeline;
+    const float refresh_rate =
+      (Host::GetDisplayTimeline(&timeline) && timeline.period > 0) ?
+        static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period)) :
+        System::GetThrottleFrequency() * static_cast<float>(s_display_lock_refreshes);
+    s_target_speed = FramePacing::LockedSpeed(refresh_rate, System::GetThrottleFrequency(), s_display_lock_refreshes);
+    s_syncing_to_host = true;
+    s_syncing_to_host_with_vsync = false;
+    s_throttler_enabled = true;
+    INFO_LOG("Locked to the screen's refreshes: {:.3f} Hz, {} a frame, speed {:.4f}", refresh_rate,
+             s_display_lock_refreshes, s_target_speed);
+  }
+
   VERBOSE_LOG("Target speed: {}%", s_target_speed * 100.0f);
   VERBOSE_LOG("Preset timing: {}", s_optimal_frame_pacing ? "consistent" : "immediate");
 
@@ -3612,10 +3684,71 @@ void System::UpdateDisplayVSync()
   });
 }
 
+u32 System::WantedDisplayLock()
+{
+  // The settings and the speed allow it at once (fast-forward lets go straight away); the timeline's say, debounced.
+  if (!g_settings.sync_to_host_refresh_rate)
+    return 0;
+
+  const float base_speed = s_turbo_enabled ? g_settings.turbo_speed :
+                                             (s_fast_forward_enabled ? g_settings.fast_forward_speed :
+                                                                       g_settings.emulation_speed);
+  return FramePacing::ShouldLock(true, true, 1, base_speed, false) ? s_display_lock_debounce.Current() : 0;
+}
+
+u32 System::TimelineRefreshes()
+{
+  DisplayTimeline timeline;
+  if (!Host::GetDisplayTimeline(&timeline))
+    return 0;
+
+  const float refresh_rate = static_cast<float>(1e9 / Common::Timer::ConvertValueToNanoseconds(timeline.period));
+  return FramePacing::RefreshesPerFrame(refresh_rate, System::GetThrottleFrequency());
+}
+
+void System::SleepToDisplayDeadline(Common::Timer::Value current_time)
+{
+  DisplayTimeline timeline;
+  if (!Host::GetDisplayTimeline(&timeline))
+  {
+    // The timeline stopped (the surface went): the next frame unlocks.
+    s_display_lock_deadline = 0;
+    s_display_lock_last_wake = 0;
+    return;
+  }
+
+  const Common::Timer::Value predicted = s_display_lock_frame_times.Predicted();
+  const Common::Timer::Value margin =
+    Common::Timer::ConvertMillisecondsToValue(g_settings.display_pre_frame_sleep_buffer);
+  // Aimed past the timeline's deadline by what the presents' feedback found (the screen's real cutoff), or before it;
+  // never past the refresh itself.
+  const s64 offset = std::min(GPUThreadCommands::GetCutoffOffset(), static_cast<s64>(timeline.deadline_lead));
+  DisplayTimeline aimed = timeline;
+  aimed.deadline_lead = static_cast<Common::Timer::Value>(static_cast<s64>(timeline.deadline_lead) - offset);
+  const FramePacing::Wake wake = FramePacing::NextWake(aimed, current_time, s_display_lock_refreshes,
+                                                       s_display_lock_deadline, predicted, margin,
+                                                       s_display_lock_last_wake);
+  s_display_lock_last_wake = wake.wake_time;
+  s_display_lock_deadline = wake.deadline;
+  s_display_lock_period = timeline.period;
+  s_display_lock_planned_time = predicted + margin;
+  s_display_lock_offset = offset;
+  Common::Timer::SleepUntil(wake.wake_time, false);
+
+  // Unlocked again, the throttle carries on from here, not from where it last was.
+  s_next_frame_time = wake.wake_time + s_frame_period;
+}
+
+u32 System::GetDisplayLockStats(u64* presents, u64* made)
+{
+  GPUThreadCommands::GetDeadlineStats(presents, made);
+  return s_display_lock_refreshes;
+}
+
 GPUVSyncMode System::GetEffectiveVSyncMode()
 {
-  // Vsync off => always disabled.
-  if (!g_settings.display_vsync)
+  // Vsync off => always disabled. So is it while fast-forwarding, and back after.
+  if (!FramePacing::VSyncWhileFastForwarding(g_settings.display_vsync, s_fast_forward_enabled || s_turbo_enabled))
     return GPUVSyncMode::Disabled;
 
   // If there's no VM, or we're using vsync for timing, then we always use double-buffered (blocking).
@@ -5934,7 +6067,8 @@ bool System::PresentDisplay(bool skip_present, bool explicit_present)
     g_gpu->PrepareToPresent();
 
   GPUThreadCommands::PushPresent(ImGuiDrawCopy::Capture(*ImGui::GetDrawData()), s_input_poll_time,
-                                 s_frame_start_time, show_display, skip_present, explicit_present);
+                                 s_frame_start_time, show_display, skip_present, explicit_present, s_present_deadline,
+                                 s_display_lock_period, s_display_lock_offset, s_present_ran_long);
 
   ImGuiManager::NewFrame();
 

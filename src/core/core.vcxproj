@@ -60,6 +60,7 @@
     <ClCompile Include="gpu.cpp" />
     <ClCompile Include="gpu_hw.cpp" />
     <ClCompile Include="gpu_hw_frontend.cpp" />
+    <ClCompile Include="frame_pacing.cpp" />
     <ClCompile Include="gpu_presenter.cpp" />
     <ClCompile Include="gpu_thread_commands.cpp" />
     <ClCompile Include="host.cpp" />
@@ -154,6 +155,7 @@
     <ClInclude Include="gpu.h" />
     <ClInclude Include="gpu_hw.h" />
     <ClInclude Include="gpu_hw_frontend.h" />
+    <ClInclude Include="frame_pacing.h" />
     <ClInclude Include="gpu_presenter.h" />
     <ClInclude Include="gpu_thread_commands.h" />
     <ClInclude Include="gte_types.h" />

@@ -993,6 +993,11 @@ void EmuThread::setFullscreen(bool fullscreen, bool allow_render_to_main)
   Host::UpdateDisplayWindow();
 }
 
+bool Host::GetDisplayTimeline(DisplayTimeline* timeline)
+{
+  return false;
+}
+
 bool Host::IsFullscreen()
 {
   return g_emu_thread->isFullscreen();

@@ -5,13 +5,18 @@
 #include "gpu_hw.h"
 #include "gpu_sw.h"
 
+#include "frame_pacing.h"
 #include "gpu_presenter.h"
 
 #include "util/gpu_device.h"
 #include "util/gpu_thread.h"
 
 #include "common/assert.h"
+#include "common/log.h"
 
+Log_SetChannel(GPUThreadCommands);
+
+#include <array>
 #include <atomic>
 #include <mutex>
 
@@ -31,6 +36,26 @@ static std::mutex s_latency_mutex;
 static double s_latency_total_ms = 0.0;
 static u32 s_latency_frames = 0;
 static std::atomic<Common::Timer::Value> s_last_present_active_time{0};
+
+// Frames locked to the screen: presents with a deadline, and those done by it.
+static std::atomic<u64> s_deadline_presents{0};
+static std::atomic<u64> s_deadline_made{0};
+
+// The screen's real cutoff, from the presents' feedback (on the GPU thread), and the targets the presents aimed at.
+static FramePacing::CutoffTracker s_cutoff_tracker;
+static std::atomic<s64> s_cutoff_offset{0};
+static std::atomic_bool s_cutoff_reset{false};
+static std::atomic<u64> s_cutoff_reports{0};
+struct PresentTarget
+{
+  u64 id;
+  Common::Timer::Value frame_start_time;
+  Common::Timer::Value period;
+  s64 offset;
+  bool ran_long;
+};
+static std::array<PresentTarget, 16> s_present_targets = {};
+static void TrackCutoff(const GPUThreadPresentCommand* cmd, bool presented);
 } // namespace GPUThreadCommands
 
 void GPUThreadCommands::Handle(const GPUThreadCommand* cmd)
@@ -109,13 +134,22 @@ void GPUThreadCommands::HandlePresent(const GPUThreadPresentCommand* cmd)
   }
   if (cmd->frame_start_time != 0)
     s_last_present_active_time.store(now - cmd->frame_start_time, std::memory_order_relaxed);
+  TrackCutoff(cmd, do_present);
+
+  if (cmd->deadline != 0 && do_present)
+  {
+    s_deadline_presents.fetch_add(1, std::memory_order_relaxed);
+    if (now <= cmd->deadline)
+      s_deadline_made.fetch_add(1, std::memory_order_relaxed);
+  }
 
   GPUThread::FramePresented();
 }
 
 void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                                     Common::Timer::Value frame_start_time, bool show_display, bool skip_present,
-                                    bool explicit_present)
+                                    bool explicit_present, Common::Timer::Value deadline,
+                                    Common::Timer::Value period, s64 offset, bool ran_long)
 {
   GPUThreadPresentCommand* cmd = Allocate<GPUThreadPresentCommand>(GPUThreadCommandType::Present);
   cmd->ui = ui.release();
@@ -124,6 +158,10 @@ void GPUThreadCommands::PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::T
   cmd->show_display = show_display;
   cmd->skip_present = skip_present;
   cmd->explicit_present = explicit_present;
+  cmd->deadline = deadline;
+  cmd->period = period;
+  cmd->offset = offset;
+  cmd->ran_long = ran_long;
   GPUThread::FramePushed();
   GPUThread::PushCommand(cmd);
   GPUThread::Publish(); // the frame is drawn while the next is emulated
@@ -146,6 +184,67 @@ void GPUThreadCommands::AfterWindowChange()
 {
   if (g_gpu_hw)
     g_gpu_hw->RestoreDeviceContext();
+}
+
+void GPUThreadCommands::TrackCutoff(const GPUThreadPresentCommand* cmd, bool presented)
+{
+  if (s_cutoff_reset.exchange(false, std::memory_order_acq_rel))
+  {
+    s_cutoff_tracker.Reset();
+    s_present_targets = {};
+    s_cutoff_offset.store(0, std::memory_order_release);
+  }
+
+  if (!g_gpu_device->HasPresentFeedback())
+    return;
+
+  // This present's target, for when its feedback comes back.
+  if (presented && cmd->deadline != 0 && cmd->frame_start_time != 0)
+  {
+    const u64 id = g_gpu_device->GetLastPresentId();
+    if (id != 0)
+      s_present_targets[id % s_present_targets.size()] =
+        PresentTarget{id, cmd->frame_start_time, cmd->period, cmd->offset, cmd->ran_long};
+  }
+
+  std::array<GPUDevice::PresentFeedback, 16> feedback;
+  const u32 count = g_gpu_device->FetchPresentFeedback(feedback);
+  bool changed = false;
+  for (u32 i = 0; i < count; i++)
+  {
+    const PresentTarget& target = s_present_targets[feedback[i].id % s_present_targets.size()];
+    if (target.id != feedback[i].id || target.frame_start_time == 0 || feedback[i].present_time < target.frame_start_time)
+      continue; // not locked to the screen, or forgotten
+
+    s_cutoff_tracker.Report(feedback[i].present_time - target.frame_start_time, target.offset, target.period,
+                            target.ran_long);
+    changed = true;
+    s_cutoff_reports.fetch_add(1, std::memory_order_relaxed);
+  }
+  if (changed)
+    s_cutoff_offset.store(s_cutoff_tracker.SignedOffset(), std::memory_order_release);
+}
+
+u64 GPUThreadCommands::GetCutoffReports()
+{
+  return s_cutoff_reports.load(std::memory_order_relaxed);
+}
+
+s64 GPUThreadCommands::GetCutoffOffset()
+{
+  return s_cutoff_offset.load(std::memory_order_acquire);
+}
+
+void GPUThreadCommands::ResetCutoffOffset()
+{
+  s_cutoff_offset.store(0, std::memory_order_release);
+  s_cutoff_reset.store(true, std::memory_order_release);
+}
+
+void GPUThreadCommands::GetDeadlineStats(u64* presents, u64* made)
+{
+  *presents = s_deadline_presents.load(std::memory_order_relaxed);
+  *made = s_deadline_made.load(std::memory_order_relaxed);
 }
 
 void GPUThreadCommands::PushSubmitPresent()

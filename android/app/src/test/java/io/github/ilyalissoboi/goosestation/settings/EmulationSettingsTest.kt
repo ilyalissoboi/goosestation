@@ -11,6 +11,12 @@ class EmulationSettingsTest {
     private fun values(vararg file: Pair<String, String>) =
         SettingValues.read(MemoryCoreSettings().apply { values += file }, EmulationSettings.all)
 
+    // On by default on Android: frames locked to the screen's refreshes, with less lag (pacing stage 2a).
+    @Test
+    fun syncToHostIsOnByDefault() {
+        assertEquals(true, values()[EmulationSettings.SYNC_TO_HOST])
+    }
+
     @Test
     fun speedsAreStoredAsFactors() {
         assertEquals(1.25f, EmulationSettings.factor(125))

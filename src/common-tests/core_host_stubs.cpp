@@ -231,6 +231,11 @@ void Host::ReleaseRenderWindow()
 {
 }
 
+bool Host::GetDisplayTimeline(DisplayTimeline* timeline)
+{
+  return false;
+}
+
 bool Host::IsFullscreen()
 {
   return false;

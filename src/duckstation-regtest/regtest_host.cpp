@@ -337,6 +337,11 @@ void Host::RequestSystemShutdown(bool allow_confirm, bool save_state)
   //
 }
 
+bool Host::GetDisplayTimeline(DisplayTimeline* timeline)
+{
+  return false;
+}
+
 bool Host::IsFullscreen()
 {
   return false;

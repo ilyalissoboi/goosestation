@@ -42,6 +42,22 @@ public:
   virtual bool ChangeSurface(const WindowInfo& new_wi) = 0;
   virtual void ResizeSurface(u32 new_surface_width = 0, u32 new_surface_height = 0) = 0;
   virtual bool SwapBuffers() = 0;
+
+  /// A frame as the screen showed it: its ID (GetLastFrameId() after its SwapBuffers()), when it was shown, and how
+  /// long it sat ready before the compositor took it (nanoseconds, the monotonic clock).
+  struct FrameTiming
+  {
+    u64 id;
+    u64 present_time;
+    s64 slack;
+  };
+
+  /// Whether frames report back (EGL_ANDROID_get_frame_timestamps).
+  virtual bool HasFrameTimings() const { return false; }
+  virtual u64 GetLastFrameId() const { return 0; }
+
+  /// Frames shown since the last call, oldest first, up to out.size(); how many.
+  virtual u32 FetchFrameTimings(std::span<FrameTiming> out) { return 0; }
   virtual bool IsCurrent() const = 0;
   virtual bool MakeCurrent() = 0;
   virtual bool DoneCurrent() = 0;

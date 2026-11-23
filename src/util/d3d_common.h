@@ -22,8 +22,6 @@ struct IDXGIFactory5;
 struct IDXGIAdapter1;
 struct IDXGIOutput;
 struct DXGI_MODE_DESC;
-struct IDXGISwapChain1;
-struct IDXGISwapChain2;
 
 namespace D3DCommon {
 // returns string representation of feature level
@@ -73,32 +71,4 @@ struct DXGIFormatMapping
 };
 const DXGIFormatMapping& GetFormatMapping(GPUTexture::Format format);
 GPUTexture::Format GetFormatForDXGIFormat(DXGI_FORMAT format);
-
-/// A flip-model swap chain's frame-latency waitable (DXGI 1.3; made with
-/// DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, which also stops Present() limiting the frames queued).
-class FrameLatencyWaiter
-{
-public:
-  FrameLatencyWaiter();
-  ~FrameLatencyWaiter();
-
-  /// Takes the swap chain's waitable, at a maximum latency of 1; false if it has none.
-  bool Attach(IDXGISwapChain1* swap_chain);
-  void Detach();
-  bool IsAttached() const { return (m_handle != nullptr); }
-
-  /// After each Present() on the swap chain, the blank first frame's included.
-  void Presented();
-
-  /// Waits until the present frames_back before the last has left the queue (the waitable is released once for each,
-  /// at the refresh the compositor takes it), up to timeout; a timeout of 0 only looks. Returns when it returned
-  /// (Common::Timer's clock), or 0 on a timeout.
-  u64 Wait(u32 frames_back, u64 timeout);
-
-private:
-  Microsoft::WRL::ComPtr<IDXGISwapChain2> m_swap_chain;
-  HANDLE m_handle = nullptr;
-  u64 m_presents = 0; // since Attach()
-  u64 m_taken = 0;    // releases taken, or counted as gone
-};
 } // namespace D3DCommon

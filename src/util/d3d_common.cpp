@@ -10,15 +10,12 @@
 #include "common/gsvector.h"
 #include "common/log.h"
 #include "common/string_util.h"
-#include "common/timer.h"
 
 #include "fmt/format.h"
 
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dxgi1_5.h>
-
-#include <algorithm>
 
 Log_SetChannel(D3DCommon);
 
@@ -514,83 +511,4 @@ GPUTexture::Format D3DCommon::GetFormatForDXGIFormat(DXGI_FORMAT format)
   }
 
   return GPUTexture::Format::Unknown;
-}
-
-D3DCommon::FrameLatencyWaiter::FrameLatencyWaiter() = default;
-
-D3DCommon::FrameLatencyWaiter::~FrameLatencyWaiter()
-{
-  Detach();
-}
-
-bool D3DCommon::FrameLatencyWaiter::Attach(IDXGISwapChain1* swap_chain)
-{
-  Detach();
-
-  Microsoft::WRL::ComPtr<IDXGISwapChain2> swap_chain2;
-  if (FAILED(swap_chain->QueryInterface(IID_PPV_ARGS(swap_chain2.GetAddressOf()))))
-    return false;
-
-  HANDLE handle = swap_chain2->GetFrameLatencyWaitableObject();
-  if (!handle)
-    return false;
-
-  if (FAILED(swap_chain2->SetMaximumFrameLatency(1)))
-  {
-    CloseHandle(handle);
-    return false;
-  }
-
-  // It starts with a release for the first frame's slot: taken, so each release after is a present leaving the queue.
-  WaitForSingleObjectEx(handle, 0, FALSE);
-
-  m_swap_chain = std::move(swap_chain2);
-  m_handle = handle;
-  m_presents = 0;
-  m_taken = 0;
-  return true;
-}
-
-void D3DCommon::FrameLatencyWaiter::Presented()
-{
-  if (m_handle)
-    m_presents++;
-}
-
-void D3DCommon::FrameLatencyWaiter::Detach()
-{
-  if (m_handle)
-  {
-    CloseHandle(m_handle);
-    m_handle = nullptr;
-  }
-  m_swap_chain.Reset();
-}
-
-u64 D3DCommon::FrameLatencyWaiter::Wait(u32 frames_back, u64 timeout)
-{
-  if (!m_handle)
-    return 0;
-  if (m_presents <= frames_back)
-    return Common::Timer::GetCurrentValue();
-
-  // The presents that must have left the queue, the one waited for last. The statistics can't say (windowed, they
-  // run two presents behind the screen), so the waitable's releases are counted, one a present.
-  const u64 target = m_presents - frames_back;
-
-  // Releases for presents nobody waited for: taken while they're there; any not there are counted as gone (the count
-  // may be capped, and those presents left the queue long since).
-  while (m_taken + 1 < target && WaitForSingleObjectEx(m_handle, 0, FALSE) == WAIT_OBJECT_0)
-    m_taken++;
-  m_taken = std::max(m_taken, target - 1);
-  if (m_taken >= target)
-    return Common::Timer::GetCurrentValue();
-
-  const DWORD ms =
-    (timeout == 0) ? 0 : static_cast<DWORD>(std::max(Common::Timer::ConvertValueToMilliseconds(timeout), 1.0));
-  if (WaitForSingleObjectEx(m_handle, ms, FALSE) != WAIT_OBJECT_0)
-    return 0;
-
-  m_taken++;
-  return Common::Timer::GetCurrentValue();
 }

@@ -301,6 +301,13 @@ call)*.
   - Windows can't be measured on screen from here, and on the Mac FIFO under the compositor cost a refresh.
   - The waits and the lock serve vsync On.
   - A follow-up turns Automatic on API by API once the player's on-screen check (lag against vsync off) passes.
+- **No D3D present waits yet** *(builder's call, 2026-11-24, measured on the Windows machine's screen)*.
+  - DXGI's frame statistics run two presents behind the screen in a window, so a wait for them always timed out:
+    19.7 VPS at vsync On.
+  - Counting the frame-latency waitable's releases instead held 59.95 VPS and 30.5 ms of lag once. In the next runs
+    it was no better than without the waits (85–100 ms, more frames held), so its releases don't reliably mark a
+    present leaving the queue.
+  - D3D11 and D3D12 are left as they were, and their waits are a follow-up.
 - **Success for 2b:**
   - On the Mac (Metal), measured from the presented handlers at the defaults: lag from input poll to screen no higher
     than the base branch's default (vsync off). Every frame shown for its refreshes (one at 60 Hz, two at 120) in at

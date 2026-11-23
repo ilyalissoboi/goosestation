@@ -20,7 +20,6 @@
 #include "common/scoped_guard.h"
 #include "common/small_string.h"
 #include "common/string_util.h"
-#include "common/timer.h"
 
 #include "D3D12MemAlloc.h"
 #include "fmt/format.h"
@@ -828,9 +827,6 @@ bool D3D12Device::CreateSwapChain(Error* error)
   if (m_using_allow_tearing)
     swap_chain_desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
-  // Presents are waited on (WaitForPresent()), so at most one frame stays queued with vsync.
-  swap_chain_desc.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-
   HRESULT hr = S_OK;
 
   if (m_is_exclusive_fullscreen)
@@ -838,7 +834,7 @@ bool D3D12Device::CreateSwapChain(Error* error)
     DXGI_SWAP_CHAIN_DESC1 fs_sd_desc = swap_chain_desc;
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fs_desc = {};
 
-    fs_sd_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    fs_sd_desc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
     fs_sd_desc.Width = fullscreen_mode.Width;
     fs_sd_desc.Height = fullscreen_mode.Height;
     fs_desc.RefreshRate = fullscreen_mode.RefreshRate;
@@ -872,9 +868,6 @@ bool D3D12Device::CreateSwapChain(Error* error)
   hr = m_dxgi_factory->MakeWindowAssociation(window_hwnd, DXGI_MWA_NO_WINDOW_CHANGES);
   if (FAILED(hr))
     WARNING_LOG("MakeWindowAssociation() to disable ALT+ENTER failed");
-
-  if (!m_latency_waiter.Attach(m_swap_chain.Get()))
-    WARNING_LOG("The swap chain has no frame-latency waitable: presents won't be waited on.");
 
   if (!CreateSwapChainRTV(error))
   {
@@ -973,7 +966,6 @@ void D3D12Device::DestroySwapChain()
   if (SUCCEEDED(m_swap_chain->GetFullscreenState(&is_fullscreen, nullptr)) && is_fullscreen)
     m_swap_chain->SetFullscreenState(FALSE, nullptr);
 
-  m_latency_waiter.Detach();
   m_swap_chain.Reset();
   m_is_exclusive_fullscreen = false;
 }
@@ -993,7 +985,6 @@ void D3D12Device::RenderBlankFrame()
                                              D3D12_RESOURCE_STATE_PRESENT);
   SubmitCommandList(false);
   m_swap_chain->Present(0, m_using_allow_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0);
-  m_latency_waiter.Presented();
 }
 
 bool D3D12Device::UpdateWindow()
@@ -1034,8 +1025,7 @@ void D3D12Device::ResizeWindow(s32 new_window_width, s32 new_window_height, floa
   DestroySwapChainRTVs();
 
   HRESULT hr = m_swap_chain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN,
-                                           (m_using_allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) |
-                                             DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
+                                           m_using_allow_tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
   if (FAILED(hr))
     ERROR_LOG("ResizeBuffers() failed: 0x{:08X}", static_cast<unsigned>(hr));
 
@@ -1182,18 +1172,6 @@ void D3D12Device::SubmitPresent()
   const UINT sync_interval = static_cast<UINT>(m_vsync_mode == GPUVSyncMode::FIFO);
   const UINT flags = (m_vsync_mode == GPUVSyncMode::Disabled && m_using_allow_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
   m_swap_chain->Present(sync_interval, flags);
-  m_latency_waiter.Presented();
-
-}
-
-bool D3D12Device::HasPresentWait() const
-{
-  return m_latency_waiter.IsAttached();
-}
-
-u64 D3D12Device::WaitForPresent(u32 frames_back, u64 timeout)
-{
-  return m_latency_waiter.Wait(frames_back, timeout);
 }
 
 #ifdef _DEBUG

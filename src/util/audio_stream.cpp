@@ -334,6 +334,8 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
     const u32 restart = std::min(std::max(m_restart_frames, num_frames + m_fade_frames), m_restart_cap);
     if (available < restart)
     {
+      // Nothing is heard, so a volume change needs no ramp.
+      m_current_volume = static_cast<float>(m_volume.load(std::memory_order_relaxed)) / 100.0f;
       std::memset(samples, 0, num_frames * channels * sizeof(SampleType));
       return;
     }
@@ -380,10 +382,13 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
           continue;
         }
 
-        // What's left only just covers a fade-out.
+        // What's left only just covers a fade-out. Muted, the producer writes nothing, which isn't an underrun.
         m_play_state = PlayState::FadingOut;
-        m_underrun_count.fetch_add(1, std::memory_order_relaxed);
-        m_fade_count.fetch_add(1, std::memory_order_relaxed);
+        if (m_volume.load(std::memory_order_relaxed) != 0)
+        {
+          m_underrun_count.fetch_add(1, std::memory_order_relaxed);
+          m_fade_count.fetch_add(1, std::memory_order_relaxed);
+        }
         if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch)
           StretchUnderrun();
       }
@@ -410,14 +415,37 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 
 void AudioStream::ApplyOutputVolume(SampleType* samples, u32 num_frames)
 {
-  if (m_volume != 100)
+  const u32 target_volume = m_volume.load(std::memory_order_relaxed);
+  const float target = static_cast<float>(target_volume) / 100.0f;
+  if (m_current_volume != target)
   {
+    // A step a callback would click: ramp, frame by frame.
+    const float step = 100.0f / static_cast<float>(m_sample_rate * VOLUME_RAMP_MS / 10u);
+    const u32 channels = m_output_channels;
+    u32 i = 0;
+    for (; i < num_frames && m_current_volume != target; i++)
+    {
+      m_current_volume = (m_current_volume < target) ? std::min(m_current_volume + step, target) :
+                                                       std::max(m_current_volume - step, target);
+      for (u32 c = 0; c < channels; c++)
+      {
+        SampleType& v = samples[i * channels + c];
+        v = static_cast<SampleType>(std::clamp(std::lrint(static_cast<float>(v) * m_current_volume), -32768l, 32767l));
+      }
+    }
+
+    samples += i * channels;
+    num_frames -= i;
+  }
+
+  if (target_volume != 100)
+  {
+    const float volume_mult = target;
     u32 num_samples = num_frames * m_output_channels;
 
     const u32 aligned_samples = Common::AlignDownPow2(num_samples, 8);
     num_samples -= aligned_samples;
 
-    const float volume_mult = static_cast<float>(m_volume) / 100.0f;
     const GSVector4 volume_multv = GSVector4(volume_mult);
     const SampleType* const aligned_samples_end = samples + aligned_samples;
     for (; samples != aligned_samples_end; samples += 8)
@@ -625,7 +653,7 @@ void AudioStream::PauseDevice(bool paused)
 
 void AudioStream::SetOutputVolume(u32 volume)
 {
-  m_volume = volume;
+  m_volume.store(volume, std::memory_order_relaxed);
 }
 
 void AudioStream::BeginWrite(SampleType** buffer_ptr, u32* num_frames)
@@ -721,7 +749,7 @@ void AudioStream::ExpandAllocate()
 void AudioStream::EndWrite(u32 num_frames)
 {
   // don't bother committing anything when muted
-  if (m_volume == 0)
+  if (m_volume.load(std::memory_order_relaxed) == 0)
     return;
 
   m_staging_buffer_pos += num_frames * NUM_INPUT_CHANNELS;

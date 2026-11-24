@@ -143,6 +143,7 @@ public:
 
   /// How long a fade in or out takes.
   static constexpr u32 FADE_MS = 4;
+  static constexpr u32 VOLUME_RAMP_MS = 10;
 
   struct DeviceInfo
   {
@@ -178,7 +179,7 @@ public:
   ALWAYS_INLINE u32 GetOutputChannels() const { return m_internal_channels; }
   ALWAYS_INLINE u32 GetBufferSize() const { return m_buffer_size; }
   ALWAYS_INLINE u32 GetTargetBufferSize() const { return m_target_buffer_size; }
-  ALWAYS_INLINE u32 GetOutputVolume() const { return m_volume; }
+  ALWAYS_INLINE u32 GetOutputVolume() const { return m_volume.load(std::memory_order_relaxed); }
   ALWAYS_INLINE float GetNominalTempo() const { return m_nominal_rate; }
   ALWAYS_INLINE bool IsPaused() const { return m_paused; }
 
@@ -190,6 +191,7 @@ public:
   /// Temporarily pauses the stream, preventing it from requesting data.
   virtual void SetPaused(bool paused);
 
+  /// Changes are ramped over VOLUME_RAMP_MS for a full-scale change.
   void SetOutputVolume(u32 volume);
 
   void BeginWrite(SampleType** buffer_ptr, u32* num_frames);
@@ -241,7 +243,7 @@ protected:
   static void StereoSampleReaderImpl(SampleType* dest, const SampleType* src, u32 num_frames);
 
   u32 m_sample_rate = 0;
-  u32 m_volume = 100;
+  std::atomic<u32> m_volume{100}; // the target; the consumer ramps toward it
   AudioStreamParameters m_parameters;
   u8 m_internal_channels = 0;
   u8 m_output_channels = 0;
@@ -316,6 +318,7 @@ private:
   u32 m_restart_cap = 0;
   std::unique_ptr<float[]> m_fade_curve;
   std::array<SampleType, MAX_OUTPUT_CHANNELS> m_last_frame = {};
+  float m_current_volume = 1.0f;
 
   std::atomic<u32> m_underrun_count{0};
   std::atomic<u32> m_overflow_count{0};

@@ -262,3 +262,46 @@ TEST(AudioStream, CountersResetWhenRead)
   EXPECT_EQ(c.clears, 0u);
   EXPECT_EQ(c.cuts, 0u);
 }
+
+TEST(AudioStream, VolumeChangeRamps)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  sine.freq = 0.0; // a constant, so the ramp shows on its own
+  sine.phase = 3.14159265358979323846 / 2.0;
+  Listener ear;
+
+  Write(stream, sine.Next(1792));
+  ear.Read(stream, 512);
+  stream.SetOutputVolume(50);
+
+  // Half of a 10 ms full-scale ramp: 220 frames, then steady at half.
+  const Frames out = ear.Read(stream, 512);
+  EXPECT_GT(out[100 * 2], 5100);
+  EXPECT_LT(out[100 * 2], 9900);
+  for (u32 i = 230; i < 512; i++)
+    ASSERT_EQ(out[i * 2], 5000) << i;
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+}
+
+TEST(AudioStream, MuteAndUnmuteFadesBackIn)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+
+  Write(stream, sine.Next(1280));
+  ear.Read(stream, 512);
+  stream.GetAndResetCounters();
+
+  stream.SetOutputVolume(0);
+  Write(stream, sine.Next(1024)); // dropped while muted
+  ear.Read(stream, 1536);
+  EXPECT_EQ(stream.GetAndResetCounters().underruns, 0u);
+
+  stream.SetOutputVolume(100);
+  Write(stream, sine.Next(1280));
+  const Frames out = ear.Read(stream, 1024);
+  EXPECT_FALSE(AllZero(out, FADE));
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+}

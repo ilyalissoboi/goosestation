@@ -131,6 +131,19 @@ public:
   static constexpr AudioBackend DEFAULT_BACKEND = AudioBackend::AAudio;
 #endif
 
+  /// What the stream did since the last read of these, for the statistics.
+  struct Counters
+  {
+    u32 underruns = 0; ///< Gaps from running out of audio.
+    u32 overflows = 0; ///< Times audio was dropped because the buffer was full.
+    u32 fades = 0;     ///< Fade-outs, for any cause.
+    u32 clears = 0;    ///< Times the queued audio was emptied.
+    u32 cuts = 0;      ///< Fade-outs that couldn't finish before the device stopped.
+  };
+
+  /// How long a fade in or out takes.
+  static constexpr u32 FADE_MS = 4;
+
   struct DeviceInfo
   {
     std::string name;
@@ -170,6 +183,9 @@ public:
   ALWAYS_INLINE bool IsPaused() const { return m_paused; }
 
   u32 GetBufferedFramesRelaxed() const;
+
+  /// Returns the counters and starts them again. Any thread.
+  Counters GetAndResetCounters();
 
   /// Temporarily pauses the stream, preventing it from requesting data.
   virtual void SetPaused(bool paused);
@@ -213,6 +229,9 @@ protected:
   AudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   void BaseInitialize(SampleReader sample_reader);
 
+  /// Stops or starts the device's callbacks. Backends override it; it records the state in m_paused.
+  virtual void PauseDevice(bool paused);
+
   void ReadFrames(SampleType* samples, u32 num_frames);
 
   template<AudioExpansionMode mode, ReadChannel c0 = READ_CHANNEL_NONE, ReadChannel c1 = READ_CHANNEL_NONE,
@@ -227,7 +246,6 @@ protected:
   u8 m_internal_channels = 0;
   u8 m_output_channels = 0;
   bool m_stretch_inactive = false;
-  bool m_filling = false;
   bool m_paused = false;
 
 private:
@@ -259,6 +277,10 @@ private:
 
   void InternalWriteFrames(SampleType* samples, u32 num_frames);
 
+  // The consumer: copies frames out of the ring and advances the read position.
+  void ReadFromRing(SampleType* samples, u32 num_frames);
+  void ApplyOutputVolume(SampleType* samples, u32 num_frames);
+
 #ifndef __ANDROID__
   void ExpandAllocate();
 #endif
@@ -278,6 +300,28 @@ private:
 
   std::atomic<u32> m_rpos{0};
   std::atomic<u32> m_wpos{0};
+
+  // The consumer's gain envelope, touched only by ReadFrames(): silent while filling (until m_restart_frames are
+  // buffered), fading in and then full while playing, fading out to a gap. The gain is m_fade_curve[m_fade_pos].
+  enum class PlayState : u8
+  {
+    Filling,
+    Playing,
+    FadingOut,
+  };
+  PlayState m_play_state = PlayState::Filling;
+  u32 m_fade_pos = 0;
+  u32 m_fade_frames = 0;
+  u32 m_restart_frames = 0;
+  u32 m_restart_cap = 0;
+  std::unique_ptr<float[]> m_fade_curve;
+  std::array<SampleType, MAX_OUTPUT_CHANNELS> m_last_frame = {};
+
+  std::atomic<u32> m_underrun_count{0};
+  std::atomic<u32> m_overflow_count{0};
+  std::atomic<u32> m_fade_count{0};
+  std::atomic<u32> m_clear_count{0};
+  std::atomic<u32> m_cut_count{0};
 
   void* m_soundtouch = nullptr;
 

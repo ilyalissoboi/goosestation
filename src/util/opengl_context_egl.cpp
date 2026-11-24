@@ -303,6 +303,10 @@ bool OpenGLContextEGL::SwapBuffers()
     }
   }
 
+  if (m_next_present_time != 0 && GLAD_EGL_ANDROID_presentation_time)
+    eglPresentationTimeANDROID(m_display, m_surface, static_cast<EGLnsecsANDROID>(m_next_present_time));
+  m_next_present_time = 0;
+
   return eglSwapBuffers(m_display, m_surface);
 }
 
@@ -487,6 +491,11 @@ void OpenGLContextEGL::DestroyContext()
 bool OpenGLContextEGL::HasFrameTimings() const
 {
   return m_frame_timestamps;
+}
+
+void OpenGLContextEGL::SetNextPresentTime(u64 time)
+{
+  m_next_present_time = m_frame_timestamps ? time : 0;
 }
 
 u64 OpenGLContextEGL::GetLastFrameId() const

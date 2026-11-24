@@ -25,6 +25,7 @@ public:
   bool HasFrameTimings() const override;
   u64 GetLastFrameId() const override;
   u32 FetchFrameTimings(std::span<FrameTiming> out) override;
+  void SetNextPresentTime(u64 time) override;
   bool IsCurrent() const override;
   bool MakeCurrent() override;
   bool DoneCurrent() override;
@@ -66,4 +67,5 @@ protected:
   u64 m_last_frame_id = 0;
   std::array<u64, MAX_PENDING_FRAMES> m_pending_frames = {};
   u32 m_pending_frame_count = 0;
+  u64 m_next_present_time = 0; // EGL_ANDROID_presentation_time, for the next swap
 };

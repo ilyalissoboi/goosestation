@@ -118,6 +118,7 @@ public:
   bool HasPresentFeedback() const override;
   u64 GetLastPresentId() const override;
   u32 FetchPresentFeedback(std::span<PresentFeedback> out) override;
+  void SetNextPresentTime(u64 time) override;
 
   bool SetGPUTimingEnabled(bool enabled) override;
   float GetAndResetAccumulatedGPUTime() override;

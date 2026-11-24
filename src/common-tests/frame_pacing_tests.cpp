@@ -38,6 +38,8 @@ TEST(FramePacing, RefreshesPerFrameFindsTheMultiple)
   EXPECT_EQ(FramePacing::RefreshesPerFrame(59.94f, NTSC), 1u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(100.0f, 50.0f), 2u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(240.0f, NTSC), 4u);
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(118.36f, NTSC), 2u); // the Thor's 120 Hz panel, measured
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(59.77f, NTSC), 1u);  // and its 60 Hz
 }
 
 TEST(FramePacing, RefreshesPerFrameIsZeroWithoutOne)
@@ -47,6 +49,8 @@ TEST(FramePacing, RefreshesPerFrameIsZeroWithoutOne)
   EXPECT_EQ(FramePacing::RefreshesPerFrame(0.0f, NTSC), 0u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(60.0f, 0.0f), 0u);
   EXPECT_EQ(FramePacing::RefreshesPerFrame(300.0f, NTSC), 0u); // five refreshes a frame is past the limit
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(117.0f, NTSC), 0u); // 2.2% off two refreshes
+  EXPECT_EQ(FramePacing::RefreshesPerFrame(61.3f, NTSC), 0u);  // 2.5% off one
 }
 
 TEST(FramePacing, LockedSpeedRunsTheGameAtTheRefresh)
@@ -383,6 +387,26 @@ TEST(FramePacing, ThePeriodSkipsAMissedTickButFollowsANewRate)
   for (int i = 0; i < FramePacing::PeriodEstimator::NEW_RATE_TICKS; i++)
     period.Add(Ms(1000.0 / 120.0));
   EXPECT_NEAR(ToMs(period.Period()), 1000.0 / 120.0, 0.05);
+}
+
+TEST(FramePacing, TheWakeKnowsItsRefresh)
+{
+  // Due 4 ms before the refresh it's for: 112.67 is the deadline of the refresh at 116.67.
+  const FramePacing::Wake w = FramePacing::NextWake(Screen60(), Ms(101), 1, 0, Ms(3), Ms(1));
+  EXPECT_NEAR(ToMs(w.refresh), ToMs(w.deadline) + 4.0, 0.001);
+  EXPECT_NEAR(ToMs(w.refresh), 116.667, 0.01);
+
+  EXPECT_EQ(FramePacing::NextWake(DisplayTimeline{}, Ms(50), 1, 0, Ms(3), Ms(1)).refresh, 0u);
+}
+
+TEST(FramePacing, TwoRefreshesAFrameAskNotToBeShownEarly)
+{
+  // 120 Hz: a frame on two (or more) refreshes may be shown no sooner than half a refresh before its own.
+  const double p = 1000.0 / 120.0;
+  EXPECT_NEAR(ToMs(FramePacing::DesiredPresent(Ms(500), Ms(p), 2)), 500.0 - p / 2, 0.001);
+  EXPECT_NEAR(ToMs(FramePacing::DesiredPresent(Ms(500), Ms(p), 3)), 500.0 - p / 2, 0.001);
+  EXPECT_EQ(FramePacing::DesiredPresent(Ms(500), Ms(p), 1), 0u); // one refresh a frame: no request
+  EXPECT_EQ(FramePacing::DesiredPresent(0, Ms(p), 2), 0u);       // no refresh known
 }
 
 TEST(FramePacing, VSyncWantedFollowsTheMode)

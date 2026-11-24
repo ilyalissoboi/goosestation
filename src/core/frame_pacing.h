@@ -24,7 +24,8 @@ struct DisplayTimeline
 namespace FramePacing {
 
 /// How many refreshes each console frame takes when the screen's rate is a whole multiple of the console's (within
-/// 0.5%), up to four; 0 when it isn't (PAL on 60 Hz, 144 Hz).
+/// 2%: a panel's real rate can be a percent off its nominal one, the Thor's 120 Hz is 118.36), up to four; 0 when it
+/// isn't (PAL on 60 Hz, 144 Hz).
 u32 RefreshesPerFrame(float refresh_hz, float console_hz);
 
 /// The game's speed that puts one frame on every refreshes_per_frame refreshes.
@@ -34,6 +35,7 @@ struct Wake
 {
   Common::Timer::Value wake_time; // start the next frame then
   Common::Timer::Value deadline;  // it's due then (0 without a timeline)
+  Common::Timer::Value refresh;   // the timeline's expected present of the refresh it's due for (0 without one)
 };
 
 /// When to start the next frame: the first deadline at least refreshes_per_frame refreshes after last_deadline (0
@@ -43,6 +45,11 @@ struct Wake
 Wake NextWake(const DisplayTimeline& timeline, Common::Timer::Value now, u32 refreshes_per_frame,
               Common::Timer::Value last_deadline, Common::Timer::Value predicted_frame_time,
               Common::Timer::Value margin, Common::Timer::Value last_wake = 0);
+
+/// The earliest a frame due for the refresh at refresh may be shown, when each frame takes two or more refreshes:
+/// half a refresh before it, so one ready early waits for its refresh instead of taking the one before. 0 (no
+/// request) on one refresh a frame, where it only adds lag, or without a refresh.
+Common::Timer::Value DesiredPresent(Common::Timer::Value refresh, Common::Timer::Value period, u32 refreshes_per_frame);
 
 /// How long the next frame will take, to be ready by its deadline: the 90th percentile of the last 120 frames, so a
 /// rare long one (a shader compile) costs that frame alone, not every frame's lag. Frames over a second are skipped.

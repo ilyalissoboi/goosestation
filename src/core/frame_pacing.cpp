@@ -9,7 +9,7 @@
 u32 FramePacing::RefreshesPerFrame(float refresh_hz, float console_hz)
 {
   static constexpr u32 MAX_REFRESHES = 4;
-  static constexpr float TOLERANCE = 0.005f;
+  static constexpr float TOLERANCE = 0.02f;
 
   if (refresh_hz <= 0.0f || console_hz <= 0.0f)
     return 0;
@@ -33,7 +33,7 @@ FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common:
                                         Common::Timer::Value last_wake)
 {
   if (timeline.period == 0 || refreshes_per_frame == 0)
-    return Wake{now, 0};
+    return Wake{now, 0, 0};
 
   const s64 period = static_cast<s64>(timeline.period);
 
@@ -61,7 +61,17 @@ FramePacing::Wake FramePacing::NextWake(const DisplayTimeline& timeline, Common:
   Common::Timer::Value wake = static_cast<Common::Timer::Value>(deadline - frame_time);
   if (overlong)
     wake = (last_wake != 0) ? std::max(now, last_wake + static_cast<Common::Timer::Value>(slot)) : now;
-  return Wake{wake, static_cast<Common::Timer::Value>(deadline)};
+  return Wake{wake, static_cast<Common::Timer::Value>(deadline),
+              static_cast<Common::Timer::Value>(deadline + static_cast<s64>(timeline.deadline_lead))};
+}
+
+Common::Timer::Value FramePacing::DesiredPresent(Common::Timer::Value refresh, Common::Timer::Value period,
+                                                 u32 refreshes_per_frame)
+{
+  if (refresh == 0 || refreshes_per_frame < 2)
+    return 0;
+
+  return refresh - period / 2;
 }
 
 bool FramePacing::ShouldLock(bool sync_to_host, bool has_timeline, u32 refreshes_per_frame, float target_speed,

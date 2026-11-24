@@ -243,6 +243,11 @@ call, pending the player's yes)*:
   presented handlers) and vsync on by default only where one keeps at most a frame queued — checked by hand on Windows,
   where SSH can't present.
 
+*Measured again 2026-11-23 (`docs/superpowers/plans/2026-11-23-pacing-120hz.md`):* the Thor's panel runs at 118.36 Hz
+when set to 120 and 59.77 Hz at 60 (SurfaceFlinger's own present times), so the lock takes a screen within 2% of a
+multiple; at 120 Hz "even" is counted as every frame shown for exactly two refreshes in a second (the 60 Hz test, the
+slowest frame at most 17.5 ms, can't see a frame shown early).
+
 **Success for 2a**, on the Thor's own screen at the defaults: still at least 95% of seconds with every frame shown for
 one refresh (today 100%); input lag (the core's input poll to on screen) at least 10 ms lower than today on Vulkan and
 OpenGL ES at 1×, and no higher in the heavy case; at 120 Hz, each NTSC frame shown for two refreshes; PAL games as

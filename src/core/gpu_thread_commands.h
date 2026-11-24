@@ -184,6 +184,7 @@ struct GPUThreadPresentCommand : public GPUThreadCommand
   s64 offset;                          // how far past the timeline's deadline it was aimed (negative: before)
   bool ran_long;                       // its frame's own work took longer than planned (late whatever the aim)
   u32 refreshes;                       // the refreshes it should be shown for (the lock's, or the frame rate's)
+  Common::Timer::Value desired_present; // not to be shown before then (two refreshes a frame), else 0
 };
 
 namespace GPUThreadCommands {
@@ -195,7 +196,7 @@ void Handle(const GPUThreadCommand* cmd);
 void PushPresent(std::unique_ptr<ImGuiDrawCopy> ui, Common::Timer::Value input_poll_time,
                  Common::Timer::Value frame_start_time, bool show_display, bool skip_present, bool explicit_present,
                  Common::Timer::Value deadline = 0, Common::Timer::Value period = 0, s64 offset = 0,
-                 bool ran_long = false, u32 refreshes = 1);
+                 bool ran_long = false, u32 refreshes = 1, Common::Timer::Value desired_present = 0);
 
 /// The screen's refreshes as the present waits found them (desktop's timeline for the lock); false without one: no
 /// wait, presents not blocking, or nothing shown lately.

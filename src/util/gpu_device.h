@@ -742,6 +742,10 @@ public:
   /// The presents shown since the last call, oldest first, up to out.size(); how many.
   virtual u32 FetchPresentFeedback(std::span<PresentFeedback> out) { return 0; }
 
+  /// The earliest the next present may be shown (Common::Timer's clock, 0 for none), for that present only; where
+  /// presents report back (VK_GOOGLE_display_timing's desiredPresentTime, eglPresentationTimeANDROID).
+  virtual void SetNextPresentTime(u64 time) {}
+
   /// Whether presents can be waited on until the screen shows them (Vulkan's VK_KHR_present_wait, a DXGI
   /// frame-latency waitable, Metal's presented handlers).
   virtual bool HasPresentWait() const { return false; }

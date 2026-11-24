@@ -197,6 +197,8 @@ public:
   void BeginWrite(SampleType** buffer_ptr, u32* num_frames);
   void EndWrite(u32 num_frames);
 
+  /// Drops what's queued: what's playing fades out, and audio written from now on fades in once enough is buffered.
+  /// From the producer's thread; the consumer applies it at its next callback.
   void EmptyBuffer();
 
   /// Nominal rate is used for both resampling and timestretching, input samples are assumed to be this amount faster
@@ -281,6 +283,7 @@ private:
 
   // The consumer: copies frames out of the ring and advances the read position.
   void ReadFromRing(SampleType* samples, u32 num_frames);
+  void ApplyClear(u32 wpos);
   void ApplyOutputVolume(SampleType* samples, u32 num_frames);
 
 #ifndef __ANDROID__
@@ -313,12 +316,23 @@ private:
   };
   PlayState m_play_state = PlayState::Filling;
   u32 m_fade_pos = 0;
+  bool m_fade_holding = false; // a fade-out past its data holds the last frame until it ends
   u32 m_fade_frames = 0;
   u32 m_restart_frames = 0;
   u32 m_restart_cap = 0;
   std::unique_ptr<float[]> m_fade_curve;
   std::array<SampleType, MAX_OUTPUT_CHANNELS> m_last_frame = {};
   float m_current_volume = 1.0f;
+
+  // A clear: the producer publishes its generation (high 32 bits) and write position (low 32 bits). The consumer
+  // fades out what's before that position, skips it, and stores the generation in m_cleared_generation.
+  std::atomic<u64> m_clear_request{0};
+  std::atomic<u32> m_cleared_generation{0};
+  u32 m_clear_generation = 0;      // producer
+  u32 m_seen_clear_generation = 0; // consumer
+  u32 m_clear_pos = 0;             // consumer
+  bool m_clear_pending = false;    // consumer
+  bool m_discard_writes = false;   // the null stream keeps nothing
 
   std::atomic<u32> m_underrun_count{0};
   std::atomic<u32> m_overflow_count{0};

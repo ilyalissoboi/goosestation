@@ -68,6 +68,7 @@ std::unique_ptr<AudioStream> AudioStream::CreateNullStream(u32 sample_rate, u32 
 
   std::unique_ptr<AudioStream> stream(new AudioStream(sample_rate, params));
   stream->BaseInitialize(&StereoSampleReaderImpl);
+  stream->m_discard_writes = true;
   return stream;
 }
 
@@ -321,11 +322,45 @@ void AudioStream::ReadFromRing(SampleType* samples, u32 num_frames)
   m_rpos.store(rpos, std::memory_order_release);
 }
 
+void AudioStream::ApplyClear(u32 wpos)
+{
+  // The callback may already have read past the clear's position (written after it, and read before the request was
+  // seen): then there's nothing stale left, and the read position never moves back.
+  const u32 rpos = m_rpos.load(std::memory_order_relaxed);
+  const u32 stale = (m_clear_pos + m_buffer_size - rpos) % m_buffer_size;
+  const u32 available = (wpos + m_buffer_size - rpos) % m_buffer_size;
+  if (stale <= available)
+    m_rpos.store(m_clear_pos, std::memory_order_release);
+
+  m_clear_pending = false;
+  m_cleared_generation.store(m_seen_clear_generation, std::memory_order_release);
+}
+
 void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 {
   const u32 channels = m_output_channels;
-  const u32 rpos = m_rpos.load(std::memory_order_relaxed);
+
+  // The request first: the write position read after it is at or beyond the clear's.
+  const u64 clear_request = m_clear_request.load(std::memory_order_acquire);
+  if (static_cast<u32>(clear_request >> 32) != m_seen_clear_generation)
+  {
+    m_seen_clear_generation = static_cast<u32>(clear_request >> 32);
+    m_clear_pos = static_cast<u32>(clear_request);
+    m_clear_pending = true;
+    m_clear_count.fetch_add(1, std::memory_order_relaxed);
+    if (m_play_state == PlayState::Playing)
+    {
+      m_play_state = PlayState::FadingOut;
+      if (m_volume.load(std::memory_order_relaxed) != 0)
+        m_fade_count.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+
   const u32 wpos = m_wpos.load(std::memory_order_acquire);
+  if (m_play_state == PlayState::Filling && m_clear_pending)
+    ApplyClear(wpos);
+
+  const u32 rpos = m_rpos.load(std::memory_order_relaxed);
   const u32 available = (wpos + m_buffer_size - rpos) % m_buffer_size;
 
   // Silent, consuming nothing, until enough is buffered that this callback and a fade-out fit.
@@ -350,7 +385,14 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
   u32 consume;
   if (m_play_state == PlayState::FadingOut)
   {
-    consume = std::min(available, m_fade_pos);
+    // A clear's fade-out plays only what's before the clear.
+    u32 limit = m_fade_holding ? 0 : available;
+    if (m_clear_pending && !m_fade_holding)
+    {
+      const u32 stale = (m_clear_pos + m_buffer_size - rpos) % m_buffer_size;
+      limit = (stale <= available) ? stale : 0;
+    }
+    consume = std::min({limit, m_fade_pos, num_frames});
   }
   else if (available < num_frames)
   {
@@ -396,12 +438,16 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
       if (m_play_state == PlayState::FadingOut && m_fade_pos > 0)
       {
         // Past the data, the last frame played is held as it fades, so the fade always has its full length.
-        const SampleType* const src = (i < consume) ? frame : m_last_frame.data();
+        m_fade_holding |= (i >= consume);
+        const SampleType* const src = m_fade_holding ? m_last_frame.data() : frame;
         const float gain = m_fade_curve[m_fade_pos];
         for (u32 c = 0; c < channels; c++)
           frame[c] = static_cast<SampleType>(std::lrint(static_cast<float>(src[c]) * gain));
         if (--m_fade_pos == 0)
+        {
           m_play_state = PlayState::Filling;
+          m_fade_holding = false;
+        }
         continue;
       }
 
@@ -409,6 +455,9 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
       std::memset(frame, 0, channels * sizeof(SampleType));
     }
   }
+
+  if (m_play_state == PlayState::Filling && m_clear_pending)
+    ApplyClear(wpos);
 
   ApplyOutputVolume(samples, num_frames);
 }
@@ -605,9 +654,17 @@ void AudioStream::EmptyBuffer()
     soundtouch_clear(m_soundtouch);
     if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch)
       soundtouch_setTempo(m_soundtouch, m_nominal_rate);
+
+    // The tempo's averaging starts again from the new audio.
+    m_stretch_reset = STRETCH_RESET_THRESHOLD;
   }
 
-  m_wpos.store(m_rpos.load(std::memory_order_acquire), std::memory_order_release);
+  m_staging_buffer_pos = 0;
+
+  // The consumer moves its own read position; this thread never writes it.
+  m_clear_generation++;
+  m_clear_request.store((static_cast<u64>(m_clear_generation) << 32) | m_wpos.load(std::memory_order_relaxed),
+                        std::memory_order_release);
 }
 
 void AudioStream::SetNominalRate(float tempo)
@@ -748,8 +805,8 @@ void AudioStream::ExpandAllocate()
 
 void AudioStream::EndWrite(u32 num_frames)
 {
-  // don't bother committing anything when muted
-  if (m_volume.load(std::memory_order_relaxed) == 0)
+  // don't bother committing anything when muted, or with no output
+  if (m_discard_writes || m_volume.load(std::memory_order_relaxed) == 0)
     return;
 
   m_staging_buffer_pos += num_frames * NUM_INPUT_CHANNELS;

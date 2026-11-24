@@ -6,6 +6,10 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <random>
+#include <thread>
 #include <cmath>
 #include <cstdlib>
 #include <vector>
@@ -110,6 +114,30 @@ int MaxStep(const Frames& f)
   for (size_t i = 2; i < f.size(); i++)
     step = std::max(step, std::abs(f[i] - f[i - 2]));
   return step;
+}
+
+constexpr u32 NOT_FOUND = ~0u;
+
+// Where `expected` starts in `out`, found by its frames after a fade-in (which are exact); the frames before are
+// checked to be no louder than expected's, as a fade-in's are.
+u32 Locate(const Frames& out, const Frames& expected)
+{
+  const size_t frames = out.size() / 2;
+  constexpr u32 PROBE = 64;
+  for (size_t at = FADE; at + PROBE <= frames; at++)
+  {
+    if (std::equal(&out[at * 2], &out[(at + PROBE) * 2], &expected[FADE * 2]))
+    {
+      const u32 start = static_cast<u32>(at - FADE);
+      for (u32 i = 0; i < FADE; i++)
+      {
+        if (std::abs(out[(start + i) * 2]) > std::abs(expected[i * 2]) + 1)
+          return NOT_FOUND;
+      }
+      return start;
+    }
+  }
+  return NOT_FOUND;
 }
 
 bool AllZero(const Frames& f, size_t from_frame = 0, size_t to_frame = SIZE_MAX)
@@ -304,4 +332,173 @@ TEST(AudioStream, MuteAndUnmuteFadesBackIn)
   const Frames out = ear.Read(stream, 1024);
   EXPECT_FALSE(AllZero(out, FADE));
   EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+}
+
+namespace {
+// Plays until full gain, so a clear has something audible to fade.
+void PlayUntilFull(FakeAudioStream& stream, Sine& sine, Listener& ear)
+{
+  Write(stream, sine.Next(1280));
+  ear.Read(stream, 512);
+  stream.GetAndResetCounters();
+}
+} // namespace
+
+TEST(AudioStream, EmptyBufferFadesOutAndDropsStaleAudio)
+{
+  FakeAudioStream stream(Params());
+  Sine old_sine;
+  Listener ear;
+  PlayUntilFull(stream, old_sine, ear);
+
+  stream.EmptyBuffer();
+  Sine new_sine;
+  new_sine.freq = 300.0;
+  new_sine.amplitude = 7000.0;
+  const Frames fresh = new_sine.Next(1280);
+  Write(stream, fresh);
+
+  const Frames out = ear.Read(stream, 1536);
+  // The old sine fades out within a fade, then silence, then the new one from its first frame, fading in.
+  const u32 start = Locate(out, fresh);
+  ASSERT_NE(start, NOT_FOUND);
+  EXPECT_TRUE(AllZero(out, FADE, start));
+  for (u32 i = FADE; start + i < 1536; i++)
+    ASSERT_EQ(out[(start + i) * 2], fresh[i * 2]) << i;
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+
+  const AudioStream::Counters c = stream.GetAndResetCounters();
+  EXPECT_EQ(c.fades, 1u);
+  EXPECT_EQ(c.clears, 1u);
+  EXPECT_EQ(c.underruns, 0u);
+}
+
+TEST(AudioStream, EmptyBufferWhileFillingIsImmediate)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+  Write(stream, sine.Next(512));
+
+  stream.EmptyBuffer();
+  EXPECT_TRUE(AllZero(ear.Read(stream, 256)));
+  EXPECT_EQ(stream.GetBufferedFramesRelaxed(), 0u);
+
+  const AudioStream::Counters c = stream.GetAndResetCounters();
+  EXPECT_EQ(c.clears, 1u);
+  EXPECT_EQ(c.fades, 0u);
+}
+
+TEST(AudioStream, RepeatedClearsRecover)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+  PlayUntilFull(stream, sine, ear);
+
+  Frames tail;
+  for (int i = 0; i < 10; i++)
+  {
+    stream.EmptyBuffer();
+    tail = sine.Next(64);
+    Write(stream, tail);
+    ear.Read(stream, 64);
+  }
+
+  // What came after the last clear plays, from its first frame.
+  Frames after = sine.Next(1280);
+  Write(stream, after);
+  after.insert(after.begin(), tail.begin(), tail.end());
+  const Frames out = ear.Read(stream, 1024);
+  const u32 start = Locate(out, after);
+  ASSERT_NE(start, NOT_FOUND);
+  EXPECT_TRUE(AllZero(out, 0, start));
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+  EXPECT_EQ(stream.GetAndResetCounters().fades, 1u);
+}
+
+TEST(AudioStream, NullStreamDiscards)
+{
+  std::unique_ptr<AudioStream> stream = AudioStream::CreateNullStream(RATE, 50);
+  Sine sine;
+  Write(*stream, sine.Next(4096));
+  EXPECT_EQ(stream->GetBufferedFramesRelaxed(), 0u);
+  const AudioStream::Counters c = stream->GetAndResetCounters();
+  EXPECT_EQ(c.overflows + c.underruns + c.fades + c.clears + c.cuts, 0u);
+}
+
+TEST(AudioStream, UnderrunFadeAcrossSmallCallbacksKeepsHolding)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+  Write(stream, sine.Next(1280));
+  ear.Read(stream, 1240);
+
+  // 64-frame callbacks: the fade (176 frames) spans three. New audio arriving mid-fade waits for the restart.
+  Frames out = ear.Read(stream, 64);
+  Write(stream, sine.Next(1280));
+  for (int i = 0; i < 3; i++)
+  {
+    const Frames more = ear.Read(stream, 64);
+    out.insert(out.end(), more.begin(), more.end());
+  }
+  for (u32 i = 41; i < FADE; i++)
+    EXPECT_LE(std::abs(out[i * 2]), std::abs(out[(i - 1) * 2])) << i;
+  EXPECT_TRUE(AllZero(out, FADE, 192)); // the new audio fades in from the next callback
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+}
+
+TEST(AudioStream, ConcurrentClearsNeverReplayOldAudio)
+{
+  // The left channel counts frames (mod 30000), the right is 30000: their ratio gives the frame through any fade.
+  FakeAudioStream stream(Params());
+  std::atomic<bool> stop{false};
+
+  std::thread producer([&]() {
+    std::mt19937 rng(1234);
+    u32 index = 0;
+    while (!stop.load())
+    {
+      Frames f(64 * 2);
+      for (u32 i = 0; i < 64; i++, index++)
+      {
+        f[i * 2] = static_cast<s16>(index % 30000);
+        f[i * 2 + 1] = 30000;
+      }
+      // Kept topped up, with a clear every few chunks, so clears land while the callback is reading.
+      while (!stop.load() && stream.GetBufferedFramesRelaxed() > 1600)
+        std::this_thread::yield();
+      Write(stream, f);
+      if (rng() % 30 == 0)
+        stream.EmptyBuffer();
+    }
+  });
+
+  Frames heard;
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < end)
+  {
+    Frames out(256 * 2);
+    stream.Read(out.data(), 256);
+    heard.insert(heard.end(), out.begin(), out.end());
+    std::this_thread::sleep_for(std::chrono::microseconds(200));
+  }
+  stop.store(true);
+  producer.join();
+
+  int last = -1;
+  u32 loud = 0;
+  for (size_t i = 0; i < heard.size(); i += 2)
+  {
+    if (heard[i + 1] <= 8000) // below that, rounding blurs the ratio by more than a few frames
+      continue;
+    loud++;
+    const int index = static_cast<int>(std::lround(30000.0 * heard[i] / heard[i + 1]));
+    // A replay goes back by at most the ring's length; a bigger step back is the wrap at 30000 after a skip forward.
+    if (last >= 0 && index < last - 8 && last - index < 2400)
+      FAIL() << "frame " << i / 2 << " went back from " << last << " to " << index;
+    last = index;
+  }
+  EXPECT_GT(loud, 10000u);
 }

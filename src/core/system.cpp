@@ -4677,8 +4677,6 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
 
       SPU::RecreateOutputStream();
     }
-    if (g_settings.audio_stream_parameters.stretch_mode != old_settings.audio_stream_parameters.stretch_mode)
-      SPU::GetOutputStream()->SetStretchMode(g_settings.audio_stream_parameters.stretch_mode);
     if (g_settings.audio_stream_parameters != old_settings.audio_stream_parameters)
     {
       SPU::RecreateOutputStream();

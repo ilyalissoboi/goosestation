@@ -144,6 +144,7 @@ public:
   /// How long a fade in or out takes.
   static constexpr u32 FADE_MS = 4;
   static constexpr u32 VOLUME_RAMP_MS = 10;
+  static constexpr u32 PAUSE_FADE_TIMEOUT_MS = 100;
 
   struct DeviceInfo
   {
@@ -188,8 +189,9 @@ public:
   /// Returns the counters and starts them again. Any thread.
   Counters GetAndResetCounters();
 
-  /// Temporarily pauses the stream, preventing it from requesting data.
-  virtual void SetPaused(bool paused);
+  /// Temporarily pauses the stream, preventing it from requesting data. Pausing fades out first, waiting for the
+  /// callback for up to PAUSE_FADE_TIMEOUT_MS, and drops what's queued: nothing from before a pause plays after it.
+  void SetPaused(bool paused);
 
   /// Changes are ramped over VOLUME_RAMP_MS for a full-scale change.
   void SetOutputVolume(u32 volume);
@@ -204,8 +206,6 @@ public:
   /// Nominal rate is used for both resampling and timestretching, input samples are assumed to be this amount faster
   /// than the sample rate.
   void SetNominalRate(float tempo);
-
-  void SetStretchMode(AudioStretchMode mode);
 
   static std::vector<std::pair<std::string, std::string>> GetDriverNames(AudioBackend backend);
   static std::vector<DeviceInfo> GetOutputDevices(AudioBackend backend, const char* driver, u32 sample_rate);

@@ -20,9 +20,11 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <thread>
 
 Log_SetChannel(AudioStream);
 
@@ -727,31 +729,33 @@ void AudioStream::SetNominalRate(float tempo)
     soundtouch_setTempo(m_soundtouch, tempo);
 }
 
-void AudioStream::SetStretchMode(AudioStretchMode mode)
-{
-  if (m_parameters.stretch_mode == mode)
-    return;
-
-  // can't resize the buffers while paused
-  bool paused = m_paused;
-  if (!paused)
-    SetPaused(true);
-
-  DestroyBuffer();
-  StretchDestroy();
-  m_parameters.stretch_mode = mode;
-
-  AllocateBuffer();
-  if (m_parameters.stretch_mode != AudioStretchMode::Off)
-    StretchAllocate();
-
-  if (!paused)
-    SetPaused(false);
-}
-
 void AudioStream::SetPaused(bool paused)
 {
-  m_paused = paused;
+  if (paused == m_paused)
+    return;
+
+  if (paused)
+  {
+    // Stopping the device mid-sound clicks: fade out first. Without callbacks (a device gone, or one that never
+    // started), the wait gives up, and the stop is a cut.
+    EmptyBuffer();
+    const u32 generation = m_clear_generation;
+    const Common::Timer::Value deadline =
+      Common::Timer::GetCurrentValue() + Common::Timer::ConvertMillisecondsToValue(PAUSE_FADE_TIMEOUT_MS);
+    while (m_cleared_generation.load(std::memory_order_acquire) != generation)
+    {
+      if (Common::Timer::GetCurrentValue() >= deadline)
+      {
+        m_cut_count.fetch_add(1, std::memory_order_relaxed);
+        WARNING_LOG("Audio didn't fade out within {} ms, pausing anyway.", PAUSE_FADE_TIMEOUT_MS);
+        break;
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }
+
+  PauseDevice(paused);
 }
 
 void AudioStream::PauseDevice(bool paused)

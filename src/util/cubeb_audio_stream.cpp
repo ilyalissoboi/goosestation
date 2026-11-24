@@ -25,7 +25,7 @@ public:
   CubebAudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   ~CubebAudioStream();
 
-  void SetPaused(bool paused) override;
+  void PauseDevice(bool paused) override;
 
   bool Initialize(const char* driver_name, const char* device_name, Error* error);
 
@@ -256,7 +256,7 @@ long CubebAudioStream::DataCallback(cubeb_stream* stm, void* user_ptr, const voi
   return nframes;
 }
 
-void CubebAudioStream::SetPaused(bool paused)
+void CubebAudioStream::PauseDevice(bool paused)
 {
   if (paused == m_paused || !stream)
     return;

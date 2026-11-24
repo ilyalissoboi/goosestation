@@ -20,7 +20,7 @@ public:
   SDLAudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   ~SDLAudioStream();
 
-  void SetPaused(bool paused) override;
+  void PauseDevice(bool paused) override;
 
   bool OpenDevice(Error* error);
   void CloseDevice();
@@ -131,7 +131,7 @@ bool SDLAudioStream::OpenDevice(Error* error)
   return true;
 }
 
-void SDLAudioStream::SetPaused(bool paused)
+void SDLAudioStream::PauseDevice(bool paused)
 {
   if (m_paused == paused)
     return;

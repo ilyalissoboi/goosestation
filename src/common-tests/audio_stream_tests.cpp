@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <mutex>
 #include <chrono>
 #include <random>
 #include <thread>
@@ -596,4 +597,119 @@ TEST(AudioStream, TimeStretchUnderConcurrencyStaysConsistent)
 
   EXPECT_GE(loudest, 8000);
   EXPECT_LE(stream.GetBufferedFramesRelaxed(), stream.GetBufferSize());
+}
+
+namespace {
+// A device callback on its own thread, every 5.8 ms (256 frames at 44.1 kHz), until stopped.
+class CallbackThread
+{
+public:
+  explicit CallbackThread(FakeAudioStream& stream) : m_stream(stream), m_thread([this]() { Run(); }) {}
+  ~CallbackThread()
+  {
+    m_stop.store(true);
+    m_thread.join();
+  }
+
+  Frames Heard()
+  {
+    std::lock_guard lock(m_mutex);
+    return m_heard;
+  }
+
+private:
+  void Run()
+  {
+    while (!m_stop.load())
+    {
+      if (m_running.load())
+      {
+        Frames out(256 * 2);
+        m_stream.Read(out.data(), 256);
+        std::lock_guard lock(m_mutex);
+        m_heard.insert(m_heard.end(), out.begin(), out.end());
+      }
+      std::this_thread::sleep_for(std::chrono::microseconds(5805));
+    }
+  }
+
+  FakeAudioStream& m_stream;
+  std::mutex m_mutex;
+  Frames m_heard;
+  std::atomic<bool> m_stop{false};
+
+public:
+  std::atomic<bool> m_running{true};
+
+private:
+  std::thread m_thread;
+};
+} // namespace
+
+TEST(AudioStream, PauseFadesOutWaitsAndClears)
+{
+  FakeAudioStream stream(Params());
+  Sine old_sine;
+  Write(stream, old_sine.Next(1792));
+  CallbackThread device(stream);
+  std::this_thread::sleep_for(std::chrono::milliseconds(20)); // playing at full gain
+
+  const auto start = std::chrono::steady_clock::now();
+  stream.SetPaused(true);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(100));
+  ASSERT_EQ(stream.device_pauses, std::vector<bool>{true});
+  EXPECT_EQ(stream.GetAndResetCounters().cuts, 0u);
+
+  // The device stops, as a real one would; nothing queued before the pause plays after it.
+  device.m_running.store(false);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  const size_t heard_before = device.Heard().size();
+  stream.SetPaused(false);
+  Sine new_sine;
+  new_sine.freq = 300.0;
+  new_sine.amplitude = 7000.0;
+  const Frames fresh = new_sine.Next(1280);
+  Write(stream, fresh);
+  device.m_running.store(true);
+  std::this_thread::sleep_for(std::chrono::milliseconds(40));
+  device.m_running.store(false);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  const Frames all = device.Heard();
+  const Frames after(all.begin() + static_cast<std::ptrdiff_t>(heard_before), all.end());
+  const u32 at = Locate(after, fresh);
+  ASSERT_NE(at, NOT_FOUND);
+  EXPECT_TRUE(AllZero(after, 0, at));
+  EXPECT_LE(MaxStep(all), MAX_STEP);
+}
+
+TEST(AudioStream, PauseWithNoConsumerReturnsAfterTimeout)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+  PlayUntilFull(stream, sine, ear);
+  Write(stream, sine.Next(512));
+
+  // No callbacks: the fade can't run, so the wait gives up and counts a cut.
+  const auto start = std::chrono::steady_clock::now();
+  stream.SetPaused(true);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(150));
+  EXPECT_EQ(stream.GetAndResetCounters().cuts, 1u);
+
+  stream.SetPaused(false);
+  const Frames fresh = sine.Next(1280);
+  Write(stream, fresh);
+  const Frames out = ear.Read(stream, 1536);
+  EXPECT_NE(Locate(out, fresh), NOT_FOUND);
+}
+
+TEST(AudioStream, PauseWhilePausedIsANoOp)
+{
+  FakeAudioStream stream(Params());
+  stream.SetPaused(true);
+  const auto start = std::chrono::steady_clock::now();
+  stream.SetPaused(true);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(20));
+  EXPECT_EQ(stream.device_pauses, std::vector<bool>{true});
 }

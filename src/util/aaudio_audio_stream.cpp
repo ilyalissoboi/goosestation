@@ -25,7 +25,7 @@ public:
   AAudioAudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   ~AAudioAudioStream() override;
 
-  void SetPaused(bool paused) override;
+  void PauseDevice(bool paused) override;
 
   bool Initialize(Error* error);
 
@@ -187,7 +187,7 @@ bool AAudioAudioStream::StartStream(Error* error)
   return true;
 }
 
-void AAudioAudioStream::SetPaused(bool paused)
+void AAudioAudioStream::PauseDevice(bool paused)
 {
   std::unique_lock lock(m_stream_mutex);
   if (m_paused == paused)

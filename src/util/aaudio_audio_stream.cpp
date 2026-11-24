@@ -25,7 +25,7 @@ public:
   AAudioAudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   ~AAudioAudioStream() override;
 
-  void SetPaused(bool paused) override;
+  void PauseDevice(bool paused) override;
 
   bool Initialize(Error* error);
 
@@ -157,6 +157,8 @@ bool AAudioAudioStream::OpenStream(Error* error)
 
   // Clamped to the stream's capacity by AAudio; returns the size actually set.
   const aaudio_result_t set_frames = AAudioStream_setBufferSizeInFrames(m_stream, buffer_frames);
+  // A pause waits this long for its fade to be heard.
+  SetDeviceLatencyFrames(static_cast<u32>((set_frames >= 0) ? set_frames : AAudioStream_getBufferSizeInFrames(m_stream)));
   DEV_LOG("Opened AAudio stream: {} Hz, burst {} frames, requested buffer {} frames, got {}", got_rate, burst_frames,
           buffer_frames, (set_frames >= 0) ? set_frames : AAudioStream_getBufferSizeInFrames(m_stream));
   return true;
@@ -187,14 +189,24 @@ bool AAudioAudioStream::StartStream(Error* error)
   return true;
 }
 
-void AAudioAudioStream::SetPaused(bool paused)
+void AAudioAudioStream::PauseDevice(bool paused)
 {
   std::unique_lock lock(m_stream_mutex);
   if (m_paused == paused)
     return;
 
-  // With no stream (a reopen failed), only the state is recorded; a later reopen honours it.
-  if (m_stream)
+  // With no stream (a reopen failed), no error callback will ever come to reopen it: resuming tries again here, so a
+  // failed reopen doesn't leave the game silent. Pausing only records the state.
+  if (!m_stream && !paused)
+  {
+    Error error;
+    if (!OpenStream(&error) || !StartStream(&error))
+    {
+      ERROR_LOG("Failed to reopen the AAudio stream on resume: {}", error.GetDescription());
+      CloseStream();
+    }
+  }
+  else if (m_stream)
   {
     const aaudio_result_t res = paused ? AAudioStream_requestPause(m_stream) : AAudioStream_requestStart(m_stream);
     if (res != AAUDIO_OK)

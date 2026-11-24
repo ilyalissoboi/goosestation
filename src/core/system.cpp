@@ -341,6 +341,7 @@ static float s_sw_thread_time = 0.0f;
 static float s_gpu_thread_usage = 0.0f;
 static float s_gpu_thread_time = 0.0f;
 static float s_input_latency = 0.0f; // input polled to present finished, the second's mean, ms
+static AudioStream::Counters s_audio_counters; // the audio stream's, over the last second
 static bool s_gpu_time_plausible = true;
 static float s_average_gpu_time = 0.0f;
 static float s_accumulated_gpu_time = 0.0f;
@@ -1578,6 +1579,7 @@ void System::ResetSystem()
   }
 
   InternalReset();
+  SPU::GetOutputStream()->EmptyBuffer();
 
   // Reset boot mode/reload BIOS if needed. Preserve exe/psf boot.
   const BootMode new_boot_mode = (s_boot_mode == BootMode::BootEXE || s_boot_mode == BootMode::BootPSF) ?
@@ -2955,6 +2957,9 @@ bool System::LoadStateFromBuffer(const SaveStateBuffer& buffer, Error* error, bo
   // Updating game/loading settings can turn on hardcore mode. Catch this.
   Achievements::DisableHardcoreMode();
 
+  // What was queued before the load isn't played: the state's own audio fades in.
+  SPU::GetOutputStream()->EmptyBuffer();
+
   StateWrapper sw(buffer.state_data.cspan(0, buffer.state_size), StateWrapper::Mode::Read, buffer.version);
   if (!DoState(sw, nullptr, update_display, false))
   {
@@ -3513,12 +3518,17 @@ void System::UpdatePerformanceCounters()
   if (s_pre_frame_sleep)
     UpdatePreFrameSleepTime();
 
-  // The GPU thread's figures go last, so the fields before keep their places for what reads them.
+  s_audio_counters = SPU::GetOutputStream()->GetAndResetCounters();
+
+  // The GPU thread's figures, then the audio's, go last, so the fields before keep their places for what reads them.
+  // Audio: underruns, overflows, fades, clears, cuts (fades the device stopped before they finished).
   VERBOSE_LOG("FPS: {:.2f} VPS: {:.2f} CPU: {:.2f} GPU: {} Average: {:.2f}ms Min: {:.2f}ms Max: {:.2f}ms GPUThread: "
-              "{:.2f} Lat: {:.2f}ms",
+              "{:.2f} Lat: {:.2f}ms Audio: U {} O {} F {} C {} X {}",
               s_fps, s_vps, s_cpu_thread_usage,
               s_gpu_time_plausible ? TinyString::from_format("{:.2f}", s_gpu_usage) : TinyString("-"),
-              s_average_frame_time, s_minimum_frame_time, s_maximum_frame_time, s_gpu_thread_usage, s_input_latency);
+              s_average_frame_time, s_minimum_frame_time, s_maximum_frame_time, s_gpu_thread_usage, s_input_latency,
+              s_audio_counters.underruns, s_audio_counters.overflows, s_audio_counters.fades, s_audio_counters.clears,
+              s_audio_counters.cuts);
 
   Host::OnPerformanceCountersUpdated();
 }
@@ -3592,8 +3602,10 @@ void System::FormatLatencyStats(SmallStringBase& str)
     Common::Timer::ConvertValueToMilliseconds(s_frame_period - s_pre_frame_sleep_time) -
     Common::Timer::ConvertValueToMilliseconds(static_cast<Common::Timer::Value>(s_runahead_frames) * s_frame_period));
 
-  str.format("AF: {:.0f}ms | PF: {:.0f}ms | IL: {:.0f}ms | AL: {}ms", active_frame_time, pre_frame_time, input_latency,
-             audio_latency);
+  // The audio's underruns, overflows and fades over the last second.
+  str.format("AF: {:.0f}ms | PF: {:.0f}ms | IL: {:.0f}ms | AL: {}ms (U {}, O {}, F {})", active_frame_time, pre_frame_time,
+             input_latency, audio_latency, s_audio_counters.underruns, s_audio_counters.overflows,
+             s_audio_counters.fades);
 }
 
 void System::UpdateSpeedLimiterState()
@@ -3856,6 +3868,10 @@ void System::SetFastForwardEnabled(bool enabled)
   if (!IsValid())
     return;
 
+  // Ending fast-forward drops the sped-up tail, and the stretcher's tempo starts over at normal speed.
+  if (s_fast_forward_enabled && !enabled)
+    SPU::GetOutputStream()->EmptyBuffer();
+
   s_fast_forward_enabled = enabled;
   UpdateSpeedLimiterState();
 }
@@ -3869,6 +3885,9 @@ void System::SetTurboEnabled(bool enabled)
 {
   if (!IsValid())
     return;
+
+  if (s_turbo_enabled && !enabled)
+    SPU::GetOutputStream()->EmptyBuffer();
 
   s_turbo_enabled = enabled;
   UpdateSpeedLimiterState();
@@ -4677,8 +4696,6 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
 
       SPU::RecreateOutputStream();
     }
-    if (g_settings.audio_stream_parameters.stretch_mode != old_settings.audio_stream_parameters.stretch_mode)
-      SPU::GetOutputStream()->SetStretchMode(g_settings.audio_stream_parameters.stretch_mode);
     if (g_settings.audio_stream_parameters != old_settings.audio_stream_parameters)
     {
       SPU::RecreateOutputStream();
@@ -5198,6 +5215,10 @@ void System::SetRewinding(bool enabled)
   if (enabled)
   {
     const bool was_enabled = IsRewinding();
+
+    // Rewinding makes no audio: what was queued fades out rather than playing over the rewind.
+    if (!was_enabled)
+      SPU::GetOutputStream()->EmptyBuffer();
 
     // Try to rewind at the replay speed, or one per second maximum.
     const float load_frequency = std::min(g_settings.rewind_save_frequency, 1.0f);

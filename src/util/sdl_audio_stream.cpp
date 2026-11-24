@@ -7,6 +7,8 @@
 #include "common/error.h"
 #include "common/log.h"
 
+#include <algorithm>
+
 #include <SDL3/SDL.h>
 
 #include <vector>
@@ -20,7 +22,7 @@ public:
   SDLAudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   ~SDLAudioStream();
 
-  void SetPaused(bool paused) override;
+  void PauseDevice(bool paused) override;
 
   bool OpenDevice(Error* error);
   void CloseDevice();
@@ -126,12 +128,14 @@ bool SDLAudioStream::OpenDevice(Error* error)
   DEV_LOG("Requested {} frame buffer, got {} frame buffer", buffer_frames, obtained_frames);
 
   BaseInitialize(sample_readers[static_cast<size_t>(m_parameters.expansion_mode)]);
+  // A pause waits this long for its fade to be heard: the device's buffer, and the stream's own on top.
+  SetDeviceLatencyFrames(static_cast<u32>(std::max(obtained_frames, 0)) + buffer_frames);
   SDL_ResumeAudioStreamDevice(m_stream);
 
   return true;
 }
 
-void SDLAudioStream::SetPaused(bool paused)
+void SDLAudioStream::PauseDevice(bool paused)
 {
   if (m_paused == paused)
     return;

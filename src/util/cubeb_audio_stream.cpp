@@ -25,7 +25,7 @@ public:
   CubebAudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   ~CubebAudioStream();
 
-  void SetPaused(bool paused) override;
+  void PauseDevice(bool paused) override;
 
   bool Initialize(const char* driver_name, const char* device_name, Error* error);
 
@@ -233,6 +233,12 @@ bool CubebAudioStream::Initialize(const char* driver_name, const char* device_na
     return false;
   }
 
+  // A pause waits this long for its fade to be heard.
+  u32 stream_latency_frames = latency_frames;
+  if (cubeb_stream_get_latency(stream, &stream_latency_frames) != CUBEB_OK)
+    stream_latency_frames = latency_frames;
+  SetDeviceLatencyFrames(stream_latency_frames);
+
   rv = cubeb_stream_start(stream);
   if (rv != CUBEB_OK)
   {
@@ -256,7 +262,7 @@ long CubebAudioStream::DataCallback(cubeb_stream* stm, void* user_ptr, const voi
   return nframes;
 }
 
-void CubebAudioStream::SetPaused(bool paused)
+void CubebAudioStream::PauseDevice(bool paused)
 {
   if (paused == m_paused || !stream)
     return;

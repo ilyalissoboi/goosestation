@@ -131,6 +131,21 @@ public:
   static constexpr AudioBackend DEFAULT_BACKEND = AudioBackend::AAudio;
 #endif
 
+  /// What the stream did since the last read of these, for the statistics.
+  struct Counters
+  {
+    u32 underruns = 0; ///< Gaps from running out of audio.
+    u32 overflows = 0; ///< Times audio was dropped because the buffer was full.
+    u32 fades = 0;     ///< Fade-outs, for any cause.
+    u32 clears = 0;    ///< Times the queued audio was emptied.
+    u32 cuts = 0;      ///< Fade-outs that couldn't finish before the device stopped.
+  };
+
+  /// How long a fade in or out takes.
+  static constexpr u32 FADE_MS = 4;
+  static constexpr u32 VOLUME_RAMP_MS = 10;
+  static constexpr u32 PAUSE_FADE_TIMEOUT_MS = 100;
+
   struct DeviceInfo
   {
     std::string name;
@@ -165,27 +180,32 @@ public:
   ALWAYS_INLINE u32 GetOutputChannels() const { return m_internal_channels; }
   ALWAYS_INLINE u32 GetBufferSize() const { return m_buffer_size; }
   ALWAYS_INLINE u32 GetTargetBufferSize() const { return m_target_buffer_size; }
-  ALWAYS_INLINE u32 GetOutputVolume() const { return m_volume; }
+  ALWAYS_INLINE u32 GetOutputVolume() const { return m_volume.load(std::memory_order_relaxed); }
   ALWAYS_INLINE float GetNominalTempo() const { return m_nominal_rate; }
   ALWAYS_INLINE bool IsPaused() const { return m_paused; }
 
   u32 GetBufferedFramesRelaxed() const;
 
-  /// Temporarily pauses the stream, preventing it from requesting data.
-  virtual void SetPaused(bool paused);
+  /// Returns the counters and starts them again. Any thread.
+  Counters GetAndResetCounters();
 
+  /// Temporarily pauses the stream, preventing it from requesting data. Pausing fades out first, waiting for the
+  /// callback for up to PAUSE_FADE_TIMEOUT_MS, and drops what's queued: nothing from before a pause plays after it.
+  void SetPaused(bool paused);
+
+  /// Changes are ramped over VOLUME_RAMP_MS for a full-scale change.
   void SetOutputVolume(u32 volume);
 
   void BeginWrite(SampleType** buffer_ptr, u32* num_frames);
   void EndWrite(u32 num_frames);
 
+  /// Drops what's queued: what's playing fades out, and audio written from now on fades in once enough is buffered.
+  /// From the producer's thread; the consumer applies it at its next callback.
   void EmptyBuffer();
 
   /// Nominal rate is used for both resampling and timestretching, input samples are assumed to be this amount faster
   /// than the sample rate.
   void SetNominalRate(float tempo);
-
-  void SetStretchMode(AudioStretchMode mode);
 
   static std::vector<std::pair<std::string, std::string>> GetDriverNames(AudioBackend backend);
   static std::vector<DeviceInfo> GetOutputDevices(AudioBackend backend, const char* driver, u32 sample_rate);
@@ -213,6 +233,12 @@ protected:
   AudioStream(u32 sample_rate, const AudioStreamParameters& parameters);
   void BaseInitialize(SampleReader sample_reader);
 
+  /// Stops or starts the device's callbacks. Backends override it; it records the state in m_paused.
+  virtual void PauseDevice(bool paused);
+
+  /// How far ahead of what's heard the callback writes: a pause waits this long after the fade is written.
+  void SetDeviceLatencyFrames(u32 frames);
+
   void ReadFrames(SampleType* samples, u32 num_frames);
 
   template<AudioExpansionMode mode, ReadChannel c0 = READ_CHANNEL_NONE, ReadChannel c1 = READ_CHANNEL_NONE,
@@ -222,12 +248,11 @@ protected:
   static void StereoSampleReaderImpl(SampleType* dest, const SampleType* src, u32 num_frames);
 
   u32 m_sample_rate = 0;
-  u32 m_volume = 100;
+  std::atomic<u32> m_volume{100}; // the target; the consumer ramps toward it
   AudioStreamParameters m_parameters;
   u8 m_internal_channels = 0;
   u8 m_output_channels = 0;
   bool m_stretch_inactive = false;
-  bool m_filling = false;
   bool m_paused = false;
 
 private:
@@ -259,6 +284,11 @@ private:
 
   void InternalWriteFrames(SampleType* samples, u32 num_frames);
 
+  // The consumer: copies frames out of the ring and advances the read position.
+  void ReadFromRing(SampleType* samples, u32 num_frames);
+  void ApplyClear(u32 wpos);
+  void ApplyOutputVolume(SampleType* samples, u32 num_frames);
+
 #ifndef __ANDROID__
   void ExpandAllocate();
 #endif
@@ -267,9 +297,8 @@ private:
   void StretchDestroy();
   void StretchWriteBlock(const float* block);
   void StretchUnderrun();
-  void StretchOverrun();
 
-  float AddAndGetAverageTempo(float val);
+  float AddAndGetAverageTempo(float val, bool reset);
   void UpdateStretchTempo();
 
   u32 m_buffer_size = 0;
@@ -279,10 +308,61 @@ private:
   std::atomic<u32> m_rpos{0};
   std::atomic<u32> m_wpos{0};
 
+  // The consumer's gain envelope, touched only by ReadFrames(): silent while filling (until m_restart_frames are
+  // buffered), fading in and then full while playing, fading out to a gap. The gain is m_fade_curve[m_fade_pos].
+  enum class PlayState : u8
+  {
+    Filling,
+    Playing,
+    FadingOut,
+  };
+  PlayState m_play_state = PlayState::Filling;
+  u32 m_fade_pos = 0;
+  bool m_fade_holding = false; // a fade-out past its data holds the last frame until it ends
+  u32 m_fade_frames = 0;
+  u32 m_restart_frames = 0;
+  u32 m_restart_cap = 0;
+  std::unique_ptr<float[]> m_fade_curve;
+  std::array<SampleType, MAX_OUTPUT_CHANNELS> m_last_frame = {};
+  float m_current_volume = 1.0f;
+
+  // A clear: the producer publishes its generation (high 32 bits) and write position (low 32 bits). The consumer
+  // fades out what's before that position, skips it, and stores the generation in m_cleared_generation.
+  std::atomic<u64> m_clear_request{0};
+  std::atomic<u32> m_cleared_generation{0};
+  u32 m_clear_generation = 0;      // producer
+  u32 m_seen_clear_generation = 0; // consumer
+  u32 m_clear_pos = 0;             // consumer
+  bool m_clear_pending = false;    // consumer
+  bool m_discard_writes = false;   // the null stream keeps nothing
+  bool m_written_since_clear = false; // producer: anything to fade before a pause
+  bool m_tempo_hold = false;        // producer: nominal tempo until a clear is applied and the ring has refilled
+  std::atomic<u32> m_device_latency_frames{0};
+
+  // The producer's overflow handling: near full, it fades out what it writes, drops until the ring has drained to
+  // half, then fades back in. Its fade is m_write_fade_frames long (shorter only on a tiny ring).
+  enum class WriteState : u8
+  {
+    Normal,
+    FadingOut,
+    Dropping,
+    FadingIn,
+  };
+  WriteState m_write_state = WriteState::Normal;
+  u32 m_write_fade_pos = 0;
+  u32 m_write_fade_frames = 0;
+  u32 m_overflow_high_water = 0;
+
+  std::atomic<u32> m_underrun_count{0};
+  std::atomic<u32> m_overflow_count{0};
+  std::atomic<u32> m_fade_count{0};
+  std::atomic<u32> m_clear_count{0};
+  std::atomic<u32> m_cut_count{0};
+
   void* m_soundtouch = nullptr;
 
   u32 m_target_buffer_size = 0;
-  u32 m_stretch_reset = STRETCH_RESET_THRESHOLD;
+  std::atomic<u32> m_stretch_reset{STRETCH_RESET_THRESHOLD}; // underruns (consumer) and overflows (producer)
 
   u32 m_stretch_ok_count = 0;
   float m_nominal_rate = 1.0f;

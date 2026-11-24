@@ -530,21 +530,67 @@ void AudioStream::StereoSampleReaderImpl(SampleType* dest, const SampleType* src
 
 void AudioStream::InternalWriteFrames(s16* data, u32 num_frames)
 {
-  const u32 free = m_buffer_size - GetBufferedFramesRelaxed();
-  if (free <= num_frames)
+  // Acquire: the callback is done with the frames it has released.
+  const u32 rpos = m_rpos.load(std::memory_order_acquire);
+  u32 wpos = m_wpos.load(std::memory_order_relaxed);
+  const u32 buffered = (wpos + m_buffer_size - rpos) % m_buffer_size;
+  const u32 free = m_buffer_size - 1 - buffered;
+
+  if (m_write_state == WriteState::Normal && free < num_frames + m_overflow_high_water)
   {
-    if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch)
+    // Nearly full: fade out, drop, and give the stretcher time to slow down. The read position is the callback's.
+    m_write_state = WriteState::FadingOut;
+    m_write_fade_pos = m_write_fade_frames;
+    m_overflow_count.fetch_add(1, std::memory_order_relaxed);
+    m_fade_count.fetch_add(1, std::memory_order_relaxed);
+    m_stretch_reset.fetch_add(1, std::memory_order_relaxed);
+    DEBUG_LOG("Buffer overrun, fading out");
+  }
+  if (m_write_state == WriteState::Dropping)
+  {
+    if (buffered > m_buffer_size / 2)
+      return;
+
+    m_write_state = WriteState::FadingIn;
+    m_write_fade_pos = 0;
+  }
+
+  const u32 channels = m_internal_channels;
+  if (m_write_state != WriteState::Normal)
+  {
+    const auto scale = [this, data, channels](u32 frame) {
+      const float gain = m_fade_curve[(m_write_fade_pos * m_fade_frames) / m_write_fade_frames];
+      for (u32 c = 0; c < channels; c++)
+        data[frame * channels + c] = static_cast<s16>(std::lrint(static_cast<float>(data[frame * channels + c]) * gain));
+    };
+
+    if (m_write_state == WriteState::FadingOut)
     {
-      StretchOverrun();
+      u32 i = 0;
+      for (; i < num_frames && m_write_fade_pos > 0; i++, m_write_fade_pos--)
+        scale(i);
+      if (m_write_fade_pos == 0)
+      {
+        m_write_state = WriteState::Dropping;
+        num_frames = i;
+      }
     }
     else
     {
-      DEBUG_LOG("Buffer overrun, chunk dropped");
-      return;
+      for (u32 i = 0; i < num_frames && m_write_state == WriteState::FadingIn; i++)
+      {
+        m_write_fade_pos++;
+        scale(i);
+        if (m_write_fade_pos == m_write_fade_frames)
+          m_write_state = WriteState::Normal;
+      }
     }
   }
 
-  u32 wpos = m_wpos.load(std::memory_order_acquire);
+  // The high-water mark leaves room for a fade-out; never write over what the callback hasn't read.
+  num_frames = std::min(num_frames, free);
+  if (num_frames == 0)
+    return;
 
   // wrapping around the end of the buffer?
   if ((m_buffer_size - wpos) <= num_frames)
@@ -554,16 +600,16 @@ void AudioStream::InternalWriteFrames(s16* data, u32 num_frames)
     const u32 start = num_frames - end;
 
     // start is zero when this chunk reaches exactly the end
-    std::memcpy(&m_buffer[wpos * m_internal_channels], data, end * m_internal_channels * sizeof(SampleType));
+    std::memcpy(&m_buffer[wpos * channels], data, end * channels * sizeof(SampleType));
     if (start > 0)
-      std::memcpy(&m_buffer[0], data + end * m_internal_channels, start * m_internal_channels * sizeof(SampleType));
+      std::memcpy(&m_buffer[0], data + end * channels, start * channels * sizeof(SampleType));
 
     wpos = start;
   }
   else
   {
     // no split
-    std::memcpy(&m_buffer[wpos * m_internal_channels], data, num_frames * m_internal_channels * sizeof(SampleType));
+    std::memcpy(&m_buffer[wpos * channels], data, num_frames * channels * sizeof(SampleType));
     wpos += num_frames;
   }
 
@@ -600,11 +646,15 @@ void AudioStream::AllocateBuffer()
   for (u32 i = 0; i <= m_fade_frames; i++)
     m_fade_curve[i] = 0.5f - 0.5f * std::cos(3.14159265358979f * static_cast<float>(i) / static_cast<float>(m_fade_frames));
 
+  // An overflow's fade-out needs room above the high-water mark; on a tiny ring it's shorter, to fit.
+  m_write_fade_frames = std::clamp<u32>(m_buffer_size / 8, 1u, m_fade_frames);
+  m_overflow_high_water = m_write_fade_frames + 2 * CHUNK_SIZE;
+  m_write_state = WriteState::Normal;
+
   // Restarting after a gap waits for half the target: a restart on a few milliseconds stops again at once. The cap
-  // leaves room for an overflow's fade-out above it, so a small buffer can still restart.
-  const u32 overflow_high_water = m_fade_frames + 2 * CHUNK_SIZE;
-  m_restart_cap = (m_buffer_size > overflow_high_water + 3 * CHUNK_SIZE) ?
-                    (m_buffer_size - overflow_high_water - 2 * CHUNK_SIZE) :
+  // keeps it below the overflow's high-water mark, so a small buffer can still restart.
+  m_restart_cap = (m_buffer_size > m_overflow_high_water + 3 * CHUNK_SIZE) ?
+                    (m_buffer_size - m_overflow_high_water - 2 * CHUNK_SIZE) :
                     CHUNK_SIZE;
   m_restart_frames = std::clamp(m_target_buffer_size / 2, CHUNK_SIZE, m_restart_cap);
   m_play_state = PlayState::Filling;
@@ -656,10 +706,11 @@ void AudioStream::EmptyBuffer()
       soundtouch_setTempo(m_soundtouch, m_nominal_rate);
 
     // The tempo's averaging starts again from the new audio.
-    m_stretch_reset = STRETCH_RESET_THRESHOLD;
+    m_stretch_reset.store(STRETCH_RESET_THRESHOLD, std::memory_order_relaxed);
   }
 
   m_staging_buffer_pos = 0;
+  m_write_state = WriteState::Normal;
 
   // The consumer moves its own read position; this thread never writes it.
   m_clear_generation++;
@@ -878,7 +929,7 @@ void AudioStream::StretchAllocate()
   else
     soundtouch_setTempo(m_soundtouch, m_nominal_rate);
 
-  m_stretch_reset = STRETCH_RESET_THRESHOLD;
+  m_stretch_reset.store(STRETCH_RESET_THRESHOLD, std::memory_order_relaxed);
   m_stretch_inactive = false;
   m_stretch_ok_count = 0;
   m_dynamic_target_usage = 0.0f;
@@ -920,9 +971,9 @@ void AudioStream::StretchWriteBlock(const float* block)
   }
 }
 
-float AudioStream::AddAndGetAverageTempo(float val)
+float AudioStream::AddAndGetAverageTempo(float val, bool reset)
 {
-  if (m_stretch_reset >= STRETCH_RESET_THRESHOLD)
+  if (reset)
     m_average_available = 0;
   if (m_average_available < AVERAGING_BUFFER_SIZE)
     m_average_available++;
@@ -954,8 +1005,11 @@ void AudioStream::UpdateStretchTempo()
 
   float base_target_usage = static_cast<float>(m_target_buffer_size) * m_nominal_rate;
 
+  // Read once: the callback adds its underruns to it.
+  const bool reset = (m_stretch_reset.load(std::memory_order_relaxed) >= STRETCH_RESET_THRESHOLD);
+
   // state vars
-  if (m_stretch_reset >= STRETCH_RESET_THRESHOLD)
+  if (reset)
   {
     VERBOSE_LOG("___ Stretcher is being reset.");
     m_stretch_inactive = false;
@@ -966,7 +1020,7 @@ void AudioStream::UpdateStretchTempo()
   const u32 ibuffer_usage = GetBufferedFramesRelaxed();
   float buffer_usage = static_cast<float>(ibuffer_usage);
   float tempo = buffer_usage / m_dynamic_target_usage;
-  tempo = AddAndGetAverageTempo(tempo);
+  tempo = AddAndGetAverageTempo(tempo, reset);
 
   // Dampening when we get close to target.
   if (tempo < 2.0f)
@@ -1019,7 +1073,8 @@ void AudioStream::UpdateStretchTempo()
     {
       VERBOSE_LOG("buffers: {:4d} ms ({:3.0f}%), tempo: {}, comp: {:2.3f}, iters: {}, reset:{}",
                   (ibuffer_usage * 1000u) / m_sample_rate, 100.0f * buffer_usage / base_target_usage, tempo,
-                  m_dynamic_target_usage / base_target_usage, iterations, m_stretch_reset);
+                  m_dynamic_target_usage / base_target_usage, iterations,
+                  m_stretch_reset.load(std::memory_order_relaxed));
 
       last_log_time = now;
       iterations = 0;
@@ -1030,24 +1085,14 @@ void AudioStream::UpdateStretchTempo()
 
   soundtouch_setTempo(m_soundtouch, tempo);
 
-  if (m_stretch_reset >= STRETCH_RESET_THRESHOLD)
-    m_stretch_reset = 0;
+  if (reset)
+    m_stretch_reset.store(0, std::memory_order_relaxed);
 }
 
 void AudioStream::StretchUnderrun()
 {
   // Didn't produce enough frames in time.
-  m_stretch_reset++;
-}
-
-void AudioStream::StretchOverrun()
-{
-  // Produced more frames than can fit in the buffer.
-  m_stretch_reset++;
-
-  // Drop two packets to give the time stretcher a bit more time to slow things down.
-  const u32 discard = CHUNK_SIZE * 2;
-  m_rpos.store((m_rpos.load(std::memory_order_acquire) + discard) % m_buffer_size, std::memory_order_release);
+  m_stretch_reset.fetch_add(1, std::memory_order_relaxed);
 }
 
 void AudioStreamParameters::Load(SettingsInterface& si, const char* section)

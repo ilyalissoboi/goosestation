@@ -335,11 +335,11 @@ TEST(AudioStream, MuteAndUnmuteFadesBackIn)
 }
 
 namespace {
-// Plays until full gain, so a clear has something audible to fade.
+// Plays until full gain, so a clear has something audible to fade (256 frames left, room to write more).
 void PlayUntilFull(FakeAudioStream& stream, Sine& sine, Listener& ear)
 {
   Write(stream, sine.Next(1280));
-  ear.Read(stream, 512);
+  ear.Read(stream, 1024);
   stream.GetAndResetCounters();
 }
 } // namespace
@@ -501,4 +501,99 @@ TEST(AudioStream, ConcurrentClearsNeverReplayOldAudio)
     last = index;
   }
   EXPECT_GT(loud, 10000u);
+}
+
+TEST(AudioStream, OverflowFadesOutDropsAndFadesIn)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+
+  // No reads: past full, the producer fades out what it writes, then drops.
+  Write(stream, sine.Next(2560));
+  EXPECT_LT(stream.GetBufferedFramesRelaxed(), 2240u);
+  AudioStream::Counters c = stream.GetAndResetCounters();
+  EXPECT_EQ(c.overflows, 1u);
+  EXPECT_EQ(c.fades, 1u);
+
+  // Drained below half, the producer fades back in.
+  ear.Read(stream, 1024);
+  Write(stream, sine.Next(640));
+  ear.Read(stream, 1536);
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+  c = stream.GetAndResetCounters();
+  EXPECT_EQ(c.overflows, 0u);
+  EXPECT_EQ(c.underruns, 0u);
+
+  // Somewhere in what was heard, the gap: a fade-out to silence and a fade-in.
+  bool quiet = false;
+  for (size_t i = 600 * 2; i < ear.heard.size() - 600 * 2; i += 2)
+    quiet |= (std::abs(ear.heard[i]) < 200 && std::abs(ear.heard[i + 2]) < 200 && std::abs(ear.heard[i + 4]) < 200);
+  EXPECT_TRUE(quiet);
+}
+
+TEST(AudioStream, OverflowResumesInEveryMode)
+{
+  for (const AudioStretchMode mode : {AudioStretchMode::Off, AudioStretchMode::Resample, AudioStretchMode::TimeStretch})
+  {
+    for (const u16 buffer_ms : {u16(10), u16(100)})
+    {
+      FakeAudioStream stream(Params(mode, buffer_ms));
+      Sine sine;
+      Listener ear;
+      // Three times faster than it's read, for three seconds of output.
+      for (u32 second = 0; second < 3; second++)
+      {
+        int loudest = 0;
+        for (u32 i = 0; i < RATE / 128; i++)
+        {
+          Write(stream, sine.Next(384));
+          for (const s16 v : ear.Read(stream, 128))
+            loudest = std::max(loudest, std::abs(static_cast<int>(v)));
+        }
+        EXPECT_GE(loudest, 8000) << AudioStream::GetStretchModeName(mode) << " " << buffer_ms << " ms, second "
+                                 << second;
+      }
+      // Time stretching keeps up at 3x without overflowing.
+      if (mode != AudioStretchMode::TimeStretch)
+      {
+        EXPECT_GT(stream.GetAndResetCounters().overflows, 0u)
+          << AudioStream::GetStretchModeName(mode) << " " << buffer_ms << " ms";
+      }
+    }
+  }
+}
+
+TEST(AudioStream, TimeStretchUnderConcurrencyStaysConsistent)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  std::atomic<bool> stop{false};
+
+  // The producer runs at 4x, then 0.5x, in turn; the callback at 1x.
+  std::thread producer([&]() {
+    Sine sine;
+    const auto start = std::chrono::steady_clock::now();
+    while (!stop.load())
+    {
+      const bool fast = ((std::chrono::steady_clock::now() - start) / std::chrono::milliseconds(500)) % 2 == 0;
+      Write(stream, sine.Next(64));
+      std::this_thread::sleep_for(std::chrono::microseconds(fast ? 363 : 2902));
+    }
+  });
+
+  int loudest = 0;
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+  while (std::chrono::steady_clock::now() < end)
+  {
+    Frames out(256 * 2);
+    stream.Read(out.data(), 256);
+    for (const s16 v : out)
+      loudest = std::max(loudest, std::abs(static_cast<int>(v)));
+    std::this_thread::sleep_for(std::chrono::microseconds(5805));
+  }
+  stop.store(true);
+  producer.join();
+
+  EXPECT_GE(loudest, 8000);
+  EXPECT_LE(stream.GetBufferedFramesRelaxed(), stream.GetBufferSize());
 }

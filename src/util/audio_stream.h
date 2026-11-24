@@ -294,9 +294,8 @@ private:
   void StretchDestroy();
   void StretchWriteBlock(const float* block);
   void StretchUnderrun();
-  void StretchOverrun();
 
-  float AddAndGetAverageTempo(float val);
+  float AddAndGetAverageTempo(float val, bool reset);
   void UpdateStretchTempo();
 
   u32 m_buffer_size = 0;
@@ -334,6 +333,20 @@ private:
   bool m_clear_pending = false;    // consumer
   bool m_discard_writes = false;   // the null stream keeps nothing
 
+  // The producer's overflow handling: near full, it fades out what it writes, drops until the ring has drained to
+  // half, then fades back in. Its fade is m_write_fade_frames long (shorter only on a tiny ring).
+  enum class WriteState : u8
+  {
+    Normal,
+    FadingOut,
+    Dropping,
+    FadingIn,
+  };
+  WriteState m_write_state = WriteState::Normal;
+  u32 m_write_fade_pos = 0;
+  u32 m_write_fade_frames = 0;
+  u32 m_overflow_high_water = 0;
+
   std::atomic<u32> m_underrun_count{0};
   std::atomic<u32> m_overflow_count{0};
   std::atomic<u32> m_fade_count{0};
@@ -343,7 +356,7 @@ private:
   void* m_soundtouch = nullptr;
 
   u32 m_target_buffer_size = 0;
-  u32 m_stretch_reset = STRETCH_RESET_THRESHOLD;
+  std::atomic<u32> m_stretch_reset{STRETCH_RESET_THRESHOLD}; // underruns (consumer) and overflows (producer)
 
   u32 m_stretch_ok_count = 0;
   float m_nominal_rate = 1.0f;

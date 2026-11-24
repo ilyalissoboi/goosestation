@@ -236,6 +236,9 @@ protected:
   /// Stops or starts the device's callbacks. Backends override it; it records the state in m_paused.
   virtual void PauseDevice(bool paused);
 
+  /// How far ahead of what's heard the callback writes: a pause waits this long after the fade is written.
+  void SetDeviceLatencyFrames(u32 frames);
+
   void ReadFrames(SampleType* samples, u32 num_frames);
 
   template<AudioExpansionMode mode, ReadChannel c0 = READ_CHANNEL_NONE, ReadChannel c1 = READ_CHANNEL_NONE,
@@ -332,6 +335,9 @@ private:
   u32 m_clear_pos = 0;             // consumer
   bool m_clear_pending = false;    // consumer
   bool m_discard_writes = false;   // the null stream keeps nothing
+  bool m_written_since_clear = false; // producer: anything to fade before a pause
+  bool m_tempo_hold = false;        // producer: nominal tempo until a clear is applied and the ring has refilled
+  std::atomic<u32> m_device_latency_frames{0};
 
   // The producer's overflow handling: near full, it fades out what it writes, drops until the ring has drained to
   // half, then fades back in. Its fade is m_write_fade_frames long (shorter only on a tiny ring).

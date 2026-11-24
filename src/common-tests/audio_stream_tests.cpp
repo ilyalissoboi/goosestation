@@ -33,6 +33,7 @@ public:
   }
 
   void Read(s16* out, u32 frames) { ReadFrames(out, frames); }
+  void SetLatency(u32 frames) { SetDeviceLatencyFrames(frames); }
 
   std::vector<bool> device_pauses;
 
@@ -712,4 +713,70 @@ TEST(AudioStream, PauseWhilePausedIsANoOp)
   stream.SetPaused(true);
   EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(20));
   EXPECT_EQ(stream.device_pauses, std::vector<bool>{true});
+}
+
+TEST(AudioStream, NullStreamPausesAtOnce)
+{
+  std::unique_ptr<AudioStream> stream = AudioStream::CreateNullStream(RATE, 50);
+  Sine sine;
+  Write(*stream, sine.Next(1024));
+  const auto start = std::chrono::steady_clock::now();
+  stream->SetPaused(true);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(20));
+  EXPECT_EQ(stream->GetAndResetCounters().cuts, 0u);
+}
+
+TEST(AudioStream, PauseWithNothingWrittenIsImmediate)
+{
+  // A stream made while the system is paused (a settings change in the pause menu) has nothing to fade.
+  FakeAudioStream stream(Params());
+  const auto start = std::chrono::steady_clock::now();
+  stream.SetPaused(true);
+  EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(20));
+  EXPECT_EQ(stream.GetAndResetCounters().cuts, 0u);
+  EXPECT_EQ(stream.device_pauses, std::vector<bool>{true});
+}
+
+TEST(AudioStream, PauseWaitsForTheDeviceToPlayTheFade)
+{
+  // The callback writes the fade into the device's buffer; the device plays it up to its latency later.
+  FakeAudioStream stream(Params());
+  stream.SetLatency(RATE / 20); // 50 ms
+  Sine sine;
+  Write(stream, sine.Next(1792));
+  CallbackThread device(stream);
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+  const auto start = std::chrono::steady_clock::now();
+  stream.SetPaused(true);
+  const auto took = std::chrono::steady_clock::now() - start;
+  EXPECT_GE(took, std::chrono::milliseconds(50));
+  EXPECT_LT(took, std::chrono::milliseconds(250));
+  EXPECT_EQ(stream.GetAndResetCounters().cuts, 0u);
+}
+
+TEST(AudioStream, TimeStretchRefillsAtNormalTempoAfterAClear)
+{
+  // Produced and played at the same rate: after a clear, the fill comes back to about the target rather than
+  // overshooting from a tempo average restarted on an empty ring.
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  for (u32 i = 0; i < 2000; i++) // about 3 s
+  {
+    Write(stream, sine.Next(64));
+    ear.Read(stream, 64);
+  }
+  const u32 settled = stream.GetBufferedFramesRelaxed();
+
+  stream.EmptyBuffer();
+  u32 highest = 0;
+  for (u32 i = 0; i < 1400; i++) // about 2 s
+  {
+    Write(stream, sine.Next(64));
+    ear.Read(stream, 64);
+    highest = std::max(highest, stream.GetBufferedFramesRelaxed());
+  }
+  EXPECT_LE(highest, std::max(settled, stream.GetTargetBufferSize()) * 3 / 2) << "settled at " << settled;
+  EXPECT_EQ(stream.GetAndResetCounters().underruns, 0u);
 }

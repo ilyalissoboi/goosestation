@@ -233,6 +233,12 @@ bool CubebAudioStream::Initialize(const char* driver_name, const char* device_na
     return false;
   }
 
+  // A pause waits this long for its fade to be heard.
+  u32 stream_latency_frames = latency_frames;
+  if (cubeb_stream_get_latency(stream, &stream_latency_frames) != CUBEB_OK)
+    stream_latency_frames = latency_frames;
+  SetDeviceLatencyFrames(stream_latency_frames);
+
   rv = cubeb_stream_start(stream);
   if (rv != CUBEB_OK)
   {

@@ -616,6 +616,7 @@ void AudioStream::InternalWriteFrames(s16* data, u32 num_frames)
   }
 
   m_wpos.store(wpos, std::memory_order_release);
+  m_written_since_clear = true;
 }
 
 void AudioStream::BaseInitialize(SampleReader sample_reader)
@@ -713,6 +714,8 @@ void AudioStream::EmptyBuffer()
 
   m_staging_buffer_pos = 0;
   m_write_state = WriteState::Normal;
+  m_written_since_clear = false;
+  m_tempo_hold = (m_parameters.stretch_mode == AudioStretchMode::TimeStretch);
 
   // The consumer moves its own read position; this thread never writes it.
   m_clear_generation++;
@@ -734,7 +737,10 @@ void AudioStream::SetPaused(bool paused)
   if (paused == m_paused)
     return;
 
-  if (paused)
+  // Nothing to fade: no output, or nothing written since the last clear was applied (a stream made while paused).
+  const bool silent = m_discard_writes || (!m_written_since_clear && m_cleared_generation.load(std::memory_order_acquire) ==
+                                                                          m_clear_generation);
+  if (paused && !silent)
   {
     // Stopping the device mid-sound clicks: fade out first. Without callbacks (a device gone, or one that never
     // started), the wait gives up, and the stop is a cut.
@@ -753,9 +759,23 @@ void AudioStream::SetPaused(bool paused)
 
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+
+    // The fade is in the device's buffer, ahead of what's heard: let the device play it before stopping.
+    if (m_cleared_generation.load(std::memory_order_acquire) == generation)
+    {
+      const u32 latency_ms = std::min(
+        GetMSForBufferSize(m_sample_rate, m_device_latency_frames.load(std::memory_order_relaxed)) + 1u,
+        PAUSE_FADE_TIMEOUT_MS);
+      std::this_thread::sleep_for(std::chrono::milliseconds(latency_ms));
+    }
   }
 
   PauseDevice(paused);
+}
+
+void AudioStream::SetDeviceLatencyFrames(u32 frames)
+{
+  m_device_latency_frames.store(frames, std::memory_order_relaxed);
 }
 
 void AudioStream::PauseDevice(bool paused)
@@ -934,6 +954,7 @@ void AudioStream::StretchAllocate()
     soundtouch_setTempo(m_soundtouch, m_nominal_rate);
 
   m_stretch_reset.store(STRETCH_RESET_THRESHOLD, std::memory_order_relaxed);
+  m_tempo_hold = (m_parameters.stretch_mode == AudioStretchMode::TimeStretch);
   m_stretch_inactive = false;
   m_stretch_ok_count = 0;
   m_dynamic_target_usage = 0.0f;
@@ -1006,6 +1027,22 @@ void AudioStream::UpdateStretchTempo()
   static constexpr float INACTIVE_BAD_FACTOR = 1.2f;
   static constexpr u32 INACTIVE_MIN_OK_COUNT = 50;
   static constexpr u32 COMPENSATION_DIVIDER = 100;
+
+  // After a clear (or at the start), the tempo stays nominal until the clear has been applied and the ring has
+  // refilled to the restart level: averaging the fill of an empty ring gives a tempo far below 1, which stretches the
+  // new audio and overshoots the target.
+  if (m_tempo_hold)
+  {
+    if (m_cleared_generation.load(std::memory_order_acquire) != m_clear_generation ||
+        GetBufferedFramesRelaxed() < m_restart_frames)
+    {
+      soundtouch_setTempo(m_soundtouch, m_nominal_rate);
+      return;
+    }
+
+    m_tempo_hold = false;
+    m_stretch_reset.store(STRETCH_RESET_THRESHOLD, std::memory_order_relaxed);
+  }
 
   float base_target_usage = static_cast<float>(m_target_buffer_size) * m_nominal_rate;
 

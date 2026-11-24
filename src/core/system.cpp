@@ -1578,6 +1578,7 @@ void System::ResetSystem()
   }
 
   InternalReset();
+  SPU::GetOutputStream()->EmptyBuffer();
 
   // Reset boot mode/reload BIOS if needed. Preserve exe/psf boot.
   const BootMode new_boot_mode = (s_boot_mode == BootMode::BootEXE || s_boot_mode == BootMode::BootPSF) ?
@@ -2955,6 +2956,9 @@ bool System::LoadStateFromBuffer(const SaveStateBuffer& buffer, Error* error, bo
   // Updating game/loading settings can turn on hardcore mode. Catch this.
   Achievements::DisableHardcoreMode();
 
+  // What was queued before the load isn't played: the state's own audio fades in.
+  SPU::GetOutputStream()->EmptyBuffer();
+
   StateWrapper sw(buffer.state_data.cspan(0, buffer.state_size), StateWrapper::Mode::Read, buffer.version);
   if (!DoState(sw, nullptr, update_display, false))
   {
@@ -3856,6 +3860,10 @@ void System::SetFastForwardEnabled(bool enabled)
   if (!IsValid())
     return;
 
+  // Ending fast-forward drops the sped-up tail, and the stretcher's tempo starts over at normal speed.
+  if (s_fast_forward_enabled && !enabled)
+    SPU::GetOutputStream()->EmptyBuffer();
+
   s_fast_forward_enabled = enabled;
   UpdateSpeedLimiterState();
 }
@@ -3869,6 +3877,9 @@ void System::SetTurboEnabled(bool enabled)
 {
   if (!IsValid())
     return;
+
+  if (s_turbo_enabled && !enabled)
+    SPU::GetOutputStream()->EmptyBuffer();
 
   s_turbo_enabled = enabled;
   UpdateSpeedLimiterState();
@@ -5196,6 +5207,10 @@ void System::SetRewinding(bool enabled)
   if (enabled)
   {
     const bool was_enabled = IsRewinding();
+
+    // Rewinding makes no audio: what was queued fades out rather than playing over the rewind.
+    if (!was_enabled)
+      SPU::GetOutputStream()->EmptyBuffer();
 
     // Try to rewind at the replay speed, or one per second maximum.
     const float load_frequency = std::min(g_settings.rewind_save_frequency, 1.0f);

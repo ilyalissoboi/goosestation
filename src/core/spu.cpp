@@ -497,6 +497,9 @@ void SPU::CreateOutputStream()
 
 void SPU::RecreateOutputStream()
 {
+  // Fades out before the device goes; the new stream fades in.
+  if (s_state.audio_stream)
+    s_state.audio_stream->SetPaused(true);
   s_state.audio_stream.reset();
   CreateOutputStream();
 }
@@ -519,6 +522,8 @@ void SPU::Shutdown()
 
   s_state.tick_event.Deactivate();
   s_state.transfer_event.Deactivate();
+  if (s_state.audio_stream)
+    s_state.audio_stream->SetPaused(true);
   s_state.audio_stream.reset();
 }
 

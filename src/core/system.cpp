@@ -1797,6 +1797,10 @@ bool System::BootSystem(SystemBootParameters parameters, Error* error)
   // Update running game, this will apply settings as well.
   UpdateRunningGame(disc ? disc->GetFileName().c_str() : parameters.filename.c_str(), disc.get(), true);
 
+  // The game's settings and database switches (DisableFastBoot) apply just above, after fast boot was chosen.
+  if (boot_mode == BootMode::FastBoot && !parameters.override_fast_boot.has_value() && !g_settings.bios_patch_fast_boot)
+    boot_mode = BootMode::FullBoot;
+
   // Get boot EXE override.
   if (!parameters.override_exe.empty())
   {
@@ -3905,8 +3909,8 @@ void System::UpdateLoadFastForward()
 {
   const bool was_active = s_load_fast_forward.IsActive();
   const bool allowed = g_settings.fast_forward_loading && !Achievements::IsHardcoreModeActive();
-  if (s_load_fast_forward.Update(allowed, CDROM::IsLoadingData(), GetGlobalTickCounter(), g_ticks_per_second) ==
-      was_active)
+  if (s_load_fast_forward.Update(allowed, CDROM::IsLoadingData(), CDROM::IsStreaming(), GetGlobalTickCounter(),
+                                 g_ticks_per_second) == was_active)
   {
     return;
   }
@@ -5043,6 +5047,14 @@ void System::WarnAboutUnsafeSettings()
                TRANSLATE_FS("System", "CPU clock speed is set to {}% ({} / {}). This may crash games."),
                g_settings.GetCPUOverclockPercent(), g_settings.cpu_overclock_numerator,
                g_settings.cpu_overclock_denominator));
+    }
+    if (g_settings.cdrom_read_speedup > 4)
+    {
+      // Maximum stops at 4x, which some games need (Breath of Fire III and IV fail from 8x).
+      append(ICON_EMOJI_WARNING,
+             SmallString::from_format(TRANSLATE_FS("System", "CD-ROM read speedup set to {}x (effective speed {}x), "
+                                                             "faster than Maximum. This may crash games."),
+                                      g_settings.cdrom_read_speedup, g_settings.cdrom_read_speedup * 2));
     }
     if (g_settings.gpu_force_ntsc_timings)
     {

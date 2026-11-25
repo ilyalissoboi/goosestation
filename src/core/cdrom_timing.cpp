@@ -98,10 +98,14 @@ void CDROMTiming::StreamDetector::NoteSign(GlobalTicks now)
 {
   m_last_sign = now;
   m_has_sign = true;
+  m_reset_pending = false;
 }
 
-bool CDROMTiming::StreamDetector::IsStreaming(GlobalTicks now, bool mode_bits, TickCount ticks_per_second) const
+bool CDROMTiming::StreamDetector::IsStreaming(GlobalTicks now, bool mode_bits, TickCount ticks_per_second)
 {
+  if (m_reset_pending)
+    Reset(now);
+
   if (mode_bits)
     return true;
 
@@ -109,9 +113,10 @@ bool CDROMTiming::StreamDetector::IsStreaming(GlobalTicks now, bool mode_bits, T
   return m_has_sign && now >= m_last_sign && (now - m_last_sign) < hold;
 }
 
-bool CDROMTiming::LoadFastForward::Update(bool allowed, bool cd_loading, GlobalTicks now, TickCount ticks_per_second)
+bool CDROMTiming::LoadFastForward::Update(bool allowed, bool cd_loading, bool cd_streaming, GlobalTicks now,
+                                          TickCount ticks_per_second)
 {
-  if (!allowed)
+  if (!allowed || cd_streaming)
   {
     m_active = false;
   }

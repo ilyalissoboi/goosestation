@@ -153,12 +153,12 @@ TEST(CDROMTiming, LoadFastForwardHoldsAndReleases)
   const GlobalTicks t = 10 * static_cast<GlobalTicks>(TPS);
   const auto at = [t](double seconds) { return t + static_cast<GlobalTicks>(seconds * TPS); };
 
-  EXPECT_FALSE(rule.Update(true, false, at(0.0), TPS));
-  EXPECT_TRUE(rule.Update(true, true, at(0.0), TPS));
-  EXPECT_TRUE(rule.Update(true, false, at(0.2), TPS)); // a gap between a load's bursts
-  EXPECT_TRUE(rule.Update(true, true, at(0.3), TPS));
-  EXPECT_TRUE(rule.Update(true, false, at(0.54), TPS));
-  EXPECT_FALSE(rule.Update(true, false, at(0.56), TPS)); // 0.26 s after the last loading
+  EXPECT_FALSE(rule.Update(true, false, false, at(0.0), TPS));
+  EXPECT_TRUE(rule.Update(true, true, false, at(0.0), TPS));
+  EXPECT_TRUE(rule.Update(true, false, false, at(0.2), TPS)); // a gap between a load's bursts
+  EXPECT_TRUE(rule.Update(true, true, false, at(0.3), TPS));
+  EXPECT_TRUE(rule.Update(true, false, false, at(0.54), TPS));
+  EXPECT_FALSE(rule.Update(true, false, false, at(0.56), TPS)); // 0.26 s after the last loading
   EXPECT_FALSE(rule.IsActive());
   EXPECT_EQ(CDROMTiming::LOAD_FF_HOLD_SECONDS, 0.25f);
 }
@@ -166,10 +166,10 @@ TEST(CDROMTiming, LoadFastForwardHoldsAndReleases)
 TEST(CDROMTiming, LoadFastForwardNotAllowed)
 {
   CDROMTiming::LoadFastForward rule;
-  EXPECT_FALSE(rule.Update(false, true, 1000, TPS));
-  EXPECT_TRUE(rule.Update(true, true, 2000, TPS));
-  EXPECT_FALSE(rule.Update(false, true, 3000, TPS)); // off at once, even mid-load
-  EXPECT_TRUE(rule.Update(true, true, 4000, TPS));
+  EXPECT_FALSE(rule.Update(false, true, false, 1000, TPS));
+  EXPECT_TRUE(rule.Update(true, true, false, 2000, TPS));
+  EXPECT_FALSE(rule.Update(false, true, false, 3000, TPS)); // off at once, even mid-load
+  EXPECT_TRUE(rule.Update(true, true, false, 4000, TPS));
   rule.Reset();
   EXPECT_FALSE(rule.IsActive());
 }
@@ -177,4 +177,27 @@ TEST(CDROMTiming, LoadFastForwardNotAllowed)
 TEST(CDROMTiming, FastForwardLoadingDefaultsOff)
 {
   EXPECT_FALSE(Settings().fast_forward_loading);
+}
+
+TEST(CDROMTiming, LoadFastForwardStopsAtOnceWhenStreamingStarts)
+{
+  CDROMTiming::LoadFastForward rule;
+  const GlobalTicks t = 10 * static_cast<GlobalTicks>(TPS);
+  EXPECT_TRUE(rule.Update(true, true, false, t, TPS));
+  // A movie or CD track starts right after the load: off now, not after the hold.
+  EXPECT_FALSE(rule.Update(true, false, true, t + 1000, TPS));
+  EXPECT_FALSE(rule.Update(true, false, false, t + 2000, TPS));
+}
+
+TEST(CDROMTiming, ResetLaterUsesTheNextQuerysTime)
+{
+  // A state load resets the detector before the loaded timeline's tick is known: the reset takes the time of the
+  // first query after it, whether the loaded state is earlier or later than the sign before.
+  CDROMTiming::StreamDetector detector;
+  const GlobalTicks sec = static_cast<GlobalTicks>(TPS);
+  detector.NoteSign(100 * sec);
+  detector.ResetLater();
+  EXPECT_TRUE(detector.IsStreaming(5 * sec, false, TPS));
+  EXPECT_TRUE(detector.IsStreaming(5 * sec + sec * 49 / 100, false, TPS));
+  EXPECT_FALSE(detector.IsStreaming(5 * sec + sec * 51 / 100, false, TPS));
 }

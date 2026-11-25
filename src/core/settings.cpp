@@ -347,8 +347,8 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   cdrom_load_image_to_ram = si.GetBoolValue("CDROM", "LoadImageToRAM", false);
   cdrom_load_image_patches = si.GetBoolValue("CDROM", "LoadImagePatches", false);
   cdrom_mute_cd_audio = si.GetBoolValue("CDROM", "MuteCDAudio", false);
-  cdrom_read_speedup = si.GetIntValue("CDROM", "ReadSpeedup", DEFAULT_CDROM_READ_SPEEDUP);
-  cdrom_seek_speedup = si.GetIntValue("CDROM", "SeekSpeedup", DEFAULT_CDROM_SEEK_SPEEDUP);
+  cdrom_read_speedup = si.GetIntValue("CDROM", "ReadSpeedup", static_cast<s32>(DEFAULT_CDROM_READ_SPEEDUP));
+  cdrom_seek_speedup = si.GetIntValue("CDROM", "SeekSpeedup", static_cast<s32>(DEFAULT_CDROM_SEEK_SPEEDUP));
   cdrom_short_drive_waits = si.GetBoolValue("CDROM", "ShortDriveWaits", DEFAULT_CDROM_SHORT_DRIVE_WAITS);
   fast_forward_loading = si.GetBoolValue("CDROM", "FastForwardLoading", false);
 

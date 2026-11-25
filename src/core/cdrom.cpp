@@ -800,7 +800,9 @@ bool CDROM::DoState(StateWrapper& sw)
       s_reader.QueueReadSector(s_requested_lba);
     UpdateCommandEvent();
     s_drive_event.SetState(!IsDriveIdle());
-    ResetStreamDetector();
+    // The timeline isn't loaded yet (TimingEvents::DoState comes after): the reset takes the next query's time.
+    s_stream_detector.ResetLater();
+    s_last_mdec_decode_seen = MDEC::GetLastDecodeStartTick();
     s_hurry_armed = false;
 
     // Time will get fixed up later.
@@ -1481,6 +1483,14 @@ void CDROM::SpeedupSettingsChanged()
   UpdateReadInterval();
 }
 
+bool CDROM::IsStreaming()
+{
+  return (IsReadingOrPlaying() &&
+          s_stream_detector.IsStreaming(System::GetGlobalTickCounter(),
+                                        s_mode.cdda || s_mode.xa_enable || s_drive_state == DriveState::Playing,
+                                        System::GetTicksPerSecond()));
+}
+
 bool CDROM::IsLoadingData()
 {
   if (IsSeeking())
@@ -1748,6 +1758,9 @@ void CDROM::ExecuteCommand(void*, TickCount ticks, TickCount ticks_late)
 
       if (speed_change)
       {
+        // The drive's speed change isn't cut short by bringing the next sector forward.
+        s_hurry_armed = false;
+
         if (s_drive_state == DriveState::ChangingSpeedOrTOCRead)
         {
           // cancel the speed change if it's less than a quarter complete
@@ -3104,7 +3117,7 @@ void CDROM::DoSectorRead()
   if (mdec_decode != s_last_mdec_decode_seen)
   {
     s_last_mdec_decode_seen = mdec_decode;
-    s_stream_detector.NoteSign(mdec_decode);
+    s_stream_detector.NoteSign(System::GetGlobalTickCounter()); // now: after a state load the decode's tick may be later
   }
 
   s_requested_lba = next_sector;
@@ -3197,7 +3210,7 @@ ALWAYS_INLINE_RELEASE void CDROM::ProcessDataSector(const u8* raw_sector, const 
 
   s_async_response_fifo.Push(s_secondary_status.bits);
   SetAsyncInterrupt(Interrupt::DataReady);
-  s_hurry_armed = true;
+  s_hurry_armed = GetReadPace().paced_by_game;
 }
 
 bool CDROM::HasGameTakenLastSector()

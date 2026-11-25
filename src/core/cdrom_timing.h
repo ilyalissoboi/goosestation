@@ -60,23 +60,26 @@ class StreamDetector
 public:
   /// After a reset or a state load, streaming is assumed for the hold, so a movie can't run sped up.
   void Reset(GlobalTicks now);
+  /// For a state load, whose timeline isn't loaded yet: the reset takes the time of the next query.
+  void ResetLater() { m_reset_pending = true; }
   void NoteSign(GlobalTicks now);
-  bool IsStreaming(GlobalTicks now, bool mode_bits, TickCount ticks_per_second) const;
+  bool IsStreaming(GlobalTicks now, bool mode_bits, TickCount ticks_per_second);
 
 private:
   GlobalTicks m_last_sign = 0;
   bool m_has_sign = false;
+  bool m_reset_pending = false;
 };
 
 /// Fast-forward while loading stays on this long (in emulated time) after the drive last loaded, across a load's bursts.
 static constexpr float LOAD_FF_HOLD_SECONDS = 0.25f;
 
 /// `[CDROM] FastForwardLoading`: on while the drive seeks or reads data that isn't streamed, off once it has been quiet
-/// for the hold, and off at once when it isn't allowed (the setting off, or hardcore).
+/// for the hold, and off at once when it isn't allowed (the setting off, or hardcore) or the drive streams.
 class LoadFastForward
 {
 public:
-  bool Update(bool allowed, bool cd_loading, GlobalTicks now, TickCount ticks_per_second);
+  bool Update(bool allowed, bool cd_loading, bool cd_streaming, GlobalTicks now, TickCount ticks_per_second);
   void Reset() { m_active = false; }
   bool IsActive() const { return m_active; }
 

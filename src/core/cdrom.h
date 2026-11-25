@@ -37,6 +37,9 @@ void SpeedupSettingsChanged();
 /// The drive is seeking, or reading data that isn't streamed (for fast-forward while loading).
 bool IsLoadingData();
 
+/// The drive is reading or playing audio or video that's streamed (no speedup, no fast-forward while loading).
+bool IsStreaming();
+
 // I/O
 u8 ReadRegister(u32 offset);
 void WriteRegister(u32 offset, u8 value);

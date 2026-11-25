@@ -10,6 +10,7 @@
 #include "common/gsvector.h"
 #include "common/log.h"
 #include "common/settings_interface.h"
+#include "common/threading.h"
 #include "common/timer.h"
 
 #include "soundtouch/SoundTouch.h"
@@ -56,6 +57,7 @@ AudioStream::AudioStream(u32 sample_rate, const AudioStreamParameters& parameter
 
 AudioStream::~AudioStream()
 {
+  StopWorker();
   StretchDestroy();
   DestroyBuffer();
 }
@@ -69,8 +71,8 @@ std::unique_ptr<AudioStream> AudioStream::CreateNullStream(u32 sample_rate, u32 
   params.buffer_ms = static_cast<u16>(buffer_ms);
 
   std::unique_ptr<AudioStream> stream(new AudioStream(sample_rate, params));
-  stream->BaseInitialize(&StereoSampleReaderImpl);
   stream->m_discard_writes = true;
+  stream->BaseInitialize(&StereoSampleReaderImpl);
   return stream;
 }
 
@@ -294,6 +296,8 @@ AudioStream::Counters AudioStream::GetAndResetCounters()
   c.fades = m_fade_count.exchange(0, std::memory_order_relaxed);
   c.clears = m_clear_count.exchange(0, std::memory_order_relaxed);
   c.cuts = m_cut_count.exchange(0, std::memory_order_relaxed);
+  c.extra_ms = m_extra_target_ms.load(std::memory_order_relaxed);
+  c.fast_forward_mutes = m_fast_forward_mute_count.exchange(0, std::memory_order_relaxed);
   return c;
 }
 
@@ -341,6 +345,7 @@ void AudioStream::ApplyClear(u32 wpos)
 void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 {
   const u32 channels = m_output_channels;
+  m_callback_frames.fetch_add(num_frames, std::memory_order_relaxed);
 
   // The request first: the write position read after it is at or beyond the clear's.
   const u64 clear_request = m_clear_request.load(std::memory_order_acquire);
@@ -368,7 +373,10 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
   // Silent, consuming nothing, until enough is buffered that this callback and a fade-out fit.
   if (m_play_state == PlayState::Filling)
   {
-    const u32 restart = std::min(std::max(m_restart_frames, num_frames + m_fade_frames), m_restart_cap);
+    // Half of the grown target, too.
+    const u32 extra_frames = (m_extra_target_ms.load(std::memory_order_relaxed) * m_sample_rate) / 1000u;
+    const u32 restart =
+      std::min(std::max(m_restart_frames + extra_frames / 2, num_frames + m_fade_frames), m_restart_cap);
     if (available < restart)
     {
       // Nothing is heard, so a volume change needs no ramp.
@@ -426,11 +434,13 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
           continue;
         }
 
-        // What's left only just covers a fade-out. Muted, the producer writes nothing, which isn't an underrun.
+        // What's left only just covers a fade-out. Muted (the volume at 0, or fast-forward past what stretching can
+        // follow), the producer writes nothing, which isn't an underrun.
         m_play_state = PlayState::FadingOut;
-        if (m_volume.load(std::memory_order_relaxed) != 0)
+        if (m_volume.load(std::memory_order_relaxed) != 0 && !m_speed_muted.load(std::memory_order_relaxed))
         {
           m_underrun_count.fetch_add(1, std::memory_order_relaxed);
+          m_underrun_total.fetch_add(1, std::memory_order_relaxed);
           m_fade_count.fetch_add(1, std::memory_order_relaxed);
         }
         if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch)
@@ -550,7 +560,7 @@ void AudioStream::InternalWriteFrames(s16* data, u32 num_frames)
   }
   if (m_write_state == WriteState::Dropping)
   {
-    if (buffered > m_buffer_size / 2)
+    if (buffered > m_buffer_size / 2 || m_speed_muted.load(std::memory_order_relaxed))
       return;
 
     m_write_state = WriteState::FadingIn;
@@ -616,7 +626,6 @@ void AudioStream::InternalWriteFrames(s16* data, u32 num_frames)
   }
 
   m_wpos.store(wpos, std::memory_order_release);
-  m_written_since_clear = true;
 }
 
 void AudioStream::BaseInitialize(SampleReader sample_reader)
@@ -631,6 +640,10 @@ void AudioStream::BaseInitialize(SampleReader sample_reader)
     Panic("Attempting to use expansion on Android.");
 #endif
   StretchAllocate();
+
+  // No output, no audio thread.
+  if (!m_discard_writes)
+    StartWorker();
 }
 
 void AudioStream::AllocateBuffer()
@@ -664,8 +677,16 @@ void AudioStream::AllocateBuffer()
   m_fade_pos = 0;
 
   m_buffer = std::make_unique<s16[]>(m_buffer_size * m_internal_channels);
-  m_staging_buffer = std::make_unique<s16[]>(CHUNK_SIZE * m_internal_channels);
+  m_staging_buffer = std::make_unique<s16[]>(CHUNK_SIZE * NUM_INPUT_CHANNELS);
   m_float_buffer = std::make_unique<float[]>(CHUNK_SIZE * m_internal_channels);
+
+  // Whole chunks only go through the input ring, so a chunk never wraps.
+  m_input_size = GetBufferSizeForMS(m_sample_rate, INPUT_RING_MS);
+  m_input = std::make_unique<s16[]>(m_input_size * NUM_INPUT_CHANNELS);
+  m_input_rpos.store(0, std::memory_order_relaxed);
+  m_input_wpos.store(0, std::memory_order_relaxed);
+  m_worker_chunk = std::make_unique<s16[]>(CHUNK_SIZE * NUM_INPUT_CHANNELS);
+  m_worker_out = std::make_unique<s16[]>(CHUNK_SIZE * m_internal_channels);
 
 #ifndef __ANDROID__
   if (IsExpansionEnabled())
@@ -680,6 +701,10 @@ void AudioStream::AllocateBuffer()
 
 void AudioStream::DestroyBuffer()
 {
+  StopWorker();
+  m_input.reset();
+  m_worker_chunk.reset();
+  m_worker_out.reset();
 #ifndef __ANDROID__
   m_expand_buffer.reset();
 #endif
@@ -692,6 +717,22 @@ void AudioStream::DestroyBuffer()
 }
 
 void AudioStream::EmptyBuffer()
+{
+  if (m_discard_writes)
+    return;
+
+  // The audio thread drops the input before this position, clears its own state, and passes the same generation
+  // on to the callback. This thread touches neither the stretcher nor the callback's read position.
+  m_staging_buffer_pos = 0;
+  m_written_since_clear = false;
+  m_input_clear_generation++;
+  m_input_clear_request.store((static_cast<u64>(m_input_clear_generation) << 32) |
+                                m_input_wpos.load(std::memory_order_relaxed),
+                              std::memory_order_release);
+  WakeWorker();
+}
+
+void AudioStream::WorkerClear(u32 generation)
 {
 #ifndef __ANDROID__
   if (IsExpansionEnabled())
@@ -712,24 +753,36 @@ void AudioStream::EmptyBuffer()
     m_stretch_reset.store(STRETCH_RESET_THRESHOLD, std::memory_order_relaxed);
   }
 
-  m_staging_buffer_pos = 0;
   m_write_state = WriteState::Normal;
-  m_written_since_clear = false;
   m_tempo_hold = (m_parameters.stretch_mode == AudioStretchMode::TimeStretch);
 
+  // A gap next to this isn't the game falling behind (see UpdateBufferGrowth()).
+  m_last_clear_frames = m_callback_frames.load(std::memory_order_relaxed);
+
+  // A jump starts the speed's judging over (the end of fast-forward clears, too); an input overflow doesn't.
+  if (generation != m_overflow_clear_generation.load(std::memory_order_relaxed))
+  {
+    m_speed_muted.store(false, std::memory_order_relaxed);
+    m_speed_window_input = m_input_frames_written.load(std::memory_order_relaxed);
+    m_speed_window_callback = m_callback_frames.load(std::memory_order_relaxed);
+  }
+  else if (m_speed_muted.load(std::memory_order_relaxed))
+  {
+    // Still muted: the output stays silent, with nothing stretched, rather than starting again at full gain.
+    m_write_state = WriteState::Dropping;
+  }
+
   // The consumer moves its own read position; this thread never writes it.
-  m_clear_generation++;
+  m_clear_generation = generation;
   m_clear_request.store((static_cast<u64>(m_clear_generation) << 32) | m_wpos.load(std::memory_order_relaxed),
                         std::memory_order_release);
 }
 
 void AudioStream::SetNominalRate(float tempo)
 {
-  m_nominal_rate = tempo;
-  if (m_parameters.stretch_mode == AudioStretchMode::Resample)
-    soundtouch_setRate(m_soundtouch, tempo);
-  else if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch && m_stretch_inactive)
-    soundtouch_setTempo(m_soundtouch, tempo);
+  // The audio thread applies it before its next chunk.
+  m_nominal_rate_request.store(tempo, std::memory_order_relaxed);
+  WakeWorker();
 }
 
 void AudioStream::SetPaused(bool paused)
@@ -738,14 +791,15 @@ void AudioStream::SetPaused(bool paused)
     return;
 
   // Nothing to fade: no output, or nothing written since the last clear was applied (a stream made while paused).
-  const bool silent = m_discard_writes || (!m_written_since_clear && m_cleared_generation.load(std::memory_order_acquire) ==
-                                                                          m_clear_generation);
+  const bool silent = m_discard_writes || (!m_written_since_clear && GetBufferedInputFramesRelaxed() == 0 &&
+                                           m_cleared_generation.load(std::memory_order_acquire) ==
+                                             m_input_clear_generation);
   if (paused && !silent)
   {
     // Stopping the device mid-sound clicks: fade out first. Without callbacks (a device gone, or one that never
-    // started), the wait gives up, and the stop is a cut.
+    // started), or with the audio thread stuck, the wait gives up, and the stop is a cut.
     EmptyBuffer();
-    const u32 generation = m_clear_generation;
+    const u32 generation = m_input_clear_generation;
     const Common::Timer::Value deadline =
       Common::Timer::GetCurrentValue() + Common::Timer::ConvertMillisecondsToValue(PAUSE_FADE_TIMEOUT_MS);
     while (m_cleared_generation.load(std::memory_order_acquire) != generation)
@@ -781,6 +835,151 @@ void AudioStream::SetDeviceLatencyFrames(u32 frames)
 void AudioStream::PauseDevice(bool paused)
 {
   m_paused = paused;
+}
+
+void AudioStream::SetWorkerHeld(bool held)
+{
+  m_worker_held.store(held);
+  if (!held)
+    WakeWorker();
+}
+
+u32 AudioStream::GetClearedGeneration() const
+{
+  return m_cleared_generation.load(std::memory_order_acquire);
+}
+
+u32 AudioStream::GetBufferedInputFramesRelaxed() const
+{
+  if (m_input_size == 0)
+    return 0;
+
+  const u32 rpos = m_input_rpos.load(std::memory_order_relaxed);
+  const u32 wpos = m_input_wpos.load(std::memory_order_relaxed);
+  return (wpos + m_input_size - rpos) % m_input_size;
+}
+
+void AudioStream::StartWorker()
+{
+  m_worker_shutdown.store(false);
+  m_worker = std::thread(&AudioStream::WorkerThreadEntry, this);
+}
+
+void AudioStream::StopWorker()
+{
+  if (!m_worker.joinable())
+    return;
+
+  {
+    std::lock_guard lock(m_worker_mutex);
+    m_worker_shutdown.store(true);
+  }
+  m_worker_cv.notify_one();
+  m_worker.join();
+}
+
+void AudioStream::WakeWorker()
+{
+  if (!m_worker.joinable())
+    return;
+
+  {
+    std::lock_guard lock(m_worker_mutex);
+    m_worker_wake = true;
+  }
+  m_worker_cv.notify_one();
+}
+
+void AudioStream::SyncWorker()
+{
+  if (!m_worker.joinable())
+    return;
+
+  for (;;)
+  {
+    // Done once the thread has taken every whole chunk and the last clear, and isn't in the middle of one.
+    if (m_worker_held.load() ||
+        (!m_worker_busy.load() && GetBufferedInputFramesRelaxed() < CHUNK_SIZE &&
+         m_worker_seen_generation.load() == m_input_clear_generation))
+    {
+      return;
+    }
+
+    WakeWorker();
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+}
+
+void AudioStream::WorkerThreadEntry()
+{
+  Threading::SetNameOfCurrentThread("Audio Stretch");
+
+  for (;;)
+  {
+    {
+      std::unique_lock lock(m_worker_mutex);
+      m_worker_cv.wait_for(lock, std::chrono::milliseconds(WORKER_WAIT_MS),
+                           [this]() { return m_worker_wake || m_worker_shutdown.load(); });
+      m_worker_wake = false;
+      if (m_worker_shutdown.load())
+        return;
+    }
+
+    WorkerProcess();
+  }
+}
+
+void AudioStream::WorkerProcess()
+{
+  if (m_worker_held.load())
+    return;
+
+  m_worker_busy.store(true);
+  for (;;)
+  {
+    // A clear first: the input before its position is stale, and so is the stretcher's state.
+    const u64 request = m_input_clear_request.load(std::memory_order_acquire);
+    const u32 generation = static_cast<u32>(request >> 32);
+    if (generation != m_worker_seen_generation.load(std::memory_order_relaxed))
+    {
+      const u32 rpos = m_input_rpos.load(std::memory_order_relaxed);
+      const u32 wpos = m_input_wpos.load(std::memory_order_acquire);
+      const u32 clear_pos = static_cast<u32>(request);
+      if ((clear_pos + m_input_size - rpos) % m_input_size <= (wpos + m_input_size - rpos) % m_input_size)
+        m_input_rpos.store(clear_pos, std::memory_order_release);
+
+      WorkerClear(generation);
+      m_worker_seen_generation.store(generation, std::memory_order_release);
+    }
+
+    const float nominal_rate = m_nominal_rate_request.load(std::memory_order_relaxed);
+    if (nominal_rate != m_nominal_rate)
+    {
+      m_nominal_rate = nominal_rate;
+      if (m_parameters.stretch_mode == AudioStretchMode::Resample)
+        soundtouch_setRate(m_soundtouch, nominal_rate);
+      else if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch && m_stretch_inactive)
+        soundtouch_setTempo(m_soundtouch, nominal_rate);
+    }
+
+    const u32 rpos = m_input_rpos.load(std::memory_order_relaxed);
+    const u32 wpos = m_input_wpos.load(std::memory_order_acquire);
+    if ((wpos + m_input_size - rpos) % m_input_size < CHUNK_SIZE)
+      break;
+
+    std::memcpy(m_worker_chunk.get(), &m_input[rpos * NUM_INPUT_CHANNELS],
+                CHUNK_SIZE * NUM_INPUT_CHANNELS * sizeof(SampleType));
+    m_input_rpos.store((rpos + CHUNK_SIZE) % m_input_size, std::memory_order_release);
+
+    UpdateFastForwardMute();
+
+    // Muted and faded out: nothing to stretch.
+    if (m_speed_muted.load(std::memory_order_relaxed) && m_write_state == WriteState::Dropping)
+      continue;
+
+    WorkerProcessChunk(m_worker_chunk.get());
+  }
+  m_worker_busy.store(false);
 }
 
 void AudioStream::SetOutputVolume(u32 volume)
@@ -890,18 +1089,49 @@ void AudioStream::EndWrite(u32 num_frames)
     return;
 
   m_staging_buffer_pos = 0;
+  m_input_frames_written.fetch_add(CHUNK_SIZE, std::memory_order_relaxed);
 
+  // This thread only hands the chunk over: the audio thread stretches it.
+  const u32 rpos = m_input_rpos.load(std::memory_order_acquire);
+  const u32 wpos = m_input_wpos.load(std::memory_order_relaxed);
+  const u32 queued = (wpos + m_input_size - rpos) % m_input_size;
+  if (queued + CHUNK_SIZE >= m_input_size)
+  {
+    // The audio thread has fallen half a second behind: what's queued is stale. Clear once, and drop until there's
+    // room again.
+    if (!m_input_overflowed)
+    {
+      m_input_overflowed = true;
+      m_overflow_count.fetch_add(1, std::memory_order_relaxed);
+      WARNING_LOG("The audio thread fell behind, dropping its input.");
+      // Not a jump: if this is fast-forward the thread can't keep up with, its mute and judging go on.
+      m_overflow_clear_generation.store(m_input_clear_generation + 1, std::memory_order_relaxed);
+      EmptyBuffer();
+    }
+    return;
+  }
+
+  m_input_overflowed = false;
+  std::memcpy(&m_input[wpos * NUM_INPUT_CHANNELS], m_staging_buffer.get(),
+              CHUNK_SIZE * NUM_INPUT_CHANNELS * sizeof(SampleType));
+  m_input_wpos.store((wpos + CHUNK_SIZE) % m_input_size, std::memory_order_release);
+  m_written_since_clear = true;
+  if (queued + CHUNK_SIZE >= WORKER_WAKE_FRAMES)
+    WakeWorker();
+}
+
+void AudioStream::WorkerProcessChunk(SampleType* chunk)
+{
   if (!IsExpansionEnabled() && !IsStretchEnabled())
   {
-    InternalWriteFrames(m_staging_buffer.get(), CHUNK_SIZE);
+    InternalWriteFrames(chunk, CHUNK_SIZE);
     return;
   }
 
 #ifndef __ANDROID__
   if (IsExpansionEnabled())
   {
-    // StretchWriteBlock() overwrites the staging buffer on output, so we need to copy into the expand buffer first.
-    S16ChunkToFloat(m_staging_buffer.get(), m_expand_buffer.get() + m_expand_buffer_pos * NUM_INPUT_CHANNELS,
+    S16ChunkToFloat(chunk, m_expand_buffer.get() + m_expand_buffer_pos * NUM_INPUT_CHANNELS,
                     CHUNK_SIZE * NUM_INPUT_CHANNELS);
 
     // Output the corresponding block.
@@ -919,7 +1149,7 @@ void AudioStream::EndWrite(u32 num_frames)
   else
 #endif
   {
-    S16ChunkToFloat(m_staging_buffer.get(), m_float_buffer.get(), CHUNK_SIZE * NUM_INPUT_CHANNELS);
+    S16ChunkToFloat(chunk, m_float_buffer.get(), CHUNK_SIZE * NUM_INPUT_CHANNELS);
     StretchWriteBlock(m_float_buffer.get());
   }
 }
@@ -982,8 +1212,8 @@ void AudioStream::StretchWriteBlock(const float* block)
     u32 tempProgress;
     while (tempProgress = soundtouch_receiveSamples(m_soundtouch, m_float_buffer.get(), CHUNK_SIZE), tempProgress != 0)
     {
-      FloatChunkToS16(m_staging_buffer.get(), m_float_buffer.get(), tempProgress * m_internal_channels);
-      InternalWriteFrames(m_staging_buffer.get(), tempProgress);
+      FloatChunkToS16(m_worker_out.get(), m_float_buffer.get(), tempProgress * m_internal_channels);
+      InternalWriteFrames(m_worker_out.get(), tempProgress);
     }
 
     if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch)
@@ -991,8 +1221,8 @@ void AudioStream::StretchWriteBlock(const float* block)
   }
   else
   {
-    FloatChunkToS16(m_staging_buffer.get(), block, CHUNK_SIZE * m_internal_channels);
-    InternalWriteFrames(m_staging_buffer.get(), CHUNK_SIZE);
+    FloatChunkToS16(m_worker_out.get(), block, CHUNK_SIZE * m_internal_channels);
+    InternalWriteFrames(m_worker_out.get(), CHUNK_SIZE);
   }
 }
 
@@ -1017,8 +1247,108 @@ float AudioStream::AddAndGetAverageTempo(float val, bool reset)
   return (sum != 0.0f) ? sum : 1.0f;
 }
 
+void AudioStream::UpdateBufferGrowth()
+{
+  // Dropouts that keep happening (an underrun within REPEAT_WITHIN_MS of the last) grow the target, up to
+  // MAX_EXTRA_MS; a single one doesn't, nor one next to a jump (a state load stalls the emulation, then clears). After
+  // SHRINK_AFTER_MS without one (the callback's frames, so real time whatever the emulation's speed), it shrinks a
+  // step, small enough for the tempo's hysteresis to absorb.
+  const u64 now = m_callback_frames.load(std::memory_order_relaxed);
+  const u32 underruns = m_underrun_total.load(std::memory_order_relaxed);
+  u32 extra = m_extra_target_ms.load(std::memory_order_relaxed);
+  if (underruns != m_seen_underrun_total)
+  {
+    m_seen_underrun_total = underruns;
+    const u64 frames_per_ms = std::max<u64>(m_sample_rate / 1000u, 1u);
+    if (now - m_last_clear_frames > JUMP_STALL_MS * frames_per_ms)
+    {
+      if (m_dropout_seen && now - m_last_dropout_frames <= REPEAT_WITHIN_MS * frames_per_ms)
+      {
+        extra = std::min(extra + GROW_STEP_MS, MAX_EXTRA_MS);
+        m_shrink_from_frames = now;
+      }
+      m_dropout_seen = true;
+      m_last_dropout_frames = now;
+    }
+  }
+  else if (extra > 0 && (now - m_shrink_from_frames) >= (static_cast<u64>(m_sample_rate) * SHRINK_AFTER_MS) / 1000u)
+  {
+    extra -= std::min(extra, SHRINK_STEP_MS);
+    m_shrink_from_frames = now;
+  }
+  else if (extra == 0)
+  {
+    m_shrink_from_frames = now;
+  }
+
+  m_extra_target_ms.store(extra, std::memory_order_relaxed);
+}
+
+void AudioStream::UpdateFastForwardMute()
+{
+  if (m_parameters.stretch_mode != AudioStretchMode::TimeStretch)
+    return;
+
+  // Judged only over the device's own frames: with no callbacks (paused) there's no speed, and the volume at 0
+  // writes no input, so neither looks fast.
+  // The speed is what the emulation wrote, not what this thread managed to take: a thread that can't keep up must
+  // still see fast-forward for what it is.
+  const u64 callback = m_callback_frames.load(std::memory_order_relaxed);
+  const u64 input = m_input_frames_written.load(std::memory_order_relaxed);
+  const u64 window = (static_cast<u64>(m_sample_rate) * SPEED_WINDOW_MS) / 1000u;
+
+  // Input that piled up while the device didn't call (a device switch, a stall) isn't speed: when the callbacks come
+  // back after a stall, start over. Judged by the time the callbacks stopped, not the input, which at unlimited
+  // fast-forward can be more than half a second between two callbacks.
+  if (callback != m_speed_last_callback)
+  {
+    const u64 now = Common::Timer::GetCurrentValue();
+    if (m_speed_last_callback_time != 0 &&
+        Common::Timer::ConvertValueToMilliseconds(now - m_speed_last_callback_time) > CALLBACK_STALL_MS)
+    {
+      m_speed_window_input = input;
+      m_speed_window_callback = callback;
+    }
+    m_speed_last_callback = callback;
+    m_speed_last_callback_time = now;
+  }
+
+  if (callback - m_speed_window_callback < window)
+    return;
+
+  const float speed =
+    static_cast<float>(input - m_speed_window_input) / static_cast<float>(callback - m_speed_window_callback);
+  m_speed_window_input = input;
+  m_speed_window_callback = callback;
+
+  const bool muted = m_speed_muted.load(std::memory_order_relaxed);
+  if (!muted && speed > FAST_FORWARD_MUTE_SPEED)
+  {
+    DEV_LOG("Audio input at {:.1f}x, past what stretching can follow: fading out.", speed);
+    m_speed_muted.store(true, std::memory_order_relaxed);
+    m_fast_forward_mute_count.fetch_add(1, std::memory_order_relaxed);
+    if (m_write_state == WriteState::Normal || m_write_state == WriteState::FadingIn)
+    {
+      m_write_state = WriteState::FadingOut;
+      m_write_fade_pos = m_write_fade_frames;
+      m_fade_count.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+  else if (muted && speed < FAST_FORWARD_RESUME_SPEED)
+  {
+    // Fresh from here: the stretcher's state is from before the mute.
+    DEV_LOG("Audio input back at {:.1f}x: fading in.", speed);
+    m_speed_muted.store(false, std::memory_order_relaxed);
+    if (IsStretchEnabled())
+      soundtouch_clear(m_soundtouch);
+    m_tempo_hold = true;
+  }
+}
+
 void AudioStream::UpdateStretchTempo()
 {
+  UpdateBufferGrowth();
+
   static constexpr float MIN_TEMPO = 0.05f;
   static constexpr float MAX_TEMPO = 50.0f;
 
@@ -1044,7 +1374,8 @@ void AudioStream::UpdateStretchTempo()
     m_stretch_reset.store(STRETCH_RESET_THRESHOLD, std::memory_order_relaxed);
   }
 
-  float base_target_usage = static_cast<float>(m_target_buffer_size) * m_nominal_rate;
+  const u32 extra_frames = (m_extra_target_ms.load(std::memory_order_relaxed) * m_sample_rate) / 1000u;
+  float base_target_usage = static_cast<float>(m_target_buffer_size + extra_frames) * m_nominal_rate;
 
   // Read once: the callback adds its underruns to it.
   const bool reset = (m_stretch_reset.load(std::memory_order_relaxed) >= STRETCH_RESET_THRESHOLD);
@@ -1058,7 +1389,8 @@ void AudioStream::UpdateStretchTempo()
     m_dynamic_target_usage = base_target_usage;
   }
 
-  const u32 ibuffer_usage = GetBufferedFramesRelaxed();
+  // The input still queued counts too, so the input ring adds no lag.
+  const u32 ibuffer_usage = GetBufferedFramesRelaxed() + GetBufferedInputFramesRelaxed();
   float buffer_usage = static_cast<float>(ibuffer_usage);
   float tempo = buffer_usage / m_dynamic_target_usage;
   tempo = AddAndGetAverageTempo(tempo, reset);

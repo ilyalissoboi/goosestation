@@ -342,6 +342,7 @@ static float s_gpu_thread_usage = 0.0f;
 static float s_gpu_thread_time = 0.0f;
 static float s_input_latency = 0.0f; // input polled to present finished, the second's mean, ms
 static AudioStream::Counters s_audio_counters; // the audio stream's, over the last second
+static CDROM::Counters s_last_cd_counters;     // the CD's totals at the last second
 static bool s_gpu_time_plausible = true;
 static float s_average_gpu_time = 0.0f;
 static float s_accumulated_gpu_time = 0.0f;
@@ -3522,14 +3523,28 @@ void System::UpdatePerformanceCounters()
 
   // The GPU thread's figures, then the audio's, go last, so the fields before keep their places for what reads them.
   // Audio: underruns, overflows, fades, clears, cuts (fades the device stopped before they finished), how far the
-  // buffer has grown, and fast-forward's mutes.
+  // buffer has grown, and fast-forward's mutes. The CD's go after those: data sectors sped up/at normal speed, XA,
+  // CD-DA, dropped data sectors and seeks.
+  const CDROM::Counters& cd_total = CDROM::GetCounters();
+  const auto cd_delta = [](u32 now, u32& last) {
+    const u32 delta = (now >= last) ? (now - last) : now; // the totals start again at a reset
+    last = now;
+    return delta;
+  };
+  const CDROM::Counters cd = {cd_delta(cd_total.data_fast, s_last_cd_counters.data_fast),
+                              cd_delta(cd_total.data_normal, s_last_cd_counters.data_normal),
+                              cd_delta(cd_total.xa, s_last_cd_counters.xa),
+                              cd_delta(cd_total.cdda, s_last_cd_counters.cdda),
+                              cd_delta(cd_total.dropped, s_last_cd_counters.dropped),
+                              cd_delta(cd_total.seeks, s_last_cd_counters.seeks)};
   VERBOSE_LOG("FPS: {:.2f} VPS: {:.2f} CPU: {:.2f} GPU: {} Average: {:.2f}ms Min: {:.2f}ms Max: {:.2f}ms GPUThread: "
-              "{:.2f} Lat: {:.2f}ms Audio: U {} O {} F {} C {} X {} +{}ms M {}",
+              "{:.2f} Lat: {:.2f}ms Audio: U {} O {} F {} C {} X {} +{}ms M {} CD: D {}/{} X {} A {} drop {} S {}",
               s_fps, s_vps, s_cpu_thread_usage,
               s_gpu_time_plausible ? TinyString::from_format("{:.2f}", s_gpu_usage) : TinyString("-"),
               s_average_frame_time, s_minimum_frame_time, s_maximum_frame_time, s_gpu_thread_usage, s_input_latency,
               s_audio_counters.underruns, s_audio_counters.overflows, s_audio_counters.fades, s_audio_counters.clears,
-              s_audio_counters.cuts, s_audio_counters.extra_ms, s_audio_counters.fast_forward_mutes);
+              s_audio_counters.cuts, s_audio_counters.extra_ms, s_audio_counters.fast_forward_mutes, cd.data_fast,
+              cd.data_normal, cd.xa, cd.cdda, cd.dropped, cd.seeks);
 
   Host::OnPerformanceCountersUpdated();
 }

@@ -41,6 +41,20 @@ void DrawDebugWindow();
 
 void SetReadaheadSectors(u32 readahead_sectors);
 
+/// What the drive has done since the console was reset, for statistics: data sectors delivered at a sped-up pace and
+/// at the normal one, XA-ADPCM and CD-DA sectors, data sectors dropped because the game hadn't read the one before, and
+/// seeks completed.
+struct Counters
+{
+  u32 data_fast = 0;
+  u32 data_normal = 0;
+  u32 xa = 0;
+  u32 cdda = 0;
+  u32 dropped = 0;
+  u32 seeks = 0;
+};
+const Counters& GetCounters();
+
 /// Reads a frame from the audio FIFO, used by the SPU.
 std::tuple<s16, s16> GetAudioFrame();
 

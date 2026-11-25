@@ -393,6 +393,8 @@ static CDImage::LBA s_seek_end_lba{};
 static CDImage::LBA s_physical_lba{}; // current position of the disc with respect to time
 static GlobalTicks s_physical_lba_update_tick = 0;
 static u32 s_physical_lba_update_carry = 0;
+static Counters s_counters;
+
 static bool s_setloc_pending = false;
 static bool s_read_after_seek = false;
 static bool s_play_after_seek = false;
@@ -532,6 +534,7 @@ void CDROM::Shutdown()
 
 void CDROM::Reset()
 {
+  s_counters = {};
   s_command = Command::None;
   s_command_event.Deactivate();
   ClearCommandSecondResponse();
@@ -2784,6 +2787,7 @@ void CDROM::DoShellOpenComplete(TickCount ticks_late)
 
 bool CDROM::CompleteSeek()
 {
+  s_counters.seeks++;
   const bool logical = (s_drive_state == DriveState::SeekingLogical);
   ClearDriveState();
 
@@ -3114,10 +3118,14 @@ ALWAYS_INLINE_RELEASE void CDROM::ProcessDataSector(const u8* raw_sector, const 
     }
   }
 
+  const TickCount normal_ticks = System::GetTicksPerSecond() / (s_mode.double_speed ? 150 : 75);
+  (s_drive_event.GetInterval() < normal_ticks ? s_counters.data_fast : s_counters.data_normal)++;
+
   // TODO: How does XA relate to this buffering?
   SectorBuffer* sb = &s_sector_buffers[sb_num];
   if (sb->position == 0 && sb->size > 0)
   {
+    s_counters.dropped++;
     DEV_LOG("Sector buffer {} was not read, previous sector dropped",
             (s_current_write_sector_buffer - 1) % NUM_SECTOR_BUFFERS);
   }
@@ -3162,6 +3170,11 @@ ALWAYS_INLINE_RELEASE void CDROM::ProcessDataSector(const u8* raw_sector, const 
 
   s_async_response_fifo.Push(s_secondary_status.bits);
   SetAsyncInterrupt(Interrupt::DataReady);
+}
+
+const CDROM::Counters& CDROM::GetCounters()
+{
+  return s_counters;
 }
 
 std::tuple<s16, s16> CDROM::GetAudioFrame()
@@ -3406,6 +3419,7 @@ void CDROM::ResetAudioDecoder()
 
 ALWAYS_INLINE_RELEASE void CDROM::ProcessXAADPCMSector(const u8* raw_sector, const CDImage::SubChannelQ& subq)
 {
+  s_counters.xa++;
   // Check for automatic ADPCM filter.
   if (s_mode.xa_filter && (s_last_sector_subheader.file_number != s_xa_filter_file_number ||
                            s_last_sector_subheader.channel_number != s_xa_filter_channel_number))
@@ -3526,6 +3540,7 @@ ALWAYS_INLINE_RELEASE void CDROM::ProcessCDDASector(const u8* raw_sector, const 
                                                     bool subq_valid)
 {
   // For CDDA sectors, the whole sector contains the audio data.
+  s_counters.cdda++;
   DEV_LOG("Read sector {} as CDDA", s_current_lba);
 
   // The reporting doesn't happen if we're reading with the CDDA mode bit set.

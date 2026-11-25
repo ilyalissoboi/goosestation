@@ -113,3 +113,35 @@ TEST(CDROMTiming, FixedWaitsShortenOnlyWithInstantSeeks)
   EXPECT_EQ(CDROMTiming::GetFixedWaitTicks(change, 0, false), change);
   EXPECT_EQ(CDROMTiming::SHORT_WAIT_DIVISOR, 10);
 }
+
+TEST(CDROMTiming, StreamHoldEndsAfterLastSign)
+{
+  CDROMTiming::StreamDetector detector;
+  EXPECT_FALSE(detector.IsStreaming(1000, false, TPS));
+
+  const GlobalTicks t = 10 * static_cast<GlobalTicks>(TPS);
+  detector.NoteSign(t);
+  EXPECT_TRUE(detector.IsStreaming(t + static_cast<GlobalTicks>(0.49 * TPS), false, TPS));
+  EXPECT_FALSE(detector.IsStreaming(t + static_cast<GlobalTicks>(0.51 * TPS), false, TPS));
+
+  // A later sign extends it.
+  detector.NoteSign(t + static_cast<GlobalTicks>(0.4 * TPS));
+  EXPECT_TRUE(detector.IsStreaming(t + static_cast<GlobalTicks>(0.85 * TPS), false, TPS));
+  EXPECT_EQ(CDROMTiming::STREAM_HOLD_SECONDS, 0.5f);
+}
+
+TEST(CDROMTiming, ModeBitsAlwaysStream)
+{
+  CDROMTiming::StreamDetector detector;
+  EXPECT_TRUE(detector.IsStreaming(1000, true, TPS));
+  EXPECT_TRUE(detector.IsStreaming(100 * static_cast<GlobalTicks>(TPS), true, TPS));
+}
+
+TEST(CDROMTiming, ResetCountsAsStreaming)
+{
+  CDROMTiming::StreamDetector detector;
+  const GlobalTicks now = 5 * static_cast<GlobalTicks>(TPS);
+  detector.Reset(now);
+  EXPECT_TRUE(detector.IsStreaming(now + static_cast<GlobalTicks>(0.49 * TPS), false, TPS));
+  EXPECT_FALSE(detector.IsStreaming(now + static_cast<GlobalTicks>(0.51 * TPS), false, TPS));
+}

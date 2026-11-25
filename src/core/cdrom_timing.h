@@ -48,4 +48,24 @@ TickCount GetSeekTicks(const SeekParams& p);
 /// A fixed wait (speed change, TOC read, spin-up, stop), shortened with instant seeks and short drive waits.
 TickCount GetFixedWaitTicks(TickCount normal_ticks, u32 seek_speedup, bool short_drive_waits);
 
+/// Reads count as streaming this long after the last sign: it spans a movie's gaps between XA sectors and MDEC decodes,
+/// and lets a load right after a movie be sped up.
+static constexpr float STREAM_HOLD_SECONDS = 0.5f;
+
+/// Whether the drive is streaming audio or video, from what the drive and the console do: an XA-ADPCM sector, a data
+/// sector flagged real-time or video, CD-DA playing, or the MDEC starting a decode (each a sign), and the CD-DA or XA
+/// mode bits.
+class StreamDetector
+{
+public:
+  /// After a reset or a state load, streaming is assumed for the hold, so a movie can't run sped up.
+  void Reset(GlobalTicks now);
+  void NoteSign(GlobalTicks now);
+  bool IsStreaming(GlobalTicks now, bool mode_bits, TickCount ticks_per_second) const;
+
+private:
+  GlobalTicks m_last_sign = 0;
+  bool m_has_sign = false;
+};
+
 } // namespace CDROMTiming

@@ -88,3 +88,23 @@ TickCount CDROMTiming::GetFixedWaitTicks(TickCount normal_ticks, u32 seek_speedu
 {
   return (seek_speedup == 0 && short_drive_waits) ? (normal_ticks / SHORT_WAIT_DIVISOR) : normal_ticks;
 }
+
+void CDROMTiming::StreamDetector::Reset(GlobalTicks now)
+{
+  NoteSign(now);
+}
+
+void CDROMTiming::StreamDetector::NoteSign(GlobalTicks now)
+{
+  m_last_sign = now;
+  m_has_sign = true;
+}
+
+bool CDROMTiming::StreamDetector::IsStreaming(GlobalTicks now, bool mode_bits, TickCount ticks_per_second) const
+{
+  if (mode_bits)
+    return true;
+
+  const GlobalTicks hold = static_cast<GlobalTicks>(STREAM_HOLD_SECONDS * static_cast<float>(ticks_per_second));
+  return m_has_sign && now >= m_last_sign && (now - m_last_sign) < hold;
+}

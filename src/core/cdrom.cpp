@@ -4,6 +4,7 @@
 #include "cdrom.h"
 #include "cdrom_async_reader.h"
 #include "cdrom_timing.h"
+#include "mdec.h"
 #include "dma.h"
 #include "host.h"
 #include "host_interface_progress_callback.h"
@@ -309,6 +310,8 @@ static TickCount GetAckDelayForCommand(Command command);
 static TickCount GetTicksForSpinUp();
 static TickCount GetTicksForIDRead();
 static CDROMTiming::ReadPace GetReadPace();
+static void UpdateReadInterval();
+static void ResetStreamDetector();
 static TickCount GetTicksForRead();
 static TickCount GetTicksForSeek(CDImage::LBA new_lba, bool ignore_speed_change = false);
 static TickCount GetTicksForStop(bool motor_was_on);
@@ -398,6 +401,8 @@ static CDImage::LBA s_physical_lba{}; // current position of the disc with respe
 static GlobalTicks s_physical_lba_update_tick = 0;
 static u32 s_physical_lba_update_carry = 0;
 static Counters s_counters;
+static CDROMTiming::StreamDetector s_stream_detector;
+static GlobalTicks s_last_mdec_decode_seen = 0;
 static bool s_hurry_armed = false; // a data sector was delivered at a pace set by the game, and not yet hurried
 
 static bool s_setloc_pending = false;
@@ -540,6 +545,7 @@ void CDROM::Shutdown()
 void CDROM::Reset()
 {
   s_counters = {};
+  ResetStreamDetector();
   s_command = Command::None;
   s_command_event.Deactivate();
   ClearCommandSecondResponse();
@@ -794,6 +800,8 @@ bool CDROM::DoState(StateWrapper& sw)
       s_reader.QueueReadSector(s_requested_lba);
     UpdateCommandEvent();
     s_drive_event.SetState(!IsDriveIdle());
+    ResetStreamDetector();
+    s_hurry_armed = false;
 
     // Time will get fixed up later.
     s_command_second_response_event.SetState(s_command_second_response != Command::None);
@@ -1442,8 +1450,35 @@ TickCount CDROM::GetTicksForIDRead()
 
 CDROMTiming::ReadPace CDROM::GetReadPace()
 {
-  return CDROMTiming::GetReadPace(g_settings.cdrom_read_speedup, s_mode.double_speed, s_mode.cdda || s_mode.xa_enable,
-                                  System::GetTicksPerSecond());
+  const TickCount tps = System::GetTicksPerSecond();
+  const bool streaming = s_stream_detector.IsStreaming(
+    System::GetGlobalTickCounter(), s_mode.cdda || s_mode.xa_enable || s_drive_state == DriveState::Playing, tps);
+  return CDROMTiming::GetReadPace(g_settings.cdrom_read_speedup, s_mode.double_speed, streaming, tps);
+}
+
+void CDROM::UpdateReadInterval()
+{
+  // Worked out again after every sector, and when the settings change: the next sector comes at the new pace.
+  if (!IsReadingOrPlaying())
+    return;
+
+  const TickCount ticks = GetTicksForRead();
+  if (ticks != s_drive_event.GetInterval())
+  {
+    s_drive_event.SetInterval(ticks);
+    s_drive_event.Schedule(ticks);
+  }
+}
+
+void CDROM::ResetStreamDetector()
+{
+  s_stream_detector.Reset(System::GetGlobalTickCounter());
+  s_last_mdec_decode_seen = MDEC::GetLastDecodeStartTick();
+}
+
+void CDROM::SpeedupSettingsChanged()
+{
+  UpdateReadInterval();
 }
 
 TickCount CDROM::GetTicksForRead()
@@ -3054,8 +3089,17 @@ void CDROM::DoSectorRead()
                 is_data_sector ? "data" : "audio", is_data_sector ? "reading" : "playing");
   }
 
+  // The MDEC decoding is a sign of a movie streamed as plain data.
+  const GlobalTicks mdec_decode = MDEC::GetLastDecodeStartTick();
+  if (mdec_decode != s_last_mdec_decode_seen)
+  {
+    s_last_mdec_decode_seen = mdec_decode;
+    s_stream_detector.NoteSign(mdec_decode);
+  }
+
   s_requested_lba = next_sector;
   s_reader.QueueReadSector(s_requested_lba);
+  UpdateReadInterval();
 }
 
 ALWAYS_INLINE_RELEASE void CDROM::ProcessDataSectorHeader(const u8* raw_sector)
@@ -3081,6 +3125,13 @@ ALWAYS_INLINE_RELEASE void CDROM::ProcessDataSector(const u8* raw_sector, const 
       // Audio+realtime sectors aren't delivered to the CPU.
       return;
     }
+  }
+
+  // Real-time and video sectors are streamed (a movie read as plain data).
+  if (s_last_sector_header.sector_mode == 2 &&
+      (s_last_sector_subheader.submode.realtime || s_last_sector_subheader.submode.video))
+  {
+    s_stream_detector.NoteSign(System::GetGlobalTickCounter());
   }
 
   const TickCount normal_ticks = System::GetTicksPerSecond() / (s_mode.double_speed ? 150 : 75);
@@ -3411,6 +3462,7 @@ void CDROM::ResetAudioDecoder()
 ALWAYS_INLINE_RELEASE void CDROM::ProcessXAADPCMSector(const u8* raw_sector, const CDImage::SubChannelQ& subq)
 {
   s_counters.xa++;
+  s_stream_detector.NoteSign(System::GetGlobalTickCounter());
   // Check for automatic ADPCM filter.
   if (s_mode.xa_filter && (s_last_sector_subheader.file_number != s_xa_filter_file_number ||
                            s_last_sector_subheader.channel_number != s_xa_filter_channel_number))

@@ -4835,6 +4835,13 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
     if (g_settings.cdrom_readahead_sectors != old_settings.cdrom_readahead_sectors)
       CDROM::SetReadaheadSectors(g_settings.cdrom_readahead_sectors);
 
+    if (g_settings.cdrom_read_speedup != old_settings.cdrom_read_speedup ||
+        g_settings.cdrom_seek_speedup != old_settings.cdrom_seek_speedup ||
+        g_settings.cdrom_short_drive_waits != old_settings.cdrom_short_drive_waits)
+    {
+      CDROM::SpeedupSettingsChanged();
+    }
+
     if (g_settings.memory_card_types != old_settings.memory_card_types ||
         g_settings.memory_card_paths != old_settings.memory_card_paths ||
         (g_settings.memory_card_use_playlist_title != old_settings.memory_card_use_playlist_title))

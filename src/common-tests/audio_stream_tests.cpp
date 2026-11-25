@@ -1072,9 +1072,36 @@ TEST(AudioStream, CallbackStallDoesNotMute)
   Listener ear;
   RunAtSpeed(stream, sine, ear, 1.0, 1.0);
   for (u32 i = 0; i < 2 * RATE / 256; i++)
+  {
     Write(stream, sine.Next(256));
+    if (i % 32 == 0)
+      std::this_thread::sleep_for(std::chrono::milliseconds(30)); // the stall takes real time, as a device's does
+  }
   RunAtSpeed(stream, sine, ear, 1.0, 1.5);
   EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 0u);
+}
+
+TEST(AudioStream, ExtremeFastForwardMutes)
+{
+  // Unlimited fast-forward in a light scene runs at 30x and more: more than half a second of input between two of
+  // the device's callbacks is still speed.
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  RunAtSpeed(stream, sine, ear, 1.0, 1.0);
+  stream.GetAndResetCounters();
+  double owed = 0.0;
+  for (u32 i = 0; i < RATE / 882; i++) // a second of 882-frame callbacks
+  {
+    owed += 33.0 * 882;
+    u32 chunks = static_cast<u32>(owed / 64);
+    owed -= chunks * 64.0;
+    // It arrives while the audio thread works, not all at once.
+    for (; chunks > 0; chunks -= std::min(chunks, 16u))
+      Write(stream, sine.Next(std::min(chunks, 16u) * 64));
+    ear.Read(stream, 882);
+  }
+  EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 1u);
 }
 
 TEST(AudioStream, OneDropoutDoesNotGrowTheBuffer)

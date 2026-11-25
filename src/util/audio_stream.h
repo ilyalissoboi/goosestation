@@ -296,6 +296,8 @@ private:
   static constexpr float FAST_FORWARD_MUTE_SPEED = 4.0f;
   static constexpr float FAST_FORWARD_RESUME_SPEED = 3.5f;
   static constexpr u32 SPEED_WINDOW_MS = 500;
+  // Callbacks resuming after this long without one (a device switch, a stall) start the judging over.
+  static constexpr u32 CALLBACK_STALL_MS = 250;
 
 #ifndef __ANDROID__
   static std::vector<std::pair<std::string, std::string>> GetCubebDriverNames();
@@ -418,7 +420,7 @@ private:
   u64 m_speed_window_input = 0;           // audio thread
   u64 m_speed_window_callback = 0;        // audio thread
   u64 m_speed_last_callback = 0;          // audio thread
-  u64 m_speed_input_at_callback = 0;      // audio thread
+  u64 m_speed_last_callback_time = 0;     // audio thread (Common::Timer)
   std::atomic<u32> m_fast_forward_mute_count{0};
 
   std::atomic<u32> m_underrun_count{0};

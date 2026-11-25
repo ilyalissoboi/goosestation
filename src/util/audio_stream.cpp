@@ -1292,18 +1292,20 @@ void AudioStream::UpdateFastForwardMute()
   const u64 input = m_input_frames_written.load(std::memory_order_relaxed);
   const u64 window = (static_cast<u64>(m_sample_rate) * SPEED_WINDOW_MS) / 1000u;
 
-  // Input piling up while the device doesn't call (a device switch, a stall) isn't speed: start over.
+  // Input that piled up while the device didn't call (a device switch, a stall) isn't speed: when the callbacks come
+  // back after a stall, start over. Judged by the time the callbacks stopped, not the input, which at unlimited
+  // fast-forward can be more than half a second between two callbacks.
   if (callback != m_speed_last_callback)
   {
+    const u64 now = Common::Timer::GetCurrentValue();
+    if (m_speed_last_callback_time != 0 &&
+        Common::Timer::ConvertValueToMilliseconds(now - m_speed_last_callback_time) > CALLBACK_STALL_MS)
+    {
+      m_speed_window_input = input;
+      m_speed_window_callback = callback;
+    }
     m_speed_last_callback = callback;
-    m_speed_input_at_callback = input;
-  }
-  else if (input - m_speed_input_at_callback > window)
-  {
-    m_speed_window_input = input;
-    m_speed_window_callback = callback;
-    m_speed_input_at_callback = input;
-    return;
+    m_speed_last_callback_time = now;
   }
 
   if (callback - m_speed_window_callback < window)

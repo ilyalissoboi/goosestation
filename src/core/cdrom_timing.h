@@ -11,9 +11,9 @@ namespace CDROMTiming {
 /// `[CDROM] ReadSpeedup` 0: data comes as fast as the game takes it (see ReadPace::paced_by_game).
 static constexpr u32 READ_SPEEDUP_MAXIMUM = 0;
 
-/// The least time from the game taking a sector to the next one, at Maximum: room for the game's handler to return
-/// before the next INT1. It also caps Maximum at 32x.
-static constexpr TickCount MAX_READ_FLOOR_TICKS = static_cast<TickCount>((44100 * 0x300) / (150 * 32));
+/// The least time from the game taking a sector to the next one, at Maximum, which caps it at 4x: games need time
+/// between sectors (at 8x and above, Breath of Fire III drops sectors and Breath of Fire IV loops on a load).
+static constexpr TickCount MAX_READ_FLOOR_TICKS = static_cast<TickCount>((44100 * 0x300) / (150 * 4));
 
 /// The shortest seek: the whole of an instant seek but a short forward one.
 static constexpr TickCount SEEK_MIN_TICKS = 30000;

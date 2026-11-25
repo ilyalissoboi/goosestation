@@ -48,8 +48,8 @@ TEST(CDROMTiming, MaximumCeilingIsNormalSpeed)
   EXPECT_EQ(streaming.interval, TPS / 150);
   EXPECT_FALSE(streaming.paced_by_game);
 
-  // The floor caps Maximum at 32x.
-  EXPECT_EQ(CDROMTiming::MAX_READ_FLOOR_TICKS, TPS / (150 * 32));
+  // The floor caps Maximum at 4x: Breath of Fire III drops sectors and Breath of Fire IV hangs at 8x and above.
+  EXPECT_EQ(CDROMTiming::MAX_READ_FLOOR_TICKS, TPS / (150 * 4));
 }
 
 TEST(CDROMTiming, InstantSeekKeepsShortForwardTiming)

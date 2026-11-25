@@ -407,9 +407,12 @@ private:
 
   // Fast-forward's mute: the audio thread compares the input it takes with the device's frames.
   std::atomic<bool> m_speed_muted{false}; // read by the callback, so a muted gap isn't an underrun
-  u64 m_worker_input_frames = 0;          // audio thread
+  std::atomic<u64> m_input_frames_written{0}; // the emulation thread's, every chunk, dropped or not
+  std::atomic<u32> m_overflow_clear_generation{0}; // a clear from an input overflow keeps the mute and its judging
   u64 m_speed_window_input = 0;           // audio thread
   u64 m_speed_window_callback = 0;        // audio thread
+  u64 m_speed_last_callback = 0;          // audio thread
+  u64 m_speed_input_at_callback = 0;      // audio thread
   std::atomic<u32> m_fast_forward_mute_count{0};
 
   std::atomic<u32> m_underrun_count{0};

@@ -756,10 +756,13 @@ void AudioStream::WorkerClear(u32 generation)
   m_write_state = WriteState::Normal;
   m_tempo_hold = (m_parameters.stretch_mode == AudioStretchMode::TimeStretch);
 
-  // A jump starts the speed's judging over (the end of fast-forward clears, too).
-  m_speed_muted.store(false, std::memory_order_relaxed);
-  m_speed_window_input = m_worker_input_frames;
-  m_speed_window_callback = m_callback_frames.load(std::memory_order_relaxed);
+  // A jump starts the speed's judging over (the end of fast-forward clears, too); an input overflow doesn't.
+  if (generation != m_overflow_clear_generation.load(std::memory_order_relaxed))
+  {
+    m_speed_muted.store(false, std::memory_order_relaxed);
+    m_speed_window_input = m_input_frames_written.load(std::memory_order_relaxed);
+    m_speed_window_callback = m_callback_frames.load(std::memory_order_relaxed);
+  }
 
   // The consumer moves its own read position; this thread never writes it.
   m_clear_generation = generation;
@@ -959,7 +962,6 @@ void AudioStream::WorkerProcess()
     std::memcpy(m_worker_chunk.get(), &m_input[rpos * NUM_INPUT_CHANNELS],
                 CHUNK_SIZE * NUM_INPUT_CHANNELS * sizeof(SampleType));
     m_input_rpos.store((rpos + CHUNK_SIZE) % m_input_size, std::memory_order_release);
-    m_worker_input_frames += CHUNK_SIZE;
 
     UpdateFastForwardMute();
 
@@ -1079,6 +1081,7 @@ void AudioStream::EndWrite(u32 num_frames)
     return;
 
   m_staging_buffer_pos = 0;
+  m_input_frames_written.fetch_add(CHUNK_SIZE, std::memory_order_relaxed);
 
   // This thread only hands the chunk over: the audio thread stretches it.
   const u32 rpos = m_input_rpos.load(std::memory_order_acquire);
@@ -1093,6 +1096,8 @@ void AudioStream::EndWrite(u32 num_frames)
       m_input_overflowed = true;
       m_overflow_count.fetch_add(1, std::memory_order_relaxed);
       WARNING_LOG("The audio thread fell behind, dropping its input.");
+      // Not a jump: if this is fast-forward the thread can't keep up with, its mute and judging go on.
+      m_overflow_clear_generation.store(m_input_clear_generation + 1, std::memory_order_relaxed);
       EmptyBuffer();
     }
     return;
@@ -1268,14 +1273,32 @@ void AudioStream::UpdateFastForwardMute()
 
   // Judged only over the device's own frames: with no callbacks (paused) there's no speed, and the volume at 0
   // writes no input, so neither looks fast.
+  // The speed is what the emulation wrote, not what this thread managed to take: a thread that can't keep up must
+  // still see fast-forward for what it is.
   const u64 callback = m_callback_frames.load(std::memory_order_relaxed);
+  const u64 input = m_input_frames_written.load(std::memory_order_relaxed);
   const u64 window = (static_cast<u64>(m_sample_rate) * SPEED_WINDOW_MS) / 1000u;
+
+  // Input piling up while the device doesn't call (a device switch, a stall) isn't speed: start over.
+  if (callback != m_speed_last_callback)
+  {
+    m_speed_last_callback = callback;
+    m_speed_input_at_callback = input;
+  }
+  else if (input - m_speed_input_at_callback > window)
+  {
+    m_speed_window_input = input;
+    m_speed_window_callback = callback;
+    m_speed_input_at_callback = input;
+    return;
+  }
+
   if (callback - m_speed_window_callback < window)
     return;
 
-  const float speed = static_cast<float>(m_worker_input_frames - m_speed_window_input) /
-                      static_cast<float>(callback - m_speed_window_callback);
-  m_speed_window_input = m_worker_input_frames;
+  const float speed =
+    static_cast<float>(input - m_speed_window_input) / static_cast<float>(callback - m_speed_window_callback);
+  m_speed_window_input = input;
   m_speed_window_callback = callback;
 
   const bool muted = m_speed_muted.load(std::memory_order_relaxed);

@@ -1029,3 +1029,50 @@ TEST(AudioStream, MutedStreamNeverFastForwardMutes)
   RunAtSpeed(stream, sine, ear, 6.0, 2.0);
   EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 0u);
 }
+
+namespace {
+// As RunAtSpeed, without waiting for the audio thread: it keeps up only as far as it can.
+void RunAtSpeedNoSync(FakeAudioStream& stream, Sine& sine, Listener& ear, double speed, double seconds)
+{
+  double owed = 0.0;
+  for (u32 i = 0; i < static_cast<u32>(seconds * RATE / 256); i++)
+  {
+    owed += speed * 256;
+    const u32 chunks = static_cast<u32>(owed / 64);
+    owed -= chunks * 64.0;
+    if (chunks > 0)
+      WriteNoSync(stream, sine.Next(chunks * 64));
+    ear.Read(stream, 256);
+  }
+}
+} // namespace
+
+TEST(AudioStream, FastForwardMutesEvenWhenTheThreadLags)
+{
+  // The audio thread can't keep up (held), so the input ring overflows and clears: the speed is what the emulation
+  // wrote, and those clears don't start the judging over, so it mutes as soon as the thread looks.
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  RunAtSpeed(stream, sine, ear, 1.0, 1.0);
+  stream.GetAndResetCounters();
+
+  stream.Hold(true);
+  RunAtSpeedNoSync(stream, sine, ear, 6.0, 1.0);
+  stream.Hold(false);
+  RunAtSpeed(stream, sine, ear, 6.0, 0.3);
+  EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 1u);
+}
+
+TEST(AudioStream, CallbackStallDoesNotMute)
+{
+  // The device stops calling for 2 s (a Bluetooth switch) while the game runs at 1x: that input isn't speed.
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  RunAtSpeed(stream, sine, ear, 1.0, 1.0);
+  for (u32 i = 0; i < 2 * RATE / 256; i++)
+    Write(stream, sine.Next(256));
+  RunAtSpeed(stream, sine, ear, 1.0, 1.5);
+  EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 0u);
+}

@@ -5044,21 +5044,6 @@ void System::WarnAboutUnsafeSettings()
                g_settings.GetCPUOverclockPercent(), g_settings.cpu_overclock_numerator,
                g_settings.cpu_overclock_denominator));
     }
-    if (g_settings.cdrom_read_speedup > 1)
-    {
-      append(ICON_EMOJI_WARNING,
-             SmallString::from_format(
-               TRANSLATE_FS("System", "CD-ROM read speedup set to {}x (effective speed {}x). This may crash games."),
-               g_settings.cdrom_read_speedup, g_settings.cdrom_read_speedup * 2));
-    }
-    if (g_settings.cdrom_seek_speedup != 1)
-    {
-      append(ICON_EMOJI_WARNING,
-             SmallString::from_format(TRANSLATE_FS("System", "CD-ROM seek speedup set to {}. This may crash games."),
-                                      (g_settings.cdrom_seek_speedup == 0) ?
-                                        TinyString(TRANSLATE_SV("System", "Instant")) :
-                                        TinyString::from_format("{}x", g_settings.cdrom_seek_speedup)));
-    }
     if (g_settings.gpu_force_ntsc_timings)
     {
       append(ICON_FA_TV, TRANSLATE_SV("System", "Force NTSC timings is enabled. Games may run at incorrect speeds."));

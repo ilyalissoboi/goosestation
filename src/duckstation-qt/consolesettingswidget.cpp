@@ -67,8 +67,14 @@ ConsoleSettingsWidget::ConsoleSettingsWidget(SettingsWindow* dialog, QWidget* pa
     m_ui.cdromIgnoreDriveSubcode->setEnabled(false);
   }
 
-  SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.cdromSeekSpeedup, "CDROM", "SeekSpeedup", 1);
-  SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.cdromReadSpeedup, "CDROM", "ReadSpeedup", 1, 1);
+  SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.cdromSeekSpeedup, "CDROM", "SeekSpeedup",
+                                              Settings::DEFAULT_CDROM_SEEK_SPEEDUP);
+  SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.cdromReadSpeedup, "CDROM", "ReadSpeedup",
+                                              Settings::DEFAULT_CDROM_READ_SPEEDUP);
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.cdromShortDriveWaits, "CDROM", "ShortDriveWaits",
+                                               Settings::DEFAULT_CDROM_SHORT_DRIVE_WAITS);
+  SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.cdromFastForwardLoading, "CDROM", "FastForwardLoading",
+                                               false);
 
   dialog->registerWidgetHelp(m_ui.region, tr("Region"), tr("Auto-Detect"),
                              tr("Determines the emulated hardware type."));
@@ -97,11 +103,21 @@ ConsoleSettingsWidget::ConsoleSettingsWidget(SettingsWindow* dialog, QWidget* pa
     tr("Loads the game image into RAM. Useful for network paths that may become unreliable during gameplay. In some "
        "cases also eliminates stutter when games initiate audio track playback."));
   dialog->registerWidgetHelp(
-    m_ui.cdromReadSpeedup, tr("CD-ROM Read Speedup"), tr("None (Double Speed)"),
-    tr("Speeds up CD-ROM reads by the specified factor. Only applies to double-speed reads, and is ignored when audio "
-       "is playing. May improve loading speeds in some games, at the cost of breaking others."));
+    m_ui.cdromReadSpeedup, tr("CD-ROM Read Speedup"),
+    (Settings::DEFAULT_CDROM_READ_SPEEDUP == 0) ? tr("Maximum") : tr("None (Double Speed)"),
+    tr("Speeds up CD-ROM reads. Maximum reads data as fast as the game takes it. Only applies to double-speed reads; "
+       "movies and CD audio play at normal speed."));
   dialog->registerWidgetHelp(
-    m_ui.cdromSeekSpeedup, tr("CD-ROM Seek Speedup"), tr("None (Normal Speed)"),
+    m_ui.cdromShortDriveWaits, tr("Short Drive Waits"),
+    Settings::DEFAULT_CDROM_SHORT_DRIVE_WAITS ? tr("Checked") : tr("Unchecked"),
+    tr("With instant seeks, also shortens spin-up, speed changes and the table-of-contents read."));
+  dialog->registerWidgetHelp(
+    m_ui.cdromFastForwardLoading, tr("Fast-Forward While Loading"), tr("Unchecked"),
+    tr("Runs at the fast-forward speed while the disc loads data, not while movies or music play. Games that stream "
+       "data while you play will speed up too. Not available in hardcore mode."));
+  dialog->registerWidgetHelp(
+    m_ui.cdromSeekSpeedup, tr("CD-ROM Seek Speedup"),
+    (Settings::DEFAULT_CDROM_SEEK_SPEEDUP == 0) ? tr("Infinite/Instantaneous") : tr("None (Normal Speed)"),
     tr("Reduces the simulated time for the CD-ROM sled to move to different areas of the disc. Can improve loading "
        "times, but crash games which do not expect the CD-ROM to operate faster."));
   dialog->registerWidgetHelp(m_ui.cdromReadaheadSectors, tr("Asynchronous Readahead"), tr("8 Sectors"),

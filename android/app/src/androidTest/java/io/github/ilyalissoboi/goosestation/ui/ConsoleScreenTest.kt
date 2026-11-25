@@ -62,6 +62,8 @@ class ConsoleScreenTest : ControllerKeys {
             "Recompiler ICache",
             "Read speed-up",
             "Seek speed-up",
+            "Short drive waits",
+            "Fast-forward while loading",
             "Readahead",
             "Preload disc to RAM",
             "Apply image patches",
@@ -128,5 +130,24 @@ class ConsoleScreenTest : ControllerKeys {
 
         rule.onNode(isFocused()).assert(hasText("Instant", substring = true))
         assertEquals(0, changes.last()[ConsoleSettings.SEEK_SPEEDUP])
+    }
+
+    @Test
+    fun readSpeedUpStepsDownToMaximum() {
+        show(pageValues(ConsoleSettings.all))
+
+        walkTo("Read speed-up")
+        rule.onNode(isFocused()).assert(hasText("None (double speed)", substring = true))
+        press(Key.DirectionLeft)
+
+        rule.onNode(isFocused()).assert(hasText("Maximum", substring = true))
+        assertEquals(0, changes.last()[ConsoleSettings.READ_SPEEDUP])
+    }
+
+    @Test
+    fun fastForwardWhileLoadingIsOffInHardcoreMode() {
+        show(pageValues(ConsoleSettings.all, "Cheevos/Enabled" to "true", "Cheevos/ChallengeMode" to "true"))
+
+        rule.onNodeWithText("Off in hardcore mode.").assertExists()
     }
 }

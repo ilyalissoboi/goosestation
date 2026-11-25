@@ -3438,6 +3438,7 @@ void FullscreenUI::DrawBIOSSettingsPage()
 void FullscreenUI::DrawConsoleSettingsPage()
 {
   static constexpr const std::array cdrom_read_speeds = {
+    FSUI_NSTR("Maximum"),
     FSUI_NSTR("None (Double Speed)"), FSUI_NSTR("2x (Quad Speed)"), FSUI_NSTR("3x (6x Speed)"),
     FSUI_NSTR("4x (8x Speed)"),       FSUI_NSTR("5x (10x Speed)"),  FSUI_NSTR("6x (12x Speed)"),
     FSUI_NSTR("7x (14x Speed)"),      FSUI_NSTR("8x (16x Speed)"),  FSUI_NSTR("9x (18x Speed)"),
@@ -3514,16 +3515,25 @@ void FullscreenUI::DrawConsoleSettingsPage()
 
   MenuHeading(FSUI_CSTR("CD-ROM Emulation"));
 
-  DrawIntListSetting(
-    bsi, FSUI_ICONSTR(ICON_FA_COMPACT_DISC, "Read Speedup"),
-    FSUI_CSTR(
-      "Speeds up CD-ROM reads by the specified factor. May improve loading speeds in some games, and break others."),
-    "CDROM", "ReadSpeedup", 1, cdrom_read_speeds.data(), cdrom_read_speeds.size(), true, 1);
+  DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_COMPACT_DISC, "Read Speedup"),
+                     FSUI_CSTR("Reads data as fast as the game takes it at Maximum, or by the factor chosen. Movies and "
+                               "CD audio play at normal speed."),
+                     "CDROM", "ReadSpeedup", Settings::DEFAULT_CDROM_READ_SPEEDUP, cdrom_read_speeds.data(),
+                     cdrom_read_speeds.size(), true);
   DrawIntListSetting(
     bsi, FSUI_ICONSTR(ICON_FA_SEARCH, "Seek Speedup"),
     FSUI_CSTR(
       "Speeds up CD-ROM seeks by the specified factor. May improve loading speeds in some games, and break others."),
-    "CDROM", "SeekSpeedup", 1, cdrom_seek_speeds.data(), cdrom_seek_speeds.size(), true);
+    "CDROM", "SeekSpeedup", Settings::DEFAULT_CDROM_SEEK_SPEEDUP, cdrom_seek_speeds.data(), cdrom_seek_speeds.size(),
+    true);
+  DrawToggleSetting(
+    bsi, FSUI_ICONSTR(ICON_FA_STOPWATCH, "Short Drive Waits"),
+    FSUI_CSTR("With instant seeks, also shortens spin-up, speed changes and the table-of-contents read."), "CDROM",
+    "ShortDriveWaits", Settings::DEFAULT_CDROM_SHORT_DRIVE_WAITS);
+  DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_FAST_FORWARD, "Fast-Forward While Loading"),
+                    FSUI_CSTR("Runs at the fast-forward speed while the disc loads data, not while movies or music "
+                              "play. Games that stream data while you play will speed up too."),
+                    "CDROM", "FastForwardLoading", false, !Achievements::IsHardcoreModeActive());
 
   DrawIntRangeSetting(
     bsi, FSUI_ICONSTR(ICON_FA_FAST_FORWARD, "Readahead Sectors"),

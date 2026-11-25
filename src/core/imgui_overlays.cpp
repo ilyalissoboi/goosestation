@@ -436,9 +436,13 @@ void ImGuiManager::DrawEnhancementsOverlay()
     text.append_format(" CPU={}%", g_settings.GetCPUOverclockPercent());
   if (g_settings.enable_8mb_ram)
     text.append(" 8MB");
-  if (g_settings.cdrom_read_speedup != 1)
+  if (g_settings.cdrom_read_speedup == 0)
+    text.append(" CDR=Max");
+  else if (g_settings.cdrom_read_speedup != 1)
     text.append_format(" CDR={}x", g_settings.cdrom_read_speedup);
-  if (g_settings.cdrom_seek_speedup != 1)
+  if (g_settings.cdrom_seek_speedup == 0)
+    text.append(" CDS=Inst");
+  else if (g_settings.cdrom_seek_speedup != 1)
     text.append_format(" CDS={}x", g_settings.cdrom_seek_speedup);
   if (g_settings.gpu_resolution_scale != 1)
     text.append_format(" IR={}x", g_settings.gpu_resolution_scale);

@@ -123426,6 +123426,9 @@ SCUS-94960:
     rating: NoIssues
     versionTested: "0.1-1539-gf704cc64"
     comments: "Can hang if speed up in Star Wars Rebel Assaut 2 demo."
+  traits:
+    - DisableCDROMReadSpeedup
+    - DisableCDROMSeekSpeedup
 SLED-02040:
   name: "PlayStation Power (Spain) (Activision)"
 SLED-01933:
@@ -137736,6 +137739,8 @@ SCUS-94230:
     rating: NoIssues
     versionTested: "0.1-986-gfc911de1"
     comments: "Black screen if fast boot is used."
+  traits:
+    - DisableFastBoot
   controllers:
     - DigitalController
   metadata:

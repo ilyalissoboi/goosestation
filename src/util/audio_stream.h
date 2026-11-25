@@ -142,6 +142,7 @@ public:
     u32 fades = 0;     ///< Fade-outs, for any cause.
     u32 clears = 0;    ///< Times the queued audio was emptied.
     u32 cuts = 0;      ///< Fade-outs that couldn't finish before the device stopped.
+    u32 extra_ms = 0;  ///< How far the buffer has grown beyond its target (a level, not reset).
   };
 
   /// How long a fade in or out takes.
@@ -280,6 +281,12 @@ private:
   static constexpr u32 WORKER_WAKE_FRAMES = 128;
   static constexpr u32 WORKER_WAIT_MS = 5;
 
+  // With time stretching, the target grows at each underrun and shrinks back once they stop.
+  static constexpr u32 GROW_STEP_MS = 25;
+  static constexpr u32 MAX_EXTRA_MS = 100;
+  static constexpr u32 SHRINK_STEP_MS = 10;
+  static constexpr u32 SHRINK_AFTER_MS = 5000;
+
 #ifndef __ANDROID__
   static std::vector<std::pair<std::string, std::string>> GetCubebDriverNames();
   static std::vector<DeviceInfo> GetCubebOutputDevices(const char* driver, u32 sample_rate);
@@ -328,6 +335,7 @@ private:
 
   float AddAndGetAverageTempo(float val, bool reset);
   void UpdateStretchTempo();
+  void UpdateBufferGrowth();
 
   u32 m_buffer_size = 0;
   std::unique_ptr<s16[]> m_buffer;
@@ -380,6 +388,14 @@ private:
   u32 m_write_fade_pos = 0;
   u32 m_write_fade_frames = 0;
   u32 m_overflow_high_water = 0;
+
+  // The buffer's growth: the callback counts underruns and the frames it's asked for (its clock); the audio thread
+  // grows the target at each new underrun and shrinks it after a quiet spell.
+  std::atomic<u32> m_extra_target_ms{0};
+  std::atomic<u32> m_underrun_total{0};
+  std::atomic<u64> m_callback_frames{0};
+  u32 m_seen_underrun_total = 0;   // audio thread
+  u64 m_shrink_from_frames = 0;    // audio thread
 
   std::atomic<u32> m_underrun_count{0};
   std::atomic<u32> m_overflow_count{0};

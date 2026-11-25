@@ -893,3 +893,70 @@ TEST(AudioStream, ClearGenerationsMatchAcrossRings)
     EXPECT_EQ(stream.ClearedGeneration(), i);
   }
 }
+
+namespace {
+// One second at 1x, then a stall of `stall_ms` with nothing produced while the device keeps reading.
+void SecondThenStall(FakeAudioStream& stream, Sine& sine, Listener& ear, u32 stall_ms)
+{
+  for (u32 i = 0; i < RATE / 512; i++)
+  {
+    Write(stream, sine.Next(512));
+    ear.Read(stream, 512);
+  }
+  for (u32 i = 0; i < (RATE * stall_ms / 1000) / 512; i++)
+    ear.Read(stream, 512);
+}
+} // namespace
+
+TEST(AudioStream, BufferGrowsWhileUnderrunsRepeat)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  u32 highest = 0;
+  for (int i = 0; i < 8; i++)
+  {
+    SecondThenStall(stream, sine, ear, 300);
+    highest = std::max(highest, stream.GetAndResetCounters().extra_ms);
+  }
+  EXPECT_EQ(highest, 100u);
+}
+
+TEST(AudioStream, GrowthIsCappedAndShrinks)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  for (int i = 0; i < 6; i++)
+    SecondThenStall(stream, sine, ear, 300);
+  u32 last = stream.GetAndResetCounters().extra_ms;
+  EXPECT_EQ(last, 100u);
+
+  // Steady at 1x: back to nothing within about 50 s, never more than 10 ms at a time.
+  for (int second = 0; second < 60; second++)
+  {
+    SecondThenStall(stream, sine, ear, 0);
+    const u32 now = stream.GetAndResetCounters().extra_ms;
+    EXPECT_LE(now, last);
+    EXPECT_LE(last - now, 10u) << "second " << second;
+    last = now;
+  }
+  EXPECT_EQ(last, 0u);
+}
+
+TEST(AudioStream, NoGrowthWithoutTimeStretch)
+{
+  for (const AudioStretchMode mode : {AudioStretchMode::Off, AudioStretchMode::Resample})
+  {
+    FakeAudioStream stream(Params(mode, 50));
+    Sine sine;
+    Listener ear;
+    u32 highest = 0;
+    for (int i = 0; i < 6; i++)
+    {
+      SecondThenStall(stream, sine, ear, 300);
+      highest = std::max(highest, stream.GetAndResetCounters().extra_ms);
+    }
+    EXPECT_EQ(highest, 0u) << AudioStream::GetStretchModeName(mode);
+  }
+}

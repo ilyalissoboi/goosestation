@@ -296,6 +296,7 @@ AudioStream::Counters AudioStream::GetAndResetCounters()
   c.fades = m_fade_count.exchange(0, std::memory_order_relaxed);
   c.clears = m_clear_count.exchange(0, std::memory_order_relaxed);
   c.cuts = m_cut_count.exchange(0, std::memory_order_relaxed);
+  c.extra_ms = m_extra_target_ms.load(std::memory_order_relaxed);
   return c;
 }
 
@@ -343,6 +344,7 @@ void AudioStream::ApplyClear(u32 wpos)
 void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 {
   const u32 channels = m_output_channels;
+  m_callback_frames.fetch_add(num_frames, std::memory_order_relaxed);
 
   // The request first: the write position read after it is at or beyond the clear's.
   const u64 clear_request = m_clear_request.load(std::memory_order_acquire);
@@ -370,7 +372,10 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
   // Silent, consuming nothing, until enough is buffered that this callback and a fade-out fit.
   if (m_play_state == PlayState::Filling)
   {
-    const u32 restart = std::min(std::max(m_restart_frames, num_frames + m_fade_frames), m_restart_cap);
+    // Half of the grown target, too.
+    const u32 extra_frames = (m_extra_target_ms.load(std::memory_order_relaxed) * m_sample_rate) / 1000u;
+    const u32 restart =
+      std::min(std::max(m_restart_frames + extra_frames / 2, num_frames + m_fade_frames), m_restart_cap);
     if (available < restart)
     {
       // Nothing is heard, so a volume change needs no ramp.
@@ -433,6 +438,7 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
         if (m_volume.load(std::memory_order_relaxed) != 0)
         {
           m_underrun_count.fetch_add(1, std::memory_order_relaxed);
+          m_underrun_total.fetch_add(1, std::memory_order_relaxed);
           m_fade_count.fetch_add(1, std::memory_order_relaxed);
         }
         if (m_parameters.stretch_mode == AudioStretchMode::TimeStretch)
@@ -1214,8 +1220,37 @@ float AudioStream::AddAndGetAverageTempo(float val, bool reset)
   return (sum != 0.0f) ? sum : 1.0f;
 }
 
+void AudioStream::UpdateBufferGrowth()
+{
+  // Each new underrun grows the target, up to MAX_EXTRA_MS; after SHRINK_AFTER_MS without one (the callback's
+  // frames, so real time whatever the emulation's speed), it shrinks a step, small enough for the tempo's
+  // hysteresis to absorb.
+  const u64 now = m_callback_frames.load(std::memory_order_relaxed);
+  const u32 underruns = m_underrun_total.load(std::memory_order_relaxed);
+  u32 extra = m_extra_target_ms.load(std::memory_order_relaxed);
+  if (underruns != m_seen_underrun_total)
+  {
+    m_seen_underrun_total = underruns;
+    extra = std::min(extra + GROW_STEP_MS, MAX_EXTRA_MS);
+    m_shrink_from_frames = now;
+  }
+  else if (extra > 0 && (now - m_shrink_from_frames) >= (static_cast<u64>(m_sample_rate) * SHRINK_AFTER_MS) / 1000u)
+  {
+    extra -= std::min(extra, SHRINK_STEP_MS);
+    m_shrink_from_frames = now;
+  }
+  else if (extra == 0)
+  {
+    m_shrink_from_frames = now;
+  }
+
+  m_extra_target_ms.store(extra, std::memory_order_relaxed);
+}
+
 void AudioStream::UpdateStretchTempo()
 {
+  UpdateBufferGrowth();
+
   static constexpr float MIN_TEMPO = 0.05f;
   static constexpr float MAX_TEMPO = 50.0f;
 
@@ -1241,7 +1276,8 @@ void AudioStream::UpdateStretchTempo()
     m_stretch_reset.store(STRETCH_RESET_THRESHOLD, std::memory_order_relaxed);
   }
 
-  float base_target_usage = static_cast<float>(m_target_buffer_size) * m_nominal_rate;
+  const u32 extra_frames = (m_extra_target_ms.load(std::memory_order_relaxed) * m_sample_rate) / 1000u;
+  float base_target_usage = static_cast<float>(m_target_buffer_size + extra_frames) * m_nominal_rate;
 
   // Read once: the callback adds its underruns to it.
   const bool reset = (m_stretch_reset.load(std::memory_order_relaxed) >= STRETCH_RESET_THRESHOLD);

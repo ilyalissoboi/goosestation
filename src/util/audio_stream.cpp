@@ -756,6 +756,9 @@ void AudioStream::WorkerClear(u32 generation)
   m_write_state = WriteState::Normal;
   m_tempo_hold = (m_parameters.stretch_mode == AudioStretchMode::TimeStretch);
 
+  // A gap next to this isn't the game falling behind (see UpdateBufferGrowth()).
+  m_last_clear_frames = m_callback_frames.load(std::memory_order_relaxed);
+
   // A jump starts the speed's judging over (the end of fast-forward clears, too); an input overflow doesn't.
   if (generation != m_overflow_clear_generation.load(std::memory_order_relaxed))
   {
@@ -1241,17 +1244,27 @@ float AudioStream::AddAndGetAverageTempo(float val, bool reset)
 
 void AudioStream::UpdateBufferGrowth()
 {
-  // Each new underrun grows the target, up to MAX_EXTRA_MS; after SHRINK_AFTER_MS without one (the callback's
-  // frames, so real time whatever the emulation's speed), it shrinks a step, small enough for the tempo's
-  // hysteresis to absorb.
+  // Dropouts that keep happening (an underrun within REPEAT_WITHIN_MS of the last) grow the target, up to
+  // MAX_EXTRA_MS; a single one doesn't, nor one next to a jump (a state load stalls the emulation, then clears). After
+  // SHRINK_AFTER_MS without one (the callback's frames, so real time whatever the emulation's speed), it shrinks a
+  // step, small enough for the tempo's hysteresis to absorb.
   const u64 now = m_callback_frames.load(std::memory_order_relaxed);
   const u32 underruns = m_underrun_total.load(std::memory_order_relaxed);
   u32 extra = m_extra_target_ms.load(std::memory_order_relaxed);
   if (underruns != m_seen_underrun_total)
   {
     m_seen_underrun_total = underruns;
-    extra = std::min(extra + GROW_STEP_MS, MAX_EXTRA_MS);
-    m_shrink_from_frames = now;
+    const u64 frames_per_ms = std::max<u64>(m_sample_rate / 1000u, 1u);
+    if (now - m_last_clear_frames > JUMP_STALL_MS * frames_per_ms)
+    {
+      if (m_dropout_seen && now - m_last_dropout_frames <= REPEAT_WITHIN_MS * frames_per_ms)
+      {
+        extra = std::min(extra + GROW_STEP_MS, MAX_EXTRA_MS);
+        m_shrink_from_frames = now;
+      }
+      m_dropout_seen = true;
+      m_last_dropout_frames = now;
+    }
   }
   else if (extra > 0 && (now - m_shrink_from_frames) >= (static_cast<u64>(m_sample_rate) * SHRINK_AFTER_MS) / 1000u)
   {

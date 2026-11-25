@@ -287,6 +287,9 @@ private:
   static constexpr u32 MAX_EXTRA_MS = 100;
   static constexpr u32 SHRINK_STEP_MS = 10;
   static constexpr u32 SHRINK_AFTER_MS = 5000;
+  // Only dropouts that keep happening grow it: one within this long of the last, with no jump near it.
+  static constexpr u32 REPEAT_WITHIN_MS = 10000;
+  static constexpr u32 JUMP_STALL_MS = 1000;
 
   // Past this speed (input over the device's frames), time stretching can't follow: the output fades to silence, and
   // back in below the resume speed. Judged over each SPEED_WINDOW_MS of the device's frames.
@@ -404,6 +407,9 @@ private:
   std::atomic<u64> m_callback_frames{0};
   u32 m_seen_underrun_total = 0;   // audio thread
   u64 m_shrink_from_frames = 0;    // audio thread
+  u64 m_last_dropout_frames = 0;   // audio thread
+  u64 m_last_clear_frames = 0;     // audio thread
+  bool m_dropout_seen = false;     // audio thread
 
   // Fast-forward's mute: the audio thread compares the input it takes with the device's frames.
   std::atomic<bool> m_speed_muted{false}; // read by the callback, so a muted gap isn't an underrun

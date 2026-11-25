@@ -1076,3 +1076,30 @@ TEST(AudioStream, CallbackStallDoesNotMute)
   RunAtSpeed(stream, sine, ear, 1.0, 1.5);
   EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 0u);
 }
+
+TEST(AudioStream, OneDropoutDoesNotGrowTheBuffer)
+{
+  // A single stall (a boot's CD read, say) isn't dropouts that keep happening.
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  SecondThenStall(stream, sine, ear, 300);
+  for (int i = 0; i < 3; i++)
+    SecondThenStall(stream, sine, ear, 0);
+  EXPECT_EQ(stream.GetAndResetCounters().extra_ms, 0u);
+}
+
+TEST(AudioStream, LoadStallsDoNotGrowTheBuffer)
+{
+  // A state load stalls the emulation, then jumps: its gap is the load's, not the game falling behind.
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  for (int i = 0; i < 6; i++)
+  {
+    SecondThenStall(stream, sine, ear, 300);
+    stream.EmptyBuffer();
+  }
+  SecondThenStall(stream, sine, ear, 0);
+  EXPECT_EQ(stream.GetAndResetCounters().extra_ms, 0u);
+}

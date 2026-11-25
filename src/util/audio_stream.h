@@ -7,9 +7,12 @@
 
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 class Error;
@@ -181,10 +184,16 @@ public:
   ALWAYS_INLINE u32 GetBufferSize() const { return m_buffer_size; }
   ALWAYS_INLINE u32 GetTargetBufferSize() const { return m_target_buffer_size; }
   ALWAYS_INLINE u32 GetOutputVolume() const { return m_volume.load(std::memory_order_relaxed); }
-  ALWAYS_INLINE float GetNominalTempo() const { return m_nominal_rate; }
+  ALWAYS_INLINE float GetNominalTempo() const { return m_nominal_rate_request.load(std::memory_order_relaxed); }
   ALWAYS_INLINE bool IsPaused() const { return m_paused; }
 
   u32 GetBufferedFramesRelaxed() const;
+
+  /// Frames written by the emulation thread that the audio thread hasn't stretched yet.
+  u32 GetBufferedInputFramesRelaxed() const;
+
+  /// Blocks until the audio thread has stretched everything written so far into the output (tests, mostly).
+  void SyncWorker();
 
   /// Returns the counters and starts them again. Any thread.
   Counters GetAndResetCounters();
@@ -239,6 +248,10 @@ protected:
   /// How far ahead of what's heard the callback writes: a pause waits this long after the fade is written.
   void SetDeviceLatencyFrames(u32 frames);
 
+  /// Tests: holds the audio thread, as if it were busy, and reads the callback's last applied clear.
+  void SetWorkerHeld(bool held);
+  u32 GetClearedGeneration() const;
+
   void ReadFrames(SampleType* samples, u32 num_frames);
 
   template<AudioExpansionMode mode, ReadChannel c0 = READ_CHANNEL_NONE, ReadChannel c1 = READ_CHANNEL_NONE,
@@ -260,6 +273,12 @@ private:
   static constexpr u32 AVERAGING_WINDOW = 50;
   static constexpr u32 STRETCH_RESET_THRESHOLD = 5;
   static constexpr u32 TARGET_IPS = 691;
+
+  // The input ring, emulation thread to audio thread, holds this much; full, it's an overflow and a clear.
+  static constexpr u32 INPUT_RING_MS = 500;
+  // The emulation thread wakes the audio thread once this much is queued; it also wakes on its own this often.
+  static constexpr u32 WORKER_WAKE_FRAMES = 128;
+  static constexpr u32 WORKER_WAIT_MS = 5;
 
 #ifndef __ANDROID__
   static std::vector<std::pair<std::string, std::string>> GetCubebDriverNames();
@@ -283,6 +302,15 @@ private:
   void DestroyBuffer();
 
   void InternalWriteFrames(SampleType* samples, u32 num_frames);
+
+  // The audio thread: takes chunks from the input ring, stretches them and writes the output ring.
+  void StartWorker();
+  void StopWorker();
+  void WorkerThreadEntry();
+  void WorkerProcess();
+  void WorkerProcessChunk(SampleType* chunk);
+  void WorkerClear(u32 generation);
+  void WakeWorker();
 
   // The consumer: copies frames out of the ring and advances the read position.
   void ReadFromRing(SampleType* samples, u32 num_frames);
@@ -365,7 +393,8 @@ private:
   std::atomic<u32> m_stretch_reset{STRETCH_RESET_THRESHOLD}; // underruns (consumer) and overflows (producer)
 
   u32 m_stretch_ok_count = 0;
-  float m_nominal_rate = 1.0f;
+  float m_nominal_rate = 1.0f;                            // the audio thread's
+  std::atomic<float> m_nominal_rate_request{1.0f};       // set by the emulation thread
   float m_dynamic_target_usage = 0.0f;
 
   u32 m_average_position = 0;
@@ -374,8 +403,31 @@ private:
 
   std::array<float, AVERAGING_BUFFER_SIZE> m_average_fullness = {};
 
-  // temporary staging buffer, used for timestretching
+  // The emulation thread's chunk, filled by BeginWrite()/EndWrite().
   std::unique_ptr<s16[]> m_staging_buffer;
+
+  // The input ring: raw stereo chunks from the emulation thread, read by the audio thread. A clear is published on it
+  // as a generation and an input position, which the audio thread passes on to the output ring in order.
+  std::unique_ptr<s16[]> m_input;
+  u32 m_input_size = 0;
+  std::atomic<u32> m_input_rpos{0};
+  std::atomic<u32> m_input_wpos{0};
+  std::atomic<u64> m_input_clear_request{0};
+  u32 m_input_clear_generation = 0;           // emulation thread
+  bool m_input_overflowed = false;            // emulation thread
+  std::atomic<u32> m_worker_seen_generation{0}; // the audio thread's last clear taken from the input
+
+  std::thread m_worker;
+  std::mutex m_worker_mutex;
+  std::condition_variable m_worker_cv;
+  bool m_worker_wake = false; // under m_worker_mutex
+  std::atomic<bool> m_worker_shutdown{false};
+  std::atomic<bool> m_worker_held{false};
+  std::atomic<bool> m_worker_busy{false};
+
+  // The audio thread's working chunks: the raw input, and stretched output on its way to the ring.
+  std::unique_ptr<s16[]> m_worker_chunk;
+  std::unique_ptr<s16[]> m_worker_out;
 
   // float buffer, soundtouch only accepts float samples as input
   std::unique_ptr<float[]> m_float_buffer;

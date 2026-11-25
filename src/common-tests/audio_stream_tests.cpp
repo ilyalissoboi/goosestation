@@ -34,6 +34,8 @@ public:
 
   void Read(s16* out, u32 frames) { ReadFrames(out, frames); }
   void SetLatency(u32 frames) { SetDeviceLatencyFrames(frames); }
+  void Hold(bool held) { SetWorkerHeld(held); }
+  u32 ClearedGeneration() const { return GetClearedGeneration(); }
 
   std::vector<bool> device_pauses;
 
@@ -74,7 +76,8 @@ struct Sine
   }
 };
 
-void Write(AudioStream& stream, const Frames& frames)
+// Hands frames to the stream as the emulation thread does, without waiting for the audio thread.
+void WriteNoSync(AudioStream& stream, const Frames& frames)
 {
   u32 done = 0;
   const u32 total = static_cast<u32>(frames.size() / 2);
@@ -88,6 +91,13 @@ void Write(AudioStream& stream, const Frames& frames)
     stream.EndWrite(n);
     done += n;
   }
+}
+
+// The same, then waits until the audio thread has stretched them into the output ring.
+void Write(AudioStream& stream, const Frames& frames)
+{
+  WriteNoSync(stream, frames);
+  stream.SyncWorker();
 }
 
 // Everything the device was given, in order. Reads go in callbacks of at most 512 frames, as a device's do (the
@@ -383,6 +393,7 @@ TEST(AudioStream, EmptyBufferWhileFillingIsImmediate)
   Write(stream, sine.Next(512));
 
   stream.EmptyBuffer();
+  stream.SyncWorker(); // the audio thread passes the clear on to the callback
   EXPECT_TRUE(AllZero(ear.Read(stream, 256)));
   EXPECT_EQ(stream.GetBufferedFramesRelaxed(), 0u);
 
@@ -779,4 +790,106 @@ TEST(AudioStream, TimeStretchRefillsAtNormalTempoAfterAClear)
   }
   EXPECT_LE(highest, std::max(settled, stream.GetTargetBufferSize()) * 3 / 2) << "settled at " << settled;
   EXPECT_EQ(stream.GetAndResetCounters().underruns, 0u);
+}
+
+TEST(AudioStream, EmulationThreadOnlyCopies)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  stream.Hold(true);
+  WriteNoSync(stream, sine.Next(4096)); // more than SoundTouch's own latency
+  EXPECT_EQ(stream.GetBufferedFramesRelaxed(), 0u);
+  EXPECT_EQ(stream.GetBufferedInputFramesRelaxed(), 4096u);
+
+  stream.Hold(false);
+  stream.SyncWorker();
+  EXPECT_EQ(stream.GetBufferedInputFramesRelaxed(), 0u);
+  EXPECT_GT(stream.GetBufferedFramesRelaxed(), 0u);
+}
+
+TEST(AudioStream, DestroyWhileWorkingIsClean)
+{
+  for (int i = 0; i < 20; i++)
+  {
+    auto stream = std::make_unique<FakeAudioStream>(Params(AudioStretchMode::TimeStretch, 100));
+    Sine sine;
+    WriteNoSync(*stream, sine.Next(64 * 300)); // a backlog the thread is still working through
+    const auto start = std::chrono::steady_clock::now();
+    stream.reset();
+    EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(1));
+  }
+}
+
+TEST(AudioStream, PauseWithABacklogDropsIt)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 100));
+  Sine old_sine;
+  Write(stream, old_sine.Next(1792));
+  CallbackThread device(stream);
+  std::this_thread::sleep_for(std::chrono::milliseconds(40));
+
+  // The thread is busy (held) with 300 ms queued when the pause comes.
+  stream.Hold(true);
+  WriteNoSync(stream, old_sine.Next(13248));
+  stream.SetPaused(true);
+  device.m_running.store(false);
+  stream.Hold(false);
+  stream.SyncWorker();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  const size_t heard_before = device.Heard().size();
+  stream.SetPaused(false);
+  Sine new_sine;
+  new_sine.freq = 300.0;
+  new_sine.amplitude = 7000.0;
+  Write(stream, new_sine.Next(4096));
+  device.m_running.store(true);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  device.m_running.store(false);
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // After the resume, nothing loud enough to be the old sine before the new one fades in, and the old one's
+  // 100 Hz never comes back: the new sine is 7000 at most.
+  const Frames all = device.Heard();
+  const Frames after(all.begin() + static_cast<std::ptrdiff_t>(heard_before), all.end());
+  int loudest = 0;
+  for (const s16 v : after)
+    loudest = std::max(loudest, std::abs(static_cast<int>(v)));
+  EXPECT_LE(loudest, 7100);
+  EXPECT_GT(loudest, 3000);
+}
+
+TEST(AudioStream, InputOverflowClears)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+  stream.Hold(true);
+  WriteNoSync(stream, sine.Next(26496)); // 600 ms, past the 500 ms input ring
+  stream.Hold(false);
+  stream.SyncWorker();
+  AudioStream::Counters c = stream.GetAndResetCounters();
+  EXPECT_EQ(c.overflows, 1u);
+  EXPECT_EQ(stream.GetBufferedFramesRelaxed(), 0u); // the queued input was dropped by the clear
+
+  const Frames newest = sine.Next(1280);
+  Write(stream, newest);
+  const Frames out = ear.Read(stream, 1024);
+  EXPECT_NE(Locate(out, newest), NOT_FOUND);
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+}
+
+TEST(AudioStream, ClearGenerationsMatchAcrossRings)
+{
+  FakeAudioStream stream(Params());
+  Sine sine;
+  Listener ear;
+  for (u32 i = 1; i <= 10; i++)
+  {
+    Write(stream, sine.Next(256));
+    stream.EmptyBuffer();
+    stream.SyncWorker();
+    ear.Read(stream, 64);
+    EXPECT_EQ(stream.ClearedGeneration(), i);
+  }
 }

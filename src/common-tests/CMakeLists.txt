@@ -60,6 +60,7 @@ add_executable(common-tests
   texture_cache_reference_tests.cpp
   settings_texture_cache_tests.cpp
   settings_gpu_thread_tests.cpp
+  settings_cdrom_tests.cpp
   settings_vsync_tests.cpp
   performance_counters_math_tests.cpp
   frame_pacing_tests.cpp

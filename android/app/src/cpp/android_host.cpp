@@ -271,6 +271,9 @@ bool AndroidHost::InitializeConfig(Error* error)
     changed = true;
   }
 
+  // Maximum reads and instant seeks became the defaults (faster loading): a file still at the old speeds moves, once.
+  changed = Settings::ApplyLoadingDefaults(si, "Android") || changed;
+
   // The old vsync switch becomes the three-way setting the rows show (pacing stage 2b).
   changed = Settings::MoveOldVSyncSwitch(si) || changed;
 

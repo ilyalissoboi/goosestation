@@ -1527,6 +1527,21 @@ const char* Settings::GetDisplayVSyncModeDisplayName(DisplayVSyncMode mode)
   return Host::TranslateToCString("Settings", s_display_vsync_mode_display_names[static_cast<int>(mode)]);
 }
 
+bool Settings::ApplyLoadingDefaults(SettingsInterface& si, const char* version_section)
+{
+  if (si.GetUIntValue(version_section, "LoadingDefaultsVersion", 0u) >= 1)
+    return false;
+
+  for (const char* key : {"ReadSpeedup", "SeekSpeedup"})
+  {
+    if (si.ContainsValue("CDROM", key) && si.GetIntValue("CDROM", key, 0) == 1)
+      si.SetIntValue("CDROM", key, 0);
+  }
+
+  si.SetUIntValue(version_section, "LoadingDefaultsVersion", 1);
+  return true;
+}
+
 bool Settings::ApplyDesktopPacingDefaults(SettingsInterface& si)
 {
   if (si.GetUIntValue("Main", "DesktopPacingDefaultsVersion", 0u) >= 1)

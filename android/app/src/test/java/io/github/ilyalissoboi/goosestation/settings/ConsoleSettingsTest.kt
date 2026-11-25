@@ -87,6 +87,9 @@ class ConsoleSettingsTest {
             "${ConsoleSettings.FAST_FORWARD_LOADING.section}/${ConsoleSettings.FAST_FORWARD_LOADING.key}",
         )
         assertFalse(ConsoleSettings.FAST_FORWARD_LOADING.default)
+        assertEquals(0, ConsoleSettings.READ_SPEEDUP.default)
+        assertEquals(0, ConsoleSettings.SEEK_SPEEDUP.default)
+        assertTrue(ConsoleSettings.SHORT_DRIVE_WAITS.default)
         assertTrue(ConsoleSettings.all.contains(ConsoleSettings.SHORT_DRIVE_WAITS))
         assertTrue(ConsoleSettings.all.contains(ConsoleSettings.FAST_FORWARD_LOADING))
     }

@@ -122,7 +122,7 @@ class ConsoleScreenTest : ControllerKeys {
 
     @Test
     fun seekSpeedUpStepsDownToInstant() {
-        show(pageValues(ConsoleSettings.all))
+        show(pageValues(ConsoleSettings.all, "CDROM/SeekSpeedup" to "1"))
 
         walkTo("Seek speed-up")
         rule.onNode(isFocused()).assert(hasText("None (normal speed)", substring = true))
@@ -134,7 +134,7 @@ class ConsoleScreenTest : ControllerKeys {
 
     @Test
     fun readSpeedUpStepsDownToMaximum() {
-        show(pageValues(ConsoleSettings.all))
+        show(pageValues(ConsoleSettings.all, "CDROM/ReadSpeedup" to "1"))
 
         walkTo("Read speed-up")
         rule.onNode(isFocused()).assert(hasText("None (double speed)", substring = true))

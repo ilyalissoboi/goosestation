@@ -720,9 +720,11 @@ void QtHost::MigrateSettings()
     s_base_settings_interface->Save();
   }
 
-  // Sync to host refresh rate became the default with the desktop screen lock, and vsync three-way (pacing stage 2b).
+  // Sync to host refresh rate became the default with the desktop screen lock, and vsync three-way (pacing stage 2b);
+  // Maximum reads and instant seeks became the defaults (faster loading).
   const bool moved = Settings::MoveOldVSyncSwitch(*s_base_settings_interface);
-  if (Settings::ApplyDesktopPacingDefaults(*s_base_settings_interface) || moved)
+  const bool loading = Settings::ApplyLoadingDefaults(*s_base_settings_interface, "Main");
+  if (Settings::ApplyDesktopPacingDefaults(*s_base_settings_interface) || moved || loading)
     s_base_settings_interface->Save();
 }
 

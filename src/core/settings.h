@@ -454,6 +454,10 @@ struct Settings
   /// ([Main] DesktopPacingDefaultsVersion). True if the file changed.
   static bool ApplyDesktopPacingDefaults(SettingsInterface& si);
 
+  /// Maximum reads and instant seeks became the defaults (faster loading): a file still at the old default speeds (1)
+  /// moves to them, once, recorded as `[version_section] LoadingDefaultsVersion`. Speeds the player chose stay.
+  static bool ApplyLoadingDefaults(SettingsInterface& si, const char* version_section);
+
   /// The old [Display] VSync switch moved to [Display] VSyncMode, as Load() reads it (on: On; off: the default), so
   /// the UIs show what's used. In a game's file, which holds only what it overrides, off is Off. True if it changed.
   static bool MoveOldVSyncSwitch(SettingsInterface& si, bool game_file = false);
@@ -534,11 +538,11 @@ struct Settings
 
   static constexpr u8 DEFAULT_CDROM_READAHEAD_SECTORS = 8;
 
-  static constexpr u32 DEFAULT_CDROM_READ_SPEEDUP = 1;
+  static constexpr u32 DEFAULT_CDROM_READ_SPEEDUP = 0; // Maximum
 
-  static constexpr u32 DEFAULT_CDROM_SEEK_SPEEDUP = 1;
+  static constexpr u32 DEFAULT_CDROM_SEEK_SPEEDUP = 0; // instant
 
-  static constexpr bool DEFAULT_CDROM_SHORT_DRIVE_WAITS = false;
+  static constexpr bool DEFAULT_CDROM_SHORT_DRIVE_WAITS = true; // passed the compatibility pass
   static constexpr CDROMMechaconVersion DEFAULT_CDROM_MECHACON_VERSION = CDROMMechaconVersion::VC1A;
 
   static constexpr ControllerType DEFAULT_CONTROLLER_1_TYPE = ControllerType::AnalogController;

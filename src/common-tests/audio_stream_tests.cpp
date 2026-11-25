@@ -1130,3 +1130,23 @@ TEST(AudioStream, LoadStallsDoNotGrowTheBuffer)
   SecondThenStall(stream, sine, ear, 0);
   EXPECT_EQ(stream.GetAndResetCounters().extra_ms, 0u);
 }
+
+TEST(AudioStream, MuteSurvivesAnInputOverflow)
+{
+  // Muted at 6x, then the thread falls behind and the input ring overflows: the overflow's clear keeps the mute, and
+  // the output stays silent.
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  RunAtSpeed(stream, sine, ear, 1.0, 1.0);
+  RunAtSpeed(stream, sine, ear, 6.0, 1.5); // muted by now
+  stream.GetAndResetCounters();
+
+  stream.Hold(true);
+  RunAtSpeedNoSync(stream, sine, ear, 6.0, 0.5); // past the 500 ms input ring
+  stream.Hold(false);
+  EXPECT_EQ(RunAtSpeed(stream, sine, ear, 6.0, 1.0), 0);
+  const AudioStream::Counters c = stream.GetAndResetCounters();
+  EXPECT_GE(c.overflows, 1u);
+  EXPECT_EQ(c.fast_forward_mutes, 0u); // still the same mute
+}

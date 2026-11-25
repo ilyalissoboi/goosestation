@@ -766,6 +766,11 @@ void AudioStream::WorkerClear(u32 generation)
     m_speed_window_input = m_input_frames_written.load(std::memory_order_relaxed);
     m_speed_window_callback = m_callback_frames.load(std::memory_order_relaxed);
   }
+  else if (m_speed_muted.load(std::memory_order_relaxed))
+  {
+    // Still muted: the output stays silent, with nothing stretched, rather than starting again at full gain.
+    m_write_state = WriteState::Dropping;
+  }
 
   // The consumer moves its own read position; this thread never writes it.
   m_clear_generation = generation;

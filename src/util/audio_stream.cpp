@@ -297,6 +297,7 @@ AudioStream::Counters AudioStream::GetAndResetCounters()
   c.clears = m_clear_count.exchange(0, std::memory_order_relaxed);
   c.cuts = m_cut_count.exchange(0, std::memory_order_relaxed);
   c.extra_ms = m_extra_target_ms.load(std::memory_order_relaxed);
+  c.fast_forward_mutes = m_fast_forward_mute_count.exchange(0, std::memory_order_relaxed);
   return c;
 }
 
@@ -433,9 +434,10 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
           continue;
         }
 
-        // What's left only just covers a fade-out. Muted, the producer writes nothing, which isn't an underrun.
+        // What's left only just covers a fade-out. Muted (the volume at 0, or fast-forward past what stretching can
+        // follow), the producer writes nothing, which isn't an underrun.
         m_play_state = PlayState::FadingOut;
-        if (m_volume.load(std::memory_order_relaxed) != 0)
+        if (m_volume.load(std::memory_order_relaxed) != 0 && !m_speed_muted.load(std::memory_order_relaxed))
         {
           m_underrun_count.fetch_add(1, std::memory_order_relaxed);
           m_underrun_total.fetch_add(1, std::memory_order_relaxed);
@@ -558,7 +560,7 @@ void AudioStream::InternalWriteFrames(s16* data, u32 num_frames)
   }
   if (m_write_state == WriteState::Dropping)
   {
-    if (buffered > m_buffer_size / 2)
+    if (buffered > m_buffer_size / 2 || m_speed_muted.load(std::memory_order_relaxed))
       return;
 
     m_write_state = WriteState::FadingIn;
@@ -753,6 +755,11 @@ void AudioStream::WorkerClear(u32 generation)
 
   m_write_state = WriteState::Normal;
   m_tempo_hold = (m_parameters.stretch_mode == AudioStretchMode::TimeStretch);
+
+  // A jump starts the speed's judging over (the end of fast-forward clears, too).
+  m_speed_muted.store(false, std::memory_order_relaxed);
+  m_speed_window_input = m_worker_input_frames;
+  m_speed_window_callback = m_callback_frames.load(std::memory_order_relaxed);
 
   // The consumer moves its own read position; this thread never writes it.
   m_clear_generation = generation;
@@ -952,6 +959,13 @@ void AudioStream::WorkerProcess()
     std::memcpy(m_worker_chunk.get(), &m_input[rpos * NUM_INPUT_CHANNELS],
                 CHUNK_SIZE * NUM_INPUT_CHANNELS * sizeof(SampleType));
     m_input_rpos.store((rpos + CHUNK_SIZE) % m_input_size, std::memory_order_release);
+    m_worker_input_frames += CHUNK_SIZE;
+
+    UpdateFastForwardMute();
+
+    // Muted and faded out: nothing to stretch.
+    if (m_speed_muted.load(std::memory_order_relaxed) && m_write_state == WriteState::Dropping)
+      continue;
 
     WorkerProcessChunk(m_worker_chunk.get());
   }
@@ -1245,6 +1259,47 @@ void AudioStream::UpdateBufferGrowth()
   }
 
   m_extra_target_ms.store(extra, std::memory_order_relaxed);
+}
+
+void AudioStream::UpdateFastForwardMute()
+{
+  if (m_parameters.stretch_mode != AudioStretchMode::TimeStretch)
+    return;
+
+  // Judged only over the device's own frames: with no callbacks (paused) there's no speed, and the volume at 0
+  // writes no input, so neither looks fast.
+  const u64 callback = m_callback_frames.load(std::memory_order_relaxed);
+  const u64 window = (static_cast<u64>(m_sample_rate) * SPEED_WINDOW_MS) / 1000u;
+  if (callback - m_speed_window_callback < window)
+    return;
+
+  const float speed = static_cast<float>(m_worker_input_frames - m_speed_window_input) /
+                      static_cast<float>(callback - m_speed_window_callback);
+  m_speed_window_input = m_worker_input_frames;
+  m_speed_window_callback = callback;
+
+  const bool muted = m_speed_muted.load(std::memory_order_relaxed);
+  if (!muted && speed > FAST_FORWARD_MUTE_SPEED)
+  {
+    DEV_LOG("Audio input at {:.1f}x, past what stretching can follow: fading out.", speed);
+    m_speed_muted.store(true, std::memory_order_relaxed);
+    m_fast_forward_mute_count.fetch_add(1, std::memory_order_relaxed);
+    if (m_write_state == WriteState::Normal || m_write_state == WriteState::FadingIn)
+    {
+      m_write_state = WriteState::FadingOut;
+      m_write_fade_pos = m_write_fade_frames;
+      m_fade_count.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+  else if (muted && speed < FAST_FORWARD_RESUME_SPEED)
+  {
+    // Fresh from here: the stretcher's state is from before the mute.
+    DEV_LOG("Audio input back at {:.1f}x: fading in.", speed);
+    m_speed_muted.store(false, std::memory_order_relaxed);
+    if (IsStretchEnabled())
+      soundtouch_clear(m_soundtouch);
+    m_tempo_hold = true;
+  }
 }
 
 void AudioStream::UpdateStretchTempo()

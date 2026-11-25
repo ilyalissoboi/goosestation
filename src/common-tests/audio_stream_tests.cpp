@@ -960,3 +960,72 @@ TEST(AudioStream, NoGrowthWithoutTimeStretch)
     EXPECT_EQ(highest, 0u) << AudioStream::GetStretchModeName(mode);
   }
 }
+
+namespace {
+// `seconds` of callbacks with `speed` times as much input written as the device reads; returns the loudest sample.
+int RunAtSpeed(FakeAudioStream& stream, Sine& sine, Listener& ear, double speed, double seconds)
+{
+  int loudest = 0;
+  double owed = 0.0;
+  for (u32 i = 0; i < static_cast<u32>(seconds * RATE / 256); i++)
+  {
+    owed += speed * 256;
+    const u32 chunks = static_cast<u32>(owed / 64);
+    owed -= chunks * 64.0;
+    if (chunks > 0)
+      Write(stream, sine.Next(chunks * 64));
+    for (const s16 v : ear.Read(stream, 256))
+      loudest = std::max(loudest, std::abs(static_cast<int>(v)));
+  }
+  return loudest;
+}
+} // namespace
+
+TEST(AudioStream, VeryFastInputFadesToSilence)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  EXPECT_GT(RunAtSpeed(stream, sine, ear, 1.0, 1.0), 8000);
+  stream.GetAndResetCounters();
+
+  RunAtSpeed(stream, sine, ear, 6.0, 1.5);
+  const size_t muted_from = ear.heard.size();
+  const int loudest_muted = RunAtSpeed(stream, sine, ear, 6.0, 1.0);
+  AudioStream::Counters c = stream.GetAndResetCounters();
+  EXPECT_EQ(c.fast_forward_mutes, 1u);
+  EXPECT_EQ(c.underruns, 0u);
+  EXPECT_EQ(loudest_muted, 0) << "still sounding after " << muted_from / 2 << " frames";
+
+  // Back at 1x, it fades back in within a second.
+  EXPECT_GT(RunAtSpeed(stream, sine, ear, 1.0, 1.0), 8000);
+  EXPECT_LE(MaxStep(ear.heard), MAX_STEP);
+}
+
+TEST(AudioStream, ModerateFastForwardKeepsPlaying)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+  Listener ear;
+  RunAtSpeed(stream, sine, ear, 1.0, 1.0);
+  for (int second = 0; second < 3; second++)
+    EXPECT_GT(RunAtSpeed(stream, sine, ear, 3.0, 1.0), 8000) << "second " << second;
+  EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 0u);
+}
+
+TEST(AudioStream, MutedStreamNeverFastForwardMutes)
+{
+  FakeAudioStream stream(Params(AudioStretchMode::TimeStretch, 50));
+  Sine sine;
+
+  // No callbacks at all (the device paused), with input at any rate: no speed to judge.
+  for (int i = 0; i < 100; i++)
+    Write(stream, sine.Next(1024));
+  EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 0u);
+
+  // Volume 0 at 6x: the emulation thread writes nothing.
+  Listener ear;
+  stream.SetOutputVolume(0);
+  RunAtSpeed(stream, sine, ear, 6.0, 2.0);
+  EXPECT_EQ(stream.GetAndResetCounters().fast_forward_mutes, 0u);
+}

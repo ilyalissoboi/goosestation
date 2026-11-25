@@ -143,6 +143,7 @@ public:
     u32 clears = 0;    ///< Times the queued audio was emptied.
     u32 cuts = 0;      ///< Fade-outs that couldn't finish before the device stopped.
     u32 extra_ms = 0;  ///< How far the buffer has grown beyond its target (a level, not reset).
+    u32 fast_forward_mutes = 0; ///< Times the input came faster than stretching can follow, and was faded out.
   };
 
   /// How long a fade in or out takes.
@@ -287,6 +288,12 @@ private:
   static constexpr u32 SHRINK_STEP_MS = 10;
   static constexpr u32 SHRINK_AFTER_MS = 5000;
 
+  // Past this speed (input over the device's frames), time stretching can't follow: the output fades to silence, and
+  // back in below the resume speed. Judged over each SPEED_WINDOW_MS of the device's frames.
+  static constexpr float FAST_FORWARD_MUTE_SPEED = 4.0f;
+  static constexpr float FAST_FORWARD_RESUME_SPEED = 3.5f;
+  static constexpr u32 SPEED_WINDOW_MS = 500;
+
 #ifndef __ANDROID__
   static std::vector<std::pair<std::string, std::string>> GetCubebDriverNames();
   static std::vector<DeviceInfo> GetCubebOutputDevices(const char* driver, u32 sample_rate);
@@ -336,6 +343,7 @@ private:
   float AddAndGetAverageTempo(float val, bool reset);
   void UpdateStretchTempo();
   void UpdateBufferGrowth();
+  void UpdateFastForwardMute();
 
   u32 m_buffer_size = 0;
   std::unique_ptr<s16[]> m_buffer;
@@ -396,6 +404,13 @@ private:
   std::atomic<u64> m_callback_frames{0};
   u32 m_seen_underrun_total = 0;   // audio thread
   u64 m_shrink_from_frames = 0;    // audio thread
+
+  // Fast-forward's mute: the audio thread compares the input it takes with the device's frames.
+  std::atomic<bool> m_speed_muted{false}; // read by the callback, so a muted gap isn't an underrun
+  u64 m_worker_input_frames = 0;          // audio thread
+  u64 m_speed_window_input = 0;           // audio thread
+  u64 m_speed_window_callback = 0;        // audio thread
+  std::atomic<u32> m_fast_forward_mute_count{0};
 
   std::atomic<u32> m_underrun_count{0};
   std::atomic<u32> m_overflow_count{0};

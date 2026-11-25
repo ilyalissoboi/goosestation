@@ -349,6 +349,7 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   cdrom_mute_cd_audio = si.GetBoolValue("CDROM", "MuteCDAudio", false);
   cdrom_read_speedup = si.GetIntValue("CDROM", "ReadSpeedup", 1);
   cdrom_seek_speedup = si.GetIntValue("CDROM", "SeekSpeedup", 1);
+  cdrom_short_drive_waits = si.GetBoolValue("CDROM", "ShortDriveWaits", false);
 
   audio_backend =
     AudioStream::ParseBackendName(
@@ -617,6 +618,7 @@ void Settings::Save(SettingsInterface& si, bool ignore_base) const
   si.SetBoolValue("CDROM", "MuteCDAudio", cdrom_mute_cd_audio);
   si.SetIntValue("CDROM", "ReadSpeedup", cdrom_read_speedup);
   si.SetIntValue("CDROM", "SeekSpeedup", cdrom_seek_speedup);
+  si.SetBoolValue("CDROM", "ShortDriveWaits", cdrom_short_drive_waits);
 
   si.SetStringValue("Audio", "Backend", AudioStream::GetBackendName(audio_backend));
   si.SetStringValue("Audio", "Driver", audio_driver.c_str());

@@ -20,6 +20,8 @@ add_library(core
   cdrom.h
   cdrom_async_reader.cpp
   cdrom_async_reader.h
+  cdrom_timing.cpp
+  cdrom_timing.h
   cheats.cpp
   cheats.h
   controller.cpp

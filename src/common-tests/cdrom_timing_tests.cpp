@@ -201,3 +201,13 @@ TEST(CDROMTiming, ResetLaterUsesTheNextQuerysTime)
   EXPECT_TRUE(detector.IsStreaming(5 * sec + sec * 49 / 100, false, TPS));
   EXPECT_FALSE(detector.IsStreaming(5 * sec + sec * 51 / 100, false, TPS));
 }
+
+TEST(CDROMTiming, SeeksBetweenStreamedBurstsAreNotLoading)
+{
+  // A movie read in bursts seeks between them: while the stream's hold lasts, that isn't loading.
+  EXPECT_FALSE(CDROMTiming::IsLoadingData(true, false, true));
+  EXPECT_FALSE(CDROMTiming::IsLoadingData(false, true, true));
+  EXPECT_TRUE(CDROMTiming::IsLoadingData(true, false, false));
+  EXPECT_TRUE(CDROMTiming::IsLoadingData(false, true, false));
+  EXPECT_FALSE(CDROMTiming::IsLoadingData(false, false, false));
+}

@@ -1485,20 +1485,15 @@ void CDROM::SpeedupSettingsChanged()
 
 bool CDROM::IsStreaming()
 {
-  return (IsReadingOrPlaying() &&
-          s_stream_detector.IsStreaming(System::GetGlobalTickCounter(),
-                                        s_mode.cdda || s_mode.xa_enable || s_drive_state == DriveState::Playing,
-                                        System::GetTicksPerSecond()));
+  // The hold counts whatever the drive is doing: a movie read in bursts seeks or pauses between them.
+  return s_stream_detector.IsStreaming(System::GetGlobalTickCounter(),
+                                       s_mode.cdda || s_mode.xa_enable || s_drive_state == DriveState::Playing,
+                                       System::GetTicksPerSecond());
 }
 
 bool CDROM::IsLoadingData()
 {
-  if (IsSeeking())
-    return true;
-
-  return (s_drive_state == DriveState::Reading &&
-          !s_stream_detector.IsStreaming(System::GetGlobalTickCounter(), s_mode.cdda || s_mode.xa_enable,
-                                         System::GetTicksPerSecond()));
+  return CDROMTiming::IsLoadingData(IsSeeking(), s_drive_state == DriveState::Reading, IsStreaming());
 }
 
 TickCount CDROM::GetTicksForRead()

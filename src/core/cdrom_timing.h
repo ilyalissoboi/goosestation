@@ -71,6 +71,13 @@ private:
   bool m_reset_pending = false;
 };
 
+/// Whether the drive is loading, for fast-forward while loading: seeking or reading data, and nothing streamed within
+/// the stream's hold (a movie read in bursts seeks between them).
+inline bool IsLoadingData(bool seeking, bool reading_data, bool streaming)
+{
+  return !streaming && (seeking || reading_data);
+}
+
 /// Fast-forward while loading stays on this long (in emulated time) after the drive last loaded, across a load's bursts.
 static constexpr float LOAD_FF_HOLD_SECONDS = 0.25f;
 

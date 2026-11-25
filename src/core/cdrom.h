@@ -37,7 +37,7 @@ void SpeedupSettingsChanged();
 /// The drive is seeking, or reading data that isn't streamed (for fast-forward while loading).
 bool IsLoadingData();
 
-/// The drive is reading or playing audio or video that's streamed (no speedup, no fast-forward while loading).
+/// Audio or video is streaming, or streamed within the hold (no speedup, no fast-forward while loading).
 bool IsStreaming();
 
 // I/O

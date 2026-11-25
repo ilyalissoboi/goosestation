@@ -365,6 +365,9 @@ void SetFastForwardEnabled(bool enabled);
 
 /// Toggles turbo state.
 bool IsTurboEnabled();
+
+/// Fast-forward while loading ([CDROM] FastForwardLoading) is running now.
+bool IsLoadFastForwardActive();
 void SetTurboEnabled(bool enabled);
 
 /// Toggles rewind state.

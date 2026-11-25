@@ -1481,6 +1481,16 @@ void CDROM::SpeedupSettingsChanged()
   UpdateReadInterval();
 }
 
+bool CDROM::IsLoadingData()
+{
+  if (IsSeeking())
+    return true;
+
+  return (s_drive_state == DriveState::Reading &&
+          !s_stream_detector.IsStreaming(System::GetGlobalTickCounter(), s_mode.cdda || s_mode.xa_enable,
+                                         System::GetTicksPerSecond()));
+}
+
 TickCount CDROM::GetTicksForRead()
 {
   return GetReadPace().interval;

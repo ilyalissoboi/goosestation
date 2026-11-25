@@ -34,6 +34,9 @@ void CPUClockChanged();
 /// The read or seek speedup, or short drive waits, changed: the next sector comes at the new pace.
 void SpeedupSettingsChanged();
 
+/// The drive is seeking, or reading data that isn't streamed (for fast-forward while loading).
+bool IsLoadingData();
+
 // I/O
 u8 ReadRegister(u32 offset);
 void WriteRegister(u32 offset, u8 value);

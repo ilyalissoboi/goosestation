@@ -108,3 +108,23 @@ bool CDROMTiming::StreamDetector::IsStreaming(GlobalTicks now, bool mode_bits, T
   const GlobalTicks hold = static_cast<GlobalTicks>(STREAM_HOLD_SECONDS * static_cast<float>(ticks_per_second));
   return m_has_sign && now >= m_last_sign && (now - m_last_sign) < hold;
 }
+
+bool CDROMTiming::LoadFastForward::Update(bool allowed, bool cd_loading, GlobalTicks now, TickCount ticks_per_second)
+{
+  if (!allowed)
+  {
+    m_active = false;
+  }
+  else if (cd_loading)
+  {
+    m_active = true;
+    m_last_loading = now;
+  }
+  else if (m_active)
+  {
+    const GlobalTicks hold = static_cast<GlobalTicks>(LOAD_FF_HOLD_SECONDS * static_cast<float>(ticks_per_second));
+    m_active = (now >= m_last_loading && (now - m_last_loading) < hold);
+  }
+
+  return m_active;
+}

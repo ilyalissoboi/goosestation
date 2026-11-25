@@ -403,7 +403,7 @@ void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, float 
     if (g_settings.display_show_status_indicators)
     {
       const bool rewinding = System::IsRewinding();
-      if (rewinding || System::IsFastForwardEnabled() || System::IsTurboEnabled())
+      if (rewinding || System::IsFastForwardEnabled() || System::IsTurboEnabled() || System::IsLoadFastForwardActive())
       {
         text.assign(rewinding ? ICON_EMOJI_FAST_REVERSE : ICON_EMOJI_FAST_FORWARD);
         DRAW_LINE(standard_font, text, IM_COL32(255, 255, 255, 255));

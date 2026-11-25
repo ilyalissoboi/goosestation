@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0
 
 #include "core/cdrom_timing.h"
+#include "core/settings.h"
 #include "core/system.h"
 
 #include <gtest/gtest.h>
@@ -144,4 +145,36 @@ TEST(CDROMTiming, ResetCountsAsStreaming)
   detector.Reset(now);
   EXPECT_TRUE(detector.IsStreaming(now + static_cast<GlobalTicks>(0.49 * TPS), false, TPS));
   EXPECT_FALSE(detector.IsStreaming(now + static_cast<GlobalTicks>(0.51 * TPS), false, TPS));
+}
+
+TEST(CDROMTiming, LoadFastForwardHoldsAndReleases)
+{
+  CDROMTiming::LoadFastForward rule;
+  const GlobalTicks t = 10 * static_cast<GlobalTicks>(TPS);
+  const auto at = [t](double seconds) { return t + static_cast<GlobalTicks>(seconds * TPS); };
+
+  EXPECT_FALSE(rule.Update(true, false, at(0.0), TPS));
+  EXPECT_TRUE(rule.Update(true, true, at(0.0), TPS));
+  EXPECT_TRUE(rule.Update(true, false, at(0.2), TPS)); // a gap between a load's bursts
+  EXPECT_TRUE(rule.Update(true, true, at(0.3), TPS));
+  EXPECT_TRUE(rule.Update(true, false, at(0.54), TPS));
+  EXPECT_FALSE(rule.Update(true, false, at(0.56), TPS)); // 0.26 s after the last loading
+  EXPECT_FALSE(rule.IsActive());
+  EXPECT_EQ(CDROMTiming::LOAD_FF_HOLD_SECONDS, 0.25f);
+}
+
+TEST(CDROMTiming, LoadFastForwardNotAllowed)
+{
+  CDROMTiming::LoadFastForward rule;
+  EXPECT_FALSE(rule.Update(false, true, 1000, TPS));
+  EXPECT_TRUE(rule.Update(true, true, 2000, TPS));
+  EXPECT_FALSE(rule.Update(false, true, 3000, TPS)); // off at once, even mid-load
+  EXPECT_TRUE(rule.Update(true, true, 4000, TPS));
+  rule.Reset();
+  EXPECT_FALSE(rule.IsActive());
+}
+
+TEST(CDROMTiming, FastForwardLoadingDefaultsOff)
+{
+  EXPECT_FALSE(Settings().fast_forward_loading);
 }

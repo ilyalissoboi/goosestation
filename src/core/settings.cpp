@@ -350,6 +350,7 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   cdrom_read_speedup = si.GetIntValue("CDROM", "ReadSpeedup", 1);
   cdrom_seek_speedup = si.GetIntValue("CDROM", "SeekSpeedup", 1);
   cdrom_short_drive_waits = si.GetBoolValue("CDROM", "ShortDriveWaits", false);
+  fast_forward_loading = si.GetBoolValue("CDROM", "FastForwardLoading", false);
 
   audio_backend =
     AudioStream::ParseBackendName(
@@ -619,6 +620,7 @@ void Settings::Save(SettingsInterface& si, bool ignore_base) const
   si.SetIntValue("CDROM", "ReadSpeedup", cdrom_read_speedup);
   si.SetIntValue("CDROM", "SeekSpeedup", cdrom_seek_speedup);
   si.SetBoolValue("CDROM", "ShortDriveWaits", cdrom_short_drive_waits);
+  si.SetBoolValue("CDROM", "FastForwardLoading", fast_forward_loading);
 
   si.SetStringValue("Audio", "Backend", AudioStream::GetBackendName(audio_backend));
   si.SetStringValue("Audio", "Driver", audio_driver.c_str());
@@ -867,6 +869,7 @@ void Settings::FixIncompatibleSettings(bool display_osd_messages)
     g_settings.turbo_speed = (g_settings.turbo_speed != 0.0f) ? std::max(g_settings.turbo_speed, 1.0f) : 0.0f;
     g_settings.rewind_enable = false;
     g_settings.enable_cheats = false;
+    g_settings.fast_forward_loading = false;
     if (g_settings.cpu_overclock_enable && g_settings.GetCPUOverclockPercent() < 100)
     {
       g_settings.cpu_overclock_enable = false;

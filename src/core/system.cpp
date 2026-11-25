@@ -6,6 +6,7 @@
 #include "bios.h"
 #include "bus.h"
 #include "cdrom.h"
+#include "cdrom_timing.h"
 #include "cheats.h"
 #include "controller.h"
 #include "cpu_code_cache.h"
@@ -182,6 +183,8 @@ static void UpdateDisplayVSync();
 static u32 WantedDisplayLock();
 static u32 TimelineRefreshes();
 static bool IsVSyncWanted();
+static bool IsFastForwardingForAnyReason();
+static void UpdateLoadFastForward();
 static bool GetTimeline(DisplayTimeline* timeline);
 static u32 PresentRefreshes();
 static void SleepToDisplayDeadline(Common::Timer::Value current_time);
@@ -287,6 +290,7 @@ static bool s_system_executing = false;
 static bool s_system_interrupted = false;
 static bool s_frame_step_request = false;
 static bool s_fast_forward_enabled = false;
+static CDROMTiming::LoadFastForward s_load_fast_forward; // [CDROM] FastForwardLoading's state
 static bool s_turbo_enabled = false;
 static bool s_throttler_enabled = false;
 static bool s_optimal_frame_pacing = false;
@@ -1604,6 +1608,11 @@ void System::PauseSystem(bool paused)
 
   SetState(paused ? State::Paused : State::Running);
   SPU::GetOutputStream()->SetPaused(paused);
+  if (paused && s_load_fast_forward.IsActive())
+  {
+    s_load_fast_forward.Reset();
+    UpdateSpeedLimiterState();
+  }
 
   if (paused)
   {
@@ -1949,6 +1958,7 @@ bool System::Initialize(bool force_software_renderer, Error* error)
   s_next_frame_time = 0;
   s_turbo_enabled = false;
   s_fast_forward_enabled = false;
+  s_load_fast_forward.Reset();
 
   s_rewind_load_frequency = -1;
   s_rewind_load_counter = -1;
@@ -2187,6 +2197,8 @@ void System::FrameDone()
 
   if (Achievements::IsActive())
     Achievements::FrameUpdate();
+
+  UpdateLoadFastForward();
 
 #ifdef ENABLE_DISCORD_PRESENCE
   PollDiscordPresence();
@@ -3630,7 +3642,7 @@ void System::UpdateSpeedLimiterState()
 
   s_target_speed = s_turbo_enabled ?
                      g_settings.turbo_speed :
-                     (s_fast_forward_enabled ? g_settings.fast_forward_speed : g_settings.emulation_speed);
+                     (IsFastForwardingForAnyReason() ? g_settings.fast_forward_speed : g_settings.emulation_speed);
   s_throttler_enabled = (s_target_speed != 0.0f);
   s_optimal_frame_pacing = (s_throttler_enabled && g_settings.display_optimal_frame_pacing);
   s_skip_presenting_duplicate_frames = s_throttler_enabled && g_settings.display_skip_presenting_duplicate_frames;
@@ -3759,7 +3771,7 @@ u32 System::WantedDisplayLock()
     return 0;
 
   const float base_speed = s_turbo_enabled ? g_settings.turbo_speed :
-                                             (s_fast_forward_enabled ? g_settings.fast_forward_speed :
+                                             (IsFastForwardingForAnyReason() ? g_settings.fast_forward_speed :
                                                                        g_settings.emulation_speed);
   return FramePacing::ShouldLock(true, true, 1, base_speed, false) ? s_display_lock_debounce.Current() : 0;
 }
@@ -3842,7 +3854,7 @@ u32 System::GetDisplayLockStats(u64* presents, u64* made)
 GPUVSyncMode System::GetEffectiveVSyncMode()
 {
   // Vsync off => always disabled. So is it while fast-forwarding, and back after.
-  if (!FramePacing::VSyncWhileFastForwarding(IsVSyncWanted(), s_fast_forward_enabled || s_turbo_enabled))
+  if (!FramePacing::VSyncWhileFastForwarding(IsVSyncWanted(), IsFastForwardingForAnyReason() || s_turbo_enabled))
     return GPUVSyncMode::Disabled;
 
   // Where the screen lock can run from the present waits, presents block on the screen, whatever its rate.
@@ -3877,6 +3889,33 @@ bool System::ShouldAllowPresentThrottle()
 bool System::IsFastForwardEnabled()
 {
   return s_fast_forward_enabled;
+}
+
+bool System::IsFastForwardingForAnyReason()
+{
+  return s_fast_forward_enabled || s_load_fast_forward.IsActive();
+}
+
+bool System::IsLoadFastForwardActive()
+{
+  return s_load_fast_forward.IsActive();
+}
+
+void System::UpdateLoadFastForward()
+{
+  const bool was_active = s_load_fast_forward.IsActive();
+  const bool allowed = g_settings.fast_forward_loading && !Achievements::IsHardcoreModeActive();
+  if (s_load_fast_forward.Update(allowed, CDROM::IsLoadingData(), GetGlobalTickCounter(), g_ticks_per_second) ==
+      was_active)
+  {
+    return;
+  }
+
+  // As when the player's fast-forward ends: the sped-up tail is dropped, unless they're still fast-forwarding.
+  if (was_active && !s_fast_forward_enabled && !s_turbo_enabled)
+    SPU::GetOutputStream()->EmptyBuffer();
+
+  UpdateSpeedLimiterState();
 }
 
 void System::SetFastForwardEnabled(bool enabled)

@@ -68,4 +68,21 @@ private:
   bool m_has_sign = false;
 };
 
+/// Fast-forward while loading stays on this long (in emulated time) after the drive last loaded, across a load's bursts.
+static constexpr float LOAD_FF_HOLD_SECONDS = 0.25f;
+
+/// `[CDROM] FastForwardLoading`: on while the drive seeks or reads data that isn't streamed, off once it has been quiet
+/// for the hold, and off at once when it isn't allowed (the setting off, or hardcore).
+class LoadFastForward
+{
+public:
+  bool Update(bool allowed, bool cd_loading, GlobalTicks now, TickCount ticks_per_second);
+  void Reset() { m_active = false; }
+  bool IsActive() const { return m_active; }
+
+private:
+  GlobalTicks m_last_loading = 0;
+  bool m_active = false;
+};
+
 } // namespace CDROMTiming

@@ -195,6 +195,7 @@ struct Settings
   bool cdrom_load_image_patches : 1 = false;
   bool cdrom_mute_cd_audio : 1 = false;
   bool cdrom_short_drive_waits : 1 = false; // with instant seeks, shorter speed changes, TOC reads, spin-up and stop
+  bool fast_forward_loading : 1 = false;    // fast-forward while the CD loads data (not while it streams)
   u32 cdrom_read_speedup = 1;
   u32 cdrom_seek_speedup = 1;
 

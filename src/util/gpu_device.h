@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "gpu_shader_batch.h"
 #include "gpu_shader_cache.h"
 #include "shader_compile_threads.h"
 #include "gpu_texture.h"
@@ -678,6 +679,12 @@ public:
                                           Error* error = nullptr, const char* entry_point = "main");
   virtual std::unique_ptr<GPUPipeline> CreatePipeline(const GPUPipeline::GraphicsConfig& config,
                                                       Error* error = nullptr) = 0;
+
+  /// Builds many shaders on up to threads threads, through the shader cache (written in request order). On failure,
+  /// error is the first failing request's, and whatever was made is left in out.
+  using ShaderRequest = GPUShaderBatch::Request;
+  bool CreateShaders(std::span<const ShaderRequest> requests, std::span<std::unique_ptr<GPUShader>> out, u32 threads,
+                     const std::function<void(u32)>& on_progress, Error* error);
 
   /// Debug messaging.
   virtual void PushDebugGroup(const char* name) = 0;

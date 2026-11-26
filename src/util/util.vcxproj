@@ -24,6 +24,7 @@
     <ClInclude Include="dinput_source.h" />
     <ClInclude Include="gpu_device.h" />
     <ClInclude Include="gpu_framebuffer_manager.h" />
+    <ClInclude Include="gpu_shader_batch.h" />
     <ClInclude Include="gpu_shader_cache.h" />
     <ClInclude Include="shader_compile_threads.h" />
     <ClInclude Include="gpu_texture.h" />
@@ -148,6 +149,7 @@
     <ClCompile Include="d3d_common.cpp" />
     <ClCompile Include="dinput_source.cpp" />
     <ClCompile Include="gpu_device.cpp" />
+    <ClCompile Include="gpu_shader_batch.cpp" />
     <ClCompile Include="gpu_shader_cache.cpp" />
     <ClCompile Include="shader_compile_threads.cpp" />
     <ClCompile Include="gpu_texture.cpp" />

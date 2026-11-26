@@ -26,6 +26,7 @@
 #include "spirv_cross/spirv_cross_c.h"
 #include "xxhash.h"
 
+#include <mutex>
 #include <thread>
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -937,6 +938,20 @@ std::unique_ptr<GPUShader> GPUDevice::CreateShader(GPUShaderStage stage, GPUShad
   return shader;
 }
 
+bool GPUDevice::CreateShaders(std::span<const ShaderRequest> requests, std::span<std::unique_ptr<GPUShader>> out,
+                              u32 threads, const std::function<void(u32)>& on_progress, Error* error)
+{
+  return GPUShaderBatch::Run(
+    m_shader_cache, requests, out, threads,
+    [this](const ShaderRequest& req, std::span<const u8> binary, Error* err) {
+      return CreateShaderFromBinary(req.stage, binary, err);
+    },
+    [this](const ShaderRequest& req, GPUShaderCache::ShaderBinary* out_binary, Error* err) {
+      return CreateShaderFromSource(req.stage, req.language, req.source, req.entry_point, out_binary, err);
+    },
+    on_progress, error);
+}
+
 bool GPUDevice::GetRequestedExclusiveFullscreenMode(u32* width, u32* height, float* refresh_rate)
 {
   const std::string mode = Host::GetBaseStringSettingValue("GPU", "FullscreenMode", "");
@@ -1421,7 +1436,7 @@ std::unique_ptr<GPUDevice> GPUDevice::CreateDeviceForAPI(RenderAPI api)
 #define SPIRV_CROSS_MSL_FUNCTIONS(X)
 #endif
 
-// TODO: NOT thread safe, yet.
+// Loaded on first use; OpenShaderc and OpenSpirvCross take s_open_lock, as shaders compile on several threads.
 namespace dyn_libs {
 static bool OpenShaderc(Error* error);
 static void CloseShaderc();
@@ -1435,6 +1450,7 @@ static DynamicLibrary s_spirv_cross_library;
 static shaderc_compiler_t s_shaderc_compiler = nullptr;
 
 static bool s_close_registered = false;
+static std::mutex s_open_lock;
 
 #define ADD_FUNC(F) static decltype(&::F) F;
 SHADERC_FUNCTIONS(ADD_FUNC)
@@ -1447,6 +1463,8 @@ SPIRV_CROSS_MSL_FUNCTIONS(ADD_FUNC)
 
 bool dyn_libs::OpenShaderc(Error* error)
 {
+  // Shaders compile on several threads: the first to get here loads the library for all.
+  std::unique_lock lock(s_open_lock);
   if (s_shaderc_library.IsOpen())
     return true;
 
@@ -1502,6 +1520,7 @@ void dyn_libs::CloseShaderc()
 
 bool dyn_libs::OpenSpirvCross(Error* error)
 {
+  std::unique_lock lock(s_open_lock);
   if (s_spirv_cross_library.IsOpen())
     return true;
 

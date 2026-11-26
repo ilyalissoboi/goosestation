@@ -25,6 +25,8 @@ add_executable(common-tests
   game_database_tests.cpp
   ../util/fallback_fonts.cpp
   file_system_tests.cpp
+  gpu_pipeline_batch_gpu_tests.cpp
+  gpu_shader_batch_tests.cpp
   gsvector_yuvtorgb_test.cpp
   job_runner_tests.cpp
   json_reader_tests.cpp

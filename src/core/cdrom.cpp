@@ -310,7 +310,7 @@ static TickCount GetAckDelayForCommand(Command command);
 static TickCount GetTicksForSpinUp();
 static TickCount GetTicksForIDRead();
 static CDROMTiming::ReadPace GetReadPace();
-static void UpdateReadInterval();
+static void UpdateReadInterval(bool from_sector, TickCount ticks_late);
 static void ResetStreamDetector();
 static TickCount GetTicksForRead();
 static TickCount GetTicksForSeek(CDImage::LBA new_lba, bool ignore_speed_change = false);
@@ -339,7 +339,7 @@ static void DoChangeSessionComplete();
 static void DoSpinUpComplete();
 static void DoSpeedChangeOrImplicitTOCReadComplete();
 static void DoIDRead();
-static void DoSectorRead();
+static void DoSectorRead(TickCount ticks_late);
 static void ProcessDataSectorHeader(const u8* raw_sector);
 static void ProcessDataSector(const u8* raw_sector, const CDImage::SubChannelQ& subq);
 static void ProcessXAADPCMSector(const u8* raw_sector, const CDImage::SubChannelQ& subq);
@@ -1463,9 +1463,11 @@ CDROMTiming::ReadPace CDROM::GetReadPace()
   return CDROMTiming::GetReadPace(g_settings.cdrom_read_speedup, s_mode.double_speed, streaming, tps);
 }
 
-void CDROM::UpdateReadInterval()
+void CDROM::UpdateReadInterval(bool from_sector, TickCount ticks_late)
 {
-  // Worked out again after every sector, and when the settings change: the next sector comes at the new pace.
+  // Worked out again after every sector, and when the settings change. After a sector, the next one comes at the new
+  // pace, counted from when this one was due. A settings change leaves the sector already due (and any speed-change
+  // delay on it) alone, and paces the ones after.
   if (!IsReadingOrPlaying())
     return;
 
@@ -1473,7 +1475,8 @@ void CDROM::UpdateReadInterval()
   if (ticks != s_drive_event.GetInterval())
   {
     s_drive_event.SetInterval(ticks);
-    s_drive_event.Schedule(ticks);
+    if (from_sector)
+      s_drive_event.Schedule(std::max<TickCount>(ticks - ticks_late, 1));
   }
 }
 
@@ -1485,7 +1488,7 @@ void CDROM::ResetStreamDetector()
 
 void CDROM::SpeedupSettingsChanged()
 {
-  UpdateReadInterval();
+  UpdateReadInterval(false, 0);
 }
 
 bool CDROM::IsStreaming()
@@ -2474,7 +2477,7 @@ void CDROM::ExecuteDrive(void*, TickCount ticks, TickCount ticks_late)
 
     case DriveState::Reading:
     case DriveState::Playing:
-      DoSectorRead();
+      DoSectorRead(ticks_late);
       break;
 
     case DriveState::ChangingSession:
@@ -3031,7 +3034,7 @@ void CDROM::StopMotor()
   s_last_sector_header_valid = false; // TODO: correct?
 }
 
-void CDROM::DoSectorRead()
+void CDROM::DoSectorRead(TickCount ticks_late)
 {
   // TODO: Queue the next read here and swap the buffer.
   // TODO: Error handling
@@ -3122,7 +3125,7 @@ void CDROM::DoSectorRead()
 
   s_requested_lba = next_sector;
   s_reader.QueueReadSector(s_requested_lba);
-  UpdateReadInterval();
+  UpdateReadInterval(true, ticks_late);
 }
 
 ALWAYS_INLINE_RELEASE void CDROM::ProcessDataSectorHeader(const u8* raw_sector)

@@ -176,6 +176,13 @@ void ConsoleSettingsWidget::updateRecompilerICacheEnabled()
   m_ui.recompilerICache->setEnabled(mode != CPUExecutionMode::Interpreter);
 }
 
+void ConsoleSettingsWidget::showEvent(QShowEvent* event)
+{
+  // Hardcore mode is set on the Achievements page: the rows are brought up to date whenever this page comes back.
+  QWidget::showEvent(event);
+  updateCDROMRows();
+}
+
 void ConsoleSettingsWidget::updateCDROMRows()
 {
   m_ui.cdromShortDriveWaits->setEnabled(

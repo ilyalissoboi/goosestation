@@ -24,6 +24,9 @@ private Q_SLOTS:
   void onCPUClockSpeedValueChanged(int value);
   void updateCPUClockSpeedLabel();
 
+protected:
+  void showEvent(QShowEvent* event) override;
+
 private:
   void calculateCPUClockValue();
 

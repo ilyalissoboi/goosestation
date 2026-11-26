@@ -556,12 +556,17 @@ static std::string GetDriverLabel(RenderAPI api, std::string_view driver_info)
                         fmt::format("{}, {}", GPUDevice::RenderAPIToString(api), name);
 }
 
+std::string GPUDevice::GetDriverIdentity() const
+{
+  return GetDriverInfo();
+}
+
 void GPUDevice::SetUpCompileThreads(std::string_view cache_path)
 {
   const RenderAPI api = GetRenderAPI();
   const char* api_name = RenderAPIToString(api);
   const std::string driver_info = GetDriverInfo();
-  std::string key = fmt::format("{}\n{}", api_name, driver_info);
+  std::string key = fmt::format("{}\n{}", api_name, GetDriverIdentity());
 #ifdef __APPLE__
   // Metal's and OpenGL's drivers come with macOS.
   char os_version[64] = {};
@@ -706,6 +711,11 @@ bool GPUDevice::OpenPipelineCache(const std::string& filename)
     s_pipeline_cache_hash = {};
     return false;
   }
+
+  // What the driver holds now: a file it rejected (a driver update) leaves an empty cache, which must be written
+  // again once it's rebuilt, even at the size the old file had.
+  if (const std::optional<size_t> size = GetPipelineCacheSize(); size.has_value())
+    s_pipeline_cache_size = size.value();
 
   INFO_LOG("Pipeline cache hash: {}", SHA1Digest::DigestToString(s_pipeline_cache_hash));
   return true;
@@ -979,7 +989,7 @@ bool GPUDevice::CreateShaders(std::span<const ShaderRequest> requests, std::span
                               u32 threads, const std::function<void(u32)>& on_progress, Error* error)
 {
   return GPUShaderBatch::Run(
-    m_shader_cache, requests, out, threads,
+    m_shader_cache, requests, out, SupportsParallelShaderCreation() ? threads : 1,
     [this](const ShaderRequest& req, std::span<const u8> binary, Error* err) {
       return CreateShaderFromBinary(req.stage, binary, err);
     },
@@ -1016,6 +1026,11 @@ bool GPUDevice::CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> con
 bool GPUDevice::SupportsParallelCompile() const
 {
   return false;
+}
+
+bool GPUDevice::SupportsParallelShaderCreation() const
+{
+  return SupportsParallelCompile();
 }
 
 bool GPUDevice::GetRequestedExclusiveFullscreenMode(u32* width, u32* height, float* refresh_rate)

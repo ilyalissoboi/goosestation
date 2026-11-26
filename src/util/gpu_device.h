@@ -639,6 +639,10 @@ public:
 
   virtual std::string GetDriverInfo() const = 0;
 
+  /// The renderer's device and driver, the same on every run of the same driver: what the shader compile guard keys
+  /// its records by. The driver info, unless that has something that changes from run to run.
+  virtual std::string GetDriverIdentity() const;
+
   // Executes current command buffer, waits for its completion, and destroys all pending resources.
   virtual void ExecuteAndWaitForGPUIdle() = 0;
 
@@ -694,6 +698,10 @@ public:
 
   /// Whether CreatePipeline and the shader creators may run on several threads at once.
   virtual bool SupportsParallelCompile() const;
+
+  /// Whether the shader creators may run on several threads at once: as SupportsParallelCompile, unless the renderer
+  /// builds in parallel some other way (OpenGL, through the driver's own threads).
+  virtual bool SupportsParallelShaderCreation() const;
 
   /// Debug messaging.
   virtual void PushDebugGroup(const char* name) = 0;

@@ -8,6 +8,7 @@
 #include "core/gpu_hw.h"
 #include "core/gpu_hw_shadergen.h"
 
+#include "util/compress_helpers.h"
 #include "util/gpu_device.h"
 #include "util/gpu_pipeline_batch.h"
 #include "util/gpu_texture.h"
@@ -285,6 +286,37 @@ TEST_F(PipelineBatchGPU, ACacheIsOnDiskBeforeShutdown)
   EXPECT_EQ(Files(dir), saved);
 }
 
+TEST_F(PipelineBatchGPU, ACacheTheDriverRejectsIsWrittenAgain)
+{
+  if (GPUTestDevice::API() != RenderAPI::Vulkan)
+    GTEST_SKIP() << "Vulkan only: the test corrupts its cache's header";
+
+  const std::string dir = NewDir("common-tests-pipeline-rejected");
+  const std::string path = Path::Combine(dir, "vulkan_pipelines.bin");
+  Error error;
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  BuildFills();
+  GPUTestDevice::Destroy();
+
+  // A driver update: the cache's UUID (bytes 16-31 of the header) no longer matches, at the same size.
+  CompressHelpers::OptionalByteBuffer data =
+    CompressHelpers::DecompressFile(CompressHelpers::CompressType::Zstandard, path.c_str(), std::nullopt, &error);
+  ASSERT_TRUE(data.has_value() && data->size() > 32) << error.GetDescription();
+  const u8 good = (*data)[16];
+  (*data)[16] = static_cast<u8>(good ^ 0xFF);
+  ASSERT_TRUE(CompressHelpers::CompressToFile(CompressHelpers::CompressType::Zstandard, path.c_str(), data->cspan(),
+                                              -1, true, &error));
+
+  // The same pipelines are built again: the cache must be written again, valid, or every start rebuilds them.
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  BuildFills();
+  g_gpu_device->SavePipelineCacheIfGrown();
+  GPUTestDevice::Destroy();
+  data = CompressHelpers::DecompressFile(CompressHelpers::CompressType::Zstandard, path.c_str(), std::nullopt, &error);
+  ASSERT_TRUE(data.has_value() && data->size() > 32);
+  EXPECT_EQ((*data)[16], good);
+}
+
 TEST_F(PipelineBatchGPU, AWarmRunRewritesNothing)
 {
   const std::string dir = NewDir("common-tests-pipeline-warm");
@@ -300,6 +332,48 @@ TEST_F(PipelineBatchGPU, AWarmRunRewritesNothing)
   BuildFills();
   GPUTestDevice::Destroy();
   EXPECT_EQ(Files(dir), cold);
+}
+
+TEST_F(PipelineBatchGPU, AnUnfinishedBuildHoldsAutomaticAtOneThread)
+{
+  const std::string dir = NewDir("common-tests-guard-gpu");
+  Error error;
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  if (!g_gpu_device->SupportsParallelCompile())
+    GTEST_SKIP() << "This renderer builds on one thread anyway";
+  const u32 threads = g_gpu_device->GetCompileThreads(ShaderCompileThreads::AUTOMATIC);
+  ASSERT_GT(threads, 1u);
+
+  // The run dies during a build with several threads: the marker is left behind.
+  g_gpu_device->BeginCompilePass(threads);
+  GPUTestDevice::Destroy();
+
+  // The same renderer and driver next time: Automatic gives one thread.
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  EXPECT_EQ(g_gpu_device->GetCompileThreads(ShaderCompileThreads::AUTOMATIC), 1u);
+  EXPECT_TRUE(ShaderCompileThreads::Guard::ReadNote(dir).has_value());
+}
+
+TEST_F(PipelineBatchGPU, TheDriversIdentityIsTheSameEveryRun)
+{
+  // The guard keys its records by this: an object's address in it (Metal's description has one) would change every
+  // run, and a block would never hold.
+  Error error;
+  ASSERT_TRUE(GPUTestDevice::Create({}, &error)) << error.GetDescription();
+  const std::string identity = g_gpu_device->GetDriverIdentity();
+  EXPECT_FALSE(identity.empty());
+  EXPECT_EQ(identity.find("0x"), std::string::npos) << identity;
+}
+
+TEST_F(PipelineBatchGPU, OpenGLCreatesShadersOnTheCallingThread)
+{
+  // Its shader creator may ask the context for the GLSL version, which a worker doesn't have.
+  const std::optional<RenderAPI> api = GPUTestDevice::API();
+  if (api != RenderAPI::OpenGL && api != RenderAPI::OpenGLES)
+    GTEST_SKIP() << "OpenGL only";
+  Error error;
+  ASSERT_TRUE(GPUTestDevice::Create({}, &error)) << error.GetDescription();
+  EXPECT_FALSE(g_gpu_device->SupportsParallelShaderCreation());
 }
 
 TEST_F(PipelineBatchGPU, OpenGLBatchMatchesSerial)

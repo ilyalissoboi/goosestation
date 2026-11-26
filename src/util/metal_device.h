@@ -226,6 +226,7 @@ public:
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
   bool SupportsParallelCompile() const override;
+  std::string GetDriverIdentity() const override;
 
   bool SupportsSlangPresets() const override;
   std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;

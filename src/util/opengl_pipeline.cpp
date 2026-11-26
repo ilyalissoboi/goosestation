@@ -660,6 +660,12 @@ bool OpenGLDevice::SupportsParallelCompile() const
   return m_parallel_compile;
 }
 
+bool OpenGLDevice::SupportsParallelShaderCreation() const
+{
+  // Creating a shader may ask the context for the GLSL version (when transpiling), which a worker thread lacks.
+  return false;
+}
+
 bool OpenGLDevice::CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
                                    std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
                                    const std::function<void(u32)>& on_progress, Error* error)

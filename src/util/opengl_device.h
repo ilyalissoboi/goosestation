@@ -67,6 +67,7 @@ public:
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
   void SavePipelineCacheIfGrown() override;
   bool SupportsParallelCompile() const override;
+  bool SupportsParallelShaderCreation() const override;
   bool CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
                        std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
                        const std::function<void(u32)>& on_progress, Error* error) override;

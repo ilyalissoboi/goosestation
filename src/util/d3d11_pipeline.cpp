@@ -286,7 +286,9 @@ D3D11Device::ComPtr<ID3D11InputLayout> D3D11Device::GetInputLayout(const GPUPipe
 {
   std::unique_lock lock(m_state_lock);
   ComPtr<ID3D11InputLayout> dil;
-  const auto it = m_input_layouts.find(il);
+  // The key keeps its own copy of the attributes: il's may belong to a pipeline batch that is gone by the next build.
+  GPUPipeline::InputLayoutKey key(il);
+  const auto it = m_input_layouts.find(key);
   if (it != m_input_layouts.end())
   {
     dil = it->second;
@@ -330,7 +332,7 @@ D3D11Device::ComPtr<ID3D11InputLayout> D3D11Device::GetInputLayout(const GPUPipe
   if (FAILED(hr)) [[unlikely]]
     Error::SetHResult(error, "CreateInputLayout() failed: ", hr);
   else
-    m_input_layouts.emplace(il, dil);
+    m_input_layouts.emplace(std::move(key), dil);
 
   return dil;
 }

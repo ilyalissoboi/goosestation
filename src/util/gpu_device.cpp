@@ -130,6 +130,21 @@ size_t GPUPipeline::InputLayoutHash::operator()(const InputLayout& il) const
   return h;
 }
 
+GPUPipeline::InputLayoutKey::InputLayoutKey(const InputLayout& il)
+  : vertex_attributes(il.vertex_attributes.begin(), il.vertex_attributes.end()), vertex_stride(il.vertex_stride)
+{
+}
+
+bool GPUPipeline::InputLayoutKey::operator==(const InputLayoutKey& rhs) const
+{
+  return (vertex_stride == rhs.vertex_stride && vertex_attributes == rhs.vertex_attributes);
+}
+
+size_t GPUPipeline::InputLayoutKeyHash::operator()(const InputLayoutKey& key) const
+{
+  return InputLayoutHash()(InputLayout{key.vertex_attributes, key.vertex_stride});
+}
+
 bool GPUPipeline::InputLayout::operator==(const InputLayout& rhs) const
 {
   return (vertex_stride == rhs.vertex_stride && vertex_attributes.size() == rhs.vertex_attributes.size() &&

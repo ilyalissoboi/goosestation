@@ -257,6 +257,22 @@ public:
     size_t operator()(const InputLayout& il) const;
   };
 
+  /// An input layout that owns its attributes, for caches that outlive the config they were made from.
+  struct InputLayoutKey
+  {
+    explicit InputLayoutKey(const InputLayout& il);
+
+    std::vector<VertexAttribute> vertex_attributes;
+    u32 vertex_stride;
+
+    bool operator==(const InputLayoutKey& rhs) const;
+  };
+
+  struct InputLayoutKeyHash
+  {
+    size_t operator()(const InputLayoutKey& key) const;
+  };
+
   enum class CullMode : u8
   {
     None,

@@ -7,7 +7,9 @@
 #include <gtest/gtest.h>
 
 #include <cctype>
+#include <algorithm>
 #include <functional>
+#include <unordered_map>
 #include <span>
 #include <string>
 #include <vector>
@@ -164,6 +166,24 @@ TEST(PipelineBatch, EachShaderHandleMakesItDifferent)
     f.batch.AddPipeline(BaseConfig(), vs2, f.fs, Batch::NONE, &f.slots[1]);
     EXPECT_EQ(f.batch.GetUniquePipelineCount(), 2u);
   }
+}
+
+TEST(InputLayoutKey, OutlivesTheAttributesItWasMadeFrom)
+{
+  // A cache keyed by an input layout must not point into memory that goes away (a batch's own copy of the
+  // attributes, freed after the build).
+  std::unordered_map<GPUPipeline::InputLayoutKey, int, GPUPipeline::InputLayoutKeyHash> cache;
+  {
+    std::vector<GPUPipeline::VertexAttribute> temporary(std::begin(ATTRIBUTES), std::end(ATTRIBUTES));
+    cache.emplace(GPUPipeline::InputLayoutKey(GPUPipeline::InputLayout{temporary, 20}), 1);
+    std::fill(temporary.begin(), temporary.end(), OTHER_ATTRIBUTES[1]);
+  }
+
+  const GPUPipeline::InputLayout same{ATTRIBUTES, 20};
+  const GPUPipeline::InputLayout other{OTHER_ATTRIBUTES, 20};
+  EXPECT_EQ(cache.count(GPUPipeline::InputLayoutKey(same)), 1u);
+  EXPECT_EQ(cache.count(GPUPipeline::InputLayoutKey(other)), 0u);
+  EXPECT_EQ(cache.count(GPUPipeline::InputLayoutKey(GPUPipeline::InputLayout{ATTRIBUTES, 24})), 0u);
 }
 
 } // namespace

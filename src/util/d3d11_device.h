@@ -138,7 +138,7 @@ private:
   using DepthStateMap = std::unordered_map<u8, ComPtr<ID3D11DepthStencilState>>;
   using BlendStateMap = std::unordered_map<BlendStateMapKey, ComPtr<ID3D11BlendState>, BlendStateMapHash>;
   using InputLayoutMap =
-    std::unordered_map<GPUPipeline::InputLayout, ComPtr<ID3D11InputLayout>, GPUPipeline::InputLayoutHash>;
+    std::unordered_map<GPUPipeline::InputLayoutKey, ComPtr<ID3D11InputLayout>, GPUPipeline::InputLayoutKeyHash>;
 
   static constexpr u32 VERTEX_BUFFER_SIZE = 8 * 1024 * 1024;
   static constexpr u32 INDEX_BUFFER_SIZE = 4 * 1024 * 1024;

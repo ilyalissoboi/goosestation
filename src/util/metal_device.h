@@ -225,6 +225,8 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+  bool SupportsParallelCompile() const override;
+  std::string GetDriverIdentity() const override;
 
   bool SupportsSlangPresets() const override;
   std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
@@ -396,6 +398,7 @@ private:
   std::atomic<u64> m_completed_fence_counter{0};
   std::deque<std::pair<u64, id>> m_cleanup_objects; // [fence_counter, object]
 
+  std::mutex m_depth_state_lock; // pipelines are created on several threads
   DepthStateMap m_depth_states;
 
   MetalStreamBuffer m_vertex_buffer;

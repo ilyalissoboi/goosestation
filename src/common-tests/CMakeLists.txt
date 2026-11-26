@@ -26,6 +26,10 @@ add_executable(common-tests
   ../util/fallback_fonts.cpp
   file_system_tests.cpp
   gsvector_yuvtorgb_test.cpp
+  gpu_pipeline_batch_gpu_tests.cpp
+  gpu_pipeline_batch_tests.cpp
+  gpu_shader_batch_tests.cpp
+  job_runner_tests.cpp
   json_reader_tests.cpp
   librashader_loader_tests.cpp
   memcard_sync_ui_tests.cpp
@@ -38,6 +42,7 @@ add_executable(common-tests
   postprocessing_browser_tests.cpp
   postprocessing_favourites_tests.cpp
   postprocessing_config_tests.cpp
+  postprocessing_gpu_tests.cpp
   postprocessing_slang_gpu_tests.cpp
   postprocessing_slang_tests.cpp
   rectangle_tests.cpp
@@ -60,6 +65,7 @@ add_executable(common-tests
   texture_cache_reference_tests.cpp
   settings_texture_cache_tests.cpp
   settings_gpu_thread_tests.cpp
+  shader_compile_threads_tests.cpp
   settings_cdrom_tests.cpp
   settings_vsync_tests.cpp
   performance_counters_math_tests.cpp
@@ -86,7 +92,7 @@ if(ANDROID)
   target_link_libraries(common-tests PRIVATE imgui)
 endif()
 
-target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip xxhash gtest gtest_main)
+target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip xxhash reshadefx gtest gtest_main)
 
 # game_database_tests.cpp loads the shipped database from the source tree (and skips where it isn't there).
 target_compile_definitions(common-tests PRIVATE

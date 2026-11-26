@@ -21,6 +21,7 @@
 #include "core/settings.h"
 #include "core/shader_packs.h"
 #include "util/http_downloader.h"
+#include "util/shader_compile_threads.h"
 #include "util/audio_stream.h"
 #include "util/platform_misc.h"
 #include "common/error.h"
@@ -28,6 +29,7 @@
 #include "common/log.h"
 #include "common/progress_callback.h"
 #include "common/string_util.h"
+#include "fmt/format.h"
 #include <android/native_window_jni.h>
 #include <jni.h>
 #include <algorithm>
@@ -36,6 +38,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -406,6 +409,14 @@ NATIVE_LIBRARY_FUNCTION(jboolean, pressHotkeyForTest)(JNIEnv* env, jobject, jstr
 NATIVE_LIBRARY_FUNCTION(jboolean, isFastmemAvailable)(JNIEnv* env, jobject)
 {
   return AndroidHost::IsFastmemAvailable();
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, getShaderCompileThreadsInfo)(JNIEnv* env, jobject)
+{
+  const u32 automatic =
+    ShaderCompileThreads::GetAutomatic(std::thread::hardware_concurrency(), ShaderCompileThreads::GetPhysicalMemory());
+  const std::optional<std::string> note = ShaderCompileThreads::GetNote(EmuFolders::Cache);
+  return ToJString(env, fmt::format("{}\n{}", automatic, note.value_or(std::string())));
 }
 
 NATIVE_LIBRARY_FUNCTION(jboolean, postProcessingUsesOpenGLES)(JNIEnv* env, jobject, jstring key)

@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
+import io.github.ilyalissoboi.goosestation.settings.CompileThreadsInfo
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
@@ -17,6 +18,9 @@ import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 const val FASTMEM_UNAVAILABLE = "This device's memory pages are too large for it."
 
 private const val FASTMEM_NOTE = "Avoids calls to slower code, speeding up the recompiler."
+private const val COMPILE_THREADS_NOTE =
+    "How many threads build shaders and pipelines when a game starts or a graphics setting changes. Automatic " +
+        "uses one on a driver that didn't finish a build with several."
 
 /**
  * The Advanced page: logging (not on a game's page, as desktop's Copy keeps it global), save states, CD-ROM and CPU,
@@ -31,6 +35,7 @@ fun AdvancedScreen(
     fastmemAvailable: Boolean,
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
+    compileThreads: CompileThreadsInfo = CompileThreadsInfo(),
 ) {
     val first = rememberInitialFocus()
     val logging = !values.isGame
@@ -114,5 +119,17 @@ fun AdvancedScreen(
             note = if (fastmemAvailable) FASTMEM_NOTE else FASTMEM_UNAVAILABLE,
             enabled = fastmemAvailable,
         )
+
+        if (!values.isGame) {
+            SettingsSection("Graphics")
+            GameNumber(
+                values,
+                onChange,
+                "Shader compile threads",
+                AdvancedSettings.SHADER_COMPILE_THREADS,
+                AdvancedSettings.compileThreadsScale(compileThreads.automatic),
+                note = compileThreads.note ?: COMPILE_THREADS_NOTE,
+            )
+        }
     }
 }

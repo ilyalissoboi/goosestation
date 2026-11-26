@@ -12,6 +12,7 @@
 #include "util/imgui_manager.h"
 #include "util/input_manager.h"
 #include "util/media_capture.h"
+#include "util/shader_compile_threads.h"
 
 #include "common/assert.h"
 #include "common/file_system.h"
@@ -192,6 +193,8 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   gpu_adapter = si.GetStringValue("GPU", "Adapter", "");
   gpu_resolution_scale = static_cast<u8>(si.GetIntValue("GPU", "ResolutionScale", 1));
   gpu_multisamples = static_cast<u8>(si.GetIntValue("GPU", "Multisamples", 1));
+  gpu_shader_compile_threads = static_cast<u8>(std::clamp<int>(
+    si.GetIntValue("GPU", "ShaderCompileThreads", ShaderCompileThreads::AUTOMATIC), 0, ShaderCompileThreads::MAX_THREADS));
   gpu_use_debug_device = si.GetBoolValue("GPU", "UseDebugDevice", false);
   gpu_disable_shader_cache = si.GetBoolValue("GPU", "DisableShaderCache", false);
   gpu_disable_dual_source_blend = si.GetBoolValue("GPU", "DisableDualSourceBlend", false);
@@ -523,6 +526,7 @@ void Settings::Save(SettingsInterface& si, bool ignore_base) const
 
   if (!ignore_base)
   {
+    si.SetIntValue("GPU", "ShaderCompileThreads", static_cast<int>(gpu_shader_compile_threads));
     si.SetBoolValue("GPU", "UseDebugDevice", gpu_use_debug_device);
     si.SetBoolValue("GPU", "DisableShaderCache", gpu_disable_shader_cache);
     si.SetBoolValue("GPU", "DisableDualSourceBlend", gpu_disable_dual_source_blend);

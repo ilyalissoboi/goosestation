@@ -317,6 +317,14 @@ bool D3D12Device::ReadPipelineCache(std::optional<DynamicHeapArray<u8>> data)
   return true;
 }
 
+std::optional<size_t> D3D12Device::GetPipelineCacheSize()
+{
+  if (!m_pipeline_library)
+    return std::nullopt;
+
+  return m_pipeline_library->GetSerializedSize();
+}
+
 bool D3D12Device::GetPipelineCacheData(DynamicHeapArray<u8>* data)
 {
   if (!m_pipeline_library)
@@ -1054,6 +1062,12 @@ bool D3D12Device::SupportsTextureFormat(GPUTexture::Format format) const
   D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {dfmt, {}, {}};
   return SUCCEEDED(m_device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support))) &&
          (support.Support1 & required) == required;
+}
+
+bool D3D12Device::SupportsParallelCompile() const
+{
+  // The device is free-threaded, and the pipeline library is used under m_pipeline_library_locks.
+  return true;
 }
 
 std::string D3D12Device::GetDriverInfo() const

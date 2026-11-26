@@ -12,8 +12,10 @@
 #include "core/texture_pack_config.h"
 
 #include "util/media_capture.h"
+#include "util/shader_compile_threads.h"
 
 #include <algorithm>
+#include <thread>
 
 static QVariant GetMSAAModeValue(uint multisamples, bool ssaa)
 {
@@ -134,6 +136,21 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
 #ifdef _WIN32
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.blitSwapChain, "Display", "UseBlitSwapChain", false);
 #endif
+  if (sif)
+  {
+    // The device's, not a game's.
+    m_ui.shaderCompileThreadsLabel->setVisible(false);
+    m_ui.shaderCompileThreads->setVisible(false);
+    m_ui.shaderCompileThreadsNote->setVisible(false);
+  }
+  else
+  {
+    SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.shaderCompileThreads, "GPU", "ShaderCompileThreads",
+                                                ShaderCompileThreads::AUTOMATIC);
+    const std::optional<std::string> note = ShaderCompileThreads::GetNote(EmuFolders::Cache);
+    m_ui.shaderCompileThreadsNote->setText(note.has_value() ? QString::fromStdString(note.value()) : QString());
+    m_ui.shaderCompileThreadsNote->setVisible(note.has_value());
+  }
   SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_ui.gpuLineDetectMode, "GPU", "LineDetectMode",
                                                &Settings::ParseLineDetectModeName, &Settings::GetLineDetectModeName,
                                                Settings::DEFAULT_GPU_LINE_DETECT_MODE);
@@ -427,6 +444,11 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
     m_ui.displayAlignment, tr("Position"),
     QString::fromUtf8(Settings::GetDisplayAlignmentDisplayName(Settings::DEFAULT_DISPLAY_ALIGNMENT)),
     tr("Determines the position on the screen when black borders must be added."));
+  dialog->registerWidgetHelp(
+    m_ui.shaderCompileThreads, tr("Shader Compile Threads"), tr("Automatic"),
+    tr("How many threads build shaders and pipelines when a game starts or a graphics setting changes. Automatic "
+       "picks from this machine's cores and memory, and uses one on a driver that is known to misbehave or that "
+       "didn't finish a build with several threads. 1 builds one at a time, as before."));
   dialog->registerWidgetHelp(m_ui.gpuThread, tr("Threaded Rendering"), tr("Checked"),
                              tr("Uses a second thread for drawing graphics. Currently only available for the software "
                                 "renderer, but can provide a significant speed improvement, and is safe to use."));
@@ -754,6 +776,15 @@ void GraphicsSettingsWidget::setupAdditionalUi()
     m_ui.gpuLineDetectMode->addItem(
       QString::fromUtf8(Settings::GetLineDetectModeDisplayName(static_cast<GPULineDetectMode>(i))));
   }
+
+  // Index = the setting's value: 0 is Automatic, with what Automatic gives on this machine.
+  m_ui.shaderCompileThreads->addItem(
+    tr("Automatic (%1)")
+      .arg(ShaderCompileThreads::GetAutomatic(std::thread::hardware_concurrency(),
+                                              ShaderCompileThreads::GetPhysicalMemory())));
+  m_ui.shaderCompileThreads->addItem(tr("1 (One at a Time)"));
+  for (u32 i = 2; i <= ShaderCompileThreads::MAX_THREADS; i++)
+    m_ui.shaderCompileThreads->addItem(QString::number(i));
 
   // Capture Tab
 

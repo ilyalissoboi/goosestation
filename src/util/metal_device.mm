@@ -513,6 +513,22 @@ void MetalDevice::ResizeWindow(s32 new_window_width, s32 new_window_height, floa
   }
 }
 
+std::string MetalDevice::GetDriverIdentity() const
+{
+  // The description starts with the device object's address, which changes every run; the name doesn't. The driver
+  // comes with macOS, whose version the guard adds.
+  @autoreleasepool
+  {
+    return fmt::format("Metal {}", [[m_device name] UTF8String]);
+  }
+}
+
+bool MetalDevice::SupportsParallelCompile() const
+{
+  // MTLDevice's creators are thread-safe, and each of our paths has its own autorelease pool.
+  return true;
+}
+
 std::string MetalDevice::GetDriverInfo() const
 {
   @autoreleasepool
@@ -694,6 +710,7 @@ void MetalPipeline::SetDebugName(std::string_view name)
 
 id<MTLDepthStencilState> MetalDevice::GetDepthState(const GPUPipeline::DepthState& ds)
 {
+  std::unique_lock lock(m_depth_state_lock);
   const auto it = m_depth_states.find(ds.key);
   if (it != m_depth_states.end())
     return it->second;

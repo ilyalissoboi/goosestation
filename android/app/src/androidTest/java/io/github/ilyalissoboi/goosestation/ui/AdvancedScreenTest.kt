@@ -17,6 +17,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
+import io.github.ilyalissoboi.goosestation.settings.CompileThreadsInfo
 import io.github.ilyalissoboi.goosestation.settings.SettingValues
 import io.github.ilyalissoboi.goosestation.ui.theme.GooseStationTheme
 import org.junit.Assert.assertEquals
@@ -32,7 +33,10 @@ class AdvancedScreenTest : ControllerKeys {
 
     private val changes = mutableListOf<SettingValues>()
 
-    private fun show(fastmemAvailable: Boolean = true) {
+    private fun show(
+        fastmemAvailable: Boolean = true,
+        compileThreads: CompileThreadsInfo = CompileThreadsInfo(automatic = 6),
+    ) {
         rule.setContent {
             GooseStationTheme {
                 var values by remember { mutableStateOf(pageValues(AdvancedSettings.all)) }
@@ -40,6 +44,7 @@ class AdvancedScreenTest : ControllerKeys {
                     values,
                     SampleNames.ALL,
                     fastmemAvailable,
+                    compileThreads = compileThreads,
                     onChange = {
                         changes += it
                         values = it
@@ -93,5 +98,21 @@ class AdvancedScreenTest : ControllerKeys {
 
         rule.onNodeWithText("Recompiler fast memory access", substring = true).assertIsNotEnabled()
         rule.onNodeWithText(FASTMEM_UNAVAILABLE, substring = true).assertExists()
+    }
+
+    @Test
+    fun shaderCompileThreadsShowsWhatAutomaticGives() {
+        show()
+
+        rule.onNodeWithText("Shader compile threads", substring = true).assertExists()
+        rule.onNodeWithText("Automatic (6)", substring = true).assertExists()
+    }
+
+    @Test
+    fun aBlockedDriverIsExplainedInTheRow() {
+        val note = "Automatic uses 1 on Vulkan, Adreno (TM) 740: a build with several threads didn't finish last time."
+        show(compileThreads = CompileThreadsInfo(automatic = 6, note = note))
+
+        rule.onNodeWithText(note, substring = true).assertExists()
     }
 }

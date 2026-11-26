@@ -12,6 +12,7 @@
 #include "common/file_system.h"
 #include "common/hash_combine.h"
 #include "common/log.h"
+#include "common/timer.h"
 #include "common/path.h"
 #include "common/scoped_guard.h"
 #include "common/small_string.h"
@@ -97,7 +98,7 @@ void OpenGLShader::SetDebugName(std::string_view name)
 #endif
 }
 
-bool OpenGLShader::Compile(Error* error)
+bool OpenGLShader::Compile(Error* error, bool defer_status)
 {
   if (m_compile_tried)
   {
@@ -107,7 +108,7 @@ bool OpenGLShader::Compile(Error* error)
       return false;
     }
 
-    return true;
+    return defer_status ? true : FinishCompile(error);
   }
 
   m_compile_tried = true;
@@ -126,6 +127,36 @@ bool OpenGLShader::Compile(Error* error)
   const GLint length = static_cast<GLint>(m_source.length());
   glShaderSource(shader, 1, &string, &length);
   glCompileShader(shader);
+
+  m_id = shader;
+  m_status_pending = true;
+
+#ifdef _DEBUG
+  if (glObjectLabel && !m_debug_name.empty())
+  {
+    glObjectLabel(GL_SHADER, shader, static_cast<GLsizei>(m_debug_name.length()),
+                  static_cast<const GLchar*>(m_debug_name.data()));
+    m_debug_name = {};
+  }
+#endif
+
+  // With the driver compiling in parallel, the status is read once everything is queued: reading it waits.
+  return defer_status ? true : FinishCompile(error);
+}
+
+bool OpenGLShader::FinishCompile(Error* error)
+{
+  if (!m_status_pending)
+  {
+    if (m_id.has_value())
+      return true;
+
+    Error::SetStringView(error, "Shader previously failed to compile.");
+    return false;
+  }
+
+  m_status_pending = false;
+  const GLuint shader = m_id.value();
 
   GLint status = GL_FALSE;
   glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
@@ -149,20 +180,10 @@ bool OpenGLShader::Compile(Error* error)
       Error::SetStringFmt(error, "Shader failed to compile:\n{}", info_log);
       GPUDevice::DumpBadShader(m_source, info_log);
       glDeleteShader(shader);
+      m_id.reset();
       return false;
     }
   }
-
-  m_id = shader;
-
-#ifdef _DEBUG
-  if (glObjectLabel && !m_debug_name.empty())
-  {
-    glObjectLabel(GL_SHADER, shader, static_cast<GLsizei>(m_debug_name.length()),
-                  static_cast<const GLchar*>(m_debug_name.data()));
-    m_debug_name = {};
-  }
-#endif
 
   return true;
 }
@@ -300,8 +321,8 @@ GLuint OpenGLDevice::LookupProgramCache(const OpenGLPipeline::ProgramCacheKey& k
     return it->second.program_id;
   }
 
-  const GLuint program_id = CompileProgram(plconfig, error);
-  if (program_id == 0)
+  const GLuint program_id = IssueProgram(plconfig, m_defer_program_status, error);
+  if (program_id == 0 || (!m_defer_program_status && !FinishProgram(plconfig, program_id, error)))
   {
     // Compile failed, don't add to map, it just gets confusing.
     return 0;
@@ -314,20 +335,23 @@ GLuint OpenGLDevice::LookupProgramCache(const OpenGLPipeline::ProgramCacheKey& k
   item.file_offset = 0;
   item.file_uncompressed_size = 0;
   item.file_compressed_size = 0;
-  if (m_pipeline_disk_cache_file)
+  if (m_defer_program_status)
+    m_pending_programs.emplace_back(key, plconfig);
+  else if (m_pipeline_disk_cache_file)
     AddToPipelineCache(&item);
 
   m_program_cache.emplace(key, item);
   return item.program_id;
 }
 
-GLuint OpenGLDevice::CompileProgram(const GPUPipeline::GraphicsConfig& plconfig, Error* error)
+GLuint OpenGLDevice::IssueProgram(const GPUPipeline::GraphicsConfig& plconfig, bool defer_status, Error* error)
 {
   OpenGLShader* vertex_shader = static_cast<OpenGLShader*>(plconfig.vertex_shader);
   OpenGLShader* fragment_shader = static_cast<OpenGLShader*>(plconfig.fragment_shader);
   OpenGLShader* geometry_shader = static_cast<OpenGLShader*>(plconfig.geometry_shader);
-  if (!vertex_shader || !fragment_shader || !vertex_shader->Compile(error) || !fragment_shader->Compile(error) ||
-      (geometry_shader && !geometry_shader->Compile(error))) [[unlikely]]
+  if (!vertex_shader || !fragment_shader || !vertex_shader->Compile(error, defer_status) ||
+      !fragment_shader->Compile(error, defer_status) ||
+      (geometry_shader && !geometry_shader->Compile(error, defer_status))) [[unlikely]]
   {
     return 0;
   }
@@ -385,6 +409,19 @@ GLuint OpenGLDevice::CompileProgram(const GPUPipeline::GraphicsConfig& plconfig,
   }
 
   glLinkProgram(program_id);
+  return program_id;
+}
+
+bool OpenGLDevice::FinishProgram(const GPUPipeline::GraphicsConfig& plconfig, GLuint program_id, Error* error)
+{
+  OpenGLShader* vertex_shader = static_cast<OpenGLShader*>(plconfig.vertex_shader);
+  OpenGLShader* fragment_shader = static_cast<OpenGLShader*>(plconfig.fragment_shader);
+  OpenGLShader* geometry_shader = static_cast<OpenGLShader*>(plconfig.geometry_shader);
+  if (!vertex_shader->FinishCompile(error) || !fragment_shader->FinishCompile(error) ||
+      (geometry_shader && !geometry_shader->FinishCompile(error))) [[unlikely]]
+  {
+    return false;
+  }
 
   GLint status = GL_FALSE;
   glGetProgramiv(program_id, GL_LINK_STATUS, &status);
@@ -422,13 +459,12 @@ GLuint OpenGLDevice::CompileProgram(const GPUPipeline::GraphicsConfig& plconfig,
       ERROR_LOG("Program failed to link:\n{}", info_log);
       Error::SetStringFmt(error, "Program failed to link:\n{}", info_log);
       glDeleteProgram(program_id);
-      return 0;
+      return false;
     }
   }
 
   PostLinkProgram(plconfig, program_id);
-
-  return program_id;
+  return true;
 }
 
 void OpenGLDevice::PostLinkProgram(const GPUPipeline::GraphicsConfig& plconfig, GLuint program_id)
@@ -616,6 +652,65 @@ std::unique_ptr<GPUPipeline> OpenGLDevice::CreatePipeline(const GPUPipeline::Gra
 
   return std::unique_ptr<GPUPipeline>(new OpenGLPipeline(pkey, program_id, vao, config.rasterization, config.depth,
                                                          config.blend, primitives[static_cast<u8>(config.primitive)]));
+}
+
+bool OpenGLDevice::SupportsParallelCompile() const
+{
+  // Through the driver's own threads (KHR/ARB_parallel_shader_compile): a GL context belongs to one thread.
+  return m_parallel_compile;
+}
+
+bool OpenGLDevice::SupportsParallelShaderCreation() const
+{
+  // Creating a shader may ask the context for the GLSL version (when transpiling), which a worker thread lacks.
+  return false;
+}
+
+bool OpenGLDevice::CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
+                                   std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
+                                   const std::function<void(u32)>& on_progress, Error* error)
+{
+  if (!m_parallel_compile || threads <= 1)
+    return GPUDevice::CreatePipelines(configs, out, 1, on_progress, error);
+
+  if (GLAD_GL_KHR_parallel_shader_compile)
+    glMaxShaderCompilerThreadsKHR(threads);
+  else
+    glMaxShaderCompilerThreadsARB(threads);
+
+  // Every compile and link is queued first, then each program's status is read in order, which waits for it.
+  const u32 count = static_cast<u32>(configs.size());
+  bool ok = true;
+  m_defer_program_status = true;
+  m_pending_programs.clear();
+  for (u32 i = 0; i < count && ok; i++)
+    ok = static_cast<bool>(out[i] = CreatePipeline(configs[i], error));
+  m_defer_program_status = false;
+
+  const u32 num_pending = static_cast<u32>(m_pending_programs.size());
+  for (u32 i = 0; i < num_pending && ok; i++)
+  {
+    const auto& [key, plconfig] = m_pending_programs[i];
+    auto it = m_program_cache.find(key);
+    if (it == m_program_cache.end() || it->second.program_id == 0) [[unlikely]]
+      continue;
+    if (!FinishProgram(plconfig, it->second.program_id, error))
+    {
+      ok = false;
+      break;
+    }
+
+    // Binaries go to the disk cache in request order, so its file doesn't depend on the driver's timing.
+    if (m_pipeline_disk_cache_file)
+      AddToPipelineCache(&it->second);
+
+    if (on_progress)
+      on_progress(((i + 1) * count) / num_pending);
+  }
+
+  // Programs left pending after a failure are deleted with the pipelines the caller destroys.
+  m_pending_programs.clear();
+  return ok;
 }
 
 ALWAYS_INLINE_RELEASE void OpenGLDevice::ApplyRasterizationState(GPUPipeline::RasterizationState rs)
@@ -1008,10 +1103,28 @@ void OpenGLDevice::ClosePipelineCache()
     return;
   }
 
+  WritePipelineCacheIndex();
+}
+
+void OpenGLDevice::SavePipelineCacheIfGrown()
+{
+  // After a build that added programs, the index goes to disk too, so a run Android kills keeps them.
+  if (!m_pipeline_disk_cache_file || !m_pipeline_disk_cache_changed)
+    return;
+
+  Common::Timer timer;
+  if (WritePipelineCacheIndex())
+    m_pipeline_disk_cache_changed = false;
+  DEV_LOG("Wrote the program cache's index in {:.1f} ms", timer.GetTimeMilliseconds());
+}
+
+bool OpenGLDevice::WritePipelineCacheIndex()
+{
+  // The index and footer follow the programs' data; programs added later are written over them, and they again after.
   if (FileSystem::FSeek64(m_pipeline_disk_cache_file, m_pipeline_disk_cache_data_end, SEEK_SET) != 0) [[unlikely]]
   {
     ERROR_LOG("Failed to seek to data end.");
-    return;
+    return false;
   }
 
   u32 count = 0;
@@ -1031,7 +1144,7 @@ void OpenGLDevice::ClosePipelineCache()
     if (std::fwrite(&entry, sizeof(entry), 1, m_pipeline_disk_cache_file) != 1) [[unlikely]]
     {
       ERROR_LOG("Failed to write index entry.");
-      return;
+      return false;
     }
 
     count++;
@@ -1041,6 +1154,12 @@ void OpenGLDevice::ClosePipelineCache()
   FillFooter(&footer, m_shader_cache.GetVersion());
   footer.num_programs = count;
 
-  if (std::fwrite(&footer, sizeof(footer), 1, m_pipeline_disk_cache_file) != 1) [[unlikely]]
+  if (std::fwrite(&footer, sizeof(footer), 1, m_pipeline_disk_cache_file) != 1 ||
+      std::fflush(m_pipeline_disk_cache_file) != 0) [[unlikely]]
+  {
     ERROR_LOG("Failed to write footer.");
+    return false;
+  }
+
+  return true;
 }

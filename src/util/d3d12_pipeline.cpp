@@ -101,6 +101,9 @@ std::string D3D12Pipeline::GetPipelineName(const GraphicsConfig& config)
   hash.Update(&config.depth_format, sizeof(config.depth_format));
   hash.Update(&config.samples, sizeof(config.samples));
   hash.Update(&config.per_sample_shading, sizeof(config.per_sample_shading));
+  // Only when set, so the names of pipelines without flags (and the libraries holding them) stay as they were.
+  if (config.render_pass_flags != GPUPipeline::NoRenderPassFlags)
+    hash.Update(&config.render_pass_flags, sizeof(config.render_pass_flags));
 
   u8 digest[SHA1Digest::DIGEST_SIZE];
   hash.Final(digest);
@@ -241,7 +244,10 @@ std::unique_ptr<GPUPipeline> D3D12Device::CreatePipeline(const GPUPipeline::Grap
   ComPtr<ID3D12PipelineState> pipeline;
   if (m_pipeline_library)
   {
-    const std::wstring name = StringUtil::UTF8StringToWideString(D3D12Pipeline::GetPipelineName(config));
+    const std::string utf8_name = D3D12Pipeline::GetPipelineName(config);
+    const std::wstring name = StringUtil::UTF8StringToWideString(utf8_name);
+    std::unique_lock lock(
+      m_pipeline_library_locks[std::hash<std::string>()(utf8_name) % NUM_PIPELINE_LIBRARY_LOCKS]);
     HRESULT hr =
       m_pipeline_library->LoadGraphicsPipeline(name.c_str(), gpb.GetDesc(), IID_PPV_ARGS(pipeline.GetAddressOf()));
     if (FAILED(hr))

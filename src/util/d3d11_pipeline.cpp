@@ -142,6 +142,7 @@ void D3D11Pipeline::SetDebugName(std::string_view name)
 D3D11Device::ComPtr<ID3D11RasterizerState> D3D11Device::GetRasterizationState(const GPUPipeline::RasterizationState& rs,
                                                                               Error* error)
 {
+  std::unique_lock lock(m_state_lock);
   ComPtr<ID3D11RasterizerState> drs;
 
   const auto it = m_rasterization_states.find(rs.key);
@@ -174,6 +175,7 @@ D3D11Device::ComPtr<ID3D11RasterizerState> D3D11Device::GetRasterizationState(co
 
 D3D11Device::ComPtr<ID3D11DepthStencilState> D3D11Device::GetDepthState(const GPUPipeline::DepthState& ds, Error* error)
 {
+  std::unique_lock lock(m_state_lock);
   ComPtr<ID3D11DepthStencilState> dds;
 
   const auto it = m_depth_states.find(ds.key);
@@ -217,6 +219,7 @@ size_t D3D11Device::BlendStateMapHash::operator()(const BlendStateMapKey& key) c
 
 D3D11Device::ComPtr<ID3D11BlendState> D3D11Device::GetBlendState(const GPUPipeline::BlendState& bs, u32 num_rts, Error* error)
 {
+  std::unique_lock lock(m_state_lock);
   ComPtr<ID3D11BlendState> dbs;
 
   const std::pair<u64, u32> key(bs.key, num_rts);
@@ -281,8 +284,11 @@ D3D11Device::ComPtr<ID3D11BlendState> D3D11Device::GetBlendState(const GPUPipeli
 D3D11Device::ComPtr<ID3D11InputLayout> D3D11Device::GetInputLayout(const GPUPipeline::InputLayout& il,
                                                                    const D3D11Shader* vs, Error* error)
 {
+  std::unique_lock lock(m_state_lock);
   ComPtr<ID3D11InputLayout> dil;
-  const auto it = m_input_layouts.find(il);
+  // The key keeps its own copy of the attributes: il's may belong to a pipeline batch that is gone by the next build.
+  GPUPipeline::InputLayoutKey key(il);
+  const auto it = m_input_layouts.find(key);
   if (it != m_input_layouts.end())
   {
     dil = it->second;
@@ -326,7 +332,7 @@ D3D11Device::ComPtr<ID3D11InputLayout> D3D11Device::GetInputLayout(const GPUPipe
   if (FAILED(hr)) [[unlikely]]
     Error::SetHResult(error, "CreateInputLayout() failed: ", hr);
   else
-    m_input_layouts.emplace(il, dil);
+    m_input_layouts.emplace(std::move(key), dil);
 
   return dil;
 }

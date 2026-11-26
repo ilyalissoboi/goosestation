@@ -57,6 +57,8 @@ add_library(common
   string_util.h
   thirdparty/SmallVector.cpp
   thirdparty/SmallVector.h
+  job_runner.cpp
+  job_runner.h
   threading.cpp
   threading.h
   timer.cpp

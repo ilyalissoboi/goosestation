@@ -13,6 +13,7 @@
 #include "common/dynamic_library.h"
 #include "common/error.h"
 #include "common/file_system.h"
+#include "common/job_runner.h"
 #include "common/log.h"
 #include "common/path.h"
 #include "common/scoped_guard.h"
@@ -25,6 +26,12 @@
 #include "shaderc/shaderc.h"
 #include "spirv_cross/spirv_cross_c.h"
 #include "xxhash.h"
+
+#include <mutex>
+#include <thread>
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
 
 Log_SetChannel(GPUDevice);
 
@@ -121,6 +128,21 @@ size_t GPUPipeline::InputLayoutHash::operator()(const InputLayout& il) const
     hash_combine(h, va.key);
 
   return h;
+}
+
+GPUPipeline::InputLayoutKey::InputLayoutKey(const InputLayout& il)
+  : vertex_attributes(il.vertex_attributes.begin(), il.vertex_attributes.end()), vertex_stride(il.vertex_stride)
+{
+}
+
+bool GPUPipeline::InputLayoutKey::operator==(const InputLayoutKey& rhs) const
+{
+  return (vertex_stride == rhs.vertex_stride && vertex_attributes == rhs.vertex_attributes);
+}
+
+size_t GPUPipeline::InputLayoutKeyHash::operator()(const InputLayoutKey& key) const
+{
+  return InputLayoutHash()(InputLayout{key.vertex_attributes, key.vertex_stride});
 }
 
 bool GPUPipeline::InputLayout::operator==(const InputLayout& rhs) const
@@ -388,6 +410,7 @@ bool GPUDevice::Create(std::string_view adapter, std::string_view shader_cache_p
   INFO_LOG("Graphics Driver Info:\n{}", GetDriverInfo());
 
   OpenShaderCache(shader_cache_path, shader_cache_version);
+  SetUpCompileThreads(shader_cache_path);
 
   if (!CreateResources(error))
   {
@@ -462,29 +485,167 @@ void GPUDevice::CloseShaderCache()
 
   if (!s_pipeline_cache_path.empty())
   {
-    DynamicHeapArray<u8> data;
-    if (GetPipelineCacheData(&data))
-    {
-      // Save disk writes if it hasn't changed, think of the poor SSDs.
-      if (s_pipeline_cache_size != data.size() || s_pipeline_cache_hash != SHA1Digest::GetDigest(data.cspan()))
-      {
-        Error error;
-        INFO_LOG("Compressing and writing {} bytes to '{}'", data.size(), Path::GetFileName(s_pipeline_cache_path));
-        if (!CompressHelpers::CompressToFile(CompressHelpers::CompressType::Zstandard, s_pipeline_cache_path.c_str(),
-                                             data.cspan(), -1, true, &error))
-        {
-          ERROR_LOG("Failed to write pipeline cache to '{}': {}", Path::GetFileName(s_pipeline_cache_path),
-                    error.GetDescription());
-        }
-      }
-      else
-      {
-        INFO_LOG("Skipping updating pipeline cache '{}' due to no changes.", Path::GetFileName(s_pipeline_cache_path));
-      }
-    }
-
+    WritePipelineCache();
     s_pipeline_cache_path = {};
   }
+}
+
+void GPUDevice::WritePipelineCache()
+{
+  DynamicHeapArray<u8> data;
+  if (!GetPipelineCacheData(&data))
+    return;
+
+  // Save disk writes if nothing was added, think of the poor SSDs. Caches only grow, so the size tells: some drivers
+  // (MoltenVK, D3D12's library) serialise the same entries in another order on every run, which the bytes would
+  // count as a change.
+  if (data.size() == s_pipeline_cache_size)
+  {
+    INFO_LOG("Skipping updating pipeline cache '{}' due to no changes.", Path::GetFileName(s_pipeline_cache_path));
+    return;
+  }
+
+  Error error;
+  Common::Timer timer;
+  INFO_LOG("Compressing and writing {} bytes to '{}'", data.size(), Path::GetFileName(s_pipeline_cache_path));
+  if (!CompressHelpers::CompressToFile(CompressHelpers::CompressType::Zstandard, s_pipeline_cache_path.c_str(),
+                                       data.cspan(), -1, true, &error))
+  {
+    ERROR_LOG("Failed to write pipeline cache to '{}': {}", Path::GetFileName(s_pipeline_cache_path),
+              error.GetDescription());
+    return;
+  }
+
+  s_pipeline_cache_size = data.size();
+  s_pipeline_cache_hash = SHA1Digest::GetDigest(data.cspan());
+  DEV_LOG("Wrote the pipeline cache in {:.1f} ms", timer.GetTimeMilliseconds());
+}
+
+void GPUDevice::SavePipelineCacheIfGrown()
+{
+  if (s_pipeline_cache_path.empty())
+    return;
+
+  // Only the size is asked for first: serialising the whole cache after every build would slow warm starts.
+  const std::optional<size_t> size = GetPipelineCacheSize();
+  if (!size.has_value() || size.value() == s_pipeline_cache_size)
+    return;
+
+  WritePipelineCache();
+}
+
+std::optional<size_t> GPUDevice::GetPipelineCacheSize()
+{
+  return std::nullopt;
+}
+
+// A short name for the driver in the log and the settings rows: the device's name from the driver's description.
+static std::string GetDriverLabel(RenderAPI api, std::string_view driver_info)
+{
+  const std::vector<std::string_view> lines = StringUtil::SplitString(driver_info, '\n', true);
+  std::string_view name;
+  switch (api)
+  {
+    case RenderAPI::Vulkan:
+      name = lines.empty() ? std::string_view() : lines.back();
+      break;
+    case RenderAPI::OpenGL:
+    case RenderAPI::OpenGLES:
+    case RenderAPI::D3D11:
+    case RenderAPI::D3D12:
+      name = (lines.size() > 2) ? lines[2] : std::string_view();
+      break;
+    case RenderAPI::Metal:
+      for (const std::string_view line : lines)
+      {
+        if (const std::string_view::size_type pos = line.find("name = "); pos != std::string_view::npos)
+          name = line.substr(pos + 7);
+      }
+      break;
+    default:
+      break;
+  }
+
+  name = StringUtil::StripWhitespace(name);
+  return name.empty() ? std::string(GPUDevice::RenderAPIToString(api)) :
+                        fmt::format("{}, {}", GPUDevice::RenderAPIToString(api), name);
+}
+
+std::string GPUDevice::GetDriverIdentity() const
+{
+  return GetDriverInfo();
+}
+
+void GPUDevice::SetUpCompileThreads(std::string_view cache_path)
+{
+  const RenderAPI api = GetRenderAPI();
+  const char* api_name = RenderAPIToString(api);
+  const std::string driver_info = GetDriverInfo();
+  std::string key = fmt::format("{}\n{}", api_name, GetDriverIdentity());
+#ifdef __APPLE__
+  // Metal's and OpenGL's drivers come with macOS.
+  char os_version[64] = {};
+  size_t os_version_size = sizeof(os_version) - 1;
+  if (sysctlbyname("kern.osversion", os_version, &os_version_size, nullptr, 0) == 0)
+    key += fmt::format("\nmacOS {}", os_version);
+#endif
+  const std::string label = GetDriverLabel(api, driver_info);
+
+  m_compile_guard = ShaderCompileThreads::Guard(std::string(cache_path), api_name, key, label);
+  m_compile_known_bad = ShaderCompileThreads::FindKnownBad(api, driver_info);
+  ShaderCompileThreads::SetKnownBadNote(
+    m_compile_known_bad.has_value() ?
+      std::optional<std::string>(fmt::format("Automatic uses 1 on {}: {}.", label, m_compile_known_bad.value())) :
+      std::nullopt);
+  m_compile_block_logged = false;
+}
+
+u32 GPUDevice::GetCompileThreads(u8 setting)
+{
+  // A renderer that can't build on several threads builds on one, whatever the setting.
+  if (!SupportsParallelCompile())
+  {
+    m_compile_automatic = false;
+    return 1;
+  }
+
+  if (setting != ShaderCompileThreads::AUTOMATIC)
+  {
+    // The player's own number lifts a block the guard set.
+    m_compile_automatic = false;
+    m_compile_guard.ClearBlock();
+    return std::min<u32>(setting, ShaderCompileThreads::MAX_THREADS);
+  }
+
+  m_compile_automatic = true;
+  const std::optional<std::string> reason =
+    m_compile_known_bad.has_value() ? m_compile_known_bad : m_compile_guard.GetBlockReason();
+  if (reason.has_value())
+  {
+    if (!m_compile_block_logged)
+    {
+      WARNING_LOG("Shader compile threads: Automatic uses 1, because {}.", reason.value());
+      m_compile_block_logged = true;
+    }
+    return 1;
+  }
+
+  return ShaderCompileThreads::GetAutomatic(std::thread::hardware_concurrency(),
+                                            ShaderCompileThreads::GetPhysicalMemory());
+}
+
+void GPUDevice::BeginCompilePass(u32 threads)
+{
+  m_compile_pass_guarded = (m_compile_automatic && threads > 1);
+  if (m_compile_pass_guarded)
+    m_compile_guard.BeginPass();
+}
+
+void GPUDevice::EndCompilePass()
+{
+  if (m_compile_pass_guarded)
+    m_compile_guard.EndPass();
+  m_compile_pass_guarded = false;
 }
 
 std::string GPUDevice::GetShaderCacheBaseName(std::string_view type) const
@@ -565,6 +726,11 @@ bool GPUDevice::OpenPipelineCache(const std::string& filename)
     s_pipeline_cache_hash = {};
     return false;
   }
+
+  // What the driver holds now: a file it rejected (a driver update) leaves an empty cache, which must be written
+  // again once it's rebuilt, even at the size the old file had.
+  if (const std::optional<size_t> size = GetPipelineCacheSize(); size.has_value())
+    s_pipeline_cache_size = size.value();
 
   INFO_LOG("Pipeline cache hash: {}", SHA1Digest::DigestToString(s_pipeline_cache_hash));
   return true;
@@ -832,6 +998,54 @@ std::unique_ptr<GPUShader> GPUDevice::CreateShader(GPUShaderStage stage, GPUShad
   }
 
   return shader;
+}
+
+bool GPUDevice::CreateShaders(std::span<const ShaderRequest> requests, std::span<std::unique_ptr<GPUShader>> out,
+                              u32 threads, const std::function<void(u32)>& on_progress, Error* error)
+{
+  return GPUShaderBatch::Run(
+    m_shader_cache, requests, out, SupportsParallelShaderCreation() ? threads : 1,
+    [this](const ShaderRequest& req, std::span<const u8> binary, Error* err) {
+      return CreateShaderFromBinary(req.stage, binary, err);
+    },
+    [this](const ShaderRequest& req, GPUShaderCache::ShaderBinary* out_binary, Error* err) {
+      return CreateShaderFromSource(req.stage, req.language, req.source, req.entry_point, out_binary, err);
+    },
+    on_progress, error);
+}
+
+bool GPUDevice::CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
+                                std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
+                                const std::function<void(u32)>& on_progress, Error* error)
+{
+  const u32 count = static_cast<u32>(configs.size());
+  std::vector<Error> errors(count);
+  const bool ok = Threading::RunJobs(
+    count, SupportsParallelCompile() ? threads : 1,
+    [&](u32 i) { return static_cast<bool>(out[i] = CreatePipeline(configs[i], &errors[i])); }, on_progress);
+  if (!ok)
+  {
+    for (u32 i = 0; i < count; i++)
+    {
+      if (!out[i] && errors[i].IsValid())
+      {
+        if (error)
+          *error = std::move(errors[i]);
+        break;
+      }
+    }
+  }
+  return ok;
+}
+
+bool GPUDevice::SupportsParallelCompile() const
+{
+  return false;
+}
+
+bool GPUDevice::SupportsParallelShaderCreation() const
+{
+  return SupportsParallelCompile();
 }
 
 bool GPUDevice::GetRequestedExclusiveFullscreenMode(u32* width, u32* height, float* refresh_rate)
@@ -1318,7 +1532,7 @@ std::unique_ptr<GPUDevice> GPUDevice::CreateDeviceForAPI(RenderAPI api)
 #define SPIRV_CROSS_MSL_FUNCTIONS(X)
 #endif
 
-// TODO: NOT thread safe, yet.
+// Loaded on first use; OpenShaderc and OpenSpirvCross take s_open_lock, as shaders compile on several threads.
 namespace dyn_libs {
 static bool OpenShaderc(Error* error);
 static void CloseShaderc();
@@ -1332,6 +1546,7 @@ static DynamicLibrary s_spirv_cross_library;
 static shaderc_compiler_t s_shaderc_compiler = nullptr;
 
 static bool s_close_registered = false;
+static std::mutex s_open_lock;
 
 #define ADD_FUNC(F) static decltype(&::F) F;
 SHADERC_FUNCTIONS(ADD_FUNC)
@@ -1344,6 +1559,8 @@ SPIRV_CROSS_MSL_FUNCTIONS(ADD_FUNC)
 
 bool dyn_libs::OpenShaderc(Error* error)
 {
+  // Shaders compile on several threads: the first to get here loads the library for all.
+  std::unique_lock lock(s_open_lock);
   if (s_shaderc_library.IsOpen())
     return true;
 
@@ -1399,6 +1616,7 @@ void dyn_libs::CloseShaderc()
 
 bool dyn_libs::OpenSpirvCross(Error* error)
 {
+  std::unique_lock lock(s_open_lock);
   if (s_spirv_cross_library.IsOpen())
     return true;
 

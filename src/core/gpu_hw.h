@@ -380,7 +380,7 @@ private:
   std::unordered_map<u64, ReplacementSourceTexture> m_replacement_sources;
   u64 m_replacement_source_counter = 0;
   /// Draws a replacement into a composed page, its alpha turned into the coverage marker.
-  std::unique_ptr<GPUPipeline> m_replacement_compose_pipeline;
+  GPUPipeline* m_replacement_compose_pipeline = nullptr;
 
   BatchVertex* m_batch_vertex_ptr = nullptr;
   u16* m_batch_index_ptr = nullptr;
@@ -431,35 +431,38 @@ private:
   GSVector4i m_current_uv_rect = INVALID_RECT;
   s32 m_current_texture_page_offset[2] = {};
 
-  std::unique_ptr<GPUPipeline> m_wireframe_pipeline;
+  GPUPipeline* m_wireframe_pipeline = nullptr;
 
   // [wrapped][interlaced]
-  DimensionalArray<std::unique_ptr<GPUPipeline>, 2, 2> m_vram_fill_pipelines{};
+  DimensionalArray<GPUPipeline*, 2, 2> m_vram_fill_pipelines{};
 
   // [depth_test]
-  std::array<std::unique_ptr<GPUPipeline>, 2> m_vram_write_pipelines{};
-  std::array<std::unique_ptr<GPUPipeline>, 2> m_vram_copy_pipelines{};
+  std::array<GPUPipeline*, 2> m_vram_write_pipelines{};
+  std::array<GPUPipeline*, 2> m_vram_copy_pipelines{};
 
-  std::unique_ptr<GPUPipeline> m_vram_readback_pipeline;
-  std::unique_ptr<GPUPipeline> m_vram_update_depth_pipeline;
-  std::unique_ptr<GPUPipeline> m_vram_write_replacement_pipeline;
+  GPUPipeline* m_vram_readback_pipeline = nullptr;
+  GPUPipeline* m_vram_update_depth_pipeline = nullptr;
+  GPUPipeline* m_vram_write_replacement_pipeline = nullptr;
 
-  std::array<std::unique_ptr<GPUPipeline>, 3> m_vram_extract_pipeline; // [24bit, 2=depth]
+  std::array<GPUPipeline*, 3> m_vram_extract_pipeline{}; // [24bit, 2=depth]
   std::unique_ptr<GPUTexture> m_vram_extract_texture;
   std::unique_ptr<GPUTexture> m_vram_extract_depth_texture;
-  std::unique_ptr<GPUPipeline> m_copy_depth_pipeline;
+  GPUPipeline* m_copy_depth_pipeline = nullptr;
 
   std::unique_ptr<GPUTexture> m_downsample_texture;
-  std::unique_ptr<GPUPipeline> m_downsample_first_pass_pipeline;
-  std::unique_ptr<GPUPipeline> m_downsample_mid_pass_pipeline;
-  std::unique_ptr<GPUPipeline> m_downsample_blur_pass_pipeline;
-  std::unique_ptr<GPUPipeline> m_downsample_composite_pass_pipeline;
+  GPUPipeline* m_downsample_first_pass_pipeline = nullptr;
+  GPUPipeline* m_downsample_mid_pass_pipeline = nullptr;
+  GPUPipeline* m_downsample_blur_pass_pipeline = nullptr;
+  GPUPipeline* m_downsample_composite_pass_pipeline = nullptr;
   std::unique_ptr<GPUSampler> m_downsample_lod_sampler;
   std::unique_ptr<GPUSampler> m_downsample_composite_sampler;
   u32 m_downsample_scale_or_levels = 0;
 
   // [depth_test][transparency_mode][render_mode][texture_mode][dithering][interlacing][check_mask]
-  DimensionalArray<std::unique_ptr<GPUPipeline>, 2, 2, 2, NUM_TEXTURE_MODES, 5, 5, 2> m_batch_pipelines{};
+  DimensionalArray<GPUPipeline*, 2, 2, 2, NUM_TEXTURE_MODES, 5, 5, 2> m_batch_pipelines{};
+
+  // Owns every pipeline above: one built pipeline can fill several of their slots.
+  std::vector<std::unique_ptr<GPUPipeline>> m_pipeline_storage;
 };
 
 /// The GPU thread's hardware renderer, while one is in use.

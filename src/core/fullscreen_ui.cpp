@@ -29,6 +29,7 @@
 #include "util/postprocessing.h"
 #include "util/postprocessing_favourites.h"
 #include "util/postprocessing_browser.h"
+#include "util/shader_compile_threads.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
@@ -4927,6 +4928,32 @@ void FullscreenUI::DrawDisplaySettingsPage()
                     FSUI_CSTR("Draws and presents on a thread of its own, beside the emulation, at most one frame "
                               "behind it. Off runs everything on the emulation thread, as before."),
                     "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
+
+  if (!IsEditingGameSettings(bsi))
+  {
+    // The device's, not a game's. Index = the setting's value: 0 is Automatic, with what it gives on this machine.
+    static std::vector<std::string> thread_names;
+    static std::vector<const char*> thread_options;
+    if (thread_names.empty())
+    {
+      thread_names.push_back(fmt::format(
+        FSUI_FSTR("Automatic ({})"), ShaderCompileThreads::GetAutomatic(std::thread::hardware_concurrency(),
+                                                                       ShaderCompileThreads::GetPhysicalMemory())));
+      thread_names.push_back(FSUI_STR("1 (One at a Time)"));
+      for (u32 i = 2; i <= ShaderCompileThreads::MAX_THREADS; i++)
+        thread_names.push_back(std::to_string(i));
+      for (const std::string& name : thread_names)
+        thread_options.push_back(name.c_str());
+    }
+
+    const std::optional<std::string> note = ShaderCompileThreads::GetNote(EmuFolders::Cache);
+    const std::string summary =
+      note.has_value() ? note.value() :
+                         FSUI_STR("How many threads build shaders and pipelines when a game starts or a graphics "
+                                  "setting changes.");
+    DrawIntListSetting(bsi, FSUI_CSTR("Shader Compile Threads"), summary.c_str(), "GPU", "ShaderCompileThreads",
+                       ShaderCompileThreads::AUTOMATIC, thread_options.data(), thread_options.size(), false);
+  }
   const bool gpu_thread = GetEffectiveBoolSetting(bsi, "GPU", "UseGPUThread", Settings::DEFAULT_GPU_THREAD);
 
   switch (renderer)

@@ -108,6 +108,7 @@ struct Settings
   std::string gpu_adapter;
   u8 gpu_resolution_scale = 1;
   u8 gpu_multisamples = 1;
+  u8 gpu_shader_compile_threads = 0; // 0 = Automatic, 1 = one at a time as before
   bool gpu_use_thread : 1 = true;
   bool gpu_use_gpu_thread : 1 = DEFAULT_GPU_THREAD; // the device and its work on a GPU thread of their own
   bool gpu_use_software_renderer_for_readbacks : 1 = false;

@@ -393,6 +393,11 @@ bool OpenGLDevice::CheckFeatures(FeatureMask disabled_features)
   // using the normal texture update routines and letting the driver take care of it. PBOs are also completely
   // broken on mobile drivers.
   const bool is_shitty_mobile_driver = (vendor_id_powervr || vendor_id_qualcomm || vendor_id_arm);
+
+  m_parallel_compile = (GLAD_GL_KHR_parallel_shader_compile || GLAD_GL_ARB_parallel_shader_compile);
+  INFO_LOG("Parallel shader compile: {}", GLAD_GL_KHR_parallel_shader_compile ? "KHR" :
+                                         GLAD_GL_ARB_parallel_shader_compile ? "ARB" :
+                                                                               "not supported, one at a time");
   m_disable_pbo =
     (!GLAD_GL_VERSION_4_4 && !GLAD_GL_ARB_buffer_storage && !GLAD_GL_EXT_buffer_storage) || is_shitty_mobile_driver;
   if (m_disable_pbo && !is_shitty_mobile_driver)

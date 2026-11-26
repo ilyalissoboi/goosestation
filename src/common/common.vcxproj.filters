@@ -32,6 +32,7 @@
     <ClInclude Include="layered_settings_interface.h" />
     <ClInclude Include="heterogeneous_containers.h" />
     <ClInclude Include="memory_settings_interface.h" />
+    <ClInclude Include="job_runner.h" />
     <ClInclude Include="threading.h" />
     <ClInclude Include="scoped_guard.h" />
     <ClInclude Include="build_timestamp.h" />
@@ -68,6 +69,7 @@
     <ClCompile Include="json_reader.cpp" />
     <ClCompile Include="layered_settings_interface.cpp" />
     <ClCompile Include="memory_settings_interface.cpp" />
+    <ClCompile Include="job_runner.cpp" />
     <ClCompile Include="threading.cpp" />
     <ClCompile Include="sha1_digest.cpp" />
     <ClCompile Include="fastjmp.cpp" />

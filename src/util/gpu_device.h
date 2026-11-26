@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include "gpu_shader_batch.h"
 #include "gpu_shader_cache.h"
+#include "shader_compile_threads.h"
 #include "gpu_texture.h"
 #include "window_info.h"
 
@@ -253,6 +255,22 @@ public:
   struct InputLayoutHash
   {
     size_t operator()(const InputLayout& il) const;
+  };
+
+  /// An input layout that owns its attributes, for caches that outlive the config they were made from.
+  struct InputLayoutKey
+  {
+    explicit InputLayoutKey(const InputLayout& il);
+
+    std::vector<VertexAttribute> vertex_attributes;
+    u32 vertex_stride;
+
+    bool operator==(const InputLayoutKey& rhs) const;
+  };
+
+  struct InputLayoutKeyHash
+  {
+    size_t operator()(const InputLayoutKey& key) const;
   };
 
   enum class CullMode : u8
@@ -637,6 +655,10 @@ public:
 
   virtual std::string GetDriverInfo() const = 0;
 
+  /// The renderer's device and driver, the same on every run of the same driver: what the shader compile guard keys
+  /// its records by. The driver info, unless that has something that changes from run to run.
+  virtual std::string GetDriverIdentity() const;
+
   // Executes current command buffer, waits for its completion, and destroys all pending resources.
   virtual void ExecuteAndWaitForGPUIdle() = 0;
 
@@ -677,6 +699,25 @@ public:
                                           Error* error = nullptr, const char* entry_point = "main");
   virtual std::unique_ptr<GPUPipeline> CreatePipeline(const GPUPipeline::GraphicsConfig& config,
                                                       Error* error = nullptr) = 0;
+
+  /// Builds many shaders on up to threads threads, through the shader cache (written in request order). On failure,
+  /// error is the first failing request's, and whatever was made is left in out.
+  using ShaderRequest = GPUShaderBatch::Request;
+  bool CreateShaders(std::span<const ShaderRequest> requests, std::span<std::unique_ptr<GPUShader>> out, u32 threads,
+                     const std::function<void(u32)>& on_progress, Error* error);
+
+  /// Builds many pipelines on up to threads threads (one, where the renderer can't build in parallel). On failure,
+  /// error is the first failing config's, and whatever was made is left in out.
+  virtual bool CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
+                               std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
+                               const std::function<void(u32)>& on_progress, Error* error);
+
+  /// Whether CreatePipeline and the shader creators may run on several threads at once.
+  virtual bool SupportsParallelCompile() const;
+
+  /// Whether the shader creators may run on several threads at once: as SupportsParallelCompile, unless the renderer
+  /// builds in parallel some other way (OpenGL, through the driver's own threads).
+  virtual bool SupportsParallelShaderCreation() const;
 
   /// Debug messaging.
   virtual void PushDebugGroup(const char* name) = 0;
@@ -772,6 +813,20 @@ public:
   virtual void SetVSyncMode(GPUVSyncMode mode, bool allow_present_throttle) = 0;
 
   ALWAYS_INLINE bool IsDebugDevice() const { return m_debug_device; }
+
+  /// How many threads build shaders and pipelines for the setting (0 = Automatic): 1 where the renderer can't build in
+  /// parallel, and under Automatic when the fixed list or the guard names this driver (logged once).
+  u32 GetCompileThreads(u8 setting);
+
+  /// Brackets a build on the threads GetCompileThreads gave: under Automatic with more than one thread, the guard's
+  /// marker is written for its length.
+  void BeginCompilePass(u32 threads);
+  void EndCompilePass();
+
+  /// Writes the driver's pipeline cache to disk if it grew since the last write, so a run that is killed keeps what
+  /// it built. Called after each build.
+  virtual void SavePipelineCacheIfGrown();
+
   ALWAYS_INLINE size_t GetVRAMUsage() const { return s_total_vram_usage; }
 
   /// The font atlas's texture, made or updated from its RGBA8 pixels; nullptr if it couldn't be.
@@ -817,6 +872,8 @@ protected:
   virtual bool OpenPipelineCache(const std::string& filename);
   virtual bool ReadPipelineCache(std::optional<DynamicHeapArray<u8>> data);
   virtual bool GetPipelineCacheData(DynamicHeapArray<u8>* data);
+  virtual std::optional<size_t> GetPipelineCacheSize();
+  void WritePipelineCache();
 
   virtual std::unique_ptr<GPUShader> CreateShaderFromBinary(GPUShaderStage stage, std::span<const u8> data,
                                                             Error* error) = 0;
@@ -825,6 +882,7 @@ protected:
                                                             DynamicHeapArray<u8>* out_binary, Error* error) = 0;
 
   bool AcquireWindow(bool recreate_window);
+  void SetUpCompileThreads(std::string_view cache_path);
 
   void TrimTexturePool();
 
@@ -915,6 +973,12 @@ protected:
   bool m_allow_present_throttle = false;
   bool m_gpu_timing_enabled = false;
   bool m_debug_device = false;
+
+  ShaderCompileThreads::Guard m_compile_guard;
+  std::optional<std::string> m_compile_known_bad;
+  bool m_compile_block_logged = false;
+  bool m_compile_automatic = false;
+  bool m_compile_pass_guarded = false;
 };
 
 extern std::unique_ptr<GPUDevice> g_gpu_device;

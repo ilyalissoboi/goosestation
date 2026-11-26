@@ -15,6 +15,7 @@ import io.github.ilyalissoboi.goosestation.core.StageInfo
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
 import io.github.ilyalissoboi.goosestation.input.ConnectedController
+import io.github.ilyalissoboi.goosestation.settings.CompileThreadsInfo
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
 import kotlinx.coroutines.flow.StateFlow
@@ -93,6 +94,9 @@ interface CoreApi {
 
     /** [NativeLibrary.isFastmemAvailable]. */
     fun isFastmemAvailable(): Boolean
+
+    /** [NativeLibrary.getShaderCompileThreadsInfo], read. */
+    fun getCompileThreadsInfo(): CompileThreadsInfo
 
     /** The core's choice list [kind] (an enum's name, as [NativeLibrary.getSettingNames] takes it), in its order. */
     fun getSettingNames(kind: String): List<Choice<String>>
@@ -309,6 +313,11 @@ object NativeCoreApi : CoreApi {
     override fun isVulkanFailed(): Boolean = NativeLibrary.isVulkanFailed()
 
     override fun isFastmemAvailable(): Boolean = NativeLibrary.isFastmemAvailable()
+
+    override fun getCompileThreadsInfo(): CompileThreadsInfo {
+        val (automatic, note) = NativeLibrary.getShaderCompileThreadsInfo().split('\n', limit = 2) + listOf("", "")
+        return CompileThreadsInfo(automatic.toIntOrNull() ?: 1, note.ifEmpty { null })
+    }
 
     override fun getSettingNames(kind: String): List<Choice<String>> =
         NativeLibrary

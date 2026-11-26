@@ -25,7 +25,8 @@ fun SharedPageScreen(
         SharedPage.Emulation -> EmulationScreen(values, extras.rewindUsage, onChange, onBack, extras.names)
         SharedPage.Graphics -> GraphicsScreen(values, extras.names, extras.vulkanFailed, onChange, onBack)
         SharedPage.Audio -> AudioScreen(values, extras.names, onChange, onBack)
-        SharedPage.Advanced -> AdvancedScreen(values, extras.names, extras.fastmemAvailable, onChange, onBack)
+        SharedPage.Advanced ->
+            AdvancedScreen(values, extras.names, extras.fastmemAvailable, onChange, onBack, extras.compileThreads)
         SharedPage.MemoryCards -> error("Memory cards is each owner's own page")
     }
 }

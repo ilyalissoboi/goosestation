@@ -11,6 +11,7 @@
 #include <d3d11_1.h>
 #include <dxgi1_5.h>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -70,6 +71,7 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+  bool SupportsParallelCompile() const override;
   void CopyTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
                          u32 src_x, u32 src_y, u32 src_layer, u32 src_level, u32 width, u32 height) override;
   void ResolveTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
@@ -176,6 +178,8 @@ private:
   ComPtr<IDXGISwapChain1> m_swap_chain;
   ComPtr<ID3D11RenderTargetView> m_swap_chain_rtv;
 
+  // Pipelines are created on several threads: the four state maps are under this lock.
+  std::mutex m_state_lock;
   RasterizationStateMap m_rasterization_states;
   DepthStateMap m_depth_states;
   BlendStateMap m_blend_states;

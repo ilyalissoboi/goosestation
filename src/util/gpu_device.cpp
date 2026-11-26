@@ -13,6 +13,7 @@
 #include "common/dynamic_library.h"
 #include "common/error.h"
 #include "common/file_system.h"
+#include "common/job_runner.h"
 #include "common/log.h"
 #include "common/path.h"
 #include "common/scoped_guard.h"
@@ -950,6 +951,35 @@ bool GPUDevice::CreateShaders(std::span<const ShaderRequest> requests, std::span
       return CreateShaderFromSource(req.stage, req.language, req.source, req.entry_point, out_binary, err);
     },
     on_progress, error);
+}
+
+bool GPUDevice::CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
+                                std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
+                                const std::function<void(u32)>& on_progress, Error* error)
+{
+  const u32 count = static_cast<u32>(configs.size());
+  std::vector<Error> errors(count);
+  const bool ok = Threading::RunJobs(
+    count, SupportsParallelCompile() ? threads : 1,
+    [&](u32 i) { return static_cast<bool>(out[i] = CreatePipeline(configs[i], &errors[i])); }, on_progress);
+  if (!ok)
+  {
+    for (u32 i = 0; i < count; i++)
+    {
+      if (!out[i] && errors[i].IsValid())
+      {
+        if (error)
+          *error = std::move(errors[i]);
+        break;
+      }
+    }
+  }
+  return ok;
+}
+
+bool GPUDevice::SupportsParallelCompile() const
+{
+  return false;
 }
 
 bool GPUDevice::GetRequestedExclusiveFullscreenMode(u32* width, u32* height, float* refresh_rate)

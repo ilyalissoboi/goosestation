@@ -52,6 +52,7 @@
     <ClInclude Include="d3d12_stream_buffer.h" />
     <ClInclude Include="d3d12_texture.h" />
     <ClInclude Include="gpu_device.h" />
+    <ClInclude Include="gpu_pipeline_batch.h" />
     <ClInclude Include="gpu_shader_batch.h" />
     <ClInclude Include="gpu_shader_cache.h" />
     <ClInclude Include="shader_compile_threads.h" />
@@ -151,6 +152,7 @@
     <ClCompile Include="d3d12_stream_buffer.cpp" />
     <ClCompile Include="d3d12_texture.cpp" />
     <ClCompile Include="gpu_device.cpp" />
+    <ClCompile Include="gpu_pipeline_batch.cpp" />
     <ClCompile Include="gpu_shader_batch.cpp" />
     <ClCompile Include="gpu_shader_cache.cpp" />
     <ClCompile Include="shader_compile_threads.cpp" />

@@ -1140,6 +1140,7 @@ VkRenderPass VulkanDevice::GetRenderPass(const GPUPipeline::GraphicsConfig& conf
   key.samples = static_cast<u8>(config.samples);
   key.feedback_loop = config.render_pass_flags;
 
+  std::unique_lock lock(m_render_pass_lock);
   const auto it = m_render_pass_cache.find(key);
   return (it != m_render_pass_cache.end()) ? it->second : CreateCachedRenderPass(key);
 }
@@ -1176,6 +1177,7 @@ VkRenderPass VulkanDevice::GetRenderPass(VulkanTexture* const* rts, u32 num_rts,
 
   key.feedback_loop = feedback_loop;
 
+  std::unique_lock lock(m_render_pass_lock);
   const auto it = m_render_pass_cache.find(key);
   return (it != m_render_pass_cache.end()) ? it->second : CreateCachedRenderPass(key);
 }
@@ -1192,12 +1194,14 @@ VkRenderPass VulkanDevice::GetSwapChainRenderPass(GPUTexture::Format format, VkA
   key.color[0].store_op = VK_ATTACHMENT_STORE_OP_STORE;
   key.samples = 1;
 
+  std::unique_lock lock(m_render_pass_lock);
   const auto it = m_render_pass_cache.find(key);
   return (it != m_render_pass_cache.end()) ? it->second : CreateCachedRenderPass(key);
 }
 
 VkRenderPass VulkanDevice::GetRenderPassForRestarting(VkRenderPass pass)
 {
+  std::unique_lock lock(m_render_pass_lock);
   for (const auto& it : m_render_pass_cache)
   {
     if (it.second != pass)
@@ -1837,6 +1841,7 @@ bool VulkanDevice::IsBrokenMobileDriver() const
 
 VkRenderPass VulkanDevice::CreateCachedRenderPass(RenderPassCacheKey key)
 {
+  // Called with m_render_pass_lock held.
   std::array<VkAttachmentReference, MAX_RENDER_TARGETS> color_references;
   VkAttachmentReference* color_reference_ptr = nullptr;
   VkAttachmentReference depth_reference;
@@ -2409,6 +2414,13 @@ void VulkanDevice::DestroySurface()
 bool VulkanDevice::SupportsTextureFormat(GPUTexture::Format format) const
 {
   return (TEXTURE_FORMAT_MAPPING[static_cast<u8>(format)] != VK_FORMAT_UNDEFINED);
+}
+
+bool VulkanDevice::SupportsParallelCompile() const
+{
+  // vkCreateShaderModule and vkCreateGraphicsPipelines may be called on several threads; the pipeline cache is made
+  // without VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT, so the driver guards it.
+  return true;
 }
 
 std::string VulkanDevice::GetDriverInfo() const

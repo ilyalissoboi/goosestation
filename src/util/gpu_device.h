@@ -686,6 +686,15 @@ public:
   bool CreateShaders(std::span<const ShaderRequest> requests, std::span<std::unique_ptr<GPUShader>> out, u32 threads,
                      const std::function<void(u32)>& on_progress, Error* error);
 
+  /// Builds many pipelines on up to threads threads (one, where the renderer can't build in parallel). On failure,
+  /// error is the first failing config's, and whatever was made is left in out.
+  virtual bool CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
+                               std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
+                               const std::function<void(u32)>& on_progress, Error* error);
+
+  /// Whether CreatePipeline and the shader creators may run on several threads at once.
+  virtual bool SupportsParallelCompile() const;
+
   /// Debug messaging.
   virtual void PushDebugGroup(const char* name) = 0;
   virtual void PopDebugGroup() = 0;

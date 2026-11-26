@@ -87,6 +87,7 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+  bool SupportsParallelCompile() const override;
   void CopyTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
                          u32 src_x, u32 src_y, u32 src_layer, u32 src_level, u32 width, u32 height) override;
   void ResolveTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
@@ -336,6 +337,11 @@ private:
 
   SamplerMap m_sampler_map;
   ComPtr<ID3D12PipelineLibrary> m_pipeline_library;
+
+  // The library may not load one name on two threads at once: a name always takes the same of these locks, held from
+  // its load to its store.
+  static constexpr u32 NUM_PIPELINE_LIBRARY_LOCKS = 64;
+  std::array<std::mutex, NUM_PIPELINE_LIBRARY_LOCKS> m_pipeline_library_locks;
 
   // Which bindings/state has to be updated before the next draw.
   u32 m_dirty_flags = ALL_DIRTY_STATE;

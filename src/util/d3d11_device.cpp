@@ -442,6 +442,12 @@ bool D3D11Device::SupportsExclusiveFullscreen() const
   return true;
 }
 
+bool D3D11Device::SupportsParallelCompile() const
+{
+  // The device is free-threaded (not created single-threaded); its state caches have m_state_lock.
+  return true;
+}
+
 std::string D3D11Device::GetDriverInfo() const
 {
   const D3D_FEATURE_LEVEL fl = m_device->GetFeatureLevel();

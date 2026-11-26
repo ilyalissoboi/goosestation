@@ -104,6 +104,7 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+  bool SupportsParallelCompile() const override;
 
   bool SupportsSlangPresets() const override;
   std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
@@ -461,6 +462,8 @@ private:
 
   QueuedPresent m_queued_present = {nullptr, 0xFFFFFFFFu};
 
+  // Pipelines are created on several threads, which look render passes up too.
+  std::mutex m_render_pass_lock;
   std::unordered_map<RenderPassCacheKey, VkRenderPass, RenderPassCacheKeyHash> m_render_pass_cache;
   GPUFramebufferManager<VkFramebuffer, CreateFramebuffer, DestroyFramebuffer> m_framebuffer_manager;
   VkPipelineCache m_pipeline_cache = VK_NULL_HANDLE;

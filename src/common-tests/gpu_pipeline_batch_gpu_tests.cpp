@@ -9,6 +9,8 @@
 #include "core/gpu_hw_shadergen.h"
 
 #include "util/gpu_device.h"
+#include "util/gpu_pipeline_batch.h"
+#include "util/gpu_texture.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
@@ -121,6 +123,121 @@ TEST_F(ShaderBatchGPU, ParallelShadersMatchSerial)
   if (GPUTestDevice::API() != RenderAPI::OpenGL && GPUTestDevice::API() != RenderAPI::OpenGLES)
     EXPECT_FALSE(files[0].empty());
   EXPECT_EQ(files[0], files[1]);
+}
+
+using PipelineBatchGPU = GPUBatchTest;
+
+constexpr u32 TARGET_SIZE = 16;
+
+// 64 variants of a fill pipeline: four blend states, each with all sixteen colour write masks.
+std::vector<GPUPipeline::GraphicsConfig> FillConfigs()
+{
+  std::vector<GPUPipeline::GraphicsConfig> configs;
+  for (u32 blend = 0; blend < 4; blend++)
+  {
+    for (u8 mask = 0; mask < 16; mask++)
+    {
+      GPUPipeline::GraphicsConfig c = {};
+      c.layout = GPUPipeline::Layout::SingleTextureAndPushConstants;
+      c.primitive = GPUPipeline::Primitive::Triangles;
+      c.rasterization = GPUPipeline::RasterizationState::GetNoCullState();
+      c.depth = GPUPipeline::DepthState::GetNoTestsState();
+      c.blend = (blend == 1) ? GPUPipeline::BlendState::GetAlphaBlendingState() :
+                               GPUPipeline::BlendState::GetNoBlendingState();
+      if (blend >= 2)
+      {
+        c.blend.enable = true;
+        c.blend.src_blend = GPUPipeline::BlendFunc::One;
+        c.blend.dst_blend = (blend == 2) ? GPUPipeline::BlendFunc::One : GPUPipeline::BlendFunc::ConstantColor;
+        c.blend.blend_op = (blend == 2) ? GPUPipeline::BlendOp::Add : GPUPipeline::BlendOp::ReverseSubtract;
+        c.blend.src_alpha_blend = GPUPipeline::BlendFunc::One;
+        c.blend.dst_alpha_blend = GPUPipeline::BlendFunc::Zero;
+        c.blend.alpha_blend_op = GPUPipeline::BlendOp::Add;
+        c.blend.constant = 0x00808080u;
+      }
+      c.blend.write_mask = mask;
+      c.SetTargetFormats(GPUTexture::Format::RGBA8);
+      c.samples = 1;
+      c.render_pass_flags = GPUPipeline::NoRenderPassFlags;
+      configs.push_back(c);
+    }
+  }
+  return configs;
+}
+
+struct FillUniforms
+{
+  u32 dst_coords[2];
+  u32 end_coords[2];
+  float fill_color[4];
+  u32 interlaced_displayed_field;
+  u32 pad[3];
+};
+
+// Builds the fill pipelines on threads threads, draws each over a cleared target, and returns every pixel drawn.
+std::vector<u32> DrawFills(u32 threads)
+{
+  const RenderAPI api = g_gpu_device->GetRenderAPI();
+  GPU_HW_ShaderGen shadergen(api, 1, 1, false, false, false, false, false, true, false, false);
+
+  GPUPipelineBatch batch;
+  const GPUPipelineBatch::Handle vs = batch.AddShader(GPUShaderStage::Vertex, shadergen.GetLanguage(),
+                                                      shadergen.GenerateScreenQuadVertexShader(1.0f));
+  const GPUPipelineBatch::Handle fs = batch.AddShader(GPUShaderStage::Fragment, shadergen.GetLanguage(),
+                                                      shadergen.GenerateVRAMFillFragmentShader(false, false));
+  const std::vector<GPUPipeline::GraphicsConfig> configs = FillConfigs();
+  std::vector<GPUPipeline*> slots(configs.size());
+  for (size_t i = 0; i < configs.size(); i++)
+    batch.AddPipeline(configs[i], vs, fs, GPUPipelineBatch::NONE, &slots[i]);
+  EXPECT_EQ(batch.GetUniquePipelineCount(), configs.size());
+
+  Error error;
+  EXPECT_TRUE(batch.Build(*g_gpu_device, threads, {}, &error)) << error.GetDescription();
+  const std::vector<std::unique_ptr<GPUPipeline>> pipelines = batch.TakePipelines();
+
+  std::unique_ptr<GPUTexture> target = g_gpu_device->CreateTexture(
+    TARGET_SIZE, TARGET_SIZE, 1, 1, 1, GPUTexture::Type::RenderTarget, GPUTexture::Format::RGBA8);
+  std::unique_ptr<GPUDownloadTexture> dl =
+    g_gpu_device->CreateDownloadTexture(TARGET_SIZE, TARGET_SIZE, GPUTexture::Format::RGBA8);
+  EXPECT_TRUE(target && dl);
+  if (!target || !dl)
+    return {};
+
+  std::vector<u32> pixels;
+  std::vector<u32> frame(TARGET_SIZE * TARGET_SIZE);
+  for (GPUPipeline* pipeline : slots)
+  {
+    EXPECT_TRUE(pipeline);
+    if (!pipeline)
+      continue;
+    g_gpu_device->ClearRenderTarget(target.get(), 0xC0402010u);
+    g_gpu_device->SetRenderTarget(target.get());
+    g_gpu_device->SetViewportAndScissor(0, 0, TARGET_SIZE, TARGET_SIZE);
+    g_gpu_device->SetPipeline(pipeline);
+    const FillUniforms uniforms = {{0, 0}, {TARGET_SIZE, TARGET_SIZE}, {0.75f, 0.5f, 0.25f, 0.5f}, 0, {}};
+    g_gpu_device->PushUniformBuffer(&uniforms, sizeof(uniforms));
+    g_gpu_device->Draw(3, 0);
+    target->MakeReadyForSampling();
+    dl->CopyFromTexture(0, 0, target.get(), 0, 0, TARGET_SIZE, TARGET_SIZE, 0, 0, true);
+    dl->Flush();
+    EXPECT_TRUE(dl->ReadTexels(0, 0, TARGET_SIZE, TARGET_SIZE, frame.data(), TARGET_SIZE * sizeof(u32)));
+    pixels.insert(pixels.end(), frame.begin(), frame.end());
+  }
+  return pixels;
+}
+
+TEST_F(PipelineBatchGPU, ParallelPipelinesDrawTheSame)
+{
+  Error error;
+  ASSERT_TRUE(GPUTestDevice::Create({}, &error)) << error.GetDescription();
+  const std::vector<u32> one = DrawFills(1);
+  const std::vector<u32> eight = DrawFills(8);
+  ASSERT_EQ(one.size(), 64u * TARGET_SIZE * TARGET_SIZE);
+  EXPECT_EQ(one, eight);
+
+  // The fills did draw: write mask 15 without blending gives the fill colour.
+  const u32 opaque = one[15 * TARGET_SIZE * TARGET_SIZE + 5 * TARGET_SIZE + 5];
+  EXPECT_NE(opaque, 0xC0402010u);
 }
 
 } // namespace

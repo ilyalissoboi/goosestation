@@ -1056,6 +1056,12 @@ bool D3D12Device::SupportsTextureFormat(GPUTexture::Format format) const
          (support.Support1 & required) == required;
 }
 
+bool D3D12Device::SupportsParallelCompile() const
+{
+  // The device is free-threaded, and the pipeline library is used under m_pipeline_library_locks.
+  return true;
+}
+
 std::string D3D12Device::GetDriverInfo() const
 {
   std::string ret = fmt::format("{} ({})\n", D3DCommon::GetFeatureLevelString(m_feature_level),

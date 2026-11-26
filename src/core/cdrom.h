@@ -15,7 +15,7 @@ namespace CDROM {
 void Initialize();
 void Shutdown();
 void Reset();
-bool DoState(StateWrapper& sw);
+bool DoState(StateWrapper& sw, bool is_memory_state);
 
 bool HasMedia();
 const std::string& GetMediaFileName();

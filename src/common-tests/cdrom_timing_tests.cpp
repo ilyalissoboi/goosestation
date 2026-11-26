@@ -211,3 +211,24 @@ TEST(CDROMTiming, SeeksBetweenStreamedBurstsAreNotLoading)
   EXPECT_TRUE(CDROMTiming::IsLoadingData(false, true, false));
   EXPECT_FALSE(CDROMTiming::IsLoadingData(false, false, false));
 }
+
+TEST(CDROMTiming, TimeGoingBackKeepsTheStreamHold)
+{
+  // Runahead and rewind load an earlier state every frame: an earlier time counts as just now.
+  CDROMTiming::StreamDetector detector;
+  const GlobalTicks sec = static_cast<GlobalTicks>(TPS);
+  detector.NoteSign(10 * sec);
+  EXPECT_TRUE(detector.IsStreaming(9 * sec, false, TPS));
+  EXPECT_TRUE(detector.IsStreaming(9 * sec + sec * 4 / 10, false, TPS));
+  EXPECT_FALSE(detector.IsStreaming(9 * sec + sec * 6 / 10, false, TPS));
+}
+
+TEST(CDROMTiming, TimeGoingBackKeepsLoadFastForwardOn)
+{
+  CDROMTiming::LoadFastForward rule;
+  const GlobalTicks sec = static_cast<GlobalTicks>(TPS);
+  EXPECT_TRUE(rule.Update(true, true, false, 10 * sec, TPS));
+  EXPECT_TRUE(rule.Update(true, false, false, 9 * sec, TPS)); // runahead's rollback, mid-load
+  EXPECT_TRUE(rule.Update(true, false, false, 9 * sec + sec / 5, TPS));
+  EXPECT_FALSE(rule.Update(true, false, false, 9 * sec + sec * 3 / 10, TPS));
+}

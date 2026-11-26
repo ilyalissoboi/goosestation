@@ -150,4 +150,11 @@ class ConsoleScreenTest : ControllerKeys {
 
         rule.onNodeWithText("Off in hardcore mode.").assertExists()
     }
+
+    @Test
+    fun shortDriveWaitsSayTheyNeedInstantSeeks() {
+        show(pageValues(ConsoleSettings.all, "CDROM/SeekSpeedup" to "1"))
+
+        rule.onNodeWithText("Only with instant seeks.").assertExists()
+    }
 }

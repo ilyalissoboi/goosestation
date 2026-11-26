@@ -233,7 +233,8 @@ void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, float 
   if (!(g_settings.display_show_fps || g_settings.display_show_speed || g_settings.display_show_gpu_stats ||
         g_settings.display_show_resolution || g_settings.display_show_cpu_usage ||
         (g_settings.display_show_status_indicators &&
-         (System::IsPaused() || System::IsFastForwardEnabled() || System::IsTurboEnabled()))))
+         (System::IsPaused() || System::IsFastForwardEnabled() || System::IsTurboEnabled() ||
+          System::IsLoadFastForwardActive()))))
   {
     return;
   }

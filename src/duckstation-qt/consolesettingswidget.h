@@ -20,8 +20,12 @@ public:
 private Q_SLOTS:
   void updateRecompilerICacheEnabled();
   void onEnableCPUClockSpeedControlChecked(int state);
+  void updateCDROMRows();
   void onCPUClockSpeedValueChanged(int value);
   void updateCPUClockSpeedLabel();
+
+protected:
+  void showEvent(QShowEvent* event) override;
 
 private:
   void calculateCPUClockValue();

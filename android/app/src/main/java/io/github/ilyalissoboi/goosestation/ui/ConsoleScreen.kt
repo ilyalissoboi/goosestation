@@ -88,12 +88,18 @@ fun ConsoleScreen(
             ConsoleSettings.SEEK_SPEEDS,
             "Faster loading in some games; breaks others.",
         )
+        val instantSeeks = values[ConsoleSettings.SEEK_SPEEDUP] == 0
         GameSwitch(
             values,
             onChange,
             "Short drive waits",
             ConsoleSettings.SHORT_DRIVE_WAITS,
-            "With instant seeks, also shortens spin-up, speed changes and the disc's table-of-contents read.",
+            if (instantSeeks) {
+                "With instant seeks, also shortens spin-up, speed changes and the disc's table-of-contents read."
+            } else {
+                "Only with instant seeks."
+            },
+            enabled = instantSeeks,
         )
         GameSwitch(
             values,

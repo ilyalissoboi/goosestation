@@ -2634,7 +2634,7 @@ bool System::DoState(StateWrapper& sw, GPUTexture** host_texture, bool update_di
   if (!sw.DoMarker("GPU") || !g_gpu->DoState(sw, host_texture, update_display))
     return false;
 
-  if (!sw.DoMarker("CDROM") || !CDROM::DoState(sw))
+  if (!sw.DoMarker("CDROM") || !CDROM::DoState(sw, is_memory_state))
     return false;
 
   if (!sw.DoMarker("Pad") || !Pad::DoState(sw, is_memory_state))
@@ -3927,8 +3927,9 @@ void System::SetFastForwardEnabled(bool enabled)
   if (!IsValid())
     return;
 
-  // Ending fast-forward drops the sped-up tail, and the stretcher's tempo starts over at normal speed.
-  if (s_fast_forward_enabled && !enabled)
+  // Ending fast-forward drops the sped-up tail, and the stretcher's tempo starts over at normal speed: unless fast-forward
+  // while loading keeps the speed up, when that drops it as it ends.
+  if (s_fast_forward_enabled && !enabled && !s_load_fast_forward.IsActive())
     SPU::GetOutputStream()->EmptyBuffer();
 
   s_fast_forward_enabled = enabled;

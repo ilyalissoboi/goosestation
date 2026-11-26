@@ -106,11 +106,15 @@ bool CDROMTiming::StreamDetector::IsStreaming(GlobalTicks now, bool mode_bits, T
   if (m_reset_pending)
     Reset(now);
 
+  // Runahead and rewind load an earlier state every frame: a sign later than now counts as just now.
+  if (m_has_sign && now < m_last_sign)
+    m_last_sign = now;
+
   if (mode_bits)
     return true;
 
   const GlobalTicks hold = static_cast<GlobalTicks>(STREAM_HOLD_SECONDS * static_cast<float>(ticks_per_second));
-  return m_has_sign && now >= m_last_sign && (now - m_last_sign) < hold;
+  return m_has_sign && (now - m_last_sign) < hold;
 }
 
 bool CDROMTiming::LoadFastForward::Update(bool allowed, bool cd_loading, bool cd_streaming, GlobalTicks now,
@@ -127,8 +131,12 @@ bool CDROMTiming::LoadFastForward::Update(bool allowed, bool cd_loading, bool cd
   }
   else if (m_active)
   {
+    // Time going back (runahead, rewind) counts as just now, so the hold doesn't end every frame.
+    if (now < m_last_loading)
+      m_last_loading = now;
+
     const GlobalTicks hold = static_cast<GlobalTicks>(LOAD_FF_HOLD_SECONDS * static_cast<float>(ticks_per_second));
-    m_active = (now >= m_last_loading && (now - m_last_loading) < hold);
+    m_active = (now - m_last_loading) < hold;
   }
 
   return m_active;

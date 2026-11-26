@@ -663,7 +663,7 @@ TickCount CDROM::SoftReset(TickCount ticks_late)
   return total_ticks;
 }
 
-bool CDROM::DoState(StateWrapper& sw)
+bool CDROM::DoState(StateWrapper& sw, bool is_memory_state)
 {
   sw.Do(&s_command);
   sw.DoEx(&s_command_second_response, 53, Command::None);
@@ -800,10 +800,15 @@ bool CDROM::DoState(StateWrapper& sw)
       s_reader.QueueReadSector(s_requested_lba);
     UpdateCommandEvent();
     s_drive_event.SetState(!IsDriveIdle());
-    // The timeline isn't loaded yet (TimingEvents::DoState comes after): the reset takes the next query's time.
-    s_stream_detector.ResetLater();
-    s_last_mdec_decode_seen = MDEC::GetLastDecodeStartTick();
-    s_hurry_armed = false;
+    // A state from a file may be from anywhere: streaming is assumed for the hold, from the next query's time (the
+    // timeline isn't loaded yet, TimingEvents::DoState comes after). Runahead and rewind load memory states every
+    // frame: those keep the drive's own picture, and the detector allows for time going back.
+    if (!is_memory_state)
+    {
+      s_stream_detector.ResetLater();
+      s_last_mdec_decode_seen = MDEC::GetLastDecodeStartTick();
+      s_hurry_armed = false;
+    }
 
     // Time will get fixed up later.
     s_command_second_response_event.SetState(s_command_second_response != Command::None);

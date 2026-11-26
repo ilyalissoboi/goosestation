@@ -5,10 +5,14 @@
 
 #include "common/assert.h"
 #include "common/error.h"
+#include "common/log.h"
+#include "common/timer.h"
 
 #include "xxhash.h"
 
 #include <cstring>
+
+Log_SetChannel(GPUDevice);
 
 GPUPipelineBatch::Handle GPUPipelineBatch::AddShader(GPUShaderStage stage, GPUShaderLanguage language,
                                                      std::string source, const char* entry_point)
@@ -90,6 +94,7 @@ bool GPUPipelineBatch::Build(GPUDevice& device, u32 threads, const std::function
   const u32 total = num_shaders + num_pipelines;
 
   device.BeginCompilePass(threads);
+  Common::Timer timer;
 
   std::vector<GPUDevice::ShaderRequest> requests;
   requests.reserve(num_shaders);
@@ -105,6 +110,7 @@ bool GPUPipelineBatch::Build(GPUDevice& device, u32 threads, const std::function
     },
     error);
 
+  const double shaders_ms = timer.GetTimeMilliseconds();
   std::vector<std::unique_ptr<GPUPipeline>> pipelines(num_pipelines);
   if (ok)
   {
@@ -129,6 +135,8 @@ bool GPUPipelineBatch::Build(GPUDevice& device, u32 threads, const std::function
   }
 
   device.EndCompilePass();
+  DEV_LOG("Batch: {} shaders in {:.1f} ms, {} pipelines in {:.1f} ms, {} threads", num_shaders, shaders_ms, num_pipelines,
+          timer.GetTimeMilliseconds() - shaders_ms, threads);
 
   // Everything is destroyed here, on the calling thread: the backends queue destruction on the GPU thread's state.
   shaders.clear();

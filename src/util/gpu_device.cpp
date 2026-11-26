@@ -491,6 +491,7 @@ void GPUDevice::WritePipelineCache()
   }
 
   Error error;
+  Common::Timer timer;
   INFO_LOG("Compressing and writing {} bytes to '{}'", data.size(), Path::GetFileName(s_pipeline_cache_path));
   if (!CompressHelpers::CompressToFile(CompressHelpers::CompressType::Zstandard, s_pipeline_cache_path.c_str(),
                                        data.cspan(), -1, true, &error))
@@ -502,6 +503,7 @@ void GPUDevice::WritePipelineCache()
 
   s_pipeline_cache_size = data.size();
   s_pipeline_cache_hash = SHA1Digest::GetDigest(data.cspan());
+  DEV_LOG("Wrote the pipeline cache in {:.1f} ms", timer.GetTimeMilliseconds());
 }
 
 void GPUDevice::SavePipelineCacheIfGrown()

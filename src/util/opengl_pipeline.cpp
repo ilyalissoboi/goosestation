@@ -12,6 +12,7 @@
 #include "common/file_system.h"
 #include "common/hash_combine.h"
 #include "common/log.h"
+#include "common/timer.h"
 #include "common/path.h"
 #include "common/scoped_guard.h"
 #include "common/small_string.h"
@@ -1105,8 +1106,10 @@ void OpenGLDevice::SavePipelineCacheIfGrown()
   if (!m_pipeline_disk_cache_file || !m_pipeline_disk_cache_changed)
     return;
 
+  Common::Timer timer;
   if (WritePipelineCacheIndex())
     m_pipeline_disk_cache_changed = false;
+  DEV_LOG("Wrote the program cache's index in {:.1f} ms", timer.GetTimeMilliseconds());
 }
 
 bool OpenGLDevice::WritePipelineCacheIndex()

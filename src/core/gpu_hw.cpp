@@ -1780,6 +1780,9 @@ bool GPU_HW::CompilePipelines(Error* error)
     return false;
 
   m_pipeline_storage = batch.TakePipelines();
+
+  // Kept on disk now, not only at shutdown: Android may kill the app before then.
+  g_gpu_device->SavePipelineCacheIfGrown();
 #ifdef _DEBUG
   for (const auto& [slot, name] : pipeline_names)
     GL_OBJECT_NAME(*slot, name);

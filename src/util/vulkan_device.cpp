@@ -2342,6 +2342,22 @@ bool VulkanDevice::GetPipelineCacheData(DynamicHeapArray<u8>* data)
   return true;
 }
 
+std::optional<size_t> VulkanDevice::GetPipelineCacheSize()
+{
+  if (m_pipeline_cache == VK_NULL_HANDLE)
+    return std::nullopt;
+
+  size_t size = 0;
+  const VkResult res = vkGetPipelineCacheData(m_device, m_pipeline_cache, &size, nullptr);
+  if (res != VK_SUCCESS)
+  {
+    LOG_VULKAN_ERROR(res, "vkGetPipelineCacheData() (size) failed: ");
+    return std::nullopt;
+  }
+
+  return size;
+}
+
 bool VulkanDevice::UpdateWindow()
 {
   DestroySurface();

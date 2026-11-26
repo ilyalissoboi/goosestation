@@ -65,6 +65,7 @@ public:
                                                             u32 memory_stride) override;
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
+  void SavePipelineCacheIfGrown() override;
 
   bool SupportsSlangPresets() const override;
   std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
@@ -186,6 +187,7 @@ private:
   void AddToPipelineCache(OpenGLPipeline::ProgramCacheItem* it);
   bool DiscardPipelineCache();
   void ClosePipelineCache();
+  bool WritePipelineCacheIndex();
 
   void ApplyRasterizationState(GPUPipeline::RasterizationState rs);
   void ApplyDepthState(GPUPipeline::DepthState ds);

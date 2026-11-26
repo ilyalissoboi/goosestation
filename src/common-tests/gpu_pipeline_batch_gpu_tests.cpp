@@ -226,6 +226,82 @@ std::vector<u32> DrawFills(u32 threads)
   return pixels;
 }
 
+// Builds the 64 fill pipelines on the current device, on eight threads.
+void BuildFills()
+{
+  const RenderAPI api = g_gpu_device->GetRenderAPI();
+  GPU_HW_ShaderGen shadergen(api, 1, 1, false, false, false, false, false, true, false, false);
+  GPUPipelineBatch batch;
+  const GPUPipelineBatch::Handle vs = batch.AddShader(GPUShaderStage::Vertex, shadergen.GetLanguage(),
+                                                      shadergen.GenerateScreenQuadVertexShader(1.0f));
+  const GPUPipelineBatch::Handle fs = batch.AddShader(GPUShaderStage::Fragment, shadergen.GetLanguage(),
+                                                      shadergen.GenerateVRAMFillFragmentShader(false, false));
+  const std::vector<GPUPipeline::GraphicsConfig> configs = FillConfigs();
+  std::vector<GPUPipeline*> slots(configs.size());
+  for (size_t i = 0; i < configs.size(); i++)
+    batch.AddPipeline(configs[i], vs, fs, GPUPipelineBatch::NONE, &slots[i]);
+  Error error;
+  EXPECT_TRUE(batch.Build(*g_gpu_device, 8, {}, &error)) << error.GetDescription();
+}
+
+// Every file in the cache folder, with its bytes.
+std::vector<std::pair<std::string, std::string>> Files(const std::string& dir)
+{
+  std::vector<std::pair<std::string, std::string>> files;
+  FileSystem::FindResultsArray found;
+  FileSystem::FindFiles(dir.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_SORT_BY_NAME, &found);
+  for (const FILESYSTEM_FIND_DATA& f : found)
+    files.emplace_back(Path::GetFileName(f.FileName), FileSystem::ReadFileToString(f.FileName.c_str()).value_or(""));
+  return files;
+}
+
+TEST_F(PipelineBatchGPU, ACacheIsOnDiskBeforeShutdown)
+{
+  const std::string dir = NewDir("common-tests-pipeline-cache");
+  Error error;
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  if (!g_gpu_device->GetFeatures().pipeline_cache)
+    GTEST_SKIP() << "No driver pipeline cache on this renderer and driver";
+  BuildFills();
+  g_gpu_device->SavePipelineCacheIfGrown();
+
+  // The run is killed here: what's on disk now is all the next run gets. (A device can't be leaked to show it: the
+  // renderer's library is shared, so the shutdown runs, and the folder is put back as it was.)
+  const std::vector<std::pair<std::string, std::string>> saved = Files(dir);
+  bool found = false;
+  for (const auto& [name, bytes] : saved)
+    found |= (name.find("_pipelines.bin") != std::string::npos && !bytes.empty());
+  EXPECT_TRUE(found) << "no pipeline cache written after the build";
+  GPUTestDevice::Destroy();
+  FileSystem::RecursiveDeleteDirectory(dir.c_str());
+  FileSystem::CreateDirectory(dir.c_str(), false);
+  for (const auto& [name, bytes] : saved)
+    FileSystem::WriteStringToFile(Path::Combine(dir, name).c_str(), bytes);
+
+  // The next run finds everything there: building the same pipelines adds nothing, so nothing is written.
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  BuildFills();
+  g_gpu_device->SavePipelineCacheIfGrown();
+  EXPECT_EQ(Files(dir), saved);
+}
+
+TEST_F(PipelineBatchGPU, AWarmRunRewritesNothing)
+{
+  const std::string dir = NewDir("common-tests-pipeline-warm");
+  Error error;
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  BuildFills();
+  GPUTestDevice::Destroy();
+  const std::vector<std::pair<std::string, std::string>> cold = Files(dir);
+  if (cold.empty())
+    GTEST_SKIP() << "Nothing is cached on this renderer and driver";
+
+  ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+  BuildFills();
+  GPUTestDevice::Destroy();
+  EXPECT_EQ(Files(dir), cold);
+}
+
 TEST_F(PipelineBatchGPU, ParallelPipelinesDrawTheSame)
 {
   Error error;

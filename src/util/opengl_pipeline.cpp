@@ -1008,10 +1008,26 @@ void OpenGLDevice::ClosePipelineCache()
     return;
   }
 
+  WritePipelineCacheIndex();
+}
+
+void OpenGLDevice::SavePipelineCacheIfGrown()
+{
+  // After a build that added programs, the index goes to disk too, so a run Android kills keeps them.
+  if (!m_pipeline_disk_cache_file || !m_pipeline_disk_cache_changed)
+    return;
+
+  if (WritePipelineCacheIndex())
+    m_pipeline_disk_cache_changed = false;
+}
+
+bool OpenGLDevice::WritePipelineCacheIndex()
+{
+  // The index and footer follow the programs' data; programs added later are written over them, and they again after.
   if (FileSystem::FSeek64(m_pipeline_disk_cache_file, m_pipeline_disk_cache_data_end, SEEK_SET) != 0) [[unlikely]]
   {
     ERROR_LOG("Failed to seek to data end.");
-    return;
+    return false;
   }
 
   u32 count = 0;
@@ -1031,7 +1047,7 @@ void OpenGLDevice::ClosePipelineCache()
     if (std::fwrite(&entry, sizeof(entry), 1, m_pipeline_disk_cache_file) != 1) [[unlikely]]
     {
       ERROR_LOG("Failed to write index entry.");
-      return;
+      return false;
     }
 
     count++;
@@ -1041,6 +1057,12 @@ void OpenGLDevice::ClosePipelineCache()
   FillFooter(&footer, m_shader_cache.GetVersion());
   footer.num_programs = count;
 
-  if (std::fwrite(&footer, sizeof(footer), 1, m_pipeline_disk_cache_file) != 1) [[unlikely]]
+  if (std::fwrite(&footer, sizeof(footer), 1, m_pipeline_disk_cache_file) != 1 ||
+      std::fflush(m_pipeline_disk_cache_file) != 0) [[unlikely]]
+  {
     ERROR_LOG("Failed to write footer.");
+    return false;
+  }
+
+  return true;
 }

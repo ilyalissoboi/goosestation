@@ -799,6 +799,10 @@ public:
   void BeginCompilePass(u32 threads);
   void EndCompilePass();
 
+  /// Writes the driver's pipeline cache to disk if it grew since the last write, so a run that is killed keeps what
+  /// it built. Called after each build.
+  virtual void SavePipelineCacheIfGrown();
+
   ALWAYS_INLINE size_t GetVRAMUsage() const { return s_total_vram_usage; }
 
   /// The font atlas's texture, made or updated from its RGBA8 pixels; nullptr if it couldn't be.
@@ -844,6 +848,8 @@ protected:
   virtual bool OpenPipelineCache(const std::string& filename);
   virtual bool ReadPipelineCache(std::optional<DynamicHeapArray<u8>> data);
   virtual bool GetPipelineCacheData(DynamicHeapArray<u8>* data);
+  virtual std::optional<size_t> GetPipelineCacheSize();
+  void WritePipelineCache();
 
   virtual std::unique_ptr<GPUShader> CreateShaderFromBinary(GPUShaderStage stage, std::span<const u8> data,
                                                             Error* error) = 0;

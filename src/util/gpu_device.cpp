@@ -470,29 +470,56 @@ void GPUDevice::CloseShaderCache()
 
   if (!s_pipeline_cache_path.empty())
   {
-    DynamicHeapArray<u8> data;
-    if (GetPipelineCacheData(&data))
-    {
-      // Save disk writes if it hasn't changed, think of the poor SSDs.
-      if (s_pipeline_cache_size != data.size() || s_pipeline_cache_hash != SHA1Digest::GetDigest(data.cspan()))
-      {
-        Error error;
-        INFO_LOG("Compressing and writing {} bytes to '{}'", data.size(), Path::GetFileName(s_pipeline_cache_path));
-        if (!CompressHelpers::CompressToFile(CompressHelpers::CompressType::Zstandard, s_pipeline_cache_path.c_str(),
-                                             data.cspan(), -1, true, &error))
-        {
-          ERROR_LOG("Failed to write pipeline cache to '{}': {}", Path::GetFileName(s_pipeline_cache_path),
-                    error.GetDescription());
-        }
-      }
-      else
-      {
-        INFO_LOG("Skipping updating pipeline cache '{}' due to no changes.", Path::GetFileName(s_pipeline_cache_path));
-      }
-    }
-
+    WritePipelineCache();
     s_pipeline_cache_path = {};
   }
+}
+
+void GPUDevice::WritePipelineCache()
+{
+  DynamicHeapArray<u8> data;
+  if (!GetPipelineCacheData(&data))
+    return;
+
+  // Save disk writes if nothing was added, think of the poor SSDs. Caches only grow, so the size tells: some drivers
+  // (MoltenVK, D3D12's library) serialise the same entries in another order on every run, which the bytes would
+  // count as a change.
+  if (data.size() == s_pipeline_cache_size)
+  {
+    INFO_LOG("Skipping updating pipeline cache '{}' due to no changes.", Path::GetFileName(s_pipeline_cache_path));
+    return;
+  }
+
+  Error error;
+  INFO_LOG("Compressing and writing {} bytes to '{}'", data.size(), Path::GetFileName(s_pipeline_cache_path));
+  if (!CompressHelpers::CompressToFile(CompressHelpers::CompressType::Zstandard, s_pipeline_cache_path.c_str(),
+                                       data.cspan(), -1, true, &error))
+  {
+    ERROR_LOG("Failed to write pipeline cache to '{}': {}", Path::GetFileName(s_pipeline_cache_path),
+              error.GetDescription());
+    return;
+  }
+
+  s_pipeline_cache_size = data.size();
+  s_pipeline_cache_hash = SHA1Digest::GetDigest(data.cspan());
+}
+
+void GPUDevice::SavePipelineCacheIfGrown()
+{
+  if (s_pipeline_cache_path.empty())
+    return;
+
+  // Only the size is asked for first: serialising the whole cache after every build would slow warm starts.
+  const std::optional<size_t> size = GetPipelineCacheSize();
+  if (!size.has_value() || size.value() == s_pipeline_cache_size)
+    return;
+
+  WritePipelineCache();
+}
+
+std::optional<size_t> GPUDevice::GetPipelineCacheSize()
+{
+  return std::nullopt;
 }
 
 // A short name for the driver in the log and the settings rows: the device's name from the driver's description.

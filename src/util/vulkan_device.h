@@ -254,6 +254,7 @@ protected:
 
   bool ReadPipelineCache(std::optional<DynamicHeapArray<u8>> data) override;
   bool GetPipelineCacheData(DynamicHeapArray<u8>* data) override;
+  std::optional<size_t> GetPipelineCacheSize() override;
 
 private:
   enum DIRTY_FLAG : u32

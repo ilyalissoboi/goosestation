@@ -317,6 +317,14 @@ bool D3D12Device::ReadPipelineCache(std::optional<DynamicHeapArray<u8>> data)
   return true;
 }
 
+std::optional<size_t> D3D12Device::GetPipelineCacheSize()
+{
+  if (!m_pipeline_library)
+    return std::nullopt;
+
+  return m_pipeline_library->GetSerializedSize();
+}
+
 bool D3D12Device::GetPipelineCacheData(DynamicHeapArray<u8>* data)
 {
   if (!m_pipeline_library)

@@ -28,6 +28,8 @@ add_library(util
   gpu_framebuffer_manager.h
   gpu_shader_cache.cpp
   gpu_shader_cache.h
+  shader_compile_threads.cpp
+  shader_compile_threads.h
   gpu_texture.cpp
   gpu_texture.h
   gpu_thread.cpp

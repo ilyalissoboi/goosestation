@@ -4,6 +4,7 @@
 #pragma once
 
 #include "gpu_shader_cache.h"
+#include "shader_compile_threads.h"
 #include "gpu_texture.h"
 #include "window_info.h"
 
@@ -772,6 +773,16 @@ public:
   virtual void SetVSyncMode(GPUVSyncMode mode, bool allow_present_throttle) = 0;
 
   ALWAYS_INLINE bool IsDebugDevice() const { return m_debug_device; }
+
+  /// How many threads build shaders and pipelines for the setting (0 = Automatic). Automatic gives 1 when the fixed
+  /// list or the guard names this driver, logged once.
+  u32 GetCompileThreads(u8 setting);
+
+  /// Brackets a build on the threads GetCompileThreads gave: under Automatic with more than one thread, the guard's
+  /// marker is written for its length.
+  void BeginCompilePass(u32 threads);
+  void EndCompilePass();
+
   ALWAYS_INLINE size_t GetVRAMUsage() const { return s_total_vram_usage; }
 
   /// The font atlas's texture, made or updated from its RGBA8 pixels; nullptr if it couldn't be.
@@ -825,6 +836,7 @@ protected:
                                                             DynamicHeapArray<u8>* out_binary, Error* error) = 0;
 
   bool AcquireWindow(bool recreate_window);
+  void SetUpCompileThreads(std::string_view cache_path);
 
   void TrimTexturePool();
 
@@ -915,6 +927,12 @@ protected:
   bool m_allow_present_throttle = false;
   bool m_gpu_timing_enabled = false;
   bool m_debug_device = false;
+
+  ShaderCompileThreads::Guard m_compile_guard;
+  std::optional<std::string> m_compile_known_bad;
+  bool m_compile_block_logged = false;
+  bool m_compile_automatic = false;
+  bool m_compile_pass_guarded = false;
 };
 
 extern std::unique_ptr<GPUDevice> g_gpu_device;

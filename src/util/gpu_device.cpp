@@ -26,6 +26,11 @@
 #include "spirv_cross/spirv_cross_c.h"
 #include "xxhash.h"
 
+#include <thread>
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
 Log_SetChannel(GPUDevice);
 
 // The device belongs to the GPU thread: a call from elsewhere is a bug, reported once per place.
@@ -388,6 +393,7 @@ bool GPUDevice::Create(std::string_view adapter, std::string_view shader_cache_p
   INFO_LOG("Graphics Driver Info:\n{}", GetDriverInfo());
 
   OpenShaderCache(shader_cache_path, shader_cache_version);
+  SetUpCompileThreads(shader_cache_path);
 
   if (!CreateResources(error))
   {
@@ -485,6 +491,103 @@ void GPUDevice::CloseShaderCache()
 
     s_pipeline_cache_path = {};
   }
+}
+
+// A short name for the driver in the log and the settings rows: the device's name from the driver's description.
+static std::string GetDriverLabel(RenderAPI api, std::string_view driver_info)
+{
+  const std::vector<std::string_view> lines = StringUtil::SplitString(driver_info, '\n', true);
+  std::string_view name;
+  switch (api)
+  {
+    case RenderAPI::Vulkan:
+      name = lines.empty() ? std::string_view() : lines.back();
+      break;
+    case RenderAPI::OpenGL:
+    case RenderAPI::OpenGLES:
+    case RenderAPI::D3D11:
+    case RenderAPI::D3D12:
+      name = (lines.size() > 2) ? lines[2] : std::string_view();
+      break;
+    case RenderAPI::Metal:
+      for (const std::string_view line : lines)
+      {
+        if (const std::string_view::size_type pos = line.find("name = "); pos != std::string_view::npos)
+          name = line.substr(pos + 7);
+      }
+      break;
+    default:
+      break;
+  }
+
+  name = StringUtil::StripWhitespace(name);
+  return name.empty() ? std::string(GPUDevice::RenderAPIToString(api)) :
+                        fmt::format("{}, {}", GPUDevice::RenderAPIToString(api), name);
+}
+
+void GPUDevice::SetUpCompileThreads(std::string_view cache_path)
+{
+  const RenderAPI api = GetRenderAPI();
+  const char* api_name = RenderAPIToString(api);
+  const std::string driver_info = GetDriverInfo();
+  std::string key = fmt::format("{}\n{}", api_name, driver_info);
+#ifdef __APPLE__
+  // Metal's and OpenGL's drivers come with macOS.
+  char os_version[64] = {};
+  size_t os_version_size = sizeof(os_version) - 1;
+  if (sysctlbyname("kern.osversion", os_version, &os_version_size, nullptr, 0) == 0)
+    key += fmt::format("\nmacOS {}", os_version);
+#endif
+  const std::string label = GetDriverLabel(api, driver_info);
+
+  m_compile_guard = ShaderCompileThreads::Guard(std::string(cache_path), api_name, key, label);
+  m_compile_known_bad = ShaderCompileThreads::FindKnownBad(api, driver_info);
+  ShaderCompileThreads::SetKnownBadNote(
+    m_compile_known_bad.has_value() ?
+      std::optional<std::string>(fmt::format("Automatic uses 1 on {}: {}.", label, m_compile_known_bad.value())) :
+      std::nullopt);
+  m_compile_block_logged = false;
+}
+
+u32 GPUDevice::GetCompileThreads(u8 setting)
+{
+  if (setting != ShaderCompileThreads::AUTOMATIC)
+  {
+    // The player's own number lifts a block the guard set.
+    m_compile_automatic = false;
+    m_compile_guard.ClearBlock();
+    return std::min<u32>(setting, ShaderCompileThreads::MAX_THREADS);
+  }
+
+  m_compile_automatic = true;
+  const std::optional<std::string> reason =
+    m_compile_known_bad.has_value() ? m_compile_known_bad : m_compile_guard.GetBlockReason();
+  if (reason.has_value())
+  {
+    if (!m_compile_block_logged)
+    {
+      WARNING_LOG("Shader compile threads: Automatic uses 1, because {}.", reason.value());
+      m_compile_block_logged = true;
+    }
+    return 1;
+  }
+
+  return ShaderCompileThreads::GetAutomatic(std::thread::hardware_concurrency(),
+                                            ShaderCompileThreads::GetPhysicalMemory());
+}
+
+void GPUDevice::BeginCompilePass(u32 threads)
+{
+  m_compile_pass_guarded = (m_compile_automatic && threads > 1);
+  if (m_compile_pass_guarded)
+    m_compile_guard.BeginPass();
+}
+
+void GPUDevice::EndCompilePass()
+{
+  if (m_compile_pass_guarded)
+    m_compile_guard.EndPass();
+  m_compile_pass_guarded = false;
 }
 
 std::string GPUDevice::GetShaderCacheBaseName(std::string_view type) const

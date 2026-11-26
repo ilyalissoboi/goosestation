@@ -1,8 +1,8 @@
 # GooseStation roadmap
 
 What to build next, in order of priority, with what each item waits on. Written on 2026-10-24,
-after the memory card sync (#2), the rebrand (#4) and the new logo (#5); last updated on 2026-11-20,
-after adding what players notice most from the upstream gaps (items 21 to 30).
+after the memory card sync (#2), the rebrand (#4) and the new logo (#5); last updated on 2026-11-26,
+after moving the upscaling defaults (item 27) to Later.
 
 **Size** is a rough effort guess: **S** a day or two, **M** a week or two, **L** longer.
 **After** names the items that must be finished first. Items from DuckStation's post-fork feature
@@ -71,7 +71,7 @@ our own design.
 | 24 | The audio stream reworked for uneven devices, in two stages (`docs/superpowers/specs/2026-11-24-audio-stream-design.md`). Measured on the AYN Thor, ordinary play was already clean; the clicks and dropouts came where the audio was interrupted (a fresh boot and loading, fast-forward switched, state loads under load), each a hard cut, a splice or a burst of silence. Stage 1 is done (#143), desktop and Android: a 4 ms fade out before every gap and back in after it (underruns, state loads, rewind, resets, pause and resume, fast-forward ending, a stream recreated by a settings change, shutdown), volume changes ramped, stale audio dropped at each jump, overflows dropped from the emulation thread's side with a fade (it no longer moves the callback's read position), playback restarting only once half the target is buffered, a pause waiting for its fade to be heard, and the stream's underruns, overflows and fades in the per-second line and beside "AL:" in the latency statistics. On the Thor, ordinary play stays at no underruns; fast-forward switched five times gives one faded gap a cycle (8–9 underruns before, 29 in the heavy OpenGL ES case, now 0–2 there), six state loads one faded gap each, and no gap anywhere is a cut; the Mac and Windows likewise (fast-forward 11–27 underruns before, 0–1 now). Stage 2 is done too (#144): stretching (SoundTouch, surround, the tempo control) runs on an audio thread of its own, so the emulation thread only copies its samples over (on the Thor its audio share fell from 12.8% to 0.5%, with no more lag in ordinary play); the buffer grows by up to 100 ms while dropouts repeat (not for a single stall, or a load's) and shrinks back once they stop; and fast-forward past 4× fades to silence rather than stretching choppily, back in below 3.5×, judged by the speed actually reached (the Thor's unlimited fast-forward runs at about 33× on Vulkan, and stays under 4× in the heavy OpenGL ES case, which plays stretched). The device's own rate was dropped: on the Thor, AAudio stays in its normal path at 48 kHz as at 44.1 (AYN's settings app attaches a global equalizer to the output mix), so it would have gained nothing. | M | none |
 | 25 | Faster loading (`docs/superpowers/specs/2026-11-25-faster-loading-design.md`), done. CD reads at Maximum (as fast as the game takes each sector, up to 4×: at 8× and above, and at today's 10×, Breath of Fire IV loops on a load and Breath of Fire III drops sectors), instant seeks that keep the short-seek timing Transformers needs, and short drive waits (spin-up, speed changes and the table-of-contents read a tenth as long) are the defaults on Qt, Big Picture and Android, turned on once in older settings files that still had the old speeds. Reads go back to the drive's speed while XA audio, CD audio or a movie streams (the mode bits, an XA sector, a sector flagged real-time or video, or the MDEC decoding, then 0.5 s), worked out again after every sector. Fast-forward while loading is a setting, off by default and not in hardcore. Game-database switches turn the read or seek speedup or fast boot off (the PlayStation Picks disc with the Rebel Assault II demo, SaGa Frontier), from the database's own notes. On the Thor, Vagrant Story's switch-on to its movie went from 30.6 to 22.5–23.2 s with fast boot (−24 to −26% over four runs, about the 25% aimed for; Maximum's 4× cap, which Breath of Fire needs, costs about a second) and from 41.4 to 32.4 s through the BIOS, and its title-to-intro load from 10.7 to 4.0 s; fast-forward while loading brings them to 19.7 and 1.3–1.5 s, with no audio left muted. Movies drop no more sectors and show the same frames. Every disc in the test library (81) boots to its first screen and movie at the new defaults with fast boot on and off. The full-BIOS boot that seemed to stall was the Japanese test BIOS refusing a US disc. Watching movies and playing are the user's checks. | S | none |
 | 26 | PGXP improvements: PGXP for lines and unaligned loads and stores, a more precise CPU mode, and a reworked depth buffer, for less wobbling geometry and z-fighting when upscaled. Checked with our own test games and regression tests. | M | none |
-| 27 | Upscaling defaults: a rewritten automatic internal resolution, nearest sprite filtering by default, and an option not to upscale direct-colour textures, for fewer seams and artefacts in 2D at higher resolutions. | S | none |
+| 27 | Deferred to [Later](#later): upscaling defaults. | S | none |
 | 28 | Patch codes with options: patches that offer choices (a widescreen ratio, a frame rate), shown as settings in the patch lists on Qt, Big Picture and Android. The system only: the widescreen and 60 fps patches themselves come from our own testing and public sources, as they're found, like the game database. | M | none |
 | 29 | More picture options: texture filters (Scale2x, Scale3x, MMPX, hybrid bilinear), Lanczos display scaling, separate scaling for FMVs, and finer crop controls. | M | none |
 | 30 | Border overlays (bezels): images drawn around the game picture, chosen from a list, with presets of our own. | M | 29 helps |
@@ -88,6 +88,12 @@ our own design.
   such as a TV PC.
 - Flathub publishing: needs screenshots, media mirroring and the `flatpak-builder-lint repo` check
   restored.
+- Upscaling defaults (item 27, deferred on 2026-11-26): a rewritten automatic internal resolution,
+  nearest sprite filtering by default, and an option not to upscale direct-colour textures. They came
+  from upstream's changes, not from problems seen here: GooseStation's defaults (1x, Nearest) don't
+  upscale, captures of five 2D-heavy games at 4x with Nearest showed no seams, and a player can
+  already set the sprite filter apart from the texture filter. Worth it if upscaling becomes the
+  default, or if a game turns up with seams in its 16-bit images (a game-database switch would suit).
 - The P2 items in [upstream-features.md](upstream-features.md): texture filters, display scaling,
   bezels, save state and game list improvements, cheat management, more controllers, achievement UI
   and the rest.
@@ -100,4 +106,4 @@ use). With 12, 14 and 15 done, Android (16) is next. Items 17 and 18 block nothi
 picked up at any time.
 
 Items 21 to 30 are ordered by what players notice: 21 and 22 together (smoothness), then 24 and 25
-(sound and loading, both small), then 23, then the enhancements 26 to 30.
+(sound and loading, both small), then 23, then the enhancements 26 and 28 to 30 (27 is in Later).

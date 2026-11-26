@@ -106,6 +106,9 @@ class SettingsPages(
     /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
     val fastmemAvailable get() = pages.fastmemAvailable
 
+    /** What Automatic's compile threads give here, and why it uses one, as the core said when Advanced was read. */
+    val compileThreads get() = pages.compileThreads
+
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
     val vulkanFailed get() = pages.vulkanFailed
 

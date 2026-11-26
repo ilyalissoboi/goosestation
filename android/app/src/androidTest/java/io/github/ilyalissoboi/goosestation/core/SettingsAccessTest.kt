@@ -5,6 +5,7 @@ package io.github.ilyalissoboi.goosestation.core
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.ilyalissoboi.goosestation.settings.AdvancedSettings
 import io.github.ilyalissoboi.goosestation.settings.AudioSettings
 import io.github.ilyalissoboi.goosestation.settings.ConsoleSettings
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
@@ -229,6 +230,10 @@ class SettingsAccessTest {
 
     @Test
     fun graphicsDefaultsMatchTheCore() = assertDefaultsMatchTheCore(GraphicsSettings.all)
+
+    @Test
+    fun shaderCompileThreadsDefaultMatchesTheCore() =
+        assertDefaultsMatchTheCore(listOf(AdvancedSettings.SHADER_COMPILE_THREADS))
 
     @Test
     fun audioDefaultsMatchTheCore() = assertDefaultsMatchTheCore(AudioSettings.all)

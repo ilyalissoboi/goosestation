@@ -394,6 +394,23 @@
           <string>Rendering Options</string>
          </property>
          <layout class="QFormLayout" name="formLayout_6">
+          <item row="0" column="0">
+           <widget class="QLabel" name="shaderCompileThreadsLabel">
+            <property name="text">
+             <string>Shader Compile Threads:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="shaderCompileThreads"/>
+          </item>
+          <item row="3" column="0" colspan="2">
+           <widget class="QLabel" name="shaderCompileThreadsNote">
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
           <item row="1" column="0">
            <widget class="QLabel" name="gpuLineDetectModeLabel">
             <property name="text">

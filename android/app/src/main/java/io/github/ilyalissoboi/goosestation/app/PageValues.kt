@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.ilyalissoboi.goosestation.settings.CompileThreadsInfo
 import io.github.ilyalissoboi.goosestation.settings.CoreNames
 import io.github.ilyalissoboi.goosestation.settings.EmulationSettings
 import io.github.ilyalissoboi.goosestation.settings.NameList
@@ -50,6 +51,9 @@ interface PageExtras {
     /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
     val fastmemAvailable: Boolean
 
+    /** What Automatic's compile threads give here, and why it uses one, as the core said when Advanced was read. */
+    val compileThreads: CompileThreadsInfo get() = CompileThreadsInfo()
+
     /** What Emulation's rewind states take, as the core said when that page was last read or changed. */
     val rewindUsage: RewindUsage?
 }
@@ -78,6 +82,9 @@ class PageValues<P : Any>(
         private set
 
     override var fastmemAvailable by mutableStateOf(true)
+        private set
+
+    override var compileThreads by mutableStateOf(CompileThreadsInfo())
         private set
 
     override var rewindUsage by mutableStateOf<RewindUsage?>(null)
@@ -157,6 +164,7 @@ class PageValues<P : Any>(
                         load = load,
                         vulkanFailed = kind == SharedPage.Graphics && api.isVulkanFailed(),
                         fastmemAvailable = kind != SharedPage.Advanced || api.isFastmemAvailable(),
+                        compileThreads = if (kind == SharedPage.Advanced) api.getCompileThreadsInfo() else null,
                         rewindUsage =
                             if (kind == SharedPage.Emulation) {
                                 api.getRewindMemoryUsage(load.values[EmulationSettings.REWIND_SLOTS])
@@ -171,6 +179,7 @@ class PageValues<P : Any>(
             names = loaded.names
             if (kind == SharedPage.Graphics) vulkanFailed = loaded.vulkanFailed
             if (kind == SharedPage.Advanced) fastmemAvailable = loaded.fastmemAvailable
+            loaded.compileThreads?.let { compileThreads = it }
             loaded.rewindUsage?.let { rewindUsage = it }
             loaded.sharedCards?.let { sharedCards = it }
             loaded.load.then()
@@ -184,6 +193,7 @@ class PageValues<P : Any>(
         val load: PageLoad,
         val vulkanFailed: Boolean,
         val fastmemAvailable: Boolean,
+        val compileThreads: CompileThreadsInfo?,
         val rewindUsage: RewindUsage?,
         val sharedCards: List<String>?,
     )

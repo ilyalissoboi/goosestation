@@ -16,6 +16,7 @@ import io.github.ilyalissoboi.goosestation.core.SyncActivity
 import io.github.ilyalissoboi.goosestation.core.SyncConflict
 import io.github.ilyalissoboi.goosestation.core.SyncStatusKind
 import io.github.ilyalissoboi.goosestation.core.TypeSetting
+import io.github.ilyalissoboi.goosestation.settings.CompileThreadsInfo
 import io.github.ilyalissoboi.goosestation.settings.MemoryCoreSettings
 import io.github.ilyalissoboi.goosestation.settings.RewindUsage
 import io.github.ilyalissoboi.goosestation.ui.components.Choice
@@ -164,6 +165,10 @@ class FakeCoreApi(
     var fastmemAvailable = true
 
     override fun isFastmemAvailable(): Boolean = fastmemAvailable
+
+    var compileThreads = CompileThreadsInfo(automatic = 8)
+
+    override fun getCompileThreadsInfo(): CompileThreadsInfo = compileThreads
 
     /** Each choice list the core names, by kind: its values, each its own label unless [nameLabels] has one. */
     var names = mutableMapOf<String, List<String>>()

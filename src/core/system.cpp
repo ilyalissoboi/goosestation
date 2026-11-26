@@ -3927,8 +3927,9 @@ void System::SetFastForwardEnabled(bool enabled)
   if (!IsValid())
     return;
 
-  // Ending fast-forward drops the sped-up tail, and the stretcher's tempo starts over at normal speed.
-  if (s_fast_forward_enabled && !enabled)
+  // Ending fast-forward drops the sped-up tail, and the stretcher's tempo starts over at normal speed: unless fast-forward
+  // while loading keeps the speed up, when that drops it as it ends.
+  if (s_fast_forward_enabled && !enabled && !s_load_fast_forward.IsActive())
     SPU::GetOutputStream()->EmptyBuffer();
 
   s_fast_forward_enabled = enabled;

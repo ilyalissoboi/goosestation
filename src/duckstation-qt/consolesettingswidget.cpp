@@ -138,6 +138,10 @@ ConsoleSettingsWidget::ConsoleSettingsWidget(SettingsWindow* dialog, QWidget* pa
 
   m_ui.cpuClockSpeed->setEnabled(m_dialog->getEffectiveBoolValue("CPU", "OverclockEnable", false));
 
+  // Short drive waits only apply with instant seeks; fast-forward while loading is off in hardcore mode.
+  connect(m_ui.cdromSeekSpeedup, &QComboBox::currentIndexChanged, this, &ConsoleSettingsWidget::updateCDROMRows);
+  updateCDROMRows();
+
   connect(m_ui.enableCPUClockSpeedControl, &QCheckBox::checkStateChanged, this,
           &ConsoleSettingsWidget::onEnableCPUClockSpeedControlChecked);
   connect(m_ui.cpuClockSpeed, &QSlider::valueChanged, this, &ConsoleSettingsWidget::onCPUClockSpeedValueChanged);
@@ -170,6 +174,14 @@ void ConsoleSettingsWidget::updateRecompilerICacheEnabled()
         .c_str())
       .value_or(Settings::DEFAULT_CPU_EXECUTION_MODE);
   m_ui.recompilerICache->setEnabled(mode != CPUExecutionMode::Interpreter);
+}
+
+void ConsoleSettingsWidget::updateCDROMRows()
+{
+  m_ui.cdromShortDriveWaits->setEnabled(
+    m_dialog->getEffectiveIntValue("CDROM", "SeekSpeedup", Settings::DEFAULT_CDROM_SEEK_SPEEDUP) == 0);
+  m_ui.cdromFastForwardLoading->setEnabled(!(m_dialog->getEffectiveBoolValue("Cheevos", "Enabled", false) &&
+                                             m_dialog->getEffectiveBoolValue("Cheevos", "ChallengeMode", false)));
 }
 
 void ConsoleSettingsWidget::onEnableCPUClockSpeedControlChecked(int state)

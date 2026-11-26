@@ -20,6 +20,7 @@ public:
 private Q_SLOTS:
   void updateRecompilerICacheEnabled();
   void onEnableCPUClockSpeedControlChecked(int state);
+  void updateCDROMRows();
   void onCPUClockSpeedValueChanged(int value);
   void updateCPUClockSpeedLabel();
 

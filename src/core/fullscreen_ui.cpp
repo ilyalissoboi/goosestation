@@ -3529,7 +3529,8 @@ void FullscreenUI::DrawConsoleSettingsPage()
   DrawToggleSetting(
     bsi, FSUI_ICONSTR(ICON_FA_STOPWATCH, "Short Drive Waits"),
     FSUI_CSTR("With instant seeks, also shortens spin-up, speed changes and the table-of-contents read."), "CDROM",
-    "ShortDriveWaits", Settings::DEFAULT_CDROM_SHORT_DRIVE_WAITS);
+    "ShortDriveWaits", Settings::DEFAULT_CDROM_SHORT_DRIVE_WAITS,
+    GetEffectiveIntSetting(bsi, "CDROM", "SeekSpeedup", static_cast<s32>(Settings::DEFAULT_CDROM_SEEK_SPEEDUP)) == 0);
   DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_FAST_FORWARD, "Fast-Forward While Loading"),
                     FSUI_CSTR("Runs at the fast-forward speed while the disc loads data, not while movies or music "
                               "play. Games that stream data while you play will speed up too."),

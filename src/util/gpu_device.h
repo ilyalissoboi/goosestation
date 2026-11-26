@@ -790,8 +790,8 @@ public:
 
   ALWAYS_INLINE bool IsDebugDevice() const { return m_debug_device; }
 
-  /// How many threads build shaders and pipelines for the setting (0 = Automatic). Automatic gives 1 when the fixed
-  /// list or the guard names this driver, logged once.
+  /// How many threads build shaders and pipelines for the setting (0 = Automatic): 1 where the renderer can't build in
+  /// parallel, and under Automatic when the fixed list or the guard names this driver (logged once).
   u32 GetCompileThreads(u8 setting);
 
   /// Brackets a build on the threads GetCompileThreads gave: under Automatic with more than one thread, the guard's

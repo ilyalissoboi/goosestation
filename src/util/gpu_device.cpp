@@ -553,6 +553,13 @@ void GPUDevice::SetUpCompileThreads(std::string_view cache_path)
 
 u32 GPUDevice::GetCompileThreads(u8 setting)
 {
+  // A renderer that can't build on several threads builds on one, whatever the setting.
+  if (!SupportsParallelCompile())
+  {
+    m_compile_automatic = false;
+    return 1;
+  }
+
   if (setting != ShaderCompileThreads::AUTOMATIC)
   {
     // The player's own number lifts a block the guard set.

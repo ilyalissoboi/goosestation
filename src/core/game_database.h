@@ -54,6 +54,9 @@ enum class Trait : u32
   ForceRecompilerMemoryExceptions,
   ForceRecompilerICache,
   ForceRecompilerLUTFastmem,
+  DisableCDROMReadSpeedup,
+  DisableCDROMSeekSpeedup,
+  DisableFastBoot,
   IsLibCryptProtected,
 
   Count

@@ -87,3 +87,54 @@ TEST_F(GameDatabaseShippedFiles, LoadsTrackHashes)
   EXPECT_EQ(found->second.serial, "SLPS-01204");
   EXPECT_GT(hashes.size(), 40000u);
 }
+
+TEST(GameDatabaseCDSpeed, CDSpeedTraitsApply)
+{
+  GameDatabase::Entry entry;
+  entry.traits.set(static_cast<int>(GameDatabase::Trait::DisableCDROMReadSpeedup));
+  entry.traits.set(static_cast<int>(GameDatabase::Trait::DisableCDROMSeekSpeedup));
+  entry.traits.set(static_cast<int>(GameDatabase::Trait::DisableFastBoot));
+
+  Settings settings;
+  settings.cdrom_read_speedup = 0;
+  settings.cdrom_seek_speedup = 0;
+  settings.bios_patch_fast_boot = true;
+  entry.ApplySettings(settings, false);
+
+  EXPECT_EQ(settings.cdrom_read_speedup, 1u);
+  EXPECT_EQ(settings.cdrom_seek_speedup, 1u);
+  EXPECT_FALSE(settings.bios_patch_fast_boot);
+
+  // Their names parse.
+  EXPECT_EQ(std::string_view(GameDatabase::GetTraitName(GameDatabase::Trait::DisableCDROMReadSpeedup)), "DisableCDROMReadSpeedup");
+  EXPECT_EQ(std::string_view(GameDatabase::GetTraitName(GameDatabase::Trait::DisableCDROMSeekSpeedup)), "DisableCDROMSeekSpeedup");
+  EXPECT_EQ(std::string_view(GameDatabase::GetTraitName(GameDatabase::Trait::DisableFastBoot)), "DisableFastBoot");
+}
+
+TEST_F(GameDatabaseShippedFiles, ShippedCDSpeedEntries)
+{
+  // The database's own notes: the PlayStation Picks disc's Rebel Assault II demo "can hang if speed up", and SaGa
+  // Frontier (USA) has a "black screen if fast boot is used".
+  const GameDatabase::Entry* picks = GameDatabase::GetEntryForSerial("SCUS-94960");
+  ASSERT_NE(picks, nullptr);
+  EXPECT_TRUE(picks->HasTrait(GameDatabase::Trait::DisableCDROMReadSpeedup));
+  EXPECT_TRUE(picks->HasTrait(GameDatabase::Trait::DisableCDROMSeekSpeedup));
+
+  const GameDatabase::Entry* saga = GameDatabase::GetEntryForSerial("SCUS-94230");
+  ASSERT_NE(saga, nullptr);
+  EXPECT_TRUE(saga->HasTrait(GameDatabase::Trait::DisableFastBoot));
+}
+
+TEST_F(GameDatabaseShippedFiles, NoSwitchForBIOSLoopGames)
+{
+  // Medal of Honor - Underground and Rally Cross 2: their BIOS sound loop is avoided with fast boot on, which none of
+  // the switches does, and neither has been tested.
+  for (const char* serial : {"SLUS-01270", "SCUS-94247"})
+  {
+    const GameDatabase::Entry* entry = GameDatabase::GetEntryForSerial(serial);
+    ASSERT_NE(entry, nullptr) << serial;
+    EXPECT_FALSE(entry->HasTrait(GameDatabase::Trait::DisableCDROMReadSpeedup)) << serial;
+    EXPECT_FALSE(entry->HasTrait(GameDatabase::Trait::DisableCDROMSeekSpeedup)) << serial;
+    EXPECT_FALSE(entry->HasTrait(GameDatabase::Trait::DisableFastBoot)) << serial;
+  }
+}

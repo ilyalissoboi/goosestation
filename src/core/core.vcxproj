@@ -12,6 +12,7 @@
     <ClCompile Include="bus.cpp" />
     <ClCompile Include="cdrom.cpp" />
     <ClCompile Include="cdrom_async_reader.cpp" />
+    <ClCompile Include="cdrom_timing.cpp" />
     <ClCompile Include="cheats.cpp" />
     <ClCompile Include="cpu_core.cpp" />
     <ClCompile Include="cpu_disasm.cpp" />
@@ -112,6 +113,7 @@
     <ClInclude Include="bus.h" />
     <ClInclude Include="cdrom.h" />
     <ClInclude Include="cdrom_async_reader.h" />
+    <ClInclude Include="cdrom_timing.h" />
     <ClInclude Include="cheats.h" />
     <ClInclude Include="achievements.h" />
     <ClInclude Include="cpu_code_cache_private.h" />

@@ -8,6 +8,7 @@
 #include "settingwidgetbinder.h"
 
 #include "core/bios.h"
+#include "core/game_database.h"
 #include "core/settings.h"
 
 #include <QtWidgets/QFileDialog>
@@ -21,6 +22,7 @@ BIOSSettingsWidget::BIOSSettingsWidget(SettingsWindow* dialog, QWidget* parent) 
 
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enableTTYLogging, "BIOS", "TTYLogging", false);
   SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.fastBoot, "BIOS", "PatchFastBoot", false);
+  SettingWidgetBinder::SetAvailability(m_ui.fastBoot, !dialog->hasGameTrait(GameDatabase::Trait::DisableFastBoot));
 
   dialog->registerWidgetHelp(m_ui.fastBoot, tr("Fast Boot"), tr("Unchecked"),
                              tr("Patches the BIOS to skip the console's boot animation. Does not work with all games, "

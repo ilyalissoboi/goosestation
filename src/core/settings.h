@@ -194,8 +194,10 @@ struct Settings
   bool cdrom_load_image_to_ram : 1 = false;
   bool cdrom_load_image_patches : 1 = false;
   bool cdrom_mute_cd_audio : 1 = false;
-  u32 cdrom_read_speedup = 1;
-  u32 cdrom_seek_speedup = 1;
+  bool cdrom_short_drive_waits : 1 = DEFAULT_CDROM_SHORT_DRIVE_WAITS; // with instant seeks: shorter fixed waits
+  bool fast_forward_loading : 1 = false; // fast-forward while the CD loads data (not while it streams)
+  u32 cdrom_read_speedup = DEFAULT_CDROM_READ_SPEEDUP; // 0 is Maximum
+  u32 cdrom_seek_speedup = DEFAULT_CDROM_SEEK_SPEEDUP; // 0 is instant
 
   std::string audio_driver;
   std::string audio_output_device;
@@ -452,6 +454,10 @@ struct Settings
   /// ([Main] DesktopPacingDefaultsVersion). True if the file changed.
   static bool ApplyDesktopPacingDefaults(SettingsInterface& si);
 
+  /// Maximum reads and instant seeks became the defaults (faster loading): a file still at the old default speeds (1)
+  /// moves to them, once, recorded as `[version_section] LoadingDefaultsVersion`. Speeds the player chose stay.
+  static bool ApplyLoadingDefaults(SettingsInterface& si, const char* version_section);
+
   /// The old [Display] VSync switch moved to [Display] VSyncMode, as Load() reads it (on: On; off: the default), so
   /// the UIs show what's used. In a game's file, which holds only what it overrides, off is Off. True if it changed.
   static bool MoveOldVSyncSwitch(SettingsInterface& si, bool game_file = false);
@@ -531,6 +537,12 @@ struct Settings
   static constexpr float DEFAULT_OSD_SCALE = 100.0f;
 
   static constexpr u8 DEFAULT_CDROM_READAHEAD_SECTORS = 8;
+
+  static constexpr u32 DEFAULT_CDROM_READ_SPEEDUP = 0; // Maximum
+
+  static constexpr u32 DEFAULT_CDROM_SEEK_SPEEDUP = 0; // instant
+
+  static constexpr bool DEFAULT_CDROM_SHORT_DRIVE_WAITS = true; // passed the compatibility pass
   static constexpr CDROMMechaconVersion DEFAULT_CDROM_MECHACON_VERSION = CDROMMechaconVersion::VC1A;
 
   static constexpr ControllerType DEFAULT_CONTROLLER_1_TYPE = ControllerType::AnalogController;

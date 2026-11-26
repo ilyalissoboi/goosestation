@@ -93,6 +93,8 @@ union CommandWord
 
 } // namespace
 
+static GlobalTicks s_last_decode_start_tick = 0;
+
 static bool HasPendingBlockCopyOut();
 
 static void SoftReset();
@@ -158,6 +160,11 @@ struct MDECState
 
 ALIGN_TO_CACHE_LINE static MDECState s_state;
 } // namespace MDEC
+
+GlobalTicks MDEC::GetLastDecodeStartTick()
+{
+  return s_last_decode_start_tick;
+}
 
 void MDEC::Initialize()
 {
@@ -410,6 +417,7 @@ void MDEC::Execute()
           case Command::DecodeMacroblock:
             num_words = ZeroExtend32(cw.parameter_word_count.GetValue());
             new_state = State::DecodingMacroblock;
+            s_last_decode_start_tick = System::GetGlobalTickCounter();
             break;
 
           case Command::SetIqTab:

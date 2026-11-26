@@ -119,6 +119,32 @@ class SettingsSetupTest {
         assertEquals("false", readSettings().value("Main", "SyncToHostRefreshRate"))
     }
 
+    // A file from before faster loading has the old speeds (1) as its defaults: they move to Maximum and instant once,
+    // and stay as the player sets them after; speeds the player chose are kept.
+    @Test
+    fun oldCdSpeedsMoveToTheNewDefaultsOnce() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[CDROM]\nReadSpeedup = 1\nSeekSpeedup = 1\n\n" +
+                "[Android]\nInstallID = $INSTALL_ID\n",
+        )
+        assertEquals("0", readSettings().value("CDROM", "ReadSpeedup"))
+        assertEquals("0", readSettings().value("CDROM", "SeekSpeedup"))
+
+        NativeLibrary.setIntSetting("CDROM", "ReadSpeedup", 1)
+        NativeLibrary.reloadSettings()
+        assertEquals("1", readSettings().value("CDROM", "ReadSpeedup"))
+    }
+
+    @Test
+    fun chosenCdSpeedsAreKept() {
+        initialize(
+            "[Main]\nSettingsVersion = 3\n\n[CDROM]\nReadSpeedup = 4\nSeekSpeedup = 2\n\n" +
+                "[Android]\nInstallID = $INSTALL_ID\n",
+        )
+        assertEquals("4", readSettings().value("CDROM", "ReadSpeedup"))
+        assertEquals("2", readSettings().value("CDROM", "SeekSpeedup"))
+    }
+
     // The old vsync switch's on reads On in the three-way setting, as the rows show it (pacing stage 2b).
     @Test
     fun aFileWithTheOldVSyncKeyReadsOn() {

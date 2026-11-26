@@ -22,4 +22,7 @@ void DMAWrite(const u32* words, u32 word_count);
 
 void DrawDebugStateWindow();
 
+/// When the last macroblock decode command started (a sign that video is streaming).
+GlobalTicks GetLastDecodeStartTick();
+
 } // namespace MDEC

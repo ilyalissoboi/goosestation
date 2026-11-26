@@ -347,8 +347,10 @@ void Settings::Load(SettingsInterface& si, SettingsInterface& controller_si)
   cdrom_load_image_to_ram = si.GetBoolValue("CDROM", "LoadImageToRAM", false);
   cdrom_load_image_patches = si.GetBoolValue("CDROM", "LoadImagePatches", false);
   cdrom_mute_cd_audio = si.GetBoolValue("CDROM", "MuteCDAudio", false);
-  cdrom_read_speedup = si.GetIntValue("CDROM", "ReadSpeedup", 1);
-  cdrom_seek_speedup = si.GetIntValue("CDROM", "SeekSpeedup", 1);
+  cdrom_read_speedup = si.GetIntValue("CDROM", "ReadSpeedup", static_cast<s32>(DEFAULT_CDROM_READ_SPEEDUP));
+  cdrom_seek_speedup = si.GetIntValue("CDROM", "SeekSpeedup", static_cast<s32>(DEFAULT_CDROM_SEEK_SPEEDUP));
+  cdrom_short_drive_waits = si.GetBoolValue("CDROM", "ShortDriveWaits", DEFAULT_CDROM_SHORT_DRIVE_WAITS);
+  fast_forward_loading = si.GetBoolValue("CDROM", "FastForwardLoading", false);
 
   audio_backend =
     AudioStream::ParseBackendName(
@@ -617,6 +619,8 @@ void Settings::Save(SettingsInterface& si, bool ignore_base) const
   si.SetBoolValue("CDROM", "MuteCDAudio", cdrom_mute_cd_audio);
   si.SetIntValue("CDROM", "ReadSpeedup", cdrom_read_speedup);
   si.SetIntValue("CDROM", "SeekSpeedup", cdrom_seek_speedup);
+  si.SetBoolValue("CDROM", "ShortDriveWaits", cdrom_short_drive_waits);
+  si.SetBoolValue("CDROM", "FastForwardLoading", fast_forward_loading);
 
   si.SetStringValue("Audio", "Backend", AudioStream::GetBackendName(audio_backend));
   si.SetStringValue("Audio", "Driver", audio_driver.c_str());
@@ -865,6 +869,7 @@ void Settings::FixIncompatibleSettings(bool display_osd_messages)
     g_settings.turbo_speed = (g_settings.turbo_speed != 0.0f) ? std::max(g_settings.turbo_speed, 1.0f) : 0.0f;
     g_settings.rewind_enable = false;
     g_settings.enable_cheats = false;
+    g_settings.fast_forward_loading = false;
     if (g_settings.cpu_overclock_enable && g_settings.GetCPUOverclockPercent() < 100)
     {
       g_settings.cpu_overclock_enable = false;
@@ -1520,6 +1525,21 @@ const char* Settings::GetDisplayVSyncModeName(DisplayVSyncMode mode)
 const char* Settings::GetDisplayVSyncModeDisplayName(DisplayVSyncMode mode)
 {
   return Host::TranslateToCString("Settings", s_display_vsync_mode_display_names[static_cast<int>(mode)]);
+}
+
+bool Settings::ApplyLoadingDefaults(SettingsInterface& si, const char* version_section)
+{
+  if (si.GetUIntValue(version_section, "LoadingDefaultsVersion", 0u) >= 1)
+    return false;
+
+  for (const char* key : {"ReadSpeedup", "SeekSpeedup"})
+  {
+    if (si.ContainsValue("CDROM", key) && si.GetIntValue("CDROM", key, 0) == 1)
+      si.SetIntValue("CDROM", key, 0);
+  }
+
+  si.SetUIntValue(version_section, "LoadingDefaultsVersion", 1);
+  return true;
 }
 
 bool Settings::ApplyDesktopPacingDefaults(SettingsInterface& si)

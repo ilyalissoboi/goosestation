@@ -71,6 +71,30 @@ class ConsoleSettingsTest {
     }
 
     @Test
+    fun readSpeedUpsStartAtMaximum() {
+        assertEquals("Maximum", ConsoleSettings.READ_SPEEDS.label(0))
+        assertEquals(0, ConsoleSettings.READ_SPEEDS.next(1, -1))
+    }
+
+    @Test
+    fun loadingSwitchesLiveUnderCdrom() {
+        assertEquals(
+            "CDROM/ShortDriveWaits",
+            "${ConsoleSettings.SHORT_DRIVE_WAITS.section}/${ConsoleSettings.SHORT_DRIVE_WAITS.key}",
+        )
+        assertEquals(
+            "CDROM/FastForwardLoading",
+            "${ConsoleSettings.FAST_FORWARD_LOADING.section}/${ConsoleSettings.FAST_FORWARD_LOADING.key}",
+        )
+        assertFalse(ConsoleSettings.FAST_FORWARD_LOADING.default)
+        assertEquals(0, ConsoleSettings.READ_SPEEDUP.default)
+        assertEquals(0, ConsoleSettings.SEEK_SPEEDUP.default)
+        assertTrue(ConsoleSettings.SHORT_DRIVE_WAITS.default)
+        assertTrue(ConsoleSettings.all.contains(ConsoleSettings.SHORT_DRIVE_WAITS))
+        assertTrue(ConsoleSettings.all.contains(ConsoleSettings.FAST_FORWARD_LOADING))
+    }
+
+    @Test
     fun seekSpeedUpsGoDownToInstant() {
         assertEquals(0, ConsoleSettings.SEEK_SPEEDS.next(1, -1))
         assertEquals("Instant", ConsoleSettings.SEEK_SPEEDS.label(0))

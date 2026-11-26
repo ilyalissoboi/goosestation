@@ -6,6 +6,7 @@
 #include "bios.h"
 #include "bus.h"
 #include "cdrom.h"
+#include "cdrom_timing.h"
 #include "cheats.h"
 #include "controller.h"
 #include "cpu_code_cache.h"
@@ -182,6 +183,8 @@ static void UpdateDisplayVSync();
 static u32 WantedDisplayLock();
 static u32 TimelineRefreshes();
 static bool IsVSyncWanted();
+static bool IsFastForwardingForAnyReason();
+static void UpdateLoadFastForward();
 static bool GetTimeline(DisplayTimeline* timeline);
 static u32 PresentRefreshes();
 static void SleepToDisplayDeadline(Common::Timer::Value current_time);
@@ -287,6 +290,7 @@ static bool s_system_executing = false;
 static bool s_system_interrupted = false;
 static bool s_frame_step_request = false;
 static bool s_fast_forward_enabled = false;
+static CDROMTiming::LoadFastForward s_load_fast_forward; // [CDROM] FastForwardLoading's state
 static bool s_turbo_enabled = false;
 static bool s_throttler_enabled = false;
 static bool s_optimal_frame_pacing = false;
@@ -342,6 +346,7 @@ static float s_gpu_thread_usage = 0.0f;
 static float s_gpu_thread_time = 0.0f;
 static float s_input_latency = 0.0f; // input polled to present finished, the second's mean, ms
 static AudioStream::Counters s_audio_counters; // the audio stream's, over the last second
+static CDROM::Counters s_last_cd_counters;     // the CD's totals at the last second
 static bool s_gpu_time_plausible = true;
 static float s_average_gpu_time = 0.0f;
 static float s_accumulated_gpu_time = 0.0f;
@@ -1603,6 +1608,11 @@ void System::PauseSystem(bool paused)
 
   SetState(paused ? State::Paused : State::Running);
   SPU::GetOutputStream()->SetPaused(paused);
+  if (paused && s_load_fast_forward.IsActive())
+  {
+    s_load_fast_forward.Reset();
+    UpdateSpeedLimiterState();
+  }
 
   if (paused)
   {
@@ -1787,6 +1797,10 @@ bool System::BootSystem(SystemBootParameters parameters, Error* error)
   // Update running game, this will apply settings as well.
   UpdateRunningGame(disc ? disc->GetFileName().c_str() : parameters.filename.c_str(), disc.get(), true);
 
+  // The game's settings and database switches (DisableFastBoot) apply just above, after fast boot was chosen.
+  if (boot_mode == BootMode::FastBoot && !parameters.override_fast_boot.has_value() && !g_settings.bios_patch_fast_boot)
+    boot_mode = BootMode::FullBoot;
+
   // Get boot EXE override.
   if (!parameters.override_exe.empty())
   {
@@ -1948,6 +1962,7 @@ bool System::Initialize(bool force_software_renderer, Error* error)
   s_next_frame_time = 0;
   s_turbo_enabled = false;
   s_fast_forward_enabled = false;
+  s_load_fast_forward.Reset();
 
   s_rewind_load_frequency = -1;
   s_rewind_load_counter = -1;
@@ -2186,6 +2201,8 @@ void System::FrameDone()
 
   if (Achievements::IsActive())
     Achievements::FrameUpdate();
+
+  UpdateLoadFastForward();
 
 #ifdef ENABLE_DISCORD_PRESENCE
   PollDiscordPresence();
@@ -3522,14 +3539,28 @@ void System::UpdatePerformanceCounters()
 
   // The GPU thread's figures, then the audio's, go last, so the fields before keep their places for what reads them.
   // Audio: underruns, overflows, fades, clears, cuts (fades the device stopped before they finished), how far the
-  // buffer has grown, and fast-forward's mutes.
+  // buffer has grown, and fast-forward's mutes. The CD's go after those: data sectors sped up/at normal speed, XA,
+  // CD-DA, dropped data sectors and seeks.
+  const CDROM::Counters& cd_total = CDROM::GetCounters();
+  const auto cd_delta = [](u32 now, u32& last) {
+    const u32 delta = (now >= last) ? (now - last) : now; // the totals start again at a reset
+    last = now;
+    return delta;
+  };
+  const CDROM::Counters cd = {cd_delta(cd_total.data_fast, s_last_cd_counters.data_fast),
+                              cd_delta(cd_total.data_normal, s_last_cd_counters.data_normal),
+                              cd_delta(cd_total.xa, s_last_cd_counters.xa),
+                              cd_delta(cd_total.cdda, s_last_cd_counters.cdda),
+                              cd_delta(cd_total.dropped, s_last_cd_counters.dropped),
+                              cd_delta(cd_total.seeks, s_last_cd_counters.seeks)};
   VERBOSE_LOG("FPS: {:.2f} VPS: {:.2f} CPU: {:.2f} GPU: {} Average: {:.2f}ms Min: {:.2f}ms Max: {:.2f}ms GPUThread: "
-              "{:.2f} Lat: {:.2f}ms Audio: U {} O {} F {} C {} X {} +{}ms M {}",
+              "{:.2f} Lat: {:.2f}ms Audio: U {} O {} F {} C {} X {} +{}ms M {} CD: D {}/{} X {} A {} drop {} S {}",
               s_fps, s_vps, s_cpu_thread_usage,
               s_gpu_time_plausible ? TinyString::from_format("{:.2f}", s_gpu_usage) : TinyString("-"),
               s_average_frame_time, s_minimum_frame_time, s_maximum_frame_time, s_gpu_thread_usage, s_input_latency,
               s_audio_counters.underruns, s_audio_counters.overflows, s_audio_counters.fades, s_audio_counters.clears,
-              s_audio_counters.cuts, s_audio_counters.extra_ms, s_audio_counters.fast_forward_mutes);
+              s_audio_counters.cuts, s_audio_counters.extra_ms, s_audio_counters.fast_forward_mutes, cd.data_fast,
+              cd.data_normal, cd.xa, cd.cdda, cd.dropped, cd.seeks);
 
   Host::OnPerformanceCountersUpdated();
 }
@@ -3615,7 +3646,7 @@ void System::UpdateSpeedLimiterState()
 
   s_target_speed = s_turbo_enabled ?
                      g_settings.turbo_speed :
-                     (s_fast_forward_enabled ? g_settings.fast_forward_speed : g_settings.emulation_speed);
+                     (IsFastForwardingForAnyReason() ? g_settings.fast_forward_speed : g_settings.emulation_speed);
   s_throttler_enabled = (s_target_speed != 0.0f);
   s_optimal_frame_pacing = (s_throttler_enabled && g_settings.display_optimal_frame_pacing);
   s_skip_presenting_duplicate_frames = s_throttler_enabled && g_settings.display_skip_presenting_duplicate_frames;
@@ -3744,7 +3775,7 @@ u32 System::WantedDisplayLock()
     return 0;
 
   const float base_speed = s_turbo_enabled ? g_settings.turbo_speed :
-                                             (s_fast_forward_enabled ? g_settings.fast_forward_speed :
+                                             (IsFastForwardingForAnyReason() ? g_settings.fast_forward_speed :
                                                                        g_settings.emulation_speed);
   return FramePacing::ShouldLock(true, true, 1, base_speed, false) ? s_display_lock_debounce.Current() : 0;
 }
@@ -3827,7 +3858,7 @@ u32 System::GetDisplayLockStats(u64* presents, u64* made)
 GPUVSyncMode System::GetEffectiveVSyncMode()
 {
   // Vsync off => always disabled. So is it while fast-forwarding, and back after.
-  if (!FramePacing::VSyncWhileFastForwarding(IsVSyncWanted(), s_fast_forward_enabled || s_turbo_enabled))
+  if (!FramePacing::VSyncWhileFastForwarding(IsVSyncWanted(), IsFastForwardingForAnyReason() || s_turbo_enabled))
     return GPUVSyncMode::Disabled;
 
   // Where the screen lock can run from the present waits, presents block on the screen, whatever its rate.
@@ -3862,6 +3893,33 @@ bool System::ShouldAllowPresentThrottle()
 bool System::IsFastForwardEnabled()
 {
   return s_fast_forward_enabled;
+}
+
+bool System::IsFastForwardingForAnyReason()
+{
+  return s_fast_forward_enabled || s_load_fast_forward.IsActive();
+}
+
+bool System::IsLoadFastForwardActive()
+{
+  return s_load_fast_forward.IsActive();
+}
+
+void System::UpdateLoadFastForward()
+{
+  const bool was_active = s_load_fast_forward.IsActive();
+  const bool allowed = g_settings.fast_forward_loading && !Achievements::IsHardcoreModeActive();
+  if (s_load_fast_forward.Update(allowed, CDROM::IsLoadingData(), CDROM::IsStreaming(), GetGlobalTickCounter(),
+                                 g_ticks_per_second) == was_active)
+  {
+    return;
+  }
+
+  // As when the player's fast-forward ends: the sped-up tail is dropped, unless they're still fast-forwarding.
+  if (was_active && !s_fast_forward_enabled && !s_turbo_enabled)
+    SPU::GetOutputStream()->EmptyBuffer();
+
+  UpdateSpeedLimiterState();
 }
 
 void System::SetFastForwardEnabled(bool enabled)
@@ -4820,6 +4878,13 @@ void System::CheckForSettingsChanges(const Settings& old_settings)
     if (g_settings.cdrom_readahead_sectors != old_settings.cdrom_readahead_sectors)
       CDROM::SetReadaheadSectors(g_settings.cdrom_readahead_sectors);
 
+    if (g_settings.cdrom_read_speedup != old_settings.cdrom_read_speedup ||
+        g_settings.cdrom_seek_speedup != old_settings.cdrom_seek_speedup ||
+        g_settings.cdrom_short_drive_waits != old_settings.cdrom_short_drive_waits)
+    {
+      CDROM::SpeedupSettingsChanged();
+    }
+
     if (g_settings.memory_card_types != old_settings.memory_card_types ||
         g_settings.memory_card_paths != old_settings.memory_card_paths ||
         (g_settings.memory_card_use_playlist_title != old_settings.memory_card_use_playlist_title))
@@ -4983,20 +5048,13 @@ void System::WarnAboutUnsafeSettings()
                g_settings.GetCPUOverclockPercent(), g_settings.cpu_overclock_numerator,
                g_settings.cpu_overclock_denominator));
     }
-    if (g_settings.cdrom_read_speedup > 1)
+    if (g_settings.cdrom_read_speedup > 4)
     {
+      // Maximum stops at 4x, which some games need (Breath of Fire III and IV fail from 8x).
       append(ICON_EMOJI_WARNING,
-             SmallString::from_format(
-               TRANSLATE_FS("System", "CD-ROM read speedup set to {}x (effective speed {}x). This may crash games."),
-               g_settings.cdrom_read_speedup, g_settings.cdrom_read_speedup * 2));
-    }
-    if (g_settings.cdrom_seek_speedup != 1)
-    {
-      append(ICON_EMOJI_WARNING,
-             SmallString::from_format(TRANSLATE_FS("System", "CD-ROM seek speedup set to {}. This may crash games."),
-                                      (g_settings.cdrom_seek_speedup == 0) ?
-                                        TinyString(TRANSLATE_SV("System", "Instant")) :
-                                        TinyString::from_format("{}x", g_settings.cdrom_seek_speedup)));
+             SmallString::from_format(TRANSLATE_FS("System", "CD-ROM read speedup set to {}x (effective speed {}x), "
+                                                             "faster than Maximum. This may crash games."),
+                                      g_settings.cdrom_read_speedup, g_settings.cdrom_read_speedup * 2));
     }
     if (g_settings.gpu_force_ntsc_timings)
     {

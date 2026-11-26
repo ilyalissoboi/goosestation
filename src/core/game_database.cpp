@@ -37,7 +37,7 @@ namespace GameDatabase {
 enum : u32
 {
   GAME_DATABASE_CACHE_SIGNATURE = 0x45434C48,
-  GAME_DATABASE_CACHE_VERSION = 14,
+  GAME_DATABASE_CACHE_VERSION = 15,
 };
 
 static Entry* GetMutableEntry(std::string_view serial);
@@ -89,6 +89,9 @@ static constexpr const std::array<const char*, static_cast<u32>(GameDatabase::Tr
   "ForceRecompilerMemoryExceptions",
   "ForceRecompilerICache",
   "ForceRecompilerLUTFastmem",
+  "DisableCDROMReadSpeedup",
+  "DisableCDROMSeekSpeedup",
+  "DisableFastBoot",
   "IsLibCryptProtected",
 }};
 
@@ -119,6 +122,9 @@ static constexpr const std::array<const char*, static_cast<u32>(GameDatabase::Tr
   TRANSLATE_NOOP("GameDatabase", "Force Recompiler Memory Exceptions"),
   TRANSLATE_NOOP("GameDatabase", "Force Recompiler ICache"),
   TRANSLATE_NOOP("GameDatabase", "Force Recompiler LUT Fastmem"),
+  TRANSLATE_NOOP("GameDatabase", "Disable CD-ROM Read Speedup"),
+  TRANSLATE_NOOP("GameDatabase", "Disable CD-ROM Seek Speedup"),
+  TRANSLATE_NOOP("GameDatabase", "Disable Fast Boot"),
   TRANSLATE_NOOP("GameDatabase", "Is LibCrypt Protected"),
 }};
 
@@ -715,6 +721,30 @@ void GameDatabase::Entry::ApplySettings(Settings& settings, bool display_osd_mes
   {
     WARNING_LOG("LUT fastmem for recompiler forced by compatibility settings.");
     settings.cpu_fastmem_mode = CPUFastmemMode::LUT;
+  }
+
+  if (HasTrait(Trait::DisableCDROMReadSpeedup))
+  {
+    if (display_osd_messages && settings.cdrom_read_speedup != 1)
+      APPEND_MESSAGE(TRANSLATE_SV("GameDatabase", "CD-ROM read speedup disabled."));
+
+    settings.cdrom_read_speedup = 1;
+  }
+
+  if (HasTrait(Trait::DisableCDROMSeekSpeedup))
+  {
+    if (display_osd_messages && settings.cdrom_seek_speedup != 1)
+      APPEND_MESSAGE(TRANSLATE_SV("GameDatabase", "CD-ROM seek speedup disabled."));
+
+    settings.cdrom_seek_speedup = 1;
+  }
+
+  if (HasTrait(Trait::DisableFastBoot))
+  {
+    if (display_osd_messages && settings.bios_patch_fast_boot)
+      APPEND_MESSAGE(TRANSLATE_SV("GameDatabase", "Fast boot disabled."));
+
+    settings.bios_patch_fast_boot = false;
   }
 
   if (!messages.empty())

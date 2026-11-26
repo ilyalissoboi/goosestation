@@ -85,7 +85,7 @@ An entry from the file as shipped. Comments after a value are fine; say why a se
 | `name` | The game's name; redump's style, "Title (Region) (Notes)", for new entries. |
 | `codes` | The serials (or `HASH-…` ids) this entry is found by; see above. |
 | `compatibility` | `rating` (`Unknown`, `DoesntBoot`, `CrashesInIntro`, `CrashesInGame`, `GraphicalAudioIssues`, `NoIssues`), `versionTested`, and optional `comments`. |
-| `traits` | Fixes the core forces on for the game, by name: `ForceInterpreter`, `ForceSoftwareRenderer`, `ForceSoftwareRendererForReadbacks`, `ForceRoundTextureCoordinates`, `ForceAccurateBlending`, `ForceInterlacing`, `DisableAutoAnalogMode`, `DisableTrueColor`, `DisableUpscaling`, `DisableTextureFiltering`, `DisableSpriteTextureFiltering`, `DisableScaledDithering`, `DisableForceNTSCTimings`, `DisableWidescreen`, the `DisablePGXP…` and `ForcePGXP…` family, `ForceRecompilerMemoryExceptions`, `ForceRecompilerICache`, `ForceRecompilerLUTFastmem`, `IsLibCryptProtected` (the full list is `s_trait_names` in `src/core/game_database.cpp`). |
+| `traits` | Fixes the core forces on for the game, by name: `ForceInterpreter`, `ForceSoftwareRenderer`, `ForceSoftwareRendererForReadbacks`, `ForceRoundTextureCoordinates`, `ForceAccurateBlending`, `ForceInterlacing`, `DisableAutoAnalogMode`, `DisableTrueColor`, `DisableUpscaling`, `DisableTextureFiltering`, `DisableSpriteTextureFiltering`, `DisableScaledDithering`, `DisableForceNTSCTimings`, `DisableWidescreen`, the `DisablePGXP…` and `ForcePGXP…` family, `ForceRecompilerMemoryExceptions`, `ForceRecompilerICache`, `ForceRecompilerLUTFastmem`, `DisableCDROMReadSpeedup`, `DisableCDROMSeekSpeedup`, `DisableFastBoot`, `IsLibCryptProtected` (the full list is `s_trait_names` in `src/core/game_database.cpp`). |
 | `libcrypt` | `true` if the disc has LibCrypt protection (it then needs its SBI file). |
 | `settings` | Per-game values: display offsets and crop/deinterlacing modes, DMA timing (`dmaMaxSliceTicks`, `dmaHaltTicks`), GPU FIFO and run-ahead, PGXP tolerance and depth threshold, line detection. See `ParseYamlEntry`. |
 | `discSet` | A multi-disc game's set name and its discs' serials, in order. |
@@ -126,6 +126,21 @@ the cue sheet's order. A few older entries quote the size (`size: '244939632'`);
 `comments`), and `versionTested` to `"GooseStation "` followed by `git describe`'s output for the build you tested (the version the app's About shows)
 (`"GooseStation 0.1-604-g9c4c4d0e6"`). The prefix keeps our ratings apart from the base's, whose versions have
 the same shape (`"0.1-1308-g622e50fa"`); a rating without it came with the base and hasn't been rechecked.
+
+**Loading speed switches.** Reads at Maximum (as fast as the game takes the data, up to 4×), instant seeks and short
+drive waits are the defaults. `DisableCDROMReadSpeedup` and `DisableCDROMSeekSpeedup` put a game back at the drive's
+own read or seek speed (the seek switch also turns the short waits off, since they only apply with instant seeks), and
+`DisableFastBoot` boots it through the BIOS's intro. To show that a game needs one, boot it with `goosestation-regtest`
+twice, once with `-setting CDROM/ReadSpeedup=1 -setting CDROM/SeekSpeedup=1 -setting CDROM/ShortDriveWaits=false`
+and once at the defaults, with fast boot on and off (`-setting BIOS/PatchFastBoot=true` or `false`), dumping frames
+(`-dumpdir`, `-dumpinterval 300`) and logging at `-log verbose`. The per-second statistics line ends with the drive's
+counts, `CD: D 12/0 X 0 A 0 drop 0 S 1`: data sectors sped up and at normal speed, XA and CD audio sectors, data
+sectors the game didn't read before the next came, and seeks. A game that hangs, shows other frames, or drops sectors
+in a load at the defaults but not at the drive's speeds needs the switch; then find which of the three settings
+causes it, and add only that one. The entries so far come from the database's own notes: the PlayStation Picks
+(USA) disc with the Rebel Assault II demo (`SCUS-94960`, both speedups) and SaGa Frontier (USA) (`SCUS-94230`, fast
+boot). Medal of Honor – Underground and Rally Cross 2 have notes about the BIOS's sound looping that fast boot
+avoids, which none of these switches does, so they have none.
 
 **Before pushing**, run the checks the pull request will run:
 

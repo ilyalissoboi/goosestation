@@ -78,7 +78,7 @@ fun ConsoleScreen(
             "Read speed-up",
             ConsoleSettings.READ_SPEEDUP,
             ConsoleSettings.READ_SPEEDS,
-            "Faster loading in some games; breaks others.",
+            "Maximum reads as fast as the game takes it. Movies and CD audio play at normal speed.",
         )
         GameNumber(
             values,
@@ -87,6 +87,25 @@ fun ConsoleScreen(
             ConsoleSettings.SEEK_SPEEDUP,
             ConsoleSettings.SEEK_SPEEDS,
             "Faster loading in some games; breaks others.",
+        )
+        GameSwitch(
+            values,
+            onChange,
+            "Short drive waits",
+            ConsoleSettings.SHORT_DRIVE_WAITS,
+            "With instant seeks, also shortens spin-up, speed changes and the disc's table-of-contents read.",
+        )
+        GameSwitch(
+            values,
+            onChange,
+            "Fast-forward while loading",
+            ConsoleSettings.FAST_FORWARD_LOADING,
+            if (Hardcore.on(values)) {
+                "${Hardcore.OFF}."
+            } else {
+                "While the disc loads data, not while movies or music play. Games that stream while you play speed up too."
+            },
+            enabled = !Hardcore.on(values),
         )
         GameNumber(
             values,

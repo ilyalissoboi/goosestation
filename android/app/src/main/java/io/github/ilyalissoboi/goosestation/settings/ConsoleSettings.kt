@@ -17,8 +17,10 @@ object ConsoleSettings {
     val OVERCLOCK_NUMERATOR = IntSetting("CPU", "OverclockNumerator", 1)
     val OVERCLOCK_DENOMINATOR = IntSetting("CPU", "OverclockDenominator", 1)
     val ICACHE = BoolSetting("CPU", "RecompilerICache", false)
-    val READ_SPEEDUP = IntSetting("CDROM", "ReadSpeedup", 1)
-    val SEEK_SPEEDUP = IntSetting("CDROM", "SeekSpeedup", 1)
+    val READ_SPEEDUP = IntSetting("CDROM", "ReadSpeedup", 0)
+    val SEEK_SPEEDUP = IntSetting("CDROM", "SeekSpeedup", 0)
+    val SHORT_DRIVE_WAITS = BoolSetting("CDROM", "ShortDriveWaits", true)
+    val FAST_FORWARD_LOADING = BoolSetting("CDROM", "FastForwardLoading", false)
     val READAHEAD_SECTORS = IntSetting("CDROM", "ReadaheadSectors", 8)
     val PRELOAD = BoolSetting("CDROM", "LoadImageToRAM", false)
     val IMAGE_PATCHES = BoolSetting("CDROM", "LoadImagePatches", false)
@@ -35,6 +37,8 @@ object ConsoleSettings {
             ICACHE,
             READ_SPEEDUP,
             SEEK_SPEEDUP,
+            SHORT_DRIVE_WAITS,
+            FAST_FORWARD_LOADING,
             READAHEAD_SECTORS,
             PRELOAD,
             IMAGE_PATCHES,
@@ -43,10 +47,15 @@ object ConsoleSettings {
     val OVERCLOCK_PERCENTS =
         NumberScale.Range(10, 1000, 10, presets = listOf(50, 100, 150, 200, 300, 400)) { "$it%" }
 
-    /** A read speed-up of n reads at 2n× a drive's speed: 1 is the console's double speed. */
+    /** 0 reads as fast as the game takes the data; a read speed-up of n reads at 2n× a drive's speed: 1 is the console's
+     * double speed. */
     val READ_SPEEDS =
-        NumberScale.Steps((1..10).toList(), presets = (1..10).toList()) {
-            if (it == 1) "None (double speed)" else "${it}x (${it * 2}x speed)"
+        NumberScale.Steps((0..10).toList(), presets = (0..10).toList()) {
+            when (it) {
+                0 -> "Maximum"
+                1 -> "None (double speed)"
+                else -> "${it}x (${it * 2}x speed)"
+            }
         }
 
     /** 0 seeks at once; 1 is the console's own speed. */

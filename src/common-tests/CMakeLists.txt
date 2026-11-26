@@ -18,6 +18,7 @@ add_executable(common-tests
   android_patch_codes_tests.cpp
   ../util/android_patch_codes.cpp
   bitutils_tests.cpp
+  cdrom_timing_tests.cpp
   content_uri_tests.cpp
   core_host_stubs.cpp
   fallback_fonts_tests.cpp
@@ -59,6 +60,7 @@ add_executable(common-tests
   texture_cache_reference_tests.cpp
   settings_texture_cache_tests.cpp
   settings_gpu_thread_tests.cpp
+  settings_cdrom_tests.cpp
   settings_vsync_tests.cpp
   performance_counters_math_tests.cpp
   frame_pacing_tests.cpp

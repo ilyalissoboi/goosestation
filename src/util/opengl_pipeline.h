@@ -18,7 +18,10 @@ public:
 
   void SetDebugName(std::string_view name) override;
 
-  bool Compile(Error* error);
+  /// Compiles the shader. With defer_status, its status is left for FinishCompile, so the driver can work on it
+  /// while more is queued.
+  bool Compile(Error* error, bool defer_status = false);
+  bool FinishCompile(Error* error);
 
   ALWAYS_INLINE GLuint GetGLId() const { return m_id.value(); }
   ALWAYS_INLINE const GPUShaderCache::CacheIndexKey& GetKey() const { return m_key; }
@@ -31,6 +34,7 @@ private:
   std::string m_source;
   std::optional<GLuint> m_id;
   bool m_compile_tried = false;
+  bool m_status_pending = false;
 
 #ifdef _DEBUG
   std::string m_debug_name;

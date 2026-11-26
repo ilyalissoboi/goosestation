@@ -66,6 +66,10 @@ public:
 
   bool SupportsTextureFormat(GPUTexture::Format format) const override;
   void SavePipelineCacheIfGrown() override;
+  bool SupportsParallelCompile() const override;
+  bool CreatePipelines(std::span<const GPUPipeline::GraphicsConfig> configs,
+                       std::span<std::unique_ptr<GPUPipeline>> out, u32 threads,
+                       const std::function<void(u32)>& on_progress, Error* error) override;
 
   bool SupportsSlangPresets() const override;
   std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
@@ -129,7 +133,8 @@ public:
   void CommitDSClearInFB(OpenGLTexture* tex);
 
   GLuint LookupProgramCache(const OpenGLPipeline::ProgramCacheKey& key, const GPUPipeline::GraphicsConfig& plconfig, Error* error);
-  GLuint CompileProgram(const GPUPipeline::GraphicsConfig& plconfig, Error* error);
+  GLuint IssueProgram(const GPUPipeline::GraphicsConfig& plconfig, bool defer_status, Error* error);
+  bool FinishProgram(const GPUPipeline::GraphicsConfig& plconfig, GLuint program_id, Error* error);
   void PostLinkProgram(const GPUPipeline::GraphicsConfig& plconfig, GLuint program_id);
   void UnrefProgram(const OpenGLPipeline::ProgramCacheKey& key);
 
@@ -245,4 +250,9 @@ private:
 
   bool m_disable_pbo = false;
   bool m_disable_async_download = false;
+
+  // KHR/ARB_parallel_shader_compile: compiles and links queued, their status read once all are.
+  bool m_parallel_compile = false;
+  bool m_defer_program_status = false;
+  std::vector<std::pair<OpenGLPipeline::ProgramCacheKey, GPUPipeline::GraphicsConfig>> m_pending_programs;
 };

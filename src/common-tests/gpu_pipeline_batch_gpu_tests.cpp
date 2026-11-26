@@ -302,6 +302,29 @@ TEST_F(PipelineBatchGPU, AWarmRunRewritesNothing)
   EXPECT_EQ(Files(dir), cold);
 }
 
+TEST_F(PipelineBatchGPU, OpenGLBatchMatchesSerial)
+{
+  const std::optional<RenderAPI> api = GPUTestDevice::API();
+  if (api != RenderAPI::OpenGL && api != RenderAPI::OpenGLES)
+    GTEST_SKIP() << "OpenGL only";
+
+  // The same pixels, and the same program-binary file, whether the driver compiles in parallel or one at a time.
+  std::vector<u32> pixels[2];
+  std::vector<std::pair<std::string, std::string>> files[2];
+  const u32 threads[2] = {1, 8};
+  for (u32 run = 0; run < 2; run++)
+  {
+    const std::string dir = NewDir("common-tests-gl-batch");
+    Error error;
+    ASSERT_TRUE(GPUTestDevice::Create(dir, &error)) << error.GetDescription();
+    pixels[run] = DrawFills(threads[run]);
+    GPUTestDevice::Destroy();
+    files[run] = Files(dir);
+  }
+  EXPECT_EQ(pixels[0], pixels[1]);
+  EXPECT_EQ(files[0], files[1]);
+}
+
 TEST_F(PipelineBatchGPU, ParallelPipelinesDrawTheSame)
 {
   Error error;

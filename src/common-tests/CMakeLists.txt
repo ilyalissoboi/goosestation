@@ -26,6 +26,7 @@ add_executable(common-tests
   ../util/fallback_fonts.cpp
   file_system_tests.cpp
   gsvector_yuvtorgb_test.cpp
+  job_runner_tests.cpp
   json_reader_tests.cpp
   librashader_loader_tests.cpp
   memcard_sync_ui_tests.cpp

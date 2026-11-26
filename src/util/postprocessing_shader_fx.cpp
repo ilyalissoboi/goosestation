@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: (GPL-3.0 OR CC-BY-NC-ND-4.0)
 
 #include "postprocessing_shader_fx.h"
+#include "gpu_pipeline_batch.h"
+#include "gpu_thread.h"
 #include "image.h"
 #include "input_manager.h"
-#include "gpu_thread.h"
 #include "shadergen.h"
 
 // TODO: Remove me
@@ -66,11 +67,10 @@ static bool PreprocessorReadFileCallback(const std::string& path, std::string& d
   return true;
 }
 
-static std::unique_ptr<reshadefx::codegen> CreateRFXCodegen()
+static std::unique_ptr<reshadefx::codegen> CreateRFXCodegen(RenderAPI rapi)
 {
   const bool debug_info = GPUThread::GetDeviceInfo().debug_device;
   const bool uniforms_to_spec_constants = false;
-  const RenderAPI rapi = GetRenderAPI();
 
   switch (rapi)
   {
@@ -310,7 +310,7 @@ bool PostProcessing::ReShadeFXShader::LoadFromString(std::string name, std::stri
     code.push_back('\n');
 
   reshadefx::module temp_module;
-  if (!CreateModule(only_config ? DEFAULT_BUFFER_WIDTH : g_gpu_device->GetWindowWidth(),
+  if (!CreateModule(GetRenderAPI(), only_config ? DEFAULT_BUFFER_WIDTH : g_gpu_device->GetWindowWidth(),
                     only_config ? DEFAULT_BUFFER_HEIGHT : g_gpu_device->GetWindowHeight(), &temp_module,
                     std::move(code), error))
   {
@@ -376,8 +376,8 @@ bool PostProcessing::ReShadeFXShader::WantsDepthBuffer() const
   return m_wants_depth_buffer;
 }
 
-bool PostProcessing::ReShadeFXShader::CreateModule(s32 buffer_width, s32 buffer_height, reshadefx::module* mod,
-                                                   std::string code, Error* error)
+bool PostProcessing::ReShadeFXShader::CreateModule(RenderAPI api, s32 buffer_width, s32 buffer_height,
+                                                   reshadefx::module* mod, std::string code, Error* error)
 {
   reshadefx::preprocessor pp;
   pp.set_include_callbacks(PreprocessorFileExistsCallback, PreprocessorReadFileCallback);
@@ -409,7 +409,7 @@ bool PostProcessing::ReShadeFXShader::CreateModule(s32 buffer_width, s32 buffer_
   pp.add_macro_definition("RESHADE_DEPTH_LINEARIZATION_FAR_PLANE", "1000.0");
   pp.add_macro_definition("RESHADE_DEPTH_INPUT_IS_REVERSED", "0");
 
-  switch (GetRenderAPI())
+  switch (api)
   {
     case RenderAPI::D3D11:
     case RenderAPI::D3D12:
@@ -434,7 +434,7 @@ bool PostProcessing::ReShadeFXShader::CreateModule(s32 buffer_width, s32 buffer_
     return false;
   }
 
-  std::unique_ptr<reshadefx::codegen> cg = CreateRFXCodegen();
+  std::unique_ptr<reshadefx::codegen> cg = CreateRFXCodegen(api);
   if (!cg)
     return false;
 
@@ -1306,10 +1306,13 @@ bool PostProcessing::ReShadeFXShader::CompilePipeline(GPUTexture::Format format,
 {
   const RenderAPI api = g_gpu_device->GetRenderAPI();
   const bool needs_main_defn = (api != RenderAPI::D3D11 && api != RenderAPI::D3D12);
+  if (!progress)
+    progress = ProgressCallback::NullProgressCallback;
 
   m_valid = false;
   m_textures.clear();
   m_passes.clear();
+  m_pipelines.clear();
   m_wants_depth_buffer = false;
 
   std::string fxcode;
@@ -1325,7 +1328,8 @@ bool PostProcessing::ReShadeFXShader::CompilePipeline(GPUTexture::Format format,
 
   Error error;
   reshadefx::module mod;
-  if (!CreateModule(width, height, &mod, std::move(fxcode), &error))
+  // The device's own renderer: this runs where the device is.
+  if (!CreateModule(api, width, height, &mod, std::move(fxcode), &error))
   {
     ERROR_LOG("Failed to create module for '{}': {}", m_name, error.GetDescription());
     return false;
@@ -1341,8 +1345,10 @@ bool PostProcessing::ReShadeFXShader::CompilePipeline(GPUTexture::Format format,
 
   const std::string_view code(mod.code.data(), mod.code.size());
 
-  auto get_shader = [api, needs_main_defn, &code](const std::string& name, const std::span<Sampler> samplers,
-                                                  GPUShaderStage stage) {
+  // The passes' shaders and pipelines are built together: on several threads, and a shared entry point once.
+  GPUPipelineBatch batch;
+  auto get_shader = [api, needs_main_defn, &code, &batch](const std::string& name, const std::span<Sampler> samplers,
+                                                          GPUShaderStage stage) {
     std::string real_code;
     if (needs_main_defn)
     {
@@ -1387,16 +1393,11 @@ bool PostProcessing::ReShadeFXShader::CompilePipeline(GPUTexture::Format format,
 
     // FileSystem::WriteStringToFile("D:\\foo.txt", real_code);
 
-    Error error;
-    std::unique_ptr<GPUShader> sshader = g_gpu_device->CreateShader(
-      stage, ShaderGen::GetShaderLanguageForAPI(api), real_code, &error, needs_main_defn ? "main" : name.c_str());
-    if (!sshader)
-      ERROR_LOG("Failed to compile function '{}': {}", name, error.GetDescription());
-
-    return sshader;
+    return batch.AddShader(stage, ShaderGen::GetShaderLanguageForAPI(api), std::move(real_code),
+                           needs_main_defn ? "main" : name.c_str());
   };
 
-  GPUPipeline::GraphicsConfig plconfig;
+  GPUPipeline::GraphicsConfig plconfig = {};
   plconfig.layout = GPUPipeline::Layout::MultiTextureAndUBO;
   plconfig.primitive = GPUPipeline::Primitive::Triangles;
   plconfig.depth_format = GPUTexture::Format::Unknown;
@@ -1408,11 +1409,6 @@ bool PostProcessing::ReShadeFXShader::CompilePipeline(GPUTexture::Format format,
   plconfig.render_pass_flags = GPUPipeline::NoRenderPassFlags;
 
   progress->PushState();
-
-  size_t total_passes = 0;
-  for (const reshadefx::technique_info& tech : mod.techniques)
-    total_passes += tech.passes.size();
-  progress->SetProgressRange(static_cast<u32>(total_passes));
   progress->SetProgressValue(0);
 
   u32 passnum = 0;
@@ -1423,13 +1419,8 @@ bool PostProcessing::ReShadeFXShader::CompilePipeline(GPUTexture::Format format,
       DebugAssert(passnum < m_passes.size());
       Pass& pass = m_passes[passnum++];
 
-      auto vs = get_shader(info.vs_entry_point, pass.samplers, GPUShaderStage::Vertex);
-      auto fs = get_shader(info.ps_entry_point, pass.samplers, GPUShaderStage::Fragment);
-      if (!vs || !fs)
-      {
-        progress->PopState();
-        return false;
-      }
+      const GPUPipelineBatch::Handle vs = get_shader(info.vs_entry_point, pass.samplers, GPUShaderStage::Vertex);
+      const GPUPipelineBatch::Handle fs = get_shader(info.ps_entry_point, pass.samplers, GPUShaderStage::Fragment);
 
       for (size_t i = 0; i < pass.render_targets.size(); i++)
       {
@@ -1442,27 +1433,22 @@ bool PostProcessing::ReShadeFXShader::CompilePipeline(GPUTexture::Format format,
 
       plconfig.blend = MapBlendState(info);
       plconfig.primitive = MapPrimitive(info.topology);
-      plconfig.vertex_shader = vs.get();
-      plconfig.fragment_shader = fs.get();
-      plconfig.geometry_shader = nullptr;
-      if (!plconfig.vertex_shader || !plconfig.fragment_shader)
-      {
-        progress->PopState();
-        return false;
-      }
-
-      pass.pipeline = g_gpu_device->CreatePipeline(plconfig);
-      if (!pass.pipeline)
-      {
-        ERROR_LOG("Failed to create pipeline for pass '{}'", info.name);
-        progress->PopState();
-        return false;
-      }
-
-      progress->SetProgressValue(passnum);
+      batch.AddPipeline(plconfig, vs, fs, GPUPipelineBatch::NONE, &pass.pipeline);
     }
   }
 
+  progress->SetProgressRange(batch.GetUniqueShaderCount() + batch.GetUniquePipelineCount());
+  if (!batch.Build(
+        *g_gpu_device, g_gpu_device->GetCompileThreads(g_gpu_settings.gpu_shader_compile_threads),
+        [progress](u32 done, u32) { progress->SetProgressValue(done); }, &error))
+  {
+    ERROR_LOG("Failed to compile '{}': {}", m_name, error.GetDescription());
+    progress->PopState();
+    return false;
+  }
+
+  m_pipelines = batch.TakePipelines();
+  g_gpu_device->SavePipelineCacheIfGrown();
   progress->PopState();
 
   m_valid = true;
@@ -1806,7 +1792,7 @@ bool PostProcessing::ReShadeFXShader::Apply(GPUTexture* input_color, GPUTexture*
       g_gpu_device->SetRenderTargets(render_targets.data(), static_cast<u32>(pass.render_targets.size()), nullptr);
     }
 
-    g_gpu_device->SetPipeline(pass.pipeline.get());
+    g_gpu_device->SetPipeline(pass.pipeline);
 
     // Set all inputs first, before the render pass starts.
     std::bitset<GPUDevice::MAX_TEXTURE_SAMPLERS> bound_textures = {};

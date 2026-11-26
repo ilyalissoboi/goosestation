@@ -649,8 +649,9 @@ bool RegTestHost::ParseCommandLineParameters(int argc, char* argv[], std::option
       else if (CHECK_ARG_PARAM("-setting"))
       {
         const std::string_view setting = argv[++i];
-        const std::string_view::size_type slash = setting.find('/');
+        // Sections may contain slashes (PostProcessing/Stage1), keys don't.
         const std::string_view::size_type equals = setting.find('=');
+        const std::string_view::size_type slash = setting.rfind('/', equals);
         if (slash == std::string_view::npos || equals == std::string_view::npos || slash == 0 || equals < slash + 2)
         {
           ERROR_LOG("Invalid setting '{}', expected <Section>/<Key>=<Value>.", setting);

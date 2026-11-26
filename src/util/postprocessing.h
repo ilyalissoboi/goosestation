@@ -206,6 +206,11 @@ struct AvailableShader
 
 /// Every shader that can be a stage, from the shaders folder, the shader packs' folder and the resources (a name the
 /// shaders folder has hides the others'), sorted by GetBrowserPath() ignoring case. Reads directory entries only.
+/// Whether a stage built for old_format at old_width x old_height must be built again for format at width x height.
+/// A stage whose build doesn't depend on the size (depends_on_size) is only resized.
+bool StageNeedsCompile(bool depends_on_size, GPUTexture::Format old_format, u32 old_width, u32 old_height,
+                       GPUTexture::Format format, u32 width, u32 height);
+
 std::vector<AvailableShader> GetAvailableShaders();
 
 /// Whether the file a stage named name would load is there (the shaders folder, the packs' folder, the resources), by

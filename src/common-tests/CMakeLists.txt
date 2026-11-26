@@ -42,6 +42,7 @@ add_executable(common-tests
   postprocessing_browser_tests.cpp
   postprocessing_favourites_tests.cpp
   postprocessing_config_tests.cpp
+  postprocessing_gpu_tests.cpp
   postprocessing_slang_gpu_tests.cpp
   postprocessing_slang_tests.cpp
   rectangle_tests.cpp
@@ -91,7 +92,7 @@ if(ANDROID)
   target_link_libraries(common-tests PRIVATE imgui)
 endif()
 
-target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip xxhash gtest gtest_main)
+target_link_libraries(common-tests PRIVATE core scmversion common rcheevos minizip xxhash reshadefx gtest gtest_main)
 
 # game_database_tests.cpp loads the shipped database from the source tree (and skips where it isn't there).
 target_compile_definitions(common-tests PRIVATE

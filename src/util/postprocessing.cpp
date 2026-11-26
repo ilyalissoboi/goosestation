@@ -653,11 +653,25 @@ void PostProcessing::Chain::Toggle()
     s_timer.Reset();
 }
 
+bool PostProcessing::StageNeedsCompile(bool depends_on_size, GPUTexture::Format old_format, u32 old_width,
+                                       u32 old_height, GPUTexture::Format format, u32 width, u32 height)
+{
+  if (old_format != format)
+    return true;
+
+  return depends_on_size && (old_width != width || old_height != height);
+}
+
 bool PostProcessing::Chain::CheckTargets(GPUTexture::Format target_format, u32 target_width, u32 target_height,
                                          ProgressCallback* progress /* = nullptr */)
 {
   if (m_target_format == target_format && m_target_width == target_width && m_target_height == target_height)
     return true;
+
+  // What the stages were built for: a stage is only resized unless its build depends on what changed.
+  const GPUTexture::Format old_format = m_target_format;
+  const u32 old_width = m_target_width;
+  const u32 old_height = m_target_height;
 
   // In case any allocs fail.
   DestroyTextures();
@@ -685,7 +699,10 @@ bool PostProcessing::Chain::CheckTargets(GPUTexture::Format target_format, u32 t
 
     progress->FormatStatusText("Compiling {}...", shader->GetName());
 
-    if (!shader->CompilePipeline(target_format, target_width, target_height, progress) ||
+    const bool compile = StageNeedsCompile(shader->CompileDependsOnSize(), old_format, old_width, old_height,
+                                           target_format, target_width, target_height);
+    Common::Timer timer;
+    if ((compile && !shader->CompilePipeline(target_format, target_width, target_height, progress)) ||
         !shader->ResizeOutput(target_format, target_width, target_height))
     {
       ERROR_LOG("Failed to compile one or more post-processing shaders, disabling.");
@@ -694,6 +711,12 @@ bool PostProcessing::Chain::CheckTargets(GPUTexture::Format target_format, u32 t
         fmt::format("Failed to compile post-processing shader '{}'. Disabling post-processing.", shader->GetName()));
       m_enabled = false;
       return false;
+    }
+
+    if (compile)
+    {
+      INFO_LOG("Built post-processing stage '{}' for {}x{} in {:.1f} ms", shader->GetName(), target_width,
+               target_height, timer.GetTimeMilliseconds());
     }
 
     progress->SetProgressValue(static_cast<u32>(i + 1));

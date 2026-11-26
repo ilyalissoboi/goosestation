@@ -31,6 +31,9 @@ public:
 
   bool ResizeOutput(GPUTexture::Format format, u32 width, u32 height) override;
   bool CompilePipeline(GPUTexture::Format format, u32 width, u32 height, ProgressCallback* progress) override;
+
+  // BUFFER_WIDTH and BUFFER_HEIGHT are baked into the effect's source.
+  bool CompileDependsOnSize() const override { return true; }
   bool Apply(GPUTexture* input_color, GPUTexture* input_depth, GPUTexture* final_target, GSVector4i final_rect,
              s32 orig_width, s32 orig_height, s32 native_width, s32 native_height, u32 target_width,
              u32 target_height, const PictureInfo& picture) override;
@@ -94,7 +97,8 @@ private:
     ShaderOption::ValueVector value;
   };
 
-  bool CreateModule(s32 buffer_width, s32 buffer_height, reshadefx::module* mod, std::string code, Error* error);
+  bool CreateModule(RenderAPI api, s32 buffer_width, s32 buffer_height, reshadefx::module* mod, std::string code,
+                    Error* error);
   bool CreateOptions(const reshadefx::module& mod, Error* error);
   bool GetSourceOption(const reshadefx::uniform_info& ui, SourceOptionType* si, Error* error);
   bool CreatePasses(GPUTexture::Format backbuffer_format, reshadefx::module& mod, Error* error);
@@ -123,7 +127,7 @@ private:
 
   struct Pass
   {
-    std::unique_ptr<GPUPipeline> pipeline;
+    GPUPipeline* pipeline = nullptr; // in m_pipelines
     llvm::SmallVector<TextureID, GPUDevice::MAX_RENDER_TARGETS> render_targets;
     llvm::SmallVector<Sampler, GPUDevice::MAX_TEXTURE_SAMPLERS> samplers;
     u32 num_vertices;
@@ -134,6 +138,7 @@ private:
   };
 
   std::vector<Pass> m_passes;
+  std::vector<std::unique_ptr<GPUPipeline>> m_pipelines; // the passes' pipelines
   std::vector<Texture> m_textures;
   std::vector<SourceOption> m_source_options;
   u32 m_uniforms_size = 0;

@@ -76,6 +76,12 @@ if(NOT ANDROID)
   )
 endif()
 
+# The OpenGL ES shaders' tests set glad's flags and context strings themselves.
+if(ENABLE_OPENGL)
+  target_sources(common-tests PRIVATE shadergen_gles_tests.cpp)
+  target_link_libraries(common-tests PRIVATE glad)
+endif()
+
 # Android's stand-in for the fullscreen UI, which replaces fullscreen_ui.cpp there, with the ImGuiFullscreen it drives.
 if(ANDROID)
   target_sources(common-tests PRIVATE

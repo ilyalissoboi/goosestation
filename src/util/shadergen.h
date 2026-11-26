@@ -48,7 +48,9 @@ protected:
 
   void DefineMacro(std::stringstream& ss, const char* name, bool enabled);
   void DefineMacro(std::stringstream& ss, const char* name, s32 value);
-  void WriteHeader(std::stringstream& ss, bool enable_rov = false);
+  /// dual_source_output: the fragment shader blends with a second source, which needs EXT_blend_func_extended on
+  /// OpenGL ES.
+  void WriteHeader(std::stringstream& ss, bool enable_rov = false, bool dual_source_output = false);
   void WriteUniformBufferDeclaration(std::stringstream& ss, bool push_constant_on_vulkan);
   void DeclareUniformBuffer(std::stringstream& ss, const std::initializer_list<const char*>& members,
                             bool push_constant_on_vulkan);

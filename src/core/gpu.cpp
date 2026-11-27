@@ -342,7 +342,8 @@ bool GPU::DoState(StateWrapper& sw, GPUTexture** host_texture, bool update_displ
 
   sw.Do(&m_fifo);
   sw.Do(&m_blit_buffer);
-  m_polyline_addresses.clear();
+  if (sw.IsReading())
+    m_polyline_addresses.clear();
   sw.Do(&m_blit_remaining_words);
   sw.Do(&m_render_command.bits);
 

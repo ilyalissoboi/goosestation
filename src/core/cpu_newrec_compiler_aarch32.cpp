@@ -1677,6 +1677,7 @@ void CPU::NewRec::AArch32Compiler::Compile_lwx(CompileFlags cf, MemoryAccessSize
     armAsm->mov(RARG3, value);
     armAsm->bic(RARG2, addr, 3);
     EmitMov(RARG1, inst->bits);
+    // Unbuilt and untested here, so still the aligned hook: unaligned precision is lost, as before.
     EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_LW));
   }
 }
@@ -1865,6 +1866,7 @@ void CPU::NewRec::AArch32Compiler::Compile_swx(CompileFlags cf, MemoryAccessSize
     armAsm->mov(RARG2, addr);
     FreeHostReg(addr.GetCode());
     EmitMov(RARG1, inst->bits);
+    // Unbuilt and untested here, so still the aligned hook: unaligned precision is lost, as before.
     EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_SW));
   }
 }

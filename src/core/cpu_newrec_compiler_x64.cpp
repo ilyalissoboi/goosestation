@@ -26,7 +26,7 @@ Log_SetChannel(CPU::NewRec);
 // #define PTR(x) (cg->rip + (x))
 #define PTR(x) (RSTATE + (u32)(((u8*)(x)) - ((u8*)&g_state)))
 
-// PGXP TODO: LWL etc, MFC0
+// PGXP TODO: MFC0
 // PGXP TODO: Spyro 1 level gates have issues.
 
 static constexpr u32 BACKPATCH_JMP_SIZE = 5;
@@ -1620,9 +1620,8 @@ void CPU::NewRec::X64Compiler::Compile_lwx(CompileFlags cf, MemoryAccessSize siz
     DebugAssert(value != RWARG3);
     cg->mov(RWARG3, value);
     cg->mov(RWARG2, addr);
-    cg->and_(RWARG2, ~0x3u);
     cg->mov(RWARG1, inst->bits);
-    cg->call(reinterpret_cast<const void*>(&PGXP::CPU_LW));
+    cg->call(reinterpret_cast<const void*>(&PGXP::CPU_LWx));
   }
 }
 
@@ -1749,11 +1748,16 @@ void CPU::NewRec::X64Compiler::Compile_swx(CompileFlags cf, MemoryAccessSize siz
   if (g_settings.gpu_pgxp_enable)
     MoveMIPSRegToReg(value, inst->r.rt);
 
+  // PGXP needs the unaligned address, to know which bytes moved.
+  const Reg32 pgxp_addr = g_settings.gpu_pgxp_enable ? Reg32(AllocateTempHostReg(HR_CALLEE_SAVED)) : addr;
+
   FlushForLoadStore(address, true, use_fastmem);
 
   // TODO: if address is constant, this can be simplified..
   // We'd need to be careful here if we weren't overwriting it..
   ComputeLoadStoreAddressArg(cf, address, addr);
+  if (g_settings.gpu_pgxp_enable)
+    cg->mov(pgxp_addr, addr);
   cg->mov(RWARG1, addr);
   cg->and_(RWARG1, ~0x3u);
   GenerateLoad(RWARG1, MemoryAccessSize::Word, false, use_fastmem, []() { return RWRET; });
@@ -1810,10 +1814,11 @@ void CPU::NewRec::X64Compiler::Compile_swx(CompileFlags cf, MemoryAccessSize siz
     Flush(FLUSH_FOR_C_CALL);
     cg->mov(RWARG3, value);
     FreeHostReg(value.getIdx());
-    cg->mov(RWARG2, addr);
+    cg->mov(RWARG2, pgxp_addr);
+    FreeHostReg(pgxp_addr.getIdx());
     FreeHostReg(addr.getIdx());
     cg->mov(RWARG1, inst->bits);
-    cg->call(reinterpret_cast<const void*>(&PGXP::CPU_SW));
+    cg->call(reinterpret_cast<const void*>(&PGXP::CPU_SWx));
   }
 }
 

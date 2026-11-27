@@ -1572,7 +1572,7 @@ bool Settings::MoveOldVSyncSwitch(SettingsInterface& si, bool game_file)
   return true;
 }
 
-bool Settings::MovePGXPDepthThresholdOutOfDepthBuffer(SettingsInterface& si)
+bool Settings::MovePGXPDepthThresholdOutOfDepthBuffer(SettingsInterface& si, bool game_file)
 {
   const std::string value = si.GetStringValue("GPU", "PGXPDepthBuffer", "");
   if (value.empty() || StringUtil::FromChars<bool>(value).has_value())
@@ -1584,7 +1584,10 @@ bool Settings::MovePGXPDepthThresholdOutOfDepthBuffer(SettingsInterface& si)
 
   if (!si.ContainsValue("GPU", "PGXPDepthClearThreshold"))
     si.SetFloatValue("GPU", "PGXPDepthClearThreshold", threshold.value());
-  si.SetBoolValue("GPU", "PGXPDepthBuffer", false);
+  if (game_file)
+    si.DeleteValue("GPU", "PGXPDepthBuffer");
+  else
+    si.SetBoolValue("GPU", "PGXPDepthBuffer", false);
   return true;
 }
 

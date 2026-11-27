@@ -465,8 +465,9 @@ struct Settings
 
   /// Big Picture's Depth Clear Threshold row used to write its number into [GPU] PGXPDepthBuffer, which then read as
   /// off. The number moves to PGXPDepthClearThreshold (unless that is set) and the depth buffer stays off, as it read.
-  /// True if it changed.
-  static bool MovePGXPDepthThresholdOutOfDepthBuffer(SettingsInterface& si);
+  /// In a game's file, where the unreadable value fell through to the global switch, the key is dropped instead, so it
+  /// still does. True if it changed.
+  static bool MovePGXPDepthThresholdOutOfDepthBuffer(SettingsInterface& si, bool game_file = false);
 
   static std::optional<DisplayRotation> ParseDisplayRotation(const char* str);
   static const char* GetDisplayRotationName(DisplayRotation alignment);

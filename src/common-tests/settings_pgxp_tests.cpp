@@ -43,3 +43,15 @@ TEST(SettingsPGXP, BoolDepthBufferIsLeftAlone)
   EXPECT_TRUE(si.GetBoolValue("GPU", "PGXPDepthBuffer", false));
   EXPECT_FALSE(si.ContainsValue("GPU", "PGXPDepthClearThreshold"));
 }
+
+TEST(SettingsPGXP, GameFileDropsTheNumberSoTheGlobalSwitchStands)
+{
+  // A game's file holds only what it overrides: the unreadable value fell through to the global switch, so after the
+  // move it must still fall through rather than turn the depth buffer off for that game.
+  MemorySettingsInterface si;
+  si.SetStringValue("GPU", "PGXPDepthBuffer", "450.000000");
+
+  EXPECT_TRUE(Settings::MovePGXPDepthThresholdOutOfDepthBuffer(si, true));
+  EXPECT_FLOAT_EQ(si.GetFloatValue("GPU", "PGXPDepthClearThreshold", 0.0f), 450.0f);
+  EXPECT_FALSE(si.ContainsValue("GPU", "PGXPDepthBuffer"));
+}

@@ -1507,7 +1507,7 @@ bool System::UpdateGameSettingsLayer()
       // The old vsync switch becomes the three-way setting, as the game's own (pacing stage 2b), and a depth threshold
       // Big Picture wrote into the depth buffer's key moves to its own.
       else if (Settings::MoveOldVSyncSwitch(*new_interface, true) |
-               Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface))
+               Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface, true))
       {
         Error error;
         if (!new_interface->Save(&error))
@@ -1519,7 +1519,7 @@ bool System::UpdateGameSettingsLayer()
       {
         // In memory only: the file is desktop's too, and must never be saved with these dropped.
         Settings::MoveOldVSyncSwitch(*new_interface, true);
-        Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface);
+        Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface, true);
         Host::AdaptGameSettingsLayer(*new_interface);
         new_interface->MarkClean();
       }

@@ -83,7 +83,12 @@ void GPU::TryExecuteCommands()
         {
           m_blit_buffer.reserve(m_blit_buffer.size() + words_to_copy);
           for (u32 i = 0; i < words_to_copy; i++)
-            m_blit_buffer.push_back(FifoPop());
+          {
+            const u64 word = m_fifo.Pop();
+            m_blit_buffer.push_back(Truncate32(word));
+            if (g_settings.gpu_pgxp_enable)
+              m_polyline_addresses.push_back(Truncate32(word >> 32));
+          }
         }
 
         DEBUG_LOG("Added {} words to polyline", words_to_copy);
@@ -443,8 +448,14 @@ bool GPU::HandleRenderPolyLineCommand()
   // m_blit_buffer.resize(words_to_pop);
   // FifoPopRange(m_blit_buffer.data(), words_to_pop);
   m_blit_buffer.reserve(words_to_pop);
+  m_polyline_addresses.clear();
   for (u32 i = 0; i < words_to_pop; i++)
-    m_blit_buffer.push_back(Truncate32(FifoPop()));
+  {
+    const u64 word = m_fifo.Pop();
+    m_blit_buffer.push_back(Truncate32(word));
+    if (g_settings.gpu_pgxp_enable)
+      m_polyline_addresses.push_back(Truncate32(word >> 32));
+  }
 
   // polyline goes via a different path through the blit buffer
   m_blitter_state = BlitterState::DrawingPolyLine;

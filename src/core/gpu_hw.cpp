@@ -2775,7 +2775,8 @@ void GPU_HW::DrawLine(const GPUThreadHWDrawLineCommand* cmd)
   {
     const u32 end_color = cmd->vertices[i].color;
     const GSVector4i end_pos = GSVector4i(cmd->vertices[i].x, cmd->vertices[i].y);
-    const GSVector4i bounds = start_pos.xyxy(end_pos);
+    const GSVector4 bounds =
+      GSVector4(cmd->vertices[i - 1].fx, cmd->vertices[i - 1].fy, cmd->vertices[i].fx, cmd->vertices[i].fy);
     const GSVector4i rect =
       start_pos.min_i32(end_pos).xyxy(start_pos.max_i32(end_pos)).add32(GSVector4i::cxpr(0, 0, 1, 1));
     const GSVector4i clamped_rect = rect.rintersect(m_clamped_drawing_area);
@@ -2787,8 +2788,8 @@ void GPU_HW::DrawLine(const GPUThreadHWDrawLineCommand* cmd)
     {
       AddDrawnRectangle(clamped_rect);
 
-      // TODO: Should we do a PGXP lookup here? Most lines are 2D.
-      DrawLine(GSVector4(bounds), start_color, end_color, depth);
+      // Precise positions where PGXP found them (only lines from the GTE), otherwise the native ones.
+      DrawLine(bounds, start_color, end_color, depth);
     }
 
     start_pos = end_pos;

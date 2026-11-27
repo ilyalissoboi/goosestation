@@ -647,6 +647,26 @@ bool CPU::PGXP::GetPreciseVertex(u32 addr, u32 value, int x, int y, int xOffs, i
   return false;
 }
 
+bool CPU::PGXP::GetPreciseLineVertices(u32 count, const u32* addrs, const u32* values, const s32* native_xy,
+                                        s32 offset_x, s32 offset_y, float* out_xy)
+{
+  bool precise = (addrs != nullptr);
+  for (u32 i = 0; i < count && precise; i++)
+  {
+    float w;
+    precise = GetPreciseVertex(addrs[i], values[i], native_xy[i * 2], native_xy[i * 2 + 1], offset_x, offset_y,
+                               &out_xy[i * 2], &out_xy[i * 2 + 1], &w);
+  }
+
+  if (!precise)
+  {
+    for (u32 i = 0; i < count * 2; i++)
+      out_xy[i] = static_cast<float>(native_xy[i]);
+  }
+
+  return precise;
+}
+
 void CPU::PGXP::CPU_LW(Instruction instr, u32 addr, u32 rtVal)
 {
   // Rt = Mem[Rs + Im]

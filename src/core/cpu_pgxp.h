@@ -15,6 +15,12 @@ void Shutdown();
 bool GetPreciseVertex(u32 addr, u32 value, int x, int y, int xOffs, int yOffs, float* out_x, float* out_y,
                       float* out_w);
 
+/// Precise positions for a line's or polyline's vertices: every one of them when every vertex has a precise X, Y and Z
+/// from memory (came from the GTE), otherwise none. native_xy and out_xy hold count x, y pairs, native ones including
+/// the drawing offset. Without addresses (addrs null), the native positions.
+bool GetPreciseLineVertices(u32 count, const u32* addrs, const u32* values, const s32* native_xy, s32 offset_x,
+                            s32 offset_y, float* out_xy);
+
 // GTE instruction hooks.
 
 void GTE_RTPS(float x, float y, float z, u32 value);

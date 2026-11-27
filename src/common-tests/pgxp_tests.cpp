@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 namespace {
 
 u32 Pack(s16 x, s16 y)
@@ -238,4 +240,67 @@ TEST_F(PGXPUnalignedTest, MismatchedSourceIsNative)
   StoreRegister(RT, 0x2000, reg);
   const Found f = Lookup(0x2000, reg);
   EXPECT_FLOAT_EQ(f.x, 99.0f);
+}
+
+namespace {
+struct LineVertex
+{
+  u32 addr;
+  u32 value;
+};
+
+// Looks up a line's vertices as the GPU frontend does, with drawing offset 0.
+bool LookupLine(const std::vector<LineVertex>& verts, bool with_addresses, std::vector<float>* out)
+{
+  std::vector<u32> addrs, values;
+  std::vector<s32> native;
+  for (const LineVertex& v : verts)
+  {
+    addrs.push_back(v.addr);
+    values.push_back(v.value);
+    native.push_back(static_cast<s16>(v.value));
+    native.push_back(static_cast<s16>(v.value >> 16));
+  }
+  out->assign(verts.size() * 2, -1.0f);
+  return CPU::PGXP::GetPreciseLineVertices(static_cast<u32>(verts.size()), with_addresses ? addrs.data() : nullptr,
+                                           values.data(), native.data(), 0, 0, out->data());
+}
+} // namespace
+
+TEST_F(PGXPUnalignedTest, LineWithPreciseEndsIsPrecise)
+{
+  std::vector<float> xy;
+  EXPECT_TRUE(LookupLine({{0x1000, A}, {0x1004, B}}, true, &xy));
+  EXPECT_EQ(xy, (std::vector<float>{10.25f, 20.5f, 30.75f, 40.125f}));
+}
+
+TEST_F(PGXPUnalignedTest, LineWithOneGameBuiltEndIsNative)
+{
+  // X and Y precise but no Z: put together by the game, not projected by the GTE.
+  u32 reg = LoadLeftRight(CPU::InstructionOp::lwr, 0x1002, A, 0, RT);
+  reg = LoadLeftRight(CPU::InstructionOp::lwl, 0x1005, B, reg, RT);
+  StoreRegister(RT, 0x2000, reg);
+
+  std::vector<float> xy;
+  EXPECT_FALSE(LookupLine({{0x1000, A}, {0x2000, reg}}, true, &xy));
+  EXPECT_EQ(xy, (std::vector<float>{10.0f, 20.0f, 20.0f, 30.0f}));
+}
+
+TEST_F(PGXPUnalignedTest, PolylineIsAllOrNothing)
+{
+  StorePreciseVertex(0x1008, 50.5f, 60.5f, 100.0f);
+  std::vector<float> xy;
+  EXPECT_FALSE(LookupLine({{0x1000, A}, {0x1004, B}, {0x1008, Pack(50, 60)}, {0x3000, Pack(70, 80)}}, true, &xy));
+  EXPECT_EQ(xy, (std::vector<float>{10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f, 70.0f, 80.0f}));
+
+  EXPECT_TRUE(LookupLine({{0x1000, A}, {0x1004, B}, {0x1008, Pack(50, 60)}}, true, &xy));
+  EXPECT_EQ(xy, (std::vector<float>{10.25f, 20.5f, 30.75f, 40.125f, 50.5f, 60.5f}));
+}
+
+TEST_F(PGXPUnalignedTest, PolylineWithMissingAddressesIsNative)
+{
+  // A state loaded in the middle of a polyline: the words already buffered have no addresses.
+  std::vector<float> xy;
+  EXPECT_FALSE(LookupLine({{0x1000, A}, {0x1004, B}}, false, &xy));
+  EXPECT_EQ(xy, (std::vector<float>{10.0f, 20.0f, 30.0f, 40.0f}));
 }

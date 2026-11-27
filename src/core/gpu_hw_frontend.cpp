@@ -586,31 +586,47 @@ void GPU_HWFrontend::DispatchRectangle(GPURenderCommand rc)
 void GPU_HWFrontend::DispatchLine(GPURenderCommand rc)
 {
   u32 start_color, end_color;
-  GPUVertexPosition start_pos, end_pos;
+  u64 start_word, end_word; // position and the address it came from
   if (rc.shading_enable)
   {
     start_color = rc.color_for_first_vertex;
-    start_pos.bits = FifoPop();
+    start_word = m_fifo.Pop();
     end_color = FifoPop() & UINT32_C(0x00FFFFFF);
-    end_pos.bits = FifoPop();
+    end_word = m_fifo.Pop();
   }
   else
   {
     start_color = end_color = rc.color_for_first_vertex;
-    start_pos.bits = FifoPop();
-    end_pos.bits = FifoPop();
+    start_word = m_fifo.Pop();
+    end_word = m_fifo.Pop();
   }
 
+  const GPUVertexPosition start_pos{Truncate32(start_word)};
+  const GPUVertexPosition end_pos{Truncate32(end_word)};
   const GSVector4i vstart_pos = GSVector4i(start_pos.x + m_drawing_offset.x, start_pos.y + m_drawing_offset.y);
   const GSVector4i vend_pos = GSVector4i(end_pos.x + m_drawing_offset.x, end_pos.y + m_drawing_offset.y);
+
+  const s32 native_xy[4] = {vstart_pos.x, vstart_pos.y, vend_pos.x, vend_pos.y};
+  float xy[4];
+  if (g_settings.gpu_pgxp_enable)
+  {
+    const u32 addrs[2] = {Truncate32(start_word >> 32), Truncate32(end_word >> 32)};
+    const u32 values[2] = {start_pos.bits, end_pos.bits};
+    CPU::PGXP::GetPreciseLineVertices(2, addrs, values, native_xy, m_drawing_offset.x, m_drawing_offset.y, xy);
+  }
+  else
+  {
+    for (u32 i = 0; i < 4; i++)
+      xy[i] = static_cast<float>(native_xy[i]);
+  }
 
   GPUThreadHWDrawLineCommand* cmd = NewCommand<GPUThreadHWDrawLineCommand>(
     GPUThreadCommandType::HWDrawLine, GetCommandParameters(),
     sizeof(GPUThreadHWDrawLineCommand) + sizeof(GPUThreadHWDrawLineCommand::Vertex) * 2);
   cmd->rc.bits = rc.bits;
   cmd->num_vertices = 2;
-  cmd->vertices[0] = {vstart_pos.x, vstart_pos.y, start_color};
-  cmd->vertices[1] = {vend_pos.x, vend_pos.y, end_color};
+  cmd->vertices[0] = {vstart_pos.x, vstart_pos.y, xy[0], xy[1], start_color};
+  cmd->vertices[1] = {vend_pos.x, vend_pos.y, xy[2], xy[3], end_color};
   GPUThread::PushCommand(cmd);
 
   const GSVector4i bounds = vstart_pos.xyxy(vend_pos);
@@ -652,11 +668,46 @@ void GPU_HWFrontend::DispatchPolyLine(GPURenderCommand rc)
     FillDrawCommand(sw_cmd, rc);
   }
 
+  // With PGXP, look every vertex up from where its word came from; all of them precise, or none.
+  if (g_settings.gpu_pgxp_enable && m_polyline_addresses.size() == m_blit_buffer.size())
+  {
+    m_polyline_lookup_addrs.clear();
+    m_polyline_lookup_values.clear();
+    m_polyline_lookup_native.clear();
+    for (u32 i = 0, pos = 0; i < num_vertices; i++)
+    {
+      pos += (shaded && i > 0) ? 1 : 0; // the colour word before every vertex but the first
+      const GPUVertexPosition vp{m_blit_buffer[pos]};
+      m_polyline_lookup_addrs.push_back(m_polyline_addresses[pos]);
+      m_polyline_lookup_values.push_back(vp.bits);
+      m_polyline_lookup_native.push_back(m_drawing_offset.x + vp.x);
+      m_polyline_lookup_native.push_back(m_drawing_offset.y + vp.y);
+      pos++;
+    }
+    m_polyline_lookup_xy.resize(num_vertices * 2);
+    if (!CPU::PGXP::GetPreciseLineVertices(num_vertices, m_polyline_lookup_addrs.data(),
+                                           m_polyline_lookup_values.data(), m_polyline_lookup_native.data(),
+                                           m_drawing_offset.x, m_drawing_offset.y, m_polyline_lookup_xy.data()))
+    {
+      m_polyline_lookup_xy.clear();
+    }
+  }
+  else
+  {
+    m_polyline_lookup_xy.clear();
+  }
+  const auto drawn = [this](u32 i, const GSVector4i& native) {
+    return m_polyline_lookup_xy.empty() ?
+             std::make_pair(static_cast<float>(native.x), static_cast<float>(native.y)) :
+             std::make_pair(m_polyline_lookup_xy[i * 2], m_polyline_lookup_xy[i * 2 + 1]);
+  };
+
   u32 buffer_pos = 0;
   const GPUVertexPosition start_vp{m_blit_buffer[buffer_pos++]};
   GSVector4i start_pos = GSVector4i(start_vp.x + m_drawing_offset.x, start_vp.y + m_drawing_offset.y);
   u32 start_color = rc.color_for_first_vertex;
-  cmd->vertices[0] = {start_pos.x, start_pos.y, start_color};
+  const auto [start_fx, start_fy] = drawn(0, start_pos);
+  cmd->vertices[0] = {start_pos.x, start_pos.y, start_fx, start_fy, start_color};
   if (sw_cmd)
   {
     GSVector4i::storel(&sw_cmd->vertices[0].x, start_pos);
@@ -674,7 +725,8 @@ void GPU_HWFrontend::DispatchPolyLine(GPURenderCommand rc)
     if (rect.width() <= MAX_PRIMITIVE_WIDTH && rect.height() <= MAX_PRIMITIVE_HEIGHT && !clamped_rect.rempty())
       AddDrawLineTicks(clamped_rect, rc.shading_enable);
 
-    cmd->vertices[i] = {end_pos.x, end_pos.y, end_color};
+    const auto [end_fx, end_fy] = drawn(i, end_pos);
+    cmd->vertices[i] = {end_pos.x, end_pos.y, end_fx, end_fy, end_color};
     if (sw_cmd)
     {
       GSVector4i::storel(&sw_cmd->vertices[i], end_pos);

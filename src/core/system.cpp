@@ -1501,8 +1501,10 @@ bool System::UpdateGameSettingsLayer()
         new_interface.reset();
       }
 #ifndef __ANDROID__
-      // The old vsync switch becomes the three-way setting, as the game's own (pacing stage 2b).
-      else if (Settings::MoveOldVSyncSwitch(*new_interface, true))
+      // The old vsync switch becomes the three-way setting, as the game's own (pacing stage 2b), and a depth threshold
+      // Big Picture wrote into the depth buffer's key moves to its own.
+      else if (Settings::MoveOldVSyncSwitch(*new_interface, true) |
+               Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface))
       {
         Error error;
         if (!new_interface->Save(&error))
@@ -1514,6 +1516,7 @@ bool System::UpdateGameSettingsLayer()
       {
         // In memory only: the file is desktop's too, and must never be saved with these dropped.
         Settings::MoveOldVSyncSwitch(*new_interface, true);
+        Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface);
         Host::AdaptGameSettingsLayer(*new_interface);
         new_interface->MarkClean();
       }

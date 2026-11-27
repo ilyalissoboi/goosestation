@@ -68,6 +68,7 @@ add_executable(common-tests
   shader_compile_threads_tests.cpp
   settings_cdrom_tests.cpp
   settings_vsync_tests.cpp
+  settings_pgxp_tests.cpp
   performance_counters_math_tests.cpp
   pgxp_tests.cpp
   frame_pacing_tests.cpp

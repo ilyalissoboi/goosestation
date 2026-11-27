@@ -702,7 +702,7 @@ void GameDatabase::Entry::ApplySettings(Settings& settings, bool display_osd_mes
     if (display_osd_messages && settings.gpu_pgxp_enable && !settings.gpu_pgxp_disable_2d)
       APPEND_MESSAGE(TRANSLATE_SV("GameDatabase", "PGXP disabled on 2D polygons."));
 
-    g_settings.gpu_pgxp_disable_2d = true;
+    settings.gpu_pgxp_disable_2d = true;
   }
 
   if (HasTrait(Trait::ForceRecompilerMemoryExceptions))

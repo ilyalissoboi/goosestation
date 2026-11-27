@@ -111,6 +111,26 @@ TEST(GameDatabaseCDSpeed, CDSpeedTraitsApply)
   EXPECT_EQ(std::string_view(GameDatabase::GetTraitName(GameDatabase::Trait::DisableFastBoot)), "DisableFastBoot");
 }
 
+TEST(GameDatabasePGXP, DisableOn2DPolygonsAppliesToTheGivenSettings)
+{
+  GameDatabase::Entry entry;
+  entry.traits.set(static_cast<int>(GameDatabase::Trait::DisablePGXPOn2DPolygons));
+
+  const bool saved_global = g_settings.gpu_pgxp_disable_2d;
+  g_settings.gpu_pgxp_disable_2d = false;
+
+  Settings settings;
+  settings.gpu_pgxp_enable = true;
+  settings.gpu_pgxp_disable_2d = false;
+  entry.ApplySettings(settings, false);
+
+  // The game's settings get the switch; the running settings are left to the caller.
+  EXPECT_TRUE(settings.gpu_pgxp_disable_2d);
+  EXPECT_FALSE(g_settings.gpu_pgxp_disable_2d);
+
+  g_settings.gpu_pgxp_disable_2d = saved_global;
+}
+
 TEST_F(GameDatabaseShippedFiles, ShippedCDSpeedEntries)
 {
   // The database's own notes: the PlayStation Picks disc's Rebel Assault II demo "can hang if speed up", and SaGa

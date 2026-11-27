@@ -69,6 +69,7 @@ add_executable(common-tests
   settings_cdrom_tests.cpp
   settings_vsync_tests.cpp
   performance_counters_math_tests.cpp
+  pgxp_tests.cpp
   frame_pacing_tests.cpp
   audio_stream_tests.cpp
   ../util/text_input.cpp

@@ -579,7 +579,7 @@ ALWAYS_INLINE_RELEASE CPU::PGXPValue* CPU::PGXP::GetCachedVertex(u32 value)
 {
   const s16 sx = static_cast<s16>(value & 0xFFFFu);
   const s16 sy = static_cast<s16>(value >> 16);
-  return (sx >= -1024 && sx <= 1023 && sy >= -1024 && sy <= 1013) ?
+  return (sx >= -1024 && sx <= 1023 && sy >= -1024 && sy <= 1023) ?
            &s_vertex_cache[(sy + 1024) * VERTEX_CACHE_WIDTH + (sx + 1024)] :
            nullptr;
 }

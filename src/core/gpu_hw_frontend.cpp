@@ -30,17 +30,13 @@ ALWAYS_INLINE T* NewCommand(GPUThreadCommandType type, GPUBackendCommandParamete
   return cmd;
 }
 
-// The rect a polygon's triangle covers, as GPU_HW culls it: max exclusive.
-ALWAYS_INLINE GSVector4i TriangleRect(const GPUThreadHWDrawPolygonCommand::Vertex& a,
-                                      const GPUThreadHWDrawPolygonCommand::Vertex& b,
-                                      const GPUThreadHWDrawPolygonCommand::Vertex& c)
+// The rect a polygon's triangle covers on the console's integer positions: max exclusive. The draw time counts the
+// triangles the console draws, so PGXP's precise positions (which only GPU_HW draws) can't change the timing.
+ALWAYS_INLINE GSVector4i TriangleRect(const GSVector2i& a, const GSVector2i& b, const GSVector2i& c)
 {
-  const GSVector2 af = GSVector2(a.x, a.y);
-  const GSVector2 bf = GSVector2(b.x, b.y);
-  const GSVector2 cf = GSVector2(c.x, c.y);
-  const GSVector2 min_pos = bf.min(cf).min(af);
-  const GSVector2 max_pos = bf.max(cf).max(af);
-  return GSVector4i(GSVector4(min_pos).upld(GSVector4(max_pos))).add32(GSVector4i::cxpr(0, 0, 1, 1));
+  const GSVector2i min_pos = b.min_i32(c).min_i32(a);
+  const GSVector2i max_pos = b.max_i32(c).max_i32(a);
+  return GSVector4i(min_pos.x, min_pos.y, max_pos.x + 1, max_pos.y + 1);
 }
 
 } // namespace
@@ -490,8 +486,8 @@ void GPU_HWFrontend::DispatchPolygon(GPURenderCommand rc)
     m_sw_renderer->PushCommand(sw_cmd);
   }
 
-  // The ticks, for what GPU_HW will draw: culled the way it culls, on the positions it draws.
-  const GSVector4i draw_rect_012 = TriangleRect(cmd->vertices[0], cmd->vertices[1], cmd->vertices[2]);
+  // The ticks, for the triangles the console draws.
+  const GSVector4i draw_rect_012 = TriangleRect(native_positions[0], native_positions[1], native_positions[2]);
   const GSVector4i clamped_draw_rect_012 = draw_rect_012.rintersect(m_clamped_drawing_area);
   const bool first_tri_culled = (draw_rect_012.width() > MAX_PRIMITIVE_WIDTH ||
                                  draw_rect_012.height() > MAX_PRIMITIVE_HEIGHT || clamped_draw_rect_012.rempty());
@@ -503,7 +499,7 @@ void GPU_HWFrontend::DispatchPolygon(GPURenderCommand rc)
 
   if (rc.quad_polygon)
   {
-    const GSVector4i draw_rect_123 = TriangleRect(cmd->vertices[1], cmd->vertices[2], cmd->vertices[3]);
+    const GSVector4i draw_rect_123 = TriangleRect(native_positions[1], native_positions[2], native_positions[3]);
     const GSVector4i clamped_draw_rect_123 = draw_rect_123.rintersect(m_clamped_drawing_area);
     const bool second_tri_culled = (draw_rect_123.width() > MAX_PRIMITIVE_WIDTH ||
                                     draw_rect_123.height() > MAX_PRIMITIVE_HEIGHT || clamped_draw_rect_123.rempty());

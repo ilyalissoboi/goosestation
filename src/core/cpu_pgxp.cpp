@@ -92,6 +92,7 @@ static void WriteMem(u32 addr, const PGXPValue& value);
 static void WriteMem16(u32 addr, const PGXPValue& value);
 
 static void CopyZIfMissing(PGXPValue& dst, const PGXPValue& src);
+static PGXPValue MergeUnaligned(InstructionOp op, u32 addr, const PGXPValue& kept, PGXPValue* moved, u32 merged);
 static void SelectZ(float& dst_z, u32& dst_flags, const PGXPValue& src1, const PGXPValue& src2);
 
 #ifdef LOG_VALUES
@@ -692,6 +693,109 @@ void CPU::PGXP::CPU_SW(Instruction instr, u32 addr, u32 rtVal)
   LOG_VALUES_STORE(instr.r.rt.GetValue(), rtVal, addr);
   PGXPValue& prtVal = ValidateAndGetRtValue(instr, rtVal);
   WriteMem(addr, prtVal);
+}
+
+// LWL/LWR/SWL/SWR merge a word moved by a multiple of 8 bits into a word partly kept. Each 16-bit half of the result
+// keeps precision when it comes whole from one half of one source and that half still matches the native bits; any
+// other half (straddling two halves, or mixing the two words) is native. Only a whole-word move keeps Z: a word put
+// together from two vertices has no depth of its own. A memory half that no longer matches loses its flag, as LH does.
+CPU::PGXPValue CPU::PGXP::MergeUnaligned(InstructionOp op, u32 addr, const PGXPValue& kept, PGXPValue* moved,
+                                         u32 merged)
+{
+  const u32 shift = (addr & 3u) * 8u;
+  u32 kept_mask;
+  s32 moved_shift; // positive: moved left
+  switch (op)
+  {
+    case InstructionOp::lwl:
+      kept_mask = UINT32_C(0x00FFFFFF) >> shift;
+      moved_shift = static_cast<s32>(24 - shift);
+      break;
+    case InstructionOp::lwr:
+      kept_mask = UINT32_C(0xFFFFFF00) << (24 - shift);
+      moved_shift = -static_cast<s32>(shift);
+      break;
+    case InstructionOp::swl:
+      kept_mask = UINT32_C(0xFFFFFF00) << shift;
+      moved_shift = -static_cast<s32>(24 - shift);
+      break;
+    default: // swr
+      kept_mask = UINT32_C(0x00FFFFFF) >> (24 - shift);
+      moved_shift = static_cast<s32>(shift);
+      break;
+  }
+
+  PGXPValue result = {};
+  result.value = merged;
+
+  for (u32 half = 0; half < 2; half++)
+  {
+    const u32 half_mask = UINT32_C(0xFFFF) << (half * 16);
+    const u16 native = Truncate16(merged >> (half * 16));
+    const PGXPValue* src;
+    u32 src_half;
+    if ((kept_mask & half_mask) == half_mask)
+    {
+      src = &kept;
+      src_half = half;
+    }
+    else if ((kept_mask & half_mask) == 0 && (moved_shift % 16) == 0 && moved)
+    {
+      const s32 from = static_cast<s32>(half) - (moved_shift / 16);
+      if (from < 0 || from > 1)
+        continue;
+      src = moved;
+      src_half = static_cast<u32>(from);
+    }
+    else
+    {
+      continue;
+    }
+
+    const u32 src_flag = VALID_X << src_half;
+    if (Truncate16(src->value >> (src_half * 16)) != native)
+    {
+      if (src == moved)
+        moved->flags &= ~src_flag;
+      continue;
+    }
+    if (!(src->flags & src_flag))
+      continue;
+
+    (half ? result.y : result.x) = src_half ? src->y : src->x;
+    result.flags |= VALID_X << half;
+  }
+
+  if (kept_mask == 0 && moved && moved->value == merged && (result.flags & VALID_XY) == VALID_XY)
+  {
+    result.z = moved->z;
+    result.flags |= moved->flags & (VALID_Z | VALID_LOWZ | VALID_HIGHZ | VALID_TAINTED_Z);
+  }
+
+  return result;
+}
+
+void CPU::PGXP::CPU_LWx(Instruction instr, u32 addr, u32 rtVal)
+{
+  // Rt = Rt merged with Mem[addr & ~3]
+  LOG_VALUES_LOAD(addr, rtVal);
+  PGXPValue* mem = GetPtr(addr);
+  GetRtValue(instr) = MergeUnaligned(instr.op, addr, GetRtValue(instr), mem, rtVal);
+}
+
+void CPU::PGXP::CPU_SWx(Instruction instr, u32 addr, u32 memVal)
+{
+  // Mem[addr & ~3] = Mem[addr & ~3] merged with Rt
+  LOG_VALUES_STORE(instr.r.rt.GetValue(), memVal, addr);
+  PGXPValue* mem = GetPtr(addr);
+  if (!mem) [[unlikely]]
+    return;
+
+  PGXPValue reg = GetRtValue(instr);
+  const PGXPValue merged = MergeUnaligned(instr.op, addr, *mem, &reg, memVal);
+  *mem = merged;
+  if (merged.flags & VALID_Z)
+    mem->flags |= VALID_LOWZ | VALID_HIGHZ;
 }
 
 void CPU::PGXP::CPU_MOVE_Packed(u32 rd_and_rs, u32 rsVal)

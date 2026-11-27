@@ -215,8 +215,10 @@ static std::string GetMediaPathFromSaveState(const char* path);
 static bool SaveUndoLoadState();
 static void UpdateMemorySaveStateSettings();
 static bool LoadRewindState(u32 skip_saves = 0, bool consume_state = true);
-static bool SaveMemoryState(MemorySaveState* mss);
-static bool LoadMemoryState(const MemorySaveState& mss);
+/// with_pgxp: rewind's states keep PGXP's precise values; runahead's don't (one or two frames stale is close enough,
+/// and copying them every frame is costly).
+static bool SaveMemoryState(MemorySaveState* mss, bool with_pgxp);
+static bool LoadMemoryState(const MemorySaveState& mss, bool with_pgxp);
 static bool LoadStateFromBuffer(const SaveStateBuffer& buffer, Error* error, bool update_display);
 static bool LoadStateBufferFromFile(SaveStateBuffer* buffer, std::FILE* fp, Error* error, bool read_title,
                                     bool read_media_path, bool read_screenshot, bool read_data);
@@ -5178,7 +5180,7 @@ void System::UpdateMemorySaveStateSettings()
     INFO_LOG("Runahead is active with {} frames", s_runahead_frames);
 }
 
-bool System::LoadMemoryState(const MemorySaveState& mss)
+bool System::LoadMemoryState(const MemorySaveState& mss, bool with_pgxp)
 {
   StateWrapper sw(mss.state_data.cspan(), StateWrapper::Mode::Read, SAVE_STATE_VERSION);
   GPUTexture* host_texture = mss.vram_texture.get();
@@ -5190,13 +5192,13 @@ bool System::LoadMemoryState(const MemorySaveState& mss)
   }
 
   // Re-run frames see the precise values the first run saw (a state saved with PGXP off resets them).
-  if (g_settings.gpu_pgxp_enable)
+  if (with_pgxp && g_settings.gpu_pgxp_enable)
     CPU::PGXP::LoadMemoryState(mss.pgxp_data.cspan());
 
   return true;
 }
 
-bool System::SaveMemoryState(MemorySaveState* mss)
+bool System::SaveMemoryState(MemorySaveState* mss, bool with_pgxp)
 {
   if (mss->state_data.empty())
     mss->state_data.resize(GetMaxSaveStateSize());
@@ -5214,7 +5216,7 @@ bool System::SaveMemoryState(MemorySaveState* mss)
   mss->state_size = sw.GetPosition();
 #endif
 
-  if (g_settings.gpu_pgxp_enable)
+  if (with_pgxp && g_settings.gpu_pgxp_enable)
   {
     const size_t pgxp_size = CPU::PGXP::GetMemoryStateSize();
     if (mss->pgxp_data.size() != pgxp_size)
@@ -5245,7 +5247,7 @@ bool System::SaveRewindState()
     s_rewind_states.pop_front();
   }
 
-  if (!SaveMemoryState(&mss))
+  if (!SaveMemoryState(&mss, true))
     return false;
 
   s_rewind_states.push_back(std::move(mss));
@@ -5274,7 +5276,7 @@ bool System::LoadRewindState(u32 skip_saves /*= 0*/, bool consume_state /*=true 
   Common::Timer load_timer;
 #endif
 
-  if (!LoadMemoryState(s_rewind_states.back()))
+  if (!LoadMemoryState(s_rewind_states.back(), true))
     return false;
 
   if (consume_state)
@@ -5350,7 +5352,7 @@ void System::SaveRunaheadState()
     s_runahead_states.pop_front();
   }
 
-  if (!SaveMemoryState(&mss))
+  if (!SaveMemoryState(&mss, false))
   {
     ERROR_LOG("Failed to save runahead state.");
     return;
@@ -5374,7 +5376,7 @@ bool System::DoRunahead()
 
     // we need to replay and catch up - load the state,
     s_runahead_replay_pending = false;
-    if (s_runahead_states.empty() || !LoadMemoryState(s_runahead_states.front()))
+    if (s_runahead_states.empty() || !LoadMemoryState(s_runahead_states.front(), false))
     {
       s_runahead_states.clear();
       return false;

@@ -796,8 +796,12 @@ CPU::PGXPValue CPU::PGXP::MergeUnaligned(InstructionOp op, u32 addr, const PGXPV
       break;
   }
 
+  // A half that doesn't stay precise holds its native value: CPU mode's ops read the floats of halves they then mark
+  // valid (SLL by 16 moves X into Y), so it must never be a stray 0.
   PGXPValue result = {};
   result.value = merged;
+  result.x = static_cast<float>(static_cast<s16>(merged));
+  result.y = static_cast<float>(static_cast<s16>(merged >> 16));
 
   for (u32 half = 0; half < 2; half++)
   {

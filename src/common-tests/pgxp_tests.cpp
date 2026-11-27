@@ -350,3 +350,22 @@ TEST_F(PGXPUnalignedTest, ShadowCopyFollowsRamSize)
   EXPECT_FLOAT_EQ(f.x, 5.5f);
   EXPECT_FLOAT_EQ(f.y, 6.5f);
 }
+
+TEST_F(PGXPUnalignedTest, ImpreciseHalfKeepsItsNativeValue)
+{
+  // A precise register (10.25, 20.5); LWR at offset 2 from an untracked word brings its high half (30) into the low
+  // half, imprecise. CPU mode's SLL by 16 then moves that half up as Y, valid: it must be 30, not a stray 0.
+  CPU::PGXP::CPU_LW(MakeInstruction(CPU::InstructionOp::lw, RT), 0x1000, A);
+  const u32 untracked = Pack(5, 30);
+  const u32 reg = LoadLeftRight(CPU::InstructionOp::lwr, 0x3002, untracked, A, RT);
+  ASSERT_EQ(reg, Pack(30, 20));
+
+  CPU::Instruction sll;
+  sll.bits = (static_cast<u32>(RT) << 16) | (6u << 11) | (16u << 6); // sll $6, $5, 16
+  CPU::PGXP::CPU_SLL(sll, reg);
+  const u32 shifted = reg << 16;
+  StoreRegister(6, 0x2000, shifted);
+
+  const Found f = Lookup(0x2000, shifted);
+  EXPECT_FLOAT_EQ(f.y, 30.0f);
+}

@@ -1598,7 +1598,7 @@ restart_instruction:
       WriteRegDelayed(inst.i.rt, new_value);
 
       if constexpr (pgxp_mode >= PGXPMode::Memory)
-        PGXP::CPU_LW(inst, addr, new_value);
+        PGXP::CPU_LWx(inst, addr, new_value);
     }
     break;
 
@@ -1685,7 +1685,7 @@ restart_instruction:
       WriteMemoryWord(aligned_addr, new_value);
 
       if constexpr (pgxp_mode >= PGXPMode::Memory)
-        PGXP::CPU_SW(inst, aligned_addr, new_value);
+        PGXP::CPU_SWx(inst, addr, new_value);
     }
     break;
 

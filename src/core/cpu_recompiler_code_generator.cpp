@@ -1691,7 +1691,18 @@ bool CodeGenerator::Compile_LoadLeftRight(Instruction instruction, const CodeCac
     address_spec = *address_spec + instruction.i.imm_sext32();
 
   Value shift = ShlValues(AndValues(address, Value::FromConstantU32(3)), Value::FromConstantU32(3)); // * 8
-  address = AndValues(address, Value::FromConstantU32(~u32(3)));
+
+  // PGXP needs the unaligned address, to know which bytes moved.
+  Value pgxp_address;
+  if (g_settings.gpu_pgxp_enable)
+  {
+    pgxp_address = std::move(address);
+    address = AndValues(pgxp_address, Value::FromConstantU32(~u32(3)));
+  }
+  else
+  {
+    address = AndValues(address, Value::FromConstantU32(~u32(3)));
+  }
 
   // hack to bypass load delays
   Value value;
@@ -1744,7 +1755,10 @@ bool CodeGenerator::Compile_LoadLeftRight(Instruction instruction, const CodeCac
   shift.ReleaseAndClear();
 
   if (g_settings.gpu_pgxp_enable)
-    EmitFunctionCall(nullptr, PGXP::CPU_LW, Value::FromConstantU32(instruction.bits), address, mem);
+  {
+    EmitFunctionCall(nullptr, PGXP::CPU_LWx, Value::FromConstantU32(instruction.bits), pgxp_address, mem);
+    pgxp_address.ReleaseAndClear();
+  }
 
   m_register_cache.WriteGuestRegisterDelayed(instruction.i.rt, std::move(mem));
 
@@ -1773,7 +1787,18 @@ bool CodeGenerator::Compile_StoreLeftRight(Instruction instruction, const CodeCa
   }
 
   Value shift = ShlValues(AndValues(address, Value::FromConstantU32(3)), Value::FromConstantU32(3)); // * 8
-  address = AndValues(address, Value::FromConstantU32(~u32(3)));
+
+  // PGXP needs the unaligned address, to know which bytes moved.
+  Value pgxp_address;
+  if (g_settings.gpu_pgxp_enable)
+  {
+    pgxp_address = std::move(address);
+    address = AndValues(pgxp_address, Value::FromConstantU32(~u32(3)));
+  }
+  else
+  {
+    address = AndValues(address, Value::FromConstantU32(~u32(3)));
+  }
 
   Value mem;
   if (instruction.op == InstructionOp::swl)
@@ -1807,7 +1832,10 @@ bool CodeGenerator::Compile_StoreLeftRight(Instruction instruction, const CodeCa
 
   EmitStoreGuestMemory(instruction, info, address, address_spec, RegSize_32, mem);
   if (g_settings.gpu_pgxp_enable)
-    EmitFunctionCall(nullptr, PGXP::CPU_SW, Value::FromConstantU32(instruction.bits), address, mem);
+  {
+    EmitFunctionCall(nullptr, PGXP::CPU_SWx, Value::FromConstantU32(instruction.bits), pgxp_address, mem);
+    pgxp_address.ReleaseAndClear();
+  }
 
   InstructionEpilogue(instruction, info);
   return true;

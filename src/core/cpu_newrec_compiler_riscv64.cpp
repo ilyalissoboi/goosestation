@@ -1987,6 +1987,7 @@ void CPU::NewRec::RISCV64Compiler::Compile_lwx(CompileFlags cf, MemoryAccessSize
     rvAsm->MV(RARG3, value);
     rvAsm->ANDI(RARG2, addr, ~0x3u);
     EmitMov(RARG1, inst->bits);
+    // Unbuilt and untested here, so still the aligned hook: unaligned precision is lost, as before.
     EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_LW));
   }
 }
@@ -2173,6 +2174,7 @@ void CPU::NewRec::RISCV64Compiler::Compile_swx(CompileFlags cf, MemoryAccessSize
     rvAsm->MV(RARG2, addr);
     FreeHostReg(addr.Index());
     EmitMov(RARG1, inst->bits);
+    // Unbuilt and untested here, so still the aligned hook: unaligned precision is lost, as before.
     EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_SW));
   }
 }

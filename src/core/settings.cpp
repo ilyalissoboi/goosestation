@@ -1572,6 +1572,25 @@ bool Settings::MoveOldVSyncSwitch(SettingsInterface& si, bool game_file)
   return true;
 }
 
+bool Settings::MovePGXPDepthThresholdOutOfDepthBuffer(SettingsInterface& si, bool game_file)
+{
+  const std::string value = si.GetStringValue("GPU", "PGXPDepthBuffer", "");
+  if (value.empty() || StringUtil::FromChars<bool>(value).has_value())
+    return false;
+
+  const std::optional<float> threshold = StringUtil::FromChars<float>(value);
+  if (!threshold.has_value())
+    return false;
+
+  if (!si.ContainsValue("GPU", "PGXPDepthClearThreshold"))
+    si.SetFloatValue("GPU", "PGXPDepthClearThreshold", threshold.value());
+  if (game_file)
+    si.DeleteValue("GPU", "PGXPDepthBuffer");
+  else
+    si.SetBoolValue("GPU", "PGXPDepthBuffer", false);
+  return true;
+}
+
 static constexpr const std::array s_display_rotation_names = {"Normal", "Rotate90", "Rotate180", "Rotate270"};
 static constexpr const std::array s_display_rotation_display_names = {
   TRANSLATE_NOOP("Settings", "No Rotation"),

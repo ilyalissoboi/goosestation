@@ -463,6 +463,12 @@ struct Settings
   /// the UIs show what's used. In a game's file, which holds only what it overrides, off is Off. True if it changed.
   static bool MoveOldVSyncSwitch(SettingsInterface& si, bool game_file = false);
 
+  /// Big Picture's Depth Clear Threshold row used to write its number into [GPU] PGXPDepthBuffer, which then read as
+  /// off. The number moves to PGXPDepthClearThreshold (unless that is set) and the depth buffer stays off, as it read.
+  /// In a game's file, where the unreadable value fell through to the global switch, the key is dropped instead, so it
+  /// still does. True if it changed.
+  static bool MovePGXPDepthThresholdOutOfDepthBuffer(SettingsInterface& si, bool game_file = false);
+
   static std::optional<DisplayRotation> ParseDisplayRotation(const char* str);
   static const char* GetDisplayRotationName(DisplayRotation alignment);
   static const char* GetDisplayRotationDisplayName(DisplayRotation alignment);

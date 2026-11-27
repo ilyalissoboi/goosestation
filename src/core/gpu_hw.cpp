@@ -2753,6 +2753,16 @@ void GPU_HW::DrawRectangle(const GPUThreadHWDrawRectangleCommand* cmd)
   AddDrawnRectangle(clamped_rect);
 }
 
+GSVector4i GPU_HW::GetLineDrawnRect(const GSVector4i& native_rect, const GSVector4& bounds)
+{
+  const GSVector4i precise =
+    GSVector4i(static_cast<s32>(std::floor(std::min(bounds.x, bounds.z))),
+               static_cast<s32>(std::floor(std::min(bounds.y, bounds.w))),
+               static_cast<s32>(std::ceil(std::max(bounds.x, bounds.z) + 1.0f)),
+               static_cast<s32>(std::ceil(std::max(bounds.y, bounds.w) + 1.0f)));
+  return native_rect.runion(precise);
+}
+
 void GPU_HW::DrawLine(const GPUThreadHWDrawLineCommand* cmd)
 {
   const GPURenderCommand rc{cmd->rc.bits};
@@ -2775,7 +2785,8 @@ void GPU_HW::DrawLine(const GPUThreadHWDrawLineCommand* cmd)
   {
     const u32 end_color = cmd->vertices[i].color;
     const GSVector4i end_pos = GSVector4i(cmd->vertices[i].x, cmd->vertices[i].y);
-    const GSVector4i bounds = start_pos.xyxy(end_pos);
+    const GSVector4 bounds =
+      GSVector4(cmd->vertices[i - 1].fx, cmd->vertices[i - 1].fy, cmd->vertices[i].fx, cmd->vertices[i].fy);
     const GSVector4i rect =
       start_pos.min_i32(end_pos).xyxy(start_pos.max_i32(end_pos)).add32(GSVector4i::cxpr(0, 0, 1, 1));
     const GSVector4i clamped_rect = rect.rintersect(m_clamped_drawing_area);
@@ -2785,10 +2796,11 @@ void GPU_HW::DrawLine(const GPUThreadHWDrawLineCommand* cmd)
     }
     else
     {
-      AddDrawnRectangle(clamped_rect);
+      // Culled on the console's positions, but marked drawn where the quad really lands (PGXP's ends can be a pixel on).
+      AddDrawnRectangle(GetLineDrawnRect(rect, bounds).rintersect(m_clamped_drawing_area));
 
-      // TODO: Should we do a PGXP lookup here? Most lines are 2D.
-      DrawLine(GSVector4(bounds), start_color, end_color, depth);
+      // Precise positions where PGXP found them (only lines from the GTE), otherwise the native ones.
+      DrawLine(bounds, start_color, end_color, depth);
     }
 
     start_pos = end_pos;

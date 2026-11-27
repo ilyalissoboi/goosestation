@@ -1660,9 +1660,9 @@ void CPU::NewRec::AArch64Compiler::Compile_lwx(CompileFlags cf, MemoryAccessSize
   {
     Flush(FLUSH_FOR_C_CALL);
     armAsm->mov(RWARG3, value);
-    armAsm->and_(RWARG2, addr, armCheckLogicalConstant(~0x3u));
+    armAsm->mov(RWARG2, addr);
     EmitMov(RWARG1, inst->bits);
-    EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_LW));
+    EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_LWx));
   }
 }
 
@@ -1792,11 +1792,16 @@ void CPU::NewRec::AArch64Compiler::Compile_swx(CompileFlags cf, MemoryAccessSize
   if (g_settings.gpu_pgxp_enable)
     MoveMIPSRegToReg(value, inst->r.rt);
 
+  // PGXP needs the unaligned address, to know which bytes moved.
+  const Register pgxp_addr = g_settings.gpu_pgxp_enable ? WRegister(AllocateTempHostReg(HR_CALLEE_SAVED)) : addr;
+
   FlushForLoadStore(address, true, use_fastmem);
 
   // TODO: if address is constant, this can be simplified..
   // We'd need to be careful here if we weren't overwriting it..
   ComputeLoadStoreAddressArg(cf, address, addr);
+  if (g_settings.gpu_pgxp_enable)
+    armAsm->mov(pgxp_addr, addr);
   armAsm->and_(RWARG1, addr, armCheckLogicalConstant(~0x3u));
   GenerateLoad(RWARG1, MemoryAccessSize::Word, false, use_fastmem, []() { return RWRET; });
 
@@ -1847,10 +1852,11 @@ void CPU::NewRec::AArch64Compiler::Compile_swx(CompileFlags cf, MemoryAccessSize
     Flush(FLUSH_FOR_C_CALL);
     armAsm->mov(RWARG3, value);
     FreeHostReg(value.GetCode());
-    armAsm->mov(RWARG2, addr);
+    armAsm->mov(RWARG2, pgxp_addr);
+    FreeHostReg(pgxp_addr.GetCode());
     FreeHostReg(addr.GetCode());
     EmitMov(RWARG1, inst->bits);
-    EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_SW));
+    EmitCall(reinterpret_cast<const void*>(&PGXP::CPU_SWx));
   }
 }
 

@@ -55,11 +55,11 @@ object GraphicsSettings {
     val PGXP_PRESERVE_PROJECTION = BoolSetting("GPU", "PGXPPreserveProjFP", false)
     val PGXP_DEPTH_BUFFER = BoolSetting("GPU", "PGXPDepthBuffer", false)
 
-    /** Its own key: Big Picture's row writes PGXPDepthBuffer instead. */
+    /** The depth buffer's clear threshold, apart from the depth buffer's switch. */
     val DEPTH_CLEAR_THRESHOLD = FloatSetting("GPU", "PGXPDepthClearThreshold", 300f)
     val PGXP_CPU = BoolSetting("GPU", "PGXPCPU", false)
 
-    /** Off by default, as the core has it (Big Picture's row shows PGXP's state instead). */
+    /** Off by default, as the core has it. */
     val PGXP_VERTEX_CACHE = BoolSetting("GPU", "PGXPVertexCache", false)
     val PGXP_DISABLE_2D = BoolSetting("GPU", "PGXPDisableOn2DPolygons", false)
 

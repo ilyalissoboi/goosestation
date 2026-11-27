@@ -5022,7 +5022,7 @@ void FullscreenUI::DrawDisplaySettingsPage()
 
     DrawToggleSetting(bsi, FSUI_CSTR("Vertex Cache"),
                       FSUI_CSTR("Uses screen positions to resolve PGXP data. May improve visuals in some games."),
-                      "GPU", "PGXPVertexCache", pgxp_enabled);
+                      "GPU", "PGXPVertexCache", false, pgxp_enabled);
 
     DrawToggleSetting(
       bsi, FSUI_CSTR("Disable on 2D Polygons"),
@@ -5033,12 +5033,12 @@ void FullscreenUI::DrawDisplaySettingsPage()
     DrawFloatRangeSetting(
       bsi, FSUI_CSTR("Geometry Tolerance"),
       FSUI_CSTR("Sets a threshold for discarding precise values when exceeded. May help with glitches in some games."),
-      "GPU", "PGXPTolerance", -1.0f, -1.0f, 10.0f, "%.1f", pgxp_enabled);
+      "GPU", "PGXPTolerance", -1.0f, -1.0f, 10.0f, "%.1f", 1.0f, pgxp_enabled);
 
     DrawFloatRangeSetting(
       bsi, FSUI_CSTR("Depth Clear Threshold"),
       FSUI_CSTR("Sets a threshold for discarding the emulated depth buffer. May help in some games."), "GPU",
-      "PGXPDepthBuffer", Settings::DEFAULT_GPU_PGXP_DEPTH_THRESHOLD, 0.0f, 4096.0f, "%.1f", pgxp_enabled);
+      "PGXPDepthClearThreshold", Settings::DEFAULT_GPU_PGXP_DEPTH_THRESHOLD, 0.0f, 4096.0f, "%.1f", 1.0f, pgxp_enabled);
   }
 
   MenuHeading(FSUI_CSTR("Capture"));

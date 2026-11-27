@@ -65,6 +65,12 @@ private:
 
   std::unique_ptr<GPU_SW_Backend> m_sw_renderer;
 
+  // A polyline's PGXP lookup, kept to reuse their storage.
+  std::vector<u32> m_polyline_lookup_addrs;
+  std::vector<u32> m_polyline_lookup_values;
+  std::vector<s32> m_polyline_lookup_native;
+  std::vector<float> m_polyline_lookup_xy;
+
   // What GPU_HW last had.
   GPUDrawModeReg m_sent_mode_reg = {};
   GPUTexturePaletteReg m_sent_palette_reg = {};

@@ -92,6 +92,7 @@ static void WriteMem(u32 addr, const PGXPValue& value);
 static void WriteMem16(u32 addr, const PGXPValue& value);
 
 static void CopyZIfMissing(PGXPValue& dst, const PGXPValue& src);
+static PGXPValue MergeUnaligned(InstructionOp op, u32 addr, const PGXPValue& kept, PGXPValue* moved, u32 merged);
 static void SelectZ(float& dst_z, u32& dst_flags, const PGXPValue& src1, const PGXPValue& src2);
 
 #ifdef LOG_VALUES
@@ -164,6 +165,57 @@ void CPU::PGXP::Reset()
 
   if (g_settings.gpu_pgxp_vertex_cache && s_vertex_cache)
     std::memset(s_vertex_cache, 0, sizeof(PGXPValue) * VERTEX_CACHE_SIZE);
+}
+
+namespace CPU::PGXP {
+static u32 GetMemoryStateRAMEntries()
+{
+  // Before RAM is set up (rewind's memory estimate), from the setting.
+  const u32 ram_size =
+    Bus::g_ram_mask ? (Bus::g_ram_mask + 1) : (g_settings.enable_8mb_ram ? Bus::RAM_8MB_SIZE : Bus::RAM_2MB_SIZE);
+  return ram_size / 4;
+}
+} // namespace CPU::PGXP
+
+size_t CPU::PGXP::GetMemoryStateSize()
+{
+  return sizeof(g_state.pgxp_gpr) + sizeof(g_state.pgxp_cop0) + sizeof(g_state.pgxp_gte) +
+         sizeof(PGXPValue) * (GetMemoryStateRAMEntries() + SCRATCHPAD_SIZE / 4);
+}
+
+void CPU::PGXP::SaveMemoryState(std::span<u8> dst)
+{
+  DebugAssert(dst.size() == GetMemoryStateSize() && s_mem);
+  u8* p = dst.data();
+  const auto put = [&p](const void* src, size_t size) {
+    std::memcpy(p, src, size);
+    p += size;
+  };
+  put(g_state.pgxp_gpr, sizeof(g_state.pgxp_gpr));
+  put(g_state.pgxp_cop0, sizeof(g_state.pgxp_cop0));
+  put(g_state.pgxp_gte, sizeof(g_state.pgxp_gte));
+  put(s_mem, sizeof(PGXPValue) * GetMemoryStateRAMEntries());
+  put(&s_mem[PGXP_MEM_SCRATCH_OFFSET], sizeof(PGXPValue) * (SCRATCHPAD_SIZE / 4));
+}
+
+void CPU::PGXP::LoadMemoryState(std::span<const u8> src)
+{
+  if (src.size() != GetMemoryStateSize() || !s_mem)
+  {
+    Reset();
+    return;
+  }
+
+  const u8* p = src.data();
+  const auto get = [&p](void* dst, size_t size) {
+    std::memcpy(dst, p, size);
+    p += size;
+  };
+  get(g_state.pgxp_gpr, sizeof(g_state.pgxp_gpr));
+  get(g_state.pgxp_cop0, sizeof(g_state.pgxp_cop0));
+  get(g_state.pgxp_gte, sizeof(g_state.pgxp_gte));
+  get(s_mem, sizeof(PGXPValue) * GetMemoryStateRAMEntries());
+  get(&s_mem[PGXP_MEM_SCRATCH_OFFSET], sizeof(PGXPValue) * (SCRATCHPAD_SIZE / 4));
 }
 
 void CPU::PGXP::Shutdown()
@@ -579,7 +631,7 @@ ALWAYS_INLINE_RELEASE CPU::PGXPValue* CPU::PGXP::GetCachedVertex(u32 value)
 {
   const s16 sx = static_cast<s16>(value & 0xFFFFu);
   const s16 sy = static_cast<s16>(value >> 16);
-  return (sx >= -1024 && sx <= 1023 && sy >= -1024 && sy <= 1013) ?
+  return (sx >= -1024 && sx <= 1023 && sy >= -1024 && sy <= 1023) ?
            &s_vertex_cache[(sy + 1024) * VERTEX_CACHE_WIDTH + (sx + 1024)] :
            nullptr;
 }
@@ -646,6 +698,26 @@ bool CPU::PGXP::GetPreciseVertex(u32 addr, u32 value, int x, int y, int xOffs, i
   return false;
 }
 
+bool CPU::PGXP::GetPreciseLineVertices(u32 count, const u32* addrs, const u32* values, const s32* native_xy,
+                                        s32 offset_x, s32 offset_y, float* out_xy)
+{
+  bool precise = (addrs != nullptr);
+  for (u32 i = 0; i < count && precise; i++)
+  {
+    float w;
+    precise = GetPreciseVertex(addrs[i], values[i], native_xy[i * 2], native_xy[i * 2 + 1], offset_x, offset_y,
+                               &out_xy[i * 2], &out_xy[i * 2 + 1], &w);
+  }
+
+  if (!precise)
+  {
+    for (u32 i = 0; i < count * 2; i++)
+      out_xy[i] = static_cast<float>(native_xy[i]);
+  }
+
+  return precise;
+}
+
 void CPU::PGXP::CPU_LW(Instruction instr, u32 addr, u32 rtVal)
 {
   // Rt = Mem[Rs + Im]
@@ -692,6 +764,113 @@ void CPU::PGXP::CPU_SW(Instruction instr, u32 addr, u32 rtVal)
   LOG_VALUES_STORE(instr.r.rt.GetValue(), rtVal, addr);
   PGXPValue& prtVal = ValidateAndGetRtValue(instr, rtVal);
   WriteMem(addr, prtVal);
+}
+
+// LWL/LWR/SWL/SWR merge a word moved by a multiple of 8 bits into a word partly kept. Each 16-bit half of the result
+// keeps precision when it comes whole from one half of one source and that half still matches the native bits; any
+// other half (straddling two halves, or mixing the two words) is native. Only a whole-word move keeps Z: a word put
+// together from two vertices has no depth of its own. A memory half that no longer matches loses its flag, as LH does.
+CPU::PGXPValue CPU::PGXP::MergeUnaligned(InstructionOp op, u32 addr, const PGXPValue& kept, PGXPValue* moved,
+                                         u32 merged)
+{
+  const u32 shift = (addr & 3u) * 8u;
+  u32 kept_mask;
+  s32 moved_shift; // positive: moved left
+  switch (op)
+  {
+    case InstructionOp::lwl:
+      kept_mask = UINT32_C(0x00FFFFFF) >> shift;
+      moved_shift = static_cast<s32>(24 - shift);
+      break;
+    case InstructionOp::lwr:
+      kept_mask = UINT32_C(0xFFFFFF00) << (24 - shift);
+      moved_shift = -static_cast<s32>(shift);
+      break;
+    case InstructionOp::swl:
+      kept_mask = UINT32_C(0xFFFFFF00) << shift;
+      moved_shift = -static_cast<s32>(24 - shift);
+      break;
+    default: // swr
+      kept_mask = UINT32_C(0x00FFFFFF) >> (24 - shift);
+      moved_shift = static_cast<s32>(shift);
+      break;
+  }
+
+  // A half that doesn't stay precise holds its native value: CPU mode's ops read the floats of halves they then mark
+  // valid (SLL by 16 moves X into Y), so it must never be a stray 0.
+  PGXPValue result = {};
+  result.value = merged;
+  result.x = static_cast<float>(static_cast<s16>(merged));
+  result.y = static_cast<float>(static_cast<s16>(merged >> 16));
+
+  for (u32 half = 0; half < 2; half++)
+  {
+    const u32 half_mask = UINT32_C(0xFFFF) << (half * 16);
+    const u16 native = Truncate16(merged >> (half * 16));
+    const PGXPValue* src;
+    u32 src_half;
+    if ((kept_mask & half_mask) == half_mask)
+    {
+      src = &kept;
+      src_half = half;
+    }
+    else if ((kept_mask & half_mask) == 0 && (moved_shift % 16) == 0 && moved)
+    {
+      const s32 from = static_cast<s32>(half) - (moved_shift / 16);
+      if (from < 0 || from > 1)
+        continue;
+      src = moved;
+      src_half = static_cast<u32>(from);
+    }
+    else
+    {
+      continue;
+    }
+
+    const u32 src_flag = VALID_X << src_half;
+    if (Truncate16(src->value >> (src_half * 16)) != native)
+    {
+      if (src == moved)
+        moved->flags &= ~src_flag;
+      continue;
+    }
+    if (!(src->flags & src_flag))
+      continue;
+
+    (half ? result.y : result.x) = src_half ? src->y : src->x;
+    result.flags |= VALID_X << half;
+  }
+
+  if (kept_mask == 0 && moved && moved->value == merged && (result.flags & VALID_XY) == VALID_XY)
+  {
+    result.z = moved->z;
+    result.flags |= moved->flags & (VALID_Z | VALID_LOWZ | VALID_HIGHZ | VALID_TAINTED_Z);
+  }
+
+  return result;
+}
+
+void CPU::PGXP::CPU_LWx(Instruction instr, u32 addr, u32 rtVal)
+{
+  // Rt = Rt merged with Mem[addr & ~3]
+  LOG_VALUES_LOAD(addr, rtVal);
+  PGXPValue* mem = GetPtr(addr);
+  GetRtValue(instr) = MergeUnaligned(instr.op, addr, GetRtValue(instr), mem, rtVal);
+}
+
+void CPU::PGXP::CPU_SWx(Instruction instr, u32 addr, u32 memVal)
+{
+  // Mem[addr & ~3] = Mem[addr & ~3] merged with Rt
+  LOG_VALUES_STORE(instr.r.rt.GetValue(), memVal, addr);
+  PGXPValue* mem = GetPtr(addr);
+  if (!mem) [[unlikely]]
+    return;
+
+  PGXPValue reg = GetRtValue(instr);
+  const PGXPValue merged = MergeUnaligned(instr.op, addr, *mem, &reg, memVal);
+  *mem = merged;
+  if (merged.flags & VALID_Z)
+    mem->flags |= VALID_LOWZ | VALID_HIGHZ;
 }
 
 void CPU::PGXP::CPU_MOVE_Packed(u32 rd_and_rs, u32 rsVal)

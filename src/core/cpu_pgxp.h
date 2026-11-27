@@ -4,6 +4,8 @@
 #pragma once
 #include "cpu_core.h"
 
+#include <span>
+
 namespace CPU::PGXP {
 
 /// State management.
@@ -11,9 +13,22 @@ void Initialize();
 void Reset();
 void Shutdown();
 
+/// Memory states (rewind and runahead): the register shadows and the shadow of the RAM in use and the scratchpad, so
+/// re-run frames see the precise values the first run saw. The vertex cache isn't included.
+size_t GetMemoryStateSize();
+void SaveMemoryState(std::span<u8> dst);
+/// Restores what SaveMemoryState() wrote; anything else (a state saved with PGXP off) resets PGXP instead.
+void LoadMemoryState(std::span<const u8> src);
+
 /// Vertex lookup from GPU side.
 bool GetPreciseVertex(u32 addr, u32 value, int x, int y, int xOffs, int yOffs, float* out_x, float* out_y,
                       float* out_w);
+
+/// Precise positions for a line's or polyline's vertices: every one of them when every vertex has a precise X, Y and Z
+/// from memory (came from the GTE), otherwise none. native_xy and out_xy hold count x, y pairs, native ones including
+/// the drawing offset. Without addresses (addrs null), the native positions.
+bool GetPreciseLineVertices(u32 count, const u32* addrs, const u32* values, const s32* native_xy, s32 offset_x,
+                            s32 offset_y, float* out_xy);
 
 // GTE instruction hooks.
 
@@ -34,6 +49,8 @@ void CPU_LBx(Instruction instr, u32 addr, u32 rtVal);
 void CPU_SB(Instruction instr, u32 addr, u32 rtVal);
 void CPU_SH(Instruction instr, u32 addr, u32 rtVal);
 void CPU_SW(Instruction instr, u32 addr, u32 rtVal);
+void CPU_LWx(Instruction instr, u32 addr, u32 rtVal);
+void CPU_SWx(Instruction instr, u32 addr, u32 memVal);
 void CPU_MOVE(u32 Rd, u32 Rs, u32 rsVal);
 void CPU_MOVE_Packed(u32 rd_and_rs, u32 rsVal);
 void CPU_ADDI(Instruction instr, u32 rsVal);

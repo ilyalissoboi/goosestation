@@ -32,6 +32,10 @@ class StateWrapper;
 class GPU_HW final
 {
 public:
+  /// The area a line drawn between bounds' two (possibly precise) ends touches, as DrawLine() expands it a pixel
+  /// wide: native_rect (integer ends, max exclusive) grown to cover the precise ends. With integer ends, native_rect.
+  static GSVector4i GetLineDrawnRect(const GSVector4i& native_rect, const GSVector4& bounds);
+
   enum class BatchRenderMode : u8
   {
     TransparencyDisabled,

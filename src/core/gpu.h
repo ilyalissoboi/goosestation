@@ -621,6 +621,7 @@ protected:
 
   HeapFIFOQueue<u64, MAX_FIFO_SIZE> m_fifo;
   std::vector<u32> m_blit_buffer;
+  std::vector<u32> m_polyline_addresses; // with PGXP, where each buffered polyline word came from; not in states
   u32 m_blit_remaining_words;
   GPURenderCommand m_render_command{};
 

@@ -137,6 +137,7 @@ struct MemorySaveState
 {
   GPUThread::TexturePtr vram_texture;
   DynamicHeapArray<u8> state_data;
+  DynamicHeapArray<u8> pgxp_data; // PGXP's precise values, with PGXP on
 #ifdef PROFILE_MEMORY_SAVE_STATES
   size_t state_size;
 #endif
@@ -1501,8 +1502,10 @@ bool System::UpdateGameSettingsLayer()
         new_interface.reset();
       }
 #ifndef __ANDROID__
-      // The old vsync switch becomes the three-way setting, as the game's own (pacing stage 2b).
-      else if (Settings::MoveOldVSyncSwitch(*new_interface, true))
+      // The old vsync switch becomes the three-way setting, as the game's own (pacing stage 2b), and a depth threshold
+      // Big Picture wrote into the depth buffer's key moves to its own.
+      else if (Settings::MoveOldVSyncSwitch(*new_interface, true) |
+               Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface, true))
       {
         Error error;
         if (!new_interface->Save(&error))
@@ -1514,6 +1517,7 @@ bool System::UpdateGameSettingsLayer()
       {
         // In memory only: the file is desktop's too, and must never be saved with these dropped.
         Settings::MoveOldVSyncSwitch(*new_interface, true);
+        Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*new_interface, true);
         Host::AdaptGameSettingsLayer(*new_interface);
         new_interface->MarkClean();
       }
@@ -5130,6 +5134,8 @@ void System::CalculateRewindMemoryUsage(u32 num_saves, u32 resolution_scale, u64
 {
   const u64 real_resolution_scale = std::max<u64>(g_settings.gpu_resolution_scale, 1u);
   *ram_usage = GetMaxSaveStateSize() * static_cast<u64>(num_saves);
+  if (g_settings.gpu_pgxp_enable)
+    *ram_usage += CPU::PGXP::GetMemoryStateSize() * static_cast<u64>(num_saves);
   *vram_usage = ((VRAM_WIDTH * real_resolution_scale) * (VRAM_HEIGHT * real_resolution_scale) * 4) *
                 static_cast<u64>(g_settings.gpu_multisamples) * static_cast<u64>(num_saves);
 }
@@ -5183,6 +5189,10 @@ bool System::LoadMemoryState(const MemorySaveState& mss)
     return false;
   }
 
+  // Re-run frames see the precise values the first run saw (a state saved with PGXP off resets them).
+  if (g_settings.gpu_pgxp_enable)
+    CPU::PGXP::LoadMemoryState(mss.pgxp_data.cspan());
+
   return true;
 }
 
@@ -5203,6 +5213,18 @@ bool System::SaveMemoryState(MemorySaveState* mss)
 #ifdef PROFILE_MEMORY_SAVE_STATES
   mss->state_size = sw.GetPosition();
 #endif
+
+  if (g_settings.gpu_pgxp_enable)
+  {
+    const size_t pgxp_size = CPU::PGXP::GetMemoryStateSize();
+    if (mss->pgxp_data.size() != pgxp_size)
+      mss->pgxp_data.resize(pgxp_size);
+    CPU::PGXP::SaveMemoryState(mss->pgxp_data.span());
+  }
+  else if (!mss->pgxp_data.empty())
+  {
+    mss->pgxp_data.deallocate();
+  }
 
   mss->vram_texture.reset(host_texture);
   return true;

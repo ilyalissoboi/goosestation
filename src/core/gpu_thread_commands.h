@@ -155,7 +155,8 @@ struct GPUThreadHWDrawLineCommand : public GPUThreadCommand
 {
   struct Vertex
   {
-    s32 x, y;
+    s32 x, y;    // native, for culling and the drawn area
+    float fx, fy; // drawn: precise with PGXP, otherwise the native position
     u32 color;
   };
 

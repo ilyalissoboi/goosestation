@@ -724,7 +724,8 @@ void QtHost::MigrateSettings()
   // Maximum reads and instant seeks became the defaults (faster loading).
   const bool moved = Settings::MoveOldVSyncSwitch(*s_base_settings_interface);
   const bool loading = Settings::ApplyLoadingDefaults(*s_base_settings_interface, "Main");
-  if (Settings::ApplyDesktopPacingDefaults(*s_base_settings_interface) || moved || loading)
+  const bool pgxp = Settings::MovePGXPDepthThresholdOutOfDepthBuffer(*s_base_settings_interface);
+  if (Settings::ApplyDesktopPacingDefaults(*s_base_settings_interface) || moved || loading || pgxp)
     s_base_settings_interface->Save();
 }
 

@@ -2753,6 +2753,16 @@ void GPU_HW::DrawRectangle(const GPUThreadHWDrawRectangleCommand* cmd)
   AddDrawnRectangle(clamped_rect);
 }
 
+GSVector4i GPU_HW::GetLineDrawnRect(const GSVector4i& native_rect, const GSVector4& bounds)
+{
+  const GSVector4i precise =
+    GSVector4i(static_cast<s32>(std::floor(std::min(bounds.x, bounds.z))),
+               static_cast<s32>(std::floor(std::min(bounds.y, bounds.w))),
+               static_cast<s32>(std::ceil(std::max(bounds.x, bounds.z) + 1.0f)),
+               static_cast<s32>(std::ceil(std::max(bounds.y, bounds.w) + 1.0f)));
+  return native_rect.runion(precise);
+}
+
 void GPU_HW::DrawLine(const GPUThreadHWDrawLineCommand* cmd)
 {
   const GPURenderCommand rc{cmd->rc.bits};
@@ -2786,7 +2796,8 @@ void GPU_HW::DrawLine(const GPUThreadHWDrawLineCommand* cmd)
     }
     else
     {
-      AddDrawnRectangle(clamped_rect);
+      // Culled on the console's positions, but marked drawn where the quad really lands (PGXP's ends can be a pixel on).
+      AddDrawnRectangle(GetLineDrawnRect(rect, bounds).rintersect(m_clamped_drawing_area));
 
       // Precise positions where PGXP found them (only lines from the GTE), otherwise the native ones.
       DrawLine(bounds, start_color, end_color, depth);

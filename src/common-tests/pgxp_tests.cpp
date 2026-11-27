@@ -4,6 +4,7 @@
 #include "core/bus.h"
 #include "core/cpu_core.h"
 #include "core/cpu_pgxp.h"
+#include "core/gpu_hw.h"
 #include "core/settings.h"
 
 #include <gtest/gtest.h>
@@ -368,4 +369,24 @@ TEST_F(PGXPUnalignedTest, ImpreciseHalfKeepsItsNativeValue)
 
   const Found f = Lookup(0x2000, shifted);
   EXPECT_FLOAT_EQ(f.y, 30.0f);
+}
+
+// GPU_HW draws a line as a quad a pixel wide from its drawn (precise) ends; the area it marks as drawn covers that.
+
+TEST(PGXPLineDrawnRect, NativeEndsKeepTheNativeRect)
+{
+  const GSVector4i native = GSVector4i(10, 20, 11, 41); // a vertical line from (10, 20) to (10, 40), max exclusive
+  const GSVector4i rect = GPU_HW::GetLineDrawnRect(native, GSVector4(10.0f, 20.0f, 10.0f, 40.0f));
+  EXPECT_TRUE(rect.eq(native));
+}
+
+TEST(PGXPLineDrawnRect, PreciseEndsCoverWhatTheQuadTouches)
+{
+  // Precise X 10.75: the quad spans 10.75..11.75, so column 11 is drawn too.
+  const GSVector4i native = GSVector4i(10, 20, 11, 41);
+  const GSVector4i rect = GPU_HW::GetLineDrawnRect(native, GSVector4(10.75f, 20.25f, 10.75f, 40.5f));
+  EXPECT_EQ(rect.left, 10);
+  EXPECT_EQ(rect.top, 20);
+  EXPECT_EQ(rect.right, 12);
+  EXPECT_EQ(rect.bottom, 42);
 }

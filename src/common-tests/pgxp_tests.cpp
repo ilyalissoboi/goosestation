@@ -304,3 +304,49 @@ TEST_F(PGXPUnalignedTest, PolylineWithMissingAddressesIsNative)
   EXPECT_FALSE(LookupLine({{0x1000, A}, {0x1004, B}}, false, &xy));
   EXPECT_EQ(xy, (std::vector<float>{10.0f, 20.0f, 30.0f, 40.0f}));
 }
+
+// Rewind and runahead re-run frames from memory states, which carry PGXP's values along.
+
+TEST_F(PGXPUnalignedTest, MemoryStateRestoresShadow)
+{
+  CPU::g_state.pgxp_gpr[4] = {1.5f, 2.5f, 3.5f, Pack(1, 2), 7};
+  std::vector<u8> state(CPU::PGXP::GetMemoryStateSize());
+  CPU::PGXP::SaveMemoryState(state);
+
+  StorePreciseVertex(0x1000, 10.75f, 20.25f, 900.0f); // the same native value, different precision
+  CPU::g_state.pgxp_gpr[4] = {};
+
+  CPU::PGXP::LoadMemoryState(state);
+  const Found f = Lookup(0x1000, A);
+  EXPECT_FLOAT_EQ(f.x, 10.25f);
+  EXPECT_FLOAT_EQ(f.y, 20.5f);
+  EXPECT_FLOAT_EQ(f.w, 300.0f / 32768.0f);
+  EXPECT_FLOAT_EQ(CPU::g_state.pgxp_gpr[4].x, 1.5f);
+  EXPECT_EQ(CPU::g_state.pgxp_gpr[4].flags, 7u);
+}
+
+TEST_F(PGXPUnalignedTest, StateWithoutShadowResets)
+{
+  // Saved while PGXP was off: nothing to restore, so nothing stale is left either.
+  CPU::PGXP::LoadMemoryState({});
+  const Found f = Lookup(0x1000, A);
+  EXPECT_FLOAT_EQ(f.x, 10.0f);
+  EXPECT_FLOAT_EQ(f.y, 20.0f);
+}
+
+TEST_F(PGXPUnalignedTest, ShadowCopyFollowsRamSize)
+{
+  const size_t small = CPU::PGXP::GetMemoryStateSize();
+  Bus::g_ram_mask = Bus::RAM_8MB_MASK;
+  EXPECT_EQ(CPU::PGXP::GetMemoryStateSize() - small, (Bus::RAM_8MB_SIZE - Bus::RAM_2MB_SIZE) / 4 * sizeof(CPU::PGXPValue));
+
+  StorePreciseVertex(0x700000, 5.5f, 6.5f, 40.0f);
+  std::vector<u8> state(CPU::PGXP::GetMemoryStateSize());
+  CPU::PGXP::SaveMemoryState(state);
+  StorePreciseVertex(0x700000, 5.25f, 6.25f, 40.0f);
+  CPU::PGXP::LoadMemoryState(state);
+
+  const Found f = Lookup(0x700000, Pack(5, 6));
+  EXPECT_FLOAT_EQ(f.x, 5.5f);
+  EXPECT_FLOAT_EQ(f.y, 6.5f);
+}

@@ -4,12 +4,21 @@
 #pragma once
 #include "cpu_core.h"
 
+#include <span>
+
 namespace CPU::PGXP {
 
 /// State management.
 void Initialize();
 void Reset();
 void Shutdown();
+
+/// Memory states (rewind and runahead): the register shadows and the shadow of the RAM in use and the scratchpad, so
+/// re-run frames see the precise values the first run saw. The vertex cache isn't included.
+size_t GetMemoryStateSize();
+void SaveMemoryState(std::span<u8> dst);
+/// Restores what SaveMemoryState() wrote; anything else (a state saved with PGXP off) resets PGXP instead.
+void LoadMemoryState(std::span<const u8> src);
 
 /// Vertex lookup from GPU side.
 bool GetPreciseVertex(u32 addr, u32 value, int x, int y, int xOffs, int yOffs, float* out_x, float* out_y,

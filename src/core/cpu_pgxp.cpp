@@ -167,6 +167,57 @@ void CPU::PGXP::Reset()
     std::memset(s_vertex_cache, 0, sizeof(PGXPValue) * VERTEX_CACHE_SIZE);
 }
 
+namespace CPU::PGXP {
+static u32 GetMemoryStateRAMEntries()
+{
+  // Before RAM is set up (rewind's memory estimate), from the setting.
+  const u32 ram_size =
+    Bus::g_ram_mask ? (Bus::g_ram_mask + 1) : (g_settings.enable_8mb_ram ? Bus::RAM_8MB_SIZE : Bus::RAM_2MB_SIZE);
+  return ram_size / 4;
+}
+} // namespace CPU::PGXP
+
+size_t CPU::PGXP::GetMemoryStateSize()
+{
+  return sizeof(g_state.pgxp_gpr) + sizeof(g_state.pgxp_cop0) + sizeof(g_state.pgxp_gte) +
+         sizeof(PGXPValue) * (GetMemoryStateRAMEntries() + SCRATCHPAD_SIZE / 4);
+}
+
+void CPU::PGXP::SaveMemoryState(std::span<u8> dst)
+{
+  DebugAssert(dst.size() == GetMemoryStateSize() && s_mem);
+  u8* p = dst.data();
+  const auto put = [&p](const void* src, size_t size) {
+    std::memcpy(p, src, size);
+    p += size;
+  };
+  put(g_state.pgxp_gpr, sizeof(g_state.pgxp_gpr));
+  put(g_state.pgxp_cop0, sizeof(g_state.pgxp_cop0));
+  put(g_state.pgxp_gte, sizeof(g_state.pgxp_gte));
+  put(s_mem, sizeof(PGXPValue) * GetMemoryStateRAMEntries());
+  put(&s_mem[PGXP_MEM_SCRATCH_OFFSET], sizeof(PGXPValue) * (SCRATCHPAD_SIZE / 4));
+}
+
+void CPU::PGXP::LoadMemoryState(std::span<const u8> src)
+{
+  if (src.size() != GetMemoryStateSize() || !s_mem)
+  {
+    Reset();
+    return;
+  }
+
+  const u8* p = src.data();
+  const auto get = [&p](void* dst, size_t size) {
+    std::memcpy(dst, p, size);
+    p += size;
+  };
+  get(g_state.pgxp_gpr, sizeof(g_state.pgxp_gpr));
+  get(g_state.pgxp_cop0, sizeof(g_state.pgxp_cop0));
+  get(g_state.pgxp_gte, sizeof(g_state.pgxp_gte));
+  get(s_mem, sizeof(PGXPValue) * GetMemoryStateRAMEntries());
+  get(&s_mem[PGXP_MEM_SCRATCH_OFFSET], sizeof(PGXPValue) * (SCRATCHPAD_SIZE / 4));
+}
+
 void CPU::PGXP::Shutdown()
 {
   if (s_vertex_cache)

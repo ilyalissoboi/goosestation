@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <clocale>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -101,6 +102,20 @@ TEST(SlangCost, ACommentedReferenceIsIgnored)
     EstimateCost(f.Write("a.slangp", "//#reference \"b.slangp\"\nshaders = 1\nscale_type0 = viewport\n"));
   ASSERT_TRUE(e.has_value());
   EXPECT_EQ(e->passes, 1u);
+}
+
+TEST(SlangCost, NumbersReadTheSameInAnyLocale)
+{
+  // Qt sets the C locale from the environment on Linux: a comma-decimal one mustn't change how "0.5" reads.
+  const std::string old = std::setlocale(LC_NUMERIC, nullptr);
+  if (!std::setlocale(LC_NUMERIC, "de_DE.UTF-8") && !std::setlocale(LC_NUMERIC, "de_DE"))
+    GTEST_SKIP() << "no de_DE locale here";
+  const PresetFolder f;
+  const std::optional<CostEstimate> e = EstimateCost(
+    f.Write("a.slangp", "shaders = 2\nscale_type0 = source\nscale0 = 0.5\nscale_type1 = viewport\n"));
+  std::setlocale(LC_NUMERIC, old.c_str());
+  ASSERT_TRUE(e.has_value());
+  EXPECT_NEAR(e->screens, (160.0f * 120.0f) / SCREEN + 1.0f, 1e-4f);
 }
 
 TEST(SlangCost, ThresholdsFromTheThorMeasurements)

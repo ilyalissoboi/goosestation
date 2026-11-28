@@ -426,6 +426,11 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
 {
   GL_SCOPE_FMT("Slang preset {}", m_name);
 
+  // A switch change dropped the chain (it's made with or without the original-aspect uniforms), and a running chain's
+  // settings update builds nothing at an unchanged size: build it again here.
+  if (!m_chain && !m_failed && m_output_format != GPUTexture::Format::Unknown)
+    CompilePipeline(m_output_format, target_width, target_height, nullptr);
+
   const bool from_game = (picture.game_texture != nullptr);
   GPUTexture* const src = from_game ? picture.game_texture : input_color;
   // Only what the target shows of the picture, cropped rather than squeezed when it's larger than the target

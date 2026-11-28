@@ -676,6 +676,54 @@ TEST_F(SlangGPU, AStageAfterABezelKeepsTheBars)
   EXPECT_PRED2(Near, At(out, 32, 16), RED_QUARTER) << std::hex << At(out, 32, 16);
 }
 
+TEST_F(SlangGPU, TheSwitchFlippedWhileRunningTakesEffect)
+{
+  // As a front-end's change reaches a running chain (Chain::UpdateSettings): the stage reads its keys again, and
+  // CheckTargets, at an unchanged size and format, builds nothing.
+  auto owned = std::make_unique<PostProcessing::SlangShader>();
+  PostProcessing::SlangShader* stage = owned.get();
+  Error error;
+  ASSERT_TRUE(stage->LoadFromFile("bezel/frame.slangp",
+                                  Path::ToNativePath(Path::Combine(m_root, "bezel/frame.slangp")), false, &error));
+  PostProcessing::Chain chain("TestChain");
+  std::vector<std::unique_ptr<PostProcessing::Shader>> stages;
+  stages.push_back(std::move(owned));
+  chain.SetStagesForTest(std::move(stages));
+  ASSERT_TRUE(chain.CheckTargets(GPUTexture::Format::RGBA8, WIDTH, HEIGHT));
+
+  const std::vector<u32> input = InputPixels();
+  GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
+  const auto run = [&]() {
+    GPUTexture* output = Texture(GPUTexture::Type::RenderTarget, nullptr);
+    EXPECT_TRUE(chain.Apply(tex, nullptr, output, PICTURE, WIDTH, HEIGHT, NATIVE_WIDTH, NATIVE_HEIGHT,
+                            PictureAt(4.0f / 3.0f)));
+    std::vector<u32> pixels(WIDTH * HEIGHT);
+    std::unique_ptr<GPUDownloadTexture> dl = g_gpu_device->CreateDownloadTexture(WIDTH, HEIGHT, output->GetFormat());
+    output->MakeReadyForSampling();
+    dl->CopyFromTexture(0, 0, output, 0, 0, WIDTH, HEIGHT, 0, 0, true);
+    dl->Flush();
+    EXPECT_TRUE(dl->ReadTexels(0, 0, WIDTH, HEIGHT, pixels.data(), WIDTH * sizeof(u32)));
+    return pixels;
+  };
+  EXPECT_EQ(At(run(), 2, 2), MAGENTA);
+
+  MemorySettingsInterface si;
+  si.SetBoolValue("Stage", PostProcessing::Config::WHOLE_SCREEN_KEY, false);
+  stage->LoadOptions(si, "Stage");
+  ASSERT_TRUE(chain.CheckTargets(GPUTexture::Format::RGBA8, WIDTH, HEIGHT));
+  // Into the picture now, and still shaded: the frame's own magenta at the picture's corner, the bars the input's.
+  std::vector<u32> out = run();
+  EXPECT_EQ(At(out, 2, 2), GREEN) << std::hex << At(out, 2, 2);
+  EXPECT_EQ(At(out, 10, 10), MAGENTA) << std::hex << At(out, 10, 10);
+
+  si.DeleteValue("Stage", PostProcessing::Config::WHOLE_SCREEN_KEY);
+  stage->LoadOptions(si, "Stage");
+  ASSERT_TRUE(chain.CheckTargets(GPUTexture::Format::RGBA8, WIDTH, HEIGHT));
+  out = run();
+  EXPECT_EQ(At(out, 2, 2), MAGENTA) << std::hex << At(out, 2, 2);
+  chain.DestroyTextures();
+}
+
 TEST_F(SlangGPU, ANonBezelChainIsUnchanged)
 {
   std::vector<std::unique_ptr<PostProcessing::Shader>> stages;

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -121,13 +122,15 @@ const std::string* Find(const Keys& keys, const std::string& key)
   return (it != keys.end()) ? &it->second : nullptr;
 }
 
+// A number as presets write it, whatever the C locale (Qt sets it from the environment on Linux); a leading number is
+// enough ("2.0f"), and one that isn't finite is none.
 float ParseFloat(const std::string* value, float fallback)
 {
   if (!value || value->empty())
     return fallback;
-  char* end = nullptr;
-  const float f = std::strtof(value->c_str(), &end);
-  return (end != value->c_str()) ? f : fallback;
+  std::string_view end;
+  const std::optional<float> f = StringUtil::FromChars<float>(*value, &end);
+  return (f.has_value() && std::isfinite(f.value())) ? f.value() : fallback;
 }
 
 // The size a pass draws along one axis.

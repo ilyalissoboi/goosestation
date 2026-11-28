@@ -389,6 +389,58 @@ TEST_F(SlangGPU, PresetsFromAPackRun)
   }
 }
 
+TEST_F(SlangGPU, PresetsFromAPackKeepDrawingFrameAfterFrame)
+{
+  // GOOSESTATION_GPU_TEST_PRESETS as above: each preset runs a dozen frames at a small screen's size and the last is
+  // drawn (on Metal, the objects librashader makes for a frame once went before the GPU used them, losing frames).
+  const char* list = std::getenv("GOOSESTATION_GPU_TEST_PRESETS");
+  if (!list || !*list)
+    GTEST_SKIP() << "GOOSESTATION_GPU_TEST_PRESETS isn't set";
+
+  constexpr u32 W = 256, H = 144;
+  const GSVector4i rect(32, 0, 224, 144);
+  std::vector<u32> pixels(W * H, GREEN);
+  for (s32 y = rect.top; y < rect.bottom; y++)
+    std::fill(&pixels[y * W + rect.left], &pixels[y * W + rect.right], (y < 72) ? RED_QUARTER : BLUE_QUARTER);
+  std::unique_ptr<GPUTexture> input = g_gpu_device->CreateTexture(W, H, 1, 1, 1, GPUTexture::Type::Texture,
+                                                                  GPUTexture::Format::RGBA8, pixels.data(), W * 4);
+  PostProcessing::PictureInfo picture = Picture(true);
+  picture.rect = rect;
+  picture.native_width = 320;
+  picture.native_height = 240;
+
+  std::string_view rest(list);
+  while (!rest.empty())
+  {
+    const size_t sep = rest.find('|');
+    const std::string path(rest.substr(0, sep));
+    rest = (sep == std::string_view::npos) ? std::string_view() : rest.substr(sep + 1);
+    SCOPED_TRACE(path);
+
+    m_shader = std::make_unique<PostProcessing::SlangShader>();
+    Error error;
+    ASSERT_TRUE(m_shader->LoadFromFile(path, path, false, &error)) << error.GetDescription();
+    ASSERT_TRUE(m_shader->CompilePipeline(GPUTexture::Format::RGBA8, W, H, nullptr));
+    // Frames in flight, as while playing (reading one back waits for the GPU), then the last read back.
+    m_textures.push_back(g_gpu_device->CreateTexture(W, H, 1, 1, 1, GPUTexture::Type::RenderTarget,
+                                                     GPUTexture::Format::RGBA8));
+    for (int frame = 0; frame < 11; frame++)
+    {
+      ASSERT_TRUE(m_shader->Apply(input.get(), nullptr, m_textures.back().get(), GSVector4i(0, 0, W, H), W, H, 320,
+                                  240, W, H, picture));
+    }
+    const std::vector<u32> out = Run(input.get(), picture, W, H);
+    EXPECT_EQ(out[2 * W + 2], GREEN) << std::hex << out[2 * W + 2];
+    u32 lit = 0;
+    for (s32 y = rect.top; y < rect.bottom; y++)
+    {
+      for (s32 x = rect.left; x < rect.right; x++)
+        lit += (out[y * W + x] & 0x00FFFFFFu) != 0;
+    }
+    EXPECT_GT(lit, 0u) << "the preset drew nothing";
+  }
+}
+
 #ifdef ENABLE_VULKAN
 // librashader reuses a frame's temporary objects frames_in_flight frames later, so two chain frames may never share a
 // command buffer (a screenshot or video capture renders the display a second time before the frame is presented).

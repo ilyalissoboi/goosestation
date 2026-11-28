@@ -87,18 +87,22 @@ bool MetalSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_cou
   {
     MetalDevice& dev = MetalDevice::GetInstance();
 
-    // librashader opens encoders of its own on the command buffer: ours must be closed.
+    // The device's command buffers don't retain what's encoded in them, and librashader lets go of objects it makes
+    // for a frame (autoreleased, within this pool) as soon as it has encoded them, so with frames in flight the GPU
+    // could read them after they're gone (whole frames came out empty). It gets a command buffer of its own, which
+    // retains them, after ours on the same queue; that also ends a batch for each of its frames, as its ring of
+    // per-frame resources needs.
     dev.EndAnyEncoding();
+    dev.SubmitCommandBuffer(false);
+    id<MTLCommandBuffer> cmdbuf = [dev.m_queue commandBuffer];
 
     frame_mtl_opt_t frame_opt;
     const libra_viewport_t vp = {0.0f, 0.0f, output->GetWidth(), output->GetHeight()};
     const libra_error_t err =
-      m_frame(&m_chain, dev.m_render_cmdbuf, static_cast<size_t>(frame_count),
-              static_cast<MetalTexture*>(input)->GetMTLTexture(), static_cast<MetalTexture*>(output)->GetMTLTexture(),
-              &vp, nullptr, Librashader::MakeFrameOptions(options, &frame_opt));
-
-    // librashader recycles its per-frame resources on a ring of its own, so each of its frames ends a batch.
-    dev.SubmitCommandBuffer(false);
+      m_frame(&m_chain, cmdbuf, static_cast<size_t>(frame_count), static_cast<MetalTexture*>(input)->GetMTLTexture(),
+              static_cast<MetalTexture*>(output)->GetMTLTexture(), &vp, nullptr,
+              Librashader::MakeFrameOptions(options, &frame_opt));
+    [cmdbuf commit];
 
     if (err)
     {

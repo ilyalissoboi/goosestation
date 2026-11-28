@@ -34,7 +34,7 @@ doing soon, **P2** worth doing, **P3** only if someone wants it.
 | Upscaling defaults and seams | Nearest sprite filtering by default (February 2025), and "Disable Upscaled Direct Textures" (September 2026), for fewer seams and artefacts in 2D when filtering or upscaling. | P2 |
 | More texture filters | Scale2x/Scale3x, MMPX (and "mmpx adv"), hybrid bilinear, extra smoothing filters, and filtering of framebuffer uploads. | P2 |
 | Display scaling options | Lanczos scaling, separate scaling for FMVs, fine crop controls, an "uncorrected borders" crop mode. | P2 |
-| Border overlays / bezels | Images drawn around the game picture, with a selectable list and user overlay presets. | P2 |
+| Border overlays / bezels | Images drawn around the game picture, with a selectable list and user overlay presets. | **Done** our own way ([roadmap](roadmap.md) item 30): libretro's slang bezel presets draw over the whole screen, rather than a separate image-overlay system or presets of our own |
 | Automatic internal resolution | A rewritten automatic resolution choice. | P2 |
 | True Color (Full) dithering mode, scaled interlacing | Rendering options for colour depth and interlaced games. | P2 |
 | PGXP improvements | PGXP for lines, unaligned loads/stores, better depth normalisation; since October 2026 more precise CPU mode (shifts, ADD/SUB, ANDI/ORI, MTC2/LWC2, GPF/GPL, MVMVA), reciprocal Z in the depth buffer, depth biased by draw order, an option to normalise depth by the GTE matrix scale, depth kept across clears. | P2 |

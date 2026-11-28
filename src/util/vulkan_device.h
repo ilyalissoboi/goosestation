@@ -107,7 +107,8 @@ public:
   bool SupportsParallelCompile() const override;
 
   bool SupportsSlangPresets() const override;
-  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                               Error* error) override;
   void CopyTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,
                          u32 src_x, u32 src_y, u32 src_layer, u32 src_level, u32 width, u32 height) override;
   void ResolveTextureRegion(GPUTexture* dst, u32 dst_x, u32 dst_y, u32 dst_layer, u32 dst_level, GPUTexture* src,

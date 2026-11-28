@@ -96,6 +96,7 @@
     <ClInclude Include="postprocessing_browser.h" />
     <ClInclude Include="postprocessing_favourites.h" />
     <ClInclude Include="postprocessing_shader_slang.h" />
+    <ClInclude Include="postprocessing_slang_cost.h" />
     <ClInclude Include="postprocessing_slang_picture.h" />
     <ClInclude Include="sdl_input_source.h" />
     <ClInclude Include="sdl_input_bindings.h" />
@@ -215,6 +216,7 @@
     <ClCompile Include="postprocessing_browser.cpp" />
     <ClCompile Include="postprocessing_favourites.cpp" />
     <ClCompile Include="postprocessing_shader_slang.cpp" />
+    <ClCompile Include="postprocessing_slang_cost.cpp" />
     <ClCompile Include="sdl_audio_stream.cpp" />
     <ClCompile Include="sdl_input_source.cpp" />
     <ClCompile Include="sdl_input_bindings.cpp" />

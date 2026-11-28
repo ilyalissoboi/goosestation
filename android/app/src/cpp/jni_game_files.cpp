@@ -256,7 +256,7 @@ static jobject ToStageInfo(JNIEnv* env, const AndroidHost::PostProcessingStage& 
   if (shader && kind && error)
   {
     result = env->NewObject(s_stage_info_class, s_stage_info_constructor, shader.get(), kind.get(), option_array.get(),
-                            error.get());
+                            error.get(), static_cast<jboolean>(stage.whole_screen));
     if (ClearException(env))
       result = nullptr;
   }
@@ -266,10 +266,11 @@ static jobject ToStageInfo(JNIEnv* env, const AndroidHost::PostProcessingStage& 
 NATIVE_LIBRARY_FUNCTION(jobjectArray, getPostProcessingShaders)(JNIEnv* env, jobject)
 {
   std::vector<std::string> flat;
-  for (auto& [name, kind] : AndroidHost::GetPostProcessingShaders())
+  for (AndroidHost::PostProcessingShader& shader : AndroidHost::GetPostProcessingShaders())
   {
-    flat.push_back(std::move(name));
-    flat.push_back(std::move(kind));
+    flat.push_back(std::move(shader.name));
+    flat.push_back(std::move(shader.kind));
+    flat.push_back(std::move(shader.cost));
   }
   return ToNonNullStringArray(env, flat);
 }
@@ -328,6 +329,21 @@ NATIVE_LIBRARY_FUNCTION(void, setPostProcessingOption)(JNIEnv* env, jobject, jst
   env->GetFloatArrayRegion(values, 0, size, floats.data());
   AndroidHost::SetPostProcessingOption(ChainKey(env, key), FromJString(env, section).c_str(), static_cast<u32>(index),
                                        FromJString(env, name), std::span<const float>(floats.data(), size));
+}
+
+NATIVE_LIBRARY_FUNCTION(void, setPostProcessingWholeScreen)(JNIEnv* env, jobject, jstring key, jstring section,
+                                                             jint index, jboolean on)
+{
+  if (index >= 0)
+  {
+    AndroidHost::SetPostProcessingWholeScreen(ChainKey(env, key), FromJString(env, section).c_str(),
+                                              static_cast<u32>(index), on);
+  }
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, chainDrawsOverWholeScreen)(JNIEnv* env, jobject, jstring key)
+{
+  return AndroidHost::ChainDrawsOverWholeScreen(ChainKey(env, key));
 }
 
 NATIVE_LIBRARY_FUNCTION(void, copyPostProcessingChain)(JNIEnv* env, jobject, jstring key, jstring section)

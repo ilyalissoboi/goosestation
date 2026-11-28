@@ -65,6 +65,7 @@
     <ClInclude Include="postprocessing_browser.h" />
     <ClInclude Include="postprocessing_favourites.h" />
     <ClInclude Include="postprocessing_shader_slang.h" />
+    <ClInclude Include="postprocessing_slang_cost.h" />
     <ClInclude Include="postprocessing_slang_picture.h" />
     <ClInclude Include="d3d11_pipeline.h" />
     <ClInclude Include="d3d11_stream_buffer.h" />
@@ -164,6 +165,7 @@
     <ClCompile Include="postprocessing_browser.cpp" />
     <ClCompile Include="postprocessing_favourites.cpp" />
     <ClCompile Include="postprocessing_shader_slang.cpp" />
+    <ClCompile Include="postprocessing_slang_cost.cpp" />
     <ClCompile Include="d3d11_pipeline.cpp" />
     <ClCompile Include="d3d11_stream_buffer.cpp" />
     <ClCompile Include="d3d11_texture.cpp" />

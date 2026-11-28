@@ -155,7 +155,12 @@ class ShaderPacksInstallTest {
         assertEquals("v1.19", info.installedVersion)
         assertTrue(info.installedSize.endsWith("KB"))
         assertEquals("Installed v1.19", NativeShaderPackApi.describeShaderPack("lola-retro", "v1.19").words)
-        val listed = NativeLibrary.getPostProcessingShaders().toList().chunked(2)
+        val listed =
+            NativeLibrary
+                .getPostProcessingShaders()
+                .toList()
+                .chunked(3)
+                .map { it.take(2) }
         assertTrue(listed.toString(), listOf("lola-retro/curved/a.slangp", "Slang") in listed)
         // Never in the data folder.
         assertFalse(File(root, "data/shaders/lola-retro").exists())

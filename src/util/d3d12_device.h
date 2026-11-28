@@ -62,7 +62,8 @@ public:
   RenderAPI GetRenderAPI() const override;
 
   bool SupportsSlangPresets() const override;
-  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                               Error* error) override;
 
   bool HasSurface() const override;
 

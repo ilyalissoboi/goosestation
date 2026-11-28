@@ -788,7 +788,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
                 &s_shader_option_info_constructor},
     ClassLookup{"io/github/ilyalissoboi/goosestation/core/StageInfo", &s_stage_info_class,
                 "(Ljava/lang/String;Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/"
-                "ShaderOptionInfo;Ljava/lang/String;)V",
+                "ShaderOptionInfo;Ljava/lang/String;Z)V",
                 &s_stage_info_constructor},
     ClassLookup{"io/github/ilyalissoboi/goosestation/core/FavouriteInfo", &s_favourite_info_class,
                 "(Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;)V", &s_favourite_info_constructor},

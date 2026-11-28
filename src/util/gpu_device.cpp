@@ -1432,7 +1432,8 @@ bool GPUDevice::SupportsSlangPresets() const
   return false;
 }
 
-std::unique_ptr<SlangChain> GPUDevice::CreateSlangChain(const std::string& preset_path, Error* error)
+std::unique_ptr<SlangChain> GPUDevice::CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                                       Error* error)
 {
   Error::SetString(error, fmt::format("Slang presets aren't supported by the {} renderer.",
                                       RenderAPIToString(GetRenderAPI())));

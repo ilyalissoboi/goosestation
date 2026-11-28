@@ -162,6 +162,14 @@ class FakeCoreApi(
 
     override fun isVulkanFailed(): Boolean = vulkanFailed
 
+    /** What chainDrawsOverWholeScreen() answers. */
+    var bezelWholeScreen = false
+
+    override fun chainDrawsOverWholeScreen(key: String?): Boolean {
+        calls += "chainDrawsOverWholeScreen $key"
+        return bezelWholeScreen
+    }
+
     var fastmemAvailable = true
 
     override fun isFastmemAvailable(): Boolean = fastmemAvailable
@@ -223,6 +231,9 @@ class FakeCoreApi(
     /** The shaders this fake has: each name's kind and options, their values the defaults. */
     var shaderCatalog = mapOf<String, Pair<String, List<ShaderOptionInfo>>>()
 
+    /** A shader's cost label by name, for getPostProcessingShaders(). */
+    var shaderCosts = mapOf<String, String>()
+
     /** settings.ini, for the chain calls with no key: the chains as desktop's keys, options as comma lists. */
     val globalLayer = MemoryCoreSettings()
 
@@ -235,8 +246,10 @@ class FakeCoreApi(
         index: Int,
     ) = "$section/Stage${index + 1}"
 
-    override fun getPostProcessingShaders(): List<Pair<String, String>> =
-        shaderCatalog.map { (name, entry) -> name to entry.first }.sortedBy { it.first.lowercase() }
+    override fun getPostProcessingShaders(): List<Triple<String, String, String>> =
+        shaderCatalog
+            .map { (name, entry) -> Triple(name, entry.first, shaderCosts[name].orEmpty()) }
+            .sortedBy { it.first.lowercase() }
 
     override fun getPostProcessingStages(
         key: String?,
@@ -254,7 +267,11 @@ class FakeCoreApi(
                     val value = set?.split(',')?.map { it.trim().toFloat() }?.toFloatArray() ?: option.defaultValue
                     option.withValue(value)
                 }
-            StageInfo(shader, entry?.first.orEmpty(), options.toTypedArray())
+            // As the core: a slang stage's switch, else whether it's a bezel by its folder.
+            val switch = layer.getString(at, "WholeScreen", "")
+            val bezel = shader.split('/').dropLast(1).any { it.equals("bezel", true) }
+            val wholeScreen = entry?.first == "Slang" && (if (switch.isEmpty()) bezel else switch == "true")
+            StageInfo(shader, entry?.first.orEmpty(), options.toTypedArray(), "", wholeScreen)
         }
     }
 
@@ -312,6 +329,16 @@ class FakeCoreApi(
     ) {
         calls += "setPostProcessingOption $key $section $index $name ${values.joinToString(",")}"
         chainLayer(key).setString(stageSection(section, index), name, values.joinToString(",") { formatFloat(it) })
+    }
+
+    override fun setPostProcessingWholeScreen(
+        key: String?,
+        section: String,
+        index: Int,
+        on: Boolean,
+    ) {
+        calls += "setPostProcessingWholeScreen $key $section $index $on"
+        chainLayer(key).setString(stageSection(section, index), "WholeScreen", on.toString())
     }
 
     override fun copyPostProcessingChain(

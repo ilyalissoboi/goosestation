@@ -17,10 +17,11 @@ class D3D11SlangChain final : public SlangChain
 public:
   ~D3D11SlangChain() override;
 
-  bool Create(const std::string& preset_path, Error* error);
+  bool Create(const std::string& preset_path, bool original_aspect, Error* error);
 
   void SetParameter(const char* name, float value) override;
-  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) override;
+  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, const SlangFrameOptions* options,
+             Error* error) override;
 
 private:
   PFN_libra_d3d11_filter_chain_create m_create = nullptr;
@@ -39,7 +40,7 @@ D3D11SlangChain::~D3D11SlangChain()
   }
 }
 
-bool D3D11SlangChain::Create(const std::string& preset_path, Error* error)
+bool D3D11SlangChain::Create(const std::string& preset_path, bool original_aspect, Error* error)
 {
   if (!Librashader::ResolveSymbol("libra_d3d11_filter_chain_create", &m_create, error) ||
       !Librashader::ResolveSymbol("libra_d3d11_filter_chain_frame", &m_frame, error) ||
@@ -50,7 +51,7 @@ bool D3D11SlangChain::Create(const std::string& preset_path, Error* error)
   }
 
   libra_shader_preset_t preset = nullptr;
-  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_D3D11, &preset, error))
+  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_D3D11, original_aspect, &preset, error))
     return false;
 
   filter_chain_d3d11_opt_t opt = {};
@@ -75,7 +76,8 @@ void D3D11SlangChain::SetParameter(const char* name, float value)
     Librashader::DescribeAndFreeError(err); // a parameter the preset doesn't have
 }
 
-bool D3D11SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error)
+bool D3D11SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count,
+                              const SlangFrameOptions* options, Error* error)
 {
   D3D11Device& dev = D3D11Device::GetInstance();
   ID3D11DeviceContext1* const context = dev.m_context.Get();
@@ -89,9 +91,10 @@ bool D3D11SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_cou
   ID3D11ShaderResourceView* const null_srvs[D3D11Device::MAX_TEXTURE_SAMPLERS] = {};
   context->PSSetShaderResources(0, D3D11Device::MAX_TEXTURE_SAMPLERS, null_srvs);
 
+  frame_d3d11_opt_t frame_opt;
   const libra_viewport_t vp = {0.0f, 0.0f, dst->GetWidth(), dst->GetHeight()};
   const libra_error_t err = m_frame(&m_chain, nullptr /* the immediate context */, static_cast<size_t>(frame_count),
-                                    src->GetD3DSRV(), dst->GetD3DRTV(), &vp, nullptr, nullptr);
+                                    src->GetD3DSRV(), dst->GetD3DRTV(), &vp, nullptr, Librashader::MakeFrameOptions(options, &frame_opt));
 
   // librashader binds shaders, states, buffers and views of its own.
   dev.InvalidateCachedState();
@@ -110,10 +113,11 @@ bool D3D11Device::SupportsSlangPresets() const
   return true;
 }
 
-std::unique_ptr<SlangChain> D3D11Device::CreateSlangChain(const std::string& preset_path, Error* error)
+std::unique_ptr<SlangChain> D3D11Device::CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                                        Error* error)
 {
   std::unique_ptr<D3D11SlangChain> chain = std::make_unique<D3D11SlangChain>();
-  if (!chain->Create(preset_path, error))
+  if (!chain->Create(preset_path, original_aspect, error))
     return {};
   return chain;
 }

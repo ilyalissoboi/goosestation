@@ -47,8 +47,8 @@ class SettingsPagesTest {
             runCurrent()
 
             assertTrue(pages.values(CorePage.Graphics)!![GraphicsSettings.SHOW_FPS])
-            // The core's names are read once.
-            assertEquals(emptyList<String>(), calls)
+            // The core's names are read once; Graphics asks again whether a bezel draws over the whole screen.
+            assertEquals(listOf("chainDrawsOverWholeScreen null"), calls)
             assertNull(pages.bios)
         }
 
@@ -204,7 +204,11 @@ class SettingsPagesTest {
             pages.load(CorePage.Graphics)
             runCurrent()
 
-            assertEquals(NameList.entries.map { "getSettingNames ${it.kind}" }, calls)
+            // Each Graphics read asks whether a bezel draws over the whole screen.
+            assertEquals(
+                NameList.entries.map { "getSettingNames ${it.kind}" } + List(2) { "chainDrawsOverWholeScreen null" },
+                calls,
+            )
             assertEquals(listOf("Automatic", "Vulkan"), pages.names[NameList.GPURenderer]!!.map { it.value })
         }
 

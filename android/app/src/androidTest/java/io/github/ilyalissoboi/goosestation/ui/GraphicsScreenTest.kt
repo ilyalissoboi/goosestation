@@ -10,9 +10,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.settings.GraphicsSettings
@@ -35,11 +37,19 @@ class GraphicsScreenTest : ControllerKeys {
     private fun show(
         values: SettingValues = start,
         vulkanFailed: Boolean = false,
+        bezelWholeScreen: Boolean = false,
     ) {
         rule.setContent {
             GooseStationTheme {
                 // The values as shown stay the same, so each change is made from them.
-                GraphicsScreen(values, SampleNames.ALL, vulkanFailed, onChange = { changes += it }, onBack = {})
+                GraphicsScreen(
+                    values,
+                    SampleNames.ALL,
+                    vulkanFailed,
+                    onChange = { changes += it },
+                    onBack = {},
+                    bezelWholeScreen = bezelWholeScreen,
+                )
             }
         }
         rule.waitForIdle()
@@ -47,6 +57,20 @@ class GraphicsScreenTest : ControllerKeys {
 
     private fun assertFocusedHas(text: String) {
         rule.onNode(isFocused()).assert(hasText(text, substring = true))
+    }
+
+    @Test
+    fun thePlacementRowsSayABezelDrawsOverTheWholeScreen() {
+        show(bezelWholeScreen = true)
+
+        rule.onAllNodesWithText(BEZEL_PLACES_PICTURE).assertCountEquals(3)
+    }
+
+    @Test
+    fun thePlacementRowsSayNothingWithoutABezel() {
+        show()
+
+        rule.onAllNodesWithText(BEZEL_PLACES_PICTURE).assertCountEquals(0)
     }
 
     @Test

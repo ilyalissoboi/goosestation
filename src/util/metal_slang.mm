@@ -15,10 +15,11 @@ class MetalSlangChain final : public SlangChain
 public:
   ~MetalSlangChain() override;
 
-  bool Create(const std::string& preset_path, Error* error);
+  bool Create(const std::string& preset_path, bool original_aspect, Error* error);
 
   void SetParameter(const char* name, float value) override;
-  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) override;
+  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, const SlangFrameOptions* options,
+             Error* error) override;
 
 private:
   PFN_libra_mtl_filter_chain_create m_create = nullptr;
@@ -40,7 +41,7 @@ MetalSlangChain::~MetalSlangChain()
     Librashader::DescribeAndFreeError(err);
 }
 
-bool MetalSlangChain::Create(const std::string& preset_path, Error* error)
+bool MetalSlangChain::Create(const std::string& preset_path, bool original_aspect, Error* error)
 {
   if (!Librashader::ResolveSymbol("libra_mtl_filter_chain_create", &m_create, error) ||
       !Librashader::ResolveSymbol("libra_mtl_filter_chain_frame", &m_frame, error) ||
@@ -51,7 +52,7 @@ bool MetalSlangChain::Create(const std::string& preset_path, Error* error)
   }
 
   libra_shader_preset_t preset = nullptr;
-  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_METAL, &preset, error))
+  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_METAL, original_aspect, &preset, error))
     return false;
 
   @autoreleasepool
@@ -79,23 +80,29 @@ void MetalSlangChain::SetParameter(const char* name, float value)
     Librashader::DescribeAndFreeError(err); // a parameter the preset doesn't have
 }
 
-bool MetalSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error)
+bool MetalSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count,
+                              const SlangFrameOptions* options, Error* error)
 {
   @autoreleasepool
   {
     MetalDevice& dev = MetalDevice::GetInstance();
 
-    // librashader opens encoders of its own on the command buffer: ours must be closed.
+    // The device's command buffers don't retain what's encoded in them, and librashader lets go of objects it makes
+    // for a frame (autoreleased, within this pool) as soon as it has encoded them, so with frames in flight the GPU
+    // could read them after they're gone (whole frames came out empty). It gets a command buffer of its own, which
+    // retains them, after ours on the same queue; that also ends a batch for each of its frames, as its ring of
+    // per-frame resources needs.
     dev.EndAnyEncoding();
+    dev.SubmitCommandBuffer(false);
+    id<MTLCommandBuffer> cmdbuf = [dev.m_queue commandBuffer];
 
+    frame_mtl_opt_t frame_opt;
     const libra_viewport_t vp = {0.0f, 0.0f, output->GetWidth(), output->GetHeight()};
     const libra_error_t err =
-      m_frame(&m_chain, dev.m_render_cmdbuf, static_cast<size_t>(frame_count),
-              static_cast<MetalTexture*>(input)->GetMTLTexture(), static_cast<MetalTexture*>(output)->GetMTLTexture(),
-              &vp, nullptr, nullptr);
-
-    // librashader recycles its per-frame resources on a ring of its own, so each of its frames ends a batch.
-    dev.SubmitCommandBuffer(false);
+      m_frame(&m_chain, cmdbuf, static_cast<size_t>(frame_count), static_cast<MetalTexture*>(input)->GetMTLTexture(),
+              static_cast<MetalTexture*>(output)->GetMTLTexture(), &vp, nullptr,
+              Librashader::MakeFrameOptions(options, &frame_opt));
+    [cmdbuf commit];
 
     if (err)
     {
@@ -112,10 +119,11 @@ bool MetalDevice::SupportsSlangPresets() const
   return true;
 }
 
-std::unique_ptr<SlangChain> MetalDevice::CreateSlangChain(const std::string& preset_path, Error* error)
+std::unique_ptr<SlangChain> MetalDevice::CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                                        Error* error)
 {
   std::unique_ptr<MetalSlangChain> chain = std::make_unique<MetalSlangChain>();
-  if (!chain->Create(preset_path, error))
+  if (!chain->Create(preset_path, original_aspect, error))
     return {};
   return chain;
 }

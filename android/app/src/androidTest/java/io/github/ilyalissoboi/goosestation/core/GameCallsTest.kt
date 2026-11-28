@@ -351,6 +351,37 @@ class GameCallsTest {
             }
         }
 
+    // A bezel stage draws over the whole screen, side bars too: the frame preset paints magenta outside the middle of
+    // what it draws. Its switch off, it draws into the picture and the bars stay black.
+    @Test
+    fun aBezelStageDrawsOverTheWholeScreen() =
+        FrameReader(1280, 720).use { frames ->
+            withPadtest(frames = frames, settings = { bezelChain(wholeScreen = null) }) {
+                val frame = frames.nextFrame()
+                assertColour("the left bar", 0xFFFF00FF.toInt(), frame[360 * 1280 + 20])
+                assertColour("the right bar", 0xFFFF00FF.toInt(), frame[360 * 1280 + 1260])
+            }
+        }
+
+    @Test
+    fun aBezelStageWithItsSwitchOffDrawsIntoThePicture() =
+        FrameReader(1280, 720).use { frames ->
+            withPadtest(frames = frames, settings = { bezelChain(wholeScreen = false) }) {
+                val frame = frames.nextFrame()
+                assertColour("the left bar", 0xFF000000.toInt(), frame[360 * 1280 + 20])
+            }
+        }
+
+    // settings.ini's Display chain: on, with the frame preset in a bezel folder.
+    private fun bezelChain(wholeScreen: Boolean?) {
+        val dir = File(dataRoot, "shaders/bezel").apply { mkdirs() }
+        File(dir, "frame.slangp").writeText("shaders = 1\nshader0 = frame.slang\nscale_type0 = viewport\n")
+        File(dir, "frame.slang").writeText(FRAME_SHADER)
+        NativeLibrary.setBoolSetting("PostProcessing", "Enabled", true)
+        assertNull(NativeLibrary.addPostProcessingStage(null, "PostProcessing", "bezel/frame.slangp"))
+        wholeScreen?.let { NativeLibrary.setPostProcessingWholeScreen(null, "PostProcessing", 0, it) }
+    }
+
     // settings.ini's Display chain: on, with the probe preset, written into the data folder's shaders.
     private fun slangChain() {
         val dir = File(dataRoot, "shaders/p").apply { mkdirs() }
@@ -1669,6 +1700,28 @@ class GameCallsTest {
             layout(location = 0) out vec4 FragColor;
             layout(set = 0, binding = 2) uniform sampler2D Source;
             void main() { FragColor = (vTexCoord.y < 0.5) ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(0.0, 0.0, 1.0, 1.0); }
+            """.trimIndent() + "\n"
+
+        // A bezel: magenta over the whole viewport but a box in the middle (a quarter of each side in), which shows
+        // the picture stretched over the box.
+        val FRAME_SHADER =
+            """
+            #version 450
+            layout(std140, set = 0, binding = 0) uniform UBO { mat4 MVP; } global;
+            #pragma stage vertex
+            layout(location = 0) in vec4 Position;
+            layout(location = 1) in vec2 TexCoord;
+            layout(location = 0) out vec2 vTexCoord;
+            void main() { gl_Position = global.MVP * Position; vTexCoord = TexCoord; }
+            #pragma stage fragment
+            layout(location = 0) in vec2 vTexCoord;
+            layout(location = 0) out vec4 FragColor;
+            layout(set = 0, binding = 2) uniform sampler2D Source;
+            void main() {
+              vec2 uv = (vTexCoord - vec2(0.25)) * 2.0;
+              FragColor = (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) ?
+                vec4(1.0, 0.0, 1.0, 1.0) : texture(Source, uv);
+            }
             """.trimIndent() + "\n"
         const val SERIAL = "SLUS-00000"
         const val PLAYER_CODES = "[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n"

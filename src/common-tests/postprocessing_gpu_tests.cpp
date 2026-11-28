@@ -98,8 +98,10 @@ protected:
     ASSERT_TRUE(GPUTestDevice::Create({}, &error)) << error.GetDescription();
 
     std::error_code ec;
-    m_dir = (std::filesystem::temp_directory_path(ec) / ("common-tests-pp-gpu-" + std::to_string(std::rand())))
-              .generic_string();
+    // Native separators: Windows' extended-length paths, which FileSystem uses for absolute ones, take no '/'.
+    m_dir = Path::ToNativePath(
+      (std::filesystem::temp_directory_path(ec) / ("common-tests-pp-gpu-" + std::to_string(std::rand())))
+        .generic_string());
     ASSERT_TRUE(FileSystem::CreateDirectory(m_dir.c_str(), true));
     ASSERT_TRUE(FileSystem::WriteStringToFile(Path::Combine(m_dir, "resize.fx").c_str(), FX_SHADER));
 

@@ -12,6 +12,7 @@
 #include "core/texture_pack_config.h"
 
 #include "util/media_capture.h"
+#include "util/postprocessing.h"
 #include "util/shader_compile_threads.h"
 
 #include <algorithm>
@@ -150,6 +151,26 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
     const std::optional<std::string> note = ShaderCompileThreads::GetNote(EmuFolders::Cache);
     m_ui.shaderCompileThreadsNote->setText(note.has_value() ? QString::fromStdString(note.value()) : QString());
     m_ui.shaderCompileThreadsNote->setVisible(note.has_value());
+  }
+
+  // Under a bezel drawing over the whole screen, the display's own placement applies only to games it falls back for.
+  const auto make_note = [this]() {
+    QLabel* note = new QLabel(tr("A bezel stage draws over the whole screen and places 4:3 games itself, so this "
+                                 "applies only to games of other shapes."),
+                              this);
+    note->setWordWrap(true);
+    note->setVisible(false);
+    return note;
+  };
+  {
+    int row;
+    QFormLayout::ItemRole role;
+    m_ui.formLayout_2->getWidgetPosition(m_ui.displayScaling, &row, &role);
+    m_bezel_scaling_note = make_note();
+    m_ui.formLayout_2->insertRow(row + 1, m_bezel_scaling_note);
+    m_ui.formLayout_7->getWidgetPosition(m_ui.label_11, &row, &role);
+    m_bezel_position_note = make_note();
+    m_ui.formLayout_7->insertRow(row + 2, m_bezel_position_note);
   }
   SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_ui.gpuLineDetectMode, "GPU", "LineDetectMode",
                                                &Settings::ParseLineDetectModeName, &Settings::GetLineDetectModeName,
@@ -1251,4 +1272,25 @@ void GraphicsSettingsWidget::onEnableVRAMWriteDumpingChanged()
   m_ui.minDumpedVRAMWriteHeight->setEnabled(enabled);
   m_ui.vramWriteDumpThresholdLabel->setEnabled(enabled);
   m_ui.vramWriteDumpThresholdSeparator->setEnabled(enabled);
+}
+
+void GraphicsSettingsWidget::showEvent(QShowEvent* event)
+{
+  // The post-processing chain is set on another page: the notes are brought up to date whenever this one comes back.
+  QWidget::showEvent(event);
+  updateBezelNotes();
+}
+
+void GraphicsSettingsWidget::updateBezelNotes()
+{
+  // The chain in effect: a game's own, else the global one.
+  const char* section = PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+  const auto lock = Host::GetSettingsLock();
+  const SettingsInterface* game = m_dialog->getSettingsInterface();
+  const SettingsInterface& si = (game && PostProcessing::Config::HasOwnChain(*game, section)) ?
+                                  *game :
+                                  *Host::Internal::GetBaseSettingsLayer();
+  const bool bezel = PostProcessing::Config::ChainHasWholeScreenStage(si, section);
+  m_bezel_scaling_note->setVisible(bezel);
+  m_bezel_position_note->setVisible(bezel);
 }

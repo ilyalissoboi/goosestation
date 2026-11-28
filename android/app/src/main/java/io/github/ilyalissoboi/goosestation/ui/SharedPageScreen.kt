@@ -23,7 +23,15 @@ fun SharedPageScreen(
     when (page) {
         SharedPage.Console -> ConsoleScreen(values, extras.names, onChange, onBack)
         SharedPage.Emulation -> EmulationScreen(values, extras.rewindUsage, onChange, onBack, extras.names)
-        SharedPage.Graphics -> GraphicsScreen(values, extras.names, extras.vulkanFailed, onChange, onBack)
+        SharedPage.Graphics ->
+            GraphicsScreen(
+                values,
+                extras.names,
+                extras.vulkanFailed,
+                onChange,
+                onBack,
+                bezelWholeScreen = extras.bezelWholeScreen,
+            )
         SharedPage.Audio -> AudioScreen(values, extras.names, onChange, onBack)
         SharedPage.Advanced ->
             AdvancedScreen(values, extras.names, extras.fastmemAvailable, onChange, onBack, extras.compileThreads)

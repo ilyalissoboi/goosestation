@@ -103,6 +103,8 @@ void PostProcessing::Shader::LoadOptions(const SettingsInterface& si, const char
       }
     }
   }
+
+  LoadStageSettings(si, section);
 }
 
 const PostProcessing::ShaderOption* PostProcessing::Shader::GetOptionByName(std::string_view name) const

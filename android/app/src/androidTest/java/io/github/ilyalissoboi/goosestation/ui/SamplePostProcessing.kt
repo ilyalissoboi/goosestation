@@ -201,6 +201,17 @@ class SamplePostProcessing : PostProcessingModel {
         stages(chain, *list.toTypedArray())
     }
 
+    override fun setWholeScreen(
+        chain: Chain,
+        index: Int,
+        on: Boolean,
+    ) {
+        calls += "setWholeScreen $chain $index $on"
+        val list = stagesOf(chain).toMutableList()
+        list[index] = list[index].copy(wholeScreen = on)
+        stages(chain, *list.toTypedArray())
+    }
+
     override fun reload() {
         calls += "reload"
     }

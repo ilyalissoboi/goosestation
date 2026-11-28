@@ -122,14 +122,25 @@ struct PostProcessingStage
   std::string kind;
   std::vector<PostProcessing::ShaderOption> options;
   std::string error; // why it doesn't load, when the core said
+  /// A slang stage's "Draw over the whole screen": its switch, else whether it's a bezel by its folder.
+  bool whole_screen = false;
+};
+
+/// A shader that can be a stage: its name, its kind, and a slang preset's cost ("light", "heavy" or "very heavy", from
+/// its structure; empty for other shaders, or one that can't be read).
+struct PostProcessingShader
+{
+  std::string name;
+  std::string kind;
+  std::string cost;
 };
 
 // The chain calls edit section ("PostProcessing" or "InternalPostProcessing") in settings.ini when key is nullopt,
 // else in the key's game file, through PostProcessing::Config, on the caller's thread.
 
 /// The shaders that can be stages, as GetAvailableShaders() orders them (slang presets unloaded, others only when their
-/// metadata loads): each name and its kind.
-std::vector<std::pair<std::string, std::string>> GetPostProcessingShaders();
+/// metadata loads).
+std::vector<PostProcessingShader> GetPostProcessingShaders();
 std::vector<PostProcessingStage> GetPostProcessingStages(const std::optional<std::string>& key, const char* section);
 /// Empty, or why the shader couldn't be added.
 std::string AddPostProcessingStage(const std::optional<std::string>& key, const char* section,
@@ -138,6 +149,11 @@ void RemovePostProcessingStage(const std::optional<std::string>& key, const char
 void MovePostProcessingStage(const std::optional<std::string>& key, const char* section, u32 index, bool down);
 void SetPostProcessingOption(const std::optional<std::string>& key, const char* section, u32 index,
                              const std::string& name, std::span<const float> values);
+/// Sets a slang stage's "Draw over the whole screen" switch.
+void SetPostProcessingWholeScreen(const std::optional<std::string>& key, const char* section, u32 index, bool on);
+/// Whether the display chain in effect (the key's game's own, else settings.ini's) is on with a stage drawing over
+/// the whole screen, so the display's own placement applies only to games it falls back for.
+bool ChainDrawsOverWholeScreen(const std::optional<std::string>& key);
 /// settings.ini's chain (Enabled, StageCount, the stages) over the game's own.
 void CopyPostProcessingChain(const std::string& key, const char* section);
 /// Deletes the game's chain: Enabled, StageCount and the stages.

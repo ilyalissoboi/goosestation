@@ -6,6 +6,7 @@
 #include "postprocessing_shader.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -46,6 +47,7 @@ public:
   bool IsValid() const override;
   bool WantsDepthBuffer() const override;
   bool ReadsGamePicture() const override;
+  bool DrewWholeScreen() const override;
 
   /// Parses the preset (no GPU) for its #pragma parameters, which become float options in preset order.
   bool LoadFromFile(std::string name, std::string path, bool only_config, Error* error);
@@ -59,8 +61,12 @@ public:
   /// The parameters whose values changed since the running chain last had them.
   const std::vector<std::string>& GetParametersToPush() const { return m_params_to_push; }
 
+  /// Whether the stage wants the whole screen: its switch (Config::WHOLE_SCREEN_KEY), else a bezel by its folder.
+  bool WantsWholeScreen() const;
+
 protected:
   void OnOptionChanged(const ShaderOption& option) override;
+  void LoadStageSettings(const SettingsInterface& si, const char* section) override;
 
 private:
   bool CreatePipelines(GPUTexture::Format format);
@@ -78,10 +84,14 @@ private:
   bool m_failed = false;
   u64 m_frame_count = 0;
   std::vector<std::string> m_params_to_push;
+  std::optional<bool> m_whole_screen_key;
+  bool m_drew_whole_screen = false;
+  std::optional<bool> m_logged_whole_screen;
 
   GPUTexture::Format m_output_format = GPUTexture::Format::Unknown;
   std::unique_ptr<GPUPipeline> m_native_copy_pipeline;
   std::unique_ptr<GPUPipeline> m_output_copy_pipeline;
+  std::unique_ptr<GPUPipeline> m_result_copy_pipeline; // the preset's result, opaque
   std::unique_ptr<GPUPipeline> m_box_pipeline;
   u32 m_box_factor = 0;
   std::unique_ptr<GPUTexture> m_native;

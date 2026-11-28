@@ -19,10 +19,11 @@ class VulkanSlangChain final : public SlangChain
 public:
   ~VulkanSlangChain() override;
 
-  bool Create(const std::string& preset_path, Error* error);
+  bool Create(const std::string& preset_path, bool original_aspect, Error* error);
 
   void SetParameter(const char* name, float value) override;
-  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) override;
+  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, const SlangFrameOptions* options,
+             Error* error) override;
 
 private:
   PFN_libra_vk_filter_chain_create m_create = nullptr;
@@ -48,7 +49,7 @@ VulkanSlangChain::~VulkanSlangChain()
     Librashader::DescribeAndFreeError(err);
 }
 
-bool VulkanSlangChain::Create(const std::string& preset_path, Error* error)
+bool VulkanSlangChain::Create(const std::string& preset_path, bool original_aspect, Error* error)
 {
   if (!Librashader::ResolveSymbol("libra_vk_filter_chain_create", &m_create, error) ||
       !Librashader::ResolveSymbol("libra_vk_filter_chain_frame", &m_frame, error) ||
@@ -59,7 +60,7 @@ bool VulkanSlangChain::Create(const std::string& preset_path, Error* error)
   }
 
   libra_shader_preset_t preset = nullptr;
-  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_VULKAN, &preset, error))
+  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_VULKAN, original_aspect, &preset, error))
     return false;
 
   VulkanDevice& dev = VulkanDevice::GetInstance();
@@ -98,7 +99,8 @@ void VulkanSlangChain::SetParameter(const char* name, float value)
     Librashader::DescribeAndFreeError(err); // a parameter the preset doesn't have
 }
 
-bool VulkanSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error)
+bool VulkanSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count,
+                              const SlangFrameOptions* options, Error* error)
 {
   VulkanDevice& dev = VulkanDevice::GetInstance();
   VulkanTexture* const src = static_cast<VulkanTexture*>(input);
@@ -117,9 +119,10 @@ bool VulkanSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_co
 
   const libra_image_vk_t in = {src->GetImage(), src->GetVkFormat(), src->GetWidth(), src->GetHeight()};
   const libra_image_vk_t out = {dst->GetImage(), dst->GetVkFormat(), dst->GetWidth(), dst->GetHeight()};
+  frame_vk_opt_t frame_opt;
   const libra_viewport_t vp = {0.0f, 0.0f, dst->GetWidth(), dst->GetHeight()};
   const libra_error_t err =
-    m_frame(&m_chain, dev.GetCurrentCommandBuffer(), static_cast<size_t>(frame_count), in, out, &vp, nullptr, nullptr);
+    m_frame(&m_chain, dev.GetCurrentCommandBuffer(), static_cast<size_t>(frame_count), in, out, &vp, nullptr, Librashader::MakeFrameOptions(options, &frame_opt));
   m_last_frame_fence = dev.GetCurrentFenceCounter();
 
   // librashader leaves the output as a colour attachment, with pipelines and descriptor sets of its own bound.
@@ -141,10 +144,11 @@ bool VulkanDevice::SupportsSlangPresets() const
   return true;
 }
 
-std::unique_ptr<SlangChain> VulkanDevice::CreateSlangChain(const std::string& preset_path, Error* error)
+std::unique_ptr<SlangChain> VulkanDevice::CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                                        Error* error)
 {
   std::unique_ptr<VulkanSlangChain> chain = std::make_unique<VulkanSlangChain>();
-  if (!chain->Create(preset_path, error))
+  if (!chain->Create(preset_path, original_aspect, error))
     return {};
   return chain;
 }

@@ -8,6 +8,7 @@
 #include <array>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -106,6 +107,10 @@ struct PictureInfo
   GPUTexture* game_texture = nullptr;
   GSVector4i game_view = GSVector4i::zero();
 
+  /// The picture's display aspect ratio as shown (after rotation): what a bezel is told, and whether it draws over the
+  /// whole screen. 0 when unknown (the internal chain), which never draws over the whole screen.
+  float aspect_ratio = 0.0f;
+
   /// Whether the chain's own textures store the picture's top row first. False only for the display chain on
   /// OpenGL, whose textures are in the window's (lower-left) orientation.
   bool rows_top_first = true;
@@ -138,6 +143,18 @@ void DeleteChain(SettingsInterface& si, const char* section);
 
 /// Whether si has a chain of its own: it sets the chain's Enabled. A game's layer without one runs the global chain.
 bool HasOwnChain(const SettingsInterface& si, const char* section);
+
+/// A slang stage's "Draw over the whole screen" switch, in its section; absent means automatic (a bezel by its folder).
+static constexpr const char* WHOLE_SCREEN_KEY = "WholeScreen";
+std::optional<bool> GetStageWholeScreen(const SettingsInterface& si, const char* section, u32 index);
+void SetStageWholeScreen(SettingsInterface& si, const char* section, u32 index, std::optional<bool> value);
+
+/// Whether the stage is a slang preset that wants the whole screen (its switch, else its folder).
+bool StageWantsWholeScreen(const SettingsInterface& si, const char* section, u32 index);
+
+/// Whether the chain is enabled and has a stage that wants the whole screen, so the display's own placement (integer
+/// scaling, alignment, stretch) applies only to games the stage falls back for.
+bool ChainHasWholeScreenStage(const SettingsInterface& si, const char* section);
 } // namespace Config
 
 class Chain
@@ -171,6 +188,9 @@ public:
 
   bool Apply(GPUTexture* input_color, GPUTexture* input_depth, GPUTexture* final_target, const GSVector4i final_rect,
              s32 orig_width, s32 orig_height, s32 native_width, s32 native_height, const PictureInfo& picture);
+
+  /// Replaces the stages with these, enabled, as LoadStages() would from settings. For tests only.
+  void SetStagesForTest(std::vector<std::unique_ptr<Shader>> stages);
 
 private:
   void ClearStagesWithError(const Error& error);

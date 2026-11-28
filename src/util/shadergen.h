@@ -30,7 +30,8 @@ public:
   std::string GenerateScreenQuadVertexShader(float z = 0.0f);
   std::string GenerateUVQuadVertexShader();
   std::string GenerateFillFragmentShader();
-  std::string GenerateCopyFragmentShader();
+  /// Copies src_rect of a texture; opaque writes alpha 1 rather than the texture's.
+  std::string GenerateCopyFragmentShader(bool opaque = false);
 
   /// Like the copy shader, but each output pixel averages factor x factor source texels around its centre (sample
   /// with a nearest sampler). Uniforms: float4 u_src_rect (as the copy's), float4 u_src_texel (xy: one texel in UV).

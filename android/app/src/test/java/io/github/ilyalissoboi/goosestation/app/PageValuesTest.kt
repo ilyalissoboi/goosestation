@@ -122,6 +122,23 @@ class PageValuesTest {
         }
 
     @Test
+    fun graphicsReadsWhetherABezelDrawsOverTheWholeScreen() =
+        runTest {
+            api.bezelWholeScreen = true
+            val model = model()
+
+            model.load("Console")
+            runCurrent()
+            assertFalse(model.bezelWholeScreen)
+            assertTrue(calls.none { it.startsWith("chainDrawsOverWholeScreen") })
+
+            model.load("Graphics")
+            runCurrent()
+            assertTrue(model.bezelWholeScreen)
+            assertTrue("chainDrawsOverWholeScreen null" in calls)
+        }
+
+    @Test
     fun aReadOvertakenByANewerOneIsDropped() =
         runTest {
             val model = model()

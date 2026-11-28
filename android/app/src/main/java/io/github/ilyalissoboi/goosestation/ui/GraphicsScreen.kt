@@ -15,12 +15,18 @@ import io.github.ilyalissoboi.goosestation.ui.components.SettingsPage
 import io.github.ilyalissoboi.goosestation.ui.components.SettingsSection
 import io.github.ilyalissoboi.goosestation.ui.components.rememberInitialFocus
 
+/** The display placement rows' note while a bezel stage draws over the whole screen. */
+const val BEZEL_PLACES_PICTURE =
+    "A bezel stage draws over the whole screen and places 4:3 games itself, so this applies only to games of other " +
+        "shapes."
+
 /**
  * The Graphics page, in desktop's sections: rendering, enhancements, PGXP, the display and the on-screen display, from
  * [values], with the core's [names] for the choice rows. A row that does nothing with the renderer chosen, or with
  * the switch it depends on off, is left out. Each change comes as the whole [values] with that setting changed
- * ([onChange]). [vulkanFailed] says Vulkan didn't start in this run. The renderer is focused on opening; B or Back go
- * back ([onBack]).
+ * ([onChange]). [vulkanFailed] says Vulkan didn't start in this run. While a bezel stage draws over the whole screen
+ * ([bezelWholeScreen]), the display placement rows say they apply only to games of other shapes. The renderer is
+ * focused on opening; B or Back go back ([onBack]).
  */
 @Composable
 fun GraphicsScreen(
@@ -29,6 +35,7 @@ fun GraphicsScreen(
     vulkanFailed: Boolean,
     onChange: (SettingValues) -> Unit,
     onBack: () -> Unit,
+    bezelWholeScreen: Boolean = false,
 ) {
     val first = rememberInitialFocus()
     val renderer = values[GraphicsSettings.RENDERER]
@@ -220,10 +227,11 @@ fun GraphicsScreen(
         }
         GameNames(values, onChange, names, "Deinterlacing", GraphicsSettings.DEINTERLACING)
         GameNames(values, onChange, names, "Crop", GraphicsSettings.CROP)
-        GameNames(values, onChange, names, "Scaling", GraphicsSettings.SCALING)
-        GameNames(values, onChange, names, "Screen position", GraphicsSettings.ALIGNMENT)
+        val placement = if (bezelWholeScreen) BEZEL_PLACES_PICTURE else null
+        GameNames(values, onChange, names, "Scaling", GraphicsSettings.SCALING, note = placement)
+        GameNames(values, onChange, names, "Screen position", GraphicsSettings.ALIGNMENT, note = placement)
         GameNames(values, onChange, names, "Rotation", GraphicsSettings.ROTATION)
-        GameSwitch(values, onChange, "Stretch vertically", GraphicsSettings.STRETCH_VERTICALLY)
+        GameSwitch(values, onChange, "Stretch vertically", GraphicsSettings.STRETCH_VERTICALLY, note = placement)
         GameSwitch(values, onChange, "Force 4:3 for FMVs", GraphicsSettings.FORCE_4_3_FOR_FMVS)
 
         SettingsSection("On-screen display")

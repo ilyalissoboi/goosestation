@@ -45,6 +45,7 @@ add_executable(common-tests
   postprocessing_favourites_tests.cpp
   postprocessing_config_tests.cpp
   postprocessing_gpu_tests.cpp
+  postprocessing_slang_cost_tests.cpp
   postprocessing_slang_gpu_tests.cpp
   postprocessing_slang_tests.cpp
   rectangle_tests.cpp

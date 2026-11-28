@@ -126,8 +126,11 @@ interface CoreApi {
 
     // The post-processing chains ([NativeLibrary.getPostProcessingStages] and the rest): [key] null for settings.ini.
 
-    /** The shaders that can be stages: each name and its kind ("GLSL", "dolphinfx", "ReShade" or "Slang"). */
-    fun getPostProcessingShaders(): List<Pair<String, String>>
+    /**
+     * The shaders that can be stages: each name, its kind ("GLSL", "dolphinfx", "ReShade" or "Slang") and a slang
+     * preset's cost ("light", "heavy" or "very heavy"; empty for the others).
+     */
+    fun getPostProcessingShaders(): List<Triple<String, String, String>>
 
     fun getPostProcessingStages(
         key: String?,
@@ -161,6 +164,17 @@ interface CoreApi {
         name: String,
         values: FloatArray,
     )
+
+    /** Sets a slang stage's "Draw over the whole screen" switch. */
+    fun setPostProcessingWholeScreen(
+        key: String?,
+        section: String,
+        index: Int,
+        on: Boolean,
+    )
+
+    /** Whether the display chain in effect for [key] (a game's own, else settings.ini's) has a bezel over the screen. */
+    fun chainDrawsOverWholeScreen(key: String?): Boolean
 
     fun copyPostProcessingChain(
         key: String,
@@ -345,13 +359,13 @@ object NativeCoreApi : CoreApi {
 
     override fun getGameInputProfile(key: String): String? = NativeLibrary.getGameInputProfile(key)
 
-    override fun getPostProcessingShaders(): List<Pair<String, String>> =
+    override fun getPostProcessingShaders(): List<Triple<String, String, String>> =
         NativeLibrary
             .getPostProcessingShaders()
             .toList()
-            .chunked(2)
-            .filter { it.size == 2 }
-            .map { it[0] to it[1] }
+            .chunked(3)
+            .filter { it.size == 3 }
+            .map { Triple(it[0], it[1], it[2]) }
 
     override fun getPostProcessingStages(
         key: String?,
@@ -384,6 +398,15 @@ object NativeCoreApi : CoreApi {
         name: String,
         values: FloatArray,
     ) = NativeLibrary.setPostProcessingOption(key, section, index, name, values)
+
+    override fun setPostProcessingWholeScreen(
+        key: String?,
+        section: String,
+        index: Int,
+        on: Boolean,
+    ) = NativeLibrary.setPostProcessingWholeScreen(key, section, index, on)
+
+    override fun chainDrawsOverWholeScreen(key: String?): Boolean = NativeLibrary.chainDrawsOverWholeScreen(key)
 
     override fun copyPostProcessingChain(
         key: String,

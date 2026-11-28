@@ -46,6 +46,26 @@ class PostProcessingSettingsTest {
     }
 
     @Test
+    fun aSlangStagesRowsStartWithTheWholeScreenSwitch() {
+        val info = StageInfo("bezel/x.slangp", "Slang", arrayOf(option("a", uiName = "A")), "", wholeScreen = true)
+        val rows = stageRows(Stage.of(info))
+
+        assertEquals(OptionRow.WholeScreen(true), rows.first())
+        assertEquals(2, rows.size)
+        val off = StageInfo("crt/x.slangp", "Slang", emptyArray(), "", wholeScreen = false)
+        assertEquals(listOf(OptionRow.WholeScreen(false)), stageRows(Stage.of(off)))
+        // Other shaders have no such switch.
+        assertEquals(emptyList<OptionRow>(), stageRows(Stage("crt-lottes", ShaderKind.GLSL, emptyList())))
+    }
+
+    @Test
+    fun aShaderShowsItsCostBesideItsKind() {
+        assertEquals("Slang · light", Shader("bezel/x.slangp", ShaderKind.Slang, "light").summary())
+        assertEquals("GLSL", glsl.summary())
+        assertEquals("Slang · heavy · crt", Shader("crt/x.slangp", ShaderKind.Slang, "heavy").summary("crt"))
+    }
+
+    @Test
     fun anOptionWithoutAUiNameIsHidden() {
         val rows = optionRows(listOf(option("hidden", uiName = ""), option("shown", uiName = "Shown")))
 
@@ -72,6 +92,7 @@ class PostProcessingSettingsTest {
                     is OptionRow.Value -> it.label
                     is OptionRow.Toggle -> it.option.uiName
                     is OptionRow.Pick -> it.option.uiName
+                    is OptionRow.WholeScreen -> "whole screen"
                 }
             },
         )

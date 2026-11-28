@@ -157,6 +157,13 @@ interface PostProcessingModel {
         values: List<Float>,
     )
 
+    /** Sets a slang stage's "Draw over the whole screen" switch. */
+    fun setWholeScreen(
+        chain: Chain,
+        index: Int,
+        on: Boolean,
+    )
+
     fun reload()
 
     fun showChain(chain: Chain)
@@ -515,6 +522,21 @@ class PostProcessingPage(
         edit { api.setPostProcessingOption(key, chain.section, index, option.name, array) }
     }
 
+    override fun setWholeScreen(
+        chain: Chain,
+        index: Int,
+        on: Boolean,
+    ) {
+        if (!editable(chain)) return
+        val view = chains[chain] ?: return
+        val stage = view.stages.getOrNull(index) ?: return
+        chains =
+            chains +
+            (chain to view.copy(stages = view.stages.toMutableList().also { it[index] = stage.copy(wholeScreen = on) }))
+        val key = key
+        edit { api.setPostProcessingWholeScreen(key, chain.section, index, on) }
+    }
+
     override fun showChain(chain: Chain) {
         shown = chain
     }
@@ -745,8 +767,8 @@ class PostProcessingPage(
                 withContext(core) {
                     val gles = api.postProcessingUsesOpenGLES(key)
                     val shaders =
-                        api.getPostProcessingShaders().mapNotNull { (name, kind) ->
-                            ShaderKind.of(kind)?.let { Shader(name, it) }
+                        api.getPostProcessingShaders().mapNotNull { (name, kind, cost) ->
+                            ShaderKind.of(kind)?.let { Shader(name, it, cost) }
                         }
                     Triple(gles, offered(shaders, gles), readChains(key) to api.getPostProcessingFavourites())
                 }

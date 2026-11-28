@@ -42,7 +42,11 @@ public:
   /// Whether, first in the display chain, the stage reads the game's own frame instead of its input.
   virtual bool ReadsGamePicture() const { return false; }
 
+  /// Whether the stage's last Apply() drew over the whole target (a bezel), so the stages after it work on all of it.
+  virtual bool DrewWholeScreen() const { return false; }
+
   std::vector<ShaderOption> TakeOptions();
+  /// Reads the stage's option values from its section, then LoadStageSettings().
   void LoadOptions(const SettingsInterface& si, const char* section);
 
   const ShaderOption* GetOptionByName(std::string_view name) const;
@@ -66,6 +70,9 @@ protected:
   static void ParseKeyValue(std::string_view line, std::string_view* key, std::string_view* value);
 
   virtual void OnOptionChanged(const ShaderOption& option);
+
+  /// Reads the stage's own keys from its section, besides the options (a slang stage's whole-screen switch).
+  virtual void LoadStageSettings(const SettingsInterface& si, const char* section) {}
 
   std::string m_name;
   OptionList m_options;

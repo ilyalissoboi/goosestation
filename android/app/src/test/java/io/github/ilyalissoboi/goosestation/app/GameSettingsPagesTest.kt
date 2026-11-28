@@ -271,7 +271,11 @@ class GameSettingsPagesTest {
             pages.confirm()
             runCurrent()
 
-            assertEquals(listOf("clearGameSettings $KEY", "applyGameSettings $KEY"), calls)
+            // Graphics, shown, is read again, with whether a bezel draws over the whole screen.
+            assertEquals(
+                listOf("clearGameSettings $KEY", "applyGameSettings $KEY", "chainDrawsOverWholeScreen $KEY"),
+                calls,
+            )
             assertEquals(3, pages.values(GamePage.Graphics)!![GraphicsSettings.RESOLUTION_SCALE])
             assertEquals(0, pages.summary!!.total)
         }

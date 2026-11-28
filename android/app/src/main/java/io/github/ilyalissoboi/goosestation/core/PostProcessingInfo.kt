@@ -34,13 +34,15 @@ class ShaderOptionInfo(
 /**
  * A stage of a post-processing chain: its [shader]'s name, as `ShaderName` has it, the shader's [kind] ("GLSL",
  * "ReShade" or "Slang"; empty when this install has no shader by that name, or it doesn't load), its [options], with
- * the stage's values over the shader's defaults, and when it doesn't load, the core's [error] if it gave one.
+ * the stage's values over the shader's defaults, and when it doesn't load, the core's [error] if it gave one. A slang
+ * stage's [wholeScreen] is its "Draw over the whole screen": its switch, else whether it's a bezel by its folder.
  */
 class StageInfo(
     val shader: String,
     val kind: String,
     val options: Array<ShaderOptionInfo>,
     val error: String = "",
+    val wholeScreen: Boolean = false,
 )
 
 /**

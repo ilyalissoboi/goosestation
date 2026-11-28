@@ -6,6 +6,7 @@
 
 #include "util/host.h"
 #include "util/http_downloader.h"
+#include "util/postprocessing_slang_cost.h"
 
 #include "core/host.h"
 
@@ -47,6 +48,12 @@ constexpr PackInfo s_packs[] = {
 };
 
 constexpr const char* MARKER_DIR = ".shaderpacks";
+
+// The browsers' cost labels go stale when a pack's files change: they're worked out again after an install or removal.
+struct ClearCostsOnExit
+{
+  ~ClearCostsOnExit() { PostProcessing::Slang::ClearCostCache(); }
+};
 
 // A relative path a marker may list: no empty, "." or ".." component, not absolute, no '\\' or drive letter.
 bool IsSafeRelativePath(std::string_view path)
@@ -356,6 +363,7 @@ void RemoveFiles(std::string_view root, const InstalledPack& pack)
 
 bool Uninstall(std::string_view root, std::string_view id, Error* error)
 {
+  const ClearCostsOnExit clear_costs;
   const PackInfo* pack = FindPack(id);
   if (!pack)
   {
@@ -707,6 +715,7 @@ std::optional<ResolvedVersion> ResolveLatest(const PackInfo& pack, Transport& tr
 std::vector<InstallResult> Install(std::string_view root, std::span<const std::string> ids, Transport& transport,
                                    ProgressCallback* progress)
 {
+  const ClearCostsOnExit clear_costs;
   std::vector<InstallResult> results;
   std::vector<std::string> failed;
   if (progress)

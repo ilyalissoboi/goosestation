@@ -9,6 +9,7 @@
 #include "postprocessing_shader_fx.h"
 #include "postprocessing_shader_glsl.h"
 #include "postprocessing_shader_slang.h"
+#include "postprocessing_slang_picture.h"
 #include "librashader_loader.h"
 
 // TODO: Remove me
@@ -456,6 +457,44 @@ bool PostProcessing::Config::HasOwnChain(const SettingsInterface& si, const char
   return si.ContainsValue(section, "Enabled");
 }
 
+std::optional<bool> PostProcessing::Config::GetStageWholeScreen(const SettingsInterface& si, const char* section,
+                                                                 u32 index)
+{
+  bool value;
+  if (!si.GetBoolValue(GetStageConfigSection(section, index), WHOLE_SCREEN_KEY, &value))
+    return std::nullopt;
+  return value;
+}
+
+void PostProcessing::Config::SetStageWholeScreen(SettingsInterface& si, const char* section, u32 index,
+                                                 std::optional<bool> value)
+{
+  const TinyString stage_section = GetStageConfigSection(section, index);
+  if (value.has_value())
+    si.SetBoolValue(stage_section, WHOLE_SCREEN_KEY, value.value());
+  else
+    si.DeleteValue(stage_section, WHOLE_SCREEN_KEY);
+}
+
+bool PostProcessing::Config::StageWantsWholeScreen(const SettingsInterface& si, const char* section, u32 index)
+{
+  const std::string name = GetStageShaderName(si, section, index);
+  return Slang::IsPresetName(name) && Slang::WantsWholeScreen(name, GetStageWholeScreen(si, section, index));
+}
+
+bool PostProcessing::Config::ChainHasWholeScreenStage(const SettingsInterface& si, const char* section)
+{
+  if (!si.GetBoolValue(section, "Enabled", false))
+    return false;
+  const u32 count = GetStageCount(si, section);
+  for (u32 i = 0; i < count; i++)
+  {
+    if (StageWantsWholeScreen(si, section, i))
+      return true;
+  }
+  return false;
+}
+
 PostProcessing::Chain::Chain(const char* section) : m_section(section)
 {
 }
@@ -632,6 +671,13 @@ void PostProcessing::Chain::UpdateSettings(std::unique_lock<std::mutex>& setting
     DEV_LOG("Depth buffer is needed.");
 }
 
+void PostProcessing::Chain::SetStagesForTest(std::vector<std::unique_ptr<Shader>> stages)
+{
+  m_stages = std::move(stages);
+  m_enabled = true;
+  m_target_format = GPUTexture::Format::Unknown;
+}
+
 void PostProcessing::Chain::Toggle()
 {
   if (m_stages.empty())
@@ -751,18 +797,30 @@ bool PostProcessing::Chain::Apply(GPUTexture* input_color, GPUTexture* input_dep
   if (input_depth)
     input_depth->MakeReadyForSampling();
 
-  // Only the first stage may read the game's own frame; the stages after it work on what came before.
+  // Only the first stage may read the game's own frame; the stages after it work on what came before. After a stage
+  // that drew over the whole screen (a bezel), they work on all of it.
   PictureInfo stage_picture = picture;
+  GSVector4i stage_rect = final_rect;
   for (const std::unique_ptr<Shader>& stage : m_stages)
   {
     const bool is_final = (stage.get() == m_stages.back().get());
 
-    if (!stage->Apply(input_color, input_depth, is_final ? final_target : output, final_rect, orig_width, orig_height,
+    if (!stage->Apply(input_color, input_depth, is_final ? final_target : output, stage_rect, orig_width, orig_height,
                       native_width, native_height, m_target_width, m_target_height, stage_picture))
     {
       return false;
     }
     stage_picture.game_texture = nullptr;
+    if (stage->DrewWholeScreen())
+    {
+      const Slang::NextStage next = Slang::AfterWholeScreen(m_target_width, m_target_height);
+      stage_rect = next.final_rect;
+      stage_picture.rect = next.picture_rect;
+      stage_picture.native_width = next.native.width;
+      stage_picture.native_height = next.native.height;
+      // A second bezel draws into the screen it's given, never squeezing the first.
+      stage_picture.aspect_ratio = 0.0f;
+    }
 
     if (!is_final)
     {

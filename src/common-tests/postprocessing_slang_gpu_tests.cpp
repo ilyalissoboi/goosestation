@@ -125,8 +125,10 @@ protected:
     ASSERT_TRUE(GPUTestDevice::Create({}, &error)) << error.GetDescription();
 
     std::error_code ec;
-    m_root = (std::filesystem::temp_directory_path(ec) / ("common-tests-slang-gpu-" + std::to_string(std::rand())))
-               .generic_string();
+    // Native separators: Windows' extended-length paths, which FileSystem uses for absolute ones, take no '/'.
+    m_root = Path::ToNativePath(
+      (std::filesystem::temp_directory_path(ec) / ("common-tests-slang-gpu-" + std::to_string(std::rand())))
+        .generic_string());
     WriteFile("p/gain.slangp", "shaders = 1\nshader0 = gain.slang\n");
     WriteFile("p/gain.slang", GAIN_SHADER);
     WriteFile("p/probe.slangp", "shaders = 1\nshader0 = probe.slang\n");
@@ -146,10 +148,10 @@ protected:
 
   void WriteFile(const std::string& relative, std::string_view contents)
   {
-    const std::filesystem::path p = std::filesystem::path(m_root) / relative;
+    const std::string path = Path::ToNativePath(Path::Combine(m_root, relative));
     std::error_code ec;
-    std::filesystem::create_directories(p.parent_path(), ec);
-    ASSERT_TRUE(FileSystem::WriteStringToFile(p.generic_string().c_str(), contents));
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+    ASSERT_TRUE(FileSystem::WriteStringToFile(path.c_str(), contents));
   }
 
   GPUTexture* Texture(GPUTexture::Type type, const std::vector<u32>* pixels)
@@ -164,7 +166,8 @@ protected:
   {
     m_shader = std::make_unique<PostProcessing::SlangShader>();
     Error error;
-    ASSERT_TRUE(m_shader->LoadFromFile(name, Path::Combine(m_root, name), false, &error)) << error.GetDescription();
+    ASSERT_TRUE(m_shader->LoadFromFile(name, Path::ToNativePath(Path::Combine(m_root, name)), false, &error))
+      << error.GetDescription();
     MemorySettingsInterface si;
     si.SetFloatValue("Stage", "TEST_GAIN", gain);
     m_shader->LoadOptions(si, "Stage");

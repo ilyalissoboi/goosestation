@@ -184,8 +184,8 @@ protected:
     // One viewport-sized pass, as bezels end.
     WriteFile("bezel/frame.slangp", "shaders = 1\nshader0 = frame.slang\nscale_type0 = viewport\n");
     WriteFile("bezel/frame.slang", FRAME_SHADER);
-    WriteFile("bezel/koko-aio/aspect.slangp", "shaders = 1\nshader0 = aspect.slang\nscale_type0 = viewport\n");
-    WriteFile("bezel/koko-aio/aspect.slang", ASPECT_SHADER);
+    WriteFile("bezel/aspect.slangp", "shaders = 1\nshader0 = aspect.slang\nscale_type0 = viewport\n");
+    WriteFile("bezel/aspect.slang", ASPECT_SHADER);
     WriteFile("p/transparent.slangp", "shaders = 1\nshader0 = transparent.slang\n");
     WriteFile("p/transparent.slang", TRANSPARENT_SHADER);
     WriteFile("bezel/transparent.slangp", "shaders = 1\nshader0 = ../p/transparent.slang\nscale_type0 = viewport\n");
@@ -493,15 +493,15 @@ TEST_F(SlangGPU, ABezelDrawsOverTheWholeScreen)
 
 TEST_F(SlangGPU, ABezelReceivesTheAspect)
 {
-  LoadStage("bezel/koko-aio/aspect.slangp", 1.0f);
+  LoadStage("bezel/aspect.slangp", 1.0f);
   const std::vector<u32> input = InputPixels();
   GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
   std::vector<u32> out = Run(tex, PictureAt(4.0f / 3.0f));
   EXPECT_PRED2(Near, At(out, 2, 2), 0xFF0000AAu) << std::hex << At(out, 2, 2);
-  // A preset that honours the aspect draws over the whole screen at any shape, told the shape.
-  out = Run(tex, PictureAt(16.0f / 9.0f));
+  // Auto with a small crop: still 4:3, told the picture's own shape.
+  out = Run(tex, PictureAt(1.31f));
   EXPECT_TRUE(m_shader->DrewWholeScreen());
-  EXPECT_PRED2(Near, At(out, 2, 2), 0xFF0000E3u) << std::hex << At(out, 2, 2);
+  EXPECT_PRED2(Near, At(out, 2, 2), 0xFF0000A7u) << std::hex << At(out, 2, 2);
 }
 
 TEST_F(SlangGPU, ANonFourThreePictureFallsBackIntoThePicture)
@@ -950,6 +950,109 @@ TEST_F(SlangGPU, DumpChainFrames)
       RGBA8Image(DUMP_W, DUMP_H, pixels.data()).SaveToFile((base + ".png").c_str());
 
       chain.DestroyTextures();
+    }
+  }
+}
+
+TEST_F(SlangGPU, BezelFramesAtTheScreensSize)
+{
+  // GOOSESTATION_GPU_TEST_SHOTS: a folder for PNGs of each preset in GOOSESTATION_GPU_TEST_PRESETS drawn as the display
+  // chain draws it on a 1920x1080 screen, from the game's own frame (GOOSESTATION_GPU_TEST_PICTURE, else a pattern):
+  // a 4:3 picture and a 16:9 one. For looking at, and for the numbers the bezels' checks read.
+  const char* shots = std::getenv("GOOSESTATION_GPU_TEST_SHOTS");
+  const char* list = std::getenv("GOOSESTATION_GPU_TEST_PRESETS");
+  if (!shots || !*shots || !list || !*list)
+    GTEST_SKIP() << "GOOSESTATION_GPU_TEST_SHOTS or GOOSESTATION_GPU_TEST_PRESETS isn't set";
+  ASSERT_TRUE(FileSystem::EnsureDirectoryExists(shots, true));
+  Log::SetConsoleOutputParams(true, false);
+  const std::string api = GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI());
+
+  constexpr u32 W = 1920, H = 1080;
+  const std::vector<u32> native = DumpNativePicture();
+  std::unique_ptr<GPUTexture> game = g_gpu_device->CreateTexture(
+    DUMP_NATIVE_W, DUMP_NATIVE_H, 1, 1, 1, GPUTexture::Type::Texture, GPUTexture::Format::RGBA8, native.data(),
+    DUMP_NATIVE_W * sizeof(u32));
+  std::unique_ptr<GPUTexture> input =
+    g_gpu_device->CreateTexture(W, H, 1, 1, 1, GPUTexture::Type::RenderTarget, GPUTexture::Format::RGBA8);
+  std::unique_ptr<GPUTexture> output =
+    g_gpu_device->CreateTexture(W, H, 1, 1, 1, GPUTexture::Type::RenderTarget, GPUTexture::Format::RGBA8);
+  ASSERT_TRUE(game && input && output);
+
+  struct Shape
+  {
+    const char* name;
+    float aspect;
+    GSVector4i rect;
+  };
+  const Shape shapes[] = {
+    {"4x3", 4.0f / 3.0f, GSVector4i(240, 0, 1680, 1080)},
+    {"16x9", 16.0f / 9.0f, GSVector4i(0, 0, 1920, 1080)},
+  };
+
+  std::string_view rest(list);
+  while (!rest.empty())
+  {
+    const size_t sep = rest.find('|');
+    const std::string path(rest.substr(0, sep));
+    rest = (sep == std::string_view::npos) ? std::string_view() : rest.substr(sep + 1);
+    SCOPED_TRACE(path);
+
+    for (const Shape& shape : shapes)
+    {
+      // The stage is named as the pack installs it, so a bezel is one by its folder.
+      std::string name = path;
+      std::replace(name.begin(), name.end(), '\\', '/');
+      if (const size_t at = name.find("/bezel/"); at != std::string::npos)
+        name = name.substr(at + 1);
+      auto stage = std::make_unique<PostProcessing::SlangShader>();
+      Error error;
+      ASSERT_TRUE(stage->LoadFromFile(name, path, false, &error)) << error.GetDescription();
+      PostProcessing::Chain chain("ShotChain");
+      std::vector<std::unique_ptr<PostProcessing::Shader>> stages;
+      stages.push_back(std::move(stage));
+      chain.SetStagesForTest(std::move(stages));
+      ASSERT_TRUE(chain.CheckTargets(GPUTexture::Format::RGBA8, W, H));
+
+      PostProcessing::PictureInfo picture;
+      picture.rect = shape.rect;
+      picture.native_width = DUMP_NATIVE_W;
+      picture.native_height = DUMP_NATIVE_H;
+      picture.game_texture = game.get();
+      picture.game_view = GSVector4i(0, 0, DUMP_NATIVE_W, DUMP_NATIVE_H);
+      picture.rows_top_first = true;
+      picture.aspect_ratio = shape.aspect;
+      for (int frame = 0; frame < DUMP_FRAMES; frame++)
+      {
+        ASSERT_TRUE(chain.Apply(input.get(), nullptr, output.get(), shape.rect, DUMP_NATIVE_W, DUMP_NATIVE_H,
+                                DUMP_NATIVE_W, DUMP_NATIVE_H, picture));
+      }
+
+      std::vector<u32> pixels(W * H);
+      std::unique_ptr<GPUDownloadTexture> dl = g_gpu_device->CreateDownloadTexture(W, H, GPUTexture::Format::RGBA8);
+      ASSERT_TRUE(dl);
+      output->MakeReadyForSampling();
+      dl->CopyFromTexture(0, 0, output.get(), 0, 0, W, H, 0, 0, true);
+      dl->Flush();
+      ASSERT_TRUE(dl->ReadTexels(0, 0, W, H, pixels.data(), W * sizeof(u32)));
+      chain.DestroyTextures();
+
+      // The share of the side bars (the screen outside the 4:3 picture) that isn't black: a bezel draws there.
+      u32 lit = 0, bar = 0;
+      for (u32 y = 0; y < H; y += 4)
+      {
+        for (u32 x = 0; x < W; x += 4)
+        {
+          if (x >= 240 && x < 1680)
+            continue;
+          bar++;
+          lit += (pixels[y * W + x] & 0x00FFFFFFu) > 0x00101010u;
+        }
+      }
+      std::printf("SHOT %s %s %s bars lit %.0f%%\n", api.c_str(), Path::GetFileTitle(path).data(), shape.name,
+                  100.0 * lit / std::max(bar, 1u));
+      const std::string file =
+        Path::Combine(shots, fmt::format("{}-{}-{}.png", api, Path::GetFileTitle(path), shape.name));
+      RGBA8Image(W, H, pixels.data()).SaveToFile(file.c_str());
     }
   }
 }

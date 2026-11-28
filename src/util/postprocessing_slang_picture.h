@@ -136,14 +136,6 @@ inline bool IsBezelName(std::string_view name)
   return Detail::HasFolders(name, {"bezel"});
 }
 
-/// Whether a preset places the game by the aspect ratio it's given (OriginalAspect), so it draws over the whole screen
-/// whatever the picture's shape. Only koko-aio's, checked by frames: the other families size the picture with their
-/// own parameters and would squeeze a picture that isn't 4:3.
-inline bool HonoursAspect(std::string_view name)
-{
-  return Detail::HasFolders(name, {"bezel", "koko-aio"});
-}
-
 /// Whether a display aspect ratio is 4:3, within 2% (Auto with a small crop still counts).
 inline bool IsFourThree(float aspect)
 {
@@ -157,10 +149,12 @@ inline bool WantsWholeScreen(std::string_view name, std::optional<bool> key)
 }
 
 /// Whether a stage that wants the whole screen draws over it this frame: the picture's aspect (0 when unknown, as in
-/// the internal chain) is 4:3, or the preset honours the aspect. Otherwise it draws into the picture as other stages do.
-inline bool DrawsWholeScreen(bool wants, bool honours_aspect, float aspect)
+/// the internal chain) is 4:3. Otherwise it draws into the picture as other stages do: the pack's bezels size the
+/// picture with their own parameters (4:3 by default; koko-aio and scanline-classic too, though they're told the
+/// aspect), so they'd squeeze a picture of another shape.
+inline bool DrawsWholeScreen(bool wants, float aspect)
 {
-  return wants && aspect > 0.0f && (honours_aspect || IsFourThree(aspect));
+  return wants && IsFourThree(aspect);
 }
 
 /// Where the stages after one that drew over the whole screen work: all of the target, its own size as the "native"

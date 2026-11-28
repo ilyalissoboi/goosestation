@@ -437,7 +437,7 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
 
   // A bezel draws over the whole target, fed the whole game picture (integer scaling doesn't apply under it), or what
   // the target shows of the drawn picture when it reads the input. Otherwise it draws where the picture is.
-  const bool whole = Slang::DrawsWholeScreen(WantsWholeScreen(), Slang::HonoursAspect(m_name), picture.aspect_ratio);
+  const bool whole = Slang::DrawsWholeScreen(WantsWholeScreen(), picture.aspect_ratio);
   const GSVector4i full_target(0, 0, static_cast<s32>(target_width), static_cast<s32>(target_height));
   const GSVector4i out_rect = whole ? full_target : visible.out;
   const GSVector4i src_rect = (whole && from_game) ? picture.game_view : visible.src;

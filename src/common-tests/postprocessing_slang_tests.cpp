@@ -513,15 +513,6 @@ TEST(SlangPlacement, BezelNamesAreByFolder)
   EXPECT_FALSE(IsBezelName("crt/bezel.slangp"));
 }
 
-TEST(SlangPlacement, KokoHonoursTheAspect)
-{
-  EXPECT_TRUE(HonoursAspect("shaders_slang/bezel/koko-aio/koko-aio-ng.slangp"));
-  EXPECT_TRUE(HonoursAspect("bezel/Koko-AIO/Presets-ng/x.slangp"));
-  EXPECT_FALSE(HonoursAspect("shaders_slang/bezel/Mega_Bezel/Presets/MBZ__5__POTATO.slangp"));
-  EXPECT_FALSE(HonoursAspect("shaders_slang/bezel/uborder/uborder-bezel-reflections.slangp"));
-  EXPECT_FALSE(HonoursAspect("koko-aio/koko-aio-ng.slangp"));
-}
-
 TEST(SlangPlacement, FourThreeWithinTwoPercent)
 {
   EXPECT_TRUE(IsFourThree(4.0f / 3.0f));
@@ -542,13 +533,16 @@ TEST(SlangPlacement, TheKeyOverridesTheFolder)
   EXPECT_FALSE(WantsWholeScreen("crt/x.slangp", std::nullopt));
 }
 
-TEST(SlangPlacement, NonFourThreeFallsBackUnlessHonoured)
+TEST(SlangPlacement, NonFourThreeFallsBack)
 {
-  EXPECT_FALSE(DrawsWholeScreen(true, false, 16.0f / 9.0f));
-  EXPECT_TRUE(DrawsWholeScreen(true, true, 16.0f / 9.0f));
-  EXPECT_TRUE(DrawsWholeScreen(true, false, 4.0f / 3.0f));
-  EXPECT_FALSE(DrawsWholeScreen(false, true, 4.0f / 3.0f));
-  EXPECT_FALSE(DrawsWholeScreen(true, true, 0.0f));
+  // No family in libretro's pack places a picture of another shape by the aspect it's given (koko-aio and
+  // scanline-classic draw a 4:3 one), so every bezel draws into the picture then.
+  EXPECT_FALSE(DrawsWholeScreen(true, 16.0f / 9.0f));
+  EXPECT_FALSE(DrawsWholeScreen(true, 0.75f));
+  EXPECT_TRUE(DrawsWholeScreen(true, 4.0f / 3.0f));
+  EXPECT_TRUE(DrawsWholeScreen(true, 1.31f));
+  EXPECT_FALSE(DrawsWholeScreen(false, 4.0f / 3.0f));
+  EXPECT_FALSE(DrawsWholeScreen(true, 0.0f));
 }
 
 TEST(SlangPlacement, TheSwitchIsAKeyInTheStagesSection)

@@ -386,7 +386,7 @@ void PostProcessingShaderConfigWidget::createUi()
     QCheckBox* checkbox = new QCheckBox(tr("Draw over the whole screen"), this);
     checkbox->setToolTip(tr("Lets a bezel preset draw around the game over the whole screen, where it places the game "
                             "with its own settings. On by itself for presets in a bezel folder. Games that aren't 4:3 "
-                            "are drawn into the picture instead, except by presets that follow the game's shape."));
+                            "are drawn into the picture instead."));
     checkbox->setChecked(m_whole_screen.value());
     connect(checkbox, &QCheckBox::checkStateChanged, [this](Qt::CheckState state) {
       m_whole_screen = (state == Qt::Checked);

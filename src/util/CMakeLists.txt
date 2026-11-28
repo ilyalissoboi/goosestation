@@ -81,6 +81,8 @@ add_library(util
   postprocessing_favourites.h
   postprocessing_shader_slang.cpp
   postprocessing_shader_slang.h
+  postprocessing_slang_cost.cpp
+  postprocessing_slang_cost.h
   postprocessing_slang_picture.h
   shadergen.cpp
   shadergen.h

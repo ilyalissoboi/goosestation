@@ -140,10 +140,15 @@ bool PostProcessing::SlangShader::ReadsGamePicture() const
   return true;
 }
 
+bool PostProcessing::SlangShader::DrewWholeScreen() const
+{
+  return m_drew_whole_screen;
+}
+
 bool PostProcessing::SlangShader::LoadFromFile(std::string name, std::string path, bool only_config, Error* error)
 {
   libra_shader_preset_t preset = nullptr;
-  if (!Librashader::LoadPreset(path, LIBRA_PRESET_CTX_RUNTIME_NONE, &preset, error))
+  if (!Librashader::LoadPreset(path, LIBRA_PRESET_CTX_RUNTIME_NONE, false, &preset, error))
     return false;
 
   const Librashader::CommonFunctions& c = Librashader::Common();
@@ -346,7 +351,7 @@ bool PostProcessing::SlangShader::CompilePipeline(GPUTexture::Format format, u32
   }
 
   Error error;
-  m_chain = g_gpu_device->CreateSlangChain(m_path, &error);
+  m_chain = g_gpu_device->CreateSlangChain(m_path, WantsWholeScreen(), &error);
   if (!m_chain)
   {
     Latch(fmt::format(TRANSLATE_FS("PostProcessing", "Slang preset {} failed: {}"), m_name, error.GetDescription()));
@@ -417,10 +422,17 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
   const Slang::VisiblePicture visible =
     Slang::CropToTarget(picture.rect, from_game ? picture.game_view : picture.rect,
                         {picture.native_width, picture.native_height}, target_width, target_height);
-  const GSVector4i out_rect = visible.out;
-  const GSVector4i src_rect = visible.src;
-  const Slang::PictureSize native = visible.native;
   const bool src_top_first = from_game || picture.rows_top_first;
+
+  // A bezel draws over the whole target, fed the whole game picture (integer scaling doesn't apply under it), or what
+  // the target shows of the drawn picture when it reads the input. Otherwise it draws where the picture is.
+  const bool whole = Slang::DrawsWholeScreen(WantsWholeScreen(), Slang::HonoursAspect(m_name), picture.aspect_ratio);
+  const GSVector4i full_target(0, 0, static_cast<s32>(target_width), static_cast<s32>(target_height));
+  const GSVector4i out_rect = whole ? full_target : visible.out;
+  const GSVector4i src_rect = (whole && from_game) ? picture.game_view : visible.src;
+  const Slang::PictureSize native =
+    (whole && from_game) ? Slang::PictureSize{picture.native_width, picture.native_height} : visible.native;
+  m_drew_whole_screen = false;
 
   bool shaded = false;
   if (m_chain && Slang::IsUsable(out_rect, native) && !src_rect.rempty())
@@ -460,13 +472,17 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
       }
       m_native->MakeReadyForSampling();
 
-      // 2. The preset, into a texture the size of the picture.
+      // 2. The preset, into a texture the size of the picture, or of the whole target for a bezel, which is told the
+      // picture's aspect ratio. The picture reaches it already turned, so no rotation: librashader's would turn the
+      // bezel too. Other stages get no frame options at all, as before bezels drew over the whole screen.
       PushParameters(false);
+      const SlangFrameOptions options{picture.aspect_ratio, 0};
       Error error;
-      if (m_chain->Frame(m_native.get(), m_result.get(), m_frame_count++, &error))
+      if (m_chain->Frame(m_native.get(), m_result.get(), m_frame_count++, whole ? &options : nullptr, &error))
       {
         m_result->MakeReadyForSampling();
         shaded = true;
+        m_drew_whole_screen = whole;
       }
       else
       {
@@ -474,6 +490,18 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
                           error.GetDescription()));
       }
     }
+  }
+
+  if (m_drew_whole_screen)
+  {
+    // 3. The bezel's output covers the whole target.
+    if (!BeginOutput(final_target))
+      return false;
+    DrawTexture(m_output_copy_pipeline.get(), m_result.get(),
+                TexelRectToUV(GSVector4i(0, 0, out_rect.width(), out_rect.height()), m_result.get(),
+                              !picture.rows_top_first),
+                out_rect, false);
+    return true;
   }
 
   // 3. The output: the input as it is (a stage before may have drawn outside the picture), then the picture.
@@ -486,21 +514,21 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
                 GSVector4i(0, 0, static_cast<s32>(target_width), static_cast<s32>(target_height)), false);
   }
 
-  if (out_rect.rempty())
+  if (visible.out.rempty())
     return true;
 
   if (shaded)
   {
     const bool flip = !picture.rows_top_first;
     DrawTexture(m_output_copy_pipeline.get(), m_result.get(),
-                TexelRectToUV(GSVector4i(0, 0, out_rect.width(), out_rect.height()), m_result.get(), flip), out_rect,
-                false);
+                TexelRectToUV(GSVector4i(0, 0, visible.out.width(), visible.out.height()), m_result.get(), flip),
+                visible.out, false);
   }
-  else if (from_game && !src_rect.rempty())
+  else if (from_game && !visible.src.rempty())
   {
     // Unshaded (no chain, or this frame failed): the game's picture where it goes, so the game keeps showing.
-    DrawTexture(m_output_copy_pipeline.get(), src, TexelRectToUV(src_rect, src, src_top_first != picture.rows_top_first),
-                out_rect, true);
+    DrawTexture(m_output_copy_pipeline.get(), src,
+                TexelRectToUV(visible.src, src, src_top_first != picture.rows_top_first), visible.out, true);
   }
 
   return true;

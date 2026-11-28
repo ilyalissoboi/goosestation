@@ -502,6 +502,9 @@ bool GPUPresenter::RenderDisplay(GPUTexture* target, const GSVector4i display_re
                                      display_texture_view_y + display_texture_view_height);
     }
     picture.rows_top_first = !g_gpu_device->UsesLowerLeftOrigin();
+    // The shape a bezel is told, and whether it draws over the whole screen (4:3): the picture as shown, turned.
+    const float aspect = m_display_params.display_aspect_ratio;
+    picture.aspect_ratio = (aspect > 0.0f) ? (rotated_quarter ? (1.0f / aspect) : aspect) : 0.0f;
 
     return PostProcessing::DisplayChain.Apply(PostProcessing::DisplayChain.GetInputTexture(), nullptr, target,
                                               display_rect, orig_width, orig_height, m_display_params.display_width,

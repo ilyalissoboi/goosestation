@@ -73,7 +73,8 @@ public:
                        const std::function<void(u32)>& on_progress, Error* error) override;
 
   bool SupportsSlangPresets() const override;
-  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error) override;
+  std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                               Error* error) override;
 
   /// After another renderer (librashader) used the context: re-binds the framebuffer, viewport and scissor, and makes
   /// the next draw re-apply the pipeline, its state, textures and samplers.

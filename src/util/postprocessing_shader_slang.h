@@ -47,6 +47,7 @@ public:
   bool IsValid() const override;
   bool WantsDepthBuffer() const override;
   bool ReadsGamePicture() const override;
+  bool DrewWholeScreen() const override;
 
   /// Parses the preset (no GPU) for its #pragma parameters, which become float options in preset order.
   bool LoadFromFile(std::string name, std::string path, bool only_config, Error* error);
@@ -84,6 +85,7 @@ private:
   u64 m_frame_count = 0;
   std::vector<std::string> m_params_to_push;
   std::optional<bool> m_whole_screen_key;
+  bool m_drew_whole_screen = false;
 
   GPUTexture::Format m_output_format = GPUTexture::Format::Unknown;
   std::unique_ptr<GPUPipeline> m_native_copy_pipeline;

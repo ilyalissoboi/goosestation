@@ -17,10 +17,11 @@ class OpenGLSlangChain final : public SlangChain
 public:
   ~OpenGLSlangChain() override;
 
-  bool Create(const std::string& preset_path, Error* error);
+  bool Create(const std::string& preset_path, bool original_aspect, Error* error);
 
   void SetParameter(const char* name, float value) override;
-  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) override;
+  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, const SlangFrameOptions* options,
+             Error* error) override;
 
 private:
   static const void* LoadFunction(const char* name);
@@ -47,7 +48,7 @@ const void* OpenGLSlangChain::LoadFunction(const char* name)
   return OpenGLDevice::GetInstance().m_gl_context->GetProcAddress(name);
 }
 
-bool OpenGLSlangChain::Create(const std::string& preset_path, Error* error)
+bool OpenGLSlangChain::Create(const std::string& preset_path, bool original_aspect, Error* error)
 {
   if (!Librashader::ResolveSymbol("libra_gl_filter_chain_create", &m_create, error) ||
       !Librashader::ResolveSymbol("libra_gl_filter_chain_frame", &m_frame, error) ||
@@ -58,7 +59,7 @@ bool OpenGLSlangChain::Create(const std::string& preset_path, Error* error)
   }
 
   libra_shader_preset_t preset = nullptr;
-  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_GL_CORE, &preset, error))
+  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_GL_CORE, original_aspect, &preset, error))
     return false;
 
   filter_chain_gl_opt_t opt = {};
@@ -88,7 +89,8 @@ void OpenGLSlangChain::SetParameter(const char* name, float value)
     Librashader::DescribeAndFreeError(err); // a parameter the preset doesn't have
 }
 
-bool OpenGLSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error)
+bool OpenGLSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count,
+                              const SlangFrameOptions* options, Error* error)
 {
   OpenGLDevice& dev = OpenGLDevice::GetInstance();
   OpenGLTexture* const src = static_cast<OpenGLTexture*>(input);
@@ -99,8 +101,9 @@ bool OpenGLSlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_co
   // The stage's own textures, always RGBA8.
   const libra_image_gl_t in = {src->GetGLId(), GL_RGBA8, src->GetWidth(), src->GetHeight()};
   const libra_image_gl_t out = {dst->GetGLId(), GL_RGBA8, dst->GetWidth(), dst->GetHeight()};
+  frame_gl_opt_t frame_opt;
   const libra_viewport_t vp = {0.0f, 0.0f, dst->GetWidth(), dst->GetHeight()};
-  const libra_error_t err = m_frame(&m_chain, static_cast<size_t>(frame_count), in, out, &vp, nullptr, nullptr);
+  const libra_error_t err = m_frame(&m_chain, static_cast<size_t>(frame_count), in, out, &vp, nullptr, Librashader::MakeFrameOptions(options, &frame_opt));
 
   // librashader binds framebuffers, programs, vertex arrays, textures and samplers of its own.
   dev.InvalidateCachedState();
@@ -119,10 +122,11 @@ bool OpenGLDevice::SupportsSlangPresets() const
   return true;
 }
 
-std::unique_ptr<SlangChain> OpenGLDevice::CreateSlangChain(const std::string& preset_path, Error* error)
+std::unique_ptr<SlangChain> OpenGLDevice::CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                                        Error* error)
 {
   std::unique_ptr<OpenGLSlangChain> chain = std::make_unique<OpenGLSlangChain>();
-  if (!chain->Create(preset_path, error))
+  if (!chain->Create(preset_path, original_aspect, error))
     return {};
   return chain;
 }

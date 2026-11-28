@@ -107,6 +107,10 @@ struct PictureInfo
   GPUTexture* game_texture = nullptr;
   GSVector4i game_view = GSVector4i::zero();
 
+  /// The picture's display aspect ratio as shown (after rotation): what a bezel is told, and whether it draws over the
+  /// whole screen. 0 when unknown (the internal chain), which never draws over the whole screen.
+  float aspect_ratio = 0.0f;
+
   /// Whether the chain's own textures store the picture's top row first. False only for the display chain on
   /// OpenGL, whose textures are in the window's (lower-left) orientation.
   bool rows_top_first = true;

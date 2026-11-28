@@ -79,6 +79,43 @@ const std::string PROBE_SHADER = std::string("#version 450\n"
                                  "void main() { FragColor = (vTexCoord.y < 0.5) ? vec4(1.0, 0.0, 0.0, 1.0) :\n"
                                  "                                               vec4(0.0, 0.0, 1.0, 1.0); }\n";
 
+// A bezel: magenta over the whole viewport but a box in the middle (a quarter of each side in), which shows the picture
+// (Source) stretched over the box.
+const std::string FRAME_SHADER = std::string("#version 450\n"
+                                             "layout(std140, set = 0, binding = 0) uniform UBO { mat4 MVP; } global;\n") +
+                                 VERTEX_STAGE +
+                                 "#pragma stage fragment\n"
+                                 "layout(location = 0) in vec2 vTexCoord;\n"
+                                 "layout(location = 0) out vec4 FragColor;\n"
+                                 "layout(set = 0, binding = 2) uniform sampler2D Source;\n"
+                                 "void main() {\n"
+                                 "  vec2 uv = (vTexCoord - vec2(0.25)) * 2.0;\n"
+                                 "  FragColor = (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) ?\n"
+                                 "    vec4(1.0, 0.0, 1.0, 1.0) : texture(Source, uv);\n"
+                                 "}\n";
+
+// Writes the aspect ratio it's given (OriginalAspect, with the original-aspect uniforms) halved into red; 0 without.
+const std::string ASPECT_SHADER = std::string("#version 450\n"
+                                              "layout(std140, set = 0, binding = 0) uniform UBO { mat4 MVP;\n"
+                                              "#ifdef _HAS_ORIGINALASPECT_UNIFORMS\n"
+                                              "  float OriginalAspect;\n"
+                                              "#endif\n"
+                                              "} global;\n") +
+                                  VERTEX_STAGE +
+                                  "#pragma stage fragment\n"
+                                  "layout(location = 0) in vec2 vTexCoord;\n"
+                                  "layout(location = 0) out vec4 FragColor;\n"
+                                  "layout(set = 0, binding = 2) uniform sampler2D Source;\n"
+                                  "void main() {\n"
+                                  "#ifdef _HAS_ORIGINALASPECT_UNIFORMS\n"
+                                  "  FragColor = vec4(global.OriginalAspect * 0.5, 0.0, 0.0, 1.0);\n"
+                                  "#else\n"
+                                  "  FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n"
+                                  "#endif\n"
+                                  "}\n";
+
+constexpr u32 MAGENTA = 0xFFFF00FFu;
+
 // The input picture: green outside the picture rect, a quarter red over its top half and a quarter blue below.
 std::vector<u32> InputPixels()
 {
@@ -133,6 +170,11 @@ protected:
     WriteFile("p/gain.slang", GAIN_SHADER);
     WriteFile("p/probe.slangp", "shaders = 1\nshader0 = probe.slang\n");
     WriteFile("p/probe.slang", PROBE_SHADER);
+    // One viewport-sized pass, as bezels end.
+    WriteFile("bezel/frame.slangp", "shaders = 1\nshader0 = frame.slang\nscale_type0 = viewport\n");
+    WriteFile("bezel/frame.slang", FRAME_SHADER);
+    WriteFile("bezel/koko-aio/aspect.slangp", "shaders = 1\nshader0 = aspect.slang\nscale_type0 = viewport\n");
+    WriteFile("bezel/koko-aio/aspect.slang", ASPECT_SHADER);
   }
 
   void TearDown() override
@@ -174,22 +216,33 @@ protected:
     ASSERT_TRUE(m_shader->CompilePipeline(GPUTexture::Format::RGBA8, WIDTH, HEIGHT, nullptr));
   }
 
-  std::vector<u32> Run(GPUTexture* input, const PostProcessing::PictureInfo& picture)
+  std::vector<u32> Run(GPUTexture* input, const PostProcessing::PictureInfo& picture, u32 width = WIDTH,
+                       u32 height = HEIGHT)
   {
-    GPUTexture* output = Texture(GPUTexture::Type::RenderTarget, nullptr);
-    EXPECT_TRUE(m_shader->Apply(input, nullptr, output, GSVector4i(0, 0, WIDTH, HEIGHT), WIDTH, HEIGHT, NATIVE_WIDTH,
-                                NATIVE_HEIGHT, WIDTH, HEIGHT, picture));
+    m_textures.push_back(g_gpu_device->CreateTexture(width, height, 1, 1, 1, GPUTexture::Type::RenderTarget,
+                                                     GPUTexture::Format::RGBA8));
+    GPUTexture* output = m_textures.back().get();
+    EXPECT_TRUE(m_shader->Apply(input, nullptr, output, GSVector4i(0, 0, width, height), width, height, NATIVE_WIDTH,
+                                NATIVE_HEIGHT, width, height, picture));
 
-    std::vector<u32> pixels(WIDTH * HEIGHT);
-    std::unique_ptr<GPUDownloadTexture> dl = g_gpu_device->CreateDownloadTexture(WIDTH, HEIGHT, output->GetFormat());
+    std::vector<u32> pixels(width * height);
+    std::unique_ptr<GPUDownloadTexture> dl = g_gpu_device->CreateDownloadTexture(width, height, output->GetFormat());
     EXPECT_TRUE(dl);
     if (!dl)
       return pixels;
     output->MakeReadyForSampling();
-    dl->CopyFromTexture(0, 0, output, 0, 0, WIDTH, HEIGHT, 0, 0, true);
+    dl->CopyFromTexture(0, 0, output, 0, 0, width, height, 0, 0, true);
     dl->Flush();
-    EXPECT_TRUE(dl->ReadTexels(0, 0, WIDTH, HEIGHT, pixels.data(), WIDTH * sizeof(u32)));
+    EXPECT_TRUE(dl->ReadTexels(0, 0, width, height, pixels.data(), width * sizeof(u32)));
     return pixels;
+  }
+
+  // The display chain's picture at the given display aspect ratio (0: unknown, as the internal chain's).
+  static PostProcessing::PictureInfo PictureAt(float aspect)
+  {
+    PostProcessing::PictureInfo picture = Picture(true);
+    picture.aspect_ratio = aspect;
+    return picture;
   }
 
   static PostProcessing::PictureInfo Picture(bool rows_top_first)
@@ -318,7 +371,7 @@ TEST_F(SlangGPU, PresetsFromAPackRun)
     Error error;
     ASSERT_TRUE(m_shader->LoadFromFile(path, path, false, &error)) << error.GetDescription();
     // librashader's own words when the preset doesn't compile here (the stage only shows them on screen).
-    ASSERT_TRUE(g_gpu_device->CreateSlangChain(path, &error)) << error.GetDescription();
+    ASSERT_TRUE(g_gpu_device->CreateSlangChain(path, false, &error)) << error.GetDescription();
     ASSERT_TRUE(m_shader->CompilePipeline(GPUTexture::Format::RGBA8, WIDTH, HEIGHT, nullptr));
 
     std::vector<u32> out;
@@ -358,6 +411,128 @@ TEST_F(SlangGPU, ASecondFrameBeforeASubmitSubmitsTheFirst)
   EXPECT_GT(VulkanDevice::GetInstance().GetCurrentFenceCounter(), before);
 }
 #endif
+
+TEST_F(SlangGPU, ABezelDrawsOverTheWholeScreen)
+{
+  LoadStage("bezel/frame.slangp", 1.0f);
+  const std::vector<u32> input = InputPixels();
+  const std::vector<u32> out = Run(Texture(GPUTexture::Type::Texture, &input), PictureAt(4.0f / 3.0f));
+  EXPECT_TRUE(m_shader->DrewWholeScreen());
+  EXPECT_EQ(At(out, 2, 2), MAGENTA) << std::hex << At(out, 2, 2);
+  EXPECT_EQ(At(out, 61, 45), MAGENTA) << std::hex << At(out, 61, 45);
+  // The box shows the picture: red over its top half, blue below.
+  EXPECT_PRED2(Near, At(out, 32, 16), RED_QUARTER) << std::hex << At(out, 32, 16);
+  EXPECT_PRED2(Near, At(out, 32, 32), BLUE_QUARTER) << std::hex << At(out, 32, 32);
+}
+
+TEST_F(SlangGPU, ABezelReceivesTheAspect)
+{
+  LoadStage("bezel/koko-aio/aspect.slangp", 1.0f);
+  const std::vector<u32> input = InputPixels();
+  GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
+  std::vector<u32> out = Run(tex, PictureAt(4.0f / 3.0f));
+  EXPECT_PRED2(Near, At(out, 2, 2), 0xFF0000AAu) << std::hex << At(out, 2, 2);
+  // A preset that honours the aspect draws over the whole screen at any shape, told the shape.
+  out = Run(tex, PictureAt(16.0f / 9.0f));
+  EXPECT_TRUE(m_shader->DrewWholeScreen());
+  EXPECT_PRED2(Near, At(out, 2, 2), 0xFF0000E3u) << std::hex << At(out, 2, 2);
+}
+
+TEST_F(SlangGPU, ANonFourThreePictureFallsBackIntoThePicture)
+{
+  LoadStage("bezel/frame.slangp", 1.0f);
+  const std::vector<u32> input = InputPixels();
+  const std::vector<u32> out = Run(Texture(GPUTexture::Type::Texture, &input), PictureAt(16.0f / 9.0f));
+  EXPECT_FALSE(m_shader->DrewWholeScreen());
+  EXPECT_EQ(At(out, 2, 2), GREEN) << std::hex << At(out, 2, 2);
+  EXPECT_EQ(At(out, 60, 44), GREEN) << std::hex << At(out, 60, 44);
+  // Inside the picture, its own frame and box, squeezed into the picture as before.
+  EXPECT_EQ(At(out, 10, 10), MAGENTA) << std::hex << At(out, 10, 10);
+}
+
+TEST_F(SlangGPU, AStageDrawingIntoThePictureIsUnchanged)
+{
+  LoadStage("p/gain.slangp", 2.0f);
+  const std::vector<u32> input = InputPixels();
+  GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
+  const std::vector<u32> unknown = Run(tex, PictureAt(0.0f));
+  const std::vector<u32> four_three = Run(tex, PictureAt(4.0f / 3.0f));
+  EXPECT_FALSE(m_shader->DrewWholeScreen());
+  EXPECT_EQ(unknown, four_three);
+  EXPECT_EQ(At(four_three, 2, 2), GREEN);
+}
+
+TEST_F(SlangGPU, AWholeScreenStageFillsAnyTargetShape)
+{
+  // A portrait window: the preset's viewport is the whole of it.
+  constexpr u32 W = 48, H = 64;
+  LoadStage("bezel/frame.slangp", 1.0f);
+  const std::vector<u32> input = InputPixels();
+  PostProcessing::PictureInfo picture = PictureAt(4.0f / 3.0f);
+  picture.rect = GSVector4i(0, 14, 48, 50);
+  const std::vector<u32> out = Run(Texture(GPUTexture::Type::Texture, &input), picture, W, H);
+  for (const auto [x, y] : {std::pair<u32, u32>{1, 1}, {46, 1}, {1, 62}, {46, 62}})
+    EXPECT_EQ(out[y * W + x], MAGENTA) << x << "," << y << " " << std::hex << out[y * W + x];
+}
+
+TEST_F(SlangGPU, ThePlacementFollowsTheAspectEachFrame)
+{
+  LoadStage("bezel/frame.slangp", 1.0f);
+  const std::vector<u32> input = InputPixels();
+  GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
+  EXPECT_EQ(At(Run(tex, PictureAt(4.0f / 3.0f)), 2, 2), MAGENTA);
+  // Nothing of the whole-screen frame is left in the bars.
+  EXPECT_EQ(At(Run(tex, PictureAt(16.0f / 9.0f)), 2, 2), GREEN);
+  EXPECT_EQ(At(Run(tex, PictureAt(4.0f / 3.0f)), 2, 2), MAGENTA);
+}
+
+TEST_F(SlangGPU, TheSwitchOffKeepsABezelInThePicture)
+{
+  LoadStage("bezel/frame.slangp", 1.0f);
+  MemorySettingsInterface si;
+  si.SetBoolValue("Stage", PostProcessing::Config::WHOLE_SCREEN_KEY, false);
+  m_shader->LoadOptions(si, "Stage");
+  ASSERT_TRUE(m_shader->CompilePipeline(GPUTexture::Format::RGBA8, WIDTH, HEIGHT, nullptr));
+  const std::vector<u32> input = InputPixels();
+  const std::vector<u32> out = Run(Texture(GPUTexture::Type::Texture, &input), PictureAt(4.0f / 3.0f));
+  EXPECT_FALSE(m_shader->DrewWholeScreen());
+  EXPECT_EQ(At(out, 2, 2), GREEN) << std::hex << At(out, 2, 2);
+
+  // And on again, a stage that isn't in a bezel folder.
+  LoadStage("p/probe.slangp", 1.0f);
+  si.SetBoolValue("Stage", PostProcessing::Config::WHOLE_SCREEN_KEY, true);
+  m_shader->LoadOptions(si, "Stage");
+  ASSERT_TRUE(m_shader->CompilePipeline(GPUTexture::Format::RGBA8, WIDTH, HEIGHT, nullptr));
+  const std::vector<u32> probe = Run(Texture(GPUTexture::Type::Texture, &input), PictureAt(4.0f / 3.0f));
+  EXPECT_TRUE(m_shader->DrewWholeScreen());
+  EXPECT_EQ(At(probe, 2, 2), 0xFF0000FFu) << std::hex << At(probe, 2, 2);
+}
+
+TEST_F(SlangGPU, TheGamesOwnFrameFeedsAWholeScreenBezelUncropped)
+{
+  // An 80x64 game picture, larger than the 64x48 target (integer scaling in a small window), red over its top half:
+  // a bezel gets all of it, as integer scaling doesn't apply under a bezel.
+  constexpr u32 PW = 80, PH = 64;
+  std::vector<u32> frame(PW * PH);
+  for (u32 y = 0; y < PH; y++)
+    std::fill_n(&frame[y * PW], PW, (y < PH / 2) ? RED_QUARTER : BLUE_QUARTER);
+  std::unique_ptr<GPUTexture> game = g_gpu_device->CreateTexture(PW, PH, 1, 1, 1, GPUTexture::Type::Texture,
+                                                                 GPUTexture::Format::RGBA8, frame.data(), PW * 4);
+
+  LoadStage("bezel/frame.slangp", 1.0f);
+  PostProcessing::PictureInfo picture = PictureAt(4.0f / 3.0f);
+  picture.rect = GSVector4i(0, 0, PW, PH);
+  picture.native_width = PW / 2;
+  picture.native_height = PH / 2;
+  picture.game_texture = game.get();
+  picture.game_view = GSVector4i(0, 0, PW, PH);
+  const std::vector<u32> input(WIDTH * HEIGHT, 0xFFFFFFFFu);
+  const std::vector<u32> out = Run(Texture(GPUTexture::Type::Texture, &input), picture);
+
+  // Box row 26 is 60% down the box: the whole picture's row 38 (blue); cropped to the target it would be row 29 (red).
+  EXPECT_PRED2(Near, At(out, 32, 26), BLUE_QUARTER) << std::hex << At(out, 32, 26);
+  EXPECT_EQ(At(out, 2, 2), MAGENTA) << std::hex << At(out, 2, 2);
+}
 
 namespace {
 

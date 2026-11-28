@@ -19,10 +19,11 @@ class D3D12SlangChain final : public SlangChain
 public:
   ~D3D12SlangChain() override;
 
-  bool Create(const std::string& preset_path, Error* error);
+  bool Create(const std::string& preset_path, bool original_aspect, Error* error);
 
   void SetParameter(const char* name, float value) override;
-  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) override;
+  bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, const SlangFrameOptions* options,
+             Error* error) override;
 
 private:
   PFN_libra_d3d12_filter_chain_create m_create = nullptr;
@@ -46,7 +47,7 @@ D3D12SlangChain::~D3D12SlangChain()
     Librashader::DescribeAndFreeError(err);
 }
 
-bool D3D12SlangChain::Create(const std::string& preset_path, Error* error)
+bool D3D12SlangChain::Create(const std::string& preset_path, bool original_aspect, Error* error)
 {
   if (!Librashader::ResolveSymbol("libra_d3d12_filter_chain_create", &m_create, error) ||
       !Librashader::ResolveSymbol("libra_d3d12_filter_chain_frame", &m_frame, error) ||
@@ -57,7 +58,7 @@ bool D3D12SlangChain::Create(const std::string& preset_path, Error* error)
   }
 
   libra_shader_preset_t preset = nullptr;
-  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_D3D12, &preset, error))
+  if (!Librashader::LoadPreset(preset_path, LIBRA_PRESET_CTX_RUNTIME_D3D12, original_aspect, &preset, error))
     return false;
 
   filter_chain_d3d12_opt_t opt = {};
@@ -84,7 +85,8 @@ void D3D12SlangChain::SetParameter(const char* name, float value)
     Librashader::DescribeAndFreeError(err); // a parameter the preset doesn't have
 }
 
-bool D3D12SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error)
+bool D3D12SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_count,
+                              const SlangFrameOptions* options, Error* error)
 {
   D3D12Device& dev = D3D12Device::GetInstance();
   D3D12Texture* const src = static_cast<D3D12Texture*>(input);
@@ -107,11 +109,12 @@ bool D3D12SlangChain::Frame(GPUTexture* input, GPUTexture* output, u64 frame_cou
   libra_image_d3d12_t out = {};
   out.image_type = LIBRA_D3D12_IMAGE_TYPE_RESOURCE;
   out.handle.resource = dst->GetResource();
+  frame_d3d12_opt_t frame_opt;
   const libra_viewport_t vp = {0.0f, 0.0f, dst->GetWidth(), dst->GetHeight()};
 
   ID3D12GraphicsCommandList4* const cmdlist = dev.GetCommandList();
   const libra_error_t err =
-    m_frame(&m_chain, cmdlist, static_cast<size_t>(frame_count), in, out, &vp, nullptr, nullptr);
+    m_frame(&m_chain, cmdlist, static_cast<size_t>(frame_count), in, out, &vp, nullptr, Librashader::MakeFrameOptions(options, &frame_opt));
   m_last_frame_fence = dev.GetCurrentFenceValue();
 
   // librashader bound descriptor heaps, a root signature and a pipeline of its own. The device sets its heaps only
@@ -136,10 +139,11 @@ bool D3D12Device::SupportsSlangPresets() const
   return true;
 }
 
-std::unique_ptr<SlangChain> D3D12Device::CreateSlangChain(const std::string& preset_path, Error* error)
+std::unique_ptr<SlangChain> D3D12Device::CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                                        Error* error)
 {
   std::unique_ptr<D3D12SlangChain> chain = std::make_unique<D3D12SlangChain>();
-  if (!chain->Create(preset_path, error))
+  if (!chain->Create(preset_path, original_aspect, error))
     return {};
   return chain;
 }

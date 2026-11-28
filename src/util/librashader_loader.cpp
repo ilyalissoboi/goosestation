@@ -191,8 +191,8 @@ std::string Librashader::DescribeAndFreeError(libra_error_t error)
   return result;
 }
 
-bool Librashader::LoadPreset(const std::string& path, LIBRA_PRESET_CTX_RUNTIME runtime, libra_shader_preset_t* out,
-                             Error* error)
+bool Librashader::LoadPreset(const std::string& path, LIBRA_PRESET_CTX_RUNTIME runtime, bool original_aspect_uniforms,
+                             libra_shader_preset_t* out, Error* error)
 {
   *out = nullptr;
   const Availability& avail = GetAvailability();
@@ -207,6 +207,7 @@ bool Librashader::LoadPreset(const std::string& path, LIBRA_PRESET_CTX_RUNTIME r
   // librashader honours (and frees) the context only when options are passed, so they must never be null.
   libra_preset_opt_t opt = {};
   opt.version = LIBRASHADER_CURRENT_VERSION;
+  opt.original_aspect_uniforms = original_aspect_uniforms;
 
   libra_error_t err = c.preset_ctx_create(&ctx);
   if (!err)

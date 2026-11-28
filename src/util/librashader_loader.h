@@ -71,7 +71,28 @@ std::string GetDefaultLibraryPath();
 Availability LoadFromPath(const std::string& path);
 
 /// Parses a preset, with core name "GooseStation" and the given runtime (unless LIBRA_PRESET_CTX_RUNTIME_NONE) for
-/// its wildcards. On success *out owns the preset (free it with Common().preset_free, or hand it to a chain).
-bool LoadPreset(const std::string& path, LIBRA_PRESET_CTX_RUNTIME runtime, libra_shader_preset_t* out, Error* error);
+/// its wildcards, and with the original-aspect uniforms (_HAS_ORIGINALASPECT_UNIFORMS, read from the frame options'
+/// aspect ratio) when asked. On success *out owns the preset (free it with Common().preset_free, or hand it to a chain).
+bool LoadPreset(const std::string& path, LIBRA_PRESET_CTX_RUNTIME runtime, bool original_aspect_uniforms,
+                libra_shader_preset_t* out, Error* error);
+
+/// A renderer's frame options (frame_*_opt_t) from ours, librashader's defaults for the rest; null without ours, so
+/// librashader takes no options at all.
+template<typename FrameOptions, typename Ours>
+inline const FrameOptions* MakeFrameOptions(const Ours* ours, FrameOptions* out)
+{
+  if (!ours)
+    return nullptr;
+  *out = {};
+  out->version = LIBRASHADER_CURRENT_VERSION;
+  out->frame_direction = 1;
+  out->total_subframes = 1;
+  out->current_subframe = 1;
+  out->frames_per_second = 1.0f;
+  out->brightness_nits = 200.0f;
+  out->aspect_ratio = ours->aspect_ratio;
+  out->rotation = ours->rotation;
+  return out;
+}
 
 } // namespace Librashader

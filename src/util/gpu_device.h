@@ -471,6 +471,15 @@ protected:
   u32 m_current_position = 0;
 };
 
+/// What a frame of a slang chain is told beyond its textures, for a stage drawing over the whole screen.
+struct SlangFrameOptions
+{
+  /// The game picture's display aspect ratio (librashader's OriginalAspect); 0 lets librashader infer it.
+  float aspect_ratio = 0.0f;
+  /// Quarter turns of the output (librashader's Rotation). Turns the whole output, bezel and all.
+  u32 rotation = 0;
+};
+
 /// A slang preset's librashader filter chain on a device, made by GPUDevice::CreateSlangChain(). Each renderer's glue
 /// implements it; librashader only ever reads and writes the two textures it's given. Every runtime (OpenGL's too)
 /// takes texel row 0 as the picture's top.
@@ -484,7 +493,9 @@ public:
 
   /// Runs the preset from input (shader-readable) into the whole of output (a render target), which then is
   /// shader-readable again. Leaves the device's cached state invalidated, so the next draw re-binds everything.
-  virtual bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, Error* error) = 0;
+  /// Without options, librashader's own defaults (no frame options at all).
+  virtual bool Frame(GPUTexture* input, GPUTexture* output, u64 frame_count, const SlangFrameOptions* options,
+                     Error* error) = 0;
 };
 
 struct ImDrawData;
@@ -851,7 +862,8 @@ public:
 
   /// A librashader filter chain for the preset at preset_path, on this device. Null with an error (librashader's
   /// text) when the preset doesn't load or compile, or when the renderer has no glue.
-  virtual std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, Error* error);
+  virtual std::unique_ptr<SlangChain> CreateSlangChain(const std::string& preset_path, bool original_aspect,
+                                                       Error* error);
 
   /// Enables/disables GPU frame timing.
   virtual bool SetGPUTimingEnabled(bool enabled);

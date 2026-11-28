@@ -7,11 +7,20 @@
 #include "core/cheats.h"
 #include "core/patches.h"
 
+#include "core_host_stubs.h"
+
 #include "common/error.h"
+#include "common/file_system.h"
+#include "common/path.h"
+#include "common/string_util.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -164,4 +173,148 @@ TEST(PatchesRestore, OnlyWithA7)
   EXPECT_TRUE(CodeFrom("[Conditional]\nD0012345 0001\nA7019656 14402400\n").RestoresOnDisable());
   // Conditions only: nothing to restore, nothing written either.
   EXPECT_FALSE(CodeFrom("[Nothing]\nD0012345 0001\n").RestoresOnDisable());
+}
+
+// The shipped marks, chtdb_patches.txt, against the shipped database, chtdb.txt.
+namespace {
+
+class PatchesBundledMarks : public testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    if (!FileSystem::DirectoryExists(GOOSESTATION_TEST_RESOURCES_DIR))
+      GTEST_SKIP() << "No source tree at " << GOOSESTATION_TEST_RESOURCES_DIR;
+    CoreHostStubs::SetResourceDirectory(GOOSESTATION_TEST_RESOURCES_DIR);
+
+    const std::optional<std::string> text =
+      FileSystem::ReadFileToString(Path::Combine(GOOSESTATION_TEST_RESOURCES_DIR, "chtdb_patches.txt").c_str());
+    ASSERT_TRUE(text.has_value()) << "chtdb_patches.txt is missing";
+    m_text = text.value();
+    Error error;
+    m_marks = Patches::Marks::Parse(m_text, &error);
+    EXPECT_FALSE(error.IsValid()) << error.GetDescription();
+  }
+
+  // Each line's serial and code key.
+  std::vector<std::pair<std::string, std::string>> Lines() const
+  {
+    std::vector<std::pair<std::string, std::string>> lines;
+    for (const std::string_view line : StringUtil::SplitString(m_text, '\n'))
+    {
+      if (line.empty() || line.front() == ';')
+        continue;
+      const std::vector<std::string_view> fields = StringUtil::SplitString(line, '\t');
+      EXPECT_EQ(fields.size(), 3u) << line;
+      if (fields.size() == 3)
+        lines.emplace_back(std::string(fields[0]), std::string(fields[1]));
+    }
+    return lines;
+  }
+
+  // The marks of serial's codes, as the core reads them from the database.
+  std::vector<Patches::Mark> MarksFor(const std::string& serial) const
+  {
+    CheatList list;
+    list.LoadFromPackage(serial);
+    std::vector<Patches::Mark> marks;
+    for (u32 i = 0; i < list.GetCodeCount(); i++)
+    {
+      if (const Patches::Mark* mark = m_marks.Find(serial, list.GetCode(i).group, list.GetCode(i).description))
+        marks.push_back(*mark);
+    }
+    return marks;
+  }
+
+  static size_t CountKind(const std::vector<Patches::Mark>& marks, Patches::Kind kind)
+  {
+    return static_cast<size_t>(
+      std::count_if(marks.begin(), marks.end(), [kind](const Patches::Mark& m) { return m.kind == kind; }));
+  }
+
+  std::string m_text;
+  Patches::Marks m_marks;
+};
+
+} // namespace
+
+TEST_F(PatchesBundledMarks, NameRealCodes)
+{
+  // Every line is a code the core reads for its serial.
+  std::map<std::string, std::set<std::string>> keys_by_serial;
+  const std::vector<std::pair<std::string, std::string>> lines = Lines();
+  EXPECT_GT(lines.size(), 500u);
+  EXPECT_EQ(m_marks.Count(), lines.size());
+  for (const auto& [serial, key] : lines)
+  {
+    auto it = keys_by_serial.find(serial);
+    if (it == keys_by_serial.end())
+    {
+      CheatList list;
+      list.LoadFromPackage(serial);
+      std::set<std::string> keys;
+      for (u32 i = 0; i < list.GetCodeCount(); i++)
+        keys.insert(Patches::CodeKey(list.GetCode(i).group, list.GetCode(i).description));
+      it = keys_by_serial.emplace(serial, std::move(keys)).first;
+    }
+    EXPECT_TRUE(it->second.contains(key)) << serial << " has no code '" << key << "'";
+  }
+}
+
+TEST_F(PatchesBundledMarks, CoverLibrary)
+{
+  // The user's library: a widescreen patch for each, 16:10 for Arc the Lad, Vert- for Alundra 2.
+  for (const char* serial : {"SLUS-01040", "SCUS-94491", "SLUS-00422", "SLUS-01324", "SCUS-94900", "SCUS-94154",
+                             "SCPS-10047", "SCUS-94244", "SLUS-01158", "SLUS-00866", "SLUS-01017", "SLUS-01224"})
+  {
+    EXPECT_GE(CountKind(MarksFor(serial), Patches::Kind::Widescreen), 1u) << serial;
+  }
+
+  const std::vector<Patches::Mark> arc = MarksFor("SLUS-01224");
+  ASSERT_EQ(arc.size(), 1u);
+  EXPECT_EQ(arc[0].needs.aspect_numerator, 16u);
+  EXPECT_EQ(arc[0].needs.aspect_denominator, 10u);
+
+  // Crash 2 (Japan)'s Hor+ and Vert- are one choice.
+  const std::vector<Patches::Mark> crash2jp = MarksFor("SCPS-10047");
+  ASSERT_EQ(crash2jp.size(), 2u);
+  EXPECT_FALSE(crash2jp[0].choice.empty());
+  EXPECT_EQ(crash2jp[0].choice, crash2jp[1].choice);
+
+  // Frame rate: Crash Warped (two variants, one choice), Parasite Eve II, King's Field II (30 and 60, one choice).
+  for (const char* serial : {"SCUS-94244", "SLUS-01042", "SLUS-00255"})
+    EXPECT_GE(CountKind(MarksFor(serial), Patches::Kind::FrameRate), 1u) << serial;
+
+  std::vector<Patches::Mark> kf2 = MarksFor("SLUS-00255");
+  std::erase_if(kf2, [](const Patches::Mark& m) { return m.kind != Patches::Kind::FrameRate; });
+  ASSERT_EQ(kf2.size(), 2u);
+  EXPECT_FALSE(kf2[0].choice.empty());
+  EXPECT_EQ(kf2[0].choice, kf2[1].choice);
+  EXPECT_EQ(kf2[0].needs.overclock_percent, 200u); // the 30 fps uncap's name says 200
+  EXPECT_EQ(kf2[1].needs.overclock_percent, 160u); // the 60 fps uncap's, 160
+}
+
+TEST_F(PatchesBundledMarks, SkipCheats)
+{
+  for (const auto& [serial, key] : Lines())
+  {
+    for (const char* cheat : {"Harold's 2 Codes", "Trophy Room", "Uncapped Fireball", "Slowmotion", "Turbo mode",
+                              "Uncap weapon", "Remove Dither"})
+    {
+      EXPECT_EQ(key.find(cheat), std::string::npos) << serial << " " << key;
+    }
+  }
+}
+
+TEST_F(PatchesBundledMarks, SelectCheatGroupsUntouched)
+{
+  // Only Select groups of patches are marked; the thousands of Select groups of cheats (levels, items) aren't.
+  for (const auto& [serial, key] : Lines())
+  {
+    if (!key.starts_with("Select "))
+      continue;
+    const std::string group = key.substr(0, key.rfind('\\'));
+    EXPECT_TRUE(group.find("Widescreen") != std::string::npos || group.find("FPS") != std::string::npos)
+      << serial << " " << key;
+  }
 }

@@ -9,13 +9,17 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
+
+class Error;
 
 struct CheatCode
 {
   enum class Type : u8
   {
     Gameshark,
+    Assembly, // the newer community format's MIPS codes: listed, never applied
     Count
   };
 
@@ -110,6 +114,13 @@ struct CheatCode
     BitField<u64, u8, 0, 8> value8;
   };
 
+  /// One of a code's named values, from the newer community format's `Option = Name:Value`.
+  struct Option
+  {
+    std::string name;
+    u32 value;
+  };
+
   std::string group;
   std::string description;
   std::vector<Instruction> instructions;
@@ -118,8 +129,33 @@ struct CheatCode
   Activation activation = Activation::EndFrame;
   bool enabled = false;
 
-  ALWAYS_INLINE bool Valid() const { return !instructions.empty() && !description.empty(); }
+  std::string author;                              // `Author`
+  std::string details;                             // `Description`: a longer note shown with the code
+  std::vector<Option> options;                     // `Option = Name:Value`, in order: a choice of values
+  std::optional<std::pair<u32, u32>> option_range; // `OptionRange = min:max`: a number
+  /// The code's lines as written, kept when it has options (with `?` nibbles for the value) or isn't a Gameshark code;
+  /// its instructions are then built from them.
+  std::vector<std::string> raw_lines;
+  u32 option_value = 0; // the value in the `?` nibbles: the first option's, or the range's least, until one is chosen
+  /// Keys other than the ones every code has (the patch-only overrides, and keys not understood), as written.
+  std::vector<std::pair<std::string, std::string>> overrides;
+  std::vector<std::string> notes; // what was read but isn't used, and why a code can't be switched on
+  bool patch = false;             // a patch (widescreen, frame rate, display mode), not a cheat
+
+  ALWAYS_INLINE bool Valid() const
+  {
+    return !description.empty() && (!instructions.empty() || !raw_lines.empty());
+  }
   ALWAYS_INLINE bool IsManuallyActivated() const { return (activation == Activation::Manual); }
+  ALWAYS_INLINE bool HasOptions() const { return (!options.empty() || option_range.has_value()); }
+
+  /// Whether the code can be switched on and applied: a Gameshark code with instructions (with options, built from a
+  /// valid value).
+  bool CanEnable() const;
+
+  /// Puts value into the code's `?` nibbles, rebuilding its instructions; false (the code unchanged) for a value
+  /// outside the range, not among the options, or wider than its nibbles.
+  bool SetOptionValue(u32 value, Error* error);
 
   std::string GetInstructionsAsString() const;
   bool SetInstructionsFromString(const std::string& str);
@@ -147,6 +183,7 @@ public:
     PCSXR,
     Libretro,
     EPSXe,
+    INI, // the newer community format: `[Name]`, then `Key = Value` lines, then the code
     Count
   };
 
@@ -186,6 +223,10 @@ public:
   bool LoadFromPCSXRString(const std::string& str);
   bool LoadFromLibretroString(const std::string& str);
   bool LoadFromEPSXeString(const std::string& str);
+  bool LoadFromINIString(const std::string& str);
+
+  /// Whether code applies with the cheats: switched on, not a patch (patches have a list of their own), and able to.
+  static bool IsAppliedAsCheat(const CheatCode& code);
 
   bool SaveToPCSXRFile(const char* filename);
 

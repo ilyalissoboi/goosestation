@@ -8,11 +8,14 @@
 #include "host.h"
 #include "system.h"
 
+#include "common/error.h"
 #include "common/file_system.h"
 #include "common/log.h"
 #include "common/small_string.h"
 #include "common/string_util.h"
 
+#include <algorithm>
+#include <array>
 #include <cctype>
 #include <iomanip>
 #include <sstream>
@@ -192,6 +195,288 @@ static const std::string* FindKey(const KeyValuePairVector& kvp, const char* sea
   return nullptr;
 }
 
+// A number as the newer format writes values: decimal, or 0x for hex, or 0b for binary.
+static std::optional<u32> ParseOptionNumber(std::string_view str)
+{
+  str = StringUtil::StripWhitespace(str);
+  int base = 10;
+  if (str.size() > 2 && str[0] == '0' && (str[1] == 'x' || str[1] == 'X'))
+  {
+    base = 16;
+    str = str.substr(2);
+  }
+  else if (str.size() > 2 && str[0] == '0' && (str[1] == 'b' || str[1] == 'B'))
+  {
+    base = 2;
+    str = str.substr(2);
+  }
+  if (str.empty())
+    return std::nullopt;
+
+  u64 value = 0;
+  for (const char ch : str)
+  {
+    u32 digit;
+    if (ch >= '0' && ch <= '9')
+      digit = static_cast<u32>(ch - '0');
+    else if (ch >= 'a' && ch <= 'f')
+      digit = static_cast<u32>(ch - 'a' + 10);
+    else if (ch >= 'A' && ch <= 'F')
+      digit = static_cast<u32>(ch - 'A' + 10);
+    else
+      return std::nullopt;
+    if (digit >= static_cast<u32>(base))
+      return std::nullopt;
+    value = value * static_cast<u32>(base) + digit;
+    if (value > 0xFFFFFFFFu)
+      return std::nullopt;
+  }
+  return static_cast<u32>(value);
+}
+
+// `Name:Value`, the name being everything before the last colon (names like "16:9" have colons of their own).
+static std::optional<CheatCode::Option> ParseOption(std::string_view str)
+{
+  const size_t colon = str.rfind(':');
+  if (colon == std::string_view::npos)
+    return std::nullopt;
+  const std::optional<u32> value = ParseOptionNumber(str.substr(colon + 1));
+  if (!value.has_value())
+    return std::nullopt;
+  return CheatCode::Option{std::string(StringUtil::StripWhitespace(str.substr(0, colon))), value.value()};
+}
+
+// `min:max`.
+static std::optional<std::pair<u32, u32>> ParseOptionRange(std::string_view str)
+{
+  const size_t colon = str.find(':');
+  if (colon == std::string_view::npos)
+    return std::nullopt;
+  const std::optional<u32> low = ParseOptionNumber(str.substr(0, colon));
+  const std::optional<u32> high = ParseOptionNumber(str.substr(colon + 1));
+  if (!low.has_value() || !high.has_value() || low.value() > high.value())
+    return std::nullopt;
+  return std::make_pair(low.value(), high.value());
+}
+
+// The newer format's keys that only work for patches: any of them makes a code a patch.
+static constexpr std::array<const char*, 10> s_patch_only_keys = {{
+  "OverrideAspectRatio",
+  "OverrideCPUOverclock",
+  "DisableWidescreenRendering",
+  "ForcePGXPPreserveProjectionPrecision",
+  "OverrideRAMSize",
+  "OverrideVRAMSize",
+  "Enable8MBRAM",
+  "Enable16MBRAM",
+  "ForceFullRAMMapping",
+  "DisallowForAchievements",
+}};
+
+// The ones GooseStation uses (Patches::NeedsFromOverrides()); the rest are read, kept and ignored.
+static constexpr std::array<const char*, 3> s_used_patch_keys = {{
+  "OverrideAspectRatio",
+  "OverrideCPUOverclock",
+  "DisableWidescreenRendering",
+}};
+
+static bool IsKeyIn(std::string_view key, const auto& keys)
+{
+  return std::any_of(keys.begin(), keys.end(), [key](const char* k) { return StringUtil::EqualNoCase(key, k); });
+}
+
+static bool OverridesMarkPatch(const std::vector<std::pair<std::string, std::string>>& overrides)
+{
+  return std::any_of(overrides.begin(), overrides.end(),
+                     [](const auto& kv) { return IsKeyIn(kv.first, s_patch_only_keys); });
+}
+
+namespace {
+// A code line with `?` nibbles in its value: the line's bits with the nibbles as 0, and where the value goes.
+struct NibbleLine
+{
+  u32 first;
+  u32 second;
+  u32 shift;      // bits up from the value's lowest
+  u32 width_bits; // 0: the line holds no `?`
+};
+} // namespace
+
+static bool ParseNibbleLine(std::string_view line, NibbleLine* out, std::string* why)
+{
+  line = StringUtil::StripWhitespace(line);
+  const size_t space = line.find_first_of(" \t");
+  if (space == std::string_view::npos)
+  {
+    *why = fmt::format("'{}' isn't an address and a value.", line);
+    return false;
+  }
+  const std::string_view address = line.substr(0, space);
+  const std::string_view value = StringUtil::StripWhitespace(line.substr(space + 1));
+  if (address.empty() || address.size() > 8 || value.empty() || value.size() > 8 ||
+      !std::all_of(address.begin(), address.end(), IsHexCharacter))
+  {
+    *why = fmt::format("'{}' isn't an address and a value ('?' only goes in the value).", line);
+    return false;
+  }
+
+  out->first = static_cast<u32>(std::strtoul(std::string(address).c_str(), nullptr, 16));
+  out->second = 0;
+  out->shift = 0;
+  out->width_bits = 0;
+  std::optional<u32> lowest, highest;
+  for (size_t i = 0; i < value.size(); i++)
+  {
+    const char ch = value[value.size() - 1 - i]; // nibble i, from the right
+    if (ch == '?')
+    {
+      if (highest.has_value() && highest.value() != i - 1)
+      {
+        *why = fmt::format("'{}' has '?' in more than one place.", line);
+        return false;
+      }
+      if (!lowest.has_value())
+        lowest = static_cast<u32>(i);
+      highest = static_cast<u32>(i);
+    }
+    else if (IsHexCharacter(ch))
+    {
+      const u32 digit = static_cast<u32>(std::strtoul(std::string(1, ch).c_str(), nullptr, 16));
+      out->second |= digit << (4 * i);
+    }
+    else
+    {
+      *why = fmt::format("'{}' isn't an address and a value.", line);
+      return false;
+    }
+  }
+
+  if (lowest.has_value())
+  {
+    out->shift = lowest.value() * 4;
+    out->width_bits = (highest.value() - lowest.value() + 1) * 4;
+  }
+  return true;
+}
+
+bool CheatCode::CanEnable() const
+{
+  return (type == Type::Gameshark && !instructions.empty());
+}
+
+bool CheatCode::SetOptionValue(u32 value, Error* error)
+{
+  if (!HasOptions())
+  {
+    Error::SetStringView(error, "The code has no values to choose from.");
+    return false;
+  }
+  if (option_range.has_value() && (value < option_range->first || value > option_range->second))
+  {
+    Error::SetStringFmt(error, "{} isn't between {} and {}.", value, option_range->first, option_range->second);
+    return false;
+  }
+  if (!option_range.has_value() &&
+      std::none_of(options.begin(), options.end(), [value](const Option& o) { return o.value == value; }))
+  {
+    Error::SetStringFmt(error, "{} isn't one of the code's values.", value);
+    return false;
+  }
+
+  std::vector<Instruction> built;
+  bool any_field = false;
+  for (const std::string& line : raw_lines)
+  {
+    NibbleLine parsed;
+    std::string why;
+    if (!ParseNibbleLine(line, &parsed, &why))
+    {
+      Error::SetString(error, std::move(why));
+      return false;
+    }
+    if (parsed.width_bits > 0)
+    {
+      any_field = true;
+      if (parsed.width_bits < 32 && value >= (1u << parsed.width_bits))
+      {
+        Error::SetStringFmt(error, "{} doesn't fit the {} '?' of '{}'.", value, parsed.width_bits / 4, line);
+        return false;
+      }
+      parsed.second |= value << parsed.shift;
+    }
+
+    Instruction inst;
+    inst.first = parsed.first;
+    inst.second = parsed.second;
+    built.push_back(inst);
+  }
+  if (!any_field)
+  {
+    Error::SetStringView(error, "The code has values but no '?' to put them in.");
+    return false;
+  }
+
+  instructions = std::move(built);
+  option_value = value;
+  return true;
+}
+
+// The last of reading a code, in any of our formats: with options, its instructions built from a value (the one its
+// file chose, else the first); without, from its raw lines, if it kept any. What can't be used is noted.
+static void FinishCode(CheatCode& code, std::optional<u32> chosen)
+{
+  if (code.type != CheatCode::Type::Gameshark)
+  {
+    code.instructions.clear();
+    code.notes.push_back(fmt::format("{} codes aren't supported; it's listed, but can't be switched on.",
+                                     CheatCode::GetTypeName(code.type)));
+    return;
+  }
+
+  if (code.HasOptions())
+  {
+    // The value the file chose, if it still fits; else the first.
+    if (chosen.has_value() && code.SetOptionValue(chosen.value(), nullptr))
+      return;
+    const u32 first = code.option_range.has_value() ? code.option_range->first : code.options.front().value;
+    Error error;
+    if (!code.SetOptionValue(first, &error))
+    {
+      code.instructions.clear();
+      code.notes.push_back(fmt::format("It can't be switched on: {}", error.GetDescription()));
+    }
+    return;
+  }
+
+  // Raw lines without options: plain codes, unless they want a value nothing gives.
+  if (!code.raw_lines.empty())
+  {
+    code.instructions.clear();
+    for (const std::string& line : code.raw_lines)
+    {
+      NibbleLine parsed;
+      std::string why;
+      if (!ParseNibbleLine(line, &parsed, &why))
+      {
+        code.instructions.clear();
+        code.notes.push_back(fmt::format("It can't be switched on: {}", why));
+        return;
+      }
+      if (parsed.width_bits > 0)
+      {
+        code.instructions.clear();
+        code.notes.push_back("It has '?' for a value, but no values to choose from.");
+        return;
+      }
+      CheatCode::Instruction inst;
+      inst.first = parsed.first;
+      inst.second = parsed.second;
+      code.instructions.push_back(inst);
+    }
+    code.raw_lines.clear();
+  }
+}
+
 bool CheatList::LoadFromPCSXRFile(const char* filename)
 {
   std::optional<std::string> str = FileSystem::ReadFileToString(filename);
@@ -210,7 +495,11 @@ bool CheatList::LoadFromPCSXRString(const std::string& str)
   std::string group;
   CheatCode::Type type = CheatCode::Type::Gameshark;
   CheatCode::Activation activation = CheatCode::Activation::EndFrame;
+  CheatCode extras; // our own #lines for the next code: the newer format's fields it was read with
+  std::optional<u32> option_value;
   CheatCode current_code;
+  std::optional<u32> current_value;
+  bool current_raw = false;
   while (std::getline(iss, line))
   {
     char* start = line.data();
@@ -245,6 +534,47 @@ bool CheatList::LoadFromPCSXRString(const std::string& str)
       continue;
     }
 
+    // GooseStation's: what a code read from the newer format keeps.
+    if (StringUtil::Strncasecmp(start, "#author=", 8) == 0)
+    {
+      extras.author = start + 8;
+      continue;
+    }
+    if (StringUtil::Strncasecmp(start, "#details=", 9) == 0)
+    {
+      extras.details = start + 9;
+      continue;
+    }
+    if (StringUtil::Strncasecmp(start, "#option=", 8) == 0)
+    {
+      if (std::optional<CheatCode::Option> option = ParseOption(start + 8))
+        extras.options.push_back(std::move(option.value()));
+      continue;
+    }
+    if (StringUtil::Strncasecmp(start, "#optionrange=", 13) == 0)
+    {
+      extras.option_range = ParseOptionRange(start + 13);
+      continue;
+    }
+    if (StringUtil::Strncasecmp(start, "#optionvalue=", 13) == 0)
+    {
+      option_value = ParseOptionNumber(start + 13);
+      continue;
+    }
+    if (StringUtil::Strncasecmp(start, "#override=", 10) == 0)
+    {
+      const char* key = start + 10;
+      const char* equals = std::strchr(key, '=');
+      if (equals)
+        extras.overrides.emplace_back(std::string(key, static_cast<size_t>(equals - key)), std::string(equals + 1));
+      continue;
+    }
+    if (StringUtil::Strcasecmp(start, "#patch") == 0)
+    {
+      extras.patch = true;
+      continue;
+    }
+
     // skip comments and empty line
     if (*start == '#' || *start == ';' || *start == '/' || *start == '\"')
     {
@@ -260,7 +590,10 @@ bool CheatList::LoadFromPCSXRString(const std::string& str)
 
       // new cheat
       if (current_code.Valid())
+      {
+        FinishCode(current_code, current_value);
         m_codes.push_back(std::move(current_code));
+      }
 
       current_code = CheatCode();
       if (group.empty())
@@ -274,6 +607,16 @@ bool CheatList::LoadFromPCSXRString(const std::string& str)
       type = CheatCode::Type::Gameshark;
       current_code.activation = activation;
       activation = CheatCode::Activation::EndFrame;
+      current_code.author = std::move(extras.author);
+      current_code.details = std::move(extras.details);
+      current_code.options = std::move(extras.options);
+      current_code.option_range = extras.option_range;
+      current_code.overrides = std::move(extras.overrides);
+      current_code.patch = extras.patch || OverridesMarkPatch(current_code.overrides);
+      extras = CheatCode();
+      current_value = option_value;
+      option_value.reset();
+      current_raw = (current_code.HasOptions() || current_code.type != CheatCode::Type::Gameshark);
 
       if (*start == '*')
       {
@@ -282,6 +625,12 @@ bool CheatList::LoadFromPCSXRString(const std::string& str)
       }
 
       current_code.description.append(start);
+      continue;
+    }
+
+    if (current_raw)
+    {
+      current_code.raw_lines.emplace_back(start);
       continue;
     }
 
@@ -309,6 +658,7 @@ bool CheatList::LoadFromPCSXRString(const std::string& str)
     // technically this isn't the place for end of file
     if (!comments.empty())
       current_code.comments += comments;
+    FinishCode(current_code, current_value);
     m_codes.push_back(std::move(current_code));
   }
 
@@ -559,9 +909,14 @@ void CheatList::Apply()
 
   for (const CheatCode& code : m_codes)
   {
-    if (code.enabled)
+    if (IsAppliedAsCheat(code))
       code.Apply();
   }
+}
+
+bool CheatList::IsAppliedAsCheat(const CheatCode& code)
+{
+  return (code.enabled && !code.patch && code.CanEnable());
 }
 
 void CheatList::AddCode(CheatCode cc)
@@ -588,6 +943,140 @@ void CheatList::RemoveCode(u32 i)
   m_codes.erase(m_codes.begin() + i);
 }
 
+// A `Key = Value` line of the newer format: a name of letters, digits and underscores, then `=`.
+static bool SplitKeyLine(std::string_view line, std::string_view* key, std::string_view* value)
+{
+  const size_t equals = line.find('=');
+  if (equals == std::string_view::npos || equals == 0)
+    return false;
+  const std::string_view name = StringUtil::StripWhitespace(line.substr(0, equals));
+  if (name.empty() || !std::isalpha(SignedCharToInt(name[0])) ||
+      !std::all_of(name.begin(), name.end(), [](char ch) { return std::isalnum(SignedCharToInt(ch)) || ch == '_'; }))
+  {
+    return false;
+  }
+  *key = name;
+  *value = StringUtil::StripWhitespace(line.substr(equals + 1));
+  return true;
+}
+
+bool CheatList::LoadFromINIString(const std::string& str)
+{
+  std::istringstream iss(str);
+  std::string line;
+  std::optional<CheatCode> current;
+  bool in_body = false;
+  bool ignore = false;
+  const size_t count_before = m_codes.size();
+
+  const auto finish = [this, &current, &ignore]() {
+    if (current.has_value() && !ignore && current->Valid())
+    {
+      FinishCode(current.value(), std::nullopt);
+      m_codes.push_back(std::move(current.value()));
+    }
+    current.reset();
+    ignore = false;
+  };
+
+  while (std::getline(iss, line))
+  {
+    const std::string_view text = StringUtil::StripWhitespace(line);
+    if (text.empty() || text[0] == ';' || text[0] == '#')
+      continue;
+
+    if (text.front() == '[' && text.back() == ']')
+    {
+      finish();
+      current = CheatCode();
+      in_body = false;
+      std::string_view name = text.substr(1, text.size() - 2);
+      if (const size_t slash = name.rfind('\\'); slash != std::string_view::npos)
+      {
+        current->group = std::string(name.substr(0, slash));
+        name = name.substr(slash + 1);
+      }
+      if (current->group.empty())
+        current->group = "Ungrouped";
+      current->description = std::string(name);
+      continue;
+    }
+
+    if (!current.has_value())
+      continue;
+
+    std::string_view key, value;
+    if (!in_body && SplitKeyLine(text, &key, &value))
+    {
+      CheatCode& code = current.value();
+      if (StringUtil::EqualNoCase(key, "Type"))
+      {
+        if (StringUtil::EqualNoCase(value, "Gameshark"))
+          code.type = CheatCode::Type::Gameshark;
+        else if (StringUtil::EqualNoCase(value, "Assembly"))
+          code.type = CheatCode::Type::Assembly;
+        else
+          code.notes.push_back(fmt::format("Type '{}' isn't known; it's read as Gameshark.", value));
+      }
+      else if (StringUtil::EqualNoCase(key, "Activation"))
+      {
+        if (StringUtil::EqualNoCase(value, "Manual"))
+          code.activation = CheatCode::Activation::Manual;
+        else if (StringUtil::EqualNoCase(value, "EndFrame"))
+          code.activation = CheatCode::Activation::EndFrame;
+        else if (StringUtil::EqualNoCase(value, "StartFrame"))
+        {
+          code.activation = CheatCode::Activation::EndFrame;
+          code.notes.push_back("StartFrame codes are applied at the end of each frame, just before the next starts.");
+        }
+        else
+          code.notes.push_back(fmt::format("Activation '{}' isn't known; it's applied every frame.", value));
+      }
+      else if (StringUtil::EqualNoCase(key, "Author"))
+        code.author = std::string(value);
+      else if (StringUtil::EqualNoCase(key, "Description"))
+        code.details = std::string(value);
+      else if (StringUtil::EqualNoCase(key, "Option"))
+      {
+        if (std::optional<CheatCode::Option> option = ParseOption(value))
+          code.options.push_back(std::move(option.value()));
+        else
+          code.notes.push_back(fmt::format("Option '{}' isn't a name and a value; it's left out.", value));
+      }
+      else if (StringUtil::EqualNoCase(key, "OptionRange"))
+      {
+        code.option_range = ParseOptionRange(value);
+        if (!code.option_range.has_value())
+          code.notes.push_back(fmt::format("OptionRange '{}' isn't a range; it's left out.", value));
+      }
+      else if (StringUtil::EqualNoCase(key, "Ignore"))
+        ignore = StringUtil::EqualNoCase(value, "true");
+      else
+      {
+        code.overrides.emplace_back(std::string(key), std::string(value));
+        if (IsKeyIn(key, s_patch_only_keys))
+        {
+          code.patch = true;
+          if (!IsKeyIn(key, s_used_patch_keys))
+            code.notes.push_back(fmt::format("{} isn't supported and is ignored.", key));
+        }
+        else
+        {
+          code.notes.push_back(fmt::format("Unknown key '{}' is ignored.", key));
+        }
+      }
+      continue;
+    }
+
+    in_body = true;
+    current->raw_lines.emplace_back(text);
+  }
+  finish();
+
+  INFO_LOG("Loaded {} cheats (INI format)", m_codes.size() - count_before);
+  return m_codes.size() > count_before;
+}
+
 std::optional<CheatList::Format> CheatList::DetectFileFormat(const char* filename)
 {
   std::optional<std::string> str = FileSystem::ReadFileToString(filename);
@@ -601,6 +1090,7 @@ CheatList::Format CheatList::DetectFileFormat(const std::string& str)
 {
   std::istringstream iss(str);
   std::string line;
+  bool saw_bracket = false;
   while (std::getline(iss, line))
   {
     char* start = line.data();
@@ -625,16 +1115,24 @@ CheatList::Format CheatList::DetectFileFormat(const std::string& str)
     if (std::strncmp(line.data(), "cheats", 6) == 0)
       return Format::Libretro;
 
-    // pcsxr if we see brackets
+    // after brackets, a `Key = Value` line is the newer format; anything else, pcsxr
+    if (saw_bracket)
+    {
+      std::string_view key, value;
+      return SplitKeyLine(start, &key, &value) ? Format::INI : Format::PCSXR;
+    }
     if (start[0] == '[')
-      return Format::PCSXR;
+    {
+      saw_bracket = true;
+      continue;
+    }
 
     // otherwise if it's a code, it's probably epsxe
     if (std::isdigit(start[0]))
       return Format::EPSXe;
   }
 
-  return Format::Count;
+  return saw_bracket ? Format::PCSXR : Format::Count;
 }
 
 bool CheatList::LoadFromFile(const char* filename, Format format)
@@ -663,6 +1161,8 @@ bool CheatList::LoadFromString(const std::string& str, Format format)
     return LoadFromLibretroString(str);
   else if (format == Format::EPSXe)
     return LoadFromEPSXeString(str);
+  else if (format == Format::INI)
+    return LoadFromINIString(str);
   else
     return false;
 }
@@ -680,9 +1180,31 @@ bool CheatList::SaveToPCSXRFile(const char* filename)
     std::fprintf(fp.get(), "#group=%s\n", cc.group.c_str());
     std::fprintf(fp.get(), "#type=%s\n", CheatCode::GetTypeName(cc.type));
     std::fprintf(fp.get(), "#activation=%s\n", CheatCode::GetActivationName(cc.activation));
+    if (!cc.author.empty())
+      std::fprintf(fp.get(), "#author=%s\n", cc.author.c_str());
+    if (!cc.details.empty())
+      std::fprintf(fp.get(), "#details=%s\n", cc.details.c_str());
+    for (const CheatCode::Option& option : cc.options)
+      std::fprintf(fp.get(), "#option=%s:%u\n", option.name.c_str(), option.value);
+    if (cc.option_range.has_value())
+      std::fprintf(fp.get(), "#optionrange=%u:%u\n", cc.option_range->first, cc.option_range->second);
+    if (cc.HasOptions())
+      std::fprintf(fp.get(), "#optionvalue=%u\n", cc.option_value);
+    for (const auto& [key, value] : cc.overrides)
+      std::fprintf(fp.get(), "#override=%s=%s\n", key.c_str(), value.c_str());
+    if (cc.patch && !OverridesMarkPatch(cc.overrides))
+      std::fprintf(fp.get(), "#patch\n");
     std::fprintf(fp.get(), "[%s%s]\n", cc.enabled ? "*" : "", cc.description.c_str());
-    for (const CheatCode::Instruction& i : cc.instructions)
-      std::fprintf(fp.get(), "%08X %04X\n", i.first, i.second);
+    if (!cc.raw_lines.empty())
+    {
+      for (const std::string& line : cc.raw_lines)
+        std::fprintf(fp.get(), "%s\n", line.c_str());
+    }
+    else
+    {
+      for (const CheatCode::Instruction& i : cc.instructions)
+        std::fprintf(fp.get(), "%08X %04X\n", i.first, i.second);
+    }
     std::fprintf(fp.get(), "\n");
   }
 
@@ -807,7 +1329,7 @@ u32 CheatList::GetEnabledCodeCount() const
   u32 count = 0;
   for (const CheatCode& cc : m_codes)
   {
-    if (cc.enabled)
+    if (IsAppliedAsCheat(cc))
       count++;
   }
 
@@ -850,7 +1372,7 @@ void CheatList::DisableCode(u32 index)
 
 void CheatList::ApplyCode(u32 index)
 {
-  if (index >= m_codes.size())
+  if (index >= m_codes.size() || m_codes[index].patch || !m_codes[index].CanEnable())
     return;
 
   m_codes[index].Apply();
@@ -2769,8 +3291,9 @@ void CheatCode::ApplyOnDisable() const
   }
 }
 
-static std::array<const char*, 1> s_cheat_code_type_names = {{"Gameshark"}};
-static std::array<const char*, 1> s_cheat_code_type_display_names{{TRANSLATE_NOOP("Cheats", "Gameshark")}};
+static std::array<const char*, 2> s_cheat_code_type_names = {{"Gameshark", "Assembly"}};
+static std::array<const char*, 2> s_cheat_code_type_display_names{
+  {TRANSLATE_NOOP("Cheats", "Gameshark"), TRANSLATE_NOOP("Cheats", "Assembly")}};
 
 const char* CheatCode::GetTypeName(Type type)
 {

@@ -19,6 +19,7 @@ add_executable(common-tests
   ../util/android_patch_codes.cpp
   bitutils_tests.cpp
   cdrom_timing_tests.cpp
+  cheats_format_tests.cpp
   content_uri_tests.cpp
   core_host_stubs.cpp
   fallback_fonts_tests.cpp

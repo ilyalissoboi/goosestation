@@ -30,6 +30,8 @@
 #include "util/postprocessing.h"
 #include "util/postprocessing_favourites.h"
 #include "util/postprocessing_browser.h"
+#include "util/postprocessing_shader_slang.h"
+#include "util/postprocessing_slang_cost.h"
 #include "util/shader_compile_threads.h"
 
 #include "common/error.h"
@@ -226,6 +228,8 @@ struct PostProcessingStageInfo
 {
   std::string name;
   std::vector<PostProcessing::ShaderOption> options;
+  /// A slang stage's "Draw over the whole screen" (its switch, else whether it's a bezel by its folder); none for others.
+  std::optional<bool> whole_screen;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -5117,9 +5121,22 @@ void FullscreenUI::DrawDisplaySettingsPage()
                   "Display", "CropMode", Settings::DEFAULT_DISPLAY_CROP_MODE, &Settings::ParseDisplayCropMode,
                   &Settings::GetDisplayCropModeName, &Settings::GetDisplayCropModeDisplayName, DisplayCropMode::Count);
 
+  // Under a bezel drawing over the whole screen (the chain in effect: the game's own, else the global one), the
+  // display's own placement applies only to games it falls back for.
+  const char* const pp_section = PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+  const bool bezel_places_picture = PostProcessing::Config::ChainHasWholeScreenStage(
+    (game_settings && PostProcessing::Config::HasOwnChain(*bsi, pp_section)) ? *bsi :
+                                                                                *Host::Internal::GetBaseSettingsLayer(),
+    pp_section);
+  const char* const bezel_note = FSUI_CSTR(
+    "A bezel stage draws over the whole screen and places 4:3 games itself, so this applies only to games of other "
+    "shapes.");
+
   DrawEnumSetting(
     bsi, FSUI_CSTR("Scaling"),
-    FSUI_CSTR("Determines how the emulated console's output is upscaled or downscaled to your monitor's resolution."),
+    bezel_places_picture ?
+      bezel_note :
+      FSUI_CSTR("Determines how the emulated console's output is upscaled or downscaled to your monitor's resolution."),
     "Display", "Scaling", Settings::DEFAULT_DISPLAY_SCALING, &Settings::ParseDisplayScaling,
     &Settings::GetDisplayScalingName, &Settings::GetDisplayScalingDisplayName, DisplayScalingMode::Count);
 
@@ -5235,7 +5252,10 @@ void FullscreenUI::DrawDisplaySettingsPage()
   }
 
   DrawEnumSetting(bsi, FSUI_CSTR("Screen Position"),
-                  FSUI_CSTR("Determines the position on the screen when black borders must be added."), "Display",
+                  bezel_places_picture ?
+                    bezel_note :
+                    FSUI_CSTR("Determines the position on the screen when black borders must be added."),
+                  "Display",
                   "Alignment", Settings::DEFAULT_DISPLAY_ALIGNMENT, &Settings::ParseDisplayAlignment,
                   &Settings::GetDisplayAlignmentName, &Settings::GetDisplayAlignmentDisplayName,
                   DisplayAlignment::Count);
@@ -5291,7 +5311,9 @@ void FullscreenUI::DrawDisplaySettingsPage()
 
   DrawToggleSetting(
     bsi, FSUI_CSTR("Stretch Display Vertically"),
-    FSUI_CSTR("Stretches the display to match the aspect ratio by multiplying vertically instead of horizontally."),
+    bezel_places_picture ?
+      bezel_note :
+      FSUI_CSTR("Stretches the display to match the aspect ratio by multiplying vertically instead of horizontally."),
     "Display", "StretchVertically", false);
 
   DrawToggleSetting(
@@ -5552,6 +5574,8 @@ void FullscreenUI::PopulatePostProcessingChain(SettingsInterface* si, const char
     PostProcessingStageInfo psi;
     psi.name = PostProcessing::Config::GetStageShaderName(*si, section, i);
     psi.options = PostProcessing::Config::GetStageOptions(*si, section, i);
+    if (PostProcessing::Slang::IsPresetName(psi.name))
+      psi.whole_screen = PostProcessing::Config::StageWantsWholeScreen(*si, section, i);
     s_postprocessing_stages.push_back(std::move(psi));
   }
 }
@@ -5660,9 +5684,14 @@ void FullscreenUI::DrawShaderBrowser()
     const auto shader_button = [&state, &chosen](size_t index) {
       const PostProcessing::AvailableShader& shader = state.shaders[index];
       const std::string folder = PostProcessing::Browser::FolderOf(PostProcessing::GetBrowserPath(shader));
-      const SmallString summary =
-        folder.empty() ? SmallString(PostProcessing::GetShaderKindName(shader.kind)) :
-                         SmallString::from_format("{} · {}", PostProcessing::GetShaderKindName(shader.kind), folder);
+      // A slang preset's cost, from its structure (read once, then kept).
+      SmallString kind(PostProcessing::GetShaderKindName(shader.kind));
+      if (shader.kind == PostProcessing::ShaderKind::Slang)
+      {
+        if (const std::optional<PostProcessing::Slang::Cost> cost = PostProcessing::Slang::GetCostForName(shader.name))
+          kind.append_format(" · {}", PostProcessing::Slang::GetCostLabel(cost.value()));
+      }
+      const SmallString summary = folder.empty() ? kind : SmallString::from_format("{} · {}", kind, folder);
       // A button's ID is its title: shaders of one name in two folders (a search lists both) need their own.
       ImGui::PushID(static_cast<int>(index));
       if (MenuButton(SmallString::from_format(ICON_FA_MAGIC " {}", PostProcessing::Browser::LeafName(shader)).c_str(),
@@ -6797,6 +6826,20 @@ void FullscreenUI::DrawPostProcessingSettingsPage()
     {
       postprocessing_action = POSTPROCESSING_ACTION_MOVE_DOWN;
       postprocessing_action_index = stage_index;
+    }
+
+    if (si.whole_screen.has_value())
+    {
+      bool value = si.whole_screen.value();
+      if (ToggleButton(FSUI_ICONSTR(ICON_FA_TV, "Draw over the whole screen"),
+                       FSUI_CSTR("Lets a bezel preset draw around the game over the whole screen. On by itself for "
+                                 "presets in a bezel folder; games that aren't 4:3 are drawn into the picture instead."),
+                       &value))
+      {
+        si.whole_screen = value;
+        PostProcessing::Config::SetStageWholeScreen(*bsi, section, stage_index, value);
+        SetSettingsChanged(bsi);
+      }
     }
 
     for (PostProcessing::ShaderOption& opt : si.options)
@@ -9958,6 +10001,9 @@ TRANSLATE_NOOP("FullscreenUI", "Speeds up CD-ROM reads by the specified factor. 
 TRANSLATE_NOOP("FullscreenUI", "Speeds up CD-ROM seeks by the specified factor. May improve loading speeds in some games, and break others.");
 TRANSLATE_NOOP("FullscreenUI", "Sprite Texture Filtering");
 TRANSLATE_NOOP("FullscreenUI", "Stage {}: {}");
+TRANSLATE_NOOP("FullscreenUI", "Draw over the whole screen");
+TRANSLATE_NOOP("FullscreenUI", "Lets a bezel preset draw around the game over the whole screen. On by itself for presets in a bezel folder; games that aren't 4:3 are drawn into the picture instead.");
+TRANSLATE_NOOP("FullscreenUI", "A bezel stage draws over the whole screen and places 4:3 games itself, so this applies only to games of other shapes.");
 TRANSLATE_NOOP("FullscreenUI", "Start BIOS");
 TRANSLATE_NOOP("FullscreenUI", "Start Disc");
 TRANSLATE_NOOP("FullscreenUI", "Start File");

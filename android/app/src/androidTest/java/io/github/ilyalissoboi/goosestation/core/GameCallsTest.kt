@@ -1673,8 +1673,10 @@ class GameCallsTest {
         const val SERIAL = "SLUS-00000"
         const val PLAYER_CODES = "[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n"
 
-        // A widescreen patch, as an imported file is kept: plain writes, so it can't be undone while the game runs.
-        const val PATCH_CODE = "#patch\n#override=OverrideAspectRatio=16:9\n[Wide]\n80010004 0003\n"
+        // A widescreen patch with an overclock, as an imported file is kept: plain writes, so it can't be undone while
+        // the game runs.
+        const val PATCH_CODE =
+            "#patch\n#override=OverrideAspectRatio=16:9\n#override=OverrideCPUOverclock=150\n[Wide]\n80010004 0003\n"
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val PADTEST_SERIAL = "HASH-9FDA0E1A56D8DF5B"
 

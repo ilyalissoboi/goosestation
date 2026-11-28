@@ -6026,7 +6026,9 @@ Patches::PatchList* System::GetPatchList()
 void System::SetPatchList(std::unique_ptr<Patches::PatchList> list)
 {
   s_patch_list = std::move(list);
-  if (IsValid())
+  // Android hands its list over as the game starts (Host::OnGameChanged()), before the system is valid: the boot's
+  // own settings load has already run without it.
+  if (!IsShutdown())
     ApplySettings(false);
 }
 

@@ -90,6 +90,7 @@ private:
   GPUTexture::Format m_output_format = GPUTexture::Format::Unknown;
   std::unique_ptr<GPUPipeline> m_native_copy_pipeline;
   std::unique_ptr<GPUPipeline> m_output_copy_pipeline;
+  std::unique_ptr<GPUPipeline> m_result_copy_pipeline; // the preset's result, opaque
   std::unique_ptr<GPUPipeline> m_box_pipeline;
   u32 m_box_factor = 0;
   std::unique_ptr<GPUTexture> m_native;

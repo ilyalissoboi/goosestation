@@ -246,7 +246,7 @@ bool PostProcessing::SlangShader::ResizeOutput(GPUTexture::Format format, u32 wi
 
 bool PostProcessing::SlangShader::CreatePipelines(GPUTexture::Format format)
 {
-  if (m_native_copy_pipeline && m_output_copy_pipeline && m_output_format == format)
+  if (m_native_copy_pipeline && m_output_copy_pipeline && m_result_copy_pipeline && m_output_format == format)
     return true;
 
   const RenderAPI api = g_gpu_device->GetRenderAPI();
@@ -279,6 +279,17 @@ bool PostProcessing::SlangShader::CreatePipelines(GPUTexture::Format format)
 
   plconfig.SetTargetFormats(format);
   if (!(m_output_copy_pipeline = g_gpu_device->CreatePipeline(plconfig)))
+    return false;
+
+  // A preset's alpha means nothing on screen (koko-aio's is 0, which shows as a blank picture where the window or a
+  // capture keeps alpha): its result is drawn opaque, as the game's picture is.
+  std::unique_ptr<GPUShader> opaque_fs =
+    g_gpu_device->CreateShader(GPUShaderStage::Fragment, shadergen.GetLanguage(),
+                               shadergen.GenerateCopyFragmentShader(true));
+  if (!opaque_fs)
+    return false;
+  plconfig.fragment_shader = opaque_fs.get();
+  if (!(m_result_copy_pipeline = g_gpu_device->CreatePipeline(plconfig)))
     return false;
 
   m_output_format = format;
@@ -497,7 +508,7 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
     // 3. The bezel's output covers the whole target.
     if (!BeginOutput(final_target))
       return false;
-    DrawTexture(m_output_copy_pipeline.get(), m_result.get(),
+    DrawTexture(m_result_copy_pipeline.get(), m_result.get(),
                 TexelRectToUV(GSVector4i(0, 0, out_rect.width(), out_rect.height()), m_result.get(),
                               !picture.rows_top_first),
                 out_rect, false);
@@ -520,7 +531,7 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
   if (shaded)
   {
     const bool flip = !picture.rows_top_first;
-    DrawTexture(m_output_copy_pipeline.get(), m_result.get(),
+    DrawTexture(m_result_copy_pipeline.get(), m_result.get(),
                 TexelRectToUV(GSVector4i(0, 0, visible.out.width(), visible.out.height()), m_result.get(), flip),
                 visible.out, false);
   }

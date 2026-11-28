@@ -116,6 +116,17 @@ const std::string ASPECT_SHADER = std::string("#version 450\n"
 
 constexpr u32 MAGENTA = 0xFFFF00FFu;
 
+// The picture with alpha 0, as koko-aio's last pass writes it.
+const std::string TRANSPARENT_SHADER = std::string("#version 450\n"
+                                                   "layout(std140, set = 0, binding = 0) uniform UBO { mat4 MVP; } "
+                                                   "global;\n") +
+                                       VERTEX_STAGE +
+                                       "#pragma stage fragment\n"
+                                       "layout(location = 0) in vec2 vTexCoord;\n"
+                                       "layout(location = 0) out vec4 FragColor;\n"
+                                       "layout(set = 0, binding = 2) uniform sampler2D Source;\n"
+                                       "void main() { FragColor = vec4(texture(Source, vTexCoord).rgb, 0.0); }\n";
+
 // The input picture: green outside the picture rect, a quarter red over its top half and a quarter blue below.
 std::vector<u32> InputPixels()
 {
@@ -175,6 +186,9 @@ protected:
     WriteFile("bezel/frame.slang", FRAME_SHADER);
     WriteFile("bezel/koko-aio/aspect.slangp", "shaders = 1\nshader0 = aspect.slang\nscale_type0 = viewport\n");
     WriteFile("bezel/koko-aio/aspect.slang", ASPECT_SHADER);
+    WriteFile("p/transparent.slangp", "shaders = 1\nshader0 = transparent.slang\n");
+    WriteFile("p/transparent.slang", TRANSPARENT_SHADER);
+    WriteFile("bezel/transparent.slangp", "shaders = 1\nshader0 = ../p/transparent.slang\nscale_type0 = viewport\n");
   }
 
   void TearDown() override
@@ -584,6 +598,25 @@ TEST_F(SlangGPU, TheGamesOwnFrameFeedsAWholeScreenBezelUncropped)
   // Box row 26 is 60% down the box: the whole picture's row 38 (blue); cropped to the target it would be row 29 (red).
   EXPECT_PRED2(Near, At(out, 32, 26), BLUE_QUARTER) << std::hex << At(out, 32, 26);
   EXPECT_EQ(At(out, 2, 2), MAGENTA) << std::hex << At(out, 2, 2);
+}
+
+TEST_F(SlangGPU, APresetsTransparentOutputIsDrawnOpaque)
+{
+  // koko-aio writes alpha 0, which a window or a capture with alpha shows as a blank (white) picture: the stage's
+  // result is drawn opaque, as the game's picture is, in the picture and over the whole screen.
+  const std::vector<u32> input = InputPixels();
+  GPUTexture* tex = Texture(GPUTexture::Type::Texture, &input);
+
+  LoadStage("p/transparent.slangp", 1.0f);
+  std::vector<u32> out = Run(tex, PictureAt(4.0f / 3.0f));
+  EXPECT_PRED2(Near, At(out, 32, 12), RED_QUARTER) << std::hex << At(out, 32, 12);
+  EXPECT_EQ(At(out, 2, 2), GREEN);
+
+  LoadStage("bezel/transparent.slangp", 1.0f);
+  out = Run(tex, PictureAt(4.0f / 3.0f));
+  EXPECT_TRUE(m_shader->DrewWholeScreen());
+  EXPECT_EQ(At(out, 2, 2) >> 24, 0xFFu) << std::hex << At(out, 2, 2);
+  EXPECT_EQ(At(out, 32, 24) >> 24, 0xFFu) << std::hex << At(out, 32, 24);
 }
 
 namespace {

@@ -860,7 +860,7 @@ std::string ShaderGen::GenerateBoxDownsampleFragmentShader(u32 factor)
   return ss.str();
 }
 
-std::string ShaderGen::GenerateCopyFragmentShader()
+std::string ShaderGen::GenerateCopyFragmentShader(bool opaque)
 {
   std::stringstream ss;
   WriteHeader(ss);
@@ -872,8 +872,10 @@ std::string ShaderGen::GenerateCopyFragmentShader()
 {
   float2 coords = u_src_rect.xy + v_tex0 * u_src_rect.zw;
   o_col0 = SAMPLE_TEXTURE(samp0, coords);
-}
 )";
+  if (opaque)
+    ss << "  o_col0.a = 1.0;\n";
+  ss << "}\n";
 
   return ss.str();
 }

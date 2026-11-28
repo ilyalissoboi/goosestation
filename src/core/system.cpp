@@ -30,6 +30,7 @@
 #include "memory_card.h"
 #include "multitap.h"
 #include "pad.h"
+#include "patches.h"
 #include "pcdrv.h"
 #include "psf_loader.h"
 #include "save_state_version.h"
@@ -199,6 +200,10 @@ static Common::Timer::Value s_input_poll_time = 0;
 static void ResetPerformanceCounters();
 
 static bool UpdateGameSettingsLayer();
+
+static std::unique_ptr<Patches::PatchList> BuildPatchList();
+static bool FollowPatchSwitches();
+static void RestartPatches();
 static void UpdateRunningGame(const std::string_view path, CDImage* image, bool booting);
 static bool CheckForSBIFile(CDImage* image, Error* error);
 
@@ -366,6 +371,9 @@ static Common::Timer s_frame_timer;
 static Threading::ThreadHandle s_cpu_thread_handle;
 
 static std::unique_ptr<CheatList> s_cheat_list;
+static std::unique_ptr<Patches::PatchList> s_patch_list;
+static bool s_patches_active = false;   // the list applies: not hardcore, nor "disable all enhancements"
+static Patches::Needs s_logged_needs;   // the overrides last logged
 static std::unique_ptr<MediaCapture> s_media_capture;
 
 // temporary save state, created when loading, used to undo load state
@@ -1327,6 +1335,17 @@ void System::LoadSettings(bool display_osd_messages)
       entry->ApplySettings(g_settings, display_osd_messages);
   }
 
+  // Patches' needs, for the running game only: never written into any settings file.
+  s_patches_active = s_patch_list && Patches::Allowed(g_settings, Achievements::IsHardcoreModeActive());
+  if (s_patches_active)
+    s_patch_list->ApplyOverrides(g_settings);
+  if (const Patches::Needs needs = s_patches_active ? s_patch_list->RunningNeeds() : Patches::Needs();
+      needs != s_logged_needs)
+  {
+    INFO_LOG("Patch overrides: {}", Patches::DescribeNeeds(needs));
+    s_logged_needs = needs;
+  }
+
   g_settings.FixIncompatibleSettings(display_osd_messages);
 }
 
@@ -1456,8 +1475,22 @@ void System::ApplySettings(bool display_osd_messages)
 
 bool System::ReloadGameSettings(bool display_osd_messages)
 {
-  if (!IsValid() || !UpdateGameSettingsLayer())
+  if (!IsValid())
     return false;
+
+#ifndef __ANDROID__
+  // A UI may have written the patches' switches: the running list follows them.
+  const bool patches_changed = FollowPatchSwitches();
+#else
+  const bool patches_changed = false;
+#endif
+
+  if (!UpdateGameSettingsLayer())
+  {
+    if (patches_changed)
+      ApplySettings(display_osd_messages);
+    return patches_changed;
+  }
 
   ApplySettings(display_osd_messages);
   return true;
@@ -1589,6 +1622,7 @@ void System::ResetSystem()
 
   InternalReset();
   SPU::GetOutputStream()->EmptyBuffer();
+  RestartPatches();
 
   // Reset boot mode/reload BIOS if needed. Preserve exe/psf boot.
   const BootMode new_boot_mode = (s_boot_mode == BootMode::BootEXE || s_boot_mode == BootMode::BootPSF) ?
@@ -2129,6 +2163,9 @@ void System::DestroySystem()
   s_exe_override = {};
   s_boot_mode = BootMode::None;
   s_cheat_list.reset();
+  s_patch_list.reset();
+  s_patches_active = false;
+  s_logged_needs = {};
 
   s_state = State::Shutdown;
 
@@ -2199,6 +2236,9 @@ void System::FrameDone()
   // Generate any pending samples from the SPU before sleeping, this way we reduce the chances of underruns.
   // TODO: when running ahead, we can skip this (and the flush above)
   SPU::GeneratePendingSamples();
+
+  if (s_patches_active)
+    s_patch_list->ApplyFrame();
 
   if (s_cheat_list)
     s_cheat_list->Apply();
@@ -4518,6 +4558,12 @@ void System::UpdateRunningGame(const std::string_view path, CDImage* image, bool
   Achievements::GameChanged(s_running_game_path, image);
 
   UpdateGameSettingsLayer();
+#ifndef __ANDROID__
+  // A game change is a next start: the patches are built again, from the switches as they are.
+  s_patch_list = BuildPatchList();
+#else
+  s_patch_list.reset();
+#endif
   ApplySettings(true);
 
   s_cheat_list.reset();
@@ -4674,6 +4720,13 @@ void System::SetCheatList(std::unique_ptr<CheatList> cheats)
 {
   Assert(!IsShutdown());
   s_cheat_list = std::move(cheats);
+
+  // Its patches stay in it, so a .cht saved from it keeps them, but they're the patch list's to apply.
+  if (s_cheat_list)
+  {
+    for (u32 i = 0; i < s_cheat_list->GetCodeCount(); i++)
+      Patches::Classify(s_running_game_serial, s_cheat_list->GetCode(i), Patches::BundledMarks());
+  }
 
   if (s_cheat_list && s_cheat_list->GetEnabledCodeCount() > 0)
   {
@@ -5963,6 +6016,123 @@ std::string System::GetMostRecentResumeSaveStatePath()
   }
 
   return std::move(most_recent->FileName);
+}
+
+Patches::PatchList* System::GetPatchList()
+{
+  return s_patch_list.get();
+}
+
+void System::SetPatchList(std::unique_ptr<Patches::PatchList> list)
+{
+  s_patch_list = std::move(list);
+  if (IsValid())
+    ApplySettings(false);
+}
+
+std::unique_ptr<Patches::PatchList> System::BuildPatchList()
+{
+  if (s_running_game_serial.empty())
+    return nullptr;
+
+  // The player's file first, so its copy of a code (marked on, say) wins over the database's.
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  std::vector<std::string> keys;
+  const auto add = [&codes, &keys](const CheatList& list) {
+    for (u32 i = 0; i < list.GetCodeCount(); i++)
+    {
+      CheatCode code = list.GetCode(i);
+      const std::optional<Patches::Mark> mark =
+        Patches::Classify(s_running_game_serial, code, Patches::BundledMarks());
+      std::string key = Patches::CodeKey(code.group, code.description);
+      if (!mark.has_value() || std::find(keys.begin(), keys.end(), key) != keys.end())
+        continue;
+      keys.push_back(std::move(key));
+      codes.emplace_back(std::move(code), mark.value());
+    }
+  };
+
+  if (const std::string filename = GetCheatFileName(); !filename.empty() && FileSystem::FileExists(filename.c_str()))
+  {
+    CheatList player;
+    if (player.LoadFromFile(filename.c_str(), CheatList::Format::Autodetect))
+      add(player);
+  }
+  if (CheatList database; database.LoadFromPackage(s_running_game_serial))
+    add(database);
+
+  if (codes.empty())
+    return nullptr;
+
+  auto list = std::make_unique<Patches::PatchList>(Patches::PatchList::Build(std::move(codes)));
+  list->Restore(Patches::ReadSwitchesForSerial(s_running_game_serial));
+  INFO_LOG("{} patches for '{}'.", list->Count(), s_running_game_title);
+  return list;
+}
+
+bool System::LoadPatchList()
+{
+  if (IsShutdown())
+    return false;
+
+  s_patch_list = BuildPatchList();
+  ApplySettings(false);
+  return static_cast<bool>(s_patch_list);
+}
+
+bool System::FollowPatchSwitches()
+{
+  if (!s_patch_list)
+    return false;
+
+  const Patches::Needs before = s_patch_list->RunningNeeds();
+  for (const CheatCode* code : s_patch_list->Follow(Patches::ReadSwitchesForSerial(s_running_game_serial)))
+  {
+    if (s_patches_active)
+      code->ApplyOnDisable();
+  }
+  return (s_patch_list->RunningNeeds() != before);
+}
+
+void System::RestartPatches()
+{
+  if (!s_patch_list)
+    return;
+
+  const Patches::Needs before = s_patch_list->RunningNeeds();
+  s_patch_list->Restart();
+  if (s_patch_list->RunningNeeds() != before)
+    ApplySettings(false);
+}
+
+bool System::PatchNeedsReset(u32 index, s32 choice)
+{
+  return (s_patch_list && index < s_patch_list->Count() && s_patch_list->NeedsRestart(index, choice));
+}
+
+void System::SetPatch(u32 index, s32 choice, bool reset_now)
+{
+  if (!s_patch_list || index >= s_patch_list->Count())
+    return;
+
+  const Patches::Needs before = s_patch_list->RunningNeeds();
+  if (const CheatCode* code = s_patch_list->Set(index, choice); code && s_patches_active && IsValid())
+    code->ApplyOnDisable();
+
+  if (reset_now && IsValid())
+    ResetSystem();
+  else if (s_patch_list->RunningNeeds() != before && IsValid())
+    ApplySettings(false);
+}
+
+bool System::SetPatchValue(u32 index, s32 choice, u32 value, Error* error)
+{
+  if (!s_patch_list || index >= s_patch_list->Count())
+  {
+    Error::SetStringView(error, "There's no such patch.");
+    return false;
+  }
+  return s_patch_list->SetValue(index, choice, value, error);
 }
 
 std::string System::GetCheatFileName()

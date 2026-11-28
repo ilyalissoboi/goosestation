@@ -775,3 +775,29 @@ TEST(PatchesSwitches, SaveForSerialByteIdentical)
   EmuFolders::GameSettings = old_folder;
   FileSystem::RecursiveDeleteDirectory(templ.c_str());
 }
+
+TEST(PatchesList, FollowSwitches)
+{
+  // The game's settings changed (a UI wrote its switches): the running list follows, as Set() would.
+  Patches::PatchList list = Crash2Japan();
+  std::vector<const CheatCode*> undo =
+    list.Follow(std::vector<Patches::Switch>{{"Select Widescreen Type\\Widescreen Vert-", true, ""}, {"60 FPS", true, ""}});
+  EXPECT_TRUE(undo.empty());
+  EXPECT_EQ(list.Get(0).running, 1);
+  EXPECT_EQ(list.Get(1).running, 0);
+
+  // Both off: the restoring one at once (handed back to undo), the plain one at the next start.
+  undo = list.Follow({});
+  ASSERT_EQ(undo.size(), 1u);
+  EXPECT_EQ(undo[0]->description, "60 FPS");
+  EXPECT_EQ(list.Get(0).saved, -1);
+  EXPECT_EQ(list.Get(0).running, 1);
+  EXPECT_EQ(list.Get(1).running, -1);
+
+  // Unchanged switches change nothing, the pending one included.
+  undo = list.Follow({});
+  EXPECT_TRUE(undo.empty());
+  EXPECT_EQ(list.Get(0).running, 1);
+  list.Restart();
+  EXPECT_EQ(list.Get(0).running, -1);
+}

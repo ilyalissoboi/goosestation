@@ -11,6 +11,7 @@
 #include "common/error.h"
 #include "common/file_system.h"
 #include "common/log.h"
+#include "common/path.h"
 #include "common/settings_interface.h"
 #include "common/string_util.h"
 
@@ -397,6 +398,31 @@ const CheatCode* PatchList::Set(size_t index, s32 choice)
   return (old >= 0 && old != choice) ? &patch.choices[static_cast<size_t>(old)].code : nullptr;
 }
 
+std::vector<const CheatCode*> PatchList::Follow(std::span<const Switch> switches)
+{
+  PatchList wanted = *this;
+  wanted.Restore(switches);
+
+  std::vector<const CheatCode*> undo;
+  for (size_t i = 0; i < m_patches.size(); i++)
+  {
+    Patch& patch = m_patches[i];
+    for (size_t c = 0; c < patch.choices.size(); c++)
+    {
+      const CheatCode& want = wanted.m_patches[i].choices[c].code;
+      if (want.HasOptions() && want.option_value != patch.choices[c].code.option_value)
+        patch.choices[c].code.SetOptionValue(want.option_value, nullptr);
+    }
+
+    if (wanted.m_patches[i].saved != patch.saved)
+    {
+      if (const CheatCode* code = Set(i, wanted.m_patches[i].saved))
+        undo.push_back(code);
+    }
+  }
+  return undo;
+}
+
 bool PatchList::SetValue(size_t index, s32 choice, u32 value, Error* error)
 {
   Patch& patch = m_patches[index];
@@ -595,6 +621,41 @@ void WriteSwitches(SettingsInterface& si, std::span<const Switch> switches)
     si.SetStringList(SECTION, "Value", values);
 }
 
+std::string DescribeNeeds(const Needs& needs)
+{
+  std::string text;
+  const auto add = [&text](std::string part) {
+    if (!text.empty())
+      text += ", ";
+    text += part;
+  };
+  if (needs.aspect_numerator != 0)
+    add(fmt::format("aspect {}:{}", needs.aspect_numerator, needs.aspect_denominator));
+  if (needs.disable_widescreen_rendering)
+    add("widescreen rendering off");
+  if (needs.overclock_percent != 0)
+    add(fmt::format("overclock {}%", needs.overclock_percent));
+  if (needs.may_need_overclock)
+    add("may need an overclock");
+  return text.empty() ? std::string("none") : text;
+}
+
+std::vector<Switch> ReadSwitchesForSerial(std::string_view serial)
+{
+  const std::string path = System::GetGameSettingsPath(serial);
+  std::unique_lock lock(System::GetGameSettingsFileMutex());
+  if (!FileSystem::FileExists(path.c_str()))
+    return {};
+
+  INISettingsInterface ini(path);
+  if (!ini.Load())
+  {
+    WARNING_LOG("Couldn't read the patch switches in '{}'.", Path::GetFileName(path));
+    return {};
+  }
+  return ReadSwitches(ini);
+}
+
 bool SaveSwitchesForSerial(std::string_view serial, std::span<const Switch> switches, Error* error)
 {
   const std::string path = System::GetGameSettingsPath(serial);
@@ -603,6 +664,9 @@ bool SaveSwitchesForSerial(std::string_view serial, std::span<const Switch> swit
   const bool exists = FileSystem::FileExists(path.c_str());
   if (!exists && switches.empty())
     return true;
+
+  if (!exists && !FileSystem::EnsureDirectoryExists(EmuFolders::GameSettings.c_str(), true, error))
+    return false;
 
   INISettingsInterface ini(path);
   if (exists && !ini.Load(error))
@@ -616,7 +680,7 @@ bool SaveSwitchesForSerial(std::string_view serial, std::span<const Switch> swit
     return ini.Save(error) && FileSystem::DeleteFile(path.c_str(), error);
   }
 
-  return FileSystem::EnsureDirectoryExists(EmuFolders::GameSettings.c_str(), false, error) && ini.Save(error);
+  return ini.Save(error);
 }
 
 } // namespace Patches

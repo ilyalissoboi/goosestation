@@ -40,7 +40,12 @@ struct Needs
   bool disable_widescreen_rendering = false;
   u32 overclock_percent = 0;
   bool may_need_overclock = false; // a frame-rate patch without a known overclock
+
+  bool operator==(const Needs&) const = default;
 };
+
+/// Needs as a log line has them: "aspect 16:9, widescreen rendering off, overclock 160%", or "none".
+std::string DescribeNeeds(const Needs& needs);
 
 /// A code the marks name as a patch: its kind, its needs, and the title of the alternatives it's one of (empty for
 /// none): codes of a game with the same choice title show as one patch, of which only one can be on.
@@ -138,6 +143,10 @@ public:
   /// once, for the caller to undo (CheatCode::ApplyOnDisable()) in a running game, or null.
   const CheatCode* Set(size_t index, s32 choice);
 
+  /// Follows switches the game's settings now have (a UI wrote them): each patch whose saved choice or values differ
+  /// changes as Set() changes it. Returns the codes switched off at once, for the caller to undo.
+  std::vector<const CheatCode*> Follow(std::span<const Switch> switches);
+
   /// Puts value into choice's code of patch index (see CheatCode::SetOptionValue()).
   bool SetValue(size_t index, s32 choice, u32 value, Error* error);
 
@@ -190,6 +199,10 @@ std::vector<Switch> ReadSwitches(const SettingsInterface& si);
 
 /// Writes switches into si's `[Patches]`, replacing what it had; with none, the section goes.
 void WriteSwitches(SettingsInterface& si, std::span<const Switch> switches);
+
+/// The switches in serial's game settings file (System::GetGameSettingsPath()), read whether or not game settings
+/// apply: patches don't depend on them.
+std::vector<Switch> ReadSwitchesForSerial(std::string_view serial);
 
 /// Writes switches into serial's game settings file (System::GetGameSettingsPath()), removing empty sections, and the
 /// file when nothing is left in it.

@@ -16,6 +16,7 @@
     <ClCompile Include="cdrom.cpp" />
     <ClCompile Include="gte.cpp" />
     <ClCompile Include="pad.cpp" />
+    <ClCompile Include="patches.cpp" />
     <ClCompile Include="digital_controller.cpp" />
     <ClCompile Include="timers.cpp" />
     <ClCompile Include="spu.cpp" />
@@ -104,6 +105,7 @@
     <ClInclude Include="cdrom.h" />
     <ClInclude Include="gte.h" />
     <ClInclude Include="pad.h" />
+    <ClInclude Include="patches.h" />
     <ClInclude Include="performance_counters_math.h" />
     <ClInclude Include="digital_controller.h" />
     <ClInclude Include="timers.h" />

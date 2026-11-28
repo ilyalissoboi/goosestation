@@ -165,6 +165,10 @@ struct CheatCode
   void Apply() const;
   void ApplyOnDisable() const;
 
+  /// Whether switching the code off puts back what it wrote: it writes only with A7 (write if equal, with restore),
+  /// and at least once, everything else being a condition.
+  bool RestoresOnDisable() const;
+
   static const char* GetTypeName(Type type);
   static const char* GetTypeDisplayName(Type type);
   static std::optional<Type> ParseTypeName(const char* str);

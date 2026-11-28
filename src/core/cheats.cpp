@@ -3190,6 +3190,52 @@ void CheatCode::Apply() const
   }
 }
 
+bool CheatCode::RestoresOnDisable() const
+{
+  bool restores = false;
+  for (const Instruction& inst : instructions)
+  {
+    switch (inst.code)
+    {
+      case InstructionCode::ExtConstantWriteIfMatchWithRestore16:
+        restores = true;
+        break;
+
+      // nothing written: no-ops, conditions and block conditions
+      case InstructionCode::Nop:
+      case InstructionCode::CompareEqual16:
+      case InstructionCode::CompareNotEqual16:
+      case InstructionCode::CompareLess16:
+      case InstructionCode::CompareGreater16:
+      case InstructionCode::CompareEqual8:
+      case InstructionCode::CompareNotEqual8:
+      case InstructionCode::CompareLess8:
+      case InstructionCode::CompareGreater8:
+      case InstructionCode::CompareButtons:
+      case InstructionCode::ExtCompareEqual32:
+      case InstructionCode::ExtCompareNotEqual32:
+      case InstructionCode::ExtCompareLess32:
+      case InstructionCode::ExtCompareGreater32:
+      case InstructionCode::SkipIfNotEqual16:
+      case InstructionCode::ExtSkipIfNotEqual32:
+      case InstructionCode::SkipIfButtonsNotEqual:
+      case InstructionCode::SkipIfButtonsEqual:
+      case InstructionCode::ExtBitCompareButtons:
+      case InstructionCode::ExtSkipIfNotLess8:
+      case InstructionCode::ExtSkipIfNotGreater8:
+      case InstructionCode::ExtSkipIfNotLess16:
+      case InstructionCode::ExtSkipIfNotGreater16:
+      case InstructionCode::ExtMultiConditionals:
+      case InstructionCode::ExtCheatRegistersCompare:
+        break;
+
+      default:
+        return false;
+    }
+  }
+  return restores;
+}
+
 void CheatCode::ApplyOnDisable() const
 {
   const u32 count = static_cast<u32>(instructions.size());

@@ -6,6 +6,7 @@
 #include "achievements_offline_words.h"
 #include "bios.h"
 #include "cheats.h"
+#include "patches.h"
 #include "controller.h"
 #include "game_list.h"
 #include "game_database.h"
@@ -198,6 +199,7 @@ enum class PauseSubMenu
 enum class SettingsPage
 {
   Summary,
+  Patches,
   Interface,
   Console,
   Emulation,
@@ -290,6 +292,15 @@ static void DoRequestExit();
 static void DoDesktopMode();
 static void DoToggleFullscreen();
 static void DoCheatsMenu();
+static void DoPatchesMenu();
+static void OpenPatchList();
+static void ChoosePatch(size_t index);
+static void RequestPatchChoice(size_t index, s32 choice);
+static void ApplyPatchChoice(size_t index, s32 choice, bool reset_now);
+static void ChoosePatchValue(size_t index);
+static void SavePatchSwitches(bool reset_now);
+static void DrawPatchesSettingsPage();
+static void BackToPatches();
 static void DoToggleAnalogMode();
 
 //////////////////////////////////////////////////////////////////////////
@@ -456,6 +467,14 @@ static bool s_memcard_sync_state_stale = true;
 static Achievements::AccountStatus s_achievements_account;
 static std::unique_ptr<INISettingsInterface> s_game_settings_interface;
 static std::unique_ptr<GameList::Entry> s_game_settings_entry;
+
+// The patches the pause menu or the game settings' Patches page is showing: a copy of the running game's list when
+// it's that game (same indices), else one built for the game, and which game; from the settings page, switches also
+// go into the page's settings interface, which is saved as the page closes.
+static std::unique_ptr<Patches::PatchList> s_patch_list;
+static std::string s_patch_serial;
+static bool s_patch_list_running = false;
+static bool s_patch_list_from_settings = false;
 static std::vector<std::pair<std::string, bool>> s_game_list_directories_cache;
 static GPUDevice::AdapterInfoList s_graphics_adapter_list_cache;
 static std::vector<std::string> s_fullscreen_mode_list_cache;
@@ -1006,6 +1025,8 @@ void FullscreenUI::Render()
             FSUI_STR("Error"), fmt::format(FSUI_FSTR("An error occurred while deleting empty game settings:\n{}"),
                                            error.GetDescription()));
         }
+        // Nothing to write: as it goes, the interface mustn't write an empty file back.
+        s_game_settings_interface->MarkClean();
       }
       else
       {
@@ -1382,32 +1403,344 @@ void FullscreenUI::DoCheatsMenu()
     }
   }
 
+  // Patches have a list of their own: the rows are the cheats only, and a cheat with values has a row for its value.
+  static std::vector<std::pair<u32, bool>> s_rows; // code index, and whether the row is its value
+  s_rows.clear();
   ImGuiFullscreen::ChoiceDialogOptions options;
   options.reserve(cl->GetCodeCount());
   for (u32 i = 0; i < cl->GetCodeCount(); i++)
   {
     const CheatCode& cc = cl->GetCode(i);
+    if (cc.patch)
+      continue;
     options.emplace_back(cc.description.c_str(), cc.enabled);
+    s_rows.emplace_back(i, false);
+    if (cc.HasOptions() && cc.CanEnable())
+    {
+      options.emplace_back(fmt::format(FSUI_FSTR("{} value: {}"), cc.description, cc.option_value), false);
+      s_rows.emplace_back(i, true);
+    }
   }
 
-  auto callback = [](s32 index, const std::string& title, bool checked) {
-    if (index < 0)
+  auto callback = [](s32 row, const std::string& title, bool checked) {
+    if (row < 0)
     {
       ReturnToPreviousWindow();
       return;
     }
 
     CheatList* cl = System::GetCheatList();
-    if (!cl)
+    if (!cl || static_cast<size_t>(row) >= s_rows.size())
       return;
 
-    const CheatCode& cc = cl->GetCode(static_cast<u32>(index));
+    const u32 index = s_rows[static_cast<size_t>(row)].first;
+    const CheatCode& cc = cl->GetCode(index);
+    if (s_rows[static_cast<size_t>(row)].second)
+    {
+      // A number, typed: the code's options are listed in its name's place if it has them.
+      OpenInputStringDialog(cc.description, FSUI_STR("The value to use:"), std::string(), FSUI_STR("OK"),
+                            [index](std::string text) {
+                              const std::optional<u32> value = StringUtil::FromChars<u32>(text);
+                              Host::RunOnCPUThread([index, value]() {
+                                CheatList* cl = System::GetCheatList();
+                                Error error;
+                                if (!cl || index >= cl->GetCodeCount() || !value.has_value() ||
+                                    !cl->GetCode(index).SetOptionValue(value.value(), &error))
+                                {
+                                  Host::AddKeyedOSDMessage("cheat_value", FSUI_STR("That value can't be used."),
+                                                           Host::OSD_ERROR_DURATION);
+                                  return;
+                                }
+                                System::SaveCheatList();
+                              });
+                            },
+                            fmt::format("{}", cc.option_value));
+      return;
+    }
+
     if (cc.activation == CheatCode::Activation::Manual)
-      cl->ApplyCode(static_cast<u32>(index));
+      cl->ApplyCode(index);
     else
-      System::SetCheatCodeState(static_cast<u32>(index), checked);
+      System::SetCheatCodeState(index, checked);
   };
   OpenChoiceDialog(FSUI_ICONSTR(ICON_FA_FROWN, "Cheat List"), true, std::move(options), std::move(callback));
+}
+
+// A patch's state as a row shows it: off, on, or its choice, and what waits for the next start.
+static std::string PatchStateText(const Patches::Patch& patch, bool running)
+{
+  const auto name = [&patch](s32 choice) -> std::string {
+    if (choice < 0)
+      return FSUI_STR("Off");
+    return (patch.choices.size() == 1) ? FSUI_STR("On") : patch.choices[static_cast<size_t>(choice)].code.description;
+  };
+  if (running && patch.running != patch.saved)
+    return fmt::format(FSUI_FSTR("{} (until the next start: {})"), name(patch.saved), name(patch.running));
+  return name(patch.saved);
+}
+
+// The code a patch's value rows set: its saved choice's, or its first's while it's off.
+static const CheatCode& PatchValueCode(const Patches::Patch& patch)
+{
+  return patch.choices[static_cast<size_t>(std::max<s32>(patch.saved, 0))].code;
+}
+
+void FullscreenUI::DoPatchesMenu()
+{
+  s_patch_serial = System::GetGameSerial();
+  s_patch_list_from_settings = false;
+  s_patch_list_running = true;
+  const Patches::PatchList* live = System::GetPatchList();
+  if (!live || live->Count() == 0)
+  {
+    Host::AddKeyedOSDMessage("patch_list", fmt::format(FSUI_FSTR("No patches for {}."), System::GetGameTitle()),
+                             10.0f);
+    ReturnToPreviousWindow();
+    return;
+  }
+
+  s_patch_list = std::make_unique<Patches::PatchList>(*live);
+  OpenPatchList();
+}
+
+void FullscreenUI::OpenPatchList()
+{
+  // Rows: each patch, then a row for its value if its code has values.
+  static std::vector<std::pair<size_t, bool>> s_rows;
+  s_rows.clear();
+  ImGuiFullscreen::ChoiceDialogOptions options;
+  for (size_t i = 0; i < s_patch_list->Count(); i++)
+  {
+    const Patches::Patch& patch = s_patch_list->Get(i);
+    options.emplace_back(fmt::format("{}: {}", patch.title, PatchStateText(patch, s_patch_list_running)),
+                         patch.saved >= 0);
+    s_rows.emplace_back(i, false);
+    const CheatCode& code = PatchValueCode(patch);
+    if (code.HasOptions() && code.CanEnable())
+    {
+      options.emplace_back(fmt::format(FSUI_FSTR("{} value: {}"), patch.title, code.option_value), false);
+      s_rows.emplace_back(i, true);
+    }
+  }
+
+  OpenChoiceDialog(FSUI_ICONSTR(ICON_FA_TV, "Patches"), true, std::move(options),
+                   [](s32 row, const std::string&, bool) {
+                     if (row < 0 || static_cast<size_t>(row) >= s_rows.size())
+                     {
+                       if (!s_patch_list_from_settings)
+                       {
+                         s_patch_list.reset();
+                         ReturnToPreviousWindow();
+                       }
+                       return;
+                     }
+
+                     const auto [index, value] = s_rows[static_cast<size_t>(row)];
+                     if (value)
+                       ChoosePatchValue(index);
+                     else
+                       ChoosePatch(index);
+                   });
+}
+
+void FullscreenUI::ChoosePatch(size_t index)
+{
+  const Patches::Patch& patch = s_patch_list->Get(index);
+  if (patch.choices.size() == 1)
+  {
+    RequestPatchChoice(index, (patch.saved == 0) ? -1 : 0);
+    return;
+  }
+
+  ImGuiFullscreen::ChoiceDialogOptions options;
+  options.emplace_back(FSUI_STR("Off"), patch.saved < 0);
+  for (size_t c = 0; c < patch.choices.size(); c++)
+    options.emplace_back(patch.choices[c].code.description, patch.saved == static_cast<s32>(c));
+  OpenChoiceDialog(patch.title, false, std::move(options), [index](s32 row, const std::string&, bool) {
+    if (row < 0)
+      BackToPatches();
+    else
+      RequestPatchChoice(index, row - 1);
+  });
+}
+
+void FullscreenUI::RequestPatchChoice(size_t index, s32 choice)
+{
+  if (s_patch_list->Get(index).saved == choice)
+  {
+    BackToPatches();
+    return;
+  }
+
+  if (!s_patch_list_running || !s_patch_list->NeedsRestart(index, choice))
+  {
+    ApplyPatchChoice(index, choice, false);
+    return;
+  }
+
+  CloseChoiceDialog();
+  ImGuiFullscreen::OpenMessageDialog(
+    FSUI_ICONSTR(ICON_FA_TV, "Switch Patch"),
+    fmt::format(FSUI_FSTR("\"{}\" can't be undone while the game runs. Reset now, or change it at the next start "
+                          "(it stays as it is until then)?"),
+                s_patch_list->Get(index).title),
+    [index, choice](s32 button) {
+      if (button == 0)
+        ApplyPatchChoice(index, choice, true);
+      else if (button == 1)
+        ApplyPatchChoice(index, choice, false);
+      else
+        BackToPatches();
+    },
+    FSUI_ICONSTR(ICON_FA_UNDO, "Reset Now"), FSUI_ICONSTR(ICON_FA_CLOCK, "At Next Start"),
+    FSUI_ICONSTR(ICON_FA_TIMES, "Cancel"));
+}
+
+void FullscreenUI::ApplyPatchChoice(size_t index, s32 choice, bool reset_now)
+{
+  s_patch_list->Set(index, choice);
+  if (reset_now)
+    s_patch_list->Restart();
+  SavePatchSwitches(reset_now);
+  BackToPatches();
+}
+
+void FullscreenUI::ChoosePatchValue(size_t index)
+{
+  const Patches::Patch& patch = s_patch_list->Get(index);
+  const s32 choice = std::max<s32>(patch.saved, 0);
+  const CheatCode& code = PatchValueCode(patch);
+  if (!code.options.empty())
+  {
+    ImGuiFullscreen::ChoiceDialogOptions options;
+    for (const CheatCode::Option& option : code.options)
+      options.emplace_back(option.name, option.value == code.option_value);
+    OpenChoiceDialog(patch.title, false, std::move(options), [index, choice](s32 row, const std::string&, bool) {
+      if (row >= 0)
+      {
+        const CheatCode& code = PatchValueCode(s_patch_list->Get(index));
+        if (static_cast<size_t>(row) < code.options.size() &&
+            s_patch_list->SetValue(index, choice, code.options[static_cast<size_t>(row)].value, nullptr))
+        {
+          SavePatchSwitches(false);
+        }
+      }
+      BackToPatches();
+    });
+    return;
+  }
+
+  CloseChoiceDialog();
+  OpenInputStringDialog(
+    patch.title,
+    fmt::format(FSUI_FSTR("A value from {} to {}:"), code.option_range->first, code.option_range->second),
+    std::string(), FSUI_STR("OK"),
+    [index, choice](std::string text) {
+      const std::optional<u32> value = StringUtil::FromChars<u32>(text);
+      Error error;
+      if (!value.has_value() || !s_patch_list->SetValue(index, choice, value.value(), &error))
+        Host::AddKeyedOSDMessage("patch_value", FSUI_STR("That value can't be used."), Host::OSD_ERROR_DURATION);
+      else
+        SavePatchSwitches(false);
+      BackToPatches();
+    },
+    fmt::format("{}", code.option_value));
+}
+
+void FullscreenUI::BackToPatches()
+{
+  // The settings page draws its own rows; the pause menu's list opens again.
+  if (s_patch_list_from_settings)
+    CloseChoiceDialog();
+  else
+    OpenPatchList();
+}
+
+void FullscreenUI::SavePatchSwitches(bool reset_now)
+{
+  std::vector<Patches::Switch> switches = s_patch_list->Switches();
+  if (s_patch_list_from_settings && s_game_settings_interface)
+  {
+    // Kept in the page's settings too: it's saved as the page closes.
+    Patches::WriteSwitches(*s_game_settings_interface, switches);
+    SetSettingsChanged(s_game_settings_interface.get());
+  }
+  if (!s_patch_list_running)
+  {
+    if (!s_patch_list_from_settings)
+      Patches::SaveSwitchesForSerial(s_patch_serial, switches, nullptr);
+    return;
+  }
+
+  // The running game follows its game settings file.
+  Host::RunOnCPUThread([serial = s_patch_serial, switches = std::move(switches), reset_now]() {
+    Error error;
+    if (!Patches::SaveSwitchesForSerial(serial, switches, &error))
+    {
+      Host::AddKeyedOSDMessage("patch_save", fmt::format(TRANSLATE_FS("FullscreenUI", "Failed to save patches: {}"),
+                                                         error.GetDescription()),
+                               Host::OSD_ERROR_DURATION);
+      return;
+    }
+    System::ReloadGameSettings(false);
+    if (reset_now)
+      System::ResetSystem();
+  });
+}
+
+void FullscreenUI::DrawPatchesSettingsPage()
+{
+  BeginMenuButtons();
+
+  const std::string serial = s_game_settings_entry ? s_game_settings_entry->serial : System::GetGameSerial();
+  const std::string title = s_game_settings_entry ? s_game_settings_entry->title : System::GetGameTitle();
+  const bool running = System::IsValid() && System::GetGameSerial() == serial;
+  if (!s_patch_list_from_settings || s_patch_serial != serial || !s_patch_list)
+  {
+    s_patch_serial = serial;
+    s_patch_list_from_settings = true;
+    s_patch_list_running = running && System::GetPatchList();
+    s_patch_list = s_patch_list_running ? std::make_unique<Patches::PatchList>(*System::GetPatchList()) :
+                                          Patches::LoadForGame(serial, title);
+  }
+
+  MenuHeading(FSUI_CSTR("Patches"));
+  if (running && Achievements::IsHardcoreModeActive())
+  {
+    MenuButton(FSUI_ICONSTR(ICON_FA_TROPHY, "Patches are off in hardcore mode."), "", false);
+  }
+  else if (!s_patch_list || s_patch_list->Count() == 0)
+  {
+    MenuButton(FSUI_ICONSTR(ICON_FA_TV, "No patches for this game."),
+               FSUI_CSTR("Patches are widescreen, frame-rate and display-mode codes."), false);
+  }
+  else
+  {
+    for (size_t i = 0; i < s_patch_list->Count(); i++)
+    {
+      const Patches::Patch& patch = s_patch_list->Get(i);
+      const Patches::Choice& shown = patch.choices[static_cast<size_t>(std::max<s32>(patch.saved, 0))];
+      std::string summary = PatchStateText(patch, s_patch_list_running);
+      if (shown.needs.overclock_percent != 0)
+        summary += fmt::format(FSUI_FSTR(" · runs with a {}% CPU overclock"), shown.needs.overclock_percent);
+      else if (shown.needs.may_need_overclock)
+        summary += FSUI_STR(" · may need a CPU overclock");
+
+      ImGui::PushID(static_cast<int>(i));
+      if (MenuButton(fmt::format("{} {}", ICON_FA_TV, patch.title).c_str(), summary.c_str(), shown.code.CanEnable()))
+        ChoosePatch(i);
+      const CheatCode& code = PatchValueCode(patch);
+      if (code.HasOptions() && code.CanEnable() &&
+          MenuButton(fmt::format("{} {}", ICON_FA_SLIDERS_H, FSUI_STR("Value")).c_str(),
+                     fmt::format("{}", code.option_value).c_str()))
+      {
+        ChoosePatchValue(i);
+      }
+      ImGui::PopID();
+    }
+  }
+
+  EndMenuButtons();
 }
 
 void FullscreenUI::DoToggleAnalogMode()
@@ -2898,6 +3231,8 @@ void FullscreenUI::SwitchToSettings()
 void FullscreenUI::SwitchToGameSettingsForSerial(std::string_view serial)
 {
   s_game_settings_entry.reset();
+  s_patch_list.reset();
+  s_patch_list_from_settings = false;
   s_game_settings_interface = std::make_unique<INISettingsInterface>(System::GetGameSettingsPath(serial));
   s_game_settings_interface->Load();
   s_postprocessing_internal_chain = false;
@@ -3004,7 +3339,7 @@ void FullscreenUI::DrawSettingsWindow()
       ICON_FA_TV,           ICON_FA_DICE_D20,    ICON_FA_COGS,   ICON_PF_MICROCHIP,
       ICON_PF_PICTURE,      ICON_FA_MAGIC,       ICON_PF_SOUND,  ICON_PF_GAMEPAD_ALT,
       ICON_PF_KEYBOARD_ALT, ICON_PF_MEMORY_CARD, ICON_FA_TROPHY, ICON_FA_EXCLAMATION_TRIANGLE};
-    static constexpr const char* per_game_icons[] = {ICON_FA_PARAGRAPH,   ICON_FA_HDD,    ICON_FA_COGS,
+    static constexpr const char* per_game_icons[] = {ICON_FA_PARAGRAPH,   ICON_FA_TV,     ICON_FA_HDD,    ICON_FA_COGS,
                                                      ICON_PF_PICTURE,     ICON_FA_MAGIC,  ICON_PF_SOUND,
                                                      ICON_PF_GAMEPAD_ALT, ICON_PF_MEMORY_CARD, ICON_FA_TROPHY,
                                                      ICON_FA_EXCLAMATION_TRIANGLE};
@@ -3013,11 +3348,12 @@ void FullscreenUI::DrawSettingsWindow()
       SettingsPage::Display,   SettingsPage::PostProcessing, SettingsPage::Audio,        SettingsPage::Controller,
       SettingsPage::Hotkey,    SettingsPage::MemoryCards,    SettingsPage::Achievements, SettingsPage::Advanced};
     static constexpr SettingsPage per_game_pages[] = {
-      SettingsPage::Summary,     SettingsPage::Console,    SettingsPage::Emulation,   SettingsPage::Display,
+      SettingsPage::Summary,     SettingsPage::Patches,    SettingsPage::Console,     SettingsPage::Emulation,
+      SettingsPage::Display,
       SettingsPage::PostProcessing, SettingsPage::Audio,   SettingsPage::Controller,  SettingsPage::MemoryCards,
       SettingsPage::Achievements, SettingsPage::Advanced};
     static constexpr std::array<const char*, static_cast<u32>(SettingsPage::Count)> titles = {
-      {FSUI_NSTR("Summary"), FSUI_NSTR("Interface Settings"), FSUI_NSTR("Console Settings"),
+      {FSUI_NSTR("Summary"), FSUI_NSTR("Patches"), FSUI_NSTR("Interface Settings"), FSUI_NSTR("Console Settings"),
        FSUI_NSTR("Emulation Settings"), FSUI_NSTR("BIOS Settings"), FSUI_NSTR("Controller Settings"),
        FSUI_NSTR("Hotkey Settings"), FSUI_NSTR("Memory Card Settings"), FSUI_NSTR("Graphics Settings"),
        FSUI_NSTR("Post-Processing Settings"), FSUI_NSTR("Audio Settings"), FSUI_NSTR("Achievements Settings"),
@@ -3111,6 +3447,10 @@ void FullscreenUI::DrawSettingsWindow()
     {
       case SettingsPage::Summary:
         DrawSummarySettingsPage();
+        break;
+
+      case SettingsPage::Patches:
+        DrawPatchesSettingsPage();
         break;
 
       case SettingsPage::Interface:
@@ -7133,6 +7473,14 @@ void FullscreenUI::DrawPauseMenu()
         {
           if (OpenSaveStateSelector(false))
             s_current_main_window = MainWindowType::None;
+        }
+
+        // Patches don't need "Enable Cheats"; neither runs in hardcore mode.
+        if (ActiveButton(FSUI_ICONSTR(ICON_FA_TV, "Patches"), false,
+                         !System::GetGameSerial().empty() && !Achievements::IsHardcoreModeActive()))
+        {
+          s_current_main_window = MainWindowType::None;
+          DoPatchesMenu();
         }
 
         if (ActiveButton(FSUI_ICONSTR(ICON_FA_FROWN_OPEN, "Cheat List"), false,

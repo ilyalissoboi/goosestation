@@ -6,17 +6,23 @@
 
 #include "core/cheats.h"
 #include "core/patches.h"
+#include "core/settings.h"
+#include "core/system.h"
+
+#include "util/ini_settings_interface.h"
 
 #include "core_host_stubs.h"
 
 #include "common/error.h"
 #include "common/file_system.h"
+#include "common/memory_settings_interface.h"
 #include "common/path.h"
 #include "common/string_util.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <string>
@@ -555,4 +561,217 @@ TEST(PatchesList, ValueRestoredByName)
   EXPECT_EQ(restored.Get(0).choices[0].code.option_value, 2u);
   EXPECT_EQ(restored.Get(1).choices[0].code.option_value, 7u);
   EXPECT_TRUE(restored.Switches().size() == 2u);
+}
+
+// Overrides: what running patches set for the game, in its settings only.
+namespace {
+
+Patches::PatchList WideAndFast(u32 overclock)
+{
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  codes.emplace_back(PlainCode("Ungrouped", "Widescreen 16-9"), WideMark());
+  codes.emplace_back(RestoringCode("Ungrouped", "60 FPS"), RateMark(overclock));
+  return Patches::PatchList::Build(std::move(codes));
+}
+
+Settings PlayerSettings()
+{
+  Settings s;
+  s.display_aspect_ratio = DisplayAspectRatio::Auto;
+  s.gpu_widescreen_hack = true;
+  s.cpu_overclock_enable = false;
+  s.cpu_overclock_numerator = 1;
+  s.cpu_overclock_denominator = 1;
+  s.UpdateOverclockActive();
+  return s;
+}
+
+} // namespace
+
+TEST(PatchesOverrides, Widescreen)
+{
+  Patches::PatchList list = WideAndFast(0);
+  list.Set(0, 0);
+  Settings s = PlayerSettings();
+  list.ApplyOverrides(s);
+  EXPECT_EQ(s.display_aspect_ratio, DisplayAspectRatio::R16_9);
+  EXPECT_FALSE(s.gpu_widescreen_hack);
+  EXPECT_FALSE(s.cpu_overclock_active);
+
+  // Off (at the next start): the next load leaves the player's settings as they are.
+  list.Set(0, -1);
+  list.Restart();
+  Settings again = PlayerSettings();
+  list.ApplyOverrides(again);
+  EXPECT_EQ(again.display_aspect_ratio, DisplayAspectRatio::Auto);
+  EXPECT_TRUE(again.gpu_widescreen_hack);
+}
+
+TEST(PatchesOverrides, SixteenByTen)
+{
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  Patches::Mark mark = WideMark();
+  mark.needs.aspect_denominator = 10;
+  codes.emplace_back(PlainCode("Ungrouped", "Widescreen 16-10"), mark);
+  Patches::PatchList list = Patches::PatchList::Build(std::move(codes));
+  list.Set(0, 0);
+  Settings s = PlayerSettings();
+  list.ApplyOverrides(s);
+  EXPECT_EQ(s.display_aspect_ratio, DisplayAspectRatio::Custom);
+  EXPECT_EQ(s.display_aspect_ratio_custom_numerator, 16u);
+  EXPECT_EQ(s.display_aspect_ratio_custom_denominator, 10u);
+}
+
+TEST(PatchesOverrides, Overclock)
+{
+  Patches::PatchList list = WideAndFast(160);
+  list.Set(1, 0);
+  Settings s = PlayerSettings();
+  list.ApplyOverrides(s);
+  EXPECT_TRUE(s.cpu_overclock_enable);
+  EXPECT_TRUE(s.cpu_overclock_active);
+  EXPECT_EQ(s.GetCPUOverclockPercent(), 160u);
+  EXPECT_EQ(s.display_aspect_ratio, DisplayAspectRatio::Auto); // no widescreen patch on
+}
+
+TEST(PatchesOverrides, OverclockNeverLowers)
+{
+  Patches::PatchList list = WideAndFast(160);
+  list.Set(1, 0);
+  Settings s = PlayerSettings();
+  s.cpu_overclock_enable = true;
+  s.SetCPUOverclockPercent(200);
+  s.UpdateOverclockActive();
+  list.ApplyOverrides(s);
+  EXPECT_EQ(s.GetCPUOverclockPercent(), 200u);
+  EXPECT_TRUE(s.cpu_overclock_active);
+}
+
+TEST(PatchesOverrides, HandChangeWins)
+{
+  Patches::PatchList list = WideAndFast(160);
+  list.Set(0, 0);
+  list.Set(1, 0);
+  Settings first = PlayerSettings();
+  list.ApplyOverrides(first);
+  ASSERT_EQ(first.display_aspect_ratio, DisplayAspectRatio::R16_9);
+
+  // The player sets 4:3 by hand: the next load finds it, and the patch leaves it be, until the patch goes.
+  Settings changed = PlayerSettings();
+  changed.display_aspect_ratio = DisplayAspectRatio::R4_3;
+  list.ApplyOverrides(changed);
+  EXPECT_EQ(changed.display_aspect_ratio, DisplayAspectRatio::R4_3);
+  EXPECT_FALSE(changed.gpu_widescreen_hack); // the widescreen setting wasn't touched by hand: still overridden
+  EXPECT_EQ(changed.GetCPUOverclockPercent(), 160u);
+
+  Settings later = PlayerSettings();
+  later.display_aspect_ratio = DisplayAspectRatio::R4_3;
+  list.ApplyOverrides(later);
+  EXPECT_EQ(later.display_aspect_ratio, DisplayAspectRatio::R4_3);
+
+  // Off and on again: it sets its ratio again.
+  list.Set(0, -1);
+  list.Restart();
+  Settings off = PlayerSettings();
+  list.ApplyOverrides(off);
+  list.Set(0, 0);
+  Settings on = PlayerSettings();
+  list.ApplyOverrides(on);
+  EXPECT_EQ(on.display_aspect_ratio, DisplayAspectRatio::R16_9);
+}
+
+TEST(PatchesOverrides, NeverWrite)
+{
+  MemorySettingsInterface si;
+  si.SetStringValue("Display", "AspectRatio", "Auto (Game Native)");
+  si.SetBoolValue("GPU", "WidescreenHack", true);
+  const auto before = si.GetKeyValueList("Display");
+
+  Settings s;
+  s.Load(si, si);
+  Patches::PatchList list = WideAndFast(160);
+  list.Set(0, 0);
+  list.Set(1, 0);
+  list.ApplyOverrides(s);
+
+  EXPECT_EQ(si.GetKeyValueList("Display"), before);
+  EXPECT_TRUE(si.GetBoolValue("GPU", "WidescreenHack", false));
+  EXPECT_FALSE(si.ContainsValue("CPU", "OverclockEnable"));
+  EXPECT_TRUE(si.GetKeyValueList("Patches").empty());
+}
+
+TEST(PatchesOverrides, NotAllowedInHardcoreOrWithoutEnhancements)
+{
+  Settings s;
+  EXPECT_TRUE(Patches::Allowed(s, false));
+  EXPECT_FALSE(Patches::Allowed(s, true));
+  s.disable_all_enhancements = true;
+  EXPECT_FALSE(Patches::Allowed(s, false));
+}
+
+TEST(PatchesSwitches, RoundTripAwkwardNames)
+{
+  const std::vector<Patches::Switch> switches = {
+    {"Widescreen 16-9", true, ""},
+    {"Select Widescreen Type\\Widescreen 16-9 (Vert-)", false, ""},
+    {"A = B; C # D", true, ""},
+    {" Leading and trailing ", true, ""},
+    {"\"Quoted\"", false, ""},
+    {"ワイド画面 16:9", true, "60 FPS"},
+    {"Level", false, "7"},
+  };
+  MemorySettingsInterface si;
+  si.SetStringValue("Display", "AspectRatio", "Auto (Game Native)");
+  Patches::WriteSwitches(si, switches);
+  const std::vector<Patches::Switch> read = Patches::ReadSwitches(si);
+  ASSERT_EQ(read.size(), switches.size());
+  for (const Patches::Switch& expected : switches)
+  {
+    const auto it = std::find_if(read.begin(), read.end(), [&](const Patches::Switch& s) { return s.code == expected.code; });
+    ASSERT_NE(it, read.end()) << expected.code;
+    EXPECT_EQ(it->on, expected.on) << expected.code;
+    EXPECT_EQ(it->value, expected.value) << expected.code;
+  }
+
+  // None left: the section goes, the rest stays.
+  Patches::WriteSwitches(si, {});
+  EXPECT_TRUE(si.GetKeyValueList("Patches").empty());
+  EXPECT_EQ(si.GetStringValue("Display", "AspectRatio"), "Auto (Game Native)");
+}
+
+TEST(PatchesSwitches, SaveForSerialByteIdentical)
+{
+  const char* tmpdir = std::getenv("TMPDIR");
+  std::string templ = Path::Combine((tmpdir && *tmpdir) ? tmpdir : "/tmp", "common-tests-patches-XXXXXX");
+  ASSERT_NE(mkdtemp(templ.data()), nullptr);
+  const std::string old_folder = EmuFolders::GameSettings;
+  EmuFolders::GameSettings = templ;
+
+  const std::vector<Patches::Switch> on = {{"Widescreen 16-9", true, ""}};
+  const std::string path = System::GetGameSettingsPath("SLUS-99999");
+
+  // No game settings before: none after on then off.
+  ASSERT_TRUE(Patches::SaveSwitchesForSerial("SLUS-99999", on, nullptr));
+  EXPECT_TRUE(FileSystem::FileExists(path.c_str()));
+  ASSERT_TRUE(Patches::SaveSwitchesForSerial("SLUS-99999", {}, nullptr));
+  EXPECT_FALSE(FileSystem::FileExists(path.c_str()));
+
+  // Game settings the app wrote: the same bytes after on then off.
+  {
+    INISettingsInterface ini(path);
+    ini.SetBoolValue("GPU", "PGXPEnable", true);
+    ini.SetStringValue("Display", "AspectRatio", "4:3");
+    ASSERT_TRUE(ini.Save());
+  }
+  const std::optional<std::string> before = FileSystem::ReadFileToString(path.c_str());
+  ASSERT_TRUE(before.has_value());
+  ASSERT_TRUE(Patches::SaveSwitchesForSerial("SLUS-99999", on, nullptr));
+  const std::optional<std::string> during = FileSystem::ReadFileToString(path.c_str());
+  ASSERT_TRUE(during.has_value());
+  EXPECT_NE(during.value(), before.value());
+  ASSERT_TRUE(Patches::SaveSwitchesForSerial("SLUS-99999", {}, nullptr));
+  EXPECT_EQ(FileSystem::ReadFileToString(path.c_str()), before);
+
+  EmuFolders::GameSettings = old_folder;
+  FileSystem::RecursiveDeleteDirectory(templ.c_str());
 }

@@ -10,11 +10,14 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 class Error;
+class SettingsInterface;
+struct Settings;
 
 /// Patches: the widescreen, frame-rate and display-mode codes, kept apart from cheats. Which of the bundled database's
 /// codes are patches, and what each needs, comes from GooseStation's marks beside it (chtdb_patches.txt); a code read
@@ -148,7 +151,24 @@ public:
   /// Applies the running choices' codes that apply every frame.
   void ApplyFrame() const;
 
+  /// Puts RunningNeeds() into settings, the game's settings as just loaded, never written anywhere: the ratio (16:9,
+  /// or a custom one), widescreen rendering off, an overclock never below the player's. A need finds a setting as the
+  /// player had it the first time; when a later load finds the player changed it, the player's value wins until the
+  /// need goes.
+  void ApplyOverrides(Settings& settings);
+
 private:
+  // What each need found before it first overrode, and whether the player has since changed it.
+  struct Found
+  {
+    std::optional<std::tuple<DisplayAspectRatio, u16, u16>> aspect;
+    bool aspect_player = false;
+    std::optional<bool> widescreen;
+    bool widescreen_player = false;
+    std::optional<std::tuple<bool, u32, u32>> overclock;
+    bool overclock_player = false;
+  };
+
   struct Defaults
   {
     s32 choice = -1;
@@ -157,6 +177,22 @@ private:
 
   std::vector<Patch> m_patches;
   std::vector<Defaults> m_defaults;
+  Found m_found;
 };
+
+/// Whether patches run at all: not in hardcore mode, nor with "disable all enhancements" (which turns the overclock
+/// off that frame-rate patches need).
+bool Allowed(const Settings& settings, bool hardcore);
+
+/// The switches in a game's settings: `[Patches]` lists `On` and `Off` of code keys, and `Value` of
+/// `key<TAB>value`.
+std::vector<Switch> ReadSwitches(const SettingsInterface& si);
+
+/// Writes switches into si's `[Patches]`, replacing what it had; with none, the section goes.
+void WriteSwitches(SettingsInterface& si, std::span<const Switch> switches);
+
+/// Writes switches into serial's game settings file (System::GetGameSettingsPath()), removing empty sections, and the
+/// file when nothing is left in it.
+bool SaveSwitchesForSerial(std::string_view serial, std::span<const Switch> switches, Error* error);
 
 } // namespace Patches

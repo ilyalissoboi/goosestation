@@ -3,15 +3,22 @@
 
 #include "patches.h"
 #include "host.h"
+#include "settings.h"
+#include "system.h"
+
+#include "util/ini_settings_interface.h"
 
 #include "common/error.h"
+#include "common/file_system.h"
 #include "common/log.h"
+#include "common/settings_interface.h"
 #include "common/string_util.h"
 
 #include "fmt/format.h"
 
 #include <algorithm>
 #include <charconv>
+#include <mutex>
 
 Log_SetChannel(Patches);
 
@@ -439,6 +446,177 @@ void PatchList::ApplyFrame() const
     if (code.CanEnable() && !code.IsManuallyActivated())
       code.Apply();
   }
+}
+
+void PatchList::ApplyOverrides(Settings& settings)
+{
+  const Needs needs = RunningNeeds();
+
+  if (needs.aspect_numerator == 0)
+  {
+    m_found.aspect.reset();
+    m_found.aspect_player = false;
+  }
+  else
+  {
+    const auto current = std::make_tuple(settings.display_aspect_ratio, settings.display_aspect_ratio_custom_numerator,
+                                         settings.display_aspect_ratio_custom_denominator);
+    if (!m_found.aspect.has_value())
+      m_found.aspect = current;
+    else if (m_found.aspect.value() != current)
+      m_found.aspect_player = true;
+
+    if (!m_found.aspect_player)
+    {
+      if (needs.aspect_numerator == 16 && needs.aspect_denominator == 9)
+      {
+        settings.display_aspect_ratio = DisplayAspectRatio::R16_9;
+      }
+      else
+      {
+        settings.display_aspect_ratio = DisplayAspectRatio::Custom;
+        settings.display_aspect_ratio_custom_numerator = needs.aspect_numerator;
+        settings.display_aspect_ratio_custom_denominator = needs.aspect_denominator;
+      }
+    }
+  }
+
+  if (!needs.disable_widescreen_rendering)
+  {
+    m_found.widescreen.reset();
+    m_found.widescreen_player = false;
+  }
+  else
+  {
+    const bool current = settings.gpu_widescreen_hack;
+    if (!m_found.widescreen.has_value())
+      m_found.widescreen = current;
+    else if (m_found.widescreen.value() != current)
+      m_found.widescreen_player = true;
+
+    if (!m_found.widescreen_player)
+      settings.gpu_widescreen_hack = false;
+  }
+
+  if (needs.overclock_percent == 0)
+  {
+    m_found.overclock.reset();
+    m_found.overclock_player = false;
+  }
+  else
+  {
+    const auto current = std::make_tuple(static_cast<bool>(settings.cpu_overclock_enable),
+                                         settings.cpu_overclock_numerator, settings.cpu_overclock_denominator);
+    if (!m_found.overclock.has_value())
+      m_found.overclock = current;
+    else if (m_found.overclock.value() != current)
+      m_found.overclock_player = true;
+
+    if (!m_found.overclock_player)
+    {
+      const u32 players = settings.cpu_overclock_enable ? settings.GetCPUOverclockPercent() : 100;
+      if (needs.overclock_percent > players)
+      {
+        settings.cpu_overclock_enable = true;
+        settings.SetCPUOverclockPercent(needs.overclock_percent);
+      }
+      settings.UpdateOverclockActive();
+    }
+  }
+}
+
+bool Allowed(const Settings& settings, bool hardcore)
+{
+  return !hardcore && !settings.disable_all_enhancements;
+}
+
+static constexpr const char* SECTION = "Patches";
+
+// A key as an ini value: one the ini would trim, or that starts with a quote, goes in quotes.
+static std::string QuoteKey(std::string_view key)
+{
+  const bool quote = !key.empty() && (std::isspace(static_cast<unsigned char>(key.front())) ||
+                                      std::isspace(static_cast<unsigned char>(key.back())) || key.front() == '"');
+  return quote ? fmt::format("\"{}\"", key) : std::string(key);
+}
+
+static std::string UnquoteKey(std::string_view value)
+{
+  if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+    value = value.substr(1, value.size() - 2);
+  return std::string(value);
+}
+
+std::vector<Switch> ReadSwitches(const SettingsInterface& si)
+{
+  std::vector<Switch> switches;
+  for (const char* list : {"On", "Off"})
+  {
+    for (const std::string& key : si.GetStringList(SECTION, list))
+      switches.push_back({UnquoteKey(key), list[1] == 'n', std::string()});
+  }
+
+  for (const std::string& entry : si.GetStringList(SECTION, "Value"))
+  {
+    const size_t tab = entry.rfind('\t');
+    if (tab == std::string::npos)
+      continue;
+    const std::string key = UnquoteKey(std::string_view(entry).substr(0, tab));
+    for (Switch& sw : switches)
+    {
+      if (sw.code == key)
+        sw.value = entry.substr(tab + 1);
+    }
+  }
+  return switches;
+}
+
+void WriteSwitches(SettingsInterface& si, std::span<const Switch> switches)
+{
+  std::vector<std::string> on, off, values;
+  for (const Switch& sw : switches)
+  {
+    (sw.on ? on : off).push_back(QuoteKey(sw.code));
+    if (!sw.value.empty())
+      values.push_back(fmt::format("{}\t{}", QuoteKey(sw.code), sw.value));
+  }
+
+  si.ClearSection(SECTION);
+  if (on.empty() && off.empty())
+  {
+    si.RemoveSection(SECTION);
+    return;
+  }
+  if (!on.empty())
+    si.SetStringList(SECTION, "On", on);
+  if (!off.empty())
+    si.SetStringList(SECTION, "Off", off);
+  if (!values.empty())
+    si.SetStringList(SECTION, "Value", values);
+}
+
+bool SaveSwitchesForSerial(std::string_view serial, std::span<const Switch> switches, Error* error)
+{
+  const std::string path = System::GetGameSettingsPath(serial);
+  std::unique_lock lock(System::GetGameSettingsFileMutex());
+
+  const bool exists = FileSystem::FileExists(path.c_str());
+  if (!exists && switches.empty())
+    return true;
+
+  INISettingsInterface ini(path);
+  if (exists && !ini.Load(error))
+    return false;
+
+  WriteSwitches(ini, switches);
+  ini.RemoveEmptySections();
+  if (ini.IsEmpty())
+  {
+    // Saved first, so the interface isn't left dirty: it would write the file again as it goes.
+    return ini.Save(error) && FileSystem::DeleteFile(path.c_str(), error);
+  }
+
+  return FileSystem::EnsureDirectoryExists(EmuFolders::GameSettings.c_str(), false, error) && ini.Save(error);
 }
 
 } // namespace Patches

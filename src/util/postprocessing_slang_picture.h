@@ -4,12 +4,19 @@
 #pragma once
 
 #include "common/gsvector.h"
+#include "common/string_util.h"
 #include "common/types.h"
 
 #include <algorithm>
+#include <cmath>
+#include <initializer_list>
+#include <optional>
+#include <string_view>
 #include <utility>
+#include <vector>
 
-/// The slang stage's picture maths: what the preset is fed, and where its result goes. No GPU here.
+/// The slang stage's picture maths: what the preset is fed, where its result goes, and whether it draws over the whole
+/// screen. No GPU here.
 namespace PostProcessing::Slang {
 
 struct PictureSize
@@ -89,6 +96,71 @@ inline VisiblePicture CropToTarget(GSVector4i picture, GSVector4i src, PictureSi
 inline bool IsUsable(GSVector4i rect, PictureSize native)
 {
   return !rect.rempty() && native.width > 0 && native.height > 0;
+}
+
+namespace Detail {
+// Whether the '/'- or '\\'-separated folders of name (not its file) hold the sequence of folders, ignoring case.
+inline bool HasFolders(std::string_view name, std::initializer_list<std::string_view> folders)
+{
+  std::vector<std::string_view> parts;
+  size_t start = 0;
+  for (size_t i = 0; i <= name.size(); i++)
+  {
+    if (i == name.size() || name[i] == '/' || name[i] == '\\')
+    {
+      parts.push_back(name.substr(start, i - start));
+      start = i + 1;
+    }
+  }
+  if (!parts.empty())
+    parts.pop_back(); // the file itself
+  for (size_t i = 0; i + folders.size() <= parts.size(); i++)
+  {
+    size_t j = 0;
+    for (const std::string_view folder : folders)
+    {
+      if (!StringUtil::EqualNoCase(parts[i + j], folder))
+        break;
+      j++;
+    }
+    if (j == folders.size())
+      return true;
+  }
+  return false;
+}
+} // namespace Detail
+
+/// Whether a preset is a bezel by where it is: under a folder named "bezel" (any case), as libretro's pack keeps them.
+inline bool IsBezelName(std::string_view name)
+{
+  return Detail::HasFolders(name, {"bezel"});
+}
+
+/// Whether a preset places the game by the aspect ratio it's given (OriginalAspect), so it draws over the whole screen
+/// whatever the picture's shape. Only koko-aio's, checked by frames: the other families size the picture with their
+/// own parameters and would squeeze a picture that isn't 4:3.
+inline bool HonoursAspect(std::string_view name)
+{
+  return Detail::HasFolders(name, {"bezel", "koko-aio"});
+}
+
+/// Whether a display aspect ratio is 4:3, within 2% (Auto with a small crop still counts).
+inline bool IsFourThree(float aspect)
+{
+  return aspect > 0.0f && std::abs(aspect * 3.0f / 4.0f - 1.0f) <= 0.02f;
+}
+
+/// Whether a stage wants the whole screen: its switch when set, else whether it's a bezel by its folder.
+inline bool WantsWholeScreen(std::string_view name, std::optional<bool> key)
+{
+  return key.value_or(IsBezelName(name));
+}
+
+/// Whether a stage that wants the whole screen draws over it this frame: the picture's aspect (0 when unknown, as in
+/// the internal chain) is 4:3, or the preset honours the aspect. Otherwise it draws into the picture as other stages do.
+inline bool DrawsWholeScreen(bool wants, bool honours_aspect, float aspect)
+{
+  return wants && aspect > 0.0f && (honours_aspect || IsFourThree(aspect));
 }
 
 } // namespace PostProcessing::Slang

@@ -501,3 +501,122 @@ TEST(SlangPicture, APictureOffTheTargetHasNothingVisible)
   EXPECT_TRUE(v.out.rempty());
   EXPECT_FALSE(IsUsable(v.out, v.native));
 }
+
+TEST(SlangPlacement, BezelNamesAreByFolder)
+{
+  EXPECT_TRUE(IsBezelName("shaders_slang/bezel/Mega_Bezel/Presets/MBZ__5__POTATO.slangp"));
+  EXPECT_TRUE(IsBezelName("bezel/x.slangp"));
+  EXPECT_TRUE(IsBezelName("Bezel\\x.slangp"));
+  EXPECT_FALSE(IsBezelName("crt/crt-royale.slangp"));
+  EXPECT_FALSE(IsBezelName("bezels/x.slangp"));
+  EXPECT_FALSE(IsBezelName("mybezel.slangp"));
+  EXPECT_FALSE(IsBezelName("crt/bezel.slangp"));
+}
+
+TEST(SlangPlacement, KokoHonoursTheAspect)
+{
+  EXPECT_TRUE(HonoursAspect("shaders_slang/bezel/koko-aio/koko-aio-ng.slangp"));
+  EXPECT_TRUE(HonoursAspect("bezel/Koko-AIO/Presets-ng/x.slangp"));
+  EXPECT_FALSE(HonoursAspect("shaders_slang/bezel/Mega_Bezel/Presets/MBZ__5__POTATO.slangp"));
+  EXPECT_FALSE(HonoursAspect("shaders_slang/bezel/uborder/uborder-bezel-reflections.slangp"));
+  EXPECT_FALSE(HonoursAspect("koko-aio/koko-aio-ng.slangp"));
+}
+
+TEST(SlangPlacement, FourThreeWithinTwoPercent)
+{
+  EXPECT_TRUE(IsFourThree(4.0f / 3.0f));
+  EXPECT_TRUE(IsFourThree(1.31f));
+  EXPECT_TRUE(IsFourThree(1.36f));
+  EXPECT_FALSE(IsFourThree(1.30f));
+  EXPECT_FALSE(IsFourThree(1.37f));
+  EXPECT_FALSE(IsFourThree(16.0f / 9.0f));
+  EXPECT_FALSE(IsFourThree(0.75f));
+  EXPECT_FALSE(IsFourThree(0.0f));
+}
+
+TEST(SlangPlacement, TheKeyOverridesTheFolder)
+{
+  EXPECT_TRUE(WantsWholeScreen("crt/x.slangp", true));
+  EXPECT_FALSE(WantsWholeScreen("bezel/x.slangp", false));
+  EXPECT_TRUE(WantsWholeScreen("bezel/x.slangp", std::nullopt));
+  EXPECT_FALSE(WantsWholeScreen("crt/x.slangp", std::nullopt));
+}
+
+TEST(SlangPlacement, NonFourThreeFallsBackUnlessHonoured)
+{
+  EXPECT_FALSE(DrawsWholeScreen(true, false, 16.0f / 9.0f));
+  EXPECT_TRUE(DrawsWholeScreen(true, true, 16.0f / 9.0f));
+  EXPECT_TRUE(DrawsWholeScreen(true, false, 4.0f / 3.0f));
+  EXPECT_FALSE(DrawsWholeScreen(false, true, 4.0f / 3.0f));
+  EXPECT_FALSE(DrawsWholeScreen(true, true, 0.0f));
+}
+
+TEST(SlangPlacement, TheSwitchIsAKeyInTheStagesSection)
+{
+  using namespace PostProcessing;
+  MemorySettingsInterface si;
+  si.SetUIntValue(Config::DISPLAY_CHAIN_SECTION, "StageCount", 1);
+  si.SetStringValue("PostProcessing/Stage1", "ShaderName", "crt/x.slangp");
+  EXPECT_EQ(Config::GetStageWholeScreen(si, Config::DISPLAY_CHAIN_SECTION, 0), std::nullopt);
+
+  Config::SetStageWholeScreen(si, Config::DISPLAY_CHAIN_SECTION, 0, false);
+  EXPECT_EQ(si.GetStringValue("PostProcessing/Stage1", Config::WHOLE_SCREEN_KEY), "false");
+  EXPECT_EQ(Config::GetStageWholeScreen(si, Config::DISPLAY_CHAIN_SECTION, 0), std::optional<bool>(false));
+
+  MemorySettingsInterface copy;
+  Config::CopyChain(si, copy, Config::DISPLAY_CHAIN_SECTION);
+  EXPECT_EQ(Config::GetStageWholeScreen(copy, Config::DISPLAY_CHAIN_SECTION, 0), std::optional<bool>(false));
+
+  Config::SetStageWholeScreen(si, Config::DISPLAY_CHAIN_SECTION, 0, std::nullopt);
+  EXPECT_FALSE(si.ContainsValue("PostProcessing/Stage1", Config::WHOLE_SCREEN_KEY));
+}
+
+TEST(SlangPlacement, ChainHasWholeScreenStageNeedsAnEnabledChain)
+{
+  using namespace PostProcessing;
+  const char* section = Config::DISPLAY_CHAIN_SECTION;
+  MemorySettingsInterface si;
+  si.SetUIntValue(section, "StageCount", 2);
+  si.SetStringValue("PostProcessing/Stage1", "ShaderName", "crt/x.slangp");
+  si.SetStringValue("PostProcessing/Stage2", "ShaderName", "bezel/y.slangp");
+  EXPECT_FALSE(Config::ChainHasWholeScreenStage(si, section));
+  si.SetBoolValue(section, "Enabled", true);
+  EXPECT_TRUE(Config::ChainHasWholeScreenStage(si, section));
+  EXPECT_FALSE(Config::StageWantsWholeScreen(si, section, 0));
+  EXPECT_TRUE(Config::StageWantsWholeScreen(si, section, 1));
+
+  Config::SetStageWholeScreen(si, section, 1, false);
+  EXPECT_FALSE(Config::ChainHasWholeScreenStage(si, section));
+
+  // Only slang stages can draw over the whole screen.
+  si.SetStringValue("PostProcessing/Stage1", "ShaderName", "crt-lottes");
+  Config::SetStageWholeScreen(si, section, 0, true);
+  EXPECT_FALSE(Config::StageWantsWholeScreen(si, section, 0));
+  EXPECT_FALSE(Config::ChainHasWholeScreenStage(si, section));
+}
+
+TEST(SlangStage, TheSwitchIsReadWithTheOptionsAndKeepsParameters)
+{
+  SKIP_WITHOUT_LIBRASHADER();
+  const TestPresetFolders f;
+  f.shaders.Write("bezel/test.slangp", "shaders = 1\nshader0 = ../p/params.slang\n");
+
+  PostProcessing::SlangShader shader;
+  Error error;
+  ASSERT_TRUE(
+    shader.LoadFromFile("bezel/test.slangp", Path::Combine(f.shaders.GetPath(), "bezel/test.slangp"), false, &error))
+    << error.GetDescription();
+  MemorySettingsInterface si;
+  shader.LoadOptions(si, "PostProcessing/Stage1");
+  EXPECT_TRUE(shader.WantsWholeScreen());
+
+  si.SetStringValue("PostProcessing/Stage1", "TEST_GAIN", "1.5");
+  si.SetBoolValue("PostProcessing/Stage1", PostProcessing::Config::WHOLE_SCREEN_KEY, false);
+  shader.LoadOptions(si, "PostProcessing/Stage1");
+  EXPECT_FALSE(shader.WantsWholeScreen());
+  EXPECT_EQ(shader.GetParametersToPush(), (std::vector<std::string>{"TEST_GAIN"}));
+
+  si.DeleteValue("PostProcessing/Stage1", PostProcessing::Config::WHOLE_SCREEN_KEY);
+  shader.LoadOptions(si, "PostProcessing/Stage1");
+  EXPECT_TRUE(shader.WantsWholeScreen());
+}

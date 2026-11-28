@@ -8,6 +8,7 @@
 #include <array>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -138,6 +139,18 @@ void DeleteChain(SettingsInterface& si, const char* section);
 
 /// Whether si has a chain of its own: it sets the chain's Enabled. A game's layer without one runs the global chain.
 bool HasOwnChain(const SettingsInterface& si, const char* section);
+
+/// A slang stage's "Draw over the whole screen" switch, in its section; absent means automatic (a bezel by its folder).
+static constexpr const char* WHOLE_SCREEN_KEY = "WholeScreen";
+std::optional<bool> GetStageWholeScreen(const SettingsInterface& si, const char* section, u32 index);
+void SetStageWholeScreen(SettingsInterface& si, const char* section, u32 index, std::optional<bool> value);
+
+/// Whether the stage is a slang preset that wants the whole screen (its switch, else its folder).
+bool StageWantsWholeScreen(const SettingsInterface& si, const char* section, u32 index);
+
+/// Whether the chain is enabled and has a stage that wants the whole screen, so the display's own placement (integer
+/// scaling, alignment, stretch) applies only to games the stage falls back for.
+bool ChainHasWholeScreenStage(const SettingsInterface& si, const char* section);
 } // namespace Config
 
 class Chain

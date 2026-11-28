@@ -9,6 +9,7 @@
 #include "postprocessing_shader_fx.h"
 #include "postprocessing_shader_glsl.h"
 #include "postprocessing_shader_slang.h"
+#include "postprocessing_slang_picture.h"
 #include "librashader_loader.h"
 
 // TODO: Remove me
@@ -454,6 +455,44 @@ void PostProcessing::Config::DeleteChain(SettingsInterface& si, const char* sect
 bool PostProcessing::Config::HasOwnChain(const SettingsInterface& si, const char* section)
 {
   return si.ContainsValue(section, "Enabled");
+}
+
+std::optional<bool> PostProcessing::Config::GetStageWholeScreen(const SettingsInterface& si, const char* section,
+                                                                 u32 index)
+{
+  bool value;
+  if (!si.GetBoolValue(GetStageConfigSection(section, index), WHOLE_SCREEN_KEY, &value))
+    return std::nullopt;
+  return value;
+}
+
+void PostProcessing::Config::SetStageWholeScreen(SettingsInterface& si, const char* section, u32 index,
+                                                 std::optional<bool> value)
+{
+  const TinyString stage_section = GetStageConfigSection(section, index);
+  if (value.has_value())
+    si.SetBoolValue(stage_section, WHOLE_SCREEN_KEY, value.value());
+  else
+    si.DeleteValue(stage_section, WHOLE_SCREEN_KEY);
+}
+
+bool PostProcessing::Config::StageWantsWholeScreen(const SettingsInterface& si, const char* section, u32 index)
+{
+  const std::string name = GetStageShaderName(si, section, index);
+  return Slang::IsPresetName(name) && Slang::WantsWholeScreen(name, GetStageWholeScreen(si, section, index));
+}
+
+bool PostProcessing::Config::ChainHasWholeScreenStage(const SettingsInterface& si, const char* section)
+{
+  if (!si.GetBoolValue(section, "Enabled", false))
+    return false;
+  const u32 count = GetStageCount(si, section);
+  for (u32 i = 0; i < count; i++)
+  {
+    if (StageWantsWholeScreen(si, section, i))
+      return true;
+  }
+  return false;
 }
 
 PostProcessing::Chain::Chain(const char* section) : m_section(section)

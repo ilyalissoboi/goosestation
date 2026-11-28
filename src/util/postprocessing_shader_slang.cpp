@@ -184,6 +184,27 @@ bool PostProcessing::SlangShader::LoadFromFile(std::string name, std::string pat
   return true;
 }
 
+bool PostProcessing::SlangShader::WantsWholeScreen() const
+{
+  return Slang::WantsWholeScreen(m_name, m_whole_screen_key);
+}
+
+void PostProcessing::SlangShader::LoadStageSettings(const SettingsInterface& si, const char* section)
+{
+  bool value;
+  std::optional<bool> key;
+  if (si.GetBoolValue(section, Config::WHOLE_SCREEN_KEY, &value))
+    key = value;
+  if (key == m_whole_screen_key)
+    return;
+
+  const bool wanted = WantsWholeScreen();
+  m_whole_screen_key = key;
+  // The chain is made with or without the original-aspect uniforms the whole screen needs: a change builds it again.
+  if (WantsWholeScreen() != wanted)
+    m_chain.reset();
+}
+
 void PostProcessing::SlangShader::OnOptionChanged(const ShaderOption& option)
 {
   if (std::find(m_params_to_push.begin(), m_params_to_push.end(), option.name) == m_params_to_push.end())

@@ -296,8 +296,8 @@ TEST_F(PatchesBundledMarks, CoverLibrary)
   ASSERT_EQ(kf2.size(), 2u);
   EXPECT_FALSE(kf2[0].choice.empty());
   EXPECT_EQ(kf2[0].choice, kf2[1].choice);
-  EXPECT_EQ(kf2[0].needs.overclock_percent, 200u); // the 30 fps uncap's name says 200
-  EXPECT_EQ(kf2[1].needs.overclock_percent, 160u); // the 60 fps uncap's, 160
+  EXPECT_EQ(kf2[0].needs.overclock_percent, 180u); // measured: the 30 fps uncap's name says 200
+  EXPECT_EQ(kf2[1].needs.overclock_percent, 195u); // measured: the 60 fps uncap's says 160
 }
 
 TEST_F(PatchesBundledMarks, SkipCheats)
@@ -948,4 +948,14 @@ TEST(PatchesSwitches, RoundTripOnDisk)
     EXPECT_EQ(it->on, expected.on);
     EXPECT_EQ(it->value, expected.value);
   }
+}
+
+TEST(PatchesMarks, MeasuredNoOverclock)
+{
+  // Measured on the library: the patch holds its rate without an overclock, so it doesn't say it may need one.
+  const Patches::Marks marks = Patches::Marks::Parse("SLUS-01042\tForce and cap game to 60 FPS\tframerate overclock=none\n", nullptr);
+  const Patches::Mark* mark = marks.Find("SLUS-01042", "", "Force and cap game to 60 FPS");
+  ASSERT_NE(mark, nullptr);
+  EXPECT_EQ(mark->needs.overclock_percent, 0u);
+  EXPECT_FALSE(mark->needs.may_need_overclock);
 }

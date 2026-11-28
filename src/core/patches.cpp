@@ -76,6 +76,7 @@ static std::optional<Mark> ParseMarkField(std::string_view field)
   std::string_view rest = (space == std::string_view::npos) ? std::string_view() : field.substr(space + 1);
 
   Mark mark;
+  bool measured_none = false;
   if (kind == "widescreen")
   {
     mark.kind = Kind::Widescreen;
@@ -109,7 +110,12 @@ static std::optional<Mark> ParseMarkField(std::string_view field)
     const size_t next = rest.find(' ');
     const std::string_view token = rest.substr(0, next);
     rest = (next == std::string_view::npos) ? std::string_view() : rest.substr(next + 1);
-    if (token.starts_with("overclock="))
+    if (token == "overclock=none")
+    {
+      // Measured: it holds its rate without one.
+      measured_none = true;
+    }
+    else if (token.starts_with("overclock="))
     {
       const std::optional<u32> percent = ParseUnsigned(token.substr(10));
       if (!percent.has_value() || percent.value() < 10 || percent.value() > 1000)
@@ -126,7 +132,7 @@ static std::optional<Mark> ParseMarkField(std::string_view field)
     }
   }
 
-  mark.needs.may_need_overclock = (mark.kind == Kind::FrameRate && mark.needs.overclock_percent == 0);
+  mark.needs.may_need_overclock = (mark.kind == Kind::FrameRate && mark.needs.overclock_percent == 0 && !measured_none);
   return mark;
 }
 

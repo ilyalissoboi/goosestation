@@ -37,9 +37,29 @@ NOT_PATCHES = [
     )
 ]
 
-# Overclocks (percent) measured on the user's library: the lowest that holds the patch's rate (Task 11 of the plan).
+# Overclocks (percent) measured on the user's library on 2026-11-28 (D3D11 regtest on pcsx2-win, from a gameplay
+# state): the lowest that holds the patch's rate in every 600-frame window (594 of 600 for 60 fps, all 300 for 30), or
+# "none" where it holds without one. Each applies to every serial of the code's block.
 MEASURED_OVERCLOCK = {
-    # ("SERIAL", "Group\\Name"): percent,
+    # Crash Bandicoot - Warped (USA), in the Time Twister hub: 130% dips to 572, 135% holds 598-622. The code uncaps
+    # the game, so more runs it faster than 60.
+    "Enable 60 FPS (Play with Overclock to get preferred speed)": 135,
+    "Enable 60 FPS Alternative (Play with Overclock to get preferred speed)": 135,
+    # Parasite Eve II (USA), at the shooting range: 600 of 600 at 100%.
+    "Force and cap game to 60 FPS": "none",
+    # King's Field II (USA), on the first beach: the 60 fps uncap dips to 591 at 190% and holds 607-613 at 195% (its
+    # name's 160% gives about 50 fps); the 30 fps uncap holds 300 at 180% (its name says 200%).
+    "Uncap Game at 60 FPS (160 Overclock for stable 60 FPS)": 195,
+    "Uncap game at 30 FPS (200 Overclock for stable 30 FPS)": 180,
+}
+
+# The measured games' serials, so a measurement applies only to them (other games may share a code's name).
+MEASURED_SERIALS = {
+    "Enable 60 FPS (Play with Overclock to get preferred speed)": {"SCUS-94244", "SCUS-94244CE"},
+    "Enable 60 FPS Alternative (Play with Overclock to get preferred speed)": {"SCUS-94244", "SCUS-94244CE"},
+    "Force and cap game to 60 FPS": {"SLUS-01042", "SLUS-01055"},
+    "Uncap Game at 60 FPS (160 Overclock for stable 60 FPS)": {"SLUS-00255"},
+    "Uncap game at 30 FPS (200 Overclock for stable 30 FPS)": {"SLUS-00255"},
 }
 
 # Ratios for widescreen codes whose names don't say 16:9.
@@ -140,7 +160,7 @@ def marks_for_block(serials, codes):
             if kind == "widescreen":
                 field.append(next((ratio for p, ratio in RATIOS if p.search(key)), "16:9"))
             elif kind == "framerate":
-                overclock = MEASURED_OVERCLOCK.get((serial, key))
+                overclock = MEASURED_OVERCLOCK.get(key) if serial in MEASURED_SERIALS.get(key, ()) else None
                 if overclock is None:
                     m = OVERCLOCK_IN_NAME.search(key)
                     overclock = int(m.group(1)) if m else None

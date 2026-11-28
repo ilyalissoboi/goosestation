@@ -50,11 +50,11 @@ SLUS-00288	Widescreen 16-9	widescreen 16:9
 SCUS-94900	Widescreen 16-9	widescreen 16:9
 SCUS-94154	Widescreen 16-9	widescreen 16:9
 SCUS-94244	Widescreen 16-9	widescreen 16:9
-SCUS-94244	Enable 60 FPS (Play with Overclock to get preferred speed)	framerate choice=Frame rate
-SCUS-94244	Enable 60 FPS Alternative (Play with Overclock to get preferred speed)	framerate choice=Frame rate
+SCUS-94244	Enable 60 FPS (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
+SCUS-94244	Enable 60 FPS Alternative (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
 SCUS-94244CE	Widescreen 16-9	widescreen 16:9
-SCUS-94244CE	Enable 60 FPS (Play with Overclock to get preferred speed)	framerate choice=Frame rate
-SCUS-94244CE	Enable 60 FPS Alternative (Play with Overclock to get preferred speed)	framerate choice=Frame rate
+SCUS-94244CE	Enable 60 FPS (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
+SCUS-94244CE	Enable 60 FPS Alternative (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
 SCUS-94570	Widescreen 16-9	widescreen 16:9
 SCUS-94156	Widescreen 16-9	widescreen 16:9
 SLUS-00046	Widescreen 16-9	widescreen 16:9
@@ -141,8 +141,8 @@ SLUS-00708	Widescreen 16-9	widescreen 16:9
 SLUS-00600	Widescreen 16-9	widescreen 16:9
 SLUS-00369	Widescreen 16-9	widescreen 16:9
 SLUS-00801	Widescreen 16-9	widescreen 16:9
-SLUS-00255	Uncap game at 30 FPS (200 Overclock for stable 30 FPS)	framerate overclock=200 choice=Frame rate
-SLUS-00255	Uncap Game at 60 FPS (160 Overclock for stable 60 FPS)	framerate overclock=160 choice=Frame rate
+SLUS-00255	Uncap game at 30 FPS (200 Overclock for stable 30 FPS)	framerate overclock=180 choice=Frame rate
+SLUS-00255	Uncap Game at 60 FPS (160 Overclock for stable 60 FPS)	framerate overclock=195 choice=Frame rate
 SLUS-00585	Widescreen 16-9	widescreen 16:9 choice=Widescreen
 SLUS-00585	Widescreen 16-9 [ALT]:Fixes Most Sprites and 3D environment.	widescreen 16:9 choice=Widescreen
 SCUS-94491	Widescreen 16-9	widescreen 16:9
@@ -187,8 +187,8 @@ SLUS-00439GH	Widescreen 16-9	widescreen 16:9
 SLUS-00578	Widescreen 16-9	widescreen 16:9
 SLUS-00232	Widescreen 16-9	widescreen 16:9
 SCUS-94183	Widescreen 16-9	widescreen 16:9
-SLUS-01042	Force and cap game to 60 FPS	framerate
-SLUS-01055	Force and cap game to 60 FPS	framerate
+SLUS-01042	Force and cap game to 60 FPS	framerate overclock=none
+SLUS-01055	Force and cap game to 60 FPS	framerate overclock=none
 SLUS-01158	Widescreen 16-9	widescreen 16:9
 SLUS-01339	Widescreen 16-9	widescreen 16:9
 SLUS-00408	Widescreen 16-9	widescreen 16:9

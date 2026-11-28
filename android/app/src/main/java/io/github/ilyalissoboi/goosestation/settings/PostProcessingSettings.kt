@@ -45,10 +45,14 @@ enum class ShaderKind(
     }
 }
 
-/** A shader that can be added to a chain: its [name], as `ShaderName` has it, and its [kind]. */
+/**
+ * A shader that can be added to a chain: its [name], as `ShaderName` has it, its [kind], and a slang preset's [cost]
+ * ("light", "heavy" or "very heavy", estimated from its structure; empty for the others).
+ */
 data class Shader(
     val name: String,
     val kind: ShaderKind,
+    val cost: String = "",
 )
 
 const val STAGE_STAYS_OFF = "Post-processing stays off while it's in the chain."

@@ -850,7 +850,8 @@ object NativeLibrary {
     /**
      * The post-processing shaders this install has (the data folder's `shaders/`, the app's packs and the resources';
      * slang presets by name, the others only when their metadata loads), sorted by their place in the browser: name,
-     * kind ("GLSL", "dolphinfx", "ReShade" or "Slang"), name, kind…
+     * kind ("GLSL", "dolphinfx", "ReShade" or "Slang"), cost (a slang preset's "light", "heavy" or "very heavy", from
+     * its structure; else empty), name, kind, cost…
      */
     external fun getPostProcessingShaders(): Array<String>
 
@@ -894,6 +895,20 @@ object NativeLibrary {
         name: String,
         values: FloatArray,
     )
+
+    /** Sets a slang stage's "Draw over the whole screen" switch (`WholeScreen` in its section). */
+    external fun setPostProcessingWholeScreen(
+        key: String?,
+        section: String,
+        index: Int,
+        on: Boolean,
+    )
+
+    /**
+     * Whether the display chain in effect (the game's of [key] when it has one of its own, else settings.ini's) is on
+     * and has a stage drawing over the whole screen.
+     */
+    external fun chainDrawsOverWholeScreen(key: String?): Boolean
 
     /** Copies settings.ini's chain (its Enabled, StageCount and stages) into the game's file, over its own. */
     external fun copyPostProcessingChain(

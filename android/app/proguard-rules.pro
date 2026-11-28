@@ -105,7 +105,7 @@
 }
 -keep class io.github.ilyalissoboi.goosestation.core.StageInfo {
     <init>(java.lang.String, java.lang.String, io.github.ilyalissoboi.goosestation.core.ShaderOptionInfo[],
-        java.lang.String);
+        java.lang.String, boolean);
 }
 # jni_classes.cpp finds FavouriteInfo and its constructor by name in JNI_OnLoad, for getPostProcessingFavourites().
 -keep class io.github.ilyalissoboi.goosestation.core.FavouriteInfo {

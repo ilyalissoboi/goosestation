@@ -223,6 +223,9 @@ class FakeCoreApi(
     /** The shaders this fake has: each name's kind and options, their values the defaults. */
     var shaderCatalog = mapOf<String, Pair<String, List<ShaderOptionInfo>>>()
 
+    /** A shader's cost label by name, for getPostProcessingShaders(). */
+    var shaderCosts = mapOf<String, String>()
+
     /** settings.ini, for the chain calls with no key: the chains as desktop's keys, options as comma lists. */
     val globalLayer = MemoryCoreSettings()
 
@@ -235,8 +238,10 @@ class FakeCoreApi(
         index: Int,
     ) = "$section/Stage${index + 1}"
 
-    override fun getPostProcessingShaders(): List<Pair<String, String>> =
-        shaderCatalog.map { (name, entry) -> name to entry.first }.sortedBy { it.first.lowercase() }
+    override fun getPostProcessingShaders(): List<Triple<String, String, String>> =
+        shaderCatalog
+            .map { (name, entry) -> Triple(name, entry.first, shaderCosts[name].orEmpty()) }
+            .sortedBy { it.first.lowercase() }
 
     override fun getPostProcessingStages(
         key: String?,

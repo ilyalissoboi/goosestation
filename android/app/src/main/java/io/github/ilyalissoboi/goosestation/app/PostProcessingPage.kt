@@ -745,8 +745,8 @@ class PostProcessingPage(
                 withContext(core) {
                     val gles = api.postProcessingUsesOpenGLES(key)
                     val shaders =
-                        api.getPostProcessingShaders().mapNotNull { (name, kind) ->
-                            ShaderKind.of(kind)?.let { Shader(name, it) }
+                        api.getPostProcessingShaders().mapNotNull { (name, kind, cost) ->
+                            ShaderKind.of(kind)?.let { Shader(name, it, cost) }
                         }
                     Triple(gles, offered(shaders, gles), readChains(key) to api.getPostProcessingFavourites())
                 }

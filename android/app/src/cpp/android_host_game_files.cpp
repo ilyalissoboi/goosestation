@@ -31,6 +31,7 @@
 #include "util/ini_settings_interface.h"
 #include "util/input_manager.h"
 #include "util/postprocessing.h"
+#include "util/postprocessing_slang_cost.h"
 #include "util/postprocessing_shader_slang.h"
 #include "util/window_info.h"
 #include "common/memory_settings_interface.h"
@@ -293,9 +294,9 @@ static bool ShaderLoads(const std::string& name, Error* error)
   return PostProcessing::Config::AddStage(scratch, PostProcessing::Config::DISPLAY_CHAIN_SECTION, name, error);
 }
 
-std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingShaders()
+std::vector<AndroidHost::PostProcessingShader> AndroidHost::GetPostProcessingShaders()
 {
-  std::vector<std::pair<std::string, std::string>> shaders;
+  std::vector<PostProcessingShader> shaders;
   if (!s_initialized)
     return shaders;
 
@@ -314,7 +315,14 @@ std::vector<std::pair<std::string, std::string>> AndroidHost::GetPostProcessingS
           INFO_LOG("Not offering shader '{}': {}", name, error.GetDescription());
           continue;
         }
-        shaders.emplace_back(name, PostProcessing::GetShaderKindName(available.kind));
+        // Its cost from its structure, read once and then kept.
+        std::string cost;
+        if (available.kind == PostProcessing::ShaderKind::Slang)
+        {
+          if (const std::optional<PostProcessing::Slang::Cost> c = PostProcessing::Slang::GetCostForName(name))
+            cost = PostProcessing::Slang::GetCostLabel(c.value());
+        }
+        shaders.push_back({name, PostProcessing::GetShaderKindName(available.kind), std::move(cost)});
       }
     },
     true);
@@ -337,6 +345,7 @@ static std::vector<AndroidHost::PostProcessingStage> ReadStages(const std::optio
       {
         stage.kind = ShaderKind(stage.shader);
         stage.options = PostProcessing::Config::GetStageOptions(si, section, i);
+        stage.whole_screen = PostProcessing::Config::StageWantsWholeScreen(si, section, i);
       }
       else
       {
@@ -413,6 +422,34 @@ void AndroidHost::SetPostProcessingOption(const std::optional<std::string>& key,
       PostProcessing::Config::SetStageOption(si, section, index, option);
       return;
     }
+  });
+}
+
+void AndroidHost::SetPostProcessingWholeScreen(const std::optional<std::string>& key, const char* section, u32 index,
+                                               bool on)
+{
+  EditChainLayer(key, [&](SettingsInterface& si) {
+    if (index < PostProcessing::Config::GetStageCount(si, section))
+      PostProcessing::Config::SetStageWholeScreen(si, section, index, on);
+  });
+}
+
+bool AndroidHost::ChainDrawsOverWholeScreen(const std::optional<std::string>& key)
+{
+  const char* section = PostProcessing::Config::DISPLAY_CHAIN_SECTION;
+  if (key.has_value())
+  {
+    // A game without a chain of its own runs settings.ini's.
+    const std::optional<bool> own = ReadChainLayer(key, std::optional<bool>(), [section](const SettingsInterface& si) {
+      return PostProcessing::Config::HasOwnChain(si, section) ?
+               std::optional<bool>(PostProcessing::Config::ChainHasWholeScreenStage(si, section)) :
+               std::nullopt;
+    });
+    if (own.has_value())
+      return own.value();
+  }
+  return ReadChainLayer(std::optional<std::string>(), false, [section](const SettingsInterface& si) {
+    return PostProcessing::Config::ChainHasWholeScreenStage(si, section);
   });
 }
 

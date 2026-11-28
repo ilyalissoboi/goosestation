@@ -161,6 +161,62 @@ class PostProcessingAccessTest {
         assertEquals(1.5f, NativeLibrary.getPostProcessingStages(null, DISPLAY)!![0].options[0].value[0], 0f)
     }
 
+    // libretro's pack keeps its bezels in a bezel folder: a stage there draws over the whole screen by itself.
+    @Test
+    fun aBezelStageDrawsOverTheWholeScreenByItsFolder() {
+        writeTestPreset()
+        writeTestPreset(File(dataRoot, "shaders/bezel"))
+        initialize()
+        NativeLibrary.addPostProcessingStage(null, DISPLAY, "p/test.slangp")
+        NativeLibrary.addPostProcessingStage(null, DISPLAY, "bezel/test.slangp")
+
+        val stages = NativeLibrary.getPostProcessingStages(null, DISPLAY)!!
+        assertFalse(stages[0].wholeScreen)
+        assertTrue(stages[1].wholeScreen)
+    }
+
+    @Test
+    fun theWholeScreenSwitchIsWrittenToTheStage() {
+        writeTestPreset(File(dataRoot, "shaders/bezel"))
+        initialize()
+        NativeLibrary.addPostProcessingStage(null, DISPLAY, "bezel/test.slangp")
+
+        NativeLibrary.setPostProcessingWholeScreen(null, DISPLAY, 0, false)
+        assertEquals("false", settings().value("$DISPLAY/Stage1", "WholeScreen"))
+        assertFalse(NativeLibrary.getPostProcessingStages(null, DISPLAY)!![0].wholeScreen)
+
+        // A game's chain is its own file.
+        NativeLibrary.addPostProcessingStage(KEY, DISPLAY, "bezel/test.slangp")
+        NativeLibrary.setPostProcessingWholeScreen(KEY, DISPLAY, 0, false)
+        assertEquals("false", gameFile().value("$DISPLAY/Stage1", "WholeScreen"))
+    }
+
+    @Test
+    fun slangPresetsCarryACostLabel() {
+        File(dataRoot, "shaders/p").mkdirs()
+        File(dataRoot, "shaders/p/one.slangp").writeText("shaders = 1\nscale_type0 = viewport\n")
+        initialize()
+
+        assertEquals("light", costs()["p/one.slangp"])
+        assertEquals("", costs()["crt-lottes"])
+    }
+
+    @Test
+    fun theChainSaysWhenABezelDrawsOverTheWholeScreen() {
+        writeTestPreset(File(dataRoot, "shaders/bezel"))
+        initialize()
+        NativeLibrary.addPostProcessingStage(null, DISPLAY, "bezel/test.slangp")
+        assertFalse(NativeLibrary.chainDrawsOverWholeScreen(null)) // the chain is off
+        NativeLibrary.setBoolSetting(DISPLAY, "Enabled", true)
+        assertTrue(NativeLibrary.chainDrawsOverWholeScreen(null))
+        // A game without a chain of its own runs the global one; with one, its own.
+        assertTrue(NativeLibrary.chainDrawsOverWholeScreen(KEY))
+        NativeLibrary.copyPostProcessingChain(KEY, DISPLAY)
+        NativeLibrary.setPostProcessingWholeScreen(KEY, DISPLAY, 0, false)
+        assertFalse(NativeLibrary.chainDrawsOverWholeScreen(KEY))
+        assertTrue(NativeLibrary.chainDrawsOverWholeScreen(null))
+    }
+
     // A chain from another install names a preset this one lacks: the stage says so, in the core's words.
     @Test
     fun aMissingSlangStageSaysWhy() {
@@ -438,8 +494,15 @@ class PostProcessingAccessTest {
         NativeLibrary
             .getPostProcessingShaders()
             .toList()
-            .chunked(2)
+            .chunked(3)
             .associate { (name, kind) -> name to kind }
+
+    private fun costs(): Map<String, String> =
+        NativeLibrary
+            .getPostProcessingShaders()
+            .toList()
+            .chunked(3)
+            .associate { (name, _, cost) -> name to cost }
 
     private fun settings() = Ini.parse(File(dataRoot, "settings.ini").readText())
 

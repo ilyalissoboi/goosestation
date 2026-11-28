@@ -504,6 +504,17 @@ TEST_F(SlangGPU, ABezelReceivesTheAspect)
   EXPECT_PRED2(Near, At(out, 2, 2), 0xFF0000A7u) << std::hex << At(out, 2, 2);
 }
 
+TEST_F(SlangGPU, ABezelFallingBackIsStillToldTheAspect)
+{
+  // Built with the original-aspect uniforms, a bezel drawing into a 16:9 picture is told 16:9, not the 3:2 its
+  // 24x16 source would give librashader to infer.
+  LoadStage("bezel/aspect.slangp", 1.0f);
+  const std::vector<u32> input = InputPixels();
+  const std::vector<u32> out = Run(Texture(GPUTexture::Type::Texture, &input), PictureAt(16.0f / 9.0f));
+  EXPECT_FALSE(m_shader->DrewWholeScreen());
+  EXPECT_PRED2(Near, At(out, 32, 24), 0xFF0000E3u) << std::hex << At(out, 32, 24);
+}
+
 TEST_F(SlangGPU, ANonFourThreePictureFallsBackIntoThePicture)
 {
   LoadStage("bezel/frame.slangp", 1.0f);

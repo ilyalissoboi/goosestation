@@ -495,13 +495,16 @@ bool PostProcessing::SlangShader::Apply(GPUTexture* input_color, GPUTexture* inp
       }
       m_native->MakeReadyForSampling();
 
-      // 2. The preset, into a texture the size of the picture, or of the whole target for a bezel, which is told the
-      // picture's aspect ratio. The picture reaches it already turned, so no rotation: librashader's would turn the
-      // bezel too. Other stages get no frame options at all, as before bezels drew over the whole screen.
+      // 2. The preset, into a texture the size of the picture, or of the whole target for a bezel. A bezel is told the
+      // picture's aspect ratio, falling back into the picture too, as its chain has the original-aspect uniforms
+      // (without it librashader would infer one from the source's size). The picture reaches it already turned, so
+      // no rotation: librashader's would turn the bezel too. Other stages get no frame options at all, as before
+      // bezels drew over the whole screen.
       PushParameters(false);
       const SlangFrameOptions options{picture.aspect_ratio, 0};
+      const bool told_aspect = WantsWholeScreen() && picture.aspect_ratio > 0.0f;
       Error error;
-      if (m_chain->Frame(m_native.get(), m_result.get(), m_frame_count++, whole ? &options : nullptr, &error))
+      if (m_chain->Frame(m_native.get(), m_result.get(), m_frame_count++, told_aspect ? &options : nullptr, &error))
       {
         m_result->MakeReadyForSampling();
         shaded = true;

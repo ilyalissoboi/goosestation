@@ -155,9 +155,9 @@ fun PatchCodePanel(
                 }
             }
         }
+        // As the Achievements panel's two tabs: a third hint would take a line the rows need on a small screen.
         KeyHints(
             listOf(
-                KeyHint(PadGlyphs.confirm, "Select"),
                 KeyHint("${PadGlyphs.previousTab} ${PadGlyphs.nextTab}", "Switch"),
                 KeyHint(PadGlyphs.back, "Back"),
             ),

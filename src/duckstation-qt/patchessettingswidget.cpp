@@ -15,6 +15,7 @@
 #include "common/file_system.h"
 
 #include <QtCore/QSignalBlocker>
+#include <QtGui/QStandardItemModel>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QHBoxLayout>
@@ -50,8 +51,9 @@ PatchesSettingsWidget::PatchesSettingsWidget(SettingsWindow* dialog, QWidget* pa
   QHBoxLayout* buttons = new QHBoxLayout();
   buttons->addStretch(1);
   m_import = new QPushButton(tr("Import..."), this);
-  m_import->setToolTip(tr("Adds the patches in a cheat file (any format GooseStation reads, the newer community "
-                          "format included) to this game's file in the cheats folder, each as a patch."));
+  m_import->setToolTip(tr("Adds the codes in a cheat file (any format GooseStation reads, the newer community format "
+                          "included) to this game's file in the cheats folder. Codes its file or GooseStation's marks "
+                          "call patches show here; the rest are cheats."));
   buttons->addWidget(m_import);
   layout->addLayout(buttons);
   connect(m_import, &QPushButton::clicked, this, &PatchesSettingsWidget::onImportClicked);
@@ -109,6 +111,8 @@ QString PatchesSettingsWidget::noteFor(const Patches::Patch& patch) const
     notes.append(QString::fromStdString(choice.code.details));
   for (const std::string& note : choice.code.notes)
     notes.append(QString::fromStdString(note));
+  if (choice.code.IsManuallyActivated())
+    notes.append(tr("A patch applied by hand can't be switched on."));
   return notes.join(QLatin1Char(' '));
 }
 
@@ -166,6 +170,15 @@ void PatchesSettingsWidget::fill()
       choices->addItem(tr("Off"));
       for (const Patches::Choice& choice : patch.choices)
         choices->addItem(QString::fromStdString(choice.code.description));
+      // A choice that can't run is listed, but can't be picked.
+      if (QStandardItemModel* model = qobject_cast<QStandardItemModel*>(choices->model()))
+      {
+        for (size_t c = 0; c < patch.choices.size(); c++)
+        {
+          if (!m_list->CanChoose(i, static_cast<s32>(c)))
+            model->item(static_cast<int>(c) + 1)->setEnabled(false);
+        }
+      }
       choices->setCurrentIndex(patch.saved + 1);
       connect(choices, &QComboBox::currentIndexChanged, this, [this, i](int row) { setChoice(i, row - 1); });
       setting_layout->addWidget(choices);
@@ -179,7 +192,7 @@ void PatchesSettingsWidget::fill()
     // A value for the shown choice's code, if it has options.
     const s32 shown = (patch.saved >= 0) ? patch.saved : 0;
     const CheatCode& code = patch.choices[static_cast<size_t>(shown)].code;
-    if (!code.CanEnable())
+    if (!m_list->CanChoose(i, shown))
     {
       item->setDisabled(true);
     }
@@ -239,18 +252,25 @@ void PatchesSettingsWidget::setChoice(size_t index, s32 choice)
       reset_now = true;
     else if (box.clickedButton() != later)
     {
-      fill(); // back as it was
+      refill(); // back as it was
       return;
     }
   }
 
   m_list->Set(index, choice);
-  if (reset_now)
-    m_list->Restart();
   save();
   if (reset_now)
     g_emu_thread->resetSystem(true);
-  fill();
+  // The running game's list as it is after the change (and the reset, if it happened): its calls queue behind them.
+  if (m_running)
+    reload();
+  refill();
+}
+
+void PatchesSettingsWidget::refill()
+{
+  // Never inside the tree's own signals: rebuilding deletes the item that sent it.
+  QMetaObject::invokeMethod(this, &PatchesSettingsWidget::fill, Qt::QueuedConnection);
 }
 
 void PatchesSettingsWidget::setValue(size_t index, s32 choice, u32 value)
@@ -262,7 +282,7 @@ void PatchesSettingsWidget::setValue(size_t index, s32 choice, u32 value)
   if (!m_list->SetValue(index, choice, value, &error))
   {
     QMessageBox::critical(this, tr("Patch Value"), QString::fromStdString(error.GetDescription()));
-    fill();
+    refill();
     return;
   }
   save();
@@ -296,11 +316,17 @@ void PatchesSettingsWidget::onImportClicked()
   CheatList file;
   if (FileSystem::FileExists(path.c_str()))
     file.LoadFromFile(path.c_str(), CheatList::Format::Autodetect);
+  // A code is a patch when its own file says so (override keys, #patch) or the marks name it for this game; the rest
+  // are cheats, which only the cheat manager shows, with "Enable Cheats" on.
+  int patches = 0;
   for (u32 i = 0; i < imported.GetCodeCount(); i++)
   {
-    imported.GetCode(i).patch = true;
-    imported.GetCode(i).enabled = false;
+    CheatCode& code = imported.GetCode(i);
+    code.enabled = false;
+    if (Patches::Classify(m_serial, code, Patches::BundledMarks()).has_value())
+      patches++;
   }
+  const int cheats = static_cast<int>(imported.GetCodeCount()) - patches;
   file.MergeList(imported);
   Error error;
   if (!FileSystem::EnsureDirectoryExists(EmuFolders::Cheats.c_str(), false, &error) ||
@@ -322,8 +348,12 @@ void PatchesSettingsWidget::onImportClicked()
       true);
   }
 
-  QMessageBox::information(this, tr("Import Patches"),
-                           tr("%n code(s) imported as patches.", "", static_cast<int>(imported.GetCodeCount())));
+  QMessageBox::information(
+    this, tr("Import Patches"),
+    cheats == 0 ? tr("%n patch(es) imported.", "", patches) :
+                  tr("%1 patch(es) and %2 cheat(s) imported. The cheats are in the cheat manager, with Enable Cheats on.")
+                    .arg(patches)
+                    .arg(cheats));
   reload();
   fill();
 }

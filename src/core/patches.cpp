@@ -235,7 +235,11 @@ std::optional<Mark> Classify(std::string_view serial, CheatCode& code, const Mar
   Mark mark;
   mark.needs = NeedsFromOverrides(code);
   if (mark.needs.aspect_numerator != 0)
+  {
+    // A widescreen patch: the emulator's own widescreen rendering would widen the picture twice.
     mark.kind = Kind::Widescreen;
+    mark.needs.disable_widescreen_rendering = true;
+  }
   else if (mark.needs.overclock_percent != 0)
     mark.kind = Kind::FrameRate;
   return mark;
@@ -281,7 +285,7 @@ PatchList PatchList::Build(std::vector<std::pair<CheatCode, Mark>> codes)
     Patch& patch = list.m_patches[index];
     Defaults& defaults = list.m_defaults[index];
     const s32 choice = static_cast<s32>(patch.choices.size());
-    if (code.enabled && defaults.choice < 0)
+    if (code.enabled && defaults.choice < 0 && code.CanEnable() && !code.IsManuallyActivated())
       defaults.choice = choice;
     code.enabled = false;
     defaults.values.push_back(code.option_value);
@@ -337,7 +341,7 @@ void PatchList::Restore(std::span<const Switch> switches)
           continue;
 
         const s32 choice = static_cast<s32>(c);
-        if (sw.on && !switched_on[i])
+        if (sw.on && !switched_on[i] && CanChoose(i, choice))
         {
           patch.saved = choice;
           switched_on[i] = true;
@@ -386,9 +390,43 @@ bool PatchList::NeedsRestart(size_t index, s32 choice) const
           !patch.choices[static_cast<size_t>(patch.running)].code.RestoresOnDisable());
 }
 
+bool PatchList::CanChoose(size_t index, s32 choice) const
+{
+  const Patch& patch = m_patches[index];
+  if (choice < 0)
+    return true;
+  if (static_cast<size_t>(choice) >= patch.choices.size())
+    return false;
+  const CheatCode& code = patch.choices[static_cast<size_t>(choice)].code;
+  return code.CanEnable() && !code.IsManuallyActivated();
+}
+
+void PatchList::KeepRunningFrom(const PatchList& old)
+{
+  for (Patch& patch : m_patches)
+  {
+    for (const Patch& was : old.m_patches)
+    {
+      if (was.title != patch.title || was.running < 0)
+        continue;
+      const CheatCode& running = was.choices[static_cast<size_t>(was.running)].code;
+      for (size_t c = 0; c < patch.choices.size(); c++)
+      {
+        if (CodeKey(patch.choices[c].code.group, patch.choices[c].code.description) ==
+            CodeKey(running.group, running.description))
+        {
+          patch.running = static_cast<s32>(c);
+        }
+      }
+    }
+  }
+}
+
 const CheatCode* PatchList::Set(size_t index, s32 choice)
 {
   Patch& patch = m_patches[index];
+  if (!CanChoose(index, choice))
+    return nullptr;
   patch.saved = choice;
   if (NeedsRestart(index, choice))
     return nullptr;
@@ -443,9 +481,10 @@ void PatchList::Restart()
 Needs PatchList::RunningNeeds() const
 {
   Needs needs;
-  for (const Patch& patch : m_patches)
+  for (size_t i = 0; i < m_patches.size(); i++)
   {
-    if (patch.running < 0)
+    const Patch& patch = m_patches[i];
+    if (patch.running < 0 || !CanChoose(i, patch.running))
       continue;
 
     const Needs& each = patch.choices[static_cast<size_t>(patch.running)].needs;

@@ -850,3 +850,102 @@ TEST(PatchesClassify, EachDiscBySerial)
   EXPECT_FALSE(Patches::Classify("SLUS-00002", disc2, marks).has_value());
   EXPECT_FALSE(disc2.patch);
 }
+
+TEST(PatchesList, UnusableChoicesNeverRun)
+{
+  // An imported Assembly code and a manual one, both with a ratio: listed, but never on, so their ratio never applies.
+  CheatList file;
+  ASSERT_TRUE(file.LoadFromINIString("[Asm Wide]\nType = Assembly\nOverrideAspectRatio = 16:9\n80010000 nop\n"
+                                     "[Manual Wide]\nActivation = Manual\nOverrideAspectRatio = 16:9\n80001234 0001\n"
+                                     "[Good Wide]\nOverrideAspectRatio = 16:9\n80001238 0001\n"));
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  for (u32 i = 0; i < file.GetCodeCount(); i++)
+  {
+    CheatCode code = file.GetCode(i);
+    code.enabled = true; // marked on in its file
+    const std::optional<Patches::Mark> mark = Patches::Classify("SLUS-00001", code, Patches::Marks());
+    ASSERT_TRUE(mark.has_value());
+    codes.emplace_back(std::move(code), mark.value());
+  }
+  Patches::PatchList list = Patches::PatchList::Build(std::move(codes));
+  ASSERT_EQ(list.Count(), 3u);
+
+  EXPECT_FALSE(list.CanChoose(0, 0));
+  EXPECT_FALSE(list.CanChoose(1, 0));
+  EXPECT_TRUE(list.CanChoose(2, 0));
+  EXPECT_TRUE(list.CanChoose(0, -1));
+
+  // Their markers and switches don't put them on.
+  list.Restore(std::vector<Patches::Switch>{{"Asm Wide", true, ""}, {"Manual Wide", true, ""}});
+  EXPECT_EQ(list.Get(0).saved, -1);
+  EXPECT_EQ(list.Get(1).saved, -1);
+  EXPECT_EQ(list.Get(2).saved, 0);
+
+  // Nor does Set.
+  list.Set(2, -1);
+  list.Restart();
+  list.Set(0, 0);
+  list.Set(1, 0);
+  EXPECT_EQ(list.Get(0).saved, -1);
+  EXPECT_EQ(list.Get(1).saved, -1);
+  EXPECT_EQ(list.RunningNeeds().aspect_numerator, 0u);
+}
+
+TEST(PatchesClassify, WidescreenOverridesTurnWidescreenRenderingOff)
+{
+  // A widescreen patch never widens twice, whether or not its file says DisableWidescreenRendering.
+  CheatList file;
+  ASSERT_TRUE(file.LoadFromINIString("[Wide]\nOverrideAspectRatio = 16:9\n80001234 0001\n"));
+  CheatCode code = file.GetCode(0);
+  const std::optional<Patches::Mark> mark = Patches::Classify("SLUS-00001", code, Patches::Marks());
+  ASSERT_TRUE(mark.has_value());
+  EXPECT_TRUE(mark->needs.disable_widescreen_rendering);
+}
+
+TEST(PatchesList, RebuildKeepsWhatRuns)
+{
+  // The list built again mid-game (an import) keeps what runs until the next start: a plain patch pending off stays
+  // on, with its 16:9.
+  Patches::PatchList old = Crash2Japan();
+  old.Set(0, 1);
+  old.Set(0, -1); // waits: plain writes
+  ASSERT_EQ(old.Get(0).running, 1);
+
+  Patches::PatchList fresh = Crash2Japan();
+  fresh.Restore({}); // the switches say off
+  fresh.KeepRunningFrom(old);
+  EXPECT_EQ(fresh.Get(0).saved, -1);
+  EXPECT_EQ(fresh.Get(0).running, 1);
+  EXPECT_EQ(fresh.RunningNeeds().aspect_numerator, 16u);
+  fresh.Restart();
+  EXPECT_EQ(fresh.Get(0).running, -1);
+}
+
+TEST(PatchesSwitches, RoundTripOnDisk)
+{
+  // As RoundTripAwkwardNames, through a game settings file written and read back.
+  const char* tmpdir = std::getenv("TMPDIR");
+  const std::string path = Path::Combine((tmpdir && *tmpdir) ? tmpdir : "/tmp", "patches-switches-roundtrip.ini");
+  const std::vector<Patches::Switch> switches = {{"A = B; C # D", true, ""},
+                                                 {" Leading and trailing ", true, ""},
+                                                 {"\"Quoted\"", false, ""},
+                                                 {"Group\\Name\\", true, ""},
+                                                 {"ワイド画面 16:9", true, "60 FPS"}};
+  {
+    INISettingsInterface ini(path);
+    Patches::WriteSwitches(ini, switches);
+    ASSERT_TRUE(ini.Save());
+  }
+  INISettingsInterface ini(path);
+  ASSERT_TRUE(ini.Load());
+  const std::vector<Patches::Switch> read = Patches::ReadSwitches(ini);
+  FileSystem::DeleteFile(path.c_str());
+  ASSERT_EQ(read.size(), switches.size());
+  for (const Patches::Switch& expected : switches)
+  {
+    const auto it = std::find_if(read.begin(), read.end(), [&](const Patches::Switch& s) { return s.code == expected.code; });
+    ASSERT_NE(it, read.end()) << expected.code;
+    EXPECT_EQ(it->on, expected.on);
+    EXPECT_EQ(it->value, expected.value);
+  }
+}

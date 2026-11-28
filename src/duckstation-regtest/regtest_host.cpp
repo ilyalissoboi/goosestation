@@ -61,6 +61,8 @@ static u32 s_patch_off_frame = 0;
 static bool s_patch_reset = false;
 static bool s_patches_switched_on = false;
 static bool s_patches_switched_off = false;
+// The game's switches before the run's, put back as it ends: the data folder may outlive the run.
+static std::optional<std::pair<std::string, std::vector<Patches::Switch>>> s_switches_before;
 static u32 s_last_internal_frame = 0;
 
 bool RegTestHost::SetFolders()
@@ -383,6 +385,9 @@ static void SwitchRunPatches(bool on)
     ERROR_LOG("The game has no patches.");
     return;
   }
+
+  if (!s_switches_before.has_value())
+    s_switches_before.emplace(System::GetGameSerial(), Patches::ReadSwitchesForSerial(System::GetGameSerial()));
 
   Patches::PatchList list = *running;
   for (const std::string& request : s_patches)
@@ -965,6 +970,12 @@ int main(int argc, char* argv[])
   result = 0;
 
 cleanup:
+  if (s_switches_before.has_value())
+  {
+    Error error;
+    if (!Patches::SaveSwitchesForSerial(s_switches_before->first, s_switches_before->second, &error))
+      ERROR_LOG("Failed to put the patch switches back: {}", error.GetDescription());
+  }
   System::Internal::CPUThreadShutdown();
   System::Internal::ProcessShutdown();
   return result;

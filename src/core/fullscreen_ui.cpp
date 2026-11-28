@@ -301,6 +301,8 @@ static void ChoosePatchValue(size_t index);
 static void SavePatchSwitches(bool reset_now);
 static void DrawPatchesSettingsPage();
 static void BackToPatches();
+static void LeavePatchDialog();
+static bool RefuseUnusablePatch(size_t index, s32 choice);
 static void DoToggleAnalogMode();
 
 //////////////////////////////////////////////////////////////////////////
@@ -1437,7 +1439,8 @@ void FullscreenUI::DoCheatsMenu()
     const CheatCode& cc = cl->GetCode(index);
     if (s_rows[static_cast<size_t>(row)].second)
     {
-      // A number, typed: the code's options are listed in its name's place if it has them.
+      // A number, typed over the pause menu, which a cancel leaves showing.
+      ReturnToPreviousWindow();
       OpenInputStringDialog(cc.description, FSUI_STR("The value to use:"), std::string(), FSUI_STR("OK"),
                             [index](std::string text) {
                               const std::optional<u32> value = StringUtil::FromChars<u32>(text);
@@ -1512,7 +1515,10 @@ void FullscreenUI::OpenPatchList()
   for (size_t i = 0; i < s_patch_list->Count(); i++)
   {
     const Patches::Patch& patch = s_patch_list->Get(i);
-    options.emplace_back(fmt::format("{}: {}", patch.title, PatchStateText(patch, s_patch_list_running)),
+    const bool usable = std::any_of(patch.choices.begin(), patch.choices.end(),
+                                    [&patch](const Patches::Choice& c) { return c.code.CanEnable() && !c.code.IsManuallyActivated(); });
+    options.emplace_back(fmt::format("{}: {}", patch.title,
+                                     usable ? PatchStateText(patch, s_patch_list_running) : FSUI_STR("can't be switched on")),
                          patch.saved >= 0);
     s_rows.emplace_back(i, false);
     const CheatCode& code = PatchValueCode(patch);
@@ -1558,7 +1564,7 @@ void FullscreenUI::ChoosePatch(size_t index)
     options.emplace_back(patch.choices[c].code.description, patch.saved == static_cast<s32>(c));
   OpenChoiceDialog(patch.title, false, std::move(options), [index](s32 row, const std::string&, bool) {
     if (row < 0)
-      BackToPatches();
+      LeavePatchDialog();
     else
       RequestPatchChoice(index, row - 1);
   });
@@ -1566,7 +1572,7 @@ void FullscreenUI::ChoosePatch(size_t index)
 
 void FullscreenUI::RequestPatchChoice(size_t index, s32 choice)
 {
-  if (s_patch_list->Get(index).saved == choice)
+  if (s_patch_list->Get(index).saved == choice || RefuseUnusablePatch(index, choice))
   {
     BackToPatches();
     return;
@@ -1616,21 +1622,25 @@ void FullscreenUI::ChoosePatchValue(size_t index)
     for (const CheatCode::Option& option : code.options)
       options.emplace_back(option.name, option.value == code.option_value);
     OpenChoiceDialog(patch.title, false, std::move(options), [index, choice](s32 row, const std::string&, bool) {
-      if (row >= 0)
+      if (row < 0)
       {
-        const CheatCode& code = PatchValueCode(s_patch_list->Get(index));
-        if (static_cast<size_t>(row) < code.options.size() &&
-            s_patch_list->SetValue(index, choice, code.options[static_cast<size_t>(row)].value, nullptr))
-        {
-          SavePatchSwitches(false);
-        }
+        LeavePatchDialog();
+        return;
+      }
+      const CheatCode& code = PatchValueCode(s_patch_list->Get(index));
+      if (static_cast<size_t>(row) < code.options.size() &&
+          s_patch_list->SetValue(index, choice, code.options[static_cast<size_t>(row)].value, nullptr))
+      {
+        SavePatchSwitches(false);
       }
       BackToPatches();
     });
     return;
   }
 
+  // Typed over the pause menu, which a cancel leaves showing.
   CloseChoiceDialog();
+  LeavePatchDialog();
   OpenInputStringDialog(
     patch.title,
     fmt::format(FSUI_FSTR("A value from {} to {}:"), code.option_range->first, code.option_range->second),
@@ -1645,6 +1655,27 @@ void FullscreenUI::ChoosePatchValue(size_t index)
       BackToPatches();
     },
     fmt::format("{}", code.option_value));
+}
+
+void FullscreenUI::LeavePatchDialog()
+{
+  // Back from a dialog (it closes itself): the pause menu shows again, or the settings page stays.
+  if (!s_patch_list_from_settings)
+    ReturnToPreviousWindow();
+}
+
+bool FullscreenUI::RefuseUnusablePatch(size_t index, s32 choice)
+{
+  if (s_patch_list->CanChoose(index, choice))
+    return false;
+
+  const CheatCode& code = s_patch_list->Get(index).choices[static_cast<size_t>(choice)].code;
+  Host::AddKeyedOSDMessage("patch_unusable",
+                           code.notes.empty() ? FSUI_STR("This patch can't be switched on.") :
+                                                fmt::format(FSUI_FSTR("This patch can't be switched on. {}"),
+                                                            code.notes.front()),
+                           Host::OSD_ERROR_DURATION);
+  return true;
 }
 
 void FullscreenUI::BackToPatches()
@@ -1727,7 +1758,12 @@ void FullscreenUI::DrawPatchesSettingsPage()
         summary += FSUI_STR(" · may need a CPU overclock");
 
       ImGui::PushID(static_cast<int>(i));
-      if (MenuButton(fmt::format("{} {}", ICON_FA_TV, patch.title).c_str(), summary.c_str(), shown.code.CanEnable()))
+      const bool usable = std::any_of(patch.choices.begin(), patch.choices.end(), [](const Patches::Choice& c) {
+        return c.code.CanEnable() && !c.code.IsManuallyActivated();
+      });
+      if (!usable && !shown.code.notes.empty())
+        summary = shown.code.notes.front();
+      if (MenuButton(fmt::format("{} {}", ICON_FA_TV, patch.title).c_str(), summary.c_str(), usable))
         ChoosePatch(i);
       const CheatCode& code = PatchValueCode(patch);
       if (code.HasOptions() && code.CanEnable() &&

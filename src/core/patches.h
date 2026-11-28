@@ -136,12 +136,20 @@ public:
   /// The switches that keep this list: one for each code whose state or value differs from its default, in order.
   std::vector<Switch> Switches() const;
 
+  /// Whether choice (-1: off) can be patch index's: off always; a choice whose code can be switched on and applies
+  /// every frame (an Assembly code, one whose values don't fit, or a manual one never runs, nor do its needs).
+  bool CanChoose(size_t index, s32 choice) const;
+
+  /// After a rebuild mid-game (codes imported): each patch runs what old's same code runs, until the next start.
+  void KeepRunningFrom(const PatchList& old);
+
   /// Whether changing patch index to choice (-1: off) must wait for the next start: the running choice is on, isn't
   /// choice, and can't be undone (CheatCode::RestoresOnDisable()).
   bool NeedsRestart(size_t index, s32 choice) const;
 
   /// Changes patch index to choice: saved at once; running too unless NeedsRestart(). Returns the code switched off at
-  /// once, for the caller to undo (CheatCode::ApplyOnDisable()) in a running game, or null.
+  /// once, for the caller to undo (CheatCode::ApplyOnDisable()) in a running game, or null. A choice CanChoose()
+  /// refuses changes nothing.
   const CheatCode* Set(size_t index, s32 choice);
 
   /// Follows switches the game's settings now have (a UI wrote them): each patch whose saved choice or values differ

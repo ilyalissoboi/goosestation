@@ -36,6 +36,7 @@ private:
   /// The running game's list when it's this game (its indices are the running game's), else one built for it.
   void reload();
   void fill();
+  void refill(); // fill(), after the current event
   void setChoice(size_t index, s32 choice);
   void setValue(size_t index, s32 choice, u32 value);
   void save();

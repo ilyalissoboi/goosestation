@@ -280,14 +280,15 @@ void Load(const AndroidDiscGroups::Game& game)
     CheatCode code = entry.from_player ? player[entry.index] : database[entry.index].code;
     const AndroidPatchCodes::Listed& listed =
       entry.from_player ? player_listed[entry.index] : database_listed[entry.index];
-    // A database code that differs between discs is shown and switched by its disc's name for it.
-    code.description = entry.name;
     const bool default_on = entry.from_player && listed.marked_on && !listed.manual;
 
-    // A patch, by the marks of the disc it came from (a player's code, of any of the game's discs).
+    // A patch, by the marks of the disc it came from (a player's code, of any of the game's discs), which name the
+    // database's code as it has it.
     const std::optional<Patches::Mark> mark =
       entry.from_player ? ClassifyPlayers(game, code) :
                           Patches::Classify(database[entry.index].serial, code, Patches::BundledMarks());
+    // A database code that differs between discs is then shown and switched by its disc's name for it.
+    code.description = entry.name;
     if (mark.has_value())
     {
       code.enabled = default_on;

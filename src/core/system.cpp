@@ -6045,7 +6045,11 @@ bool System::LoadPatchList()
   if (IsShutdown())
     return false;
 
+  // Built again mid-game (codes imported): what runs keeps running until the next start.
+  std::unique_ptr<Patches::PatchList> old = std::move(s_patch_list);
   s_patch_list = BuildPatchList();
+  if (old && s_patch_list)
+    s_patch_list->KeepRunningFrom(*old);
   ApplySettings(false);
   return static_cast<bool>(s_patch_list);
 }

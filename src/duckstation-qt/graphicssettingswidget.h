@@ -43,6 +43,9 @@ private Q_SLOTS:
   void onEnableTextureDumpingChanged();
   void onEnableVRAMWriteDumpingChanged();
 
+protected:
+  void showEvent(QShowEvent* event) override;
+
 private:
   static constexpr int TAB_INDEX_RENDERING = 0;
   static constexpr int TAB_INDEX_ADVANCED = 1;
@@ -62,7 +65,12 @@ private:
 
   Ui::GraphicsSettingsWidget m_ui;
 
+  /// Shows the notes under the display placement rows while a bezel stage draws over the whole screen.
+  void updateBezelNotes();
+
   SettingsWindow* m_dialog;
+  QLabel* m_bezel_scaling_note = nullptr;
+  QLabel* m_bezel_position_note = nullptr;
 
   GPUDevice::AdapterInfoList m_adapters;
   RenderAPI m_adapters_render_api = RenderAPI::None;

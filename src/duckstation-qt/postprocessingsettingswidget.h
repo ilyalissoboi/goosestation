@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "ui_postprocessingchainconfigwidget.h"
 
 #include "util/postprocessing.h"
@@ -79,8 +81,11 @@ class PostProcessingShaderConfigWidget : public QWidget
   Q_OBJECT
 
 public:
+  /// whole_screen: a slang stage's "Draw over the whole screen" (its switch, else whether it's a bezel by its folder);
+  /// none for other stages, which have no such switch.
   PostProcessingShaderConfigWidget(QWidget* parent, PostProcessingChainConfigWidget* widget, const char* section,
-                                   u32 stage_index, std::vector<PostProcessing::ShaderOption> options);
+                                   u32 stage_index, std::vector<PostProcessing::ShaderOption> options,
+                                   std::optional<bool> whole_screen);
   ~PostProcessingShaderConfigWidget();
 
 private Q_SLOTS:
@@ -98,4 +103,5 @@ protected:
   const char* m_section;
   u32 m_stage_index;
   std::vector<PostProcessing::ShaderOption> m_options;
+  std::optional<bool> m_whole_screen;
 };

@@ -9,6 +9,7 @@
 #include "settingwidgetbinder.h"
 
 #include "util/postprocessing.h"
+#include "util/postprocessing_shader_slang.h"
 #include "util/postprocessing_favourites.h"
 
 #include "common/error.h"
@@ -200,11 +201,15 @@ void PostProcessingChainConfigWidget::updateButtonsAndConfigPane(std::optional<u
   const SettingsInterface& si = getSettingsInterfaceToUpdate();
   std::vector<PostProcessing::ShaderOption> options =
     PostProcessing::Config::GetStageOptions(si, m_section, index.value());
-  if (options.empty())
+  // A slang stage always has a pane, for its "Draw over the whole screen" switch.
+  std::optional<bool> whole_screen;
+  if (PostProcessing::Slang::IsPresetName(PostProcessing::Config::GetStageShaderName(si, m_section, index.value())))
+    whole_screen = PostProcessing::Config::StageWantsWholeScreen(si, m_section, index.value());
+  if (options.empty() && !whole_screen.has_value())
     return;
 
-  m_shader_config =
-    new PostProcessingShaderConfigWidget(m_ui.scrollArea, this, m_section, index.value(), std::move(options));
+  m_shader_config = new PostProcessingShaderConfigWidget(m_ui.scrollArea, this, m_section, index.value(),
+                                                         std::move(options), whole_screen);
   m_ui.scrollArea->setWidget(m_shader_config);
   m_ui.scrollArea->setVisible(true);
 }
@@ -321,8 +326,10 @@ void PostProcessingChainConfigWidget::onSelectedShaderChanged()
 PostProcessingShaderConfigWidget::PostProcessingShaderConfigWidget(QWidget* parent,
                                                                    PostProcessingChainConfigWidget* widget,
                                                                    const char* section, u32 stage_index,
-                                                                   std::vector<PostProcessing::ShaderOption> options)
-  : QWidget(parent), m_widget(widget), m_section(section), m_stage_index(stage_index), m_options(std::move(options))
+                                                                   std::vector<PostProcessing::ShaderOption> options,
+                                                                   std::optional<bool> whole_screen)
+  : QWidget(parent), m_widget(widget), m_section(section), m_stage_index(stage_index), m_options(std::move(options)),
+    m_whole_screen(whole_screen)
 {
   m_layout = new QGridLayout(this);
 
@@ -352,6 +359,11 @@ void PostProcessingShaderConfigWidget::onResetDefaultsClicked()
       option.value = option.default_value;
       PostProcessing::Config::UnsetStageOption(si, m_section, m_stage_index, option);
     }
+    if (m_whole_screen.has_value())
+    {
+      PostProcessing::Config::SetStageWholeScreen(si, m_section, m_stage_index, std::nullopt);
+      m_whole_screen = PostProcessing::Config::StageWantsWholeScreen(si, m_section, m_stage_index);
+    }
     m_widget->commitSettingsUpdate();
   }
 
@@ -368,6 +380,25 @@ void PostProcessingShaderConfigWidget::onResetDefaultsClicked()
 void PostProcessingShaderConfigWidget::createUi()
 {
   u32 row = 0;
+
+  if (m_whole_screen.has_value())
+  {
+    QCheckBox* checkbox = new QCheckBox(tr("Draw over the whole screen"), this);
+    checkbox->setToolTip(tr("Lets a bezel preset draw around the game over the whole screen, where it places the game "
+                            "with its own settings. On by itself for presets in a bezel folder. Games that aren't 4:3 "
+                            "are drawn into the picture instead, except by presets that follow the game's shape."));
+    checkbox->setChecked(m_whole_screen.value());
+    connect(checkbox, &QCheckBox::checkStateChanged, [this](Qt::CheckState state) {
+      m_whole_screen = (state == Qt::Checked);
+      const auto lock = Host::GetSettingsLock();
+      SettingsInterface& si = m_widget->getSettingsInterfaceToUpdate();
+      PostProcessing::Config::SetStageWholeScreen(si, m_section, m_stage_index, m_whole_screen);
+      m_widget->commitSettingsUpdate();
+    });
+    m_layout->addWidget(checkbox, row, 0, 1, 3, Qt::AlignLeft);
+    m_widgets.push_back(checkbox);
+    row++;
+  }
 
   const std::string* last_category = nullptr;
 

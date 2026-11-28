@@ -4,6 +4,7 @@
 #include "shaderbrowserdialog.h"
 
 #include "util/postprocessing_browser.h"
+#include "util/postprocessing_slang_cost.h"
 
 #include <QtCore/QItemSelectionModel>
 #include <QtCore/QSortFilterProxyModel>
@@ -58,7 +59,7 @@ ShaderBrowserDialog::ShaderBrowserDialog(QWidget* parent, std::vector<PostProces
   layout->addWidget(m_buttons);
 
   m_model = new QStandardItemModel(this);
-  m_model->setHorizontalHeaderLabels({tr("Name"), tr("Kind")});
+  m_model->setHorizontalHeaderLabels({tr("Name"), tr("Kind"), tr("Cost")});
   buildModel();
 
   m_proxy = new QSortFilterProxyModel(this);
@@ -70,6 +71,7 @@ ShaderBrowserDialog::ShaderBrowserDialog(QWidget* parent, std::vector<PostProces
   m_tree->setModel(m_proxy);
   m_tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
   m_tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+  m_tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
   m_tree->header()->setStretchLastSection(false);
 
   connect(m_filter, &QLineEdit::textChanged, this, &ShaderBrowserDialog::onFilterChanged);
@@ -106,15 +108,18 @@ void ShaderBrowserDialog::buildModel()
 
   // Folders first in each folder, then shaders, as the other browsers show them.
   const auto add_row = [](QStandardItem* parent, QStandardItem* name, QStandardItem* kind, bool is_folder) {
+    QStandardItem* cost = new QStandardItem();
+    cost->setEditable(false);
     if (!is_folder)
     {
-      parent->appendRow({name, kind});
-      return;
+      parent->appendRow({name, kind, cost});
+      return cost;
     }
     int row = 0;
     while (row < parent->rowCount() && parent->child(row)->data(ROLE_INDEX).toInt() < 0)
       row++;
-    parent->insertRow(row, {name, kind});
+    parent->insertRow(row, {name, kind, cost});
+    return cost;
   };
 
   for (size_t i = 0; i < m_shaders.size(); i++)
@@ -151,7 +156,17 @@ void ShaderBrowserDialog::buildModel()
     leaf->setToolTip(QString::fromStdString(m_shaders[i].name));
     QStandardItem* kind = new QStandardItem(QString::fromUtf8(PostProcessing::GetShaderKindName(m_shaders[i].kind)));
     kind->setEditable(false);
-    add_row(parent, leaf, kind, false);
+    QStandardItem* cost = add_row(parent, leaf, kind, false);
+    // From the preset's structure (read once, then kept): how heavy it's likely to be.
+    if (m_shaders[i].kind == PostProcessing::ShaderKind::Slang)
+    {
+      if (const std::optional<PostProcessing::Slang::Cost> c = PostProcessing::Slang::GetCostForName(m_shaders[i].name))
+      {
+        cost->setText(QString::fromUtf8(PostProcessing::Slang::GetCostLabel(c.value())));
+        cost->setToolTip(tr("Estimated from the preset's passes and the pixels they draw; heavy presets can slow "
+                            "slower GPUs down."));
+      }
+    }
   }
 }
 

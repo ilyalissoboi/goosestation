@@ -572,6 +572,33 @@ object NativeLibrary {
     /** Applies the running game's manual code [index] once. Null when it's done, or else why not. */
     external fun applyPatchCode(index: Int): String?
 
+    /** Whether changing the running game's patch [index] to [choice] (-1: off) waits for the next start. */
+    external fun patchNeedsReset(
+        index: Int,
+        choice: Int,
+    ): Boolean
+
+    /**
+     * Changes the running game's patch [index] to [choice] (-1: off), at once or at the next start, or now with a reset
+     * ([resetNow]), and keeps it in the app's file. Null when it's done, or else why not.
+     */
+    external fun setPatch(
+        index: Int,
+        choice: Int,
+        resetNow: Boolean,
+    ): String?
+
+    /**
+     * Puts [value] into a code's value: patch [index]'s [choice] ([patch]), or cheat [index]. Kept in the app's file.
+     * Null when it's done, or else why not.
+     */
+    external fun setCodeValue(
+        patch: Boolean,
+        index: Int,
+        choice: Int,
+        value: Int,
+    ): String?
+
     /** The [GameDisc.number] of the running game's disc in the drive, 0 without a game or one of its discs. */
     external fun getCurrentDisc(): Int
 

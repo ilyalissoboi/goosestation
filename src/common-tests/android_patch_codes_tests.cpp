@@ -218,3 +218,64 @@ TEST(AndroidPatchCodes, RememberWritesOnlyDifferences)
   EXPECT_TRUE(remembered[0] == (Switch{"", "Switched on", true}));
   EXPECT_TRUE(remembered[1] == (Switch{"", "Switched off", false}));
 }
+
+TEST(AndroidPatchCodes, FourthFieldRoundTrip)
+{
+  // A code's value (an option's name or a number) rides in a fourth field.
+  const std::vector<Switch> switches = {{"Video", "Frame Rate", false, "60 FPS"}, {"", "Level", true, "7"}};
+
+  const std::string text = Format(switches);
+
+  EXPECT_NE(text.find("off\tVideo\tFrame Rate\t60 FPS\n"), std::string::npos);
+  EXPECT_NE(text.find("on\t\tLevel\t7\n"), std::string::npos);
+  const std::vector<Switch> parsed = Parse(text);
+  ASSERT_EQ(parsed.size(), 2u);
+  EXPECT_EQ(parsed[0].value, "60 FPS");
+  EXPECT_EQ(parsed[1].value, "7");
+  EXPECT_FALSE(parsed[0].on);
+}
+
+TEST(AndroidPatchCodes, ThreeFieldLinesStillRead)
+{
+  const std::vector<Switch> parsed = Parse("on\tPlayer\tInfinite HP\nmaybe\ta\tb\tc\ton\ta\tb\tc\td\n");
+
+  ASSERT_EQ(parsed.size(), 1u);
+  EXPECT_EQ(parsed[0].name, "Infinite HP");
+  EXPECT_TRUE(parsed[0].value.empty());
+  // A three-field line is written as one too.
+  EXPECT_NE(Format(parsed).find("on\tPlayer\tInfinite HP\n"), std::string::npos);
+}
+
+TEST(AndroidPatchCodes, AwkwardNamesRoundTrip)
+{
+  const std::vector<Switch> switches = {{"Select Widescreen Type", "Widescreen 16-9 (Vert-)", true},
+                                        {"", "A = B; C # D", true},
+                                        {"", " Leading and trailing ", false},
+                                        {"", "ワイド画面 16:9", true, "60 FPS"},
+                                        {"", "Tabbed value", true, "bad\tvalue"}};
+
+  const std::vector<Switch> parsed = Parse(Format(switches));
+
+  ASSERT_EQ(parsed.size(), switches.size());
+  for (size_t i = 0; i + 1 < switches.size(); i++)
+  {
+    EXPECT_EQ(parsed[i].group, switches[i].group);
+    EXPECT_EQ(parsed[i].name, switches[i].name);
+    EXPECT_EQ(parsed[i].on, switches[i].on);
+    EXPECT_EQ(parsed[i].value, switches[i].value);
+  }
+  // A value that can't be written is left out, the switch kept.
+  EXPECT_TRUE(parsed.back().value.empty());
+}
+
+TEST(AndroidPatchCodes, RememberKeepsValues)
+{
+  // A code with a chosen value is remembered even when it's on or off as by default.
+  const std::vector<State> codes = {{"", "Frame Rate", false, false, "60 FPS"}, {"", "Plain", false, false}};
+
+  const std::vector<Switch> remembered = Remember({}, codes);
+
+  ASSERT_EQ(remembered.size(), 1u);
+  EXPECT_EQ(remembered[0].name, "Frame Rate");
+  EXPECT_EQ(remembered[0].value, "60 FPS");
+}

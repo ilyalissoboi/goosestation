@@ -7,6 +7,7 @@
 #include "core/game_list.h"
 #include "core/gpu.h"
 #include "core/host.h"
+#include "core/patches.h"
 #include "core/system.h"
 
 #include "scmversion/scmversion.h"
@@ -52,6 +53,17 @@ static u32 s_frames_remaining = 0;
 static u32 s_frame_dump_interval = 0;
 static bool s_dump_vram = false;
 static std::string s_dump_base_directory;
+
+// Patches switched on for the run (-patch "<title>[=<choice>]"), switched off at a frame (-patch-off), with a reset or
+// for the next start (-patch-reset), through the game settings file as the UIs do.
+static std::vector<std::string> s_patches;
+static u32 s_patch_off_frame = 0;
+static bool s_patch_reset = false;
+static bool s_patches_switched_on = false;
+static bool s_patches_switched_off = false;
+// The game's switches before the run's, put back as it ends: the data folder may outlive the run.
+static std::optional<std::pair<std::string, std::vector<Patches::Switch>>> s_switches_before;
+static u32 s_last_internal_frame = 0;
 
 bool RegTestHost::SetFolders()
 {
@@ -364,9 +376,84 @@ void Host::ReleaseRenderWindow()
   //
 }
 
+// Writes the run's patches into the game's settings file, on (or off), and has the running game follow.
+static void SwitchRunPatches(bool on)
+{
+  Patches::PatchList* running = System::GetPatchList();
+  if (!running)
+  {
+    ERROR_LOG("The game has no patches.");
+    return;
+  }
+
+  if (!s_switches_before.has_value())
+    s_switches_before.emplace(System::GetGameSerial(), Patches::ReadSwitchesForSerial(System::GetGameSerial()));
+
+  Patches::PatchList list = *running;
+  for (const std::string& request : s_patches)
+  {
+    const size_t equals = request.find('=');
+    const std::string_view title = std::string_view(request).substr(0, equals);
+    const std::string_view choice_name =
+      (equals == std::string::npos) ? std::string_view() : std::string_view(request).substr(equals + 1);
+    bool found = false;
+    for (size_t i = 0; i < list.Count() && !found; i++)
+    {
+      const Patches::Patch& patch = list.Get(i);
+      if (patch.title != title)
+        continue;
+      for (size_t c = 0; c < patch.choices.size(); c++)
+      {
+        if (choice_name.empty() || patch.choices[c].code.description == choice_name)
+        {
+          list.Set(i, on ? static_cast<s32>(c) : -1);
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found)
+      ERROR_LOG("No patch '{}' in this game.", request);
+  }
+
+  Error error;
+  if (!Patches::SaveSwitchesForSerial(System::GetGameSerial(), list.Switches(), &error))
+    ERROR_LOG("Failed to save the patch switches: {}", error.GetDescription());
+  System::ReloadGameSettings(false);
+  INFO_LOG("Patches switched {} at frame {}.", on ? "on" : "off", System::GetFrameNumber());
+}
+
 void Host::FrameDone()
 {
   const u32 frame = System::GetFrameNumber();
+  if (!s_patches.empty())
+  {
+    if (!s_patches_switched_on)
+    {
+      s_patches_switched_on = true;
+      SwitchRunPatches(true);
+    }
+    else if (frame == s_patch_off_frame && !s_patches_switched_off)
+    {
+      // Once: a reset starts the frames again.
+      s_patches_switched_off = true;
+      SwitchRunPatches(false);
+      if (s_patch_reset)
+      {
+        INFO_LOG("Resetting for the patches.");
+        System::ResetSystem();
+      }
+    }
+  }
+
+  // How many frames the game drew, for frame-rate patches.
+  if (frame % 600 == 0)
+  {
+    const u32 internal = System::GetInternalFrameNumber();
+    INFO_LOG("Game frames: {} in 600", internal - s_last_internal_frame);
+    s_last_internal_frame = internal;
+  }
+
   if (s_frame_dump_interval > 0 && (s_frame_dump_interval == 1 || (frame % s_frame_dump_interval) == 0))
   {
     std::string dump_filename(RegTestHost::GetFrameDumpFilename(frame));
@@ -534,6 +621,9 @@ void RegTestHost::PrintCommandLineHelp(const char* progname)
   std::fprintf(stderr, "  -version: Displays version information and exits.\n");
   std::fprintf(stderr, "  -dumpdir: Set frame dump base directory (will be dumped to basedir/gametitle).\n");
   std::fprintf(stderr, "  -dumpinterval: Dumps every N frames.\n");
+  std::fprintf(stderr, "  -patch <title>[=<choice>]: Switches the game's patch on from the first frame (repeatable).\n"
+                       "  -patch-off <frame>: Switches the -patch patches off at that frame, for the next start.\n"
+                       "  -patch-reset: With -patch-off, resets the game instead.\n");
   std::fprintf(stderr, "  -dumpvram: With each frame dump, also dumps VRAM beside it (vram_NNNNN.png, at 1x),\n"
                        "    read back from the GPU each time.\n");
   std::fprintf(stderr, "  -frames: Sets the number of frames to execute.\n");
@@ -697,6 +787,28 @@ bool RegTestHost::ParseCommandLineParameters(int argc, char* argv[], std::option
         s_dump_vram = true;
         continue;
       }
+      else if (CHECK_ARG_PARAM("-patch"))
+      {
+        s_patches.emplace_back(argv[++i]);
+        INFO_LOG("Switching on patch '{}'.", s_patches.back());
+        continue;
+      }
+      else if (CHECK_ARG_PARAM("-patch-off"))
+      {
+        const std::optional<u32> frame = StringUtil::FromChars<u32>(argv[++i]);
+        if (!frame.has_value() || frame.value() == 0)
+        {
+          ERROR_LOG("Invalid patch-off frame: {}", argv[i]);
+          return false;
+        }
+        s_patch_off_frame = frame.value();
+        continue;
+      }
+      else if (CHECK_ARG("-patch-reset"))
+      {
+        s_patch_reset = true;
+        continue;
+      }
       else if (CHECK_ARG("-pgxp"))
       {
         INFO_LOG("Enabling PGXP.");
@@ -858,6 +970,12 @@ int main(int argc, char* argv[])
   result = 0;
 
 cleanup:
+  if (s_switches_before.has_value())
+  {
+    Error error;
+    if (!Patches::SaveSwitchesForSerial(s_switches_before->first, s_switches_before->second, &error))
+      ERROR_LOG("Failed to put the patch switches back: {}", error.GetDescription());
+  }
   System::Internal::CPUThreadShutdown();
   System::Internal::ProcessShutdown();
   return result;

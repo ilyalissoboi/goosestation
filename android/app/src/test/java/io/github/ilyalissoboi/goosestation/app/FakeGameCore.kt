@@ -6,6 +6,7 @@ package io.github.ilyalissoboi.goosestation.app
 import io.github.ilyalissoboi.goosestation.core.AchievementSection
 import io.github.ilyalissoboi.goosestation.core.ArgbImage
 import io.github.ilyalissoboi.goosestation.core.GameAchievements
+import io.github.ilyalissoboi.goosestation.core.GamePatch
 import io.github.ilyalissoboi.goosestation.core.Leaderboard
 import io.github.ilyalissoboi.goosestation.core.PatchCode
 import io.github.ilyalissoboi.goosestation.core.PatchCodes
@@ -27,6 +28,10 @@ class FakeGameCore(
     var discInDrive = 1
     var discError: String? = null
     var codes = listOf<PatchCode>()
+    var patches = listOf<GamePatch>()
+
+    /** Patch [index] and choice pairs whose change [patchNeedsReset] says waits for the next start. */
+    val waiting = HashSet<Pair<Int, Int>>()
     var codesFile = "Crash Bandicoot.cht"
     var codeError: String? = null
     var saveError: String? = null
@@ -226,7 +231,51 @@ class FakeGameCore(
 
     override fun getPatchCodes(): PatchCodes {
         calls += "getPatchCodes"
-        return PatchCodes(codesFile, codes.toTypedArray())
+        return PatchCodes(codesFile, codes.toTypedArray(), patches.toTypedArray())
+    }
+
+    override fun patchNeedsReset(
+        index: Int,
+        choice: Int,
+    ): Boolean = (index to choice) in waiting
+
+    override fun setPatch(
+        index: Int,
+        choice: Int,
+        resetNow: Boolean,
+    ): String? {
+        calls += "setPatch $index $choice $resetNow"
+        if (codeError == null) {
+            // Saved at once; running too, unless it waits for the next start.
+            val waits = !resetNow && (index to choice) in waiting
+            patches =
+                patches.map {
+                    if (it.index != index) {
+                        it
+                    } else {
+                        GamePatch(
+                            it.index,
+                            it.group,
+                            it.title,
+                            it.choices,
+                            choice,
+                            if (waits) it.running else choice,
+                            note = it.note,
+                        )
+                    }
+                }
+        }
+        return codeError
+    }
+
+    override fun setCodeValue(
+        patch: Boolean,
+        index: Int,
+        choice: Int,
+        value: Int,
+    ): String? {
+        calls += "setCodeValue $patch $index $choice $value"
+        return codeError
     }
 
     override fun setPatchCode(

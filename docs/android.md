@@ -1244,23 +1244,37 @@ game's title, its region, serial and play time, then its rows, **Resume** focuse
   in its mode).
 - **Screenshot**: saves the game's picture, without the menu, to the data folder's `screenshots`, and says
   "Screenshot saved".
-- **Patch codes**: opens a panel beside the menu with the game's codes, in their groups (codes without one last, under
-  "Other", or with no heading when none has a group). Each is a switch, with its note under it (the database writes
-  notes into names after a colon: "Infinite HP Slot 1:Turn Off When Out of Battle"); a code applied by hand (a
-  `#activation=Manual` code in a player's file) is an **Apply** row instead, which applies it once and says "Applied:
-  <name>". Switching a code changes it at once, and the menu stays open. A name and its note show two lines at most,
-  then an ellipsis. With no codes the panel says "No patch codes for this game." and names the file to add.
+- **Patches & cheats**: opens a panel beside the menu with two tabs, **Patches** first, then **Cheats** (L1 and R1
+  switch them; off in hardcore mode, as the row is). Patches are the game's widescreen, frame-rate and display-mode
+  codes ([patches](patches.md)); everything else is a cheat. Each tab lists its codes in their groups (codes without
+  one last, under "Other", or with no heading when none has a group).
+  - A plain **patch** is a switch; a patch with choices (a `Select Widescreen Type` group, a game's frame-rate codes)
+    cycles Off and its choices, never two on at once. Its note says what it runs with ("Runs with a 160% CPU
+    overclock.", or that it may need one) and what waits for the next start ("Off at the next start"). A patch on
+    sets the game's aspect ratio, widescreen rendering off and its overclock for this game only, never in the settings.
+    Switching one off whose code can't put back what it wrote asks first: **Reset now**, **At next start** or Cancel
+    (focused). A disc change is a next start.
+  - A **cheat** is a switch, with its note under it (the database writes notes into names after a colon: "Infinite HP
+    Slot 1:Turn Off When Out of Battle"); a code applied by hand (a `#activation=Manual` code in a player's file) is an
+    **Apply** row instead, which applies it once and says "Applied: <name>".
+  - A code read from the newer community format that has values (a patch's or a cheat's) has a **Value** row under it.
+
+  Switching a code changes it at once, and the menu stays open. A name and its note show two lines at most, then an
+  ellipsis. With no patches the tab says "No patches for this game."; with no cheats, "No cheats for this game." and
+  the file to add.
 
   The codes are one list per game (`GameCodes`), built as it boots and given to the core again after every disc
   change or cross-disc load: the player's `cheats/<game title>.cht` (the tile's title, as written or with `< > : " / \
-  | ? *` as `_`) and each disc's own `cheats/<disc title>.cht`, as desktop makes them, then the database's codes
-  (`chtdb.txt`) for every disc of the game, each code once by group and name, a player's file winning. The player's
-  files are only read, never written. Which codes are on is kept in the app's own file, `cheats/<key>.patchcodes`
-  (mirrored; one `on` or `off`, a tab, the group, a tab and the name per line, for the codes switched from their
-  default). A code a player's file marks `[*Name]` starts on; the database's start off. There's no separate on/off
-  switch: only the codes switched on apply, and `[Console] EnableCheats` is off in memory on Android (the host owns
-  the list) and never written, so desktop's own setting stays as it is. While codes are on, the game's start says "1
-  patch code is on".
+  | ? *` as `_`), each disc's own `cheats/<disc title>.cht`, as desktop makes them, and `cheats/<serial>.cht` for each
+  disc (the newer format's naming), then the database's codes (`chtdb.txt`) for every disc of the game, each code once
+  by group and name, a player's file winning. The list is then split: a code is a patch when the bundled marks
+  (`chtdb_patches.txt`) name it for the serial of the disc it came from, or its own file marks it. The player's files
+  are only read, never written. Which codes are on is kept in the app's own file, `cheats/<key>.patchcodes`
+  (mirrored; one `on` or `off`, a tab, the group, a tab and the name per line, then a tab and the value for a code
+  with one, for the codes switched from their default), patches and cheats alike. A code a player's file marks
+  `[*Name]` starts on; the database's start off. There's no separate on/off switch: only the codes switched on apply,
+  and `[Console] EnableCheats` is off in memory on Android (the host owns the list) and never written, so desktop's
+  own setting stays as it is. While cheats are on, the game's start says "1 patch code is on".
 - **Reset console** asks "Reset the console? Progress since your last save is lost." in the menu, Cancel focused,
   then restarts the game: "Console reset".
 - **Exit game** saves the game's resume state (`savestates/<key>_resume.sav`, when `[Main] SaveStateOnExit` is on,

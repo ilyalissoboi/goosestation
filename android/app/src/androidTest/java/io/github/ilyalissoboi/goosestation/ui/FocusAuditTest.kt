@@ -37,6 +37,7 @@ import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.CodeTab
 import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CoverJob
@@ -51,6 +52,8 @@ import io.github.ilyalissoboi.goosestation.app.GameSummary
 import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
+import io.github.ilyalissoboi.goosestation.app.PatchQuestion
+import io.github.ilyalissoboi.goosestation.app.PatchRow
 import io.github.ilyalissoboi.goosestation.app.ResumeOffer
 import io.github.ilyalissoboi.goosestation.app.SaveListState
 import io.github.ilyalissoboi.goosestation.app.SavePanel
@@ -1511,7 +1514,63 @@ class FocusAuditTest : ControllerKeys {
             GameMenu(
                 GameMenuState(
                     booted = true,
-                    panel = ShownPanel.Codes(CodePanel(listOf(PatchCodeGroup("Player", rows)), "Game.cht")),
+                    panel =
+                        ShownPanel.Codes(
+                            CodePanel(listOf(PatchCodeGroup("Player", rows)), "Game.cht", tab = CodeTab.Cheats),
+                        ),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuPatches() {
+        val rows =
+            listOf(
+                PatchRow(0, null, "Widescreen 16-9", listOf("Widescreen 16-9"), 0, 0, null, null, true),
+                PatchRow(
+                    1,
+                    null,
+                    "Frame rate",
+                    listOf("30 FPS", "60 FPS"),
+                    1,
+                    1,
+                    null,
+                    "Runs with a 160% CPU overclock.",
+                    true,
+                ),
+            )
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    panel = ShownPanel.Codes(CodePanel(fileName = "Game.cht", patches = rows)),
+                ),
+                NoMenuActions,
+            )
+        }
+
+        rule.assertControllerReady()
+    }
+
+    @Test
+    fun gameMenuPatchQuestion() {
+        val rows = listOf(PatchRow(0, null, "Widescreen 16-9", listOf("Widescreen 16-9"), 0, 0, null, null, true))
+        show {
+            GameMenu(
+                GameMenuState(
+                    booted = true,
+                    panel =
+                        ShownPanel.Codes(
+                            CodePanel(
+                                fileName = "Game.cht",
+                                patches = rows,
+                                question = PatchQuestion(0, -1, "Widescreen 16-9"),
+                            ),
+                        ),
                 ),
                 NoMenuActions,
             )
@@ -1524,7 +1583,10 @@ class FocusAuditTest : ControllerKeys {
     fun gameMenuNoCodes() {
         show {
             GameMenu(
-                GameMenuState(booted = true, panel = ShownPanel.Codes(CodePanel(emptyList(), "Game.cht"))),
+                GameMenuState(
+                    booted = true,
+                    panel = ShownPanel.Codes(CodePanel(emptyList(), "Game.cht", tab = CodeTab.Cheats)),
+                ),
                 NoMenuActions,
             )
         }

@@ -242,6 +242,8 @@ bool QtHost::SaveGameSettings(SettingsInterface* sif, bool delete_if_empty)
       return false;
     }
 
+    // Nothing left to write: as it goes, the interface mustn't write an empty file back.
+    ini->MarkClean();
     return true;
   }
 

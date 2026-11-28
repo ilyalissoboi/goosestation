@@ -1,0 +1,669 @@
+; GooseStation's patch marks for chtdb.txt, written by scripts/generate_patch_marks.py: don't edit by hand.
+; One line per patch code and serial: serial<TAB>Group\Name<TAB>kind and needs. Kinds: widescreen <ratio>,
+; framerate [overclock=<percent>], displaymode; choice=<title> joins codes of which only one can be on.
+SLUS-01300	Play game at 60 FPS	framerate
+SLUS-01300CE	Play game at 60 FPS	framerate
+SLUS-01152	Widescreen 16-9	widescreen 16:9
+SLUS-00715	Play game at 60 FPS	framerate
+SLUS-00715	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-00633	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-01017	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-00264	Play game at 60 FPS	framerate
+SCUS-94423	Widescreen 16-9	widescreen 16:9
+SCUS-94603	Widescreen 16-9:Enabling this code results in the camera shaking heavily while turning	widescreen 16:9
+SLUS-01224	Widescreen 16-10	widescreen 16:10
+SLUS-01224B	Widescreen 16-10	widescreen 16:10
+SLUS-00023	Play game at 60 FPS	framerate
+SLUS-00068	Select Widescreen Type\Widescreen 16-9	widescreen 16:9 choice=Select Widescreen Type
+SLUS-00068	Select Widescreen Type\Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Select Widescreen Type
+SLUS-00068	Select Widescreen Type\Widescreen 16-9 (Vert- Adjusted)	widescreen 16:9 choice=Select Widescreen Type
+SLUS-01221	Widescreen 16-9	widescreen 16:9
+SLUS-00946	Widescreen 16-9	widescreen 16:9
+SLUS-00393	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-00393	Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Widescreen
+SCUS-94180	Widescreen 16-9	widescreen 16:9
+SLUS-00663	Widescreen 16-9	widescreen 16:9
+SLUS-01144	Widescreen 16-9	widescreen 16:9
+SLUS-01489	Widescreen 16-9	widescreen 16:9
+SLUS-00645	Widescreen 16-9	widescreen 16:9
+SCUS-94424	Widescreen 16-9	widescreen 16:9
+SLUS-01031	Widescreen 16-9	widescreen 16:9
+SLUS-01424	Widescreen 16-9	widescreen 16:9
+SLUS-00422	Widescreen 16-9	widescreen 16:9
+SLUS-01324	Widescreen 16-9	widescreen 16:9
+SLUS-00823	Widescreen 16-9	widescreen 16:9
+SLUS-00444	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-00110	Widescreen 16-9	widescreen 16:9
+SLUS-00838	Select Widescreen\16-9	widescreen 16:9 choice=Select Widescreen
+SLUS-00838	Select Widescreen\Eyefinity:GPU Intense, massive slowdown, de-syncs+/breaks cutscenes	widescreen 48:9 choice=Select Widescreen
+SLUS-01538CE	Widescreen 16-9	widescreen 16:9
+SLUS-01538	Widescreen 16-9	widescreen 16:9
+SCUS-94288	Widescreen 16-9	widescreen 16:9
+SLUS-01192	Widescreen 16-9	widescreen 16:9
+SLUS-01304	Widescreen	widescreen 16:9
+SLUS-00539	Widescreen 16-9	widescreen 16:9
+SLUS-00695	Widescreen 16-9	widescreen 16:9
+SLUS-01305	Widescreen 16-9	widescreen 16:9
+SCUS-94294	Widescreen 16-9	widescreen 16:9
+SLUS-00499	Widescreen 16-9	widescreen 16:9
+SLUS-00288	Widescreen 16-9	widescreen 16:9
+SCUS-94900	Widescreen 16-9	widescreen 16:9
+SCUS-94154	Widescreen 16-9	widescreen 16:9
+SCUS-94244	Widescreen 16-9	widescreen 16:9
+SCUS-94244	Enable 60 FPS (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
+SCUS-94244	Enable 60 FPS Alternative (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
+SCUS-94244CE	Widescreen 16-9	widescreen 16:9
+SCUS-94244CE	Enable 60 FPS (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
+SCUS-94244CE	Enable 60 FPS Alternative (Play with Overclock to get preferred speed)	framerate overclock=135 choice=Frame rate
+SCUS-94570	Widescreen 16-9	widescreen 16:9
+SCUS-94156	Widescreen 16-9	widescreen 16:9
+SLUS-00046	Widescreen 16-9	widescreen 16:9
+SLUS-00530	Widescreen 16-9	widescreen 16:9
+SLUS-00530	FPS unlock	framerate choice=Frame rate
+SLUS-00530	Alternative FPS unlock	framerate choice=Frame rate
+SLUS-00530	FPS uncap + 60FPS lock	framerate choice=Frame rate
+SLUS-00634	Widescreen 16-9	widescreen 16:9
+SLUS-00428	Widescreen 16-9	widescreen 16:9
+SCUS-94426	Uncap FPS lock	framerate
+SCUS-94426	Widescreen	widescreen 16:9 choice=Widescreen
+SCUS-94426	Widescreen 16-9 ALT	widescreen 16:9 choice=Widescreen
+SLUS-00866	Widescreen 16-9	widescreen 16:9
+SLUS-00493	Widescreen 16-9	widescreen 16:9
+SLUS-00969	Widescreen 16-9	widescreen 16:9
+SLUS-00732	Widescreen 16-9	widescreen 16:9
+SLUS-01032	Widescreen 16-9	widescreen 16:9
+SLUS-01193	Widescreen 16-9	widescreen 16:9
+SLUS-01436	Widescreen 16-9	widescreen 16:9
+SLUS-01436GH	Widescreen 16-9	widescreen 16:9
+SLUS-00922	60 FPS (Doubles game speed)	framerate
+SLUS-00606	Widescreen 16-9	widescreen 16:9
+SLUS-00077	Widescreen 16-9	widescreen 16:9
+SLUS-00734	Widescreen 16-9	widescreen 16:9
+SLUS-00842	Widescreen 16-9	widescreen 16:9
+SLUS-00842GH	Widescreen 16-9	widescreen 16:9
+SLUS-01161	Widescreen 16-9	widescreen 16:9
+SLUS-01161GH	Widescreen 16-9	widescreen 16:9
+SLUS-01318	Widescreen 16-9	widescreen 16:9
+SLUS-01318GH	Widescreen 16-9	widescreen 16:9
+SLUS-00973	Widescreen 16-9	widescreen 16:9
+SLUS-01206	Widescreen 16-9	widescreen 16:9
+SLUS-01346	Widescreen 16-9	widescreen 16:9
+SLUS-00438	Widescreen 16-9	widescreen 16:9
+SLUS-00809	Widescreen 16-9	widescreen 16:9
+SCUS-94243	Widescreen 16-9	widescreen 16:9
+SLUS-01186	Widescreen 16-9	widescreen 16:9
+SLUS-00855	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-00855	Widescreen 16-9 (Alt)	widescreen 16:9 choice=Widescreen
+SLUS-01001	Widescreen 16-9	widescreen 16:9
+SLUS-00641	Widescreen 16-9	widescreen 16:9
+SLUS-01172	Widescreen 16-9	widescreen 16:9
+SLUS-01172GH	Widescreen 16-9	widescreen 16:9
+SLUS-00970	Widescreen 16-9	widescreen 16:9
+SLUS-00598	Widescreen 16-9	widescreen 16:9
+SLUS-00806	Widescreen 16-9	widescreen 16:9
+SLUS-00597	Widescreen 16-9	widescreen 16:9
+SLUS-00323	Widescreen 16-9	widescreen 16:9
+SLUS-01197	Widescreen 16-9	widescreen 16:9
+SCUS-94568	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SCUS-94568	Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Widescreen
+SCUS-94568	Widescreen 16-9 (Vert- Adjusted)	widescreen 16:9 choice=Widescreen
+SCUS-94194	60 FPS (+Re-enable tire smoke, Re-enable rear view mirror)	framerate
+SCUS-94488	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SCUS-94488	Widescreen 16-9 option Better Graphics	widescreen 16:9
+SCUS-94488	16:9 Widescreen 2.0	widescreen 16:9 choice=Widescreen
+SCUS-94488	21:9 Widescreen 2.0	widescreen 21:9 choice=Widescreen
+SCUS-94488	60 FPS (+Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate
+SCUS-94455	16:9 Widescreen	widescreen 16:9 choice=Widescreen
+SCUS-94455	21:9 Widescreen	widescreen 21:9 choice=Widescreen
+SCUS-94455	60 FPS (+Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate
+SLUS-00106	Push game cap to 30 fps	framerate
+SLUS-00106GH	Push game cap to 30 fps	framerate
+SLUS-00106CE	Push game cap to 30 fps	framerate
+SLUS-01414	Widescreen 16-9	widescreen 16:9
+SLUS-01113	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-01195	60 FPS unlock (Needs overclock)	framerate choice=Frame rate
+SLUS-01195	30 FPS unlock	framerate choice=Frame rate
+SLUS-00964	Widescreen 16-9	widescreen 16:9
+SLUS-01503	Widescreen 16-9	widescreen 16:9
+SLUS-01415	Widescreen 16-9	widescreen 16:9
+SCUS-94181	Widescreen 16-9	widescreen 16:9
+SLUS-01014	Widescreen 16-9	widescreen 16:9
+SCUS-94448	Widescreen 16-9	widescreen 16:9
+SLUS-00684	Widescreen hack	widescreen 16:9
+SCUS-94907	Widescreen 16-9	widescreen 16:9
+SCUS-94167	Widescreen 16-9	widescreen 16:9
+SCUS-94309	Widescreen 16-9	widescreen 16:9
+SLUS-00414	Widescreen 16-9	widescreen 16:9
+SLUS-00941	Widescreen 16-9	widescreen 16:9
+SLUS-00766	Widescreen 16-9	widescreen 16:9
+SLUS-00677	Widescreen 16-9	widescreen 16:9
+SLUS-00708	Widescreen 16-9	widescreen 16:9
+SLUS-00600	Widescreen 16-9	widescreen 16:9
+SLUS-00369	Widescreen 16-9	widescreen 16:9
+SLUS-00801	Widescreen 16-9	widescreen 16:9
+SLUS-00255	Uncap game at 30 FPS (200 Overclock for stable 30 FPS)	framerate overclock=180 choice=Frame rate
+SLUS-00255	Uncap Game at 60 FPS (160 Overclock for stable 60 FPS)	framerate overclock=195 choice=Frame rate
+SLUS-00585	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-00585	Widescreen 16-9 [ALT]:Fixes Most Sprites and 3D environment.	widescreen 16:9 choice=Widescreen
+SCUS-94491	Widescreen 16-9	widescreen 16:9
+SCUS-94584	Widescreen 16-9	widescreen 16:9
+SCUS-94585	Widescreen 16-9	widescreen 16:9
+SCUS-94586	Widescreen 16-9	widescreen 16:9
+SLUS-00076	Widescreen 16-9	widescreen 16:9
+SLUS-01222	Widescreen 16-9	widescreen 16:9
+SLUS-00426	Widescreen 16-9	widescreen 16:9
+SCUS-94227	Widescreen 16-9	widescreen 16:9
+SCUS-94227	FPS Uncap	framerate
+SCUS-94564	Widescreen 16-9	widescreen 16:9
+SLUS-01286	FPS unlocker	framerate
+SLUS-00594	Widescreen 16-9	widescreen 16:9
+SLUS-00594	FPS unlocker	framerate
+SLUS-00594P3	Widescreen 16-9	widescreen 16:9
+SLUS-00594P3	FPS unlocker	framerate
+SLUS-00776	Widescreen 16-9	widescreen 16:9
+SLUS-00776	FPS unlocker	framerate
+SLUS-00776P3	Widescreen 16-9	widescreen 16:9
+SLUS-00776P3	FPS unlocker	framerate
+SLUS-00974	Widescreen 16-9	widescreen 16:9
+SLUS-00974CE	Widescreen 16-9	widescreen 16:9
+SLUS-00974GH	Widescreen 16-9	widescreen 16:9
+SLUS-01270	Widescreen 16-9	widescreen 16:9
+SLUS-01016	Widescreen 16-9	widescreen 16:9
+SLUS-00603	Widescreen 16-9	widescreen 16:9
+SLUS-00603GH	Widescreen 16-9	widescreen 16:9
+SLUS-01140	Disable FPS lock	framerate choice=Frame rate
+SLUS-01140	Force 30 FPS	framerate choice=Frame rate
+SLUS-00930	Widescreen 16-9	widescreen 16:9
+SLUS-00568	Widescreen 16-9	widescreen 16:9
+SLUS-00917	Widescreen 16-9	widescreen 16:9
+SLUS-01018	Widescreen 16-9	widescreen 16:9
+SLUS-01237	Widescreen 16-9	widescreen 16:9
+SLUS-00726	Widescreen 16-9	widescreen 16:9
+SLUS-00435	Widescreen 16-9	widescreen 16:9
+SLUS-00464	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-00464	Widescreen 16-9 [ALT]	widescreen 16:9 choice=Widescreen
+SLUS-00439	Widescreen 16-9	widescreen 16:9
+SLUS-00439GH	Widescreen 16-9	widescreen 16:9
+SLUS-00578	Widescreen 16-9	widescreen 16:9
+SLUS-00232	Widescreen 16-9	widescreen 16:9
+SCUS-94183	Widescreen 16-9	widescreen 16:9
+SLUS-01042	Force and cap game to 60 FPS	framerate overclock=none
+SLUS-01055	Force and cap game to 60 FPS	framerate overclock=none
+SLUS-01158	Widescreen 16-9	widescreen 16:9
+SLUS-01339	Widescreen 16-9	widescreen 16:9
+SLUS-00408	Widescreen 16-9	widescreen 16:9
+SLUS-01165	FPS Uncap	framerate
+SCUS-94187	Widescreen 16-9	widescreen 16:9
+SLUS-00102	Widescreen 16-9	widescreen 16:9
+SLUS-00486	Widescreen 16-9	widescreen 16:9
+SLUS-00419	Widescreen 16-9	widescreen 16:9
+SLUS-01343	Widescreen 16-9	widescreen 16:9
+SLUS-00757	Widescreen 16-9	widescreen 16:9
+SLUS-00403	Widescreen 16-9	widescreen 16:9
+SLUS-01235	Select 60 FPS Unlock\Needs slight overclock	framerate choice=Select 60 FPS Unlock
+SLUS-01235	Select 60 FPS Unlock\Needs Higher overclock but may be more Stable	framerate choice=Select 60 FPS Unlock
+SLUS-00534	Widescreen 16-9	widescreen 16:9
+SLUS-01322	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-01322	Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Widescreen
+SLUS-01322	Widescreen 16-9 (Vert- Adjusted)	widescreen 16:9 choice=Widescreen
+SLUS-00282	Widescreen 16-9	widescreen 16:9
+SLUS-00274	Widescreen 16-9	widescreen 16:9
+SLUS-00923	Remove Cutscene Black Bars	displaymode
+SLUS-00923	Full FPS Unlock	framerate choice=Frame rate
+SLUS-00923	60 FPS Beta	framerate choice=Frame rate
+SLUS-00923D	Remove Cutscene Black Bars	displaymode
+SLUS-00923D	Full FPS Unlock	framerate choice=Frame rate
+SLUS-00923D	60 FPS Beta	framerate choice=Frame rate
+SLUS-00923GH	Remove Cutscene Black Bars	displaymode
+SLUS-00923GH	Full FPS Unlock	framerate choice=Frame rate
+SLUS-00923GH	60 FPS Beta	framerate choice=Frame rate
+SLUS-01087	Widescreen 16-9	widescreen 16:9
+SLUS-01135	Widescreen 16-9 (In-Game)	widescreen 16:9
+SLUS-01135	Widescreen 16-9 (Alt)	widescreen 16:9
+SLUS-01124	Widescreen 16-9	widescreen 16:9
+SLUS-00316	Widescreen 16-9	widescreen 16:9
+SLUS-00724	Widescreen 16-9	widescreen 16:9
+SLUS-00797	Widescreen 16-9	widescreen 16:9
+SLUS-90049	Widescreen 16-9	widescreen 16:9
+SLUS-00214	40 FPS unlock (Might speed up game)	framerate
+SLUS-00877	Widescreen 16-9	widescreen 16:9
+SCUS-94272	Widescreen 16-9 (1P & Main Menu)	widescreen 16:9
+SCUS-94272	Widescreen 16-9 (2P Only)	widescreen 16:9
+SCUS-94272	Widescreen 16-9 (3P & 4P Only)	widescreen 16:9
+SLUS-00681	Widescreen 16-9	widescreen 16:9
+SLUS-00771	Widescreen 16-9	widescreen 16:9
+SLUS-01381	Widescreen 16-9	widescreen 16:9
+SLUS-01039	Widescreen 16-9	widescreen 16:9
+SLUS-01528	Widescreen 16-9	widescreen 16:9
+SLUS-01105	Widescreen 16-9	widescreen 16:9
+SLUS-00548	Widescreen 16-9	widescreen 16:9
+SLUS-01369	Uncap FPS:Untested, use at your own risk	framerate
+SLUS-00707	FPS Unlock	framerate choice=Frame rate
+SLUS-00707	Widescreen 16-9	widescreen 16:9
+SLUS-00707	60 FPS	framerate choice=Frame rate
+SLUS-01227	Widescreen 16-9	widescreen 16:9
+SLUS-00955	Widescreen 16-9	widescreen 16:9
+SLUS-00955GH	Widescreen 16-9	widescreen 16:9
+SLUS-01359	Widescreen 16-9	widescreen 16:9
+SLUS-01093	Widescreen 16-9	widescreen 16:9
+SLUS-00240	Widescreen 16-9	widescreen 16:9
+SLUS-00613	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-00613	Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Widescreen
+SLUS-00875	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-00875	Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Widescreen
+SLUS-01378	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-01378	Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Widescreen
+SLUS-01378	Widescreen 16-9 (for Rev 1; Vert-)	widescreen 16:9 choice=Widescreen
+SLUS-01378GH	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLUS-01378GH	Widescreen 16-9 (Vert-)	widescreen 16:9 choice=Widescreen
+SLUS-01378GH	Widescreen 16-9 (for Rev 1; Vert-)	widescreen 16:9 choice=Widescreen
+SCUS-94228	PAL2NTSC	displaymode
+SCUS-94228	Widescreen 16-9	widescreen 16:9
+SCUS-94228CE	PAL2NTSC	displaymode
+SCUS-94228CE	Widescreen 16-9	widescreen 16:9
+SCUS-94425	Widescreen 16-9	widescreen 16:9
+SCUS-94425CE	Widescreen 16-9	widescreen 16:9
+SCUS-94467	Widescreen 16-9:Do not play Crash Bash demo	widescreen 16:9
+SCUS-94467	Crash Bash Demo Widescreen 16-9	widescreen 16:9
+SLUS-01464	Widescreen 16-9	widescreen 16:9
+SLUS-00372	Widescreen 16-9	widescreen 16:9
+SLUS-00629	Widescreen 16-9	widescreen 16:9
+SLUS-00562	Widescreen 16-9	widescreen 16:9
+SCUS-94240	Widescreen 16-9	widescreen 16:9
+SCUS-94451	Widescreen 16-9	widescreen 16:9
+SCUS-94492	Widescreen 16-9	widescreen 16:9
+SCUS-94640	Widescreen 16-9	widescreen 16:9
+SLUS-00487	Widescreen 16-9	widescreen 16:9
+SLUS-00610	Widescreen 16-9	widescreen 16:9
+SLUS-00839	Widescreen 16-9	widescreen 16:9
+SLUS-00609	Widescreen 16-9	widescreen 16:9
+SLUS-00840	Widescreen 16-9	widescreen 16:9
+SLUS-00340	Widescreen 16-9	widescreen 16:9
+SLUS-00706	Widescreen 16-9	widescreen 16:9
+SLUS-00939	Widescreen 16-9	widescreen 16:9
+SLUS-00939GH	Widescreen 16-9	widescreen 16:9
+SLUS-00860	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-00860GH	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-01066	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-01066GH	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-01485	Widescreen 16-9	widescreen 16:9
+SLUS-01019	Widescreen 16-9	widescreen 16:9
+SCUS-94427	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SCUS-94427	Widescreen 16-9 (Adjusted)	widescreen 16:9 choice=Widescreen
+SCUS-94454	Uncap FPS Full	framerate choice=Frame rate
+SCUS-94454	Uncap FPS At 60 FPS (Needs Slight Overclock to remain stable)	framerate choice=Frame rate
+SLUS-00893	Widescreen 16-9	widescreen 16:9
+SLUS-00893CE	Widescreen 16-9	widescreen 16:9
+SLUS-01214	Widescreen 16-9	widescreen 16:9
+SCUS-94229	Widescreen 16-9 (Vert-)	widescreen 16:9
+SLUS-00679	Widescreen 16-9	widescreen 16:9
+SCUS-94642	Widescreen 16-9	widescreen 16:9
+SCUS-94304	Widescreen 16-9	widescreen 16:9
+SLUS-00643	Widescreen 16-9	widescreen 16:9
+SLUS-01040	Widescreen 16-9	widescreen 16:9
+SLUS-01156	FPS uncap	framerate
+SLUS-01179	FPS uncap	framerate
+SLUS-01070	Widescreen 16-9	widescreen 16:9
+SLUS-01070A	Widescreen 16-9	widescreen 16:9
+SLUS-00513	Widescreen 16-9	widescreen 16:9
+SLUS-00328	Widescreen 16-9	widescreen 16:9
+SCUS-94305	Widescreen 16-9	widescreen 16:9
+SLUS-00976	Widescreen 16-9	widescreen 16:9
+SLUS-00455	Widescreen 16-9:When booting with the code enabled, you'll want skip the intro videos quickly in case they freeze the game.	widescreen 16:9
+SLUS-00599	Widescreen 16-9	widescreen 16:9
+SLUS-00929	Widescreen 16-9	widescreen 16:9
+SLUS-01234	Widescreen 16-9 (In-Game/Demo)	widescreen 16:9
+SLUS-01234	Widescreen 16-9 (Create A Superstar)	widescreen 16:9
+SLUS-01234	Widescreen 16-9 (Create A Taunt)	widescreen 16:9
+SLUS-00927	Widescreen 16-9 (In-Game,Demo)	widescreen 16:9
+SLUS-00927	Widescreen 16-9 (Create A Superstar)	widescreen 16:9
+SLUS-00927GH	Widescreen 16-9 (In-Game,Demo)	widescreen 16:9
+SLUS-00927GH	Widescreen 16-9 (Create A Superstar)	widescreen 16:9
+SLUS-00461	Widescreen 16-9 (3D/G)	widescreen 16:9
+SLUS-00461	Widescreen 16-9 (Main Menu)	widescreen 16:9
+SLUS-00774	Widescreen 16-9	widescreen 16:9
+SLUS-01382	Widescreen 16-9	widescreen 16:9
+SLUS-00627	Uncap Gamespeed to 120 FPS	framerate
+SCPS-10131	Widescreen 16-9	widescreen 16:9
+SCPS-10131	Widescreen 16-9 (Secondary)	widescreen 16:9
+SCPS-10131	Widescreen 16-9 (Cut Scenes)	widescreen 16:9
+SCPS-10132	Widescreen 16-9	widescreen 16:9
+SCPS-10132	Widescreen 16-9 (Secondary)	widescreen 16:9
+SCPS-10132	Widescreen 16-9 (Cut Scenes)	widescreen 16:9
+SLPM-86209	Widescreen 16-9	widescreen 16:9
+SLPS-01598	Widescreen 16-9	widescreen 16:9
+SLPM-86133	Widescreen 16-9	widescreen 16:9
+SLPS-00311	Widescreen 16-9	widescreen 16:9
+SLPS-01912	Widescreen 16-9	widescreen 16:9
+SLPS-01913	Widescreen 16-9	widescreen 16:9
+SLPS-02316	Widescreen 16-9	widescreen 16:9
+SLPS-01934	Widescreen 16-9	widescreen 16:9
+SLPM-86494	Widescreen 16-9	widescreen 16:9
+SLPS-00491	Widescreen 16-9	widescreen 16:9
+SLPS-01542	Widescreen 16-9	widescreen 16:9
+SLPS-00667	Widescreen 16-9	widescreen 16:9
+SLPS-02120	Widescreen 16-9	widescreen 16:9
+SLPS-01696	Widescreen 16-9	widescreen 16:9
+SLPM-86621	Widescreen 16-9	widescreen 16:9
+SLPS-02640	Widescreen 16-9	widescreen 16:9
+SCPS-10124	Widescreen 16-9	widescreen 16:9
+SLPS-01556	Widescreen 16-9	widescreen 16:9
+SLPS-01784	Widescreen 16-9	widescreen 16:9
+SLPS-00880	Widescreen 16-9	widescreen 16:9
+SLPS-00722	Widescreen 16-9	widescreen 16:9
+SLPS-01783	Widescreen 16-9	widescreen 16:9
+SLPS-01762	Widescreen 16-9	widescreen 16:9
+SLPM-86061	Widescreen 16-9	widescreen 16:9
+SLPS-00522	Widescreen 16-9	widescreen 16:9
+SLPS-01202	Widescreen 16-9	widescreen 16:9
+SLPS-02789	Widescreen 16-9	widescreen 16:9
+SLPS-01823	Widescreen 16-9	widescreen 16:9
+SLPS-00338	Widescreen 16-9	widescreen 16:9
+SLPS-03459	Widescreen 16-9	widescreen 16:9
+SLPS-00575	Widescreen 16-9	widescreen 16:9
+SCES-01564	Widescreen 16-9	widescreen 16:9
+SCES-02834	Widescreen 16-9	widescreen 16:9
+SCES-00984	50 FPS (+Re-enable tire smoke, Re-enable rear view mirror)	framerate
+SCES-02380	16:9 Widescreen	widescreen 16:9 choice=Widescreen
+SCES-02380	21:9 Widescreen	widescreen 21:9 choice=Widescreen
+SCES-02380	50 FPS (+Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate
+SCES-12380	16:9 Widescreen	widescreen 16:9 choice=Widescreen
+SCES-12380	21:9 Widescreen	widescreen 21:9 choice=Widescreen
+SCES-12380	50 FPS (+Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate
+SCES-00409	Widescreen 16-9	widescreen 16:9
+SLES-02732	Widescreen 16-9	widescreen 16:9
+SLES-01514	Widescreen 16-9	widescreen 16:9
+SLES-02752	Widescreen 16-9	widescreen 16:9
+SLES-02752	Wide screen part 1 (Stretch)	widescreen 16:9
+SLES-02752	Widescreen part 2 (Camera distance)	widescreen 16:9
+SLES-02253	Widescreen 16-9	widescreen 16:9
+SLUS-00752	Widescreen 16-9	widescreen 16:9
+SLPS-00965	FPS Unlocker	framerate choice=Frame rate
+SLPS-00965	FPS Unlocker V2	framerate choice=Frame rate
+SLPS-00965	Widescreen 16-9	widescreen 16:9
+SLES-03120	Widescreen 16-9	widescreen 16:9
+SLES-02017	Widescreen 16-9	widescreen 16:9
+SLES-03083	Widescreen 16-9	widescreen 16:9
+SLES-01761	Widescreen 16-9	widescreen 16:9
+SLPS-01318	Widescreen 16-9	widescreen 16:9
+SCES-02028	Widescreen 16-9	widescreen 16:9
+SCES-02029	Widescreen 16-9	widescreen 16:9
+SCES-02031	Widescreen 16-9	widescreen 16:9
+SLES-03390	Widescreen 16-9	widescreen 16:9
+SCES-00842	FPS unlock "Might want to underclock"	framerate
+SLPS-01489	Widescreen 16-9	widescreen 16:9
+SLES-01531	Widescreen 16-9	widescreen 16:9
+SLPS-02553	Widescreen 16-9	widescreen 16:9
+SLES-01722	Widescreen 16-9	widescreen 16:9
+SLPS-01842	Widescreen 16-9	widescreen 16:9
+SLPS-01469	Widescreen 16-9	widescreen 16:9
+SLES-01304	Widescreen 16-9	widescreen 16:9
+SLES-03552	Widescreen 16-9	widescreen 16:9
+SLES-00122	Widescreen 16-9	widescreen 16:9
+SLES-02896	Widescreen 16-9	widescreen 16:9
+SLES-01726	Widescreen 16-9	widescreen 16:9
+SLPS-01232	60 FPS (130% overclock works well)	framerate overclock=130
+SLPS-01232	Widescreen 16-9	widescreen 16:9
+SLPS-01233	60 FPS (130% overclock works well)	framerate overclock=130
+SLPS-01233	Widescreen 16-9	widescreen 16:9
+SLP-86219	Widescreen 16-9	widescreen 16:9
+SLPM-86219	Widescreen 16-9	widescreen 16:9
+SLES-03986	FPS Unlock	framerate
+SCES-01043	Widescreen 16-9	widescreen 16:9
+SCES-00441	Widescreen 16-9	widescreen 16:9
+SLES-03107	Widescreen 16-9	widescreen 16:9
+SLES-03107	Widescreen 16-9 (Optional Extra)	widescreen 16:9
+SLP-86363	Widescreen 16-9	widescreen 16:9
+SLP-86363	Widescreen 16-9 (Optional Extra)	widescreen 16:9
+SLPM-86363	Widescreen 16-9	widescreen 16:9
+SLPM-86363	Widescreen 16-9 (Optional Extra)	widescreen 16:9
+SLES-03188	Widescreen	widescreen 16:9
+SLES-03285	Widescreen 16-9	widescreen 16:9
+SLES-00870	Widescreen 16-9	widescreen 16:9
+SLES-00871	Widescreen 16-9	widescreen 16:9
+SLES-02605	Widescreen 16-9	widescreen 16:9
+SLES-00608	Widescreen 16-9	widescreen 16:9
+SCPS-10031	Widescreen	widescreen 16:9
+SCPS-10047	Select Widescreen Type\Widescreen Hor+	widescreen 16:9 choice=Select Widescreen Type
+SCPS-10047	Select Widescreen Type\Widescreen Vert-	widescreen 16:9 choice=Select Widescreen Type
+SCES-01420	Widescreen 16-9	widescreen 16:9
+SLES-00954	Widescreen 16-9	widescreen 16:9
+SLES-02793	Widescreen 16-9	widescreen 16:9
+SLPS-01430	Widescreen 16-9	widescreen 16:9
+SLPS-01044	Widescreen 16-9	widescreen 16:9
+SLES-00136	Widescreen 16-9	widescreen 16:9
+SLES-00196	Widescreen 16-9	widescreen 16:9
+SLPS-01135	Widescreen 16-9	widescreen 16:9
+SLPS-01135	Widescreen 16-9 (Menus)	widescreen 16:9
+SCES-01259	Widescreen 16-9	widescreen 16:9
+SLPS-01289	Widescreen 16-9	widescreen 16:9
+SLES-02018	Widescreen 16-9	widescreen 16:9
+SLES-03803	Widescreen 16-9	widescreen 16:9
+UNLICENSED	Deuce\Widescreen 16-9	widescreen 16:9
+SLES-00848	Widescreen 16-9	widescreen 16:9
+SLES-03936	Widescreen 16-9	widescreen 16:9
+SCES-01489	Widescreen 16-9	widescreen 16:9
+SLES-02067	50 FPS	framerate
+SLES-03396	Widescreen 16-9	widescreen 16:9
+SLES-00964	Widescreen 16-9	widescreen 16:9
+SCES-02565	Widescreen 16-9	widescreen 16:9
+SCES-12565	Widescreen 16-9	widescreen 16:9
+SLES-01816	Widescreen 16-9	widescreen 16:9
+SLES-01976	Widescreen 16-9	widescreen 16:9
+SLES-01977	Widescreen 16-9	widescreen 16:9
+SLES-02993	Widescreen 16-9	widescreen 16:9
+SLES-12993	Widescreen 16-9	widescreen 16:9
+SLES-02994	Widescreen 16-9	widescreen 16:9
+SLES-12994	Widescreen 16-9	widescreen 16:9
+SLES-02248	Widescreen 16-9	widescreen 16:9
+SLES-01871	Widescreen 16-9	widescreen 16:9
+SLES-00097	Widescreen 16-9	widescreen 16:9
+SLPS-02034	Widescreen 16-9	widescreen 16:9
+SLPS-02985	Widescreen 16-9	widescreen 16:9
+SLES-02527	Widescreen 16-9	widescreen 16:9
+SLES-02853	Widescreen 16-9	widescreen 16:9
+SCPS-10033	Widescreen 16-9	widescreen 16:9
+SCPS-10036	Widescreen 16-9	widescreen 16:9
+SLES-00596	Widescreen 16-9	widescreen 16:9
+SCPS-10045	60 FPS (+Re-enable tire smoke, Re-enable rear view mirror)	framerate
+SCPS-10116	16:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 16:9 choice=Widescreen
+SCPS-10116	16:9 Widescreen 2.0 (NTSC-J 1.1)	widescreen 16:9 choice=Widescreen
+SCPS-10116	21:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 21:9 choice=Widescreen
+SCPS-10116	21:9 Widescreen (NTSC-J 1.1)	widescreen 21:9 choice=Widescreen
+SCPS-10116	60 FPS (NTSC-J 1.0 Arcade Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-10116	60 FPS (NTSC-J 1.0 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-10116	60 FPS (NTSC-J 1.1 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-10117	16:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 16:9 choice=Widescreen
+SCPS-10117	16:9 Widescreen 2.0 (NTSC-J 1.1)	widescreen 16:9 choice=Widescreen
+SCPS-10117	21:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 21:9 choice=Widescreen
+SCPS-10117	21:9 Widescreen (NTSC-J 1.1)	widescreen 21:9 choice=Widescreen
+SCPS-10117	60 FPS (NTSC-J 1.0 Arcade Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-10117	60 FPS (NTSC-J 1.0 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-10117	60 FPS (NTSC-J 1.1 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-45457	16:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 16:9 choice=Widescreen
+SCPS-45457	16:9 Widescreen 2.0 (NTSC-J 1.1)	widescreen 16:9 choice=Widescreen
+SCPS-45457	21:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 21:9 choice=Widescreen
+SCPS-45457	21:9 Widescreen (NTSC-J 1.1)	widescreen 21:9 choice=Widescreen
+SCPS-45457	60 FPS (NTSC-J 1.0 Arcade Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-45457	60 FPS (NTSC-J 1.0 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-45457	60 FPS (NTSC-J 1.1 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-91326	16:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 16:9 choice=Widescreen
+SCPS-91326	16:9 Widescreen 2.0 (NTSC-J 1.1)	widescreen 16:9 choice=Widescreen
+SCPS-91326	21:9 Widescreen 2.0 (NTSC-J 1.0)	widescreen 21:9 choice=Widescreen
+SCPS-91326	21:9 Widescreen (NTSC-J 1.1)	widescreen 21:9 choice=Widescreen
+SCPS-91326	60 FPS (NTSC-J 1.0 Arcade Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-91326	60 FPS (NTSC-J 1.0 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SCPS-91326	60 FPS (NTSC-J 1.1 Simulation Disc, +Re-enable tire smoke, sky in the read view mirror, rear view mirror)	framerate choice=Frame rate
+SLES-02069	Mode 60 HZ	displaymode
+SLES-02069	Widescreen 16-9	widescreen 16:9
+SLPS-01408	Widescreen 16-9	widescreen 16:9 choice=Widescreen
+SLPS-01408	Widescreen 16-9 (ALT)	widescreen 16:9 choice=Widescreen
+SLPS-02993	Widescreen 16-9	widescreen 16:9
+SLES-02095	Widescreen 16-9	widescreen 16:9
+SLES-02424	Widescreen 16-9	widescreen 16:9
+SLES-03321	Widescreen 16-9	widescreen 16:9
+SLES-03322	Widescreen 16-9	widescreen 16:9
+SLES-00333	Widescreen 16-9	widescreen 16:9
+SLES-02448	Widescreen 16-9	widescreen 16:9
+SLPS-01007	Widescreen 16-9	widescreen 16:9
+SLP-86538	Widescreen 16-9	widescreen 16:9
+SLPM-86538	Widescreen 16-9	widescreen 16:9
+SLP-86668	Widescreen 16-9	widescreen 16:9
+SLPM-86668	Widescreen 16-9	widescreen 16:9
+SLP-86835	Widescreen 16-9	widescreen 16:9
+SLPM-86835	Widescreen 16-9	widescreen 16:9
+SLP-86055	Widescreen 16-9	widescreen 16:9
+SLPM-86055	Widescreen 16-9	widescreen 16:9
+SLES-00598	Widescreen 16-9	widescreen 16:9
+SCES-00566	Widescreen 16-9	widescreen 16:9
+SCES-01045	Widescreen 16-9	widescreen 16:9
+SLP-86323	Widescreen 16-9	widescreen 16:9
+SLPM-86323	Widescreen 16-9	widescreen 16:9
+SLES-00611	Widescreen 16-9	widescreen 16:9
+SLES-02753	Widescreen 16-9	widescreen 16:9
+SLES-00767	Widescreen 16-9	widescreen 16:9
+SLP-86763	Widescreen 16-9	widescreen 16:9
+SLPM-86763	Widescreen 16-9	widescreen 16:9
+SLP-87174	FPS Unlock	framerate
+SLES-01967	Widescreen 16-9	widescreen 16:9
+SLPS-01010	Widescreen 16-9	widescreen 16:9
+SLPS-01010	Widescreen Heart Sprites (Level 1 only)	widescreen 16:9
+SLES-01081	Widescreen 16-9	widescreen 16:9
+SLPS-02370	Widescreen 16-9	widescreen 16:9
+SCES-01659	Widescreen 16-9	widescreen 16:9
+SCES-01185	Widescreen 16-9	widescreen 16:9
+SLES-03122	Widescreen 16-9	widescreen 16:9
+SLES-01450	Widescreen 16-9	widescreen 16:9
+SCES-01000	Widescreen 16-9	widescreen 16:9
+SCPS-10064	Widescreen 16-9	widescreen 16:9
+SCES-00866	Widescreen 16-9	widescreen 16:9
+SLES-01301	Widescreen 16-9	widescreen 16:9
+SLES-00730	Widescreen 16-9	widescreen 16:9
+SLES-00613	Widescreen 16-9	widescreen 16:9
+SLES-00614	Widescreen 16-9	widescreen 16:9
+SLES-00615	Widescreen 16-9	widescreen 16:9
+SLP-86015	Widescreen 16-9	widescreen 16:9
+SLPM-86015	Widescreen 16-9	widescreen 16:9
+SLPS-02791	Widescreen 16-9	widescreen 16:9
+SLPS-02237	Widescreen 16-9	widescreen 16:9
+SLPS-00005	Widescreen 16-9 (Normal Release)	widescreen 16:9 choice=Widescreen
+SLPS-00005	Widescreen 16-9 (Rev 1 Release)	widescreen 16:9 choice=Widescreen
+SLES-03868	Widescreen 16-9	widescreen 16:9
+SCES-01492	Widescreen 16-9	widescreen 16:9
+SCES-02545	Widescreen 16:9	widescreen 16:9
+SCPS-10081	Widescreen 16-9	widescreen 16:9
+SLES-01199	Widescreen 16-9 (Partial)	widescreen 16:9
+SCES-03085	Widescreen 16-9	widescreen 16:9
+SLES-03545	Widescreen 16-9	widescreen 16:9
+SLES-00768	Widescreen 16-9	widescreen 16:9
+SLES-01879	Widescreen 16-9	widescreen 16:9
+SLES-11879	Widescreen 16-9	widescreen 16:9
+SLPS-01261	Widescreen 16-9	widescreen 16:9
+SLPS-01261	Widescreen 16-9 (Optional Extra)	widescreen 16:9
+SLPS-01262	Widescreen 16-9	widescreen 16:9
+SLPS-01262	Widescreen 16-9 (Optional Extra)	widescreen 16:9
+SCES-00743	Widescreen 16-9	widescreen 16:9
+SCES-02277	Widescreen 16-9	widescreen 16:9
+SLES-03108	Widescreen 16-9	widescreen 16:9
+SLES-00953	Widescreen 16-9	widescreen 16:9
+SLPS-02100	Widescreen 16-9	widescreen 16:9
+SCES-00981	Widescreen 16-9	widescreen 16:9
+SIPS-60016	Widescreen 16-9	widescreen 16:9
+SLES-03388	Widescreen 16-9	widescreen 16:9
+SLES-00785	Widescreen 16-9	widescreen 16:9
+SLES-01536	Widescreen 16-9	widescreen 16:9
+SLES-03795	Widescreen 16-9	widescreen 16:9
+SLES-03796	Widescreen 16-9	widescreen 16:9
+SLES-03946	Widescreen 16-9	widescreen 16:9
+SLPS-01605	Widescreen 16-9	widescreen 16:9
+SLES-00629	Widescreen 16-9	widescreen 16:9
+SLPS-00520	Widescreen 16-9	widescreen 16:9
+SLES-02557	Widescreen 16-9	widescreen 16:9
+SLP-86273	Widescreen 16-9	widescreen 16:9
+SLPM-86273	Widescreen 16-9	widescreen 16:9
+SLES-01534	Widescreen 16-9	widescreen 16:9
+SCES-01762	Widescreen 16-9	widescreen 16:9
+SLPS-01688	Widescreen 16-9	widescreen 16:9
+SLPS-00417	Widescreen 16-9	widescreen 16:9
+SCES-00741	Widescreen 16-9	widescreen 16:9
+SCES-00742	Widescreen 16-9	widescreen 16:9
+SLES-00923	Widescreen 16-9	widescreen 16:9
+SCED-00936	MediEvil Widescreen 16-9	widescreen 16:9
+SCES-01706	Widescreen 16-9	widescreen 16:9
+SLPS-01901	Widescreen 16-9	widescreen 16:9
+SLPS-02400	Widescreen 16-9	widescreen 16:9
+SLES-01436	Widescreen 16-9	widescreen 16:9
+SLES-11436	Widescreen 16-9	widescreen 16:9
+SLES-01417	Widescreen 16-9	widescreen 16:9
+SCES-01922	60Fps-Mode L2 to activate	framerate
+SLP-86230	Widescreen 16-9	widescreen 16:9
+SLPS-00084	Widescreen 16-9	widescreen 16:9
+SLP-86192	Widescreen 16-9	widescreen 16:9
+SLP-86192	60 FPS	framerate
+SLPM-86192	Widescreen 16-9	widescreen 16:9
+SLPM-86192	60 FPS	framerate
+SLES-04157	Widescreen 16-9	widescreen 16:9
+SLP-87022	Widescreen 16-9	widescreen 16:9
+SLP-86702	Widescreen 16-9 (In-Game)	widescreen 16:9
+SLPS-00246	Widescreen 16-9	widescreen 16:9
+SLES-02194	Widescreen 16-9	widescreen 16:9
+SLES-01581	Widescreen 16-9	widescreen 16:9
+SLES-01582	Widescreen 16-9	widescreen 16:9
+SLES-02763	Widescreen 16-9	widescreen 16:9
+SLES-03157	Widescreen 16-9	widescreen 16:9
+SLES-00844	Widescreen 16-9	widescreen 16:9
+SLES-01915	Widescreen 16-9	widescreen 16:9
+SLES-00495	Widescreen 16-9	widescreen 16:9
+SLPS-00539	Widescreen 16-9	widescreen 16:9
+SLES-01437	Widescreen 16-9	widescreen 16:9
+SLES-00939	Widescreen 16-9	widescreen 16:9
+SLP-86041	Widescreen 16-9	widescreen 16:9
+SLPM-86041	Widescreen 16-9	widescreen 16:9
+SLP-80149	Widescreen 16-9	widescreen 16:9
+SLPM-80149	Widescreen 16-9	widescreen 16:9
+SLES-02598	Widescreen 16-9	widescreen 16:9
+SLPS-02508	Widescreen 16-9	widescreen 16:9
+SLES-02528	Widescreen 16-9	widescreen 16:9
+SCES-01911	Widescreen 16-9	widescreen 16:9
+SCES-02286	Widescreen 16-9	widescreen 16:9
+SCES-12286	Widescreen 16-9	widescreen 16:9
+SCES-03698	Widescreen 16-9	widescreen 16:9
+SCES-03700	Widescreen	widescreen 16:9
+SLES-03242	Widescreen 16-9	widescreen 16:9
+SLES-01374	Widescreen 16-9	widescreen 16:9
+SLES-00948	Widescreen 16-9	widescreen 16:9
+SLES-01179	Widescreen 16-9	widescreen 16:9
+SLES-01165	Widescreen 16-9	widescreen 16:9
+SLPS-00675	Widescreen 16-9	widescreen 16:9
+SLES-02974	Widescreen 16-9	widescreen 16:9
+SLES-03626	Widescreen 16-9	widescreen 16:9
+SLES-00903	Widescreen 16-9	widescreen 16:9
+SLES-02055	Widescreen	widescreen 16:9
+SLES-02493	Widescreen 16-9	widescreen 16:9
+SLPS-00592	Widescreen 16-9	widescreen 16:9
+SLPS-91041	Widescreen 16-9	widescreen 16:9
+SLES-01628	Widescreen 16-9	widescreen 16:9
+SCES-01070	Widescreen 16-9	widescreen 16:9
+SCES-00061	Widescreen 16-9	widescreen 16:9
+SCES-00567	Widescreen 16-9	widescreen 16:9
+SCES-01753	Widescreen 16-9	widescreen 16:9
+SCPS-18012	Widescreen 16-9	widescreen 16:9
+SLES-00978	Widescreen 16-9	widescreen 16:9
+SCES-00062	Widescreen 16-9	widescreen 16:9
+SLES-00937	Widescreen 16-9	widescreen 16:9
+SLP-86600	Widescreen 16-9	widescreen 16:9
+SLPM-86600	Widescreen 16-9	widescreen 16:9
+SLP-86162	Widescreen 16-9	widescreen 16:9
+SLPM-86162	Widescreen 16-9	widescreen 16:9
+SLP-86086	Widescreen 16-9	widescreen 16:9
+SLPM-86086	Widescreen 16-9	widescreen 16:9
+SLP-86291	Widescreen 16-9	widescreen 16:9
+SLPM-86291	Widescreen 16-9	widescreen 16:9
+SLP-87056	Widescreen 16-9	widescreen 16:9
+SLPM-87056	Widescreen 16-9	widescreen 16:9
+SLES-02170	Widescreen 16-9	widescreen 16:9
+SLES-02865	Widescreen 16-9	widescreen 16:9
+SLES-03630	Widescreen 16-9	widescreen 16:9
+SLES-00713	Widescreen 16-9	widescreen 16:9
+SLPS-00219	Widescreen 16-9	widescreen 16:9
+NYMC-02020	Widescreen 16-9	widescreen 16:9

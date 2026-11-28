@@ -13,14 +13,17 @@
 #include "core/system.h"
 
 #include "common/assert.h"
+#include "common/error.h"
 #include "common/string_util.h"
 
 #include <QtCore/QFileInfo>
 #include <QtGui/QColor>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QTreeWidgetItemIterator>
 #include <array>
 #include <utility>
@@ -28,6 +31,10 @@
 CheatManagerWindow::CheatManagerWindow() : QWidget()
 {
   m_ui.setupUi(this);
+
+  // A code read from the newer format can have values to choose from.
+  m_ui.cheatList->setColumnCount(5);
+  m_ui.cheatList->headerItem()->setText(4, tr("Value"));
 
   connectUi();
 
@@ -206,14 +213,21 @@ void CheatManagerWindow::updateCheatList()
       const std::vector<std::string> groups = list->GetCodeGroups();
       for (const std::string& group_name : groups)
       {
+        // Patches have a page of their own (game properties): a group of nothing else isn't shown.
+        const u32 count = list->GetCodeCount();
+        bool any_cheat = false;
+        for (u32 i = 0; i < count && !any_cheat; i++)
+          any_cheat = (list->GetCode(i).group == group_name && !list->GetCode(i).patch);
+        if (!any_cheat)
+          continue;
+
         QTreeWidgetItem* group = cm->createItemForCheatGroup(QString::fromStdString(group_name));
 
-        const u32 count = list->GetCodeCount();
         bool all_enabled = true;
         for (u32 i = 0; i < count; i++)
         {
           const CheatCode& code = list->GetCode(i);
-          if (code.group != group_name)
+          if (code.group != group_name || code.patch)
             continue;
 
           QTreeWidgetItem* item = new QTreeWidgetItem(group);
@@ -253,6 +267,52 @@ void CheatManagerWindow::fillItemForCheatCode(QTreeWidgetItem* item, u32 index, 
   item->setText(1, qApp->translate("Cheats", CheatCode::GetTypeDisplayName(code.type)));
   item->setText(2, qApp->translate("Cheats", CheatCode::GetActivationDisplayName(code.activation)));
   item->setText(3, QString::number(static_cast<uint>(code.instructions.size())));
+
+  if (!code.CanEnable())
+  {
+    item->setDisabled(true);
+    item->setToolTip(0, QString::fromStdString(code.notes.empty() ? std::string() : code.notes.front()));
+  }
+  else if (!code.options.empty())
+  {
+    QComboBox* values = new QComboBox(m_ui.cheatList);
+    for (const CheatCode::Option& option : code.options)
+    {
+      values->addItem(QString::fromStdString(option.name), static_cast<uint>(option.value));
+      if (option.value == code.option_value)
+        values->setCurrentIndex(values->count() - 1);
+    }
+    connect(values, &QComboBox::currentIndexChanged, this,
+            [this, index, values](int row) { setCodeValue(index, values->itemData(row).toUInt()); });
+    m_ui.cheatList->setItemWidget(item, 4, values);
+  }
+  else if (code.option_range.has_value())
+  {
+    QSpinBox* value = new QSpinBox(m_ui.cheatList);
+    value->setRange(static_cast<int>(code.option_range->first),
+                    static_cast<int>(std::min<u32>(code.option_range->second, INT32_MAX)));
+    value->setValue(static_cast<int>(code.option_value));
+    connect(value, &QSpinBox::editingFinished, this,
+            [this, index, value]() { setCodeValue(index, static_cast<u32>(value->value())); });
+    m_ui.cheatList->setItemWidget(item, 4, value);
+  }
+}
+
+void CheatManagerWindow::setCodeValue(u32 index, u32 value)
+{
+  Host::RunOnCPUThread([index, value]() {
+    CheatList* list = System::GetCheatList();
+    if (!list || index >= list->GetCodeCount())
+      return;
+
+    Error error;
+    if (!list->GetCode(index).SetOptionValue(value, &error))
+    {
+      Host::ReportErrorAsync("Cheat Value", error.GetDescription());
+      return;
+    }
+    System::SaveCheatList();
+  });
 }
 
 void CheatManagerWindow::saveCheatList()
@@ -491,7 +551,7 @@ void CheatManagerWindow::importClicked()
 
 void CheatManagerWindow::importFromFileTriggered()
 {
-  const QString filter(tr("PCSXR/Libretro Cheat Files (*.cht *.txt);;All Files (*.*)"));
+  const QString filter(tr("Cheat Files (*.cht *.ini *.txt);;All Files (*.*)"));
   const QString filename =
     QDir::toNativeSeparators(QFileDialog::getOpenFileName(this, tr("Import Cheats"), QString(), filter));
   if (filename.isEmpty())
@@ -509,6 +569,8 @@ void CheatManagerWindow::importFromFileTriggered()
       DebugAssert(System::HasCheatList());
       System::GetCheatList()->MergeList(new_cheats);
       System::SaveCheatList();
+      // Patches among the imported codes run from the patch list, built again from the file just saved.
+      System::LoadPatchList();
     },
     true);
   updateCheatList();
@@ -532,6 +594,8 @@ void CheatManagerWindow::importFromTextTriggered()
       DebugAssert(System::HasCheatList());
       System::GetCheatList()->MergeList(new_cheats);
       System::SaveCheatList();
+      // Patches among the imported codes run from the patch list, built again from the file just saved.
+      System::LoadPatchList();
     },
     true);
   updateCheatList();

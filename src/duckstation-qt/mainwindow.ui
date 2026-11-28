@@ -87,6 +87,7 @@
     <addaction name="actionPause"/>
     <addaction name="menuChangeDisc"/>
     <addaction name="separator"/>
+    <addaction name="actionPatches"/>
     <addaction name="actionCheats"/>
     <addaction name="menuCheats"/>
     <addaction name="actionScreenshot"/>
@@ -772,6 +773,17 @@
    </property>
    <property name="text">
     <string>System &amp;Display</string>
+   </property>
+  </action>
+  <action name="actionPatches">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="tv-2-line"/>
+   </property>
+   <property name="text">
+    <string>Pa&amp;tches...</string>
    </property>
   </action>
   <action name="actionViewGameProperties">

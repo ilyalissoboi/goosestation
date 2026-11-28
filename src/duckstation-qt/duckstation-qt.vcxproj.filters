@@ -23,6 +23,7 @@
     <ClCompile Include="biossettingswidget.cpp" />
     <ClCompile Include="memorycardeditorwindow.cpp" />
     <ClCompile Include="postprocessingfavouritesdialog.cpp" />
+    <ClCompile Include="patchessettingswidget.cpp" />
     <ClCompile Include="postprocessingsettingswidget.cpp" />
     <ClCompile Include="cheatmanagerwindow.cpp" />
     <ClCompile Include="cheatcodeeditordialog.cpp" />
@@ -153,6 +154,9 @@
     <ClCompile Include="$(IntDir)moc_postprocessingfavouritesdialog.cpp">
       <Filter>moc</Filter>
     </ClCompile>
+    <ClCompile Include="$(IntDir)moc_patchessettingswidget.cpp">
+      <Filter>moc</Filter>
+    </ClCompile>
     <ClCompile Include="$(IntDir)moc_postprocessingsettingswidget.cpp">
       <Filter>moc</Filter>
     </ClCompile>
@@ -232,6 +236,7 @@
     <QtMoc Include="biossettingswidget.h" />
     <QtMoc Include="memorycardeditorwindow.h" />
     <QtMoc Include="postprocessingfavouritesdialog.h" />
+    <QtMoc Include="patchessettingswidget.h" />
     <QtMoc Include="postprocessingsettingswidget.h" />
     <QtMoc Include="cheatmanagerwindow.h" />
     <QtMoc Include="cheatcodeeditordialog.h" />

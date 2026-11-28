@@ -442,7 +442,7 @@ private fun MenuPanel(
                 }
                 MenuItem("Screenshot", GsIcons.camera, actions::screenshot, enabled = booted, quiet = quiet)
                 MenuItem(
-                    "Patch codes",
+                    "Patches & cheats",
                     GsIcons.code,
                     actions::openCodes,
                     Modifier.focusRequester(codesRow),

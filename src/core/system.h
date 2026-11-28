@@ -26,6 +26,9 @@ class Controller;
 
 struct CheatCode;
 class CheatList;
+namespace Patches {
+class PatchList;
+}
 
 class GPUTexture;
 class MediaCapture;
@@ -344,8 +347,32 @@ CheatList* GetCheatList();
 /// Applies a single cheat code.
 void ApplyCheatCode(const CheatCode& code);
 
-/// Sets or clears the provided cheat list, applying every frame.
+/// Sets or clears the provided cheat list, applying every frame. Codes that are patches stay in it (a .cht saved from
+/// it keeps them), but only the patch list applies them.
 void SetCheatList(std::unique_ptr<CheatList> cheats);
+
+/// The running game's patches, or null. They apply every frame, and their needs go into the game's settings, unless
+/// hardcore mode or "disable all enhancements" is on.
+Patches::PatchList* GetPatchList();
+
+/// Gives the running game its patches (Android builds its own list), applying their needs.
+void SetPatchList(std::unique_ptr<Patches::PatchList> list);
+
+/// Desktop: builds the running game's patches, from the player's .cht and the database, with the switches in its game
+/// settings file, and applies their needs.
+bool LoadPatchList();
+
+/// Whether changing patch index to choice (-1: off) waits for the next start (Patches::PatchList::NeedsRestart()):
+/// the UI asks to reset now or apply at the next start.
+bool PatchNeedsReset(u32 index, s32 choice);
+
+/// Changes patch index to choice in the running game: at once, or at the next start, or now with a reset when
+/// reset_now. The caller keeps the switches: desktop's UIs write them into the game settings file and call
+/// ReloadGameSettings() instead, which the list follows.
+void SetPatch(u32 index, s32 choice, bool reset_now);
+
+/// Puts value into choice's code of patch index (CheatCode::SetOptionValue()).
+bool SetPatchValue(u32 index, s32 choice, u32 value, Error* error);
 
 /// Updates throttler.
 void UpdateSpeedLimiterState();

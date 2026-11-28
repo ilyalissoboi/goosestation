@@ -9,9 +9,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The in-game menu's Patch codes panel ([CodePanel]): its codes, read as it opens, switched and applied. Main thread
- * only; [api] calls run on [game]. Each change goes to [onChange], null once it's closed. A read or a refusal for the
- * panel closed or opened again since is dropped.
+ * The in-game menu's Patches & cheats panel ([CodePanel]): the game's patches and cheats, read as it opens, switched,
+ * given values and applied. Main thread only; [api] calls run on [game]. Each change goes to [onChange], null once it's
+ * closed. A read or a refusal for the panel closed or opened again since is dropped.
  */
 class PatchCodesModel(
     private val scope: CoroutineScope,
@@ -26,16 +26,129 @@ class PatchCodesModel(
     // Changes as the panel opens and closes, so a read for an earlier one is dropped.
     private var generation = 0
 
-    /** Opens the panel, then reads the game's codes and the player's file to add codes in. */
+    /** Opens the panel on its Patches tab, then reads the game's codes and the player's file to add codes in. */
     fun open() {
-        val id = ++generation
+        ++generation
         set(CodePanel())
+        read()
+    }
+
+    // Reads the game's patches and cheats (again: after a patch changes, the core says what runs now).
+    private fun read() {
+        val id = generation
         scope.launch {
             val codes = withContext(game) { api.getPatchCodes() }
             if (id != generation) return@launch
             val panel = state ?: return@launch
-            set(panel.copy(groups = PatchCodeList.groups(codes.codes.toList()), fileName = codes.fileName))
+            set(
+                panel.copy(
+                    groups = PatchCodeList.groups(codes.codes.toList()),
+                    patches = PatchCodeList.patches(codes.patches.toList()),
+                    fileName = codes.fileName,
+                ),
+            )
         }
+    }
+
+    fun setTab(tab: CodeTab) {
+        val panel = state ?: return
+        set(panel.copy(tab = tab, question = null))
+    }
+
+    /**
+     * Switches patch [index] to [choice] (-1: off): at once, or, when the patch running can't be undone at once, after
+     * asking ([CodePanel.question]).
+     */
+    fun choosePatch(
+        index: Int,
+        choice: Int,
+    ) {
+        val row = patchRow(index) ?: return
+        if (row.saved == choice) return
+        val id = generation
+        scope.launch {
+            val waits = withContext(game) { api.patchNeedsReset(index, choice) }
+            if (id != generation) return@launch
+            val panel = state ?: return@launch
+            if (waits) {
+                set(panel.copy(question = PatchQuestion(index, choice, row.title), error = null, applied = null))
+            } else {
+                setPatch(index, choice, resetNow = false)
+            }
+        }
+    }
+
+    /** The answer to the panel's question: reset now ([resetNow] true), at the next start (false), or neither (null). */
+    fun answer(resetNow: Boolean?) {
+        val panel = state ?: return
+        val question = panel.question ?: return
+        set(panel.copy(question = null))
+        if (resetNow != null) setPatch(question.index, question.choice, resetNow)
+    }
+
+    // Shows patch [index] saved as [choice] at once, then has the core change it; put back, saying why, if it refuses.
+    private fun setPatch(
+        index: Int,
+        choice: Int,
+        resetNow: Boolean,
+    ) {
+        val row = patchRow(index) ?: return
+        changePatch(index, choice)
+        val id = generation
+        scope.launch {
+            val error = withContext(game) { api.setPatch(index, choice, resetNow) }
+            if (id != generation) return@launch
+            if (error != null) {
+                changePatch(index, row.saved)
+                set(state?.copy(error = "Couldn't switch ${row.title}: $error", applied = null))
+            } else {
+                read()
+            }
+        }
+    }
+
+    /** Puts [value] into patch [index]'s [choice] ([patch]), or cheat [index]; says why not if it can't. */
+    fun setValue(
+        patch: Boolean,
+        index: Int,
+        choice: Int,
+        value: Int,
+    ) {
+        val id = generation
+        scope.launch {
+            val error = withContext(game) { api.setCodeValue(patch, index, choice, value) }
+            if (id != generation) return@launch
+            if (error != null) {
+                set(state?.copy(error = "Couldn't set the value: $error", applied = null))
+            } else {
+                read()
+            }
+        }
+    }
+
+    private fun patchRow(index: Int) = state?.patches?.firstOrNull { it.index == index }
+
+    // Shows patch [index] saved as [choice], at once.
+    private fun changePatch(
+        index: Int,
+        choice: Int,
+    ) {
+        val panel = state ?: return
+        set(
+            panel.copy(
+                patches =
+                    panel.patches?.map {
+                        if (it.index ==
+                            index
+                        ) {
+                            it.copy(saved = choice)
+                        } else {
+                            it
+                        }
+                    },
+                error = null,
+            ),
+        )
     }
 
     fun close() {

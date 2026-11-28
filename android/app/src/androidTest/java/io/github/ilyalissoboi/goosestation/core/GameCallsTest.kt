@@ -238,6 +238,42 @@ class GameCallsTest {
         }
     }
 
+    // A code its own file marks a patch is listed apart from the cheats and switched through the app's file; a patch
+    // that can't be undone waits for the next start; the game's settings files are left as they were.
+    @Test
+    fun patchesAreApartAndLeaveTheSettingsAlone() {
+        val cheats = File(dataRoot, "cheats").apply { mkdirs() }
+        File(cheats, "padtest.cht").writeText(PLAYER_CODES + PATCH_CODE)
+        val appFile = File(cheats, "$PADTEST_SERIAL.patchcodes")
+        withListedPadtest {
+            val settings = settingsFiles()
+            val codes = NativeLibrary.getPatchCodes()!!
+            assertEquals(listOf("Marked", "Other"), codes.codes.map { it.name })
+            assertEquals(listOf("Wide"), codes.patches.map { it.title })
+            assertEquals(-1, codes.patches[0].saved)
+
+            assertNull(NativeLibrary.setPatch(0, 0, false))
+            assertEquals(0, NativeLibrary.getPatchCodes()!!.patches[0].saved)
+            assertTrue(appFile.readText(), "on\t\tWide\n" in appFile.readText())
+
+            // Plain writes: off waits for the next start, still running until then.
+            assertTrue(NativeLibrary.patchNeedsReset(0, -1))
+            assertNull(NativeLibrary.setPatch(0, -1, false))
+            val patch = NativeLibrary.getPatchCodes()!!.patches[0]
+            assertEquals(-1 to 0, patch.saved to patch.running)
+            assertTrue(appFile.readText(), "Wide" !in appFile.readText())
+
+            assertEquals(settings, settingsFiles())
+        }
+    }
+
+    // Every file under the data folder but the cheats folder, by path, with its bytes.
+    private fun settingsFiles(): Map<String, List<Byte>> =
+        dataRoot
+            .walkTopDown()
+            .filter { it.isFile && !it.path.contains("/cheats/") }
+            .associate { it.path to it.readBytes().toList() }
+
     // A switch the app's file can't keep is undone, so the code is as the panel shows it.
     @Test
     fun aSwitchThatCantBeKeptIsUndone() {
@@ -1636,6 +1672,11 @@ class GameCallsTest {
             """.trimIndent() + "\n"
         const val SERIAL = "SLUS-00000"
         const val PLAYER_CODES = "[*Marked]\n80010000 0001\n[Other]\n80010002 0002\n"
+
+        // A widescreen patch with an overclock, as an imported file is kept: plain writes, so it can't be undone while
+        // the game runs.
+        const val PATCH_CODE =
+            "#patch\n#override=OverrideAspectRatio=16:9\n#override=OverrideCPUOverclock=150\n[Wide]\n80010004 0003\n"
         const val SDCARD_TESTS = "/sdcard/GooseTest"
         const val PADTEST_SERIAL = "HASH-9FDA0E1A56D8DF5B"
 

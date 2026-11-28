@@ -106,6 +106,8 @@ jclass s_patch_code_class = nullptr;
 jmethodID s_patch_code_constructor = nullptr;
 jclass s_patch_codes_class = nullptr;
 jmethodID s_patch_codes_constructor = nullptr;
+jclass s_game_patch_class = nullptr;
+jmethodID s_game_patch_constructor = nullptr;
 jclass s_bios_image_class = nullptr;
 jmethodID s_bios_image_constructor = nullptr;
 jclass s_pad_binding_class = nullptr;
@@ -746,9 +748,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*)
     ClassLookup{"io/github/ilyalissoboi/goosestation/core/GameDisc", &s_game_disc_class,
                 "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V", &s_game_disc_constructor},
     ClassLookup{"io/github/ilyalissoboi/goosestation/core/PatchCode", &s_patch_code_class,
-                "(ILjava/lang/String;Ljava/lang/String;ZZ)V", &s_patch_code_constructor},
+                "(ILjava/lang/String;Ljava/lang/String;ZZ[Ljava/lang/String;[IIII)V", &s_patch_code_constructor},
+    ClassLookup{"io/github/ilyalissoboi/goosestation/core/GamePatch", &s_game_patch_class,
+                "(ILjava/lang/String;Ljava/lang/String;[Ljava/lang/String;II[Ljava/lang/String;[IIIILjava/lang/String;Z)V",
+                &s_game_patch_constructor},
     ClassLookup{"io/github/ilyalissoboi/goosestation/core/PatchCodes", &s_patch_codes_class,
-                "(Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/PatchCode;)V",
+                "(Ljava/lang/String;[Lio/github/ilyalissoboi/goosestation/core/PatchCode;"
+                "[Lio/github/ilyalissoboi/goosestation/core/GamePatch;)V",
                 &s_patch_codes_constructor},
     ClassLookup{"io/github/ilyalissoboi/goosestation/core/AchievementsAccount", &s_achievements_account_class,
                 "(ILjava/lang/String;Ljava/lang/String;II)V", &s_achievements_account_constructor},

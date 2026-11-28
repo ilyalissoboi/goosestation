@@ -19,6 +19,7 @@ add_executable(common-tests
   ../util/android_patch_codes.cpp
   bitutils_tests.cpp
   cdrom_timing_tests.cpp
+  cheats_format_tests.cpp
   content_uri_tests.cpp
   core_host_stubs.cpp
   fallback_fonts_tests.cpp
@@ -39,6 +40,7 @@ add_executable(common-tests
   memory_card_image_tests.cpp
   ../core/memory_card_image.cpp
   path_tests.cpp
+  patches_tests.cpp
   postprocessing_browser_tests.cpp
   postprocessing_favourites_tests.cpp
   postprocessing_config_tests.cpp

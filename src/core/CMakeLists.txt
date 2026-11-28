@@ -116,6 +116,8 @@ add_library(core
   negcon_rumble.h
   pad.cpp
   pad.h
+  patches.cpp
+  patches.h
   performance_counters_math.h
   pcdrv.cpp
   pcdrv.h

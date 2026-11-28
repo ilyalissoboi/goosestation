@@ -102,15 +102,30 @@ data class AchievementsPanelState(
     val request: Int = 0,
 )
 
+/** The Patches & cheats panel's tabs: the game's patches, then its cheats. */
+enum class CodeTab { Patches, Cheats }
+
+/** A question the panel asks before switching patch [index] to [choice] (-1: off): its [title] says which. */
+data class PatchQuestion(
+    val index: Int,
+    val choice: Int,
+    val title: String,
+)
+
 /**
- * The Patch codes panel: the game's codes in their [groups] (null while they're read), the player's file to add codes
- * in ([fileName]), the manual code last applied ([applied], as said), and why the last change didn't work ([error]).
+ * The Patches & cheats panel: the [tab] shown, the game's [patches] and its cheats in their [groups] (each null while
+ * they're read), the player's file to add codes in ([fileName]), the question asked before a patch that can't be
+ * undone at once ([question]), the manual code last applied ([applied], as said), and why the last change didn't work
+ * ([error]).
  */
 data class CodePanel(
     val groups: List<PatchCodeGroup>? = null,
     val fileName: String = "",
     val applied: String? = null,
     val error: String? = null,
+    val tab: CodeTab = CodeTab.Patches,
+    val patches: List<PatchRow>? = null,
+    val question: PatchQuestion? = null,
 )
 
 /**
@@ -141,7 +156,7 @@ sealed interface ShownPanel {
  * whether it asks before a reset or (while the game is writing a memory card, [cardBusy]) an exit, whether Exit game
  * asks before it replaces the resume state saved at [replacingResume] (Unix seconds), and whether it's saving the
  * resume state ([exiting]). A multi-disc game ([discCount] over 1) has its [disc] in the drive. In [hardcore] mode,
- * Load state, Patch codes and Fast forward are off.
+ * Load state, Patches & cheats and Fast forward are off.
  */
 data class GameMenuState(
     val booted: Boolean = false,
@@ -174,7 +189,7 @@ data class GameMenuState(
     /** The Change disc panel, while it shows. */
     val discs: DiscChoice? get() = (panel as? ShownPanel.Discs)?.choice
 
-    /** The Patch codes panel, while it shows. */
+    /** The Patches & cheats panel, while it shows. */
     val codes: CodePanel? get() = (panel as? ShownPanel.Codes)?.codes
 
     /** The Achievements panel, while it shows. */
@@ -210,6 +225,26 @@ interface GameMenuActions {
 
     /** Applies manual code [index] once; the menu stays open. */
     fun applyCode(index: Int)
+
+    /** Shows the panel's [tab]. */
+    fun setCodeTab(tab: CodeTab) {}
+
+    /** Switches patch [index] to [choice] (-1: off), asking first when it can't be undone at once. */
+    fun choosePatch(
+        index: Int,
+        choice: Int,
+    ) {}
+
+    /** The answer to the panel's question: reset now, at the next start (false), or neither (null). */
+    fun answerPatchQuestion(resetNow: Boolean?) {}
+
+    /** Puts [value] into patch [index]'s [choice] ([patch]), or cheat [index]. */
+    fun setCodeValue(
+        patch: Boolean,
+        index: Int,
+        choice: Int,
+        value: Int,
+    ) {}
 
     /** Loads one of [SlotPanel.others]: [serial]'s [slot]. */
     fun pickOther(
@@ -346,7 +381,7 @@ class InGameMenu(
             show<ShownPanel.Slots>(lists?.let { ShownPanel.Slots(state.slots?.copy(lists = it) ?: SlotPanel(it)) })
         }
 
-    /** The Patch codes panel: open while the menu shows it, which shows each change. */
+    /** The Patches & cheats panel: open while the menu shows it, which shows each change. */
     private val codes = PatchCodesModel(scope, game, api) { show<ShownPanel.Codes>(it?.let(ShownPanel::Codes)) }
 
     /** The Achievements panel: open while the menu shows it, which shows each change. */
@@ -743,6 +778,22 @@ class InGameMenu(
     ) = codes.setCode(index, on)
 
     override fun applyCode(index: Int) = codes.applyCode(index)
+
+    override fun setCodeTab(tab: CodeTab) = codes.setTab(tab)
+
+    override fun choosePatch(
+        index: Int,
+        choice: Int,
+    ) = codes.choosePatch(index, choice)
+
+    override fun answerPatchQuestion(resetNow: Boolean?) = codes.answer(resetNow)
+
+    override fun setCodeValue(
+        patch: Boolean,
+        index: Int,
+        choice: Int,
+        value: Int,
+    ) = codes.setValue(patch, index, choice, value)
 
     override fun confirmReplace() {
         val panel = state.slots ?: return

@@ -83,6 +83,7 @@
     <ClCompile Include="negcon.cpp" />
     <ClCompile Include="negcon_rumble.cpp" />
     <ClCompile Include="pad.cpp" />
+    <ClCompile Include="patches.cpp" />
     <ClCompile Include="controller.cpp" />
     <ClCompile Include="pcdrv.cpp" />
     <ClCompile Include="pch.cpp">
@@ -180,6 +181,7 @@
     <ClInclude Include="negcon.h" />
     <ClInclude Include="negcon_rumble.h" />
     <ClInclude Include="pad.h" />
+    <ClInclude Include="patches.h" />
     <ClInclude Include="performance_counters_math.h" />
     <ClInclude Include="controller.h" />
     <ClInclude Include="pcdrv.h" />

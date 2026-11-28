@@ -13,20 +13,22 @@
 /// headers and knows nothing of the core's CheatList, so it builds and is tested on every platform.
 namespace AndroidPatchCodes {
 
-/// A code the player switched on or off, by its group (empty for none) and name.
+/// A code the player switched on or off, by its group (empty for none) and name, and the value chosen for it if it has
+/// values (an option's name or a number; empty for none).
 struct Switch
 {
   std::string group;
   std::string name;
   bool on;
+  std::string value = {};
 };
 
-/// The switches in the app's file: one per `on|off<TAB>group<TAB>name` line. Blank lines, `#` comments and anything
-/// else are skipped.
+/// The switches in the app's file: one per `on|off<TAB>group<TAB>name[<TAB>value]` line. Blank lines, `#` comments and
+/// anything else are skipped.
 std::vector<Switch> Parse(std::string_view text);
 
-/// The app's file for switches: a header comment, then one line each. A switch whose group or name holds a tab or a
-/// line break can't be written, and is left out.
+/// The app's file for switches: a header comment, then one line each, with the value's field only when there's one. A
+/// switch whose group or name holds a tab or a line break can't be written, and is left out; a value that does is.
 std::string Format(std::span<const Switch> switches);
 
 /// name with each character an SD card's file system or Windows refuses (`< > : " / \ | ? *`, control characters)
@@ -67,17 +69,19 @@ struct Entry
 std::vector<Entry> Combine(std::span<const Listed> player, std::span<const Listed> database,
                            std::span<const Switch> switches);
 
-/// A code of the game's list as it stands: on by default (marked so in its file) or not, and on now or not.
+/// A code of the game's list as it stands: on by default (marked so in its file) or not, on now or not, and its value
+/// where one was chosen other than its default (empty for none).
 struct State
 {
   std::string group;
   std::string name;
   bool default_on;
   bool on;
+  std::string value = {};
 };
 
-/// The app's switches after a change: one for each of codes whose on differs from its default, after old's for codes
-/// not in codes (a disc or file that isn't here today), so none is forgotten.
+/// The app's switches after a change: one for each of codes whose on differs from its default or that has a value,
+/// after old's for codes not in codes (a disc or file that isn't here today), so none is forgotten.
 std::vector<Switch> Remember(std::span<const Switch> old, std::span<const State> codes);
 
 } // namespace AndroidPatchCodes

@@ -67,6 +67,7 @@ import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheckNowState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.CodeTab
 import io.github.ilyalissoboi.goosestation.app.ControllersState
 import io.github.ilyalissoboi.goosestation.app.ControllersView
 import io.github.ilyalissoboi.goosestation.app.CoverJob
@@ -618,7 +619,10 @@ class OrientationLayoutTest : ControllerKeys {
                     )
                 }
             val groups = listOf(PatchCodeGroup("Player", rows.take(4)), PatchCodeGroup("Other", rows.drop(4)))
-            menu.value = menu.value.copy(panel = ShownPanel.Codes(CodePanel(groups, "${LONG_GAME.title}.cht")))
+            menu.value =
+                menu.value.copy(
+                    panel = ShownPanel.Codes(CodePanel(groups, "${LONG_GAME.title}.cht", tab = CodeTab.Cheats)),
+                )
             rule.waitForIdle()
             assertTextsLaidOut(inView = true)
             pressUntilFocusedInView(Key.DirectionDown, "slot 7 of 8")

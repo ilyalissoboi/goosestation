@@ -29,6 +29,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -50,12 +51,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.ilyalissoboi.goosestation.app.AchievementsPanelState
 import io.github.ilyalissoboi.goosestation.app.CheevoTab
 import io.github.ilyalissoboi.goosestation.app.CodePanel
+import io.github.ilyalissoboi.goosestation.app.CodeTab
 import io.github.ilyalissoboi.goosestation.app.DiscChoice
 import io.github.ilyalissoboi.goosestation.app.GameMenuActions
 import io.github.ilyalissoboi.goosestation.app.GameMenuState
 import io.github.ilyalissoboi.goosestation.app.HeldGame
 import io.github.ilyalissoboi.goosestation.app.PatchCodeGroup
 import io.github.ilyalissoboi.goosestation.app.PatchCodeRow
+import io.github.ilyalissoboi.goosestation.app.PatchQuestion
+import io.github.ilyalissoboi.goosestation.app.PatchRow
 import io.github.ilyalissoboi.goosestation.app.SaveSlots
 import io.github.ilyalissoboi.goosestation.app.ShownPanel
 import io.github.ilyalissoboi.goosestation.app.SlotEntry
@@ -162,6 +166,23 @@ class GameMenuTest : ControllerKeys {
 
             override fun applyCode(index: Int) {
                 calls += "applyCode $index"
+            }
+
+            override fun setCodeTab(tab: CodeTab) {
+                calls += "setCodeTab $tab"
+                state = state.copy(panel = state.codes?.copy(tab = tab)?.let(ShownPanel::Codes))
+            }
+
+            override fun choosePatch(
+                index: Int,
+                choice: Int,
+            ) {
+                calls += "choosePatch $index $choice"
+            }
+
+            override fun answerPatchQuestion(resetNow: Boolean?) {
+                calls += "answerPatchQuestion $resetNow"
+                state = state.copy(panel = state.codes?.copy(question = null)?.let(ShownPanel::Codes))
             }
 
             override fun confirmReplace() {
@@ -360,7 +381,7 @@ class GameMenuTest : ControllerKeys {
                 "Fast forward",
                 "Analog mode",
                 "Screenshot",
-                "Patch codes",
+                "Patches & cheats",
                 "Settings",
                 "Reset console",
                 "Exit game",
@@ -489,7 +510,7 @@ class GameMenuTest : ControllerKeys {
         state = GameMenuState(booted = true, analogMode = false, hardcore = true)
         show()
 
-        for (row in listOf("Load state", "Undo load", "Fast forward", "Patch codes")) {
+        for (row in listOf("Load state", "Undo load", "Fast forward", "Patches & cheats")) {
             rule.onNode(hasText(row) and hasText("Off in hardcore mode")).assertIsNotEnabled()
         }
         // The D-pad passes over them: from Save state, Down reaches Analog mode.
@@ -1329,7 +1350,8 @@ class GameMenuTest : ControllerKeys {
         rule.onNodeWithText("Disc 2 isn't in your library any more.").assertExists()
     }
 
-    private fun codes(vararg groups: PatchCodeGroup) = CodePanel(groups.toList(), "Crash Bandicoot.cht")
+    private fun codes(vararg groups: PatchCodeGroup) =
+        CodePanel(groups.toList(), "Crash Bandicoot.cht", tab = CodeTab.Cheats)
 
     @Test
     fun patchCodesSitsAfterScreenshot() {
@@ -1340,7 +1362,7 @@ class GameMenuTest : ControllerKeys {
         press(Key.DirectionDown)
         press(Key.DirectionDown)
         press(Key.DirectionDown)
-        rule.onNode(isFocused() and hasText("Patch codes", substring = true)).assertExists()
+        rule.onNode(isFocused() and hasText("Patches & cheats", substring = true)).assertExists()
         press(Key.Enter)
         assertEquals(listOf("openCodes"), calls)
     }
@@ -1406,7 +1428,7 @@ class GameMenuTest : ControllerKeys {
         state = GameMenuState(booted = true, panel = ShownPanel.Codes(codes()))
         show()
 
-        rule.onNodeWithText("No patch codes for this game.").assertExists()
+        rule.onNodeWithText("No cheats for this game.").assertExists()
         rule.onNodeWithText("Add Crash Bandicoot.cht to the cheats folder in your data folder.").assertExists()
     }
 
@@ -1420,6 +1442,116 @@ class GameMenuTest : ControllerKeys {
             )
         show()
         rule.onNodeWithText("Applied: Max Money Now").assertExists()
+    }
+
+    private fun patches(vararg rows: PatchRow) = CodePanel(fileName = "Crash Bandicoot.cht", patches = rows.toList())
+
+    @Test
+    fun aPatchIsASwitchRowWithItsNote() {
+        state =
+            GameMenuState(
+                booted = true,
+                panel =
+                    ShownPanel.Codes(
+                        patches(
+                            PatchRow(
+                                3,
+                                null,
+                                "60 FPS",
+                                listOf("60 FPS"),
+                                0,
+                                0,
+                                null,
+                                "Runs with a 160% CPU overclock.",
+                                true,
+                            ),
+                        ),
+                    ),
+            )
+        show()
+
+        rule.onNode(isFocused() and hasText("60 FPS", substring = true)).assertIsOn()
+        rule.onNodeWithText("Runs with a 160% CPU overclock.").assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("choosePatch 3 -1"), calls)
+    }
+
+    @Test
+    fun aPatchWaitingForTheNextStartSaysSo() {
+        state =
+            GameMenuState(
+                booted = true,
+                panel =
+                    ShownPanel.Codes(
+                        patches(
+                            PatchRow(0, null, "Widescreen 16-9", listOf("Widescreen 16-9"), -1, 0, null, null, true),
+                        ),
+                    ),
+            )
+        show()
+
+        rule.onNodeWithText("Off at the next start").assertExists()
+    }
+
+    @Test
+    fun aChoicePatchCyclesItsChoices() {
+        state =
+            GameMenuState(
+                booted = true,
+                panel =
+                    ShownPanel.Codes(
+                        patches(
+                            PatchRow(
+                                0,
+                                null,
+                                "Select Widescreen Type",
+                                listOf("Widescreen Hor+", "Widescreen Vert-"),
+                                -1,
+                                -1,
+                                null,
+                                null,
+                                true,
+                            ),
+                        ),
+                    ),
+            )
+        show()
+
+        rule.onNode(isFocused() and hasText("Select Widescreen Type", substring = true)).assertExists()
+        press(Key.DirectionRight)
+        assertEquals(listOf("choosePatch 0 0"), calls)
+    }
+
+    @Test
+    fun aPatchThatCantBeUndoneAsks() {
+        state =
+            GameMenuState(
+                booted = true,
+                panel =
+                    ShownPanel.Codes(
+                        patches(PatchRow(0, null, "Widescreen 16-9", listOf("Widescreen 16-9"), 0, 0, null, null, true))
+                            .copy(question = PatchQuestion(0, -1, "Widescreen 16-9")),
+                    ),
+            )
+        show()
+
+        rule.onNodeWithText("Reset now").assertExists()
+        rule.onNodeWithText("At next start").assertExists()
+        // The focus is on the safe answer.
+        rule.onNode(isFocused() and hasText("Cancel")).assertExists()
+        press(Key.Enter)
+        assertEquals(listOf("answerPatchQuestion null"), calls)
+    }
+
+    @Test
+    fun noPatchesSaysSoAndR1ShowsTheCheats() {
+        state = GameMenuState(booted = true, panel = ShownPanel.Codes(patches()))
+        show()
+
+        rule.onNodeWithText("No patches for this game.").assertExists()
+        press(Key.ButtonR1)
+        assertEquals(listOf("setCodeTab Cheats"), calls)
+        rule.onNodeWithText("No cheats for this game.").assertExists()
     }
 
     @Test
@@ -1437,7 +1569,7 @@ class GameMenuTest : ControllerKeys {
         press(Key.ButtonB)
 
         assertEquals(listOf("closeCodes"), calls)
-        rule.onNodeWithText("Patch codes").assertIsFocused()
+        rule.onNodeWithText("Patches & cheats").assertIsFocused()
     }
 
     // The Thor's screen: the menu narrows beside a side panel and widens again as it closes, and the row it came from,
@@ -1448,16 +1580,16 @@ class GameMenuTest : ControllerKeys {
         state = GameMenuState(booted = true, analogMode = false, disc = 1, discCount = 2)
         show(width = 640, height = 360)
         for (step in 0 until 12) {
-            if (rule.onNodeWithText("Patch codes").isFocusedNow()) break
+            if (rule.onNodeWithText("Patches & cheats").isFocusedNow()) break
             press(Key.DirectionDown)
         }
-        rule.onNodeWithText("Patch codes").assertIsDisplayed()
+        rule.onNodeWithText("Patches & cheats").assertIsDisplayed()
 
         state = state.copy(panel = ShownPanel.Codes(codes(PatchCodeGroup(null, rows))))
         rule.waitForIdle()
         press(Key.ButtonB)
 
-        rule.onNodeWithText("Patch codes").assertIsFocused().assertIsDisplayed()
+        rule.onNodeWithText("Patches & cheats").assertIsFocused().assertIsDisplayed()
     }
 
     // As above, closing the disc panel by picking the disc already in.

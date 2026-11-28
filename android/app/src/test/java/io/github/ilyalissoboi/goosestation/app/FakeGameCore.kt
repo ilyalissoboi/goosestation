@@ -245,6 +245,26 @@ class FakeGameCore(
         resetNow: Boolean,
     ): String? {
         calls += "setPatch $index $choice $resetNow"
+        if (codeError == null) {
+            // Saved at once; running too, unless it waits for the next start.
+            val waits = !resetNow && (index to choice) in waiting
+            patches =
+                patches.map {
+                    if (it.index != index) {
+                        it
+                    } else {
+                        GamePatch(
+                            it.index,
+                            it.group,
+                            it.title,
+                            it.choices,
+                            choice,
+                            if (waits) it.running else choice,
+                            note = it.note,
+                        )
+                    }
+                }
+        }
         return codeError
     }
 

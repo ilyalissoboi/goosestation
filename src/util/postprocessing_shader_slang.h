@@ -86,6 +86,7 @@ private:
   std::vector<std::string> m_params_to_push;
   std::optional<bool> m_whole_screen_key;
   bool m_drew_whole_screen = false;
+  std::optional<bool> m_logged_whole_screen;
 
   GPUTexture::Format m_output_format = GPUTexture::Format::Unknown;
   std::unique_ptr<GPUPipeline> m_native_copy_pipeline;

@@ -136,10 +136,11 @@ inline bool IsBezelName(std::string_view name)
   return Detail::HasFolders(name, {"bezel"});
 }
 
-/// Whether a display aspect ratio is 4:3, within 2% (Auto with a small crop still counts).
+/// Whether a display aspect ratio is 4:3, within 5%: Auto's with the default overscan crop is often about 1.31 and moves
+/// from frame to frame, while 16:10, 16:9 and a picture turned a quarter (3:4) stay well out.
 inline bool IsFourThree(float aspect)
 {
-  return aspect > 0.0f && std::abs(aspect * 3.0f / 4.0f - 1.0f) <= 0.02f;
+  return aspect > 0.0f && std::abs(aspect * 3.0f / 4.0f - 1.0f) <= 0.05f;
 }
 
 /// Whether a stage wants the whole screen: its switch when set, else whether it's a bezel by its folder.

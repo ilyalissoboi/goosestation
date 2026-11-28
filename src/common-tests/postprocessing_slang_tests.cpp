@@ -513,13 +513,16 @@ TEST(SlangPlacement, BezelNamesAreByFolder)
   EXPECT_FALSE(IsBezelName("crt/bezel.slangp"));
 }
 
-TEST(SlangPlacement, FourThreeWithinTwoPercent)
+TEST(SlangPlacement, FourThreeWithinFivePercent)
 {
+  // Auto's aspect with the default overscan crop: padtest moves between 1.306 and 1.312 from frame to frame.
   EXPECT_TRUE(IsFourThree(4.0f / 3.0f));
-  EXPECT_TRUE(IsFourThree(1.31f));
-  EXPECT_TRUE(IsFourThree(1.36f));
-  EXPECT_FALSE(IsFourThree(1.30f));
-  EXPECT_FALSE(IsFourThree(1.37f));
+  EXPECT_TRUE(IsFourThree(1.306f));
+  EXPECT_TRUE(IsFourThree(1.27f));
+  EXPECT_TRUE(IsFourThree(1.39f));
+  EXPECT_FALSE(IsFourThree(1.26f));
+  EXPECT_FALSE(IsFourThree(1.41f));
+  EXPECT_FALSE(IsFourThree(16.0f / 10.0f));
   EXPECT_FALSE(IsFourThree(16.0f / 9.0f));
   EXPECT_FALSE(IsFourThree(0.75f));
   EXPECT_FALSE(IsFourThree(0.0f));

@@ -148,12 +148,64 @@ NATIVE_LIBRARY_FUNCTION(jstring, changeDisc)(JNIEnv* env, jobject, jint number)
   return ToResult(env, AndroidHost::ChangeDisc(static_cast<u32>(std::max(number, 0))));
 }
 
+// An int[] of values, or null (with no exception pending) if it can't be made.
+static jintArray ToJIntArray(JNIEnv* env, const std::vector<u32>& values)
+{
+  jintArray array = env->NewIntArray(static_cast<jsize>(values.size()));
+  if (!array)
+  {
+    ClearException(env);
+    return nullptr;
+  }
+  std::vector<jint> ints(values.begin(), values.end());
+  env->SetIntArrayRegion(array, 0, static_cast<jsize>(ints.size()), ints.data());
+  return array;
+}
+
+static jobject ToPatchCode(JNIEnv* env, size_t index, const AndroidHost::PatchCode& code)
+{
+  const JNIUtil::LocalRef<jstring> group(env, ToJString(env, code.group));
+  const JNIUtil::LocalRef<jstring> name(env, ToJString(env, code.name));
+  const JNIUtil::LocalRef<jobjectArray> option_names(env, ToJStringArray(env, code.values.option_names));
+  const JNIUtil::LocalRef<jintArray> option_values(env, ToJIntArray(env, code.values.option_values));
+  if (!group || !name || !option_names || !option_values)
+    return nullptr;
+
+  jobject made = env->NewObject(s_patch_code_class, s_patch_code_constructor, static_cast<jint>(index), group.get(),
+                                name.get(), static_cast<jboolean>(code.manual), static_cast<jboolean>(code.on),
+                                option_names.get(), option_values.get(), static_cast<jint>(code.values.range_min),
+                                static_cast<jint>(code.values.range_max), static_cast<jint>(code.values.value));
+  return ClearException(env) ? nullptr : made;
+}
+
+static jobject ToGamePatch(JNIEnv* env, size_t index, const AndroidHost::GamePatch& patch)
+{
+  const JNIUtil::LocalRef<jstring> group(env, ToJString(env, patch.group));
+  const JNIUtil::LocalRef<jstring> title(env, ToJString(env, patch.title));
+  const JNIUtil::LocalRef<jobjectArray> choices(env, ToJStringArray(env, patch.choices));
+  const JNIUtil::LocalRef<jobjectArray> option_names(env, ToJStringArray(env, patch.values.option_names));
+  const JNIUtil::LocalRef<jintArray> option_values(env, ToJIntArray(env, patch.values.option_values));
+  const JNIUtil::LocalRef<jstring> note(env, ToJString(env, patch.note));
+  if (!group || !title || !choices || !option_names || !option_values || !note)
+    return nullptr;
+
+  jobject made = env->NewObject(s_game_patch_class, s_game_patch_constructor, static_cast<jint>(index), group.get(),
+                                title.get(), choices.get(), static_cast<jint>(patch.saved),
+                                static_cast<jint>(patch.running), option_names.get(), option_values.get(),
+                                static_cast<jint>(patch.values.range_min), static_cast<jint>(patch.values.range_max),
+                                static_cast<jint>(patch.values.value), note.get(),
+                                static_cast<jboolean>(patch.can_enable));
+  return ClearException(env) ? nullptr : made;
+}
+
 NATIVE_LIBRARY_FUNCTION(jobject, getPatchCodes)(JNIEnv* env, jobject)
 {
   const AndroidHost::PatchCodes codes = AndroidHost::GetPatchCodes();
-  const JNIUtil::LocalRef<jobjectArray> array(
+  const JNIUtil::LocalRef<jobjectArray> cheats(
     env, env->NewObjectArray(static_cast<jsize>(codes.codes.size()), s_patch_code_class, nullptr));
-  if (!array)
+  const JNIUtil::LocalRef<jobjectArray> patches(
+    env, env->NewObjectArray(static_cast<jsize>(codes.patches.size()), s_game_patch_class, nullptr));
+  if (!cheats || !patches)
   {
     ClearException(env);
     return nullptr;
@@ -161,34 +213,43 @@ NATIVE_LIBRARY_FUNCTION(jobject, getPatchCodes)(JNIEnv* env, jobject)
 
   for (size_t i = 0; i < codes.codes.size(); i++)
   {
-    const AndroidHost::PatchCode& code = codes.codes[i];
-    jobject made = nullptr;
-    {
-      const JNIUtil::LocalRef<jstring> group(env, ToJString(env, code.group));
-      const JNIUtil::LocalRef<jstring> name(env, ToJString(env, code.name));
-      if (group && name)
-      {
-        made = env->NewObject(s_patch_code_class, s_patch_code_constructor, static_cast<jint>(i), group.get(),
-                              name.get(), static_cast<jboolean>(code.manual), static_cast<jboolean>(code.on));
-        if (ClearException(env))
-          made = nullptr;
-      }
-    }
-
-    const JNIUtil::LocalRef<jobject> entry(env, made);
+    const JNIUtil::LocalRef<jobject> entry(env, ToPatchCode(env, i, codes.codes[i]));
     if (!entry)
       return nullptr;
-
-    env->SetObjectArrayElement(array.get(), static_cast<jsize>(i), entry.get());
+    env->SetObjectArrayElement(cheats.get(), static_cast<jsize>(i), entry.get());
+  }
+  for (size_t i = 0; i < codes.patches.size(); i++)
+  {
+    const JNIUtil::LocalRef<jobject> entry(env, ToGamePatch(env, i, codes.patches[i]));
+    if (!entry)
+      return nullptr;
+    env->SetObjectArrayElement(patches.get(), static_cast<jsize>(i), entry.get());
   }
 
   const JNIUtil::LocalRef<jstring> file_name(env, ToJString(env, codes.file_name));
   jobject result = file_name ? env->NewObject(s_patch_codes_class, s_patch_codes_constructor, file_name.get(),
-                                              array.get()) :
+                                              cheats.get(), patches.get()) :
                                nullptr;
   if (ClearException(env))
     result = nullptr;
   return result;
+}
+
+NATIVE_LIBRARY_FUNCTION(jboolean, patchNeedsReset)(JNIEnv*, jobject, jint index, jint choice)
+{
+  return static_cast<jboolean>(AndroidHost::PatchNeedsReset(static_cast<u32>(std::max(index, 0)), choice));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, setPatch)(JNIEnv* env, jobject, jint index, jint choice, jboolean reset_now)
+{
+  return ToResult(env, AndroidHost::SetPatch(static_cast<u32>(std::max(index, 0)), choice, reset_now == JNI_TRUE));
+}
+
+NATIVE_LIBRARY_FUNCTION(jstring, setCodeValue)(JNIEnv* env, jobject, jboolean patch, jint index, jint choice,
+                                               jint value)
+{
+  return ToResult(env, AndroidHost::SetCodeValue(patch == JNI_TRUE, static_cast<u32>(std::max(index, 0)), choice,
+                                                 static_cast<u32>(std::max(value, 0))));
 }
 
 NATIVE_LIBRARY_FUNCTION(jstring, setPatchCode)(JNIEnv* env, jobject, jint index, jboolean on)

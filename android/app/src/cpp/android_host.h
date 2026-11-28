@@ -298,28 +298,65 @@ u32 GetCurrentDisc();
 /// it's in (or was already), else why not.
 std::optional<std::string> ChangeDisc(u32 number);
 
-/// One of the running game's patch codes: its group (empty for none), name, whether it's applied by hand, and whether
-/// it's on.
+/// A code's values, if it has any: its options' names and values, or a range (max below min for none), and the value
+/// now.
+struct CodeValues
+{
+  std::vector<std::string> option_names;
+  std::vector<u32> option_values;
+  s32 range_min = 0;
+  s32 range_max = -1;
+  u32 value = 0;
+};
+
+/// One of the running game's cheats ("patch codes" in the app's names): its group (empty for none), name, whether it's
+/// applied by hand, whether it's on, and its values.
 struct PatchCode
 {
   std::string group;
   std::string name;
   bool manual;
   bool on;
+  CodeValues values;
 };
 
-/// The running game's patch codes, and the player's file to add codes in (`<game title>.cht`). None without a game.
+/// One of the running game's patches: its group (empty for none), title, choices' names, the choice its switches say
+/// and the one running now (-1: off), the values of the choice shown, a note, and whether it can be switched on.
+struct GamePatch
+{
+  std::string group;
+  std::string title;
+  std::vector<std::string> choices;
+  s32 saved;
+  s32 running;
+  CodeValues values;
+  std::string note;
+  bool can_enable;
+};
+
+/// The running game's cheats and patches, and the player's file to add codes in (`<game title>.cht`). None without a
+/// game.
 struct PatchCodes
 {
   std::string file_name;
   std::vector<PatchCode> codes;
+  std::vector<GamePatch> patches;
 };
 PatchCodes GetPatchCodes();
 
-/// Switches the running game's code index on or off, at once and for next time; or applies a manual code once.
+/// Switches the running game's cheat index on or off, at once and for next time; or applies a manual cheat once.
 /// nullopt when it's done, else why not.
 std::optional<std::string> SetPatchCode(u32 index, bool on);
 std::optional<std::string> ApplyPatchCode(u32 index);
+
+/// Whether changing patch index to choice (-1: off) waits for the next start.
+bool PatchNeedsReset(u32 index, s32 choice);
+
+/// Changes the running game's patch index to choice, at once or at the next start, or now with a reset.
+std::optional<std::string> SetPatch(u32 index, s32 choice, bool reset_now);
+
+/// Puts value into a code's `?` nibbles: patch index's choice, or (patch false) cheat index.
+std::optional<std::string> SetCodeValue(bool patch, u32 index, s32 choice, u32 value);
 
 /// Moves from_serial's state in from_slot to to_serial's to_slot, only onto nothing. False if it didn't move.
 bool MoveSaveState(std::string from_serial, s32 from_slot, std::string to_serial, s32 to_slot);

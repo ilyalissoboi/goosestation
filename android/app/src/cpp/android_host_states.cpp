@@ -409,6 +409,23 @@ std::optional<std::string> AndroidHost::ChangeDisc(u32 number)
   return result;
 }
 
+static AndroidHost::CodeValues ToCodeValues(const GameCodes::Values& values)
+{
+  AndroidHost::CodeValues result;
+  for (const auto& [name, value] : values.options)
+  {
+    result.option_names.push_back(name);
+    result.option_values.push_back(value);
+  }
+  if (values.range.has_value())
+  {
+    result.range_min = static_cast<s32>(std::min<u32>(values.range->first, INT32_MAX));
+    result.range_max = static_cast<s32>(std::min<u32>(values.range->second, INT32_MAX));
+  }
+  result.value = values.value;
+  return result;
+}
+
 AndroidHost::PatchCodes AndroidHost::GetPatchCodes()
 {
   PatchCodes result;
@@ -422,7 +439,52 @@ AndroidHost::PatchCodes AndroidHost::GetPatchCodes()
 
       result.file_name = GameCodes::AddFileName();
       for (const GameCodes::Code& code : GameCodes::List())
-        result.codes.push_back({code.group, code.name, code.manual, code.on});
+        result.codes.push_back({code.group, code.name, code.manual, code.on, ToCodeValues(code.values)});
+      for (const GameCodes::Patch& patch : GameCodes::ListPatches())
+      {
+        result.patches.push_back({patch.group, patch.title, patch.choices, patch.saved, patch.running,
+                                  ToCodeValues(patch.values), patch.note, patch.can_enable});
+      }
+    },
+    true);
+  return result;
+}
+
+bool AndroidHost::PatchNeedsReset(u32 index, s32 choice)
+{
+  if (!s_initialized)
+    return false;
+
+  bool result = false;
+  EmuThread::RunOnThread([index, choice, &result]() { result = GameCodes::PatchNeedsReset(index, choice); }, true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::SetPatch(u32 index, s32 choice, bool reset_now)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [index, choice, reset_now, &result]() {
+      result = System::IsValid() ? GameCodes::SetPatch(index, choice, reset_now) :
+                                   std::optional<std::string>(NO_GAME_RUNNING);
+    },
+    true);
+  return result;
+}
+
+std::optional<std::string> AndroidHost::SetCodeValue(bool patch, u32 index, s32 choice, u32 value)
+{
+  if (!s_initialized)
+    return std::string(NO_GAME_RUNNING);
+
+  std::optional<std::string> result;
+  EmuThread::RunOnThread(
+    [patch, index, choice, value, &result]() {
+      result = System::IsValid() ? GameCodes::SetValue(patch, index, choice, value) :
+                                   std::optional<std::string>(NO_GAME_RUNNING);
     },
     true);
   return result;

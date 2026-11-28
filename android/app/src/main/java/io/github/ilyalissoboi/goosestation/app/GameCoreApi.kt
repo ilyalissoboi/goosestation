@@ -85,6 +85,27 @@ interface GameCoreApi {
     /** Applies manual code [index] once: null when it's done, or else why not. */
     fun applyPatchCode(index: Int): String?
 
+    /** Whether changing patch [index] to [choice] (-1: off) waits for the next start. */
+    fun patchNeedsReset(
+        index: Int,
+        choice: Int,
+    ): Boolean
+
+    /** Changes patch [index] to [choice] (-1: off), or now with a reset: null when it's done, or else why not. */
+    fun setPatch(
+        index: Int,
+        choice: Int,
+        resetNow: Boolean,
+    ): String?
+
+    /** Puts [value] into patch [index]'s [choice] ([patch]), or cheat [index]: null when it's done, or why not. */
+    fun setCodeValue(
+        patch: Boolean,
+        index: Int,
+        choice: Int,
+        value: Int,
+    ): String?
+
     /** The number of the running game's disc in the drive, 0 if unknown. */
     fun getCurrentDisc(): Int
 
@@ -185,6 +206,24 @@ object NativeGameCoreApi : GameCoreApi {
     ): String? = NativeLibrary.setPatchCode(index, on)
 
     override fun applyPatchCode(index: Int): String? = NativeLibrary.applyPatchCode(index)
+
+    override fun patchNeedsReset(
+        index: Int,
+        choice: Int,
+    ): Boolean = NativeLibrary.patchNeedsReset(index, choice)
+
+    override fun setPatch(
+        index: Int,
+        choice: Int,
+        resetNow: Boolean,
+    ): String? = NativeLibrary.setPatch(index, choice, resetNow)
+
+    override fun setCodeValue(
+        patch: Boolean,
+        index: Int,
+        choice: Int,
+        value: Int,
+    ): String? = NativeLibrary.setCodeValue(patch, index, choice, value)
 
     override fun getCurrentDisc(): Int = NativeLibrary.getCurrentDisc()
 

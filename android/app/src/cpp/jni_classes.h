@@ -147,6 +147,10 @@ extern jclass s_patch_codes_class;
 
 extern jmethodID s_patch_codes_constructor;
 
+extern jclass s_game_patch_class;
+
+extern jmethodID s_game_patch_constructor;
+
 extern jclass s_bios_image_class;
 
 extern jmethodID s_bios_image_constructor;

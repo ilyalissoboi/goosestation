@@ -839,3 +839,14 @@ TEST_F(PatchesBundledMarks, LoadForGame)
   EmuFolders::GameSettings = old_settings;
   FileSystem::RecursiveDeleteDirectory(templ.c_str());
 }
+
+TEST(PatchesClassify, EachDiscBySerial)
+{
+  // A multi-disc game's discs can share a code's name; each disc's code is classified by that disc's serial.
+  const Patches::Marks marks = Patches::Marks::Parse("SLUS-00001\tWidescreen 16-9 (Disc 1)\twidescreen 16:9\n", nullptr);
+  CheatCode disc1 = NamedCode("Ungrouped", "Widescreen 16-9 (Disc 1)");
+  CheatCode disc2 = NamedCode("Ungrouped", "Widescreen 16-9 (Disc 1)");
+  EXPECT_TRUE(Patches::Classify("SLUS-00001", disc1, marks).has_value());
+  EXPECT_FALSE(Patches::Classify("SLUS-00002", disc2, marks).has_value());
+  EXPECT_FALSE(disc2.patch);
+}

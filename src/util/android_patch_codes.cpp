@@ -31,15 +31,21 @@ std::vector<Switch> Parse(std::string_view text)
 
     const size_t first = line.find('\t');
     const size_t second = (first == std::string_view::npos) ? first : line.find('\t', first + 1);
-    if (second == std::string_view::npos || line.find('\t', second + 1) != std::string_view::npos)
+    if (second == std::string_view::npos)
+      continue;
+    const size_t third = line.find('\t', second + 1);
+    if (third != std::string_view::npos && line.find('\t', third + 1) != std::string_view::npos)
       continue;
 
     const std::string_view state = line.substr(0, first);
-    const std::string_view name = line.substr(second + 1);
+    const std::string_view name =
+      (third == std::string_view::npos) ? line.substr(second + 1) : line.substr(second + 1, third - second - 1);
+    const std::string_view value = (third == std::string_view::npos) ? std::string_view() : line.substr(third + 1);
     if ((state != "on" && state != "off") || name.empty())
       continue;
 
-    switches.push_back(Switch{std::string(line.substr(first + 1, second - first - 1)), std::string(name), state == "on"});
+    switches.push_back(Switch{std::string(line.substr(first + 1, second - first - 1)), std::string(name), state == "on",
+                              std::string(value)});
   }
 
   return switches;
@@ -55,7 +61,10 @@ std::string Format(std::span<const Switch> switches)
     if (sw.name.empty() || !writable(sw.group) || !writable(sw.name))
       continue;
 
-    text.append(sw.on ? "on" : "off").append("\t").append(sw.group).append("\t").append(sw.name).append("\n");
+    text.append(sw.on ? "on" : "off").append("\t").append(sw.group).append("\t").append(sw.name);
+    if (!sw.value.empty() && writable(sw.value))
+      text.append("\t").append(sw.value);
+    text.append("\n");
   }
 
   return text;
@@ -145,8 +154,8 @@ std::vector<Switch> Remember(std::span<const Switch> old, std::span<const State>
 
   for (const State& code : codes)
   {
-    if (code.on != code.default_on)
-      switches.push_back(Switch{code.group, code.name, code.on});
+    if (code.on != code.default_on || !code.value.empty())
+      switches.push_back(Switch{code.group, code.name, code.on, code.value});
   }
 
   return switches;

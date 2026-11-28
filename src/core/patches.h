@@ -7,9 +7,12 @@
 #include "types.h"
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 class Error;
 
@@ -75,5 +78,85 @@ Needs NeedsFromOverrides(const CheatCode& code);
 /// Whether serial's code is a patch, and its mark if so: from the marks, else from its own file (override keys or a
 /// `#patch` line). Marks the code a patch (code.patch) when it is one.
 std::optional<Mark> Classify(std::string_view serial, CheatCode& code, const Marks& marks);
+
+/// One of a patch's choices: its code and what the code needs while it runs.
+struct Choice
+{
+  CheatCode code;
+  Needs needs;
+};
+
+/// A patch as the lists show it: under group (empty for none), named title (its code's name, or its choices' title),
+/// with one choice, or several of which only one can be on. saved is the choice the game's switches say (-1: off);
+/// running the one applied now, which differs from saved until the next start when the running one can't be undone.
+struct Patch
+{
+  std::string group;
+  std::string title;
+  Kind kind = Kind::Other;
+  std::vector<Choice> choices;
+  s32 saved = -1;
+  s32 running = -1;
+};
+
+/// A code switched on or off, or given a value, where that differs from its default: by its key (CodeKey()); value is
+/// an option's name or a number, empty for none.
+struct Switch
+{
+  std::string code;
+  bool on;
+  std::string value;
+};
+
+/// A game's patches. Building it applies nothing: the caller applies the running choices each frame (ApplyFrame()),
+/// undoes a code switched off at once (Set()'s result), and puts RunningNeeds() into the game's settings.
+class PatchList
+{
+public:
+  /// The list from a game's patch codes, in order, with their marks: codes sharing a choice title are one patch, at the
+  /// first one's place. A code's file marker (enabled) is its default.
+  static PatchList Build(std::vector<std::pair<CheatCode, Mark>> codes);
+
+  size_t Count() const { return m_patches.size(); }
+  const Patch& Get(size_t index) const { return m_patches[index]; }
+
+  /// Sets every patch's choice from its default, then switches (a patch with two choices switched on takes the
+  /// first), and the codes' values from switches by an option's name or a number.
+  void Restore(std::span<const Switch> switches);
+
+  /// The switches that keep this list: one for each code whose state or value differs from its default, in order.
+  std::vector<Switch> Switches() const;
+
+  /// Whether changing patch index to choice (-1: off) must wait for the next start: the running choice is on, isn't
+  /// choice, and can't be undone (CheatCode::RestoresOnDisable()).
+  bool NeedsRestart(size_t index, s32 choice) const;
+
+  /// Changes patch index to choice: saved at once; running too unless NeedsRestart(). Returns the code switched off at
+  /// once, for the caller to undo (CheatCode::ApplyOnDisable()) in a running game, or null.
+  const CheatCode* Set(size_t index, s32 choice);
+
+  /// Puts value into choice's code of patch index (see CheatCode::SetOptionValue()).
+  bool SetValue(size_t index, s32 choice, u32 value, Error* error);
+
+  /// The next start (a boot, a reset, a game change): every patch runs its saved choice.
+  void Restart();
+
+  /// What the running choices need together: the first ratio, the largest overclock, widescreen rendering off if any
+  /// asks.
+  Needs RunningNeeds() const;
+
+  /// Applies the running choices' codes that apply every frame.
+  void ApplyFrame() const;
+
+private:
+  struct Defaults
+  {
+    s32 choice = -1;
+    std::vector<u32> values; // each choice's code's value as built
+  };
+
+  std::vector<Patch> m_patches;
+  std::vector<Defaults> m_defaults;
+};
 
 } // namespace Patches

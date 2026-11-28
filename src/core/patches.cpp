@@ -10,6 +10,7 @@
 
 #include "fmt/format.h"
 
+#include <algorithm>
 #include <charconv>
 
 Log_SetChannel(Patches);
@@ -230,6 +231,214 @@ std::optional<Mark> Classify(std::string_view serial, CheatCode& code, const Mar
   else if (mark.needs.overclock_percent != 0)
     mark.kind = Kind::FrameRate;
   return mark;
+}
+
+PatchList PatchList::Build(std::vector<std::pair<CheatCode, Mark>> codes)
+{
+  PatchList list;
+  std::unordered_map<std::string, size_t> by_choice; // choice title -> patch index
+  for (auto& [code, mark] : codes)
+  {
+    size_t index;
+    if (!mark.choice.empty())
+    {
+      if (const auto it = by_choice.find(mark.choice); it != by_choice.end())
+      {
+        index = it->second;
+      }
+      else
+      {
+        index = list.m_patches.size();
+        by_choice.emplace(mark.choice, index);
+        Patch& patch = list.m_patches.emplace_back();
+        patch.kind = mark.kind;
+        patch.title = mark.choice;
+        // A Select group's title is the group: it isn't shown twice.
+        if (code.group != UNGROUPED && code.group != mark.choice)
+          patch.group = code.group;
+        list.m_defaults.emplace_back();
+      }
+    }
+    else
+    {
+      index = list.m_patches.size();
+      Patch& patch = list.m_patches.emplace_back();
+      patch.kind = mark.kind;
+      patch.title = code.description;
+      if (code.group != UNGROUPED)
+        patch.group = code.group;
+      list.m_defaults.emplace_back();
+    }
+
+    Patch& patch = list.m_patches[index];
+    Defaults& defaults = list.m_defaults[index];
+    const s32 choice = static_cast<s32>(patch.choices.size());
+    if (code.enabled && defaults.choice < 0)
+      defaults.choice = choice;
+    code.enabled = false;
+    defaults.values.push_back(code.option_value);
+    patch.choices.push_back(Choice{std::move(code), mark.needs});
+  }
+
+  for (size_t i = 0; i < list.m_patches.size(); i++)
+    list.m_patches[i].saved = list.m_patches[i].running = list.m_defaults[i].choice;
+  return list;
+}
+
+// A switch's value: an option's name, else a number.
+static std::optional<u32> ValueFromText(const CheatCode& code, std::string_view text)
+{
+  for (const CheatCode::Option& option : code.options)
+  {
+    if (option.name == text)
+      return option.value;
+  }
+  return ParseUnsigned(text);
+}
+
+static std::string ValueToText(const CheatCode& code)
+{
+  for (const CheatCode::Option& option : code.options)
+  {
+    if (option.value == code.option_value)
+      return option.name;
+  }
+  return fmt::format("{}", code.option_value);
+}
+
+void PatchList::Restore(std::span<const Switch> switches)
+{
+  std::vector<bool> switched_on(m_patches.size(), false);
+  for (size_t i = 0; i < m_patches.size(); i++)
+  {
+    Patch& patch = m_patches[i];
+    patch.saved = m_defaults[i].choice;
+    for (size_t c = 0; c < patch.choices.size(); c++)
+      patch.choices[c].code.SetOptionValue(m_defaults[i].values[c], nullptr);
+  }
+
+  for (const Switch& sw : switches)
+  {
+    for (size_t i = 0; i < m_patches.size(); i++)
+    {
+      Patch& patch = m_patches[i];
+      for (size_t c = 0; c < patch.choices.size(); c++)
+      {
+        CheatCode& code = patch.choices[c].code;
+        if (CodeKey(code.group, code.description) != sw.code)
+          continue;
+
+        const s32 choice = static_cast<s32>(c);
+        if (sw.on && !switched_on[i])
+        {
+          patch.saved = choice;
+          switched_on[i] = true;
+        }
+        else if (!sw.on && patch.saved == choice)
+        {
+          patch.saved = -1;
+        }
+
+        if (!sw.value.empty() && code.HasOptions())
+        {
+          if (const std::optional<u32> value = ValueFromText(code, sw.value))
+            code.SetOptionValue(value.value(), nullptr);
+        }
+      }
+    }
+  }
+
+  for (Patch& patch : m_patches)
+    patch.running = patch.saved;
+}
+
+std::vector<Switch> PatchList::Switches() const
+{
+  std::vector<Switch> switches;
+  for (size_t i = 0; i < m_patches.size(); i++)
+  {
+    const Patch& patch = m_patches[i];
+    for (size_t c = 0; c < patch.choices.size(); c++)
+    {
+      const CheatCode& code = patch.choices[c].code;
+      const bool on = (patch.saved == static_cast<s32>(c));
+      const bool default_on = (m_defaults[i].choice == static_cast<s32>(c));
+      const bool value_changed = code.HasOptions() && code.option_value != m_defaults[i].values[c];
+      if (on != default_on || value_changed)
+        switches.push_back({CodeKey(code.group, code.description), on, value_changed ? ValueToText(code) : ""});
+    }
+  }
+  return switches;
+}
+
+bool PatchList::NeedsRestart(size_t index, s32 choice) const
+{
+  const Patch& patch = m_patches[index];
+  return (patch.running >= 0 && patch.running != choice &&
+          !patch.choices[static_cast<size_t>(patch.running)].code.RestoresOnDisable());
+}
+
+const CheatCode* PatchList::Set(size_t index, s32 choice)
+{
+  Patch& patch = m_patches[index];
+  patch.saved = choice;
+  if (NeedsRestart(index, choice))
+    return nullptr;
+
+  const s32 old = patch.running;
+  patch.running = choice;
+  return (old >= 0 && old != choice) ? &patch.choices[static_cast<size_t>(old)].code : nullptr;
+}
+
+bool PatchList::SetValue(size_t index, s32 choice, u32 value, Error* error)
+{
+  Patch& patch = m_patches[index];
+  if (choice < 0 || static_cast<size_t>(choice) >= patch.choices.size())
+  {
+    Error::SetStringView(error, "There's no such choice.");
+    return false;
+  }
+  return patch.choices[static_cast<size_t>(choice)].code.SetOptionValue(value, error);
+}
+
+void PatchList::Restart()
+{
+  for (Patch& patch : m_patches)
+    patch.running = patch.saved;
+}
+
+Needs PatchList::RunningNeeds() const
+{
+  Needs needs;
+  for (const Patch& patch : m_patches)
+  {
+    if (patch.running < 0)
+      continue;
+
+    const Needs& each = patch.choices[static_cast<size_t>(patch.running)].needs;
+    if (needs.aspect_numerator == 0 && each.aspect_numerator != 0)
+    {
+      needs.aspect_numerator = each.aspect_numerator;
+      needs.aspect_denominator = each.aspect_denominator;
+    }
+    needs.disable_widescreen_rendering |= each.disable_widescreen_rendering;
+    needs.overclock_percent = std::max(needs.overclock_percent, each.overclock_percent);
+    needs.may_need_overclock |= each.may_need_overclock;
+  }
+  return needs;
+}
+
+void PatchList::ApplyFrame() const
+{
+  for (const Patch& patch : m_patches)
+  {
+    if (patch.running < 0)
+      continue;
+
+    const CheatCode& code = patch.choices[static_cast<size_t>(patch.running)].code;
+    if (code.CanEnable() && !code.IsManuallyActivated())
+      code.Apply();
+  }
 }
 
 } // namespace Patches

@@ -318,3 +318,241 @@ TEST_F(PatchesBundledMarks, SelectCheatGroupsUntouched)
       << serial << " " << key;
   }
 }
+
+// The per-game list of patches.
+namespace {
+
+Patches::Mark WideMark(std::string choice = {})
+{
+  Patches::Mark mark;
+  mark.kind = Patches::Kind::Widescreen;
+  mark.needs.aspect_numerator = 16;
+  mark.needs.aspect_denominator = 9;
+  mark.needs.disable_widescreen_rendering = true;
+  mark.choice = std::move(choice);
+  return mark;
+}
+
+Patches::Mark RateMark(u32 overclock, std::string choice = {})
+{
+  Patches::Mark mark;
+  mark.kind = Patches::Kind::FrameRate;
+  mark.needs.overclock_percent = overclock;
+  mark.choice = std::move(choice);
+  return mark;
+}
+
+// A plain-write code (doesn't restore) and a restoring one (A7), by group and name.
+CheatCode PlainCode(std::string group, std::string name, bool marked_on = false)
+{
+  CheatCode code = CodeFrom("[x]\n80017A4C 0C00\n");
+  code.group = std::move(group);
+  code.description = std::move(name);
+  code.enabled = marked_on;
+  return code;
+}
+
+CheatCode RestoringCode(std::string group, std::string name)
+{
+  CheatCode code = CodeFrom("[x]\nA7019656 14402400\n");
+  code.group = std::move(group);
+  code.description = std::move(name);
+  return code;
+}
+
+// Crash 2 (Japan)'s choice, and a plain patch.
+Patches::PatchList Crash2Japan()
+{
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  codes.emplace_back(PlainCode("Select Widescreen Type", "Widescreen Hor+"), WideMark("Select Widescreen Type"));
+  codes.emplace_back(PlainCode("Select Widescreen Type", "Widescreen Vert-"), WideMark("Select Widescreen Type"));
+  codes.emplace_back(RestoringCode("Ungrouped", "60 FPS"), RateMark(150));
+  return Patches::PatchList::Build(std::move(codes));
+}
+
+} // namespace
+
+TEST(PatchesList, BuildGroupsChoices)
+{
+  const Patches::PatchList list = Crash2Japan();
+  ASSERT_EQ(list.Count(), 2u);
+  const Patches::Patch& wide = list.Get(0);
+  EXPECT_EQ(wide.title, "Select Widescreen Type");
+  EXPECT_EQ(wide.kind, Patches::Kind::Widescreen);
+  ASSERT_EQ(wide.choices.size(), 2u);
+  EXPECT_EQ(wide.choices[0].code.description, "Widescreen Hor+");
+  EXPECT_EQ(wide.choices[1].code.description, "Widescreen Vert-");
+  EXPECT_EQ(wide.saved, -1);
+  EXPECT_EQ(wide.running, -1);
+
+  const Patches::Patch& rate = list.Get(1);
+  EXPECT_EQ(rate.title, "60 FPS");
+  EXPECT_TRUE(rate.group.empty());
+  ASSERT_EQ(rate.choices.size(), 1u);
+}
+
+TEST(PatchesList, SwitchingOnIsImmediate)
+{
+  Patches::PatchList list = Crash2Japan();
+  EXPECT_FALSE(list.NeedsRestart(0, 0));
+  EXPECT_EQ(list.Set(0, 0), nullptr);
+  EXPECT_EQ(list.Get(0).saved, 0);
+  EXPECT_EQ(list.Get(0).running, 0);
+}
+
+TEST(PatchesList, OnlyOneChoiceOn)
+{
+  Patches::PatchList list = Crash2Japan();
+  list.Set(0, 0);
+  // Hor+ is plain writes: changing to Vert- waits for a restart.
+  EXPECT_TRUE(list.NeedsRestart(0, 1));
+  list.Set(0, 1);
+  EXPECT_EQ(list.Get(0).saved, 1);
+  EXPECT_EQ(list.Get(0).running, 0);
+  list.Restart();
+  EXPECT_EQ(list.Get(0).running, 1);
+
+  // Never both: the switches name one choice on.
+  size_t on = 0;
+  for (const Patches::Switch& s : list.Switches())
+    on += s.on ? 1 : 0;
+  EXPECT_EQ(on, 1u);
+}
+
+TEST(PatchesList, RestoringPatchSwitchesOffAtOnce)
+{
+  Patches::PatchList list = Crash2Japan();
+  list.Set(1, 0);
+  EXPECT_FALSE(list.NeedsRestart(1, -1));
+  const CheatCode* undo = list.Set(1, -1);
+  ASSERT_NE(undo, nullptr);
+  EXPECT_EQ(undo->description, "60 FPS");
+  EXPECT_EQ(list.Get(1).saved, -1);
+  EXPECT_EQ(list.Get(1).running, -1);
+}
+
+TEST(PatchesList, PlainPatchWaits)
+{
+  Patches::PatchList list = Crash2Japan();
+  list.Set(0, 1);
+  EXPECT_TRUE(list.NeedsRestart(0, -1));
+  EXPECT_EQ(list.Set(0, -1), nullptr);
+  EXPECT_EQ(list.Get(0).saved, -1);
+  EXPECT_EQ(list.Get(0).running, 1); // still running, with its needs, until the next start
+  EXPECT_EQ(list.RunningNeeds().aspect_numerator, 16u);
+  list.Restart();
+  EXPECT_EQ(list.Get(0).running, -1);
+  EXPECT_EQ(list.RunningNeeds().aspect_numerator, 0u);
+}
+
+TEST(PatchesList, SwitchesOnlyDifferences)
+{
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  codes.emplace_back(PlainCode("Ungrouped", "Widescreen 16-9", true), WideMark());
+  codes.emplace_back(RestoringCode("Ungrouped", "60 FPS"), RateMark(0));
+  Patches::PatchList list = Patches::PatchList::Build(std::move(codes));
+  EXPECT_TRUE(list.Switches().empty());
+
+  list.Set(0, -1);
+  const std::vector<Patches::Switch> off = list.Switches();
+  ASSERT_EQ(off.size(), 1u);
+  EXPECT_EQ(off[0].code, "Widescreen 16-9");
+  EXPECT_FALSE(off[0].on);
+
+  list.Set(0, 0);
+  EXPECT_TRUE(list.Switches().empty());
+}
+
+TEST(PatchesList, RestoreKeepsOldOnState)
+{
+  // A widescreen code the player's .cht marks on ([*Widescreen 16-9]) stays on as a patch, without any switch.
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  codes.emplace_back(PlainCode("Ungrouped", "Widescreen 16-9", true), WideMark());
+  Patches::PatchList list = Patches::PatchList::Build(std::move(codes));
+  list.Restore({});
+  EXPECT_EQ(list.Get(0).saved, 0);
+  EXPECT_EQ(list.Get(0).running, 0);
+
+  // Switches win over the marker.
+  const std::vector<Patches::Switch> switches = {{"Widescreen 16-9", false, ""}};
+  list.Restore(switches);
+  EXPECT_EQ(list.Get(0).saved, -1);
+  EXPECT_EQ(list.Get(0).running, -1);
+}
+
+TEST(PatchesList, RestoreChoosesFirstOn)
+{
+  Patches::PatchList list = Crash2Japan();
+  const std::vector<Patches::Switch> switches = {{"Select Widescreen Type\\Widescreen Vert-", true, ""},
+                                                 {"Select Widescreen Type\\Widescreen Hor+", true, ""},
+                                                 {"60 FPS", true, ""},
+                                                 {"Not a patch", true, ""}};
+  list.Restore(switches);
+  EXPECT_EQ(list.Get(0).saved, 1);
+  EXPECT_EQ(list.Get(0).running, 1);
+  EXPECT_EQ(list.Get(1).running, 0);
+}
+
+TEST(PatchesList, RunningNeedsCombine)
+{
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  Patches::Mark ultra = WideMark();
+  ultra.needs.aspect_numerator = 21;
+  codes.emplace_back(PlainCode("Ungrouped", "Widescreen 16-9"), WideMark());
+  codes.emplace_back(PlainCode("Ungrouped", "21:9 Widescreen (Menus)"), ultra);
+  codes.emplace_back(RestoringCode("Ungrouped", "60 FPS"), RateMark(160));
+  codes.emplace_back(RestoringCode("Ungrouped", "Another uncap"), RateMark(200));
+  Patches::PatchList list = Patches::PatchList::Build(std::move(codes));
+
+  for (size_t i = 0; i < list.Count(); i++)
+    list.Set(i, 0);
+  Patches::Needs needs = list.RunningNeeds();
+  EXPECT_EQ(needs.aspect_numerator, 16u); // the first patch with a ratio
+  EXPECT_EQ(needs.aspect_denominator, 9u);
+  EXPECT_TRUE(needs.disable_widescreen_rendering);
+  EXPECT_EQ(needs.overclock_percent, 200u); // the larger
+
+  // Switching one frame-rate patch off leaves the other's.
+  list.Set(3, -1);
+  needs = list.RunningNeeds();
+  EXPECT_EQ(needs.overclock_percent, 160u);
+  EXPECT_EQ(needs.aspect_numerator, 16u);
+}
+
+TEST(PatchesList, ValueRestoredByName)
+{
+  CheatList file;
+  ASSERT_TRUE(file.LoadFromINIString("[Frame Rate]\nOverrideCPUOverclock = 150\nOption = 30 FPS:1\nOption = 60 FPS:2\n"
+                                     "80001234 000?\n"
+                                     "[Level]\nOverrideAspectRatio = 16:9\nOptionRange = 1:9\n80001238 000?\n"));
+  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
+  for (u32 i = 0; i < file.GetCodeCount(); i++)
+  {
+    CheatCode code = file.GetCode(i);
+    const std::optional<Patches::Mark> mark = Patches::Classify("SLUS-00001", code, Patches::Marks());
+    ASSERT_TRUE(mark.has_value());
+    codes.emplace_back(std::move(code), mark.value());
+  }
+  Patches::PatchList list = Patches::PatchList::Build(std::move(codes));
+
+  EXPECT_TRUE(list.SetValue(0, 0, 2, nullptr));
+  EXPECT_FALSE(list.SetValue(1, 0, 10, nullptr));
+  EXPECT_TRUE(list.SetValue(1, 0, 7, nullptr));
+  const std::vector<Patches::Switch> switches = list.Switches();
+  ASSERT_EQ(switches.size(), 2u);
+  EXPECT_EQ(switches[0].value, "60 FPS"); // by the option's name
+  EXPECT_EQ(switches[1].value, "7");      // a number
+
+  // A fresh list from the same codes takes the values back.
+  std::vector<std::pair<CheatCode, Patches::Mark>> again;
+  for (u32 i = 0; i < file.GetCodeCount(); i++)
+  {
+    CheatCode code = file.GetCode(i);
+    again.emplace_back(code, Patches::Classify("SLUS-00001", code, Patches::Marks()).value());
+  }
+  Patches::PatchList restored = Patches::PatchList::Build(std::move(again));
+  restored.Restore(switches);
+  EXPECT_EQ(restored.Get(0).choices[0].code.option_value, 2u);
+  EXPECT_EQ(restored.Get(1).choices[0].code.option_value, 7u);
+  EXPECT_TRUE(restored.Switches().size() == 2u);
+}

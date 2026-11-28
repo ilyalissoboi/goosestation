@@ -838,9 +838,17 @@ desktop's: `StageCount`, and `[PostProcessing/Stage1] ShaderName` with the stage
   pack's thousands of presets cost nothing until they show. A shader whose metadata doesn't load isn't offered.
   **Slang presets** (RetroArch's `.slangp`, run by librashader, which the APK carries) are listed by their path with
   the extension (`shaders_slang/crt/crt-royale.slangp`, kind Slang), never loaded to list them; one that doesn't load
-  says why when it's added. A slang stage's options are the preset's parameters, and it shades the game's picture at
-  the console's resolution (320×240, say), drawing the result where the picture sits. A stage's name is looked up in
-  the data folder's `shaders/` first, then in the app's packs.
+  says why when it's added. Each slang preset's row also says how heavy it's likely to be ("Slang · light", heavy or
+  very heavy), estimated from its passes and the pixels they draw, never by running it. A slang stage's options are
+  the preset's parameters, and it shades the game's picture at the console's resolution (320×240, say), drawing the
+  result where the picture sits, or, for a **bezel**, over the whole screen (below). A stage's name is looked up in the
+  data folder's `shaders/` first, then in the app's packs.
+- **Bezels**: a slang preset in a `bezel` folder (as libretro's pack keeps them) draws over the whole screen, placing
+  the game with its own parameters and filling the side bars with its frame or room, while the game's picture is 4:3
+  (within 5%); otherwise it draws into the picture as other stages do. A slang stage's page starts with **Draw over
+  the whole screen** (the stage's `WholeScreen` key), on by itself for a bezel, to turn it off or to let another
+  preset do the same. Stages after a bezel work on the whole screen it drew. While the chain in effect has such a
+  stage, Graphics' Scaling, Screen position and Stretch vertically rows say they apply only to games of other shapes.
 - **Download shader packs**, after the chain, opens a panel over the page: the four packs of the core's table (libretro's
   slang shaders, Retro Crisis GDV-NTSC, satpixie CRT and lola-retro), each with its state ("Not installed",
   "Installed …", "Update available: … → …", "Incomplete: install it again"), what it is, its licence and its size,

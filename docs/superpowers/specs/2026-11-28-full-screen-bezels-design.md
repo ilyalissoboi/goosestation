@@ -146,3 +146,19 @@ From the code (2026-11-28; line numbers as of `cf8ff5665`):
 How the viewport, aspect ratio and rotation reach librashader, how a bezel is recognised beyond its folder, the cost
 formula and its thresholds, the stage switch's key, what a bezel does with a rotated picture, why koko-aio is white,
 and the order of implementation.
+
+## Built (2026-11-29)
+
+What changed from the above while building (plan `docs/superpowers/plans/2026-11-28-full-screen-bezels.md`):
+
+- **No preset family honours the aspect as shipped.** Drawn on a 1920×1080 screen with a 16:9 picture, koko-aio-ng
+  and scanline-classic both place a 4:3 picture by their own parameters (koko-aio reads the aspect only with its
+  `ASPECT_X` set negative), so every bezel falls back into the picture when it isn't 4:3.
+- **"4:3" is within 5%**, not 2%: Auto's aspect with the default overscan crop is 1.306 for Vagrant Story and moves
+  between 1.306 and 1.312 for padtest.
+- **koko-aio's white** was ours: it writes alpha 0, and the stage copied the preset's alpha into the window, where
+  captures (and Android's surface) keep it. The result is drawn opaque now.
+- **Metal lost whole frames** of heavier presets (crt-guest-advanced came out empty): librashader's per-frame objects
+  were freed before the GPU used them; it now encodes into a command buffer that retains them.
+- **The Thor** (Vagrant Story, Vulkan, 1920×1080, `.debug` build at `d662efebd`): none 59.7 VPS, GPU 5%; Potato 59.7,
+  55%; uborder 59.8, 21%; koko-aio 59.8, 28%; Mega Bezel standard 1.9 (min 0.9), 102%.

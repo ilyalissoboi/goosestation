@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: (GPL-3.0 OR CC-BY-NC-ND-4.0)
 
 #include "settingswindow.h"
+#include "patchessettingswidget.h"
 #include "advancedsettingswidget.h"
 #include "audiosettingswidget.h"
 #include "biossettingswidget.h"
@@ -46,8 +47,9 @@ SettingsWindow::SettingsWindow() : QWidget()
   connectUi();
 }
 
-SettingsWindow::SettingsWindow(const std::string& path, const std::string& serial, DiscRegion region,
-                               const GameDatabase::Entry* entry, std::unique_ptr<INISettingsInterface> sif)
+SettingsWindow::SettingsWindow(const std::string& path, const std::string& title, const std::string& serial,
+                               DiscRegion region, const GameDatabase::Entry* entry,
+                               std::unique_ptr<INISettingsInterface> sif)
   : QWidget(), m_sif(std::move(sif)), m_database_entry(entry)
 {
   m_ui.setupUi(this);
@@ -57,6 +59,11 @@ SettingsWindow::SettingsWindow(const std::string& path, const std::string& seria
             QStringLiteral("file-list-line"),
             tr("<strong>Summary</strong><hr>This page shows information about the selected game, and allows you to "
                "validate your disc was dumped correctly."));
+  addWidget(new PatchesSettingsWidget(this, m_ui.settingsContainer, serial, title), tr("Patches"),
+            QStringLiteral("tv-2-line"),
+            tr("<strong>Patches</strong><hr>Widescreen, frame-rate and display-mode patches for this game, apart from "
+               "cheats. A patch sets what it needs (the aspect ratio, the widescreen setting, a CPU overclock) for "
+               "this game only while it's on, and never writes it into your settings."));
   addPages();
   connectUi();
 
@@ -628,7 +635,7 @@ bool SettingsWindow::hasGameTrait(GameDatabase::Trait trait)
 }
 
 void SettingsWindow::openGamePropertiesDialog(const std::string& path, const std::string& title,
-                                              const std::string& serial, DiscRegion region)
+                                              const std::string& serial, DiscRegion region, const char* category)
 {
   const GameDatabase::Entry* dentry = nullptr;
   if (!System::IsExeFileName(path) && !System::IsPsfFileName(path))
@@ -661,6 +668,8 @@ void SettingsWindow::openGamePropertiesDialog(const std::string& path, const std
       dialog->raise();
       dialog->activateWindow();
       dialog->setFocus();
+      if (category)
+        dialog->setCategory(category);
       return;
     }
   }
@@ -669,7 +678,9 @@ void SettingsWindow::openGamePropertiesDialog(const std::string& path, const std
   if (FileSystem::FileExists(sif->GetFileName().c_str()))
     sif->Load();
 
-  SettingsWindow* dialog = new SettingsWindow(path, real_serial, region, dentry, std::move(sif));
+  SettingsWindow* dialog = new SettingsWindow(path, title, real_serial, region, dentry, std::move(sif));
+  if (category)
+    dialog->setCategory(category);
   dialog->show();
 }
 

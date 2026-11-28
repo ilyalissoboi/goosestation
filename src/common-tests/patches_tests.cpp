@@ -801,3 +801,41 @@ TEST(PatchesList, FollowSwitches)
   list.Restart();
   EXPECT_EQ(list.Get(0).running, -1);
 }
+
+TEST_F(PatchesBundledMarks, LoadForGame)
+{
+  const char* tmpdir = std::getenv("TMPDIR");
+  std::string templ = Path::Combine((tmpdir && *tmpdir) ? tmpdir : "/tmp", "common-tests-patches-XXXXXX");
+  ASSERT_NE(mkdtemp(templ.data()), nullptr);
+  const std::string old_cheats = EmuFolders::Cheats, old_settings = EmuFolders::GameSettings;
+  EmuFolders::Cheats = templ;
+  EmuFolders::GameSettings = templ;
+
+  // No player's file: the database's widescreen code, off.
+  std::unique_ptr<Patches::PatchList> list = Patches::LoadForGame("SLUS-01040", "Vagrant Story (USA)");
+  ASSERT_NE(list, nullptr);
+  ASSERT_EQ(list->Count(), 1u);
+  EXPECT_EQ(list->Get(0).title, "Widescreen 16-9");
+  EXPECT_EQ(list->Get(0).saved, -1);
+
+  // The player's .cht has it on ([*...]): its copy wins, on, and a cheat beside it isn't a patch.
+  ASSERT_TRUE(FileSystem::WriteStringToFile(Patches::CheatFileForTitle("Vagrant Story (USA)").c_str(),
+                                            "[*Widescreen 16-9]\n80000000 0000\n[*Infinite HP]\n80000004 0001\n"));
+  list = Patches::LoadForGame("SLUS-01040", "Vagrant Story (USA)");
+  ASSERT_EQ(list->Count(), 1u);
+  EXPECT_EQ(list->Get(0).saved, 0);
+  ASSERT_EQ(list->Get(0).choices[0].code.instructions.size(), 1u);
+  EXPECT_EQ(list->Get(0).choices[0].code.instructions[0].first, 0x80000000u);
+
+  // The game's switches win over the marker.
+  ASSERT_TRUE(Patches::SaveSwitchesForSerial("SLUS-01040", std::vector<Patches::Switch>{{"Widescreen 16-9", false, ""}},
+                                             nullptr));
+  list = Patches::LoadForGame("SLUS-01040", "Vagrant Story (USA)");
+  EXPECT_EQ(list->Get(0).saved, -1);
+
+  EXPECT_EQ(Patches::LoadForGame("SLUS-00000", "Nothing"), nullptr);
+
+  EmuFolders::Cheats = old_cheats;
+  EmuFolders::GameSettings = old_settings;
+  FileSystem::RecursiveDeleteDirectory(templ.c_str());
+}

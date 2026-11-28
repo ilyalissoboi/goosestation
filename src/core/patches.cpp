@@ -551,6 +551,48 @@ void PatchList::ApplyOverrides(Settings& settings)
   }
 }
 
+std::string CheatFileForTitle(std::string_view title)
+{
+  return title.empty() ? std::string() : Path::Combine(EmuFolders::Cheats, fmt::format("{}.cht", title));
+}
+
+std::unique_ptr<PatchList> LoadForGame(std::string_view serial, std::string_view title)
+{
+  if (serial.empty())
+    return nullptr;
+
+  std::vector<std::pair<CheatCode, Mark>> codes;
+  std::vector<std::string> keys;
+  const auto add = [serial, &codes, &keys](const CheatList& list) {
+    for (u32 i = 0; i < list.GetCodeCount(); i++)
+    {
+      CheatCode code = list.GetCode(i);
+      const std::optional<Mark> mark = Classify(serial, code, BundledMarks());
+      std::string key = CodeKey(code.group, code.description);
+      if (!mark.has_value() || std::find(keys.begin(), keys.end(), key) != keys.end())
+        continue;
+      keys.push_back(std::move(key));
+      codes.emplace_back(std::move(code), mark.value());
+    }
+  };
+
+  if (const std::string filename = CheatFileForTitle(title); !filename.empty() && FileSystem::FileExists(filename.c_str()))
+  {
+    CheatList player;
+    if (player.LoadFromFile(filename.c_str(), CheatList::Format::Autodetect))
+      add(player);
+  }
+  if (CheatList database; database.LoadFromPackage(std::string(serial)))
+    add(database);
+
+  if (codes.empty())
+    return nullptr;
+
+  auto list = std::make_unique<PatchList>(PatchList::Build(std::move(codes)));
+  list->Restore(ReadSwitchesForSerial(serial));
+  return list;
+}
+
 bool Allowed(const Settings& settings, bool hardcore)
 {
   return !hardcore && !settings.disable_all_enhancements;
@@ -676,8 +718,9 @@ bool SaveSwitchesForSerial(std::string_view serial, std::span<const Switch> swit
   ini.RemoveEmptySections();
   if (ini.IsEmpty())
   {
-    // Saved first, so the interface isn't left dirty: it would write the file again as it goes.
-    return ini.Save(error) && FileSystem::DeleteFile(path.c_str(), error);
+    // Nothing left to write: as it goes, the interface mustn't write the file again.
+    ini.MarkClean();
+    return FileSystem::DeleteFile(path.c_str(), error);
   }
 
   return ini.Save(error);

@@ -1102,7 +1102,7 @@ void MainWindow::populateCheatsMenu(QMenu* menu)
       for (u32 i = 0; i < cl->GetCodeCount(); i++)
       {
         CheatCode& cc = cl->GetCode(i);
-        if (cc.group != group)
+        if (cc.group != group || cc.patch)
           continue;
 
         QString desc(QString::fromStdString(cc.description));
@@ -1405,6 +1405,27 @@ void MainWindow::onViewGamePropertiesActionTriggered()
     QtHost::RunOnUIThread([path = path, serial = serial]() {
       SettingsWindow::openGamePropertiesDialog(path, System::GetGameTitle(), serial, System::GetDiscRegion());
     });
+  });
+}
+
+void MainWindow::onPatchesActionTriggered()
+{
+  if (!s_system_valid)
+    return;
+
+  // The running game's properties, at their Patches page.
+  Host::RunOnCPUThread([]() {
+    std::string path = System::GetDiscPath();
+    std::string serial = System::GetGameSerial();
+    std::string title = System::GetGameTitle();
+    const DiscRegion region = System::GetDiscRegion();
+    if (path.empty() || serial.empty())
+      return;
+
+    QtHost::RunOnUIThread(
+      [path = std::move(path), title = std::move(title), serial = std::move(serial), region]() {
+        SettingsWindow::openGamePropertiesDialog(path, title, serial, region, "Patches");
+      });
   });
 }
 
@@ -1834,6 +1855,7 @@ void MainWindow::updateEmulationActions(bool starting, bool running, bool cheevo
   m_ui.menuWindowSize->setDisabled(starting || !running);
 
   m_ui.actionViewGameProperties->setDisabled(starting || !running);
+  m_ui.actionPatches->setDisabled(starting || !running);
 
   if (starting || running)
   {
@@ -1852,6 +1874,7 @@ void MainWindow::updateEmulationActions(bool starting, bool running, bool cheevo
     }
 
     m_ui.actionViewGameProperties->setEnabled(false);
+    m_ui.actionPatches->setEnabled(false);
   }
 
   if (m_open_debugger_on_start && running)
@@ -2097,6 +2120,7 @@ void MainWindow::connectSignals()
   connect(m_ui.actionViewGameGrid, &QAction::triggered, this, &MainWindow::onViewGameGridActionTriggered);
   connect(m_ui.actionViewSystemDisplay, &QAction::triggered, this, &MainWindow::onViewSystemDisplayTriggered);
   connect(m_ui.actionViewGameProperties, &QAction::triggered, this, &MainWindow::onViewGamePropertiesActionTriggered);
+  connect(m_ui.actionPatches, &QAction::triggered, this, &MainWindow::onPatchesActionTriggered);
   connect(m_ui.actionGitHubRepository, &QAction::triggered, this, &MainWindow::onGitHubRepositoryActionTriggered);
   connect(m_ui.actionIssueTracker, &QAction::triggered, this, &MainWindow::onIssueTrackerActionTriggered);
   connect(m_ui.actionViewThirdPartyNotices, &QAction::triggered, this,

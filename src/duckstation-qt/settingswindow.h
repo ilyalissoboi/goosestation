@@ -41,12 +41,12 @@ class SettingsWindow final : public QWidget
 
 public:
   SettingsWindow();
-  SettingsWindow(const std::string& path, const std::string& serial, DiscRegion region,
+  SettingsWindow(const std::string& path, const std::string& title, const std::string& serial, DiscRegion region,
                  const GameDatabase::Entry* entry, std::unique_ptr<INISettingsInterface> sif);
   ~SettingsWindow();
 
   static void openGamePropertiesDialog(const std::string& path, const std::string& title, const std::string& serial,
-                                       DiscRegion region);
+                                       DiscRegion region, const char* category = nullptr);
   static void closeGamePropertiesDialogs();
 
   // Helper for externally setting fields in game settings ini.

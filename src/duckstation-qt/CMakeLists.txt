@@ -128,6 +128,8 @@ set(SRCS
   memoryscannerwindow.ui
   memoryviewwidget.cpp
   memoryviewwidget.h
+  patchessettingswidget.cpp
+  patchessettingswidget.h
   postprocessingsettingswidget.cpp
   postprocessingsettingswidget.h
   postprocessingchainconfigwidget.ui

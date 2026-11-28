@@ -6,6 +6,7 @@
 #include "cheats.h"
 #include "types.h"
 
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -188,6 +189,14 @@ private:
   std::vector<Defaults> m_defaults;
   Found m_found;
 };
+
+/// The player's .cht for a game, by title: `cheats/<title>.cht`, as desktop names it (System::GetCheatFileName()).
+std::string CheatFileForTitle(std::string_view title);
+
+/// A game's patches, built as the running game's are: from its player's .cht (first, so its copy of a code wins) and
+/// the database, with the switches in its game settings file. Null when it has none. Any UI can show one for a game
+/// that isn't running: its patches are in the same order as the running game's.
+std::unique_ptr<PatchList> LoadForGame(std::string_view serial, std::string_view title);
 
 /// Whether patches run at all: not in hardcore mode, nor with "disable all enhancements" (which turns the overclock
 /// off that frame-rate patches need).

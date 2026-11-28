@@ -168,6 +168,7 @@ private Q_SLOTS:
   void onViewGameGridActionTriggered();
   void onViewSystemDisplayTriggered();
   void onViewGamePropertiesActionTriggered();
+  void onPatchesActionTriggered();
   void onGitHubRepositoryActionTriggered();
   void onIssueTrackerActionTriggered();
   void onAboutActionTriggered();

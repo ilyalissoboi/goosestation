@@ -61,6 +61,7 @@ private:
 
   void connectUi();
   void fillItemForCheatCode(QTreeWidgetItem* item, u32 index, const CheatCode& code);
+  void setCodeValue(u32 index, u32 value);
 
   QTreeWidgetItem* getItemForCheatIndex(u32 index) const;
   QTreeWidgetItem* getItemForCheatGroup(const QString& group_name) const;

@@ -6032,41 +6032,9 @@ void System::SetPatchList(std::unique_ptr<Patches::PatchList> list)
 
 std::unique_ptr<Patches::PatchList> System::BuildPatchList()
 {
-  if (s_running_game_serial.empty())
-    return nullptr;
-
-  // The player's file first, so its copy of a code (marked on, say) wins over the database's.
-  std::vector<std::pair<CheatCode, Patches::Mark>> codes;
-  std::vector<std::string> keys;
-  const auto add = [&codes, &keys](const CheatList& list) {
-    for (u32 i = 0; i < list.GetCodeCount(); i++)
-    {
-      CheatCode code = list.GetCode(i);
-      const std::optional<Patches::Mark> mark =
-        Patches::Classify(s_running_game_serial, code, Patches::BundledMarks());
-      std::string key = Patches::CodeKey(code.group, code.description);
-      if (!mark.has_value() || std::find(keys.begin(), keys.end(), key) != keys.end())
-        continue;
-      keys.push_back(std::move(key));
-      codes.emplace_back(std::move(code), mark.value());
-    }
-  };
-
-  if (const std::string filename = GetCheatFileName(); !filename.empty() && FileSystem::FileExists(filename.c_str()))
-  {
-    CheatList player;
-    if (player.LoadFromFile(filename.c_str(), CheatList::Format::Autodetect))
-      add(player);
-  }
-  if (CheatList database; database.LoadFromPackage(s_running_game_serial))
-    add(database);
-
-  if (codes.empty())
-    return nullptr;
-
-  auto list = std::make_unique<Patches::PatchList>(Patches::PatchList::Build(std::move(codes)));
-  list->Restore(Patches::ReadSwitchesForSerial(s_running_game_serial));
-  INFO_LOG("{} patches for '{}'.", list->Count(), s_running_game_title);
+  std::unique_ptr<Patches::PatchList> list = Patches::LoadForGame(s_running_game_serial, s_running_game_title);
+  if (list)
+    INFO_LOG("{} patches for '{}'.", list->Count(), s_running_game_title);
   return list;
 }
 

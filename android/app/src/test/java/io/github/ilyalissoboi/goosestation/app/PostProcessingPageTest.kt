@@ -273,6 +273,32 @@ class PostProcessingPageTest {
         }
 
     @Test
+    fun theWholeScreenSwitchShowsAtOnceAndIsSaved() =
+        runTest {
+            api.shaderCatalog = api.shaderCatalog + ("bezel/x.slangp" to ("Slang" to emptyList()))
+            api.addPostProcessingStage(null, "PostProcessing", "bezel/x.slangp")
+            val page = page()
+            assertTrue(
+                page.chains
+                    .getValue(Chain.Display)
+                    .stages[0]
+                    .wholeScreen,
+            )
+
+            page.setWholeScreen(Chain.Display, 0, false)
+
+            assertFalse(
+                page.chains
+                    .getValue(Chain.Display)
+                    .stages[0]
+                    .wholeScreen,
+            )
+            runCurrent()
+            assertEquals("false", global.values["PostProcessing/Stage1/WholeScreen"])
+            assertTrue("setPostProcessingWholeScreen null PostProcessing 0 false" in calls)
+        }
+
+    @Test
     fun anEditInARunningGameApplies() =
         runTest {
             api.runningKey = KEY

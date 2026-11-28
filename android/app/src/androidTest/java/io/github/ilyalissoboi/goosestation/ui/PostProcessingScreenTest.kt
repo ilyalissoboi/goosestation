@@ -210,6 +210,35 @@ class PostProcessingScreenTest : ControllerKeys {
     }
 
     @Test
+    fun aSlangStageStartsWithTheWholeScreenSwitch() {
+        model.stages(Chain.Display, SamplePostProcessing.crtRoyale.copy(wholeScreen = true))
+        show()
+
+        press(listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionCenter))
+        // Move down and Remove, then the switch before the preset's parameters.
+        press(Key.DirectionDown)
+        focused("Draw over the whole screen")
+        press(Key.DirectionCenter)
+
+        assertEquals("setWholeScreen Display 0 false", model.calls.last())
+        rule.onNodeWithText("Simulated CRT gamma").assertExists()
+    }
+
+    @Test
+    fun aSlangPresetShowsItsCost() {
+        model.shaders =
+            listOf(
+                Shader("crt-lottes", ShaderKind.GLSL),
+                Shader("bezel/frame.slangp", ShaderKind.Slang, "light"),
+            )
+        model.openAdd(Chain.Display)
+        model.browseFolder = "bezel"
+        show()
+
+        rule.onNodeWithText("Slang · light").assertExists()
+    }
+
+    @Test
     fun aVectorShowsAComponentPerRow() {
         model.stages(Chain.Display, SamplePostProcessing.crtLottes)
         show()

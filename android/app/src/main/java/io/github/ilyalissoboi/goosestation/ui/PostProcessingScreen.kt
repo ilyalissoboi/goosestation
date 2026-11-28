@@ -33,7 +33,7 @@ import io.github.ilyalissoboi.goosestation.settings.Chain
 import io.github.ilyalissoboi.goosestation.settings.OptionRow
 import io.github.ilyalissoboi.goosestation.settings.ShaderBrowser
 import io.github.ilyalissoboi.goosestation.settings.Stage
-import io.github.ilyalissoboi.goosestation.settings.optionRows
+import io.github.ilyalissoboi.goosestation.settings.stageRows
 import io.github.ilyalissoboi.goosestation.ui.components.ActionButton
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonKind
 import io.github.ilyalissoboi.goosestation.ui.components.ButtonRow
@@ -358,7 +358,7 @@ private fun BrowsePage(
                 val at = ShaderBrowser.folderOf(shader)
                 NavRow(
                     ShaderBrowser.leaf(shader),
-                    if (at.isEmpty()) shader.kind.label else "${shader.kind.label} · $at",
+                    shader.summary(at),
                     onClick = { model.add(chain, shader) },
                 )
             }
@@ -399,7 +399,7 @@ private fun BrowsePage(
                 item(key = "shader:${shader.name}") {
                     NavRow(
                         ShaderBrowser.leaf(shader),
-                        shader.kind.label,
+                        shader.summary(),
                         onClick = { model.add(chain, shader) },
                         modifier = modifier,
                     )
@@ -475,17 +475,32 @@ private fun StagePage(
                 kind = ButtonKind.Danger,
             )
         }
-        OptionRows(stage) { option, values -> model.setOption(chain, index, option, values) }
+        OptionRows(stage, onWholeScreen = { model.setWholeScreen(chain, index, it) }) { option, values ->
+            model.setOption(chain, index, option, values)
+        }
     }
 }
+
+/** The note under a slang stage's "Draw over the whole screen" switch. */
+const val WHOLE_SCREEN_NOTE =
+    "Lets a bezel preset draw around the game over the whole screen. On by itself for presets in a bezel folder; " +
+        "games that aren't 4:3 are drawn into the picture instead."
 
 @Composable
 private fun OptionRows(
     stage: Stage,
+    onWholeScreen: (Boolean) -> Unit,
     onSet: (ShaderOptionInfo, List<Float>) -> Unit,
 ) {
-    for (row in optionRows(stage.options)) {
+    for (row in stageRows(stage)) {
         when (row) {
+            is OptionRow.WholeScreen ->
+                SwitchRow(
+                    "Draw over the whole screen",
+                    row.on,
+                    onToggle = onWholeScreen,
+                    note = WHOLE_SCREEN_NOTE,
+                )
             is OptionRow.Heading -> SettingsSection(row.category)
             is OptionRow.Toggle ->
                 SwitchRow(

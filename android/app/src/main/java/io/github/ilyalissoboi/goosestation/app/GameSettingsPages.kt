@@ -171,6 +171,7 @@ class GameSettingsPages(
                         }
                     },
                     current = { game?.serial == key },
+                    key = key,
                 )
             }
         }

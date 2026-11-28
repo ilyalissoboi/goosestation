@@ -165,6 +165,17 @@ interface CoreApi {
         values: FloatArray,
     )
 
+    /** Sets a slang stage's "Draw over the whole screen" switch. */
+    fun setPostProcessingWholeScreen(
+        key: String?,
+        section: String,
+        index: Int,
+        on: Boolean,
+    )
+
+    /** Whether the display chain in effect for [key] (a game's own, else settings.ini's) has a bezel over the screen. */
+    fun chainDrawsOverWholeScreen(key: String?): Boolean
+
     fun copyPostProcessingChain(
         key: String,
         section: String,
@@ -387,6 +398,15 @@ object NativeCoreApi : CoreApi {
         name: String,
         values: FloatArray,
     ) = NativeLibrary.setPostProcessingOption(key, section, index, name, values)
+
+    override fun setPostProcessingWholeScreen(
+        key: String?,
+        section: String,
+        index: Int,
+        on: Boolean,
+    ) = NativeLibrary.setPostProcessingWholeScreen(key, section, index, on)
+
+    override fun chainDrawsOverWholeScreen(key: String?): Boolean = NativeLibrary.chainDrawsOverWholeScreen(key)
 
     override fun copyPostProcessingChain(
         key: String,

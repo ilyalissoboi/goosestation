@@ -35,6 +35,8 @@ class PageLoad(
 class PageReader(
     val load: () -> PageLoad,
     val current: () -> Boolean = { true },
+    /** The game the page is for, null for settings.ini's pages. */
+    val key: String? = null,
 )
 
 /** What a page's screen shows beside its values. */
@@ -47,6 +49,9 @@ interface PageExtras {
 
     /** Vulkan didn't start in this run, as the core said when Graphics was last read. */
     val vulkanFailed: Boolean
+
+    /** A bezel stage draws over the whole screen in the chain in effect, as the core said when Graphics was read. */
+    val bezelWholeScreen: Boolean get() = false
 
     /** Whether fast memory access can run on this device, as the core said when Advanced was last read. */
     val fastmemAvailable: Boolean
@@ -79,6 +84,9 @@ class PageValues<P : Any>(
         private set
 
     override var vulkanFailed by mutableStateOf(false)
+        private set
+
+    override var bezelWholeScreen by mutableStateOf(false)
         private set
 
     override var fastmemAvailable by mutableStateOf(true)
@@ -163,6 +171,7 @@ class PageValues<P : Any>(
                         names = names,
                         load = load,
                         vulkanFailed = kind == SharedPage.Graphics && api.isVulkanFailed(),
+                        bezelWholeScreen = kind == SharedPage.Graphics && api.chainDrawsOverWholeScreen(reader.key),
                         fastmemAvailable = kind != SharedPage.Advanced || api.isFastmemAvailable(),
                         compileThreads = if (kind == SharedPage.Advanced) api.getCompileThreadsInfo() else null,
                         rewindUsage =
@@ -177,7 +186,10 @@ class PageValues<P : Any>(
             if (!latest(page).isLatest(read) || !reader.current()) return@launch
             latest(page).done()
             names = loaded.names
-            if (kind == SharedPage.Graphics) vulkanFailed = loaded.vulkanFailed
+            if (kind == SharedPage.Graphics) {
+                vulkanFailed = loaded.vulkanFailed
+                bezelWholeScreen = loaded.bezelWholeScreen
+            }
             if (kind == SharedPage.Advanced) fastmemAvailable = loaded.fastmemAvailable
             loaded.compileThreads?.let { compileThreads = it }
             loaded.rewindUsage?.let { rewindUsage = it }
@@ -192,6 +204,7 @@ class PageValues<P : Any>(
         val names: CoreNames,
         val load: PageLoad,
         val vulkanFailed: Boolean,
+        val bezelWholeScreen: Boolean,
         val fastmemAvailable: Boolean,
         val compileThreads: CompileThreadsInfo?,
         val rewindUsage: RewindUsage?,

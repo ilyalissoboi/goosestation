@@ -53,7 +53,11 @@ data class Shader(
     val name: String,
     val kind: ShaderKind,
     val cost: String = "",
-)
+) {
+    /** What the browser shows under it: its kind, its cost when it has one, and the [folder] it's in when given. */
+    fun summary(folder: String = ""): String =
+        listOf(kind.label, cost, folder).filter { it.isNotEmpty() }.joinToString(" · ")
+}
 
 const val STAGE_STAYS_OFF = "Post-processing stays off while it's in the chain."
 const val STAGE_NOT_FOUND = "Not found in this install's shaders: post-processing stays off while it's in the chain."
@@ -68,6 +72,8 @@ data class Stage(
     val kind: ShaderKind?,
     val options: List<ShaderOptionInfo>,
     val error: String = "",
+    /** A slang stage's "Draw over the whole screen": its switch, else whether it's a bezel by its folder. */
+    val wholeScreen: Boolean = false,
 ) {
     /** Why the stage can't run, which turns the whole chain off in the core; null when it can. */
     fun problem(gles: Boolean): String? =
@@ -79,7 +85,8 @@ data class Stage(
         }
 
     companion object {
-        fun of(info: StageInfo) = Stage(info.shader, ShaderKind.of(info.kind), info.options.toList(), info.error)
+        fun of(info: StageInfo) =
+            Stage(info.shader, ShaderKind.of(info.kind), info.options.toList(), info.error, info.wholeScreen)
     }
 }
 
@@ -89,8 +96,13 @@ fun offered(
     gles: Boolean,
 ): List<Shader> = if (gles) shaders.filter { it.kind != ShaderKind.ReShade } else shaders
 
-/** A row of a stage's page, for one of its shader's options. */
+/** A row of a stage's page: its "Draw over the whole screen" switch, or one of its shader's options. */
 sealed interface OptionRow {
+    /** A slang stage's "Draw over the whole screen" switch, [on] or off. */
+    data class WholeScreen(
+        val on: Boolean,
+    ) : OptionRow
+
     /** The heading of the shader's [category], before its first option. */
     data class Heading(
         val category: String,
@@ -132,6 +144,11 @@ private val COMPONENTS = listOf("Red", "Green", "Blue", "Alpha")
 
 /** At most this many decimals: past the precision shaders use. */
 private const val MAX_DECIMALS = 4
+
+/** A stage's rows: a slang stage's "Draw over the whole screen" switch first, then its options' rows. */
+fun stageRows(stage: Stage): List<OptionRow> =
+    (if (stage.kind == ShaderKind.Slang) listOf(OptionRow.WholeScreen(stage.wholeScreen)) else emptyList()) +
+        optionRows(stage.options)
 
 /**
  * The rows for [options], in the shader's order, as desktop shows them: those without a UI name hidden, a heading

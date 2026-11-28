@@ -172,6 +172,9 @@ public:
   bool Apply(GPUTexture* input_color, GPUTexture* input_depth, GPUTexture* final_target, const GSVector4i final_rect,
              s32 orig_width, s32 orig_height, s32 native_width, s32 native_height, const PictureInfo& picture);
 
+  /// Replaces the stages with these, enabled, as LoadStages() would from settings. For tests only.
+  void SetStagesForTest(std::vector<std::unique_ptr<Shader>> stages);
+
 private:
   void ClearStagesWithError(const Error& error);
 

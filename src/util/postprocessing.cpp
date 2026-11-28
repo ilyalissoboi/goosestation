@@ -632,6 +632,13 @@ void PostProcessing::Chain::UpdateSettings(std::unique_lock<std::mutex>& setting
     DEV_LOG("Depth buffer is needed.");
 }
 
+void PostProcessing::Chain::SetStagesForTest(std::vector<std::unique_ptr<Shader>> stages)
+{
+  m_stages = std::move(stages);
+  m_enabled = true;
+  m_target_format = GPUTexture::Format::Unknown;
+}
+
 void PostProcessing::Chain::Toggle()
 {
   if (m_stages.empty())

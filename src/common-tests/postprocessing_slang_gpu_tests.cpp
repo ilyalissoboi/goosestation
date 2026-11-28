@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: 2026 GooseStation contributors
 // SPDX-License-Identifier: GPL-3.0
 
-// The slang stage on a real GPU device, offscreen. Opt-in: GOOSESTATION_GPU_TEST_API=Metal|Vulkan|OpenGL|OpenGLES
-// picks the renderer, and GOOSESTATION_LIBRASHADER_PATH the library; without both, every test here is skipped (CI runs
+// The slang stage on a real GPU device, offscreen. Opt-in: GOOSESTATION_GPU_TEST_API picks the renderer (see
+// gpu_test_device.h), and GOOSESTATION_LIBRASHADER_PATH the library; without both, every test here is skipped (CI runs
 // none).
+
+#include "gpu_test_device.h"
 
 #include "util/gpu_device.h"
 #include "util/librashader_loader.h"
 #include "util/postprocessing.h"
+#include "util/image.h"
+#include "util/postprocessing_shader_fx.h"
+#include "util/postprocessing_shader_glsl.h"
 #include "util/postprocessing_shader_slang.h"
 #ifdef ENABLE_VULKAN
 #include "util/vulkan_device.h"
@@ -17,8 +22,11 @@
 
 #include "common/error.h"
 #include "common/file_system.h"
+#include "common/log.h"
 #include "common/memory_settings_interface.h"
 #include "common/path.h"
+
+#include "fmt/format.h"
 
 #include <gtest/gtest.h>
 
@@ -71,22 +79,6 @@ const std::string PROBE_SHADER = std::string("#version 450\n"
                                  "void main() { FragColor = (vTexCoord.y < 0.5) ? vec4(1.0, 0.0, 0.0, 1.0) :\n"
                                  "                                               vec4(0.0, 0.0, 1.0, 1.0); }\n";
 
-std::optional<RenderAPI> TestAPI()
-{
-  const char* name = std::getenv("GOOSESTATION_GPU_TEST_API");
-  if (!name)
-    return std::nullopt;
-  if (std::strcmp(name, "Metal") == 0)
-    return RenderAPI::Metal;
-  if (std::strcmp(name, "Vulkan") == 0)
-    return RenderAPI::Vulkan;
-  if (std::strcmp(name, "OpenGL") == 0)
-    return RenderAPI::OpenGL;
-  if (std::strcmp(name, "OpenGLES") == 0)
-    return RenderAPI::OpenGLES;
-  return std::nullopt;
-}
-
 // The input picture: green outside the picture rect, a quarter red over its top half and a quarter blue below.
 std::vector<u32> InputPixels()
 {
@@ -124,17 +116,13 @@ class SlangGPU : public ::testing::Test
 protected:
   void SetUp() override
   {
-    const std::optional<RenderAPI> api = TestAPI();
-    if (!api.has_value())
-      GTEST_SKIP() << "GOOSESTATION_GPU_TEST_API isn't Metal, Vulkan, OpenGL or OpenGLES";
+    if (!GPUTestDevice::API().has_value())
+      GTEST_SKIP() << "GOOSESTATION_GPU_TEST_API isn't set";
     if (!Librashader::GetAvailability().available)
       GTEST_SKIP() << "librashader isn't loadable: " << Librashader::GetAvailability().reason;
 
-    g_gpu_device = GPUDevice::CreateDeviceForAPI(api.value());
-    ASSERT_TRUE(g_gpu_device);
     Error error;
-    ASSERT_TRUE(g_gpu_device->Create({}, {}, 0, false, GPUVSyncMode::Disabled, false, false, std::nullopt, {}, &error))
-      << error.GetDescription();
+    ASSERT_TRUE(GPUTestDevice::Create({}, &error)) << error.GetDescription();
 
     std::error_code ec;
     m_root = (std::filesystem::temp_directory_path(ec) / ("common-tests-slang-gpu-" + std::to_string(std::rand())))
@@ -150,10 +138,8 @@ protected:
     m_shader.reset();
     m_textures.clear();
     if (g_gpu_device)
-    {
-      g_gpu_device->Destroy();
-      g_gpu_device.reset();
-    }
+      PostProcessing::Shutdown(); // the shared samplers go with the device
+    GPUTestDevice::Destroy();
     if (!m_root.empty())
       FileSystem::RecursiveDeleteDirectory(m_root.c_str());
   }
@@ -369,3 +355,257 @@ TEST_F(SlangGPU, ASecondFrameBeforeASubmitSubmitsTheFirst)
   EXPECT_GT(VulkanDevice::GetInstance().GetCurrentFenceCounter(), before);
 }
 #endif
+
+namespace {
+
+// The frame dump's target and console picture.
+constexpr u32 DUMP_W = 256, DUMP_H = 144;
+constexpr u32 DUMP_NATIVE_W = 320, DUMP_NATIVE_H = 240;
+constexpr int DUMP_FRAMES = 12;
+
+const std::string DUMP_GLSL = "void main()\n"
+                              "{\n"
+                              "  float4 c = Sample();\n"
+                              "  SetOutput(float4(c.rgb * 0.75 + float3(0.1, 0.0, 0.05), c.a));\n"
+                              "}\n";
+
+const std::string DUMP_FX = R"(
+texture BackBufferTex : COLOR;
+sampler BackBuffer { Texture = BackBufferTex; };
+void FullscreenVS(in uint id : SV_VertexID, out float4 position : SV_Position, out float2 texcoord : TEXCOORD)
+{
+  texcoord.x = (id == 2) ? 2.0 : 0.0;
+  texcoord.y = (id == 1) ? 2.0 : 0.0;
+  position = float4(texcoord * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+}
+float4 TintPS(float4 position : SV_Position, float2 texcoord : TEXCOORD) : SV_Target
+{
+  return float4(tex2D(BackBuffer, texcoord).gbr, 1.0);
+}
+technique Tint { pass { VertexShader = FullscreenVS; PixelShader = TintPS; } }
+)";
+
+// Where the picture sits for a dump case, and how it reaches the chain.
+struct DumpPlacement
+{
+  const char* name;
+  GSVector4i rect;
+  u32 turns; // quarter turns clockwise of the console's picture
+  bool from_game; // the first stage reads the game's own frame, as the presenter does unrotated
+};
+
+// The console's picture: GOOSESTATION_GPU_TEST_PICTURE (any image, scaled nearest) or a pattern with a gradient, a
+// grid and a marked top-left corner, so a flip, a turn or a shift shows.
+std::vector<u32> DumpNativePicture()
+{
+  std::vector<u32> px(DUMP_NATIVE_W * DUMP_NATIVE_H);
+  RGBA8Image image;
+  const char* path = std::getenv("GOOSESTATION_GPU_TEST_PICTURE");
+  const bool loaded = path && *path && image.LoadFromFile(path);
+  for (u32 y = 0; y < DUMP_NATIVE_H; y++)
+  {
+    for (u32 x = 0; x < DUMP_NATIVE_W; x++)
+    {
+      u32 c;
+      if (loaded)
+      {
+        c = image.GetPixel(x * image.GetWidth() / DUMP_NATIVE_W, y * image.GetHeight() / DUMP_NATIVE_H) | 0xFF000000u;
+      }
+      else
+      {
+        const bool grid = (x % 32) == 0 || (y % 32) == 0;
+        const bool corner = x < 40 && y < 30;
+        c = 0xFF000000u | ((x * 255 / DUMP_NATIVE_W) & 0xFF) | (((y * 255 / DUMP_NATIVE_H) & 0xFF) << 8) |
+            ((grid ? 0xFFu : (corner ? 0xC0u : 0x30u)) << 16);
+      }
+      px[y * DUMP_NATIVE_W + x] = c;
+    }
+  }
+  return px;
+}
+
+// The picture turned quarter-turns clockwise; *w and *h are its new size.
+std::vector<u32> Turn(const std::vector<u32>& px, u32 turns, u32* w, u32* h)
+{
+  std::vector<u32> cur = px;
+  for (u32 t = 0; t < turns; t++)
+  {
+    std::vector<u32> next(cur.size());
+    for (u32 y = 0; y < *h; y++)
+      for (u32 x = 0; x < *w; x++)
+        next[x * *h + (*h - 1 - y)] = cur[y * *w + x];
+    std::swap(*w, *h);
+    cur = std::move(next);
+  }
+  return cur;
+}
+
+// The window-sized input the presenter draws: black, and the (turned) picture scaled nearest into rect, clipped.
+std::vector<u32> DrawnInput(const std::vector<u32>& pic, u32 pw, u32 ph, const GSVector4i& rect)
+{
+  std::vector<u32> out(DUMP_W * DUMP_H, 0xFF000000u);
+  for (s32 y = std::max(rect.top, 0); y < std::min<s32>(rect.bottom, DUMP_H); y++)
+  {
+    for (s32 x = std::max(rect.left, 0); x < std::min<s32>(rect.right, DUMP_W); x++)
+    {
+      const u32 sx = static_cast<u32>((x - rect.left) * static_cast<s32>(pw) / rect.width());
+      const u32 sy = static_cast<u32>((y - rect.top) * static_cast<s32>(ph) / rect.height());
+      out[y * DUMP_W + x] = pic[sy * pw + sx];
+    }
+  }
+  return out;
+}
+
+} // namespace
+
+TEST_F(SlangGPU, DumpChainFrames)
+{
+  // GOOSESTATION_GPU_TEST_DUMP: a folder for the frames, compared before and after a change (raw RGBA, plus PNG to
+  // look at). GOOSESTATION_GPU_TEST_PRESETS: absolute .slangp paths separated by '|'.
+  const char* dump = std::getenv("GOOSESTATION_GPU_TEST_DUMP");
+  if (!dump || !*dump)
+    GTEST_SKIP() << "GOOSESTATION_GPU_TEST_DUMP isn't set";
+  ASSERT_TRUE(FileSystem::EnsureDirectoryExists(dump, true));
+  Log::SetConsoleOutputParams(true, false); // a stage that fails to build says why
+  const std::string api = GPUDevice::RenderAPIToString(g_gpu_device->GetRenderAPI());
+
+  struct StageSpec
+  {
+    std::string label;
+    std::string slang_path; // empty: GLSL or FX by label
+  };
+  WriteFile("dump-tint.fx", DUMP_FX);
+  std::vector<StageSpec> specs = {{"glsl", {}}, {"fx", {}}};
+  if (const char* list = std::getenv("GOOSESTATION_GPU_TEST_PRESETS"))
+  {
+    std::string_view rest(list);
+    while (!rest.empty())
+    {
+      const size_t sep = rest.find('|');
+      const std::string path(rest.substr(0, sep));
+      rest = (sep == std::string_view::npos) ? std::string_view() : rest.substr(sep + 1);
+      std::string label(Path::GetFileTitle(path));
+      specs.push_back({std::move(label), path});
+    }
+  }
+
+  const auto make_stage = [&](const StageSpec& spec) -> std::unique_ptr<PostProcessing::Shader> {
+    Error error;
+    if (spec.label == "glsl" && spec.slang_path.empty())
+    {
+      auto s = std::make_unique<PostProcessing::GLSLShader>();
+      EXPECT_TRUE(s->LoadFromString("dump-tint", DUMP_GLSL, &error)) << error.GetDescription();
+      return s;
+    }
+    if (spec.label == "fx" && spec.slang_path.empty())
+    {
+      auto s = std::make_unique<PostProcessing::ReShadeFXShader>();
+      // A ReShade stage reads its file again when it's built.
+      EXPECT_TRUE(s->LoadFromFile("dump-tint", Path::Combine(m_root, "dump-tint.fx"), false, &error))
+        << error.GetDescription();
+      return s;
+    }
+    auto s = std::make_unique<PostProcessing::SlangShader>();
+    EXPECT_TRUE(s->LoadFromFile(spec.slang_path, spec.slang_path, false, &error)) << error.GetDescription();
+    return s;
+  };
+
+  const DumpPlacement placements[] = {
+    {"centred", GSVector4i(32, 0, 224, 144), 0, true},
+    {"centred-drawn", GSVector4i(32, 0, 224, 144), 0, false},
+    {"integer", GSVector4i(-32, -48, 288, 192), 0, true},
+    {"cropped", GSVector4i(38, 12, 218, 132), 0, false},
+    {"turned180", GSVector4i(32, 0, 224, 144), 2, false},
+    {"turned90", GSVector4i(74, 0, 182, 144), 1, false},
+  };
+
+  const std::vector<u32> native = DumpNativePicture();
+  std::unique_ptr<GPUTexture> game = g_gpu_device->CreateTexture(
+    DUMP_NATIVE_W, DUMP_NATIVE_H, 1, 1, 1, GPUTexture::Type::Texture, GPUTexture::Format::RGBA8, native.data(),
+    DUMP_NATIVE_W * sizeof(u32));
+  ASSERT_TRUE(game);
+
+  // Each stage alone, then every stage as one chain.
+  std::vector<std::vector<size_t>> chains;
+  for (size_t i = 0; i < specs.size(); i++)
+    chains.push_back({i});
+  if (specs.size() > 1)
+  {
+    chains.emplace_back();
+    for (size_t i = 0; i < specs.size(); i++)
+      chains.back().push_back(i);
+  }
+
+  for (const std::vector<size_t>& chain_specs : chains)
+  {
+#ifdef __APPLE__
+    // ReShade FX's GLSL uses binding layouts, which Apple's OpenGL 4.1 lacks (not new here).
+    const bool skip_fx = (g_gpu_device->GetRenderAPI() == RenderAPI::OpenGL);
+#else
+    const bool skip_fx = false;
+#endif
+    std::string chain_label = (chain_specs.size() > 1) ? std::string("all") : specs[chain_specs[0]].label;
+    if (skip_fx && chain_label == "fx")
+      continue;
+
+    for (const DumpPlacement& place : placements)
+    {
+      SCOPED_TRACE(chain_label + " " + place.name);
+      PostProcessing::Chain chain("DumpChain");
+      std::vector<std::unique_ptr<PostProcessing::Shader>> stages;
+      for (size_t i : chain_specs)
+      {
+        if (skip_fx && specs[i].label == "fx")
+          continue;
+        stages.push_back(make_stage(specs[i]));
+      }
+      chain.SetStagesForTest(std::move(stages));
+      ASSERT_TRUE(chain.CheckTargets(GPUTexture::Format::RGBA8, DUMP_W, DUMP_H));
+
+      u32 pw = DUMP_NATIVE_W, ph = DUMP_NATIVE_H;
+      const std::vector<u32> turned = Turn(native, place.turns, &pw, &ph);
+      const std::vector<u32> drawn = DrawnInput(turned, pw, ph, place.rect);
+      std::unique_ptr<GPUTexture> input =
+        g_gpu_device->CreateTexture(DUMP_W, DUMP_H, 1, 1, 1, GPUTexture::Type::Texture, GPUTexture::Format::RGBA8,
+                                    drawn.data(), DUMP_W * sizeof(u32));
+      std::unique_ptr<GPUTexture> output = g_gpu_device->CreateTexture(
+        DUMP_W, DUMP_H, 1, 1, 1, GPUTexture::Type::RenderTarget, GPUTexture::Format::RGBA8);
+      ASSERT_TRUE(input && output);
+
+      PostProcessing::PictureInfo picture;
+      picture.rect = place.rect;
+      picture.native_width = pw;
+      picture.native_height = ph;
+      picture.rows_top_first = true;
+      if (place.from_game)
+      {
+        picture.game_texture = game.get();
+        picture.game_view = GSVector4i(0, 0, DUMP_NATIVE_W, DUMP_NATIVE_H);
+      }
+
+      std::vector<u32> pixels(DUMP_W * DUMP_H);
+      // Enough frames for presets that start from their own history; on Metal a new chain's first frames can come
+      // out black or wrong (not settled why: librashader's LUT uploads, or its history, starting late).
+      for (int frame = 0; frame < DUMP_FRAMES; frame++)
+      {
+        ASSERT_TRUE(chain.Apply(input.get(), nullptr, output.get(), place.rect, DUMP_NATIVE_W, DUMP_NATIVE_H,
+                                DUMP_NATIVE_W, DUMP_NATIVE_H, picture));
+      }
+      std::unique_ptr<GPUDownloadTexture> dl =
+        g_gpu_device->CreateDownloadTexture(DUMP_W, DUMP_H, GPUTexture::Format::RGBA8);
+      ASSERT_TRUE(dl);
+      output->MakeReadyForSampling();
+      dl->CopyFromTexture(0, 0, output.get(), 0, 0, DUMP_W, DUMP_H, 0, 0, true);
+      dl->Flush();
+      ASSERT_TRUE(dl->ReadTexels(0, 0, DUMP_W, DUMP_H, pixels.data(), DUMP_W * sizeof(u32)));
+
+      const std::string base = Path::Combine(dump, fmt::format("{}-{}-{}", api, chain_label, place.name));
+      ASSERT_TRUE(FileSystem::WriteBinaryFile((base + ".rgba").c_str(), pixels.data(), pixels.size() * sizeof(u32)));
+      for (u32& p : pixels)
+        p |= 0xFF000000u;
+      RGBA8Image(DUMP_W, DUMP_H, pixels.data()).SaveToFile((base + ".png").c_str());
+
+      chain.DestroyTextures();
+    }
+  }
+}

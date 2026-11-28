@@ -620,3 +620,11 @@ TEST(SlangStage, TheSwitchIsReadWithTheOptionsAndKeepsParameters)
   shader.LoadOptions(si, "PostProcessing/Stage1");
   EXPECT_TRUE(shader.WantsWholeScreen());
 }
+
+TEST(SlangPlacement, AfterABezelTheNextStageHasTheWholeTarget)
+{
+  const NextStage next = AfterWholeScreen(1920, 1080);
+  EXPECT_TRUE(next.final_rect.eq(GSVector4i(0, 0, 1920, 1080)));
+  EXPECT_TRUE(next.picture_rect.eq(GSVector4i(0, 0, 1920, 1080)));
+  EXPECT_EQ(next.native, (PictureSize{1920, 1080}));
+}

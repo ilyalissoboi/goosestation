@@ -588,6 +588,87 @@ TEST_F(SlangGPU, TheGamesOwnFrameFeedsAWholeScreenBezelUncropped)
 
 namespace {
 
+// Halves the picture, drawn into final_rect as GLSL stages are.
+constexpr const char* HALF_GLSL = "void main() { SetOutput(Sample() * 0.5); }\n";
+
+} // namespace
+
+// A chain of stages through PostProcessing::Chain, as the display draws it, into a WIDTH x HEIGHT target.
+static std::vector<u32> RunChain(std::vector<std::unique_ptr<PostProcessing::Shader>> stages, GPUTexture* input,
+                                 const PostProcessing::PictureInfo& picture)
+{
+  PostProcessing::Chain chain("TestChain");
+  chain.SetStagesForTest(std::move(stages));
+  EXPECT_TRUE(chain.CheckTargets(GPUTexture::Format::RGBA8, WIDTH, HEIGHT));
+  std::unique_ptr<GPUTexture> output =
+    g_gpu_device->CreateTexture(WIDTH, HEIGHT, 1, 1, 1, GPUTexture::Type::RenderTarget, GPUTexture::Format::RGBA8);
+  EXPECT_TRUE(chain.Apply(input, nullptr, output.get(), picture.rect, WIDTH, HEIGHT, NATIVE_WIDTH, NATIVE_HEIGHT,
+                          picture));
+  std::vector<u32> pixels(WIDTH * HEIGHT);
+  std::unique_ptr<GPUDownloadTexture> dl = g_gpu_device->CreateDownloadTexture(WIDTH, HEIGHT, output->GetFormat());
+  output->MakeReadyForSampling();
+  dl->CopyFromTexture(0, 0, output.get(), 0, 0, WIDTH, HEIGHT, 0, 0, true);
+  dl->Flush();
+  EXPECT_TRUE(dl->ReadTexels(0, 0, WIDTH, HEIGHT, pixels.data(), WIDTH * sizeof(u32)));
+  chain.DestroyTextures();
+  return pixels;
+}
+
+TEST_F(SlangGPU, AStageAfterABezelKeepsTheBars)
+{
+  std::vector<std::unique_ptr<PostProcessing::Shader>> stages;
+  for (const char* name : {"bezel/frame.slangp", "p/gain.slangp"})
+  {
+    auto slang = std::make_unique<PostProcessing::SlangShader>();
+    Error error;
+    ASSERT_TRUE(slang->LoadFromFile(name, Path::ToNativePath(Path::Combine(m_root, name)), false, &error));
+    MemorySettingsInterface si;
+    si.SetFloatValue("Stage", "TEST_GAIN", 2.0f);
+    slang->LoadOptions(si, "Stage");
+    stages.push_back(std::move(slang));
+    if (stages.size() == 1)
+    {
+      auto glsl = std::make_unique<PostProcessing::GLSLShader>();
+      ASSERT_TRUE(glsl->LoadFromString("half", HALF_GLSL, &error)) << error.GetDescription();
+      stages.push_back(std::move(glsl));
+    }
+  }
+
+  const std::vector<u32> input = InputPixels();
+  const std::vector<u32> out =
+    RunChain(std::move(stages), Texture(GPUTexture::Type::Texture, &input), PictureAt(4.0f / 3.0f));
+  // The bezel's magenta, halved by the GLSL stage and doubled by the slang one, in the bars too.
+  EXPECT_PRED2(Near, At(out, 2, 2), 0xFFFE00FEu) << std::hex << At(out, 2, 2);
+  EXPECT_PRED2(Near, At(out, 61, 45), 0xFFFE00FEu) << std::hex << At(out, 61, 45);
+  EXPECT_PRED2(Near, At(out, 32, 16), RED_QUARTER) << std::hex << At(out, 32, 16);
+}
+
+TEST_F(SlangGPU, ANonBezelChainIsUnchanged)
+{
+  std::vector<std::unique_ptr<PostProcessing::Shader>> stages;
+  Error error;
+  auto glsl = std::make_unique<PostProcessing::GLSLShader>();
+  ASSERT_TRUE(glsl->LoadFromString("half", HALF_GLSL, &error)) << error.GetDescription();
+  stages.push_back(std::move(glsl));
+  auto slang = std::make_unique<PostProcessing::SlangShader>();
+  ASSERT_TRUE(slang->LoadFromFile("p/gain.slangp", Path::ToNativePath(Path::Combine(m_root, "p/gain.slangp")), false,
+                                  &error));
+  MemorySettingsInterface si;
+  si.SetFloatValue("Stage", "TEST_GAIN", 2.0f);
+  slang->LoadOptions(si, "Stage");
+  stages.push_back(std::move(slang));
+
+  const std::vector<u32> input = InputPixels();
+  const std::vector<u32> out =
+    RunChain(std::move(stages), Texture(GPUTexture::Type::Texture, &input), PictureAt(4.0f / 3.0f));
+  // As before bezels: the GLSL stage draws only the picture (the bars cleared), the slang stage shades the picture.
+  EXPECT_EQ(At(out, 2, 2), 0u) << std::hex << At(out, 2, 2);
+  EXPECT_PRED2(Near, At(out, 32, 12), RED_QUARTER) << std::hex << At(out, 32, 12);
+  EXPECT_PRED2(Near, At(out, 32, 36), BLUE_QUARTER) << std::hex << At(out, 32, 36);
+}
+
+namespace {
+
 // The frame dump's target and console picture.
 constexpr u32 DUMP_W = 256, DUMP_H = 144;
 constexpr u32 DUMP_NATIVE_W = 320, DUMP_NATIVE_H = 240;

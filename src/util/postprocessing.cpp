@@ -797,18 +797,30 @@ bool PostProcessing::Chain::Apply(GPUTexture* input_color, GPUTexture* input_dep
   if (input_depth)
     input_depth->MakeReadyForSampling();
 
-  // Only the first stage may read the game's own frame; the stages after it work on what came before.
+  // Only the first stage may read the game's own frame; the stages after it work on what came before. After a stage
+  // that drew over the whole screen (a bezel), they work on all of it.
   PictureInfo stage_picture = picture;
+  GSVector4i stage_rect = final_rect;
   for (const std::unique_ptr<Shader>& stage : m_stages)
   {
     const bool is_final = (stage.get() == m_stages.back().get());
 
-    if (!stage->Apply(input_color, input_depth, is_final ? final_target : output, final_rect, orig_width, orig_height,
+    if (!stage->Apply(input_color, input_depth, is_final ? final_target : output, stage_rect, orig_width, orig_height,
                       native_width, native_height, m_target_width, m_target_height, stage_picture))
     {
       return false;
     }
     stage_picture.game_texture = nullptr;
+    if (stage->DrewWholeScreen())
+    {
+      const Slang::NextStage next = Slang::AfterWholeScreen(m_target_width, m_target_height);
+      stage_rect = next.final_rect;
+      stage_picture.rect = next.picture_rect;
+      stage_picture.native_width = next.native.width;
+      stage_picture.native_height = next.native.height;
+      // A second bezel draws into the screen it's given, never squeezing the first.
+      stage_picture.aspect_ratio = 0.0f;
+    }
 
     if (!is_final)
     {

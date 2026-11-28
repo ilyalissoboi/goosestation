@@ -163,4 +163,19 @@ inline bool DrawsWholeScreen(bool wants, bool honours_aspect, float aspect)
   return wants && aspect > 0.0f && (honours_aspect || IsFourThree(aspect));
 }
 
+/// Where the stages after one that drew over the whole screen work: all of the target, its own size as the "native"
+/// picture, so a later slang stage reads the bezel one to one and a GLSL stage draws over all of it.
+struct NextStage
+{
+  GSVector4i final_rect;
+  GSVector4i picture_rect;
+  PictureSize native;
+};
+
+inline NextStage AfterWholeScreen(u32 target_width, u32 target_height)
+{
+  const GSVector4i all(0, 0, static_cast<s32>(target_width), static_cast<s32>(target_height));
+  return NextStage{all, all, PictureSize{target_width, target_height}};
+}
+
 } // namespace PostProcessing::Slang

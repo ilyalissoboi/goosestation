@@ -1444,7 +1444,9 @@ class GameMenuTest : ControllerKeys {
         rule.onNodeWithText("Applied: Max Money Now").assertExists()
     }
 
-    private fun patches(vararg rows: PatchRow) = CodePanel(fileName = "Crash Bandicoot.cht", patches = rows.toList())
+    // The game's patches, with its cheats read (none).
+    private fun patches(vararg rows: PatchRow) =
+        CodePanel(groups = emptyList(), fileName = "Crash Bandicoot.cht", patches = rows.toList())
 
     @Test
     fun aPatchIsASwitchRowWithItsNote() {

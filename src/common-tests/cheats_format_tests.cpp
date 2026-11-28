@@ -285,3 +285,28 @@ TEST(CheatsFormat, ApplySkipsPatchesAndAssembly)
   EXPECT_FALSE(CheatList::IsAppliedAsCheat(list.GetCode(2)));
   EXPECT_EQ(list.GetEnabledCodeCount(), 1u);
 }
+
+TEST(CheatsFormat, EditingACodeWithValuesKeepsItsTemplate)
+{
+  // Qt's cheat editor shows a code's instructions and reads them back: a code with values shows its `?` lines, and an
+  // edit becomes the new template, kept by the .cht and by the next value chosen.
+  CheatList list = LoadINI("[Speed]\nOption = Slow:1\nOption = Fast:0x20\n80001234 00??\n");
+  CheatCode& code = list.GetCode(0);
+  EXPECT_EQ(code.GetInstructionsAsString(), "80001234 00??\n");
+
+  ASSERT_TRUE(code.SetInstructionsFromString("80005678 00??\n80005680 0001\n"));
+  EXPECT_EQ(code.raw_lines, (std::vector<std::string>{"80005678 00??", "80005680 0001"}));
+  EXPECT_EQ(Lines(code), "80005678 00000001\n80005680 00000001\n");
+  ASSERT_TRUE(code.SetOptionValue(0x20, nullptr));
+  EXPECT_EQ(Lines(code), "80005678 00000020\n80005680 00000001\n");
+
+  // An edit the values can't go into is refused, the code as it was.
+  EXPECT_FALSE(code.SetInstructionsFromString("80005678 0001\n"));
+  EXPECT_EQ(Lines(code), "80005678 00000020\n80005680 00000001\n");
+
+  // A plain code is edited as before.
+  CheatList plain = LoadINI("[Plain]\n80001234 0001\n");
+  ASSERT_TRUE(plain.GetCode(0).SetInstructionsFromString("80001238 0002\n"));
+  EXPECT_TRUE(plain.GetCode(0).raw_lines.empty());
+  EXPECT_EQ(Lines(plain.GetCode(0)), "80001238 00000002\n");
+}

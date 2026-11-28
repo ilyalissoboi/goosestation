@@ -1411,6 +1411,15 @@ void CheatList::MergeList(const CheatList& cl)
 
 std::string CheatCode::GetInstructionsAsString() const
 {
+  // A code that keeps its lines (values in `?` digits, or an Assembly code) is edited as those lines.
+  if (!raw_lines.empty())
+  {
+    std::string text;
+    for (const std::string& line : raw_lines)
+      text.append(line).append("\n");
+    return text;
+  }
+
   std::stringstream ss;
 
   for (const Instruction& inst : instructions)
@@ -1426,6 +1435,34 @@ std::string CheatCode::GetInstructionsAsString() const
 
 bool CheatCode::SetInstructionsFromString(const std::string& str)
 {
+  // A code that keeps its lines takes the edit as its new lines, rebuilding its instructions from its value: an edit
+  // the value can't go into is refused, and the code stays as it was.
+  if (HasOptions() || type != Type::Gameshark)
+  {
+    std::vector<std::string> lines;
+    for (const std::string_view line : StringUtil::SplitString(str, '\n'))
+    {
+      const std::string_view text = StringUtil::StripWhitespace(line);
+      if (!text.empty() && text[0] != '#' && text[0] != ';')
+        lines.emplace_back(text);
+    }
+    if (lines.empty())
+      return false;
+    if (type != Type::Gameshark)
+    {
+      raw_lines = std::move(lines);
+      return true;
+    }
+
+    CheatCode edited = *this;
+    edited.raw_lines = std::move(lines);
+    if (!edited.SetOptionValue(option_value, nullptr))
+      return false;
+    raw_lines = std::move(edited.raw_lines);
+    instructions = std::move(edited.instructions);
+    return true;
+  }
+
   std::vector<Instruction> new_instructions;
   std::istringstream ss(str);
 

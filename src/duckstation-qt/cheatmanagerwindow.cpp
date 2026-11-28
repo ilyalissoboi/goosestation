@@ -569,6 +569,8 @@ void CheatManagerWindow::importFromFileTriggered()
       DebugAssert(System::HasCheatList());
       System::GetCheatList()->MergeList(new_cheats);
       System::SaveCheatList();
+      // Patches among the imported codes run from the patch list, built again from the file just saved.
+      System::LoadPatchList();
     },
     true);
   updateCheatList();
@@ -592,6 +594,8 @@ void CheatManagerWindow::importFromTextTriggered()
       DebugAssert(System::HasCheatList());
       System::GetCheatList()->MergeList(new_cheats);
       System::SaveCheatList();
+      // Patches among the imported codes run from the patch list, built again from the file just saved.
+      System::LoadPatchList();
     },
     true);
   updateCheatList();

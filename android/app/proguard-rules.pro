@@ -17,7 +17,7 @@
 }
 
 # jni_classes.cpp finds these and their constructors by name in JNI_OnLoad: pictures (OSD icons, save state
-# screenshots), save state previews, and the running game's patch codes.
+# screenshots), save state previews, and the running game's cheats and patches.
 -keep class io.github.ilyalissoboi.goosestation.core.ArgbImage {
     <init>(int, int, int[]);
 }
@@ -26,10 +26,15 @@
         java.lang.String, java.lang.String);
 }
 -keep class io.github.ilyalissoboi.goosestation.core.PatchCode {
-    <init>(int, java.lang.String, java.lang.String, boolean, boolean);
+    <init>(int, java.lang.String, java.lang.String, boolean, boolean, java.lang.String[], int[], int, int, int);
+}
+-keep class io.github.ilyalissoboi.goosestation.core.GamePatch {
+    <init>(int, java.lang.String, java.lang.String, java.lang.String[], int, int, java.lang.String[], int[], int, int,
+        int, java.lang.String, boolean);
 }
 -keep class io.github.ilyalissoboi.goosestation.core.PatchCodes {
-    <init>(java.lang.String, io.github.ilyalissoboi.goosestation.core.PatchCode[]);
+    <init>(java.lang.String, io.github.ilyalissoboi.goosestation.core.PatchCode[],
+        io.github.ilyalissoboi.goosestation.core.GamePatch[]);
 }
 
 # jni_classes.cpp finds RetroAchievements' classes and their constructors by name in JNI_OnLoad: the account, the queue
